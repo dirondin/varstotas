@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 const PREFS_KEY: &str = "varstotas_prefs";
 const MAX_RECENT: usize = 8;
+/// How long transient status messages stay visible.
+const FLASH_SECS: f64 = 3.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FaceStylePref {
@@ -126,13 +128,16 @@ pub struct VarstotasApp {
     pub(crate) confirm: Option<Pending>,
     pub(crate) show_about: bool,
     /// Transient status message (text, expiry time).
-    pub(crate) flash: Option<(String, f64)>,
+    /// Transient message (text, expiry time, is_error), shown next to the tool hint.
+    pub(crate) flash: Option<(String, f64, bool)>,
     pub(crate) tray: TrayState,
     pub(crate) debug: crate::debug_capture::DebugCapture,
     last_title: String,
     allow_close: bool,
     pub(crate) tool_pressed: bool,
     pub(crate) last_pointer: Option<Pos2>,
+    /// Where the primary button went down in the viewport (click vs drag detection).
+    press_local: Option<Pos2>,
     pub(crate) last_modifiers: Modifiers,
     now: f64,
 }
@@ -169,7 +174,7 @@ impl VarstotasApp {
         }
         Self {
             doc: Document::new(),
-            camera: Camera::default(),
+            camera: nav::startup_camera(),
             cam_anim: None,
             viewport: Viewport::default(),
             tool: tools::make_tool(ToolId::Select),
@@ -187,6 +192,7 @@ impl VarstotasApp {
             allow_close: false,
             tool_pressed: false,
             last_pointer: None,
+            press_local: None,
             last_modifiers: Modifiers::NONE,
             now: 0.0,
         }
@@ -208,7 +214,11 @@ impl VarstotasApp {
     }
 
     pub(crate) fn flash(&mut self, msg: impl Into<String>) {
-        self.flash = Some((msg.into(), self.now + 4.0));
+        self.flash = Some((msg.into(), self.now + FLASH_SECS, false));
+    }
+
+    pub(crate) fn flash_error(&mut self, msg: impl Into<String>) {
+        self.flash = Some((msg.into(), self.now + FLASH_SECS, true));
     }
 
     fn aspect(&self) -> f64 {
@@ -281,9 +291,10 @@ impl VarstotasApp {
         let ok = self.with_tool(p.clone(), |t, ctx| t.on_vcb(ctx, &input));
         if !ok {
             self.vcb_error = true;
-            self.flash(format!("Invalid value: {input}"));
+            self.flash_error(format!("Invalid value: {input}"));
         } else {
             self.vcb_error = false;
+            self.flash = None;
             // Refresh hover/inference so no stale pre-commit overlay lingers.
             self.with_tool(p, |t, ctx| t.on_pointer_move(ctx));
         }
@@ -413,14 +424,25 @@ impl VarstotasApp {
                     self.last_modifiers = modifiers;
                     let local = (pos - rect.min).to_pos2();
                     if pressed && over && rect.contains(pos) {
+                        // A new click supersedes any stale error message.
+                        if self.flash.as_ref().is_some_and(|f| f.2) {
+                            self.flash = None;
+                        }
                         self.tool_pressed = true;
                         self.last_pointer = Some(local);
+                        self.press_local = (button == PointerButton::Primary).then_some(local);
                         let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(button), button == PointerButton::Primary);
                         self.with_tool(pi, |t, c| t.on_pointer_down(c));
                     } else if !pressed && self.tool_pressed {
                         self.tool_pressed = false;
                         let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(button), false);
                         self.with_tool(pi, |t, c| t.on_pointer_up(c));
+                        if button == PointerButton::Primary
+                            && let Some(p0) = self.press_local.take()
+                            && p0.distance(local) < 4.0
+                        {
+                            self.after_primary_click(local, modifiers);
+                        }
                     }
                 }
                 _ => {}
@@ -697,7 +719,7 @@ impl VarstotasApp {
         self.tool = tools::make_tool(ToolId::Select);
         self.vcb.clear();
         self.tray = TrayState::default();
-        let mut cam = guarded(Camera::default).unwrap_or_else(|_| self.camera.clone());
+        let mut cam = nav::startup_camera();
         if !self.doc.model.scenes.is_empty() {
             let s = &self.doc.model.scenes[0];
             cam.eye = s.eye;
@@ -804,7 +826,7 @@ impl VarstotasApp {
             self.flash(format!("Imported {}", path.display()));
             self.actions.push(Action::ZoomExtents);
         } else if let Some(e) = self.doc.last_error.clone() {
-            self.flash(e);
+            self.flash_error(e);
         }
     }
 
@@ -850,7 +872,7 @@ impl VarstotasApp {
         if r.is_some() {
             self.actions.push(Action::ZoomExtents);
         } else if let Some(e) = self.doc.last_error.clone() {
-            self.flash(e);
+            self.flash_error(e);
         }
     }
 
@@ -874,6 +896,72 @@ impl VarstotasApp {
     }
 
     /// Collect overlays from the active tool.
+    /// classic behaviour: a plain Select-tool click outside the open group's bounding box
+    /// closes it (repeatedly, for nested groups whose boxes the click also misses).
+    pub(crate) fn after_primary_click(&mut self, pos: Pos2, modifiers: Modifiers) {
+        if self.tool_id() != ToolId::Select
+            || self.doc.active_path.is_empty()
+            || modifiers.shift
+            || modifiers.command
+            || modifiers.ctrl
+        {
+            return;
+        }
+        let ray = self.pointer_info(pos, egui::Vec2::ZERO, None, false).ray;
+        let model = &self.doc.model;
+        let mut path = self.doc.active_path.clone();
+        while !path.is_empty() {
+            let inside = guarded(|| {
+                let Some(b) = model.def_at(&path).and_then(|d| model.def_bounds(d)) else {
+                    return false;
+                };
+                let inv = model.transform_at(&path).inverse();
+                let o = inv.transform_point3(ray.origin);
+                let d = inv.transform_vector3(ray.dir);
+                let eps = ((b.max - b.min).length() * 1e-3).max(1e-3);
+                b.inflate(eps).ray_hit(o, d).is_some()
+            })
+            .unwrap_or(false);
+            if inside {
+                break;
+            }
+            path.pop();
+        }
+        if path != self.doc.active_path {
+            self.doc.set_active_path(path);
+        }
+    }
+
+    /// World-space edges of the open group's (oriented) bounding box.
+    fn context_box_lines(&self, out: &mut Overlay3d) {
+        let path = &self.doc.active_path;
+        if path.is_empty() {
+            return;
+        }
+        let model = &self.doc.model;
+        let Ok(Some((b, xf))) =
+            guarded(|| model.def_at(path).and_then(|d| model.def_bounds(d)).map(|b| (b, model.transform_at(path))))
+        else {
+            return;
+        };
+        let c = b.corners().map(|p| xf.transform_point3(p).as_vec3().to_array());
+        // Corner index bits: 1 = x, 2 = y, 4 = z.
+        for i in 0..8usize {
+            for bit in [1usize, 2, 4] {
+                if i & bit == 0 {
+                    out.lines.push(varstotas_render::OverlayLine {
+                        a: c[i],
+                        b: c[i | bit],
+                        color: [0.25, 0.25, 0.25, 0.9],
+                        width_px: 1.0,
+                        dashed: true,
+                        on_top: true,
+                    });
+                }
+            }
+        }
+    }
+
     fn tool_overlays(&self) -> (Overlay3d, Vec<Marker2d>) {
         let mut o3 = Overlay3d::default();
         let mut o2 = Vec::new();
@@ -884,21 +972,23 @@ impl VarstotasApp {
             pointer: self.last_pointer,
         };
         tools::common::draw_guides(&view, &mut o3, &mut o2);
+        self.context_box_lines(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
+        o2.extend(self.tool.cursor_glyph());
         (o3, o2)
     }
 
     /// Status-bar text for the left side.
-    pub(crate) fn status_text(&self) -> (String, bool) {
-        if let Some((msg, until)) = &self.flash
-            && *until > self.now {
-                return (msg.clone(), false);
-            }
-        if let Some(e) = &self.doc.last_error {
-            return (e.clone(), true);
-        }
-        (self.tool.status_text(), false)
+    /// Tool hint (always shown) and an optional unexpired transient message (text, is_error).
+    pub(crate) fn status_text(&self) -> (String, Option<(String, bool)>) {
+        let flash = self
+            .flash
+            .as_ref()
+            .filter(|f| f.1 > self.now)
+            .map(|f| (f.0.clone(), f.2));
+        (self.tool.status_text(), flash)
     }
+
 }
 
 fn all_refs(mesh: &varstotas_kernel::Mesh) -> std::collections::HashSet<EntityRef> {
@@ -960,8 +1050,14 @@ impl eframe::App for VarstotasApp {
             self.actions.push(Action::SelectAll);
         }
         self.script_step(&ctx);
-        if self.flash.as_ref().is_some_and(|(_, t)| *t > self.now) {
+        if let Some(e) = self.doc.last_error.take() {
+            self.flash_error(e);
+        }
+        if self.flash.as_ref().is_some_and(|f| f.1 > self.now) {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        } else if self.vcb_error {
+            // The red Measurements border expires together with the error message.
+            self.vcb_error = false;
         }
     }
 

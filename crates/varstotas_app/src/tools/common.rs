@@ -7,7 +7,7 @@ use crate::inference::{self, Constraint, InferenceEngine, InferenceResult, Query
 use crate::overlay::Marker2d;
 use egui::{Color32, Pos2};
 use varstotas_kernel::glam::{DMat4, DVec2, DVec3};
-use varstotas_kernel::{EdgeId, EntityRef, FaceId, InstanceId, LengthUnit, Mesh, Model, Plane, units};
+use varstotas_kernel::{ContextPath, EdgeId, EntityRef, FaceId, InstanceId, LengthUnit, Mesh, Model, Plane, units};
 use varstotas_render::{Overlay3d, OverlayPolygon};
 use std::collections::HashSet;
 
@@ -163,13 +163,19 @@ pub fn pick_face(ctx: &ToolContext) -> Option<Hover> {
 }
 
 /// Edge of the active context within `radius` px of the pointer (not occluded).
+///
+/// Candidates are tried nearest-first; the 3D point is the perspective-correct closest
+/// point on the edge to the pick ray, and occlusion is tested with a ray aimed at that
+/// point, ignoring the faces bounding the edge (so silhouette/boundary edges win over
+/// their own faces).
 pub fn pick_edge_at(ctx: &ToolContext, pos: Pos2, radius: f32) -> Option<Hover> {
     let active = ctx.doc.active_path.clone();
     let mesh = ctx.doc.model.mesh_at(&active)?;
     let xf = context_xf(ctx.doc);
     let vp = ctx.viewport_d();
     let c = DVec2::new(pos.x as f64, pos.y as f64);
-    let mut best: Option<(f64, EdgeId, DVec3, DVec3, DVec3)> = None;
+    let ray = ctx.ray_at(pos);
+    let mut cands: Vec<(f64, EdgeId, DVec3, DVec3)> = Vec::new();
     for (id, e) in mesh.edges.iter() {
         if e.hidden {
             continue;
@@ -178,22 +184,34 @@ pub fn pick_edge_at(ctx: &ToolContext, pos: Pos2, radius: f32) -> Option<Hover> 
         let (a, b) = (xf.transform_point3(a), xf.transform_point3(b));
         let Some((sa, sb)) = inference::geo::project_segment(ctx.camera, vp, a, b) else { continue };
         let (d, _) = inference::geo::dist_point_seg2(c, sa, sb);
-        if d <= radius as f64 && best.as_ref().is_none_or(|x| d < x.0) {
-            let ray = ctx.ray_at(pos);
-            let p = inference::geo::closest_on_seg_to_ray(a, b, ray.origin, ray.dir);
-            best = Some((d, id, a, b, p));
+        if d <= radius as f64 {
+            cands.push((d, id, a, b));
         }
     }
-    let (_, edge, a, b, p) = best?;
-    let ray = ctx.ray_at(pos);
-    if let Some(hit) = guarded(|| ctx.doc.model.raycast(&ray)).ok().flatten() {
-        let depth = (p - ray.origin).dot(ray.dir);
-        let tol = (ctx.camera.pixel_size_at(p, vp) * 3.0).max(depth.abs() * 1e-4);
-        if hit.t < depth - tol {
-            return None;
+    cands.sort_by(|x, y| x.0.total_cmp(&y.0));
+    for (_, edge, a, b) in cands.into_iter().take(8) {
+        let p = inference::geo::closest_on_seg_to_ray(a, b, ray.origin, ray.dir);
+        if !edge_point_occluded(ctx, &active, edge, p) {
+            return Some(Hover::Edge { edge, a, b });
         }
     }
-    Some(Hover::Edge { edge, a, b })
+    None
+}
+
+/// True when a face other than those bounding `edge` lies in front of world point `p`.
+fn edge_point_occluded(ctx: &ToolContext, active: &ContextPath, edge: EdgeId, p: DVec3) -> bool {
+    let Some(sp) = ctx.to_screen(p) else { return true };
+    let ray = ctx.ray_at(sp);
+    let depth = (p - ray.origin).dot(ray.dir);
+    let vp = ctx.viewport_d();
+    let tol = (ctx.camera.pixel_size_at(p, vp) * 2.0).max(depth.abs() * 1e-6).max(1e-3);
+    let Some(hit) = guarded(|| ctx.doc.model.raycast(&ray)).ok().flatten() else { return false };
+    if hit.t >= depth - tol {
+        return false;
+    }
+    let own = hit.path == *active
+        && ctx.doc.model.mesh_at(active).is_some_and(|m| m.edge_faces(edge).contains(&hit.face));
+    !own
 }
 
 /// Edge first, then face/instance.
@@ -231,6 +249,14 @@ pub fn parse_segments(s: &str) -> Option<u32> {
     let s = s.trim().to_ascii_lowercase();
     let n = s.strip_suffix('s')?.trim().parse::<u32>().ok()?;
     (3..=360).contains(&n).then_some(n)
+}
+
+/// Format an angle for the VCB/tooltips: `90°`, `22.5°`, `-7.25°` (no trailing zeros).
+pub fn fmt_angle(deg: f64) -> String {
+    let s = format!("{deg:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    let s = if s == "-0" { "0" } else { s };
+    format!("{s}°")
 }
 
 /// Angle in degrees: `45`, `-30`, `22.5`, `22,5`, `45deg`, `45°`.
@@ -570,6 +596,14 @@ pub fn draw_guides(view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Ma
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn angle_format() {
+        assert_eq!(fmt_angle(90.0), "90°");
+        assert_eq!(fmt_angle(22.5), "22.5°");
+        assert_eq!(fmt_angle(-7.25), "-7.25°");
+        assert_eq!(fmt_angle(-0.001), "0°");
+    }
 
     #[test]
     fn array_parsing() {

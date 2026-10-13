@@ -200,7 +200,7 @@ impl Tool for EraserTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.dragging
@@ -272,9 +272,11 @@ impl Tool for PaintTool {
                     let Some(f0) = mesh.faces.get(face) else { return };
                     let old = if front { f0.front } else { f0.back };
                     let targets: Vec<FaceId> = if connected {
+                        // only connected faces that share the clicked face's material.
                         mesh.connected(EntityRef::Face(face))
                             .into_iter()
                             .filter_map(|e| if let EntityRef::Face(f) = e { Some(f) } else { None })
+                            .filter(|f| mesh.faces.get(*f).is_some_and(|f| (if front { f.front } else { f.back }) == old))
                             .collect()
                     } else if same {
                         mesh.faces
@@ -300,7 +302,7 @@ impl Tool for PaintTool {
         });
     }
     fn status_text(&self) -> String {
-        "Click a face or group to paint. Alt/Option = sample, Ctrl = connected faces, Shift = all matching faces."
+        "Click a face or group to paint. Alt/Option = sample, Ctrl = connected faces with the same material, Shift = all faces with the same material."
             .into()
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -311,7 +313,7 @@ impl Tool for PaintTool {
         out2d.push(Marker2d::CursorTooltip { text: name });
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
 }
 
@@ -345,10 +347,10 @@ impl PushPullTool {
     fn update(&mut self, ctx: &ToolContext) {
         self.unit = Some(ctx.doc.model.unit);
         self.keep.update(copy_mod(&ctx.pointer.modifiers));
-        if let Some(s) = &mut self.state {
-            let c = Constraint::Line { origin: s.origin, dir: s.n, kind: InferenceKind::Free };
-            let r = infer(&mut self.engine, ctx, Some(s.origin), Some(c), None);
+        if let Some(mut s) = self.state.take() {
+            let r = self.pull_point(ctx, &s);
             s.dist = (r.point - s.origin).dot(s.n);
+            self.state = Some(s);
             self.cur = Some(r);
         } else {
             self.hover = pick_face(ctx).filter(|h| matches!(h, Hover::Face { .. }));
@@ -377,25 +379,30 @@ impl PushPullTool {
             None => {
                 if let Some(Hover::Face { face, point, plane }) = pick_face(ctx) {
                     self.state = Some(PullState { face, origin: point, n: plane.normal, dist: 0.0 });
-                    self.keep.reset();
+                    // Ctrl toggled (or held) before the click carries over.
                     self.keep.update(copy_mod(&ctx.pointer.modifiers));
                 }
             }
             Some(s) => {
-                let s = self.state_after(ctx, s);
+                // Use exactly the distance shown in the preview/tooltip/VCB.
+                self.state = Some(s);
+                self.update(ctx);
+                let s = self.state.take().expect("state");
                 if s.dist.abs() > TOL {
                     self.apply(ctx, s.face, s.dist, s.n, self.keep.on);
                 }
+                self.keep.reset();
                 self.cur = None;
             }
         }
     }
 
-    fn state_after(&mut self, ctx: &ToolContext, mut s: PullState) -> PullState {
+    /// Distance along the face normal for the current pointer: the closest point between
+    /// the pick ray and the line through the picked point along the normal; point snaps
+    /// (endpoints, midpoints, intersections) are projected onto that line.
+    fn pull_point(&mut self, ctx: &ToolContext, s: &PullState) -> InferenceResult {
         let c = Constraint::Line { origin: s.origin, dir: s.n, kind: InferenceKind::Free };
-        let r = infer(&mut self.engine, ctx, Some(s.origin), Some(c), None);
-        s.dist = (r.point - s.origin).dot(s.n);
-        s
+        infer(&mut self.engine, ctx, Some(s.origin), Some(c), None)
     }
 }
 
@@ -428,6 +435,7 @@ impl Tool for PushPullTool {
         if pressed && key == Key::Escape {
             self.state = None;
             self.cur = None;
+            self.keep.reset();
             return true;
         }
         false
@@ -440,7 +448,9 @@ impl Tool for PushPullTool {
         if let Some(s) = self.state.take() {
             let sign = if s.dist < 0.0 { -1.0 } else { 1.0 };
             self.cur = None;
-            return self.apply(ctx, s.face, v * sign, s.n, self.keep.on);
+            let keep = self.keep.on;
+            self.keep.reset();
+            return self.apply(ctx, s.face, v * sign, s.n, keep);
         }
         if let Some((face, d, keep)) = self.last {
             if !undo_last(ctx) {
@@ -496,8 +506,11 @@ impl Tool for PushPullTool {
             highlight_hover(view, h, out3d);
         }
     }
+    fn cursor_plus(&self) -> bool {
+        self.keep.on
+    }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.state.is_some()
@@ -688,7 +701,7 @@ impl Tool for OffsetTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.state.is_some()
@@ -869,7 +882,7 @@ impl Tool for FollowMeTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.profile.is_some()

@@ -6,7 +6,7 @@ use crate::document::guarded;
 use crate::overlay::Marker2d;
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2, Rect};
 use varstotas_kernel::glam::DVec3;
-use varstotas_kernel::{ContextPath, EntityRef, Model};
+use varstotas_kernel::{ContextPath, EntityRef};
 use varstotas_render::Overlay3d;
 
 const EDGE_PICK_PX: f32 = 6.0;
@@ -72,36 +72,12 @@ impl SelectTool {
     fn pick(&self, ctx: &ToolContext) -> Option<Picked> {
         let active = ctx.doc.active_path.clone();
         let hit = ctx.pick();
-        // Edges of the active context take priority when close to the cursor and not occluded.
-        let edge = guarded(|| {
-            let model: &Model = &ctx.doc.model;
-            let mesh = model.mesh_at(&active)?;
-            let xf = model.transform_at(&active);
-            let mut best: Option<(f32, varstotas_kernel::EdgeId, DVec3)> = None;
-            for (id, e) in mesh.edges.iter() {
-                if e.hidden {
-                    continue;
-                }
-                let (a, b) = mesh.edge_segment(id);
-                let (a, b) = (xf.transform_point3(a), xf.transform_point3(b));
-                let (Some(sa), Some(sb)) = (ctx.to_screen(a), ctx.to_screen(b)) else {
-                    continue;
-                };
-                let (d, t) = dist_to_segment(ctx.pointer.pos, sa, sb);
-                if d <= EDGE_PICK_PX && best.as_ref().is_none_or(|(bd, _, _)| d < *bd) {
-                    best = Some((d, id, a.lerp(b, t as f64)));
-                }
-            }
-            best
-        })
-        .ok()
-        .flatten();
-        if let Some((_, eid, p)) = edge {
-            let depth = (p - ctx.pointer.ray.origin).dot(ctx.pointer.ray.dir);
-            let occluded = hit.as_ref().is_some_and(|h| depth > h.t * 1.01 + 1.0);
-            if !occluded {
-                return Some(Picked { context: active, entity: EntityRef::Edge(eid) });
-            }
+        // Edges of the active context take priority when close to the cursor and not occluded
+        // (perspective-correct, silhouette/boundary edges win over their own faces).
+        if let Some(super::common::Hover::Edge { edge, .. }) =
+            super::common::pick_edge_at(ctx, ctx.pointer.pos, EDGE_PICK_PX)
+        {
+            return Some(Picked { context: active, entity: EntityRef::Edge(edge) });
         }
         let hit = hit?;
         if starts_with(&hit.path, &active) {

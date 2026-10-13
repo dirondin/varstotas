@@ -15,7 +15,8 @@ use varstotas_render::Overlay3d;
 pub enum XfKind {
     Translate(DVec3),
     Rotate { center: DVec3, axis: DVec3, deg: f64 },
-    Scale { anchor: DVec3, factor: f64 },
+    /// Per-axis (world X/Y/Z) factors about `anchor`.
+    Scale { anchor: DVec3, factor: DVec3 },
 }
 
 impl XfKind {
@@ -25,8 +26,8 @@ impl XfKind {
             XfKind::Translate(v) => DMat4::from_translation(v * k),
             XfKind::Rotate { center, axis, deg } => rotation_about(center, axis, deg * k),
             XfKind::Scale { anchor, factor } => {
-                let f = factor.powf(k);
-                DMat4::from_translation(anchor) * DMat4::from_scale(DVec3::splat(f)) * DMat4::from_translation(-anchor)
+                let f = DVec3::new(factor.x.powf(k), factor.y.powf(k), factor.z.powf(k));
+                DMat4::from_translation(anchor) * DMat4::from_scale(f) * DMat4::from_translation(-anchor)
             }
         }
     }
@@ -273,8 +274,11 @@ impl Tool for MoveTool {
             inference::draw_result(r, out3d, out2d);
         }
     }
+    fn cursor_plus(&self) -> bool {
+        self.copy.on
+    }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Move
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.from.is_some()
@@ -492,8 +496,8 @@ impl Tool for RotateTool {
     }
     fn vcb_value(&self) -> String {
         match (self.stage, self.last.as_ref().map(|l| l.kind)) {
-            (Some(RotStage::Angle { .. }), _) => format!("{:.1}°", self.angle),
-            (None, Some(XfKind::Rotate { deg, .. })) => format!("{deg:.1}°"),
+            (Some(RotStage::Angle { .. }), _) => fmt_angle(self.angle),
+            (None, Some(XfKind::Rotate { deg, .. })) => fmt_angle(deg),
             _ => String::new(),
         }
     }
@@ -535,13 +539,16 @@ impl Tool for RotateTool {
                 line(out3d, c, c + cur * len, PREVIEW, 2.0);
                 let t = rotation_about(c, n, self.angle);
                 draw_preview(view, &self.ents, &t, out3d);
-                out2d.push(Marker2d::CursorTooltip { text: format!("{:.1}°", self.angle) });
+                out2d.push(Marker2d::CursorTooltip { text: fmt_angle(self.angle) });
                 out2d.push(Marker2d::Point { at: c, shape: MarkerShape::Ring, color: normal_color(n) });
             }
         }
     }
+    fn cursor_plus(&self) -> bool {
+        self.copy.on
+    }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.stage.is_some()
@@ -552,11 +559,129 @@ impl Tool for RotateTool {
 // Scale
 // ===========================================================================
 
+/// A bounding-box grip: `idx` ∈ {0,1,2}³ (0 = min, 1 = middle, 2 = max per axis).
+/// Axes whose index is not 1 are scaled: corners scale 3 axes (uniformly), edge midpoints
+/// 2 axes, face centres 1 axis.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Grip {
+    idx: [u8; 3],
+    pos: DVec3,
+}
+
+impl Grip {
+    fn axes(&self) -> [bool; 3] {
+        [self.idx[0] != 1, self.idx[1] != 1, self.idx[2] != 1]
+    }
+    fn count(&self) -> usize {
+        self.axes().iter().filter(|a| **a).count()
+    }
+}
+
+fn grip_pos(b: &Aabb, idx: [u8; 3]) -> DVec3 {
+    let e = b.max - b.min;
+    b.min + DVec3::new(e.x * idx[0] as f64, e.y * idx[1] as f64, e.z * idx[2] as f64) * 0.5
+}
+
+/// All grips of a box; axes with (near) zero extent cannot be scaled and are skipped.
+fn grips(b: &Aabb) -> Vec<Grip> {
+    let e = b.max - b.min;
+    let flat = [e.x.abs() < TOL, e.y.abs() < TOL, e.z.abs() < TOL];
+    let mut v = Vec::new();
+    for i in 0..3u8 {
+        for j in 0..3u8 {
+            for k in 0..3u8 {
+                let idx = [i, j, k];
+                if idx == [1, 1, 1] || (0..3).any(|a| flat[a] && idx[a] != 1) {
+                    continue;
+                }
+                v.push(Grip { idx, pos: grip_pos(b, idx) });
+            }
+        }
+    }
+    v
+}
+
+/// Anchor for a grip: the opposite grip, or the box centre (Ctrl).
+fn grip_anchor(b: &Aabb, g: &Grip, about_center: bool) -> DVec3 {
+    if about_center {
+        return (b.min + b.max) * 0.5;
+    }
+    grip_pos(b, [2 - g.idx[0], 2 - g.idx[1], 2 - g.idx[2]])
+}
+
+/// Per-axis factors for moving `grip` (about `anchor`) to `p`. Corner grips scale uniformly
+/// along the diagonal; edge and face grips scale each of their axes independently.
+fn grip_factors(g: &Grip, anchor: DVec3, p: DVec3) -> Option<DVec3> {
+    let axes = g.axes();
+    let d0 = g.pos - anchor;
+    let mut f = DVec3::ONE;
+    if g.count() == 3 {
+        let l2 = d0.length_squared();
+        if l2 < 1e-12 {
+            return None;
+        }
+        let u = (p - anchor).dot(d0) / l2;
+        f = DVec3::splat(u);
+    } else {
+        for a in 0..3 {
+            if axes[a] {
+                if d0[a].abs() < 1e-12 {
+                    return None;
+                }
+                f[a] = (p - anchor)[a] / d0[a];
+            }
+        }
+    }
+    let ok = f.is_finite() && (0..3).all(|a| !axes[a] || f[a].abs() > 1e-4);
+    ok.then_some(f)
+}
+
+/// Parse a scale VCB entry for `n` scaled axes: one factor (applied to all), or `n`
+/// factors separated by `;` (or `,` when that yields exactly `n` numbers).
+fn parse_factors(input: &str, n: usize) -> Option<Vec<f64>> {
+    let num = |t: &str| t.trim().replace(',', ".").parse::<f64>().ok().filter(|f| f.is_finite() && f.abs() > 1e-6);
+    let s = input.trim();
+    if s.contains(';') {
+        let v: Option<Vec<f64>> = s.split(';').map(num).collect();
+        return v.filter(|v| v.len() == 1 || v.len() == n);
+    }
+    if n > 1 && s.contains(',') {
+        let parts: Vec<&str> = s.split(',').collect();
+        if parts.len() == n
+            && let Some(v) = parts.iter().map(|t| num(t)).collect::<Option<Vec<f64>>>()
+        {
+            return Some(v);
+        }
+    }
+    num(s).map(|f| vec![f])
+}
+
+fn factors_from(axes: [bool; 3], vals: &[f64]) -> DVec3 {
+    let mut f = DVec3::ONE;
+    let mut it = vals.iter();
+    let single = vals.len() == 1;
+    for a in 0..3 {
+        if axes[a] {
+            f[a] = if single { vals[0] } else { *it.next().unwrap_or(&1.0) };
+        }
+    }
+    f
+}
+
+fn fmt_factors(axes: [bool; 3], f: DVec3) -> String {
+    let n = axes.iter().filter(|a| **a).count();
+    if n == 3 && (f.x - f.y).abs() < 1e-9 && (f.y - f.z).abs() < 1e-9 {
+        return format!("{:.3}", f.x);
+    }
+    (0..3).filter(|a| axes[*a]).map(|a| format!("{:.3}", f[a])).collect::<Vec<_>>().join("; ")
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ScaleDrag {
+    grip: Grip,
     anchor: DVec3,
-    grip: DVec3,
-    factor: f64,
+    about_center: bool,
+    factor: DVec3,
 }
 
 #[derive(Default)]
@@ -565,16 +690,10 @@ pub struct ScaleTool {
     hover: Option<Hover>,
     ents: Vec<EntityRef>,
     bbox: Option<Aabb>,
-    hot_grip: Option<DVec3>,
+    hot_grip: Option<Grip>,
     drag: Option<ScaleDrag>,
     clicker: Clicker,
-    last: Option<LastXf>,
-}
-
-fn grips(b: &Aabb) -> Vec<DVec3> {
-    let mut v: Vec<DVec3> = b.corners().to_vec();
-    v.dedup_by(|a, b| a.distance_squared(*b) < 1e-9);
-    v
+    last: Option<(LastXf, [bool; 3])>,
 }
 
 impl ScaleTool {
@@ -593,44 +712,74 @@ impl ScaleTool {
         self.hot_grip = self.bbox.as_ref().and_then(|b| {
             grips(b)
                 .into_iter()
-                .filter_map(|g| Some((ctx.camera.world_to_screen(g, vp)?.distance(c), g)))
+                .filter_map(|g| Some((ctx.camera.world_to_screen(g.pos, vp)?.distance(c), g)))
                 .filter(|(d, _)| *d <= 10.0)
-                .min_by(|a, b| a.0.total_cmp(&b.0))
+                // Prefer the closest; on ties prefer the grip scaling more axes (corners).
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(b.1.count().cmp(&a.1.count())))
                 .map(|x| x.1)
         });
     }
 
     fn update_factor(&mut self, ctx: &ToolContext) {
-        let Some(d) = &mut self.drag else { return };
-        let axis = d.grip - d.anchor;
-        let l2 = axis.length_squared();
-        if l2 < 1e-12 {
-            return;
+        let Some(mut d) = self.drag else { return };
+        // Ctrl (held) = scale about the centre.
+        let about_center = ctx.pointer.modifiers.ctrl || ctx.pointer.modifiers.command;
+        if about_center != d.about_center
+            && let Some(b) = &self.bbox
+        {
+            d.about_center = about_center;
+            d.anchor = grip_anchor(b, &d.grip, about_center);
         }
-        let r = infer(
-            &mut self.engine,
-            ctx,
-            Some(d.anchor),
-            Some(inference::Constraint::Line { origin: d.anchor, dir: axis / l2.sqrt(), kind: InferenceKind::Free }),
-            None,
-        );
-        let f = (r.point - d.anchor).dot(axis) / l2;
-        if f.is_finite() && f.abs() > 1e-4 {
+        let dir = d.grip.pos - d.anchor;
+        let axes = d.grip.axes();
+        let constraint = match d.grip.count() {
+            // Corner: along the diagonal. Face: along its single axis.
+            3 | 1 => dir.try_normalize().map(|n| inference::Constraint::Line { origin: d.anchor, dir: n, kind: InferenceKind::Free }),
+            // Edge: in the plane of its two axes through the grip.
+            _ => {
+                let n = DVec3::new(
+                    if axes[0] { 0.0 } else { 1.0 },
+                    if axes[1] { 0.0 } else { 1.0 },
+                    if axes[2] { 0.0 } else { 1.0 },
+                );
+                Some(inference::Constraint::Plane(Plane::new(d.grip.pos, n)))
+            }
+        };
+        let r = infer(&mut self.engine, ctx, Some(d.anchor), constraint, None);
+        if let Some(f) = grip_factors(&d.grip, d.anchor, r.point) {
             d.factor = f;
         }
+        self.drag = Some(d);
     }
 
-    fn finish(&mut self, ctx: &mut ToolContext, anchor: DVec3, factor: f64) {
+    fn finish(&mut self, ctx: &mut ToolContext, anchor: DVec3, factor: DVec3, axes: [bool; 3]) {
         self.drag = None;
-        if (factor - 1.0).abs() < 1e-9 || factor.abs() < 1e-6 {
+        if (factor - DVec3::ONE).abs().max_element() < 1e-9 || factor.abs().min_element() < 1e-6 {
             return;
         }
         let kind = XfKind::Scale { anchor, factor };
         let ents = self.ents.clone();
         if run_transform(ctx, "Scale", &ents, kind, false, None).is_some() {
-            self.last = Some(LastXf { ents, kind, copy: false });
+            self.last = Some((LastXf { ents, kind, copy: false }, axes));
         }
         self.bbox = None;
+    }
+
+    fn click(&mut self, ctx: &mut ToolContext) {
+        if let Some(d) = self.drag {
+            self.update_factor(ctx);
+            let d2 = self.drag.unwrap_or(d);
+            self.finish(ctx, d2.anchor, d2.factor, d2.grip.axes());
+            return;
+        }
+        self.refresh(ctx);
+        if let (Some(g), Some(b)) = (self.hot_grip, self.bbox) {
+            let about_center = ctx.pointer.modifiers.ctrl || ctx.pointer.modifiers.command;
+            let anchor = grip_anchor(&b, &g, about_center);
+            if anchor.distance(g.pos) > TOL {
+                self.drag = Some(ScaleDrag { grip: g, anchor, about_center, factor: DVec3::ONE });
+            }
+        }
     }
 }
 
@@ -661,24 +810,23 @@ impl Tool for ScaleTool {
         false
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
-        let s = input.trim().replace(',', ".");
-        let Ok(f) = s.parse::<f64>() else { return false };
-        if !f.is_finite() || f.abs() < 1e-6 {
-            return false;
-        }
         if let Some(d) = self.drag {
-            self.finish(ctx, d.anchor, f);
+            let axes = d.grip.axes();
+            let Some(v) = parse_factors(input, d.grip.count()) else { return false };
+            self.finish(ctx, d.anchor, factors_from(axes, &v), axes);
             return true;
         }
-        if let Some(l) = self.last.clone()
+        if let Some((l, axes)) = self.last.clone()
             && let XfKind::Scale { anchor, .. } = l.kind
         {
+            let n = axes.iter().filter(|a| **a).count();
+            let Some(v) = parse_factors(input, n) else { return false };
             if !undo_last(ctx) {
                 return false;
             }
-            let kind = XfKind::Scale { anchor, factor: f };
+            let kind = XfKind::Scale { anchor, factor: factors_from(axes, &v) };
             if run_transform(ctx, "Scale", &l.ents, kind, false, None).is_some() {
-                self.last = Some(LastXf { kind, ..l });
+                self.last = Some((LastXf { kind, ..l }, axes));
                 return true;
             }
         }
@@ -688,28 +836,44 @@ impl Tool for ScaleTool {
         "Scale"
     }
     fn vcb_value(&self) -> String {
-        match (self.drag, self.last.as_ref().map(|l| l.kind)) {
-            (Some(d), _) => format!("{:.3}", d.factor),
-            (None, Some(XfKind::Scale { factor, .. })) => format!("{factor:.3}"),
-            _ => String::new(),
+        if let Some(d) = self.drag {
+            return fmt_factors(d.grip.axes(), d.factor);
+        }
+        match &self.last {
+            Some((l, axes)) => match l.kind {
+                XfKind::Scale { factor, .. } => fmt_factors(*axes, factor),
+                _ => String::new(),
+            },
+            None => String::new(),
         }
     }
     fn status_text(&self) -> String {
-        if self.drag.is_some() {
-            "Move to scale uniformly about the opposite corner; click or type a factor.".into()
+        if let Some(d) = self.drag {
+            let what = match d.grip.count() {
+                3 => "uniformly",
+                2 => "along two axes",
+                _ => "along one axis",
+            };
+            format!(
+                "Move to scale {what} about the {}; click or type a factor (per axis: `1.5; 2`). Ctrl = about centre.",
+                if d.about_center { "centre" } else { "opposite grip" }
+            )
         } else if self.ents.is_empty() {
-            "Select entities (or hover one), then drag a corner grip.".into()
+            "Select entities (or hover one), then drag a grip.".into()
         } else {
-            "Click a green corner grip to scale.".into()
+            "Drag a grip: corners scale uniformly, edge midpoints two axes, face centres one axis. Ctrl = about centre."
+                .into()
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(d) = self.drag {
             let t = XfKind::Scale { anchor: d.anchor, factor: d.factor }.at(1.0);
             draw_preview(view, &self.ents, &t, out3d);
-            dashed(out3d, d.anchor, d.anchor + (d.grip - d.anchor) * d.factor, Color32::from_gray(60), 1.5);
+            let target = t.transform_point3(d.grip.pos);
+            dashed(out3d, d.anchor, target, Color32::from_gray(60), 1.5);
             out2d.push(Marker2d::Point { at: d.anchor, shape: MarkerShape::Ring, color: Color32::from_rgb(0xFF, 0, 0) });
-            out2d.push(Marker2d::CursorTooltip { text: format!("Uniform scale {:.3}", d.factor) });
+            let what = if d.grip.count() == 3 { "Uniform scale" } else { "Scale" };
+            out2d.push(Marker2d::CursorTooltip { text: format!("{what} {}", fmt_factors(d.grip.axes(), d.factor)) });
             return;
         }
         if let Some(h) = &self.hover {
@@ -722,9 +886,9 @@ impl Tool for ScaleTool {
                 line(out3d, c[i], c[j], Color32::from_rgb(0xD0, 0x60, 0x00), 1.0);
             }
             for g in grips(b) {
-                let hot = self.hot_grip.is_some_and(|h| h.distance_squared(g) < 1e-9);
+                let hot = self.hot_grip.is_some_and(|h| h.idx == g.idx);
                 out2d.push(Marker2d::Point {
-                    at: g,
+                    at: g.pos,
                     shape: MarkerShape::Square,
                     color: if hot { Color32::from_rgb(0xFF, 0, 0) } else { Color32::from_rgb(0, 0xC0, 0) },
                 });
@@ -732,28 +896,10 @@ impl Tool for ScaleTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.drag.is_some()
-    }
-}
-
-impl ScaleTool {
-    fn click(&mut self, ctx: &mut ToolContext) {
-        if let Some(d) = self.drag {
-            self.update_factor(ctx);
-            let f = self.drag.map(|d| d.factor).unwrap_or(d.factor);
-            self.finish(ctx, d.anchor, f);
-            return;
-        }
-        self.refresh(ctx);
-        if let (Some(g), Some(b)) = (self.hot_grip, self.bbox) {
-            let anchor = b.min + b.max - g;
-            if anchor.distance(g) > TOL {
-                self.drag = Some(ScaleDrag { anchor, grip: g, factor: 1.0 });
-            }
-        }
     }
 }
 
@@ -809,8 +955,44 @@ mod tests {
 
     #[test]
     fn scale_about_anchor() {
-        let k = XfKind::Scale { anchor: DVec3::new(1.0, 1.0, 1.0), factor: 2.0 };
+        let k = XfKind::Scale { anchor: DVec3::new(1.0, 1.0, 1.0), factor: DVec3::splat(2.0) };
         let p = k.at(1.0).transform_point3(DVec3::new(2.0, 1.0, 1.0));
         assert!((p - DVec3::new(3.0, 1.0, 1.0)).length() < 1e-12);
+    }
+
+    #[test]
+    fn scale_grips_and_factors() {
+        let b = Aabb { min: DVec3::ZERO, max: DVec3::new(2.0, 4.0, 6.0) };
+        let g = grips(&b);
+        assert_eq!(g.len(), 26);
+        assert_eq!(g.iter().filter(|g| g.count() == 3).count(), 8);
+        assert_eq!(g.iter().filter(|g| g.count() == 2).count(), 12);
+        assert_eq!(g.iter().filter(|g| g.count() == 1).count(), 6);
+        // Flat box: no grips scaling the flat axis.
+        let flat = Aabb { min: DVec3::ZERO, max: DVec3::new(2.0, 4.0, 0.0) };
+        assert_eq!(grips(&flat).len(), 8);
+        // +X face grip: only X scales, anchored at the -X face.
+        let fx = Grip { idx: [2, 1, 1], pos: grip_pos(&b, [2, 1, 1]) };
+        let a = grip_anchor(&b, &fx, false);
+        assert_eq!(a, DVec3::new(0.0, 2.0, 3.0));
+        let f = grip_factors(&fx, a, DVec3::new(3.0, 9.0, 9.0)).unwrap();
+        assert_eq!(f, DVec3::new(1.5, 1.0, 1.0));
+        // Edge grip (+X,+Y): independent factors.
+        let e = Grip { idx: [2, 2, 1], pos: grip_pos(&b, [2, 2, 1]) };
+        let a = grip_anchor(&b, &e, false);
+        let f = grip_factors(&e, a, DVec3::new(4.0, 2.0, 3.0)).unwrap();
+        assert_eq!(f, DVec3::new(2.0, 0.5, 1.0));
+        // Corner about the centre: uniform.
+        let c = Grip { idx: [2, 2, 2], pos: b.max };
+        let a = grip_anchor(&b, &c, true);
+        let f = grip_factors(&c, a, a + (b.max - a) * 2.0).unwrap();
+        assert!((f - DVec3::splat(2.0)).length() < 1e-12);
+        // VCB parsing.
+        assert_eq!(parse_factors("1.5", 2), Some(vec![1.5]));
+        assert_eq!(parse_factors("1,5", 1), Some(vec![1.5]));
+        assert_eq!(parse_factors("2,3", 2), Some(vec![2.0, 3.0]));
+        assert_eq!(parse_factors("2;3", 2), Some(vec![2.0, 3.0]));
+        assert_eq!(parse_factors("2;3", 3), None);
+        assert_eq!(factors_from([true, false, true], &[2.0, 3.0]), DVec3::new(2.0, 1.0, 3.0));
     }
 }

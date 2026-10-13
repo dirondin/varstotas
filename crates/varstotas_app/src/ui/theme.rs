@@ -10,7 +10,36 @@ pub const ACCENT: Color32 = Color32::from_rgb(0x2F, 0x7D, 0xE1);
 pub const ACCENT_SOFT: Color32 = Color32::from_rgb(0xD6, 0xE6, 0xFA);
 pub const TEXT_DIM: Color32 = Color32::from_rgb(0x6B, 0x72, 0x7D);
 
+/// System fonts with arrows / ⌘ ⇧ etc., appended as fallbacks (egui's bundled fonts lack them).
+const SYMBOL_FONTS: &[&str] = &[
+    "/System/Library/Fonts/Apple Symbols.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "C:\\Windows\\Fonts\\seguisym.ttf",
+    "C:\\Windows\\Fonts\\segoeui.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+];
+
+fn install_symbol_fallback(ctx: &Context) {
+    let Some((path, bytes)) = SYMBOL_FONTS
+        .iter()
+        .find_map(|p| std::fs::read(p).ok().map(|b| (*p, b)))
+    else {
+        log::warn!("no symbol fallback font found; arrows may render as boxes");
+        return;
+    };
+    let mut fonts = egui::FontDefinitions::default();
+    fonts
+        .font_data
+        .insert("symbols".into(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+    for fam in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts.families.entry(fam).or_default().push("symbols".into());
+    }
+    ctx.set_fonts(fonts);
+    log::debug!("symbol fallback font: {path}");
+}
+
 pub fn apply(ctx: &Context) {
+    install_symbol_fallback(ctx);
     ctx.set_theme(egui::ThemePreference::Light);
     let mut v = Visuals::light();
     v.panel_fill = BAR_BG;

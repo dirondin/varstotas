@@ -210,21 +210,39 @@ pub struct Script {
     wait: u32,
     frame: u32,
     shot: Option<String>,
+    /// Viewport size seen last frame and for how many frames it has been unchanged.
+    last_vp: Option<egui::Vec2>,
+    stable: u32,
 }
 
 impl Script {
     pub fn parse(text: &str) -> Self {
-        Self { cmds: text.lines().filter_map(parse_cmd).collect(), pc: 0, wait: 0, frame: 0, shot: None }
+        Self {
+            cmds: text.lines().filter_map(parse_cmd).collect(),
+            pc: 0,
+            wait: 0,
+            frame: 0,
+            shot: None,
+            last_vp: None,
+            stable: 0,
+        }
     }
 }
 
 impl VarstotasApp {
     fn script_screen(&self, p: DVec3) -> Pos2 {
         let vp = self.viewport.size();
-        self.camera
+        let s = self
+            .camera
             .world_to_screen(p, DVec2::new(vp.x as f64, vp.y as f64))
-            .map(|s| Pos2::new(s.x as f32, s.y as f32))
-            .unwrap_or(Pos2::new(vp.x * 0.5, vp.y * 0.5))
+            .map(|s| Pos2::new(s.x as f32, s.y as f32));
+        match s {
+            Some(s) if s.x >= 0.0 && s.y >= 0.0 && s.x <= vp.x && s.y <= vp.y => s,
+            _ => {
+                log::warn!("script: world point {p} is off-screen ({s:?}); results may not match intent");
+                s.unwrap_or(Pos2::new(vp.x * 0.5, vp.y * 0.5))
+            }
+        }
     }
 
     fn script_move(&mut self, pos: Pos2, primary_down: bool) {
@@ -250,6 +268,7 @@ impl VarstotasApp {
         self.script_move(pos, false);
         self.script_button(pos, true);
         self.script_button(pos, false);
+        self.after_primary_click(pos, self.last_modifiers);
     }
 
     /// Execute scripted input (one command per frame; screenshots wait for the capture).
@@ -257,8 +276,19 @@ impl VarstotasApp {
         let Some(script) = self.debug.script.as_mut() else { return };
         ctx.request_repaint();
         script.frame += 1;
-        if script.frame < 30 {
-            return; // let the window and renderer settle
+        // Let the window and renderer settle: the viewport size must be stable for a while
+        // before the first command (world → screen mapping depends on it).
+        let vp = self.viewport.size();
+        if script.pc == 0 && script.frame < 600 {
+            if script.last_vp == Some(vp) {
+                script.stable += 1;
+            } else {
+                script.stable = 0;
+                script.last_vp = Some(vp);
+            }
+            if script.frame < 30 || script.stable < 15 {
+                return;
+            }
         }
         if let Some(path) = script.shot.clone() {
             let shot = ctx.input(|i| {

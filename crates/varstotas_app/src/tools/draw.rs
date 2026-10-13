@@ -209,7 +209,7 @@ impl Tool for LineTool {
         inference::draw_result(r, out3d, out2d);
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.start.is_some()
@@ -269,15 +269,25 @@ pub struct RectangleTool {
     shape_kind: Option<InferenceKind>,
     clicker: Clicker,
     last: Option<RectSpec>,
+    unit: Option<varstotas_kernel::LengthUnit>,
 }
 
 impl RectangleTool {
     fn update(&mut self, ctx: &ToolContext) {
-        let fallback = self.c1.map(|(c, n)| Plane::new(c, n.unwrap_or(DVec3::Z)));
-        let r = infer(&mut self.engine, ctx, self.c1.map(|c| c.0), None, fallback);
+        self.unit = Some(ctx.doc.model.unit);
+        // An arrow key pressed after the first corner locks the rectangle's plane normal
+        // (not a line), so the second corner moves freely on that plane.
+        let lock = self.c1.and_then(|_| self.engine.arrow_dir().map(|(d, _)| d));
+        let fallback = self.c1.map(|(c, n)| Plane::new(c, lock.or(n).unwrap_or(DVec3::Z)));
+        let constraint = match (self.c1, lock) {
+            (Some((c, _)), Some(d)) => Some(Constraint::Plane(Plane::new(c, d))),
+            _ => None,
+        };
+        let r = infer(&mut self.engine, ctx, self.c1.map(|c| c.0), constraint, fallback);
         self.spec = None;
         self.shape_kind = None;
         if let Some((c1, fixed)) = self.c1 {
+            let fixed = lock.or(fixed);
             let (n, u, v) = rect_frame(c1, fixed, r.point);
             let plane = Plane::new(c1, n);
             let q = plane_point(ctx, &r, &plane);
@@ -407,6 +417,16 @@ impl Tool for RectangleTool {
     fn vcb_label(&self) -> &str {
         "Dimensions"
     }
+    fn vcb_value(&self) -> String {
+        match (self.unit, self.spec.or(self.last)) {
+            (Some(u), Some(s)) => format!(
+                "{}, {}",
+                varstotas_kernel::units::format_length(s.w.abs(), u),
+                varstotas_kernel::units::format_length(s.h.abs(), u)
+            ),
+            _ => String::new(),
+        }
+    }
     fn status_text(&self) -> String {
         if self.c1.is_none() {
             "Select first corner. Arrow keys pick the plane (→ red, ← green, ↑ blue normal).".into()
@@ -435,7 +455,7 @@ impl Tool for RectangleTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.c1.is_some()
@@ -482,7 +502,12 @@ impl CircleTool {
 
     fn update(&mut self, ctx: &ToolContext) {
         let fallback = self.center.map(|(c, n)| Plane::new(c, n));
-        let r = infer(&mut self.engine, ctx, self.center.map(|c| c.0), None, fallback);
+        // An arrow lock along the circle's normal would collapse the radius: use the plane.
+        let constraint = match (self.center, self.engine.arrow_dir()) {
+            (Some((c, n)), Some((d, _))) if d.dot(n).abs() > 0.5 => Some(Constraint::Plane(Plane::new(c, n))),
+            _ => None,
+        };
+        let r = infer(&mut self.engine, ctx, self.center.map(|c| c.0), constraint, fallback);
         self.spec = self.center.map(|(c, n)| {
             let q = plane_point(ctx, &r, &Plane::new(c, n));
             let d = q - c;
@@ -628,7 +653,7 @@ impl Tool for CircleTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.center.is_some()
@@ -884,7 +909,7 @@ impl Tool for ArcTool {
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.a.is_some()

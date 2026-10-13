@@ -39,7 +39,41 @@ pub struct TapeTool {
     toggle: ModToggle,
     clicker: Clicker,
     last_measure: Option<f64>,
+    /// Last completed point-to-point measurement (typing a value then offers a resize).
+    resize_base: Option<f64>,
+    /// Pending "Resize the model?" confirmation: uniform factor.
+    resize_pending: Option<f64>,
     unit: Option<varstotas_kernel::LengthUnit>,
+}
+
+/// Uniformly scale everything in the active context (and the model's guides at the root)
+/// about the context origin.
+fn resize_active(ctx: &mut ToolContext, factor: f64) -> bool {
+    let path = ctx.doc.active_path.clone();
+    let root = path.is_empty();
+    let m = DMat4::from_scale(DVec3::splat(factor));
+    ctx.doc
+        .commit("Resize Model", |model| {
+            let mesh = model.mesh_at_mut(&path)?;
+            let vs: std::collections::HashSet<_> = mesh.vertices.keys().collect();
+            if !vs.is_empty() {
+                mesh.transform_vertices(&vs, &m);
+            }
+            for (_, inst) in mesh.instances.iter_mut() {
+                inst.transform = m * inst.transform;
+            }
+            if root {
+                for g in &mut model.guides {
+                    g.origin *= factor;
+                }
+                for p in &mut model.guide_points {
+                    *p *= factor;
+                }
+            }
+            Some(())
+        })
+        .flatten()
+        .is_some()
 }
 
 impl Default for TapeTool {
@@ -52,6 +86,8 @@ impl Default for TapeTool {
             toggle: ModToggle::default(),
             clicker: Clicker::default(),
             last_measure: None,
+            resize_base: None,
+            resize_pending: None,
             unit: None,
         }
     }
@@ -84,6 +120,7 @@ impl TapeTool {
 
     fn finish(&mut self, ctx: &mut ToolContext, m: (f64, Option<GuideLine>, Option<DVec3>)) {
         self.last_measure = Some(m.0);
+        self.resize_base = (m.1.is_none() && m.0 > TOL).then_some(m.0);
         self.start = None;
         let (_, gl, gp) = m;
         if gl.is_none() && gp.is_none() {
@@ -112,6 +149,8 @@ impl TapeTool {
                     _ => None,
                 };
                 self.start = Some(TapeStart { a: r.point, edge_dir });
+                self.resize_base = None;
+                self.resize_pending = None;
             }
             Some(_) => {
                 if let Some(m) = self.measure() {
@@ -143,6 +182,21 @@ impl Tool for TapeTool {
         if !pressed {
             return false;
         }
+        if let Some(f) = self.resize_pending {
+            match key {
+                Key::Enter => {
+                    self.resize_pending = None;
+                    self.resize_base = None;
+                    resize_active(ctx, f);
+                    return true;
+                }
+                Key::Escape => {
+                    self.resize_pending = None;
+                    return true;
+                }
+                _ => {}
+            }
+        }
         if key == Key::Escape {
             self.start = None;
             self.engine.clear_locks();
@@ -155,8 +209,17 @@ impl Tool for TapeTool {
         r
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
-        // Resizing the model is not supported: a value sets the guide distance.
         let Some(v) = parse_len(ctx.doc.model.unit, input) else { return false };
+        // After a completed point-to-point measurement: offer to resize the model.
+        if self.start.is_none() {
+            let Some(base) = self.resize_base else { return false };
+            if v <= TOL {
+                return false;
+            }
+            self.resize_pending = Some(v / base);
+            return true;
+        }
+        // While measuring: the value sets the guide distance.
         let (Some(s), Some(r)) = (self.start, self.cur.clone()) else { return false };
         match s.edge_dir.filter(|_| self.guides) {
             Some(d) => {
@@ -184,6 +247,12 @@ impl Tool for TapeTool {
     }
     fn status_text(&self) -> String {
         let g = if self.guides { "guides on" } else { "measure only" };
+        if let Some(f) = self.resize_pending {
+            return format!("Resize the model (×{f:.4})? Enter = Yes, Esc = No.");
+        }
+        if self.start.is_none() && self.resize_base.is_some() {
+            return format!("Type a new length to resize the model, or select a start point ({g}).");
+        }
         if self.start.is_none() {
             format!("Select a start point (an edge for a parallel guide). Ctrl/Option toggles guides ({g}).")
         } else {
@@ -203,6 +272,10 @@ impl Tool for TapeTool {
             }
             label(out2d, r.point, fmt_len(model, d));
         }
+        if let Some(f) = self.resize_pending {
+            out2d.push(Marker2d::CursorTooltip { text: format!("Resize the model ×{f:.4}?  Enter = Yes · Esc = No") });
+            return;
+        }
         if let Some(r) = &self.cur {
             inference::draw_result(r, out3d, out2d);
             if self.start.is_none() && self.guides {
@@ -210,11 +283,14 @@ impl Tool for TapeTool {
             }
         }
     }
+    fn cursor_plus(&self) -> bool {
+        self.guides
+    }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
-        self.start.is_some()
+        self.start.is_some() || self.resize_pending.is_some()
     }
 }
 
@@ -341,7 +417,7 @@ impl Tool for ProtractorTool {
         "Angle"
     }
     fn vcb_value(&self) -> String {
-        if matches!(self.stage, Some(ProStage::Angle { .. })) { format!("{:.1}°", self.angle) } else { String::new() }
+        if matches!(self.stage, Some(ProStage::Angle { .. })) { fmt_angle(self.angle) } else { String::new() }
     }
     fn status_text(&self) -> String {
         match self.stage {
@@ -372,12 +448,12 @@ impl Tool for ProtractorTool {
                 let dir = DMat4::from_axis_angle(n, self.angle.to_radians()).transform_vector3(zero);
                 dashed(out3d, c - dir * reach, c + dir * reach, GUIDE, 1.5);
                 dashed(out3d, c, c + zero * reach * 0.01, Color32::from_gray(40), 1.5);
-                out2d.push(Marker2d::CursorTooltip { text: format!("{:.1}°", self.angle) });
+                out2d.push(Marker2d::CursorTooltip { text: fmt_angle(self.angle) });
             }
         }
     }
     fn cursor(&self) -> CursorIcon {
-        CursorIcon::Crosshair
+        CursorIcon::None
     }
     fn is_busy(&self) -> bool {
         self.stage.is_some()

@@ -17,9 +17,20 @@ impl VarstotasApp {
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
                     paint_icon(ui.painter(), rect, Icon::Info, false);
-                    let (text, is_error) = self.status_text();
-                    let color = if is_error { Color32::from_rgb(0xC0, 0x30, 0x20) } else { Color32::from_gray(50) };
-                    ui.add(egui::Label::new(RichText::new(text).color(color)).truncate());
+                    let (text, flash) = self.status_text();
+                    if let Some((msg, is_error)) = flash {
+                        let (fg, bg) = if is_error {
+                            (Color32::from_rgb(0xA8, 0x2A, 0x1C), Color32::from_rgb(0xFB, 0xE4, 0xE0))
+                        } else {
+                            (Color32::from_rgb(0x1F, 0x4E, 0x8C), theme::ACCENT_SOFT)
+                        };
+                        egui::Frame::new()
+                            .fill(bg)
+                            .corner_radius(4.0)
+                            .inner_margin(egui::Margin::symmetric(6, 1))
+                            .show(ui, |ui| ui.label(RichText::new(msg).color(fg)));
+                    }
+                    ui.add(egui::Label::new(RichText::new(text).color(Color32::from_gray(50))).truncate());
                 });
             });
         });

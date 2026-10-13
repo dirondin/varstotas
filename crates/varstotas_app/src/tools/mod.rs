@@ -370,6 +370,19 @@ pub trait Tool {
     fn cursor(&self) -> CursorIcon {
         CursorIcon::Default
     }
+    /// Tool cursor glyph drawn at the pointer (modeling tools); the tool then returns
+    /// `CursorIcon::None` from [`Tool::cursor`] to hide the OS cursor.
+    fn cursor_glyph(&self) -> Option<Marker2d> {
+        match self.id() {
+            ToolId::Select | ToolId::Orbit | ToolId::Pan | ToolId::Zoom => None,
+            id if !id.implemented() => None,
+            id => Some(Marker2d::ToolCursor { icon: id.icon(), plus: self.cursor_plus() }),
+        }
+    }
+    /// Show a "+" badge on the tool cursor (copy / keep original / guides on).
+    fn cursor_plus(&self) -> bool {
+        false
+    }
     /// True while in the middle of an operation (Esc cancels it rather than leaving context).
     fn is_busy(&self) -> bool {
         false

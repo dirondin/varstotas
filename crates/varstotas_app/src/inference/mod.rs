@@ -499,10 +499,13 @@ impl InferenceEngine {
                     r.line_origin = Some(origin);
                     r.locked = locked;
                     let proj = |p: DVec3| origin + dir * (p - origin).dot(dir);
-                    let snap_src = best_point
-                        .map(|p| p.pos)
-                        .or(best_ix.map(|x| x.1))
-                        .or(best_edge.map(|e| e.1));
+                    // Natural position: closest point between the pick ray and the line.
+                    // When the line is (nearly) parallel to the view ray it is ill-defined;
+                    // fall back to the anchor rather than jumping far away.
+                    let natural = constrained_line_point(cam, vp, q.cursor, origin, dir, ro, rd);
+                    // Only point-like snaps (endpoints, midpoints, intersections) are projected
+                    // onto the line; an edge snap would project an arbitrary point.
+                    let snap_src = best_point.map(|p| p.pos).or(best_ix.map(|x| x.1));
                     let from = self.from_points.iter().rev().copied().find(|fp| px_dist(proj(*fp)) <= FROM_POINT_PX);
                     if let Some(src) = snap_src {
                         r.point = proj(src);
@@ -513,7 +516,7 @@ impl InferenceEngine {
                         r.point = proj(fp);
                         r.from_point = Some((fp, axis_kind_of(fp - r.point).unwrap_or(InferenceKind::FromPoint)));
                     } else {
-                        r.point = closest_on_line_to_ray(origin, dir, ro, rd).unwrap_or(origin);
+                        r.point = natural;
                     }
                     return finish(r);
                 }
@@ -599,9 +602,10 @@ impl InferenceEngine {
             let px = cam.pixel_size_at(anchor, vp);
             let mut best_dir: Option<BestDir> = None;
             for (d, kind, seg) in dirs {
-                // Skip lines that are (nearly) end-on in screen space.
+                // Skip lines that are (nearly) end-on in screen space: tiny cursor offsets
+                // would map to huge distances along them.
                 if let (Some(sa), Some(sb)) = (a_s, to_screen(anchor + d * px * 40.0))
-                    && sa.distance(sb) < 6.0
+                    && sa.distance(sb) < 10.0
                 {
                     continue;
                 }
@@ -651,6 +655,9 @@ impl InferenceEngine {
                 (DVec3::Y, InferenceKind::OnGreenAxis),
                 (DVec3::Z, InferenceKind::OnBlueAxis),
             ] {
+                if end_on(cam, vp, *fp, d) {
+                    continue;
+                }
                 let Some(p) = closest_on_line_to_ray(*fp, d, ro, rd) else { continue };
                 if (p - ro).dot(rd) <= 0.0 || p.distance(*fp) < 1e-6 {
                     continue;
@@ -721,6 +728,50 @@ pub fn push_line(out: &mut Overlay3d, a: DVec3, b: DVec3, color: Color32, width:
         dashed,
         on_top,
     });
+}
+
+/// True when the line through `p` along `d` is (nearly) end-on in screen space.
+fn end_on(cam: &Camera, vp: DVec2, p: DVec3, d: DVec3) -> bool {
+    let px = cam.pixel_size_at(p, vp);
+    match (cam.world_to_screen(p, vp), cam.world_to_screen(p + d * px * 40.0, vp)) {
+        (Some(a), Some(b)) => a.distance(b) < 10.0,
+        _ => false,
+    }
+}
+
+/// Closest point on the line `origin + t*dir` to the pick ray, robust at grazing angles:
+/// the result is rejected (→ `origin`) when the line is nearly end-on, and it is limited
+/// to points whose projection stays near the cursor.
+fn constrained_line_point(cam: &Camera, vp: DVec2, cursor: DVec2, origin: DVec3, dir: DVec3, ro: DVec3, rd: DVec3) -> DVec3 {
+    let Some(p) = closest_on_line_to_ray(origin, dir, ro, rd) else { return origin };
+    if !p.is_finite() {
+        return origin;
+    }
+    // End-on in screen space: the cursor cannot meaningfully drive the distance.
+    if end_on(cam, vp, origin, dir) {
+        let px = cam.pixel_size_at(origin, vp);
+        if let (Some(a), Some(b)) = (cam.world_to_screen(origin, vp), cam.world_to_screen(origin + dir * px * 40.0, vp))
+            && a.distance(b) < 1.0
+        {
+            return origin;
+        }
+    }
+    // Behind the camera or projecting far from the cursor: clamp to the farthest point that
+    // still projects within the viewport neighbourhood of the cursor.
+    let ok = |x: DVec3| (x - ro).dot(rd) > 0.0 && cam.world_to_screen(x, vp).is_some_and(|s| s.distance(cursor) < vp.length());
+    if ok(p) {
+        return p;
+    }
+    // Bisect between the origin and p.
+    let (mut lo, mut hi) = (origin, p);
+    if !ok(lo) {
+        return origin;
+    }
+    for _ in 0..40 {
+        let m = (lo + hi) * 0.5;
+        if ok(m) { lo = m } else { hi = m }
+    }
+    lo
 }
 
 type DirCand = (DVec3, InferenceKind, Option<(DVec3, DVec3)>);

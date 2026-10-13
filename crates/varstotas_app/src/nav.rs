@@ -4,7 +4,7 @@
 use crate::document::guarded;
 use egui::{Event, MouseWheelUnit, PointerButton, Pos2, Rect, Response, Vec2};
 use varstotas_kernel::glam::{DVec2, DVec3};
-use varstotas_kernel::{Model, Ray};
+use varstotas_kernel::{Aabb, Model, Ray};
 use varstotas_render::{Camera, StandardView};
 
 pub fn dvec2(v: Vec2) -> DVec2 {
@@ -195,11 +195,44 @@ impl CameraAnimation {
     }
 }
 
+/// Bounds used for zoom extents: model geometry plus guide points. Guide lines are infinite and
+/// therefore deliberately ignored.
+pub fn extents_bounds(model: &Model) -> Option<Aabb> {
+    let geom = guarded(|| model.bounds()).ok().flatten();
+    let pts = Aabb::from_points(model.guide_points.iter().copied().filter(|p| p.is_finite()));
+    match (geom, pts) {
+        (Some(a), Some(b)) => Some(a.union(&b)),
+        (a, b) => a.or(b),
+    }
+}
+
 /// Target camera for zoom extents (unchanged camera if the model is empty).
 pub fn zoom_extents_camera(model: &Model, camera: &Camera, aspect: f64) -> Camera {
     let mut cam = camera.clone();
-    if let Ok(Some(b)) = guarded(|| model.bounds()) {
+    if let Some(b) = extents_bounds(model) {
         let _ = guarded(|| cam.zoom_extents(b.min, b.max, aspect));
+    }
+    cam
+}
+
+/// classic startup view: perspective, looking slightly down across a ~10 m area in front
+/// of the origin, with the horizon (sky) in the upper part of the view.
+pub fn startup_camera() -> Camera {
+    let mut cam = guarded(Camera::default).unwrap_or(Camera {
+        eye: DVec3::ONE,
+        target: DVec3::ZERO,
+        up: DVec3::Z,
+        fov_y_deg: 35.0,
+        ortho: false,
+        ortho_height: 5000.0,
+    });
+    cam.eye = DVec3::new(-4500.0, -7500.0, 2400.0);
+    cam.target = DVec3::new(2500.0, 2500.0, 400.0);
+    cam.up = DVec3::Z;
+    cam.ortho = false;
+    cam.ortho_height = 7000.0;
+    if let Ok(b) = guarded(|| cam.basis()) {
+        cam.up = b.up;
     }
     cam
 }

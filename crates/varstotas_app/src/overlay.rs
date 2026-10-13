@@ -34,6 +34,9 @@ pub enum Marker2d {
     ScreenRect { min: Pos2, max: Pos2, dashed: bool, color: Color32 },
     /// Screen-space line.
     ScreenLine { a: Pos2, b: Pos2, color: Color32, width: f32, dashed: bool },
+    /// Tool cursor drawn at the pointer: a small crosshair (hotspot) plus the tool's icon,
+    /// with an optional "+" badge (copy / keep face / guides). The OS cursor is hidden.
+    ToolCursor { icon: crate::ui::icons::Icon, plus: bool },
 }
 
 pub struct OverlayPainter<'a> {
@@ -79,6 +82,11 @@ impl OverlayPainter<'_> {
                         self.painter.rect_stroke(r, 0.0, st, egui::StrokeKind::Middle);
                     }
                 }
+                Marker2d::ToolCursor { icon, plus } => {
+                    if let Some(c) = self.cursor {
+                        paint_tool_cursor(self.painter, c, *icon, *plus);
+                    }
+                }
                 Marker2d::ScreenLine { a, b, color, width, dashed } => {
                     let pts = [self.rect.min + a.to_vec2(), self.rect.min + b.to_vec2()];
                     let st = Stroke::new(*width, *color);
@@ -90,6 +98,26 @@ impl OverlayPainter<'_> {
                 }
             }
         }
+    }
+}
+
+/// Crosshair at the hotspot `c` plus a small tool icon to its lower right.
+pub fn paint_tool_cursor(painter: &Painter, c: Pos2, icon: crate::ui::icons::Icon, plus: bool) {
+    let halo = Stroke::new(3.0, Color32::from_white_alpha(220));
+    let ink = Stroke::new(1.0, Color32::from_gray(20));
+    for st in [halo, ink] {
+        painter.line_segment([c - vec2(7.0, 0.0), c + vec2(7.0, 0.0)], st);
+        painter.line_segment([c - vec2(0.0, 7.0), c + vec2(0.0, 7.0)], st);
+    }
+    let r = Rect::from_min_size(c + vec2(8.0, 8.0), vec2(22.0, 22.0));
+    painter.rect_filled(r.expand(1.0), 4.0, Color32::from_white_alpha(170));
+    crate::ui::icons::paint_icon(painter, r, icon, false);
+    if plus {
+        let p = c + vec2(-9.0, 9.0);
+        painter.circle(p, 5.0, Color32::WHITE, Stroke::new(1.0, Color32::from_gray(40)));
+        let st = Stroke::new(1.6, Color32::from_gray(20));
+        painter.line_segment([p - vec2(3.0, 0.0), p + vec2(3.0, 0.0)], st);
+        painter.line_segment([p - vec2(0.0, 3.0), p + vec2(0.0, 3.0)], st);
     }
 }
 
