@@ -1,0 +1,105 @@
+//! UI pieces: menu bar, toolbar, Default Tray, status bar with the Measurements box, dialogs.
+
+pub mod dialogs;
+pub mod icons;
+pub mod menu;
+pub mod statusbar;
+pub mod theme;
+pub mod toolbar;
+pub mod tray;
+
+use crate::document::guarded;
+use egui::{Color32, Response, Sense, Ui, vec2};
+use icons::Icon;
+use varstotas_kernel::{LengthUnit, units};
+
+/// Large toolbar button (36×36 with a 24px icon).
+pub fn icon_button(ui: &mut Ui, icon: Icon, selected: bool, size: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let p = ui.painter();
+        if selected {
+            p.rect(rect, 7.0, theme::ACCENT_SOFT, egui::Stroke::new(1.0, theme::ACCENT), egui::StrokeKind::Inside);
+        } else if resp.is_pointer_button_down_on() {
+            p.rect_filled(rect, 7.0, Color32::from_rgb(0xD2, 0xD9, 0xE3));
+        } else if resp.hovered() {
+            p.rect_filled(rect, 7.0, Color32::from_rgb(0xDF, 0xE4, 0xEB));
+        }
+        let icon_size = (size * 0.68).round();
+        icons::paint_icon(p, egui::Rect::from_center_size(rect.center(), vec2(icon_size, icon_size)), icon, selected);
+    }
+    resp
+}
+
+/// Small flat icon button for tray rows.
+pub fn small_icon_button(ui: &mut Ui, icon: Icon, tooltip: &str) -> Response {
+    icon_button(ui, icon, false, 22.0).on_hover_text(tooltip)
+}
+
+pub fn unit_suffix(u: LengthUnit) -> &'static str {
+    match u {
+        LengthUnit::Millimeter => "mm",
+        LengthUnit::Centimeter => "cm",
+        LengthUnit::Meter => "m",
+        LengthUnit::Inch => "in",
+        LengthUnit::Foot => "ft",
+    }
+}
+
+pub fn unit_mm(u: LengthUnit) -> f64 {
+    match u {
+        LengthUnit::Millimeter => 1.0,
+        LengthUnit::Centimeter => 10.0,
+        LengthUnit::Meter => 1000.0,
+        LengthUnit::Inch => 25.4,
+        LengthUnit::Foot => 304.8,
+    }
+}
+
+pub fn fmt_len(mm: f64, unit: LengthUnit) -> String {
+    guarded(|| units::format_length(mm, unit))
+        .unwrap_or_else(|_| format!("{:.1} {}", mm / unit_mm(unit), unit_suffix(unit)))
+}
+
+pub fn fmt_area(mm2: f64, unit: LengthUnit) -> String {
+    // Large mm/cm areas read better in m² (classic readouts).
+    let unit = if matches!(unit, LengthUnit::Millimeter | LengthUnit::Centimeter) && mm2 >= 1.0e5 {
+        LengthUnit::Meter
+    } else {
+        unit
+    };
+    let f = unit_mm(unit);
+    let v = mm2 / (f * f);
+    let digits = if v.abs() >= 100.0 { 0 } else { 2 };
+    format!("{v:.digits$} {}²", unit_suffix(unit))
+}
+
+pub fn color32(c: [f32; 4]) -> Color32 {
+    Color32::from_rgba_unmultiplied(
+        (c[0].clamp(0.0, 1.0) * 255.0).round() as u8,
+        (c[1].clamp(0.0, 1.0) * 255.0).round() as u8,
+        (c[2].clamp(0.0, 1.0) * 255.0).round() as u8,
+        (c[3].clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
+pub fn color_f32(c: Color32) -> [f32; 4] {
+    let [r, g, b, a] = c.to_srgba_unmultiplied();
+    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0]
+}
+
+/// Paint a colour swatch; returns the response.
+pub fn swatch(ui: &mut Ui, color: Color32, size: f32, selected: bool) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+    let p = ui.painter();
+    p.rect_filled(rect, 5.0, color);
+    let stroke = if selected {
+        egui::Stroke::new(2.5, theme::ACCENT)
+    } else if resp.hovered() {
+        egui::Stroke::new(1.5, Color32::from_gray(90))
+    } else {
+        egui::Stroke::new(1.0, Color32::from_black_alpha(50))
+    };
+    p.rect_stroke(rect, 5.0, stroke, egui::StrokeKind::Inside);
+    resp
+}
