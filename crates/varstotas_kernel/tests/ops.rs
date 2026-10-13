@@ -562,3 +562,59 @@ fn rectangle_on_wall_inherits_orientation() {
     assert!(m.faces[f].normal.y < -0.999);
     assert_eq!(face_with_normal(&m, DVec3::NEG_Y).len(), 2);
 }
+
+fn split_floor(m: &mut Mesh) -> (FaceId, FaceId) {
+    rect_lines(m, 0., 0., 100., 100., 0.);
+    m.add_line(v(50., 0., 0.), v(50., 100., 0.));
+    let l = m.faces.iter().find(|(id, _)| face_centroid(m, *id).x < 50.).unwrap().0;
+    let r = m.faces.iter().find(|(id, _)| face_centroid(m, *id).x > 50.).unwrap().0;
+    (l, r)
+}
+
+#[test]
+fn split_floor_rooms_lower_second_room() {
+    let mut m = Mesh::new();
+    let (l, r) = split_floor(&mut m);
+    let top = m.push_pull(l, -100., false).unwrap();
+    assert!(m.faces[top].normal.z > 0.99);
+    assert!(m.faces.contains_key(l) && m.faces[l].normal.z < -0.99, "base kept, facing down");
+    assert!(m.faces.contains_key(r), "neighbour floor untouched");
+    m.push_pull(r, -40., false).unwrap();
+    ok(&m);
+    assert_closed_consistent(&m);
+    assert!((volume(&m) - (50. * 100. * 100. + 50. * 100. * 40.)).abs() < 1e-6);
+    // The remaining part of the shared wall (z 40..100) faces +X, outward of the taller room.
+    let walls: Vec<FaceId> = face_with_normal(&m, DVec3::X).into_iter().filter(|f| (face_centroid(&m, *f).x - 50.).abs() < 1e-6).collect();
+    assert_eq!(walls.len(), 1);
+    assert!((m.face_area(walls[0]) - 100. * 60.).abs() < 1e-6);
+}
+
+#[test]
+fn split_floor_rooms_same_height_become_one_box() {
+    let mut m = Mesh::new();
+    let (l, r) = split_floor(&mut m);
+    m.push_pull(l, -100., false).unwrap();
+    m.push_pull(r, -100., false).unwrap();
+    ok(&m);
+    assert_closed_consistent(&m);
+    assert!((volume(&m) - 100. * 100. * 100.).abs() < 1e-6);
+    // Floor and roof keep the dividing line; the side walls merge.
+    assert_eq!(m.faces.len(), 8);
+}
+
+#[test]
+fn coordinates_have_no_float_noise() {
+    let mut m = Mesh::new();
+    let a = DVec3::new(-4.5e-13, 9.1e-13, 0.);
+    m.add_face(&[a, v(6000., 0., 0.), v(6000., 4000.000000000001, 0.), v(0., 4000., 0.)]);
+    ok(&m);
+    for vx in m.vertices.values() {
+        for c in vx.pos.to_array() {
+            assert!(c == 0. || c == 6000. || c == 4000., "noisy coordinate {c}");
+        }
+    }
+    // Rotations come back clean too.
+    let vs: std::collections::HashSet<_> = m.vertices.keys().collect();
+    m.transform_vertices(&vs, &DMat4::from_rotation_z(std::f64::consts::FRAC_PI_2));
+    assert!(m.vertices.values().all(|v| v.pos.to_array().iter().all(|c| *c == c.round())));
+}

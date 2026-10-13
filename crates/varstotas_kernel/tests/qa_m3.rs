@@ -26,7 +26,7 @@ fn face_center_in_void_check(m: &Mesh) {
             match m.raycast_faces(&Ray { origin: o, dir }) {
                 Some((_, t)) => {
                     n += 1;
-                    o = o + dir * (t + 1e-6);
+                    o += dir * (t + 1e-6);
                 }
                 None => break,
             }

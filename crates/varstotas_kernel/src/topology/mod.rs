@@ -4,7 +4,7 @@ mod erase;
 mod insert;
 mod region;
 
-pub(crate) use region::{Classify, Orient};
+pub(crate) use region::{Classify, Orient, interior_sample};
 
 use crate::geom;
 use crate::mesh::Mesh;
@@ -15,6 +15,7 @@ impl Mesh {
     // ---- vertices ------------------------------------------------------------
 
     pub(crate) fn v_new(&mut self, p: DVec3) -> VertexId {
+        let p = geom::snap3(p);
         let v = self.vertices.insert(Vertex { pos: p });
         self.cache.vert_edges.insert(v, Vec::new());
         self.cache.vgrid.insert_point(v, p);
@@ -54,6 +55,7 @@ impl Mesh {
 
     /// Move one vertex, updating spatial indices of everything attached.
     pub(crate) fn v_set_pos(&mut self, v: VertexId, p: DVec3) {
+        let p = geom::snap3(p);
         self.vertices[v].pos = p;
         self.cache.vgrid.insert_point(v, p);
         let mut faces = Vec::new();

@@ -11,6 +11,11 @@
 //! - Pushing a face (negative distance) exactly onto an opposite parallel face of the solid
 //!   cuts a through-hole.
 //! - `keep_original` (Ctrl) keeps the original face and always builds side faces.
+//! - A face that is not the boundary of a solid (a "sheet": nothing behind it, e.g. one half
+//!   of a split floor) is extruded like a free-standing face, keeping its base.
+//! - New geometry is welded to coincident existing vertices/edges, and new faces overlapping
+//!   existing coplanar faces are overlaid: opposite faces cancel (a wall shared by two
+//!   adjacent rooms disappears where both sides are solid).
 
 use crate::geom::{self, PointLoc, Projector};
 use crate::mesh::{Mesh, PTOL};
@@ -46,7 +51,8 @@ impl Mesh {
             }
         }
         let bset: HashSet<EdgeId> = bedges.iter().map(|x| x.0).collect();
-        let lone = bedges.iter().all(|(e, _, _)| self.edge_faces(*e).iter().all(|g| *g == f));
+        let free = bedges.iter().all(|(e, _, _)| self.edge_faces(*e).iter().all(|g| *g == f));
+        let lone = free || (!keep_original && !self.has_solid_behind(f, &bedges));
 
         // ---- stretch analysis -------------------------------------------------------
         let mut slid: HashMap<VertexId, bool> = HashMap::new();
@@ -158,47 +164,46 @@ impl Mesh {
             self.f_set_loops(f, cap_outer, cap_loops);
             f
         };
-        let mut merge_candidates: Vec<EdgeId> = Vec::new();
+        // Merge candidates are kept as segments: welding may split the edges.
+        let mut merge_segs: Vec<(DVec3, DVec3)> = Vec::new();
+        let mut created: Vec<FaceId> = vec![cap];
         for (e, a, b) in &bedges {
             if slid[a] && slid[b] {
                 continue;
             }
             let (a2, b2) = (map[a], map[b]);
             let side = if cap_flip { vec![*b, *a, a2, b2] } else { vec![*a, *b, b2, a2] };
-            self.f_new(side, Vec::new(), &Face::template());
-            merge_candidates.push(*e);
+            created.push(self.f_new(side, Vec::new(), &Face::template()));
+            if !lone {
+                merge_segs.push(self.edge_segment(*e));
+            }
             for (x, y) in [(*a, a2), (*b, b2)] {
-                if let Some(ev) = self.edge_between(x, y)
-                    && !merge_candidates.contains(&ev)
-                {
-                    merge_candidates.push(ev);
+                if x != y {
+                    merge_segs.push((self.pos(x), self.pos(y)));
                 }
             }
         }
-        // Vertical edges between two pieces of the same curve (circle/arc) are soft + smooth.
-        for l in &loops {
-            let k = l.len();
-            for i in 0..k {
-                let (p, c, nx) = (l[(i + k - 1) % k], l[i], l[(i + 1) % k]);
-                if slid[&c] {
+        self.soften_sides(&loops, &map);
+        let new_verts: Vec<VertexId> = loops.iter().flatten().filter(|v| !slid[*v]).map(|v| map[v]).collect();
+        self.weld(&new_verts);
+        let mut touched = self.resolve_overlaps(&created);
+        let mut cands: Vec<EdgeId> = Vec::new();
+        for (a, b) in &merge_segs {
+            for e in self.cache.egrid.query_segment(*a, *b) {
+                if cands.contains(&e) || !self.edges.contains_key(e) {
                     continue;
                 }
-                let curve = |x: VertexId, y: VertexId| self.edge_between(x, y).and_then(|e| self.edges[e].curve);
-                let (c1, c2) = (curve(p, c), curve(c, nx));
-                if c1.is_some()
-                    && c1 == c2
-                    && let Some(ev) = self.edge_between(c, map[&c])
-                {
-                    let ed = &mut self.edges[ev];
-                    ed.soft = true;
-                    ed.smooth = true;
+                let (p, q) = self.edge_segment(e);
+                if geom::point_seg_dist(p, *a, *b).0 <= TOL && geom::point_seg_dist(q, *a, *b).0 <= TOL {
+                    cands.push(e);
                 }
             }
         }
-        if !keep_original && !lone {
-            self.merge_coplanar_at(&merge_candidates);
-            let vs: Vec<VertexId> = loops.iter().flatten().copied().collect();
-            self.cleanup_vertices(&vs);
+        if !keep_original {
+            self.merge_coplanar_at(&cands);
+            touched.extend(loops.iter().flatten().copied());
+            touched.extend(new_verts);
+            self.cleanup_vertices(&touched);
         }
         Ok(if self.faces.contains_key(cap) { cap } else { f })
     }
@@ -272,7 +277,249 @@ impl Mesh {
             self.f_new(vec![*a, *b, b2, a2], Vec::new(), &Face::template());
             merge_candidates.push(*e);
         }
+        self.soften_sides(loops, &map);
         self.merge_coplanar_at(&merge_candidates);
         Ok(keep.map(|(_, f)| f).filter(|f| self.faces.contains_key(*f)).unwrap_or(h))
+    }
+
+    /// Vertical edges between two pieces of the same curve (circle/arc) are soft + smooth.
+    fn soften_sides(&mut self, loops: &[Vec<VertexId>], map: &HashMap<VertexId, VertexId>) {
+        for l in loops {
+            let k = l.len();
+            for i in 0..k {
+                let (p, c, nx) = (l[(i + k - 1) % k], l[i], l[(i + 1) % k]);
+                if map[&c] == c {
+                    continue;
+                }
+                let curve = |x: VertexId, y: VertexId| self.edge_between(x, y).and_then(|e| self.edges[e].curve);
+                let (c1, c2) = (curve(p, c), curve(c, nx));
+                if c1.is_some()
+                    && c1 == c2
+                    && let Some(ev) = self.edge_between(c, map[&c])
+                {
+                    let ed = &mut self.edges[ev];
+                    ed.soft = true;
+                    ed.smooth = true;
+                }
+            }
+        }
+    }
+
+    /// Is face `f` part of a solid's boundary (material behind it, against its normal)?
+    /// True if a non-coplanar neighbour behind the face is consistently oriented with it, or a
+    /// ray from just behind the face crosses the rest of the surface an odd number of times.
+    fn has_solid_behind(&self, f: FaceId, bedges: &[(EdgeId, VertexId, VertexId)]) -> bool {
+        let n = self.faces[f].normal;
+        let o = self.pos(bedges[0].1);
+        for (e, a, b) in bedges {
+            for g in self.edge_faces(*e) {
+                if g == f || self.faces[g].normal.dot(n).abs() > 1.0 - 1e-6 {
+                    continue;
+                }
+                if self.face_traverses(g, *a, *b) != Some(false) {
+                    continue;
+                }
+                let gl = self.loop_pos(&self.faces[g].outer);
+                let c = gl.iter().copied().sum::<DVec3>() / gl.len() as f64;
+                if (c - o).dot(n) < -TOL {
+                    return true;
+                }
+            }
+        }
+        let (pr, o2, h2) = self.face_2d(f);
+        let start = pr.to3(crate::topology::interior_sample(&o2, &h2)) - n * (10.0 * TOL);
+        let dir = (-n + DVec3::new(0.0123, 0.0371, 0.0219)).normalize();
+        let fp: *const Face = &self.faces[f];
+        let mut origin = start;
+        let mut hits = 0;
+        for _ in 0..1000 {
+            match self.raycast_faces_filtered(origin, dir, |x| !std::ptr::eq(x, fp)) {
+                Some((_, t)) => {
+                    hits += 1;
+                    origin += dir * (t + TOL * 0.1);
+                }
+                None => break,
+            }
+        }
+        hits % 2 == 1
+    }
+
+    /// Split edge `e` at vertex `v` (lying on it), updating the faces that use it. Pieces that
+    /// coincide with existing edges reuse them.
+    pub(crate) fn split_edge_at(&mut self, e: EdgeId, v: VertexId) -> [EdgeId; 2] {
+        let tmpl = self.edges[e].clone();
+        let [a, b] = tmpl.v;
+        let faces = self.edge_faces(e);
+        for f in &faces {
+            self.f_unregister(*f);
+            let face = &mut self.faces[*f];
+            for l in std::iter::once(&mut face.outer).chain(face.holes.iter_mut()) {
+                let k = l.len();
+                if let Some(i) = (0..k).find(|i| {
+                    let (x, y) = (l[*i], l[(*i + 1) % k]);
+                    (x == a && y == b) || (x == b && y == a)
+                }) {
+                    l.insert(i + 1, v);
+                    break;
+                }
+            }
+        }
+        self.e_remove(e);
+        let e1 = match self.edge_between(a, v) {
+            Some(x) => x,
+            None => self.e_new(a, v, Some(&tmpl)),
+        };
+        let e2 = match self.edge_between(v, b) {
+            Some(x) => x,
+            None => self.e_new(v, b, Some(&tmpl)),
+        };
+        for f in faces {
+            self.f_register(f);
+        }
+        [e1, e2]
+    }
+
+    /// Make new vertices sticky: merge them with coincident vertices, split edges they lie on,
+    /// and split their edges at existing vertices lying on them.
+    pub(crate) fn weld(&mut self, verts: &[VertexId]) {
+        let d = DVec3::splat(TOL);
+        let mut alive: Vec<VertexId> = Vec::new();
+        for &v in verts {
+            if !self.vertices.contains_key(v) {
+                continue;
+            }
+            let p = self.pos(v);
+            let w = self
+                .cache
+                .vgrid
+                .query_box(p - d, p + d)
+                .into_iter()
+                .filter(|w| *w != v && self.vertices.get(*w).is_some_and(|x| (x.pos - p).length() <= TOL))
+                .min_by(|x, y| (self.pos(*x) - p).length().total_cmp(&(self.pos(*y) - p).length()));
+            match w {
+                Some(w) => {
+                    self.merge_vertices(w, v);
+                    if !alive.contains(&w) {
+                        alive.push(w);
+                    }
+                }
+                None => {
+                    if !alive.contains(&v) {
+                        alive.push(v);
+                    }
+                }
+            }
+        }
+        let interior = |m: &Mesh, p: DVec3, e: EdgeId| {
+            let (a, b) = m.edge_segment(e);
+            geom::point_seg_dist(p, a, b).0 <= TOL && (p - a).length() > TOL && (p - b).length() > TOL
+        };
+        for &v in &alive {
+            loop {
+                if !self.vertices.contains_key(v) {
+                    break;
+                }
+                let p = self.pos(v);
+                let hit = self
+                    .cache
+                    .egrid
+                    .query_box(p - d, p + d)
+                    .into_iter()
+                    .find(|e| self.edges.get(*e).is_some_and(|ed| !ed.has(v)) && interior(self, p, *e));
+                match hit {
+                    Some(e) => {
+                        self.split_edge_at(e, v);
+                    }
+                    None => break,
+                }
+            }
+        }
+        let mut work: Vec<EdgeId> =
+            alive.iter().filter(|v| self.vertices.contains_key(**v)).flat_map(|v| self.vertex_edges(*v)).collect();
+        while let Some(e) = work.pop() {
+            let Some(ed) = self.edges.get(e).cloned() else { continue };
+            let (a, b) = self.edge_segment(e);
+            let mut best: Option<(f64, VertexId)> = None;
+            for w in self.cache.vgrid.query_segment(a, b) {
+                if ed.has(w) || !self.vertices.contains_key(w) {
+                    continue;
+                }
+                let p = self.pos(w);
+                if interior(self, p, e) {
+                    let t = (p - a).length();
+                    if best.is_none_or(|(bt, _)| t < bt) {
+                        best = Some((t, w));
+                    }
+                }
+            }
+            if let Some((_, w)) = best {
+                work.extend(self.split_edge_at(e, w));
+            }
+        }
+    }
+
+    /// Overlay each face of `faces` with existing coplanar faces it overlaps: coverage with
+    /// opposite orientations cancels. Returns the vertices involved.
+    pub(crate) fn resolve_overlaps(&mut self, faces: &[FaceId]) -> Vec<VertexId> {
+        let mut touched = Vec::new();
+        for &s in faces {
+            if !self.faces.contains_key(s) {
+                continue;
+            }
+            let plane = self.face_plane(s);
+            let n = plane.normal;
+            let pr = Projector::new(plane.origin, n);
+            let to2 = |m: &Mesh, l: &[VertexId]| l.iter().map(|v| pr.to2(m.pos(*v))).collect::<Vec<_>>();
+            let so = to2(self, &self.faces[s].outer);
+            let sh: Vec<_> = self.faces[s].holes.iter().map(|h| to2(self, h)).collect();
+            let ss = crate::topology::interior_sample(&so, &sh);
+            let Some(bb) = self.face_aabb(s) else { continue };
+            let bb = bb.inflate(TOL);
+            let mut group = vec![s];
+            for g in self.cache.fgrid.query_box(bb.min, bb.max) {
+                let Some(gf) = self.faces.get(g) else { continue };
+                if group.contains(&g) || gf.normal.dot(n).abs() < 1.0 - 1e-6 {
+                    continue;
+                }
+                if gf.loops().flatten().any(|v| plane.distance(self.pos(*v)).abs() > PTOL) {
+                    continue;
+                }
+                let go = to2(self, &gf.outer);
+                let gh: Vec<_> = gf.holes.iter().map(|h| to2(self, h)).collect();
+                let gs = crate::topology::interior_sample(&go, &gh);
+                if geom::point_in_region(ss, &go, &gh, TOL) == PointLoc::Inside
+                    || geom::point_in_region(gs, &so, &sh, TOL) == PointLoc::Inside
+                {
+                    group.push(g);
+                }
+            }
+            if group.len() < 2 {
+                continue;
+            }
+            let mut polys = Vec::new();
+            let mut seeds: Vec<VertexId> = Vec::new();
+            let mut pairs: Vec<(VertexId, VertexId)> = Vec::new();
+            for &g in &group {
+                let face = self.faces[g].clone();
+                for l in face.loops() {
+                    seeds.extend(l.iter().copied());
+                    pairs.extend((0..l.len()).map(|i| (l[i], l[(i + 1) % l.len()])));
+                }
+                let outer = self.loop_pos(&face.outer);
+                let holes = face.holes.iter().map(|h| self.loop_pos(h)).collect();
+                polys.push((outer, holes, face));
+                self.f_remove(g);
+            }
+            self.refresh_plane(plane, &seeds, &[], &Classify::Overlay(&polys), Orient::auto());
+            for (a, b) in pairs {
+                if let Some(e) = self.edge_between(a, b)
+                    && self.edge_faces(e).is_empty()
+                {
+                    self.e_remove(e);
+                }
+            }
+            touched.extend(seeds);
+        }
+        touched
     }
 }

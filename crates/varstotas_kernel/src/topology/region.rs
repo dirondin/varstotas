@@ -16,6 +16,9 @@ use crate::{Aabb, EdgeId, Face, FaceId, Plane, TOL, VertexId};
 use glam::{DVec2, DVec3};
 use std::collections::{HashMap, HashSet};
 
+/// A face polygon for [`Classify::Overlay`]: outer, holes and the face (attributes, normal).
+pub(crate) type OverlayPoly = (Vec<DVec3>, Vec<Vec<DVec3>>, Face);
+
 /// How regions that were not part of an existing face are classified.
 pub(crate) enum Classify<'a> {
     /// Only regions inside previous faces survive (splits / merges).
@@ -24,6 +27,9 @@ pub(crate) enum Classify<'a> {
     NewEdges(&'a HashSet<EdgeId>),
     /// Additionally, regions inside this polygon (minus holes) become faces.
     Region { outer: Vec<DVec3>, holes: Vec<Vec<DVec3>> },
+    /// Overlay of coplanar faces (outer, holes, attributes incl. normal): regions get the net
+    /// orientation of the faces covering them; opposite faces cancel out (no face).
+    Overlay(&'a [OverlayPoly]),
 }
 
 /// Orientation policy for brand-new faces.
@@ -393,12 +399,28 @@ impl Mesh {
             )),
             _ => None,
         };
+        type Poly2 = (Vec<DVec2>, Vec<Vec<DVec2>>, i32);
+        let overlay: Vec<Poly2> = match cls {
+            Classify::Overlay(polys) => polys
+                .iter()
+                .map(|(o, h, f)| {
+                    (
+                        o.iter().map(|p| pr.to2(*p)).collect(),
+                        h.iter().map(|l| l.iter().map(|p| pr.to2(*p)).collect()).collect(),
+                        if f.normal.dot(n) >= 0.0 { 1 } else { -1 },
+                    )
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
 
         #[derive(Clone, Copy, PartialEq)]
         enum Kind {
             Skip,
             Inherit(FaceId),
             New,
+            /// New face with a forced flip and the attribute template of overlay polygon `idx`.
+            Forced(bool, usize),
         }
         // (outer, holes, sample, net area, kind)
         type Reg = (Vec<VertexId>, Vec<Vec<VertexId>>, DVec2, f64, Kind);
@@ -445,6 +467,21 @@ impl Mesh {
                     Classify::Region { .. } => {
                         let (o, h) = cls_poly.as_ref().unwrap();
                         if geom::point_in_region(sample, o, h, TOL) == PointLoc::Inside { Kind::New } else { Kind::Skip }
+                    }
+                    Classify::Overlay(_) => {
+                        let inside: Vec<usize> = (0..overlay.len())
+                            .filter(|i| {
+                                let (o, h, _) = &overlay[*i];
+                                geom::point_in_region(sample, o, h, TOL) == PointLoc::Inside
+                            })
+                            .collect();
+                        let net: i32 = inside.iter().map(|i| overlay[*i].2).sum();
+                        if net == 0 {
+                            Kind::Skip
+                        } else {
+                            let idx = inside.iter().copied().find(|i| overlay[*i].2 == net.signum()).unwrap();
+                            Kind::Forced(net < 0, idx)
+                        }
                     }
                 }
             };
@@ -519,6 +556,10 @@ impl Mesh {
                     let flip = t.normal.dot(n) < 0.0;
                     (t, flip)
                 }
+                Kind::Forced(flip, idx) => match cls {
+                    Classify::Overlay(polys) => (polys[idx].2.clone(), flip),
+                    _ => unreachable!(),
+                },
                 _ => (Face::template(), self.choose_flip(&plane, &outer, orient)),
             };
             let (o, h) = orient_loops(outer, holes, flip);

@@ -40,7 +40,7 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
         let _ = writeln!(mtl, "\nnewmtl {name}\nKa 0 0 0\nKd {} {} {}\nKs 0 0 0\nd {}\nillum 1", c[0], c[1], c[2], c[3]);
         names.insert(*m, name);
     }
-    let mut obj = format!("# Varstotas OBJ export (units: mm)\nmtllib {mtl_file}\n");
+    let mut obj = format!("# Varstotas OBJ export (units: mm, Z axis up)\nmtllib {mtl_file}\n");
     let mut vidx: HashMap<[u64; 3], usize> = HashMap::new();
     let mut nidx: HashMap<[u64; 3], usize> = HashMap::new();
     let mut vlines = String::new();
@@ -53,7 +53,7 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
             let nk = key(f.normal);
             let nlen = nidx.len();
             let ni = *nidx.entry(nk).or_insert_with(|| {
-                let _ = writeln!(nlines, "vn {} {} {}", f.normal.x, f.normal.y, f.normal.z);
+                let _ = writeln!(nlines, "vn {} {} {}", num(f.normal.x), num(f.normal.y), num(f.normal.z));
                 nlen + 1
             });
             for t in f.positions.as_chunks::<3>().0 {
@@ -61,7 +61,7 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
                 for (k, p) in t.iter().enumerate() {
                     let len = vidx.len();
                     ids[k] = *vidx.entry(key(*p)).or_insert_with(|| {
-                        let _ = writeln!(vlines, "v {} {} {}", p.x, p.y, p.z);
+                        let _ = writeln!(vlines, "v {} {} {}", num(p.x), num(p.y), num(p.z));
                         len + 1
                     });
                 }
@@ -134,4 +134,9 @@ pub fn import_obj(model: &mut Model, path: &Path) -> Result<(), IoError> {
         mesh.add_polyline(&l, false, false);
     }
     Ok(())
+}
+
+/// Clean number formatting: float noise removed, no `-0`, shortest round-trip digits.
+fn num(x: f64) -> String {
+    format!("{}", crate::geom::snap(x))
 }

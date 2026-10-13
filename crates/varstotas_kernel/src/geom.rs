@@ -199,3 +199,19 @@ pub fn parallel(a: DVec3, b: DVec3) -> bool {
     let (a, b) = (a.normalize_or_zero(), b.normalize_or_zero());
     a.cross(b).length() < 1e-9
 }
+
+/// Remove floating-point noise from a coordinate: values within `1e-9` (relative, at least
+/// absolute `1e-9`) of a multiple of `1e-6` mm are snapped onto it. Exact values are unchanged.
+pub fn snap(x: f64) -> f64 {
+    if !x.is_finite() || x.abs() >= 1e9 {
+        return x;
+    }
+    let r = (x * 1e6).round() / 1e6;
+    let r = if r == 0.0 { 0.0 } else { r }; // no negative zero
+    if (r - x).abs() <= 1e-9 * x.abs().max(1.0) { r } else { x }
+}
+
+/// [`snap`] applied to each component.
+pub fn snap3(p: DVec3) -> DVec3 {
+    DVec3::new(snap(p.x), snap(p.y), snap(p.z))
+}

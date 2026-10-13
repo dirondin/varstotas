@@ -336,3 +336,18 @@ fn group_inside_group_context_editing() {
     assert_eq!(model.mesh_at(&[g, sub]).unwrap().faces.len(), 1);
     assert_eq!(model.mesh_at(&[g]).unwrap().faces.len(), 6);
 }
+
+#[test]
+fn obj_numbers_are_clean_for_rotated_groups() {
+    let mut model = box_model();
+    let ents: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();
+    let g = model.make_group(&[], &ents).unwrap();
+    let rot = DMat4::from_rotation_z(std::f64::consts::FRAC_PI_3 * 1.5) * DMat4::from_translation(DVec3::new(0.1, 0.2, 0.3));
+    model.root_mesh_mut().instances[g].transform = rot;
+    let (obj, _) = io::write_obj(&model, "x.mtl");
+    for l in obj.lines().filter(|l| l.starts_with("v ") || l.starts_with("vn ")) {
+        for t in l.split_whitespace().skip(1) {
+            assert!(!t.contains('e') && t != "-0" && t.len() < 24, "noisy number {t} in `{l}`");
+        }
+    }
+}
