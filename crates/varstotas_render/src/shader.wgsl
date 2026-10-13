@@ -120,20 +120,25 @@ fn fs_ground(in: FsOut) -> GroundOut {
     let plane_z = -g.origin.z; // world z = 0 in relative coords
     let eye_world_z = g.eye_rel.z + g.origin.z;
     // Only visible from above.
-    if r.d.z >= -1e-6 || (!ortho && eye_world_z <= 0.0) {
-        discard;
+    var valid = r.d.z < -1e-6 && (ortho || eye_world_z > 0.0);
+    var t = 0.0;
+    if valid {
+        t = (plane_z - r.o.z) / r.d.z;
     }
-    let t = (plane_z - r.o.z) / r.d.z;
-    if !ortho && t <= 0.0 {
-        discard;
-    }
+    valid = valid && (ortho || t > 0.0);
     let hit = r.o + r.d * t;
     let clip = g.view_proj * vec4<f32>(hit, 1.0);
-    var depth = clip.z / clip.w;
-    if depth > 1.0 {
+    let depth_raw = clip.z / clip.w;
+    // Push the ground behind anything coplanar with z = 0 (faces there must look exactly as
+    // above ground; QA-004). Covers the faces' own slope bias via the screen-space depth
+    // derivative, plus a relative (perspective) / absolute (ortho) margin.
+    // Derivatives are taken before any discard (uniform control flow).
+    let slope = fwidth(depth_raw);
+    if !valid || depth_raw > 1.0 {
         discard;
     }
-    depth = max(depth, 0.0);
+    let margin = depth_raw * max(5.0 * g.params.z, 1e-6) + 6.0 * g.params2.x + 3.0 * slope;
+    let depth = clamp(depth_raw - margin, 0.0, 1.0);
     var alpha = g.ground.a;
     if !ortho {
         // fade toward the horizon
@@ -198,7 +203,7 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
     // turned away from the sun stay readable. Shade is defined perceptually (sRGB-ish)
     // and converted to linear so differences between planes stay visible.
     let ambient = g.light.w;
-    let sun = min(max(dot(n, g.light.xyz), 0.0) * 1.15, 1.0);
+    let sun = min(max(dot(n, g.light.xyz), 0.0) * 1.25, 1.0);
     let fill = 0.1 * max(dot(n, -g.fwd.xyz), 0.0);
     let shade = clamp(ambient + (1.0 - ambient) * sun + fill * (1.0 - sun), 0.0, 1.0);
     let shade_lin = pow(shade, 2.2);

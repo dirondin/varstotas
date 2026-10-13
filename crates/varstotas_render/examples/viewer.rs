@@ -151,6 +151,34 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
         Vec3::new(0.0, 1500.0, 1200.0),
         [0.0, 0.31, 1.0, 1.0],
     );
+    // Painted floor strips at z = 0 (must not z-fight with the ground plane).
+    for (k, col) in [[0.5, 0.5, 0.5, 1.0], [0.8, 0.1, 0.1, 1.0], [0.8, 0.6, 0.4, 1.0]].into_iter().enumerate() {
+        let x0 = -4500.0 + 1000.0 * k as f32;
+        let q = [
+            Vec3::new(x0, 2800.0, 0.0),
+            Vec3::new(x0 + 1000.0, 2800.0, 0.0),
+            Vec3::new(x0 + 1000.0, 3800.0, 0.0),
+            Vec3::new(x0, 3800.0, 0.0),
+        ];
+        b.quad(q, col, BACK);
+        for i in 0..4 {
+            b.edge(q[i], q[(i + 1) % 4], BLACK);
+        }
+    }
+    // Painted gable-roof shed: grey (0.3, 0.3, 0.35) like QA-009.
+    {
+        let c = [0.3, 0.3, 0.35, 1.0];
+        let (x0, x1, y0, y1, zr) = (-4500.0, -2500.0, 4200.0, 5400.0, 900.0);
+        let ym = (y0 + y1) * 0.5;
+        let (a0, a1) = (Vec3::new(x0, y0, 0.0), Vec3::new(x1, y0, 0.0));
+        let (b0, b1) = (Vec3::new(x0, y1, 0.0), Vec3::new(x1, y1, 0.0));
+        let (r0, r1) = (Vec3::new(x0, ym, zr), Vec3::new(x1, ym, zr));
+        b.quad([a0, a1, r1, r0], c, BACK);
+        b.quad([b1, b0, r0, r1], c, BACK);
+        for (p, q) in [(a0, r0), (b0, r0), (a1, r1), (b1, r1), (r0, r1), (a0, a1), (b0, b1)] {
+            b.edge(p, q, BLACK);
+        }
+    }
     // Gable-roof house: both roof slopes must shade differently.
     {
         let (x0, x1, y0, y1, zw, zr) = (3800.0, 6000.0, -3000.0, -1500.0, 1500.0, 2400.0);
@@ -191,8 +219,8 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
     }
     (
         b.finish(),
-        DVec3::new(-1500.0, -3000.0, -600.0),
-        DVec3::new(6000.0, 2500.0, 2400.0),
+        DVec3::new(-4500.0, -3000.0, -600.0),
+        DVec3::new(6000.0, 5400.0, 2400.0),
     )
 }
 

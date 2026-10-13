@@ -183,7 +183,7 @@ impl Default for RenderStyle {
 /// Default sun direction (toward the light, world space): from upper-left-front.
 pub const DEFAULT_LIGHT_DIR: [f32; 3] = [-0.4, -0.6, 0.7];
 /// Default ambient term (0..1, perceptual): faces turned away from the sun get this shade.
-pub const DEFAULT_AMBIENT: f32 = 0.5;
+pub const DEFAULT_AMBIENT: f32 = 0.68;
 
 /// Default face colors used by `FaceStyle::Monochrome` (sRGB).
 pub const DEFAULT_FRONT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
