@@ -5,81 +5,13 @@
 //! Renders offscreen (MSAA + depth), resolves to a texture registered with egui.
 
 pub use egui_wgpu::wgpu;
-use glam::{DMat4, DVec2, DVec3};
 
 // ---------------------------------------------------------------------------
-// Camera (f64, Z-up)
+// Camera (f64, Z-up) — see camera.rs
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StandardView {
-    Iso,
-    Top,
-    Bottom,
-    Front,
-    Back,
-    Left,
-    Right,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Camera {
-    pub eye: DVec3,
-    pub target: DVec3,
-    pub up: DVec3,
-    pub fov_y_deg: f64,
-    /// Parallel projection; `ortho_height` is the visible world height in mm.
-    pub ortho: bool,
-    pub ortho_height: f64,
-}
-
-impl Default for Camera {
-    /// classic default: iso-ish view of the origin, ~1.7 m person scale visible.
-    fn default() -> Self {
-        todo!()
-    }
-}
-
-impl Camera {
-    pub fn view(&self) -> DMat4 {
-        todo!()
-    }
-    /// Reverse-Z or standard is the renderer's choice; near/far derived from scene `extent`.
-    pub fn proj(&self, _aspect: f64, _scene_radius: f64) -> DMat4 {
-        todo!()
-    }
-    /// World ray through a pixel. `px` in logical points, origin top-left.
-    pub fn screen_ray(&self, _px: DVec2, _viewport: DVec2) -> (DVec3, DVec3) {
-        todo!()
-    }
-    /// Project world point to logical-point screen coords; None if behind camera.
-    pub fn world_to_screen(&self, _p: DVec3, _viewport: DVec2) -> Option<DVec2> {
-        todo!()
-    }
-    /// World size of one screen pixel at point `p` (for pick tolerances / constant-size gizmos).
-    pub fn pixel_size_at(&self, _p: DVec3, _viewport: DVec2) -> f64 {
-        todo!()
-    }
-    /// Orbit around `pivot` by screen delta in points (feel: Z stays up).
-    pub fn orbit(&mut self, _delta: DVec2, _pivot: DVec3) {
-        todo!()
-    }
-    /// Pan so the world point under the cursor follows the cursor; `depth_point` is the
-    /// point that was under the cursor when the drag began.
-    pub fn pan(&mut self, _delta: DVec2, _depth_point: DVec3, _viewport: DVec2) {
-        todo!()
-    }
-    /// Zoom toward world point `toward` (factor > 1 zooms in).
-    pub fn zoom(&mut self, _factor: f64, _toward: DVec3) {
-        todo!()
-    }
-    pub fn zoom_extents(&mut self, _min: DVec3, _max: DVec3, _aspect: f64) {
-        todo!()
-    }
-    pub fn set_standard_view(&mut self, _v: StandardView) {
-        todo!()
-    }
-}
+mod camera;
+pub use camera::{Camera, CameraBasis, StandardView};
 
 // ---------------------------------------------------------------------------
 // Scene data
@@ -166,40 +98,11 @@ pub struct RenderStyle {
     pub edge_color: [f32; 4],
 }
 
-impl Default for RenderStyle {
-    fn default() -> Self {
-        todo!()
-    }
-}
+// `impl Default for RenderStyle` lives in renderer.rs (classic light theme).
 
 // ---------------------------------------------------------------------------
-// Renderer
+// Renderer — see renderer.rs
 // ---------------------------------------------------------------------------
 
-pub struct Renderer {
-    // private GPU state
-}
-
-impl Renderer {
-    /// Create from eframe's wgpu render state (`frame.wgpu_render_state()`).
-    pub fn new(_rs: &egui_wgpu::RenderState) -> Self {
-        todo!()
-    }
-    /// Upload new static geometry.
-    pub fn set_geometry(&mut self, _rs: &egui_wgpu::RenderState, _geo: &SceneGeometry) {
-        todo!()
-    }
-    /// Render the scene offscreen at `size_px` (physical pixels) and return an egui texture
-    /// id to display with `egui::Image` sized to the viewport in points.
-    pub fn render(
-        &mut self,
-        _rs: &egui_wgpu::RenderState,
-        _camera: &Camera,
-        _overlay: &Overlay3d,
-        _style: &RenderStyle,
-        _size_px: [u32; 2],
-        _pixels_per_point: f32,
-    ) -> egui::TextureId {
-        todo!()
-    }
-}
+mod renderer;
+pub use renderer::{DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, Renderer};

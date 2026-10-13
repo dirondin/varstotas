@@ -10,3 +10,7 @@ bytemuck.workspace = true
 egui.workspace = true
 egui-wgpu.workspace = true
 log.workspace = true
+
+[dev-dependencies]
+eframe.workspace = true
+env_logger.workspace = true

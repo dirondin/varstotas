@@ -1,0 +1,498 @@
+//! Standalone viewer for `varstotas_render`.
+//!
+//! cargo run -p varstotas_render --example viewer
+//!
+//! Left drag = orbit, right drag / Shift+left drag = pan, wheel = zoom to cursor.
+//! Env `VARSTOTAS_SCREENSHOT=out.png` saves a window screenshot after a few frames and quits.
+
+use eframe::egui;
+use glam::{DVec2, DVec3, Vec3};
+use varstotas_render::{
+    Camera, FaceStyle, LineVertex, Overlay3d, OverlayLine, OverlayPolygon, RenderStyle, Renderer,
+    SceneGeometry, StandardView, TriVertex,
+};
+
+fn main() -> eframe::Result {
+    env_logger::init();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1200.0, 800.0])
+            .with_title("varstotas_render viewer"),
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
+    };
+    eframe::run_native(
+        "varstotas_render viewer",
+        options,
+        Box::new(|cc| Ok(Box::new(Viewer::new(cc)))),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Scene building
+// ---------------------------------------------------------------------------
+
+const BACK: [f32; 4] = varstotas_render::DEFAULT_BACK_COLOR;
+const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+#[derive(Default)]
+struct Builder {
+    geo: SceneGeometry,
+}
+
+impl Builder {
+    /// Quad with corners in CCW order seen from the front side.
+    fn quad(&mut self, p: [Vec3; 4], color: [f32; 4], back: [f32; 4]) {
+        let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize();
+        for i in [0, 1, 2, 0, 2, 3] {
+            self.geo.tris.push(TriVertex {
+                pos: p[i].into(),
+                normal: n.into(),
+                color,
+            });
+            self.geo.back_colors.push(back);
+        }
+    }
+
+    fn edge(&mut self, a: Vec3, b: Vec3, color: [f32; 4]) {
+        self.geo.edges.push(LineVertex { pos: a.into(), color });
+        self.geo.edges.push(LineVertex { pos: b.into(), color });
+    }
+
+    fn profile(&mut self, a: Vec3, b: Vec3) {
+        self.geo.profile_edges.push(LineVertex { pos: a.into(), color: BLACK });
+        self.geo.profile_edges.push(LineVertex { pos: b.into(), color: BLACK });
+    }
+
+    fn cuboid(&mut self, min: Vec3, max: Vec3, color: [f32; 4], profiles: bool) {
+        // translucent materials get a translucent back side too
+        let back = if color[3] < 1.0 { color } else { BACK };
+        let c = |i: usize| {
+            Vec3::new(
+                if i & 1 == 0 { min.x } else { max.x },
+                if i & 2 == 0 { min.y } else { max.y },
+                if i & 4 == 0 { min.z } else { max.z },
+            )
+        };
+        // faces, CCW from outside
+        let faces = [
+            [0, 2, 3, 1], // bottom -Z
+            [4, 5, 7, 6], // top +Z
+            [0, 1, 5, 4], // front -Y
+            [2, 6, 7, 3], // back +Y
+            [0, 4, 6, 2], // left -X
+            [1, 3, 7, 5], // right +X
+        ];
+        for f in faces {
+            self.quad([c(f[0]), c(f[1]), c(f[2]), c(f[3])], color, back);
+        }
+        let edges = [
+            (0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3),
+            (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7),
+        ];
+        for (a, b) in edges {
+            self.edge(c(a), c(b), BLACK);
+            if profiles {
+                self.profile(c(a), c(b));
+            }
+        }
+    }
+
+    fn finish(mut self) -> SceneGeometry {
+        let r = self
+            .geo
+            .tris
+            .iter()
+            .map(|v| Vec3::from(v.pos).length())
+            .fold(0.0f32, f32::max);
+        self.geo.radius = r;
+        self.geo
+    }
+}
+
+fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
+    let mut b = Builder::default();
+    b.cuboid(Vec3::new(0.0, 0.0, 0.0), Vec3::new(2000.0, 1500.0, 1200.0), [1.0; 4], false);
+    b.cuboid(
+        Vec3::new(2500.0, 500.0, 0.0),
+        Vec3::new(3300.0, 1300.0, 2400.0),
+        [0.88, 0.69, 0.44, 1.0],
+        true,
+    );
+    // Partially below ground: lower part is tinted by the ground plane.
+    b.cuboid(
+        Vec3::new(-1500.0, 1500.0, -600.0),
+        Vec3::new(-500.0, 2500.0, 800.0),
+        [0.55, 0.8, 0.55, 1.0],
+        false,
+    );
+    // Translucent glass box.
+    b.cuboid(
+        Vec3::new(500.0, -1500.0, 0.0),
+        Vec3::new(1500.0, -700.0, 1000.0),
+        [0.45, 0.65, 1.0, 0.35],
+        false,
+    );
+    // A single face whose front side points away from the default camera (+Y):
+    // the back color is visible.
+    let f = [
+        Vec3::new(-1500.0, -800.0, 0.0),
+        Vec3::new(-1500.0, -800.0, 1500.0),
+        Vec3::new(-200.0, -800.0, 1500.0),
+        Vec3::new(-200.0, -800.0, 0.0),
+    ];
+    b.quad(f, [1.0; 4], BACK);
+    for i in 0..4 {
+        b.edge(f[i], f[(i + 1) % 4], BLACK);
+    }
+    // a selected (blue) edge
+    b.edge(
+        Vec3::new(0.0, 0.0, 1200.0),
+        Vec3::new(0.0, 1500.0, 1200.0),
+        [0.0, 0.31, 1.0, 1.0],
+    );
+    if std::env::var("VARSTOTAS_STRESS").is_ok() {
+        // ~1M triangles: a wavy height-field 708 x 708 cells (2 tris each).
+        let n = 708;
+        let size = 20000.0f32;
+        let h = |i: usize, j: usize| {
+            let (x, y) = (i as f32 / n as f32, j as f32 / n as f32);
+            300.0 * ((x * 40.0).sin() * (y * 37.0).cos()) + 400.0
+        };
+        let p = |i: usize, j: usize| {
+            Vec3::new(
+                -size - 2000.0 + size * i as f32 / n as f32,
+                size * j as f32 / n as f32 - size / 2.0,
+                h(i, j),
+            )
+        };
+        for i in 0..n {
+            for j in 0..n {
+                b.quad([p(i, j), p(i + 1, j), p(i + 1, j + 1), p(i, j + 1)], [0.7, 0.8, 0.95, 1.0], BACK);
+            }
+        }
+        eprintln!("stress: {} triangles", b.geo.tris.len() / 3);
+    }
+    (
+        b.finish(),
+        DVec3::new(-1500.0, -1500.0, -600.0),
+        DVec3::new(3300.0, 2500.0, 2400.0),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+struct Viewer {
+    renderer: Renderer,
+    camera: Camera,
+    style: RenderStyle,
+    bbox: (DVec3, DVec3),
+    drag_point: Option<DVec3>,
+    frame_no: u64,
+    screenshot: Option<String>,
+    screenshot_sent: bool,
+}
+
+impl Viewer {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let rs = cc.wgpu_render_state.as_ref().expect("wgpu backend required");
+        let mut renderer = Renderer::new(rs);
+        let (geo, min, max) = build_scene();
+        renderer.set_geometry(rs, &geo);
+
+        // Env knobs for automated screenshots.
+        let env = |k: &str| std::env::var(k).unwrap_or_default().to_lowercase();
+        let mut camera = Camera::default();
+        let mut style = RenderStyle::default();
+        let view = match env("VARSTOTAS_VIEW").as_str() {
+            "top" => Some(StandardView::Top),
+            "front" => Some(StandardView::Front),
+            "right" => Some(StandardView::Right),
+            "back" => Some(StandardView::Back),
+            "left" => Some(StandardView::Left),
+            "bottom" => Some(StandardView::Bottom),
+            _ => None,
+        };
+        if let Some(v) = view {
+            camera.set_standard_view(v);
+        }
+        if env("VARSTOTAS_ORTHO") == "1" {
+            camera.set_ortho(true);
+        }
+        if env("VARSTOTAS_EXTENTS") == "1" {
+            camera.zoom_extents(min, max, 1.5);
+        }
+        if let Ok(o) = std::env::var("VARSTOTAS_ORBIT") {
+            let v: Vec<f64> = o.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if v.len() == 2 {
+                camera.orbit(DVec2::new(v[0], v[1]), camera.target);
+            }
+        }
+        for s in env("VARSTOTAS_STYLE").split(',') {
+            match s {
+                "mono" => style.face_style = FaceStyle::Monochrome,
+                "hidden" => style.face_style = FaceStyle::HiddenLine,
+                "wire" => style.face_style = FaceStyle::Wireframe,
+                "xray" => style.xray = true,
+                _ => {}
+            }
+        }
+        Viewer {
+            renderer,
+            camera,
+            style,
+            bbox: (min, max),
+            drag_point: None,
+            frame_no: 0,
+            screenshot: std::env::var("VARSTOTAS_SCREENSHOT").ok(),
+            screenshot_sent: false,
+        }
+    }
+
+    /// Point under the cursor: ray ∩ ground plane, else at target depth.
+    fn point_under(&self, px: DVec2, vp: DVec2) -> DVec3 {
+        let (o, d) = self.camera.screen_ray(px, vp);
+        if d.z.abs() > 1e-9 {
+            let t = -o.z / d.z;
+            if t > 0.0 && t < self.camera.distance() * 20.0 {
+                return o + d * t;
+            }
+        }
+        let depth = (self.camera.target - o).dot(self.camera.basis().forward);
+        o + d * (depth / d.dot(self.camera.basis().forward)).max(1.0)
+    }
+
+    fn toolbar(&mut self, ui: &mut egui::Ui, aspect: f64) {
+        ui.horizontal_wrapped(|ui| {
+            for (v, name) in [
+                (StandardView::Iso, "Iso"),
+                (StandardView::Top, "Top"),
+                (StandardView::Front, "Front"),
+                (StandardView::Right, "Right"),
+                (StandardView::Back, "Back"),
+                (StandardView::Left, "Left"),
+                (StandardView::Bottom, "Bottom"),
+            ] {
+                if ui.button(name).clicked() {
+                    self.camera.set_standard_view(v);
+                }
+            }
+            if ui.button("Zoom extents").clicked() {
+                self.camera.zoom_extents(self.bbox.0, self.bbox.1, aspect);
+            }
+            let mut ortho = self.camera.ortho;
+            if ui.checkbox(&mut ortho, "Parallel").changed() {
+                self.camera.set_ortho(ortho);
+            }
+            ui.separator();
+            for (s, name) in [
+                (FaceStyle::Shaded, "Shaded"),
+                (FaceStyle::Monochrome, "Mono"),
+                (FaceStyle::HiddenLine, "Hidden line"),
+                (FaceStyle::Wireframe, "Wireframe"),
+            ] {
+                ui.radio_value(&mut self.style.face_style, s, name);
+            }
+            ui.checkbox(&mut self.style.xray, "X-ray");
+            ui.checkbox(&mut self.style.show_edges, "Edges");
+            ui.checkbox(&mut self.style.profiles, "Profiles");
+            ui.checkbox(&mut self.style.show_axes, "Axes");
+            ui.checkbox(&mut self.style.show_ground, "Ground");
+        });
+    }
+}
+
+impl eframe::App for Viewer {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.frame_no += 1;
+        if self.frame_no.is_multiple_of(120) && std::env::var("VARSTOTAS_STRESS").is_ok() {
+            let dt = ui.input(|i| i.stable_dt);
+            eprintln!("frame {} dt {:.2} ms", self.frame_no, dt * 1000.0);
+        }
+        if std::env::var("VARSTOTAS_STRESS").is_ok() {
+            self.camera.orbit(DVec2::new(1.0, 0.0), self.camera.target);
+            ui.ctx().request_repaint();
+        }
+        let Some(rs) = frame.wgpu_render_state() else {
+            return;
+        };
+        let aspect_hint = {
+            let r = ui.available_rect_before_wrap();
+            (r.width() / r.height().max(1.0)) as f64
+        };
+        egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui, aspect_hint));
+
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ui, |ui| {
+                let rect = ui.available_rect_before_wrap();
+                let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+                let vp = DVec2::new(rect.width() as f64, rect.height() as f64);
+                let to_local =
+                    |p: egui::Pos2| DVec2::new((p.x - rect.min.x) as f64, (p.y - rect.min.y) as f64);
+
+                // --- navigation ---
+                let (shift, scroll, hover) = ui.input(|i| {
+                    (i.modifiers.shift, i.smooth_scroll_delta.y, i.pointer.hover_pos())
+                });
+                if response.drag_started()
+                    && let Some(p) = response.interact_pointer_pos()
+                {
+                    self.drag_point = Some(self.point_under(to_local(p), vp));
+                }
+                if response.dragged() {
+                    let d = response.drag_delta();
+                    let delta = DVec2::new(d.x as f64, d.y as f64);
+                    let pan = response.dragged_by(egui::PointerButton::Secondary)
+                        || response.dragged_by(egui::PointerButton::Middle) && shift
+                        || response.dragged_by(egui::PointerButton::Primary) && shift;
+                    let p = self.drag_point.unwrap_or(self.camera.target);
+                    if pan {
+                        self.camera.pan(delta, p, vp);
+                    } else {
+                        self.camera.orbit(delta, p);
+                    }
+                }
+                if response.drag_stopped() {
+                    self.drag_point = None;
+                }
+                if response.hovered()
+                    && scroll != 0.0
+                    && let Some(h) = hover
+                {
+                    let p = self.point_under(to_local(h), vp);
+                    self.camera.zoom((scroll as f64 * 0.003).exp(), p);
+                }
+
+                // --- overlay demo ---
+                let overlay = Overlay3d {
+                    lines: vec![
+                        OverlayLine {
+                            a: [2000.0, 1500.0, 1200.0],
+                            b: [2000.0, 1500.0, 3200.0],
+                            color: [0.0, 0.0, 1.0, 1.0],
+                            width_px: 2.0,
+                            dashed: true,
+                            on_top: true,
+                        },
+                        OverlayLine {
+                            a: [0.0, 0.0, 1200.0],
+                            b: [2000.0, 1500.0, 1200.0],
+                            color: [1.0, 0.0, 1.0, 1.0],
+                            width_px: 4.0,
+                            dashed: false,
+                            on_top: false,
+                        },
+                    ],
+                    polygons: vec![OverlayPolygon {
+                        tris: vec![
+                            [2000.0, 0.0, 1200.0],
+                            [2000.0, 1500.0, 1200.0],
+                            [0.0, 1500.0, 1200.0],
+                        ],
+                        color: [1.0, 0.85, 0.1, 0.35],
+                        on_top: false,
+                    }],
+                };
+
+                // --- render ---
+                let ppp = ui.ctx().pixels_per_point();
+                let size_px = [
+                    (rect.width() * ppp).round().max(1.0) as u32,
+                    (rect.height() * ppp).round().max(1.0) as u32,
+                ];
+                let tex = self
+                    .renderer
+                    .render(rs, &self.camera, &overlay, &self.style, size_px, ppp);
+                ui.painter().image(
+                    tex,
+                    rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+
+                // 2D marker example: project the origin
+                if let Some(s) = self.camera.world_to_screen(DVec3::ZERO, vp) {
+                    let p = rect.min + egui::vec2(s.x as f32, s.y as f32);
+                    ui.painter().circle_stroke(p, 5.0, (2.0, egui::Color32::from_rgb(0, 192, 0)));
+                }
+            });
+
+        // --- automated screenshot ---
+        if let Some(path) = self.screenshot.clone() {
+            if self.frame_no == 10 && !self.screenshot_sent {
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                self.screenshot_sent = true;
+            }
+            let shot = ui.input(|i| {
+                i.raw.events.iter().find_map(|e| match e {
+                    egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                    _ => None,
+                })
+            });
+            if let Some(img) = shot {
+                write_png(&path, img.size[0], img.size[1], img.as_raw()).expect("write png");
+                eprintln!("screenshot saved to {path}");
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            ui.ctx().request_repaint();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Minimal PNG writer (stored deflate blocks), to avoid extra dependencies.
+// ---------------------------------------------------------------------------
+
+fn write_png(path: &str, w: usize, h: usize, rgba: &[u8]) -> std::io::Result<()> {
+    fn crc32(data: &[u8]) -> u32 {
+        let mut c = 0xFFFF_FFFFu32;
+        for &b in data {
+            c ^= b as u32;
+            for _ in 0..8 {
+                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            }
+        }
+        !c
+    }
+    fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+        out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        let mut c = kind.to_vec();
+        c.extend_from_slice(data);
+        out.extend_from_slice(&c);
+        out.extend_from_slice(&crc32(&c).to_be_bytes());
+    }
+    let mut raw = Vec::with_capacity((w * 4 + 1) * h);
+    for y in 0..h {
+        raw.push(0);
+        raw.extend_from_slice(&rgba[y * w * 4..(y + 1) * w * 4]);
+    }
+    let mut z = vec![0x78, 0x01];
+    let blocks: Vec<&[u8]> = raw.chunks(65535).collect();
+    for (i, b) in blocks.iter().enumerate() {
+        z.push(if i + 1 == blocks.len() { 1 } else { 0 });
+        let len = b.len() as u16;
+        z.extend_from_slice(&len.to_le_bytes());
+        z.extend_from_slice(&(!len).to_le_bytes());
+        z.extend_from_slice(b);
+    }
+    let (mut a, mut b) = (1u32, 0u32);
+    for &x in &raw {
+        a = (a + x as u32) % 65521;
+        b = (b + a) % 65521;
+    }
+    z.extend_from_slice(&((b << 16) | a).to_be_bytes());
+
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(&(w as u32).to_be_bytes());
+    ihdr.extend_from_slice(&(h as u32).to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &ihdr);
+    chunk(&mut out, b"IDAT", &z);
+    chunk(&mut out, b"IEND", &[]);
+    std::fs::write(path, out)
+}

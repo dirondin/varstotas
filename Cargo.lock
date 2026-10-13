@@ -1871,8 +1871,10 @@ name = "varstotas_render"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "eframe",
  "egui",
  "egui-wgpu",
+ "env_logger",
  "glam",
  "log",
 ]
