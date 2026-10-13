@@ -8,7 +8,7 @@ struct Globals {
     right: vec4<f32>,         // xyz: camera right; w: tan_half_x (persp) | half width (ortho)
     up: vec4<f32>,            // xyz: camera up;    w: tan_half_y (persp) | half height (ortho)
     fwd: vec4<f32>,           // xyz: camera forward
-    light: vec4<f32>,         // xyz: direction toward light (world)
+    light: vec4<f32>,         // xyz: unit direction toward the sun (world); w: ambient
     viewport: vec4<f32>,      // x,y: size in px; z: pixels_per_point; w: profile width (px)
     sky_top: vec4<f32>,       // linear
     sky_horizon: vec4<f32>,
@@ -194,10 +194,15 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
     if mode > 0.5 {
         c = select(g.mono_back, g.mono_front, ff);
     }
-    let diff = max(dot(n, g.light.xyz), 0.0);
-    let sky = 0.5 + 0.5 * n.z;
-    let shade = min(0.42 + 0.48 * diff + 0.12 * sky, 1.0);
-    return out_color(vec4<f32>(c.rgb * shade, c.a * alpha_mul));
+    // Fixed world-space sun (Lambert) + ambient, plus a small camera fill so faces
+    // turned away from the sun stay readable. Shade is defined perceptually (sRGB-ish)
+    // and converted to linear so differences between planes stay visible.
+    let ambient = g.light.w;
+    let sun = min(max(dot(n, g.light.xyz), 0.0) * 1.15, 1.0);
+    let fill = 0.1 * max(dot(n, -g.fwd.xyz), 0.0);
+    let shade = clamp(ambient + (1.0 - ambient) * sun + fill * (1.0 - sun), 0.0, 1.0);
+    let shade_lin = pow(shade, 2.2);
+    return out_color(vec4<f32>(c.rgb * shade_lin, c.a * alpha_mul));
 }
 
 // ---------------------------------------------------------------------------

@@ -150,6 +150,8 @@ fn fallback_style() -> RenderStyle {
         sky_horizon: [0xE8 as f32 / 255.0, 0xF0 as f32 / 255.0, 0xF8 as f32 / 255.0, 1.0],
         ground: [0xC8 as f32 / 255.0, 0xC0 as f32 / 255.0, 0xB0 as f32 / 255.0, 1.0],
         edge_color: [0.0, 0.0, 0.0, 1.0],
+        light_dir: varstotas_render::DEFAULT_LIGHT_DIR,
+        ambient: varstotas_render::DEFAULT_AMBIENT,
     }
 }
 

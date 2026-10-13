@@ -96,6 +96,10 @@ pub struct RenderStyle {
     pub sky_horizon: [f32; 4],
     pub ground: [f32; 4],
     pub edge_color: [f32; 4],
+    /// Direction toward the sun in world space (need not be normalized). Fixed, not camera-relative.
+    pub light_dir: [f32; 3],
+    /// Ambient shade 0..1 for faces turned away from the sun (never black).
+    pub ambient: f32,
 }
 
 // `impl Default for RenderStyle` lives in renderer.rs (classic light theme).
@@ -105,4 +109,6 @@ pub struct RenderStyle {
 // ---------------------------------------------------------------------------
 
 mod renderer;
-pub use renderer::{DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, Renderer};
+pub use renderer::{
+    DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, Renderer,
+};

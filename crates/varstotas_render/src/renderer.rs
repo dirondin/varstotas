@@ -174,9 +174,16 @@ impl Default for RenderStyle {
             sky_horizon: hex(0xE8F0F8, 1.0),
             ground: hex(0xC8C0B0, 0.9),
             edge_color: hex(0x000000, 1.0),
+            light_dir: DEFAULT_LIGHT_DIR,
+            ambient: DEFAULT_AMBIENT,
         }
     }
 }
+
+/// Default sun direction (toward the light, world space): from upper-left-front.
+pub const DEFAULT_LIGHT_DIR: [f32; 3] = [-0.4, -0.6, 0.7];
+/// Default ambient term (0..1, perceptual): faces turned away from the sun get this shade.
+pub const DEFAULT_AMBIENT: f32 = 0.5;
 
 /// Default face colors used by `FaceStyle::Monochrome` (sRGB).
 pub const DEFAULT_FRONT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -466,7 +473,12 @@ impl Renderer {
             let t = (camera.fov_y_deg.to_radians() * 0.5).tan();
             (t * aspect, t)
         };
-        let light = (b.right * -0.35 + b.up * 0.55 - b.forward).normalize();
+        let ld = DVec3::new(
+            style.light_dir[0] as f64,
+            style.light_dir[1] as f64,
+            style.light_dir[2] as f64,
+        );
+        let light = if ld.length_squared() > 1e-12 { ld.normalize() } else { DVec3::Z };
         let (bias_rel, bias_abs) = if camera.ortho {
             let (n, f) = camera.ortho_depth_range(scene_radius);
             let px = camera.pixel_size_at(camera.target, viewport_pts);
@@ -489,7 +501,7 @@ impl Renderer {
             right: v4(b.right, rw),
             up: v4(b.up, uw),
             fwd: v4(b.forward, 0.0),
-            light: v4(light, 0.0),
+            light: v4(light, style.ambient.clamp(0.0, 1.0) as f64),
             viewport: [
                 size[0] as f32,
                 size[1] as f32,

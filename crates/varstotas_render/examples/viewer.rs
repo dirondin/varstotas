@@ -151,6 +151,22 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
         Vec3::new(0.0, 1500.0, 1200.0),
         [0.0, 0.31, 1.0, 1.0],
     );
+    // Gable-roof house: both roof slopes must shade differently.
+    {
+        let (x0, x1, y0, y1, zw, zr) = (3800.0, 6000.0, -3000.0, -1500.0, 1500.0, 2400.0);
+        b.cuboid(Vec3::new(x0, y0, 0.0), Vec3::new(x1, y1, zw), [1.0; 4], false);
+        let ym = (y0 + y1) * 0.5;
+        let (a0, a1) = (Vec3::new(x0, y0, zw), Vec3::new(x1, y0, zw));
+        let (b0, b1) = (Vec3::new(x0, y1, zw), Vec3::new(x1, y1, zw));
+        let (r0, r1) = (Vec3::new(x0, ym, zr), Vec3::new(x1, ym, zr));
+        b.quad([a0, a1, r1, r0], [1.0; 4], BACK); // -Y slope
+        b.quad([b1, b0, r0, r1], [1.0; 4], BACK); // +Y slope
+        b.quad([a0, r0, b0, b0], [1.0; 4], BACK); // -X gable (degenerate quad = triangle)
+        b.quad([a1, b1, r1, r1], [1.0; 4], BACK); // +X gable
+        for (p, q) in [(a0, r0), (b0, r0), (a1, r1), (b1, r1), (r0, r1)] {
+            b.edge(p, q, BLACK);
+        }
+    }
     if std::env::var("VARSTOTAS_STRESS").is_ok() {
         // ~1M triangles: a wavy height-field 708 x 708 cells (2 tris each).
         let n = 708;
@@ -175,8 +191,8 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
     }
     (
         b.finish(),
-        DVec3::new(-1500.0, -1500.0, -600.0),
-        DVec3::new(3300.0, 2500.0, 2400.0),
+        DVec3::new(-1500.0, -3000.0, -600.0),
+        DVec3::new(6000.0, 2500.0, 2400.0),
     )
 }
 
