@@ -13,7 +13,9 @@ cargo test --workspace                 # тесты
 - [Архитектура](docs/02-ARCHITECTURE.md)
 - [Роадмап](docs/03-ROADMAP.md)
 - [Команда и процесс](docs/04-TEAM.md)
+- [**Текущий статус и прогресс**](docs/06-STATUS.md)
 - [UX-спецификация инструментов](docs/05-UX-SPEC.md)
+- [QA-отчёт M3](docs/qa/M3-report.md)
 
 ## Структура
 ```
