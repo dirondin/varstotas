@@ -128,12 +128,12 @@ pub struct VarstotasApp {
     /// Transient status message (text, expiry time).
     pub(crate) flash: Option<(String, f64)>,
     pub(crate) tray: TrayState,
-    debug: crate::debug_capture::DebugCapture,
+    pub(crate) debug: crate::debug_capture::DebugCapture,
     last_title: String,
     allow_close: bool,
-    tool_pressed: bool,
-    last_pointer: Option<Pos2>,
-    last_modifiers: Modifiers,
+    pub(crate) tool_pressed: bool,
+    pub(crate) last_pointer: Option<Pos2>,
+    pub(crate) last_modifiers: Modifiers,
     now: f64,
 }
 
@@ -216,7 +216,7 @@ impl VarstotasApp {
 
     // ---- tools -----------------------------------------------------------
 
-    fn pointer_info(&self, pos: Pos2, delta: egui::Vec2, button: Option<PointerButton>, primary_down: bool) -> PointerInfo {
+    pub(crate) fn pointer_info(&self, pos: Pos2, delta: egui::Vec2, button: Option<PointerButton>, primary_down: bool) -> PointerInfo {
         let vp = self.viewport.size();
         let ray = guarded(|| nav::ray_at(&self.camera, pos, vp)).unwrap_or(varstotas_kernel::Ray {
             origin: self.camera.eye,
@@ -235,7 +235,7 @@ impl VarstotasApp {
     }
 
     /// Run `f` with the active tool and a fresh `ToolContext`.
-    fn with_tool<R>(&mut self, pointer: PointerInfo, f: impl FnOnce(&mut dyn Tool, &mut ToolContext) -> R) -> R {
+    pub(crate) fn with_tool<R>(&mut self, pointer: PointerInfo, f: impl FnOnce(&mut dyn Tool, &mut ToolContext) -> R) -> R {
         let mut requests = Vec::new();
         let viewport = self.viewport.size();
         let r = {
@@ -273,15 +273,17 @@ impl VarstotasApp {
         self.tool_pressed = false;
     }
 
-    fn submit_vcb(&mut self) {
+    pub(crate) fn submit_vcb(&mut self) {
         let input = std::mem::take(&mut self.vcb);
         let p = self.current_pointer();
-        let ok = self.with_tool(p, |t, ctx| t.on_vcb(ctx, &input));
+        let ok = self.with_tool(p.clone(), |t, ctx| t.on_vcb(ctx, &input));
         if !ok {
             self.vcb_error = true;
             self.flash(format!("Invalid value: {input}"));
         } else {
             self.vcb_error = false;
+            // Refresh hover/inference so no stale pre-commit overlay lingers.
+            self.with_tool(p, |t, ctx| t.on_pointer_move(ctx));
         }
     }
 
@@ -438,7 +440,7 @@ impl VarstotasApp {
         if over {
             let icon = if self.viewport.nav.is_dragging() { egui::CursorIcon::Grabbing } else { self.tool.cursor() };
             ctx.set_cursor_icon(icon);
-        } else if !self.tool_pressed {
+        } else if !self.tool_pressed && !self.debug.script_active() {
             self.last_pointer = None;
         }
     }
@@ -879,6 +881,7 @@ impl VarstotasApp {
             viewport: self.viewport.size(),
             pointer: self.last_pointer,
         };
+        tools::common::draw_guides(&view, &mut o3, &mut o2);
         self.tool.overlay(&view, &mut o3, &mut o2);
         (o3, o2)
     }
@@ -941,7 +944,10 @@ impl eframe::App for VarstotasApp {
             }
             let (o3, o2) = self.tool_overlays();
             let style = self.render_style();
-            let cursor = response.hover_pos();
+            let cursor = response.hover_pos().or_else(|| {
+                let p = self.last_pointer.filter(|_| self.debug.script_active())?;
+                Some(self.viewport.rect.min + p.to_vec2())
+            });
             self.viewport.paint(ui, frame, &self.doc, &self.camera, &style, &o3, &o2, cursor);
         });
 
@@ -951,6 +957,7 @@ impl eframe::App for VarstotasApp {
         if self.debug.update(&ctx) {
             self.actions.push(Action::SelectAll);
         }
+        self.script_step(&ctx);
         if self.flash.as_ref().is_some_and(|(_, t)| *t > self.now) {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }

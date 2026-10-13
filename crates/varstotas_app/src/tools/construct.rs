@@ -1,0 +1,396 @@
+//! Construction tools: Tape Measure (measure + guides) and Protractor (angled guides).
+
+use super::common::*;
+use super::draw::Clicker;
+use super::transform::draw_protractor;
+use super::{OverlayView, Tool, ToolContext, ToolId};
+use crate::inference::{self, InferenceEngine, InferenceKind, InferenceResult};
+use crate::overlay::{Marker2d, MarkerShape};
+use egui::{Color32, CursorIcon, Key};
+use varstotas_kernel::glam::{DMat4, DVec3};
+use varstotas_kernel::{GuideLine, Plane, TOL};
+use varstotas_render::Overlay3d;
+
+const GUIDE: Color32 = Color32::from_rgb(0x50, 0x50, 0x60);
+
+// ===========================================================================
+// Tape Measure
+// ===========================================================================
+
+#[derive(Clone, Copy, Debug)]
+struct TapeStart {
+    a: DVec3,
+    /// Edge direction when the measurement started on an edge (parallel guide mode).
+    edge_dir: Option<DVec3>,
+}
+
+/// Perpendicular offset of `q` from the line through `a` with unit direction `d`.
+pub fn perp_offset(a: DVec3, d: DVec3, q: DVec3) -> DVec3 {
+    let v = q - a;
+    v - d * v.dot(d)
+}
+
+pub struct TapeTool {
+    engine: InferenceEngine,
+    start: Option<TapeStart>,
+    cur: Option<InferenceResult>,
+    /// Create guides (Ctrl toggles; on by default).
+    guides: bool,
+    toggle: ModToggle,
+    clicker: Clicker,
+    last_measure: Option<f64>,
+    unit: Option<varstotas_kernel::LengthUnit>,
+}
+
+impl Default for TapeTool {
+    fn default() -> Self {
+        Self {
+            engine: InferenceEngine::default(),
+            start: None,
+            cur: None,
+            guides: true,
+            toggle: ModToggle::default(),
+            clicker: Clicker::default(),
+            last_measure: None,
+            unit: None,
+        }
+    }
+}
+
+impl TapeTool {
+    fn update(&mut self, ctx: &ToolContext) {
+        self.unit = Some(ctx.doc.model.unit);
+        let held = ctx.pointer.modifiers.ctrl || ctx.pointer.modifiers.alt;
+        let before = self.toggle.on;
+        self.toggle.update(held);
+        if self.toggle.on != before {
+            self.guides = !self.guides;
+        }
+        self.cur = Some(infer(&mut self.engine, ctx, self.start.map(|s| s.a), None, None));
+    }
+
+    /// Current measured value and the guide that would be created.
+    fn measure(&self) -> Option<(f64, Option<GuideLine>, Option<DVec3>)> {
+        let s = self.start?;
+        let q = self.cur.as_ref()?.point;
+        match s.edge_dir.filter(|_| self.guides) {
+            Some(d) => {
+                let off = perp_offset(s.a, d, q);
+                Some((off.length(), Some(GuideLine { origin: s.a + off, dir: d }), None))
+            }
+            None => Some((s.a.distance(q), None, self.guides.then_some(q))),
+        }
+    }
+
+    fn finish(&mut self, ctx: &mut ToolContext, m: (f64, Option<GuideLine>, Option<DVec3>)) {
+        self.last_measure = Some(m.0);
+        self.start = None;
+        let (_, gl, gp) = m;
+        if gl.is_none() && gp.is_none() {
+            return;
+        }
+        if m.0 < TOL {
+            return;
+        }
+        ctx.doc.commit("Create Guide", |model| {
+            if let Some(g) = gl {
+                model.guides.push(g);
+            }
+            if let Some(p) = gp {
+                model.guide_points.push(p);
+            }
+        });
+    }
+
+    fn click(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+        let Some(r) = self.cur.clone() else { return };
+        match self.start {
+            None => {
+                let edge_dir = match (r.kind, r.edge) {
+                    (InferenceKind::OnEdge, Some((a, b))) => Some((b - a).normalize_or(DVec3::X)),
+                    _ => None,
+                };
+                self.start = Some(TapeStart { a: r.point, edge_dir });
+            }
+            Some(_) => {
+                if let Some(m) = self.measure() {
+                    self.finish(ctx, m);
+                }
+            }
+        }
+    }
+}
+
+impl Tool for TapeTool {
+    fn id(&self) -> ToolId {
+        ToolId::Tape
+    }
+    fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+    }
+    fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
+        if self.clicker.down(ctx) {
+            self.click(ctx);
+        }
+    }
+    fn on_pointer_up(&mut self, ctx: &mut ToolContext) {
+        if self.clicker.up_is_drag(ctx) && self.start.is_some() {
+            self.click(ctx);
+        }
+    }
+    fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
+        if !pressed {
+            return false;
+        }
+        if key == Key::Escape {
+            self.start = None;
+            self.engine.clear_locks();
+            return true;
+        }
+        let r = self.engine.handle_arrow(key);
+        if r {
+            self.update(ctx);
+        }
+        r
+    }
+    fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
+        // Resizing the model is not supported: a value sets the guide distance.
+        let Some(v) = parse_len(ctx.doc.model.unit, input) else { return false };
+        let (Some(s), Some(r)) = (self.start, self.cur.clone()) else { return false };
+        match s.edge_dir.filter(|_| self.guides) {
+            Some(d) => {
+                let off = perp_offset(s.a, d, r.point);
+                let dir = off.normalize_or(d.any_orthonormal_vector());
+                let g = GuideLine { origin: s.a + dir * v, dir: d };
+                self.finish(ctx, (v.abs(), Some(g), None));
+            }
+            None => {
+                let dir = (r.point - s.a).normalize_or(DVec3::X);
+                let p = s.a + dir * v;
+                self.finish(ctx, (v.abs(), None, self.guides.then_some(p)));
+            }
+        }
+        true
+    }
+    fn vcb_label(&self) -> &str {
+        "Length"
+    }
+    fn vcb_value(&self) -> String {
+        match (self.unit, self.measure().map(|m| m.0).or(self.last_measure)) {
+            (Some(u), Some(d)) => varstotas_kernel::units::format_length(d, u),
+            _ => String::new(),
+        }
+    }
+    fn status_text(&self) -> String {
+        let g = if self.guides { "guides on" } else { "measure only" };
+        if self.start.is_none() {
+            format!("Select a start point (an edge for a parallel guide). Ctrl/Option toggles guides ({g}).")
+        } else {
+            format!("Select the end point or type a distance ({g}).")
+        }
+    }
+    fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
+        if let (Some(s), Some(r), Some((d, gl, _))) = (self.start, &self.cur, self.measure()) {
+            let model = &view.doc.model;
+            match gl {
+                Some(g) => {
+                    let reach = (view.camera.eye - view.camera.target).length() * 10.0;
+                    dashed(out3d, g.origin - g.dir * reach, g.origin + g.dir * reach, GUIDE, 1.5);
+                    dashed(out3d, s.a, g.origin, Color32::from_gray(40), 1.5);
+                }
+                None => dashed(out3d, s.a, r.point, Color32::from_gray(40), 1.5),
+            }
+            label(out2d, r.point, fmt_len(model, d));
+        }
+        if let Some(r) = &self.cur {
+            inference::draw_result(r, out3d, out2d);
+            if self.start.is_none() && self.guides {
+                out2d.push(Marker2d::Point { at: r.point, shape: MarkerShape::Cross, color: GUIDE });
+            }
+        }
+    }
+    fn cursor(&self) -> CursorIcon {
+        CursorIcon::Crosshair
+    }
+    fn is_busy(&self) -> bool {
+        self.start.is_some()
+    }
+}
+
+// ===========================================================================
+// Protractor
+// ===========================================================================
+
+#[derive(Clone, Copy, Debug)]
+enum ProStage {
+    Center { c: DVec3, n: DVec3 },
+    Angle { c: DVec3, n: DVec3, zero: DVec3 },
+}
+
+#[derive(Default)]
+pub struct ProtractorTool {
+    engine: InferenceEngine,
+    stage: Option<ProStage>,
+    cur: Option<InferenceResult>,
+    angle: f64,
+    clicker: Clicker,
+}
+
+impl ProtractorTool {
+    fn update(&mut self, ctx: &ToolContext) {
+        let (anchor, plane) = match self.stage {
+            Some(ProStage::Center { c, n }) | Some(ProStage::Angle { c, n, .. }) => (Some(c), Some(Plane::new(c, n))),
+            None => (None, None),
+        };
+        let r = infer(&mut self.engine, ctx, anchor, None, plane);
+        if let Some(ProStage::Angle { c, n, zero }) = self.stage {
+            let pl = Plane::new(c, n);
+            let q = if r.is_geometry_snap() {
+                pl.project(r.point)
+            } else {
+                pl.intersect_ray(&ctx.pointer.ray).filter(|t| *t > 0.0).map(|t| ctx.pointer.ray.at(t)).unwrap_or(pl.project(r.point))
+            };
+            let d = q - c;
+            if d.length() > 1e-9 {
+                let a = signed_angle(zero, d.normalize(), n);
+                self.angle = if r.is_geometry_snap() { a } else { snap_angle(a, 15.0, 3.0).0 };
+            }
+        }
+        self.cur = Some(r);
+    }
+
+    fn finish(&mut self, ctx: &mut ToolContext, c: DVec3, n: DVec3, zero: DVec3, deg: f64) {
+        self.stage = None;
+        let dir = DMat4::from_axis_angle(n, deg.to_radians()).transform_vector3(zero);
+        ctx.doc.commit("Create Guide", |m| m.guides.push(GuideLine { origin: c, dir }));
+    }
+
+    fn click(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+        let Some(r) = self.cur.clone() else { return };
+        match self.stage {
+            None => {
+                let n = self
+                    .engine
+                    .arrow_dir()
+                    .map(|d| d.0)
+                    .or(r.face.as_ref().map(|f| f.plane.normal))
+                    .unwrap_or(DVec3::Z);
+                self.engine.arrow_lock = None;
+                self.stage = Some(ProStage::Center { c: r.point, n });
+            }
+            Some(ProStage::Center { c, n }) => {
+                let d = Plane::new(c, n).project(r.point) - c;
+                if d.length() > TOL {
+                    self.stage = Some(ProStage::Angle { c, n, zero: d.normalize() });
+                }
+            }
+            Some(ProStage::Angle { c, n, zero }) => {
+                let a = self.angle;
+                self.finish(ctx, c, n, zero, a);
+            }
+        }
+    }
+}
+
+impl Tool for ProtractorTool {
+    fn id(&self) -> ToolId {
+        ToolId::Protractor
+    }
+    fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+    }
+    fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
+        if self.clicker.down(ctx) {
+            self.click(ctx);
+        }
+    }
+    fn on_pointer_up(&mut self, ctx: &mut ToolContext) {
+        if self.clicker.up_is_drag(ctx) && self.stage.is_some() {
+            self.click(ctx);
+        }
+    }
+    fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
+        if !pressed {
+            return false;
+        }
+        if key == Key::Escape {
+            self.stage = None;
+            return true;
+        }
+        let r = self.engine.handle_arrow(key);
+        if r {
+            if let (Some(ProStage::Center { c, .. }), Some((d, _))) = (self.stage, self.engine.arrow_dir()) {
+                self.stage = Some(ProStage::Center { c, n: d });
+                self.engine.arrow_lock = None;
+            }
+            self.update(ctx);
+        }
+        r
+    }
+    fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
+        let Some(a) = parse_angle(input) else { return false };
+        if let Some(ProStage::Angle { c, n, zero }) = self.stage {
+            self.finish(ctx, c, n, zero, a);
+            return true;
+        }
+        false
+    }
+    fn vcb_label(&self) -> &str {
+        "Angle"
+    }
+    fn vcb_value(&self) -> String {
+        if matches!(self.stage, Some(ProStage::Angle { .. })) { format!("{:.1}°", self.angle) } else { String::new() }
+    }
+    fn status_text(&self) -> String {
+        match self.stage {
+            None => "Select the protractor center (arrows lock its axis).".into(),
+            Some(ProStage::Center { .. }) => "Select the base direction.".into(),
+            Some(ProStage::Angle { .. }) => "Select the angle (snaps every 15°) or type degrees.".into(),
+        }
+    }
+    fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
+        let r = self.cur.as_ref();
+        match self.stage {
+            None => {
+                if let Some(r) = r {
+                    let n = self.engine.arrow_dir().map(|d| d.0).or(r.face.as_ref().map(|f| f.plane.normal)).unwrap_or(DVec3::Z);
+                    draw_protractor(view, r.point, n, None, out3d);
+                    inference::draw_result(r, out3d, out2d);
+                }
+            }
+            Some(ProStage::Center { c, n }) => {
+                draw_protractor(view, c, n, None, out3d);
+                if let Some(r) = r {
+                    dashed(out3d, c, r.point, Color32::from_gray(60), 1.5);
+                }
+            }
+            Some(ProStage::Angle { c, n, zero }) => {
+                draw_protractor(view, c, n, Some(zero), out3d);
+                let reach = (view.camera.eye - view.camera.target).length() * 10.0;
+                let dir = DMat4::from_axis_angle(n, self.angle.to_radians()).transform_vector3(zero);
+                dashed(out3d, c - dir * reach, c + dir * reach, GUIDE, 1.5);
+                dashed(out3d, c, c + zero * reach * 0.01, Color32::from_gray(40), 1.5);
+                out2d.push(Marker2d::CursorTooltip { text: format!("{:.1}°", self.angle) });
+            }
+        }
+    }
+    fn cursor(&self) -> CursorIcon {
+        CursorIcon::Crosshair
+    }
+    fn is_busy(&self) -> bool {
+        self.stage.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn perp_offset_from_edge() {
+        let off = perp_offset(DVec3::ZERO, DVec3::X, DVec3::new(500.0, 300.0, 0.0));
+        assert!((off - DVec3::new(0.0, 300.0, 0.0)).length() < 1e-12);
+    }
+}

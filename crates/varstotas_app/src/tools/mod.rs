@@ -9,8 +9,13 @@
 // Public API for the Tools agent: not every item is used by the scaffolding yet.
 #![allow(dead_code)]
 
+pub mod common;
+mod construct;
+mod draw;
+mod edit;
 mod nav_tools;
 mod select;
+mod transform;
 
 use crate::document::Document;
 use crate::overlay::Marker2d;
@@ -227,7 +232,7 @@ impl ToolId {
 
     /// Whether the tool is implemented (others are stubs).
     pub fn implemented(self) -> bool {
-        matches!(self, ToolId::Select | ToolId::Orbit | ToolId::Pan | ToolId::Zoom)
+        true
     }
 }
 
@@ -238,7 +243,21 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Orbit => Box::new(OrbitTool::default()),
         ToolId::Pan => Box::new(PanTool::default()),
         ToolId::Zoom => Box::new(ZoomTool::default()),
-        other => Box::new(StubTool(other)),
+        ToolId::Line => Box::new(draw::LineTool::default()),
+        ToolId::Rectangle => Box::new(draw::RectangleTool::default()),
+        ToolId::Circle => Box::new(draw::CircleTool::new(false)),
+        ToolId::Polygon => Box::new(draw::CircleTool::new(true)),
+        ToolId::Arc => Box::new(draw::ArcTool::default()),
+        ToolId::Eraser => Box::new(edit::EraserTool::default()),
+        ToolId::Paint => Box::new(edit::PaintTool::default()),
+        ToolId::PushPull => Box::new(edit::PushPullTool::default()),
+        ToolId::Offset => Box::new(edit::OffsetTool::default()),
+        ToolId::FollowMe => Box::new(edit::FollowMeTool::default()),
+        ToolId::Move => Box::new(transform::MoveTool::default()),
+        ToolId::Rotate => Box::new(transform::RotateTool::default()),
+        ToolId::Scale => Box::new(transform::ScaleTool::default()),
+        ToolId::Tape => Box::new(construct::TapeTool::default()),
+        ToolId::Protractor => Box::new(construct::ProtractorTool::default()),
     }
 }
 
