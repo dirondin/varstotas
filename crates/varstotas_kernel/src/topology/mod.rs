@@ -282,10 +282,14 @@ impl Mesh {
             }
         }
         for (a, b) in pairs {
-            if let Some(e) = self.edge_between(a, b)
-                && let Some(l) = self.cache.edge_faces.get_mut(e) {
-                    l.retain(|x| *x != f);
-                }
+            // Every edge between the pair (not just the first): stray duplicate edges must not
+            // keep a reference to a removed face.
+            for e in self.vertex_edges(a) {
+                if self.edges[e].other(a) == b
+                    && let Some(l) = self.cache.edge_faces.get_mut(e) {
+                        l.retain(|x| *x != f);
+                    }
+            }
         }
         self.cache.fgrid.remove(f);
     }
