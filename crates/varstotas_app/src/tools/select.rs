@@ -18,6 +18,34 @@ pub struct SelectTool {
     box_end: Option<Pos2>,
 }
 
+/// How a click / box combines with the current selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelOp {
+    Replace,
+    Add,
+    Toggle,
+    Remove,
+}
+
+/// Selection modifiers: "add" is Option on macOS and Ctrl on Windows; Cmd and Ctrl
+/// are accepted everywhere too. Shift toggles; Shift + add removes.
+pub fn sel_op(m: &egui::Modifiers) -> SelOp {
+    let add = m.alt || m.ctrl || m.command || m.mac_cmd;
+    match (add, m.shift) {
+        (true, true) => SelOp::Remove,
+        (true, false) => SelOp::Add,
+        (false, true) => SelOp::Toggle,
+        (false, false) => SelOp::Replace,
+    }
+}
+
+/// Modifier help for the status bar / Instructor (platform wording).
+pub const SEL_MODS_HELP: &str = if cfg!(target_os = "macos") {
+    "Option (or Cmd) = add, Shift = toggle, Shift+Option = remove"
+} else {
+    "Ctrl = add, Shift = toggle, Ctrl+Shift = remove"
+};
+
 /// What was clicked, relative to some context.
 struct Picked {
     /// Context the entity lives in (may differ from the active one when clicking outside it).
@@ -101,11 +129,10 @@ impl SelectTool {
     }
 
     fn click(&mut self, ctx: &mut ToolContext) {
-        let m = ctx.pointer.modifiers;
-        let add = m.command || m.ctrl;
+        let op = sel_op(&ctx.pointer.modifiers);
         let picked = self.pick(ctx);
         let Some(p) = picked else {
-            if !add && !m.shift {
+            if op == SelOp::Replace {
                 ctx.doc.clear_selection();
             }
             return;
@@ -113,11 +140,11 @@ impl SelectTool {
         if p.context != ctx.doc.active_path {
             ctx.doc.set_active_path(p.context);
         }
-        match (add, m.shift) {
-            (true, true) => ctx.doc.remove_from_selection(&[p.entity]),
-            (true, false) => ctx.doc.add_to_selection([p.entity]),
-            (false, true) => ctx.doc.toggle_selected(p.entity),
-            (false, false) => ctx.doc.set_selection(vec![p.entity]),
+        match op {
+            SelOp::Remove => ctx.doc.remove_from_selection(&[p.entity]),
+            SelOp::Add => ctx.doc.add_to_selection([p.entity]),
+            SelOp::Toggle => ctx.doc.toggle_selected(p.entity),
+            SelOp::Replace => ctx.doc.set_selection(vec![p.entity]),
         }
     }
 
@@ -162,13 +189,11 @@ impl SelectTool {
         })
         .unwrap_or_default();
 
-        let m = ctx.pointer.modifiers;
-        let add = m.command || m.ctrl;
-        match (add, m.shift) {
-            (true, true) => ctx.doc.remove_from_selection(&found),
-            (true, false) => ctx.doc.add_to_selection(found),
-            (false, true) => ctx.doc.toggle_many(&found),
-            (false, false) => ctx.doc.set_selection(found),
+        match sel_op(&ctx.pointer.modifiers) {
+            SelOp::Remove => ctx.doc.remove_from_selection(&found),
+            SelOp::Add => ctx.doc.add_to_selection(found),
+            SelOp::Toggle => ctx.doc.toggle_many(&found),
+            SelOp::Replace => ctx.doc.set_selection(found),
         }
     }
 }
@@ -395,10 +420,9 @@ impl Tool for SelectTool {
 
     fn status_text(&self) -> String {
         if self.box_end.is_some() {
-            "Drag left→right for window selection, right→left for crossing selection.".into()
+            format!("Drag left→right for window selection, right→left for crossing selection. {SEL_MODS_HELP}.")
         } else {
-            "Select objects. Ctrl/Cmd = add, Shift = toggle. Drag to select multiple. Double-click a group to edit it."
-                .into()
+            format!("Select objects. {SEL_MODS_HELP}. Drag to select multiple. Double-click a group to edit it.")
         }
     }
 
@@ -426,6 +450,24 @@ impl Tool for SelectTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selection_modifiers_follow_platform() {
+        let m = |f: fn(&mut egui::Modifiers)| {
+            let mut m = egui::Modifiers::NONE;
+            f(&mut m);
+            m
+        };
+        assert_eq!(sel_op(&egui::Modifiers::NONE), SelOp::Replace);
+        assert_eq!(sel_op(&m(|m| m.shift = true)), SelOp::Toggle);
+        // macOS: Option adds, Shift+Option removes.
+        assert_eq!(sel_op(&m(|m| m.alt = true)), SelOp::Add);
+        assert_eq!(sel_op(&m(|m| (m.alt, m.shift) = (true, true))), SelOp::Remove);
+        // Windows (and Cmd on macOS) parity.
+        assert_eq!(sel_op(&m(|m| m.ctrl = true)), SelOp::Add);
+        assert_eq!(sel_op(&m(|m| (m.command, m.mac_cmd) = (true, true))), SelOp::Add);
+        assert_eq!(sel_op(&m(|m| (m.ctrl, m.shift) = (true, true))), SelOp::Remove);
+    }
     use varstotas_render::{Camera, StandardView};
 
     const VP: DVec2 = DVec2::new(1000.0, 800.0);

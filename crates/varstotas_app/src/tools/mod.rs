@@ -14,7 +14,7 @@ mod construct;
 mod draw;
 mod edit;
 mod nav_tools;
-mod select;
+pub(crate) mod select;
 mod transform;
 
 use crate::document::Document;
@@ -178,13 +178,23 @@ impl ToolId {
     /// Longer help shown in the Instructor panel.
     pub fn instructor(self) -> &'static str {
         match self {
+            ToolId::Select if cfg!(target_os = "macos") => {
+                "Click an entity to select it.\n\
+                 • Double-click a face: select it with its edges.\n\
+                 • Triple-click: select everything connected.\n\
+                 • Drag left→right: window selection (fully inside).\n\
+                 • Drag right→left: crossing selection (touching).\n\
+                 • Option (or Cmd) = add, Shift = toggle, Shift+Option = remove.\n\
+                 • Double-click a group to edit it; Esc to close it.\n\
+                 • Delete erases the selection."
+            }
             ToolId::Select => {
                 "Click an entity to select it.\n\
                  • Double-click a face: select it with its edges.\n\
                  • Triple-click: select everything connected.\n\
                  • Drag left→right: window selection (fully inside).\n\
                  • Drag right→left: crossing selection (touching).\n\
-                 • Ctrl/Cmd = add, Shift = toggle, Ctrl/Cmd+Shift = remove.\n\
+                 • Ctrl = add, Shift = toggle, Ctrl+Shift = remove.\n\
                  • Double-click a group to edit it; Esc to close it.\n\
                  • Delete erases the selection."
             }

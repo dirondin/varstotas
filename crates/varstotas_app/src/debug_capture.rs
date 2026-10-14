@@ -66,6 +66,19 @@ impl DebugCapture {
         self.script.is_some()
     }
 
+    /// A script drives the tools directly (synthetic input): real egui input is ignored.
+    /// False for raw-input scripts, whose events go through the normal egui path.
+    pub fn synthetic_input(&self) -> bool {
+        self.script.as_ref().is_some_and(|s| s.raw.is_none())
+    }
+
+    /// `eframe::App::raw_input_hook` for raw-input scripts.
+    pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        if let Some(inj) = self.script.as_mut().and_then(|s| s.raw.as_mut()) {
+            inj.apply(raw);
+        }
+    }
+
     pub fn demo_requested() -> bool {
         std::env::var("VARSTOTAS_DEMO").is_ok_and(|v| v == "1")
     }
@@ -156,6 +169,8 @@ pub enum ScriptCmd {
     Key(Key),
     /// `mods none|shift|ctrl|alt|cmd` (combinations with `+`).
     Mods(Modifiers),
+    /// `raw ...` — see [`RawCmd`].
+    Raw(RawCmd),
     /// `wait N` frames.
     Wait(u32),
     /// `view iso|top|front|right|left|back|bottom`
@@ -209,6 +224,115 @@ fn tool_by_name(s: &str) -> Option<ToolId> {
     })
 }
 
+fn parse_mods(s: &str) -> Modifiers {
+    let mut m = Modifiers::NONE;
+    for part in s.split('+') {
+        match part.trim().to_ascii_lowercase().as_str() {
+            "shift" => m.shift = true,
+            "ctrl" | "control" => m.ctrl = true,
+            "alt" | "option" | "opt" => m.alt = true,
+            "cmd" | "command" => {
+                m.command = true;
+                m.mac_cmd = true;
+            }
+            _ => {}
+        }
+    }
+    m
+}
+
+/// `raw <sub> ...` — genuine egui input events, injected through `raw_input_hook`.
+fn parse_raw(rest: &str) -> Option<RawCmd> {
+    let (sub, args) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+    let args = args.trim();
+    let n: Vec<f32> = args.split(|c: char| c.is_whitespace() || c == ',').filter_map(|t| t.parse().ok()).collect();
+    let p = |i: usize| n.get(i + 1).map(|y| Pos2::new(n[i], *y));
+    Some(match sub.to_ascii_lowercase().as_str() {
+        "move" => RawCmd::Move(p(0)?),
+        "down" => RawCmd::Down(p(0)?),
+        "up" => RawCmd::Up(p(0)?),
+        "click" => RawCmd::Click(p(0)?),
+        "tap" => RawCmd::Tap(p(0)?),
+        "dblclick" => RawCmd::DoubleClick(p(0)?),
+        "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
+        "dragfast" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: true },
+        "mods" => RawCmd::Mods(parse_mods(args)),
+        "key" => {
+            let (k, st) = args.split_once(char::is_whitespace).unwrap_or((args, "tap"));
+            let key = Key::from_name(k.trim())?;
+            match st.trim() {
+                "down" => RawCmd::Key(key, Some(true)),
+                "up" => RawCmd::Key(key, Some(false)),
+                _ => RawCmd::Key(key, None),
+            }
+        }
+        _ => {
+            log::warn!("script: unknown raw command `{rest}`");
+            return None;
+        }
+    })
+}
+
+/// Raw (egui-level) input commands. Points are viewport-local screen points, like `movepx`.
+/// Each listed step is delivered in its own frame, like real input, unless noted.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RawCmd {
+    /// `raw move x y` — PointerMoved.
+    Move(Pos2),
+    /// `raw down x y` / `raw up x y` — move, then primary press / release (2 frames).
+    Down(Pos2),
+    Up(Pos2),
+    /// `raw click x y` — move, press, release (3 frames).
+    Click(Pos2),
+    /// `raw tap x y` — move + press + release in ONE frame (trackpad tap-to-click).
+    Tap(Pos2),
+    /// `raw dblclick x y` — move, press, release, press, release (5 frames).
+    DoubleClick(Pos2),
+    /// `raw drag x0 y0 x1 y1 [steps]` — move, press, `steps` moves (one per frame), release.
+    /// `raw dragfast ...` delivers the last move and the release in the same frame.
+    Drag { a: Pos2, b: Pos2, steps: u32, fast: bool },
+    /// `raw mods shift+alt|none` — `ModifiersChanged` only (what winit emits for modifier
+    /// keys; egui 0.36 tracks `InputState::modifiers` from it). Later pointer/key events
+    /// carry the new state in their `modifiers` field. No `Key` events are sent.
+    Mods(Modifiers),
+    /// `raw key <Name> [down|up]` — Key event(s); without down/up: press then release.
+    Key(Key, Option<bool>),
+}
+
+/// Pending raw events, one `Vec` per frame, plus the scripted modifier state (copied into
+/// the events' `modifiers` fields).
+#[derive(Default)]
+pub struct RawInjector {
+    pub frames: std::collections::VecDeque<Vec<Event>>,
+    pub mods: Modifiers,
+}
+
+impl RawInjector {
+    /// Replace the OS input of this frame by the scripted events (the OS mouse/keyboard must
+    /// not interfere).
+    pub fn apply(&mut self, raw: &mut egui::RawInput) {
+        raw.events.retain(|e| {
+            !matches!(
+                e,
+                Event::PointerMoved(_)
+                    | Event::MouseMoved(_)
+                    | Event::PointerButton { .. }
+                    | Event::PointerGone
+                    | Event::Key { .. }
+                    | Event::Text(_)
+                    | Event::MouseWheel { .. }
+                    | Event::Zoom(_)
+                    | Event::Touch { .. }
+                    | Event::ModifiersChanged(_)
+                    | Event::WindowFocused(_)
+            )
+        });
+        if let Some(evs) = self.frames.pop_front() {
+            raw.events.extend(evs);
+        }
+    }
+}
+
 fn parse_cmd(line: &str) -> Option<ScriptCmd> {
     let line = line.split('#').next().unwrap_or("").trim();
     if line.is_empty() {
@@ -228,22 +352,8 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "drag" if nums.len() >= 6 => ScriptCmd::Drag(p3(0), p3(3)),
         "vcb" => ScriptCmd::Vcb(rest.to_string()),
         "key" => ScriptCmd::Key(Key::from_name(rest)?),
-        "mods" => {
-            let mut m = Modifiers::NONE;
-            for part in rest.split('+') {
-                match part.trim().to_ascii_lowercase().as_str() {
-                    "shift" => m.shift = true,
-                    "ctrl" => m.ctrl = true,
-                    "alt" | "option" => m.alt = true,
-                    "cmd" | "command" => {
-                        m.command = true;
-                        m.mac_cmd = true;
-                    }
-                    _ => {}
-                }
-            }
-            ScriptCmd::Mods(m)
-        }
+        "mods" => ScriptCmd::Mods(parse_mods(rest)),
+        "raw" => ScriptCmd::Raw(parse_raw(rest)?),
         "wait" => ScriptCmd::Wait(nums.first().copied().unwrap_or(1.0) as u32),
         "view" => ScriptCmd::View(match rest.to_ascii_lowercase().as_str() {
             "top" => StandardView::Top,
@@ -306,12 +416,18 @@ pub struct Script {
     /// Viewport size seen last frame and for how many frames it has been unchanged.
     last_vp: Option<egui::Vec2>,
     stable: u32,
+    /// Present when the script uses `raw` commands: input then flows through egui exactly
+    /// like real input (and OS input is replaced, see [`RawInjector::apply`]).
+    pub raw: Option<RawInjector>,
 }
 
 impl Script {
     pub fn parse(text: &str) -> Self {
+        let cmds: Vec<ScriptCmd> = text.lines().filter_map(parse_cmd).collect();
+        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_))).then(RawInjector::default);
         Self {
-            cmds: text.lines().filter_map(parse_cmd).collect(),
+            cmds,
+            raw,
             pc: 0,
             wait: 0,
             frame: 0,
@@ -398,6 +514,9 @@ impl VarstotasApp {
                 log::info!("script: wrote {path}");
                 script.shot = None;
             }
+            return;
+        }
+        if script.raw.as_ref().is_some_and(|r| !r.frames.is_empty()) {
             return;
         }
         if script.wait > 0 {
@@ -552,7 +671,53 @@ impl VarstotasApp {
                 self.save_to(std::path::Path::new(&p));
             }
             ScriptCmd::Recover(c) => self.resolve_recovery(c),
+            ScriptCmd::Raw(r) => self.queue_raw(r),
         }
+    }
+
+    fn queue_raw(&mut self, cmd: RawCmd) {
+        let origin = self.viewport.rect.min.to_vec2();
+        let Some(inj) = self.debug.script.as_mut().and_then(|s| s.raw.as_mut()) else { return };
+        let m = inj.mods;
+        let mv = |p: Pos2| Event::PointerMoved(p + origin);
+        let btn = |p: Pos2, pressed: bool| Event::PointerButton {
+            pos: p + origin,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: m,
+        };
+        let key = |k: Key, pressed: bool| Event::Key { key: k, physical_key: None, pressed, repeat: false, modifiers: m };
+        let frames: Vec<Vec<Event>> = match cmd {
+            RawCmd::Move(p) => vec![vec![mv(p)]],
+            RawCmd::Down(p) => vec![vec![mv(p)], vec![btn(p, true)]],
+            RawCmd::Up(p) => vec![vec![mv(p)], vec![btn(p, false)]],
+            RawCmd::Click(p) => vec![vec![mv(p)], vec![btn(p, true)], vec![btn(p, false)]],
+            RawCmd::Tap(p) => vec![vec![mv(p), btn(p, true), btn(p, false)]],
+            RawCmd::DoubleClick(p) => {
+                vec![vec![mv(p)], vec![btn(p, true)], vec![btn(p, false)], vec![btn(p, true)], vec![btn(p, false)]]
+            }
+            RawCmd::Drag { a, b, steps, fast } => {
+                let mut f = vec![vec![mv(a)], vec![btn(a, true)]];
+                for i in 1..=steps {
+                    f.push(vec![mv(a.lerp(b, i as f32 / steps as f32))]);
+                }
+                if fast {
+                    if let Some(last) = f.last_mut() {
+                        last.push(btn(b, false));
+                    }
+                } else {
+                    f.push(vec![btn(b, false)]);
+                }
+                f
+            }
+            RawCmd::Mods(new) => {
+                inj.mods = new;
+                vec![vec![Event::ModifiersChanged(new)]]
+            }
+            RawCmd::Key(k, Some(p)) => vec![vec![key(k, p)]],
+            RawCmd::Key(k, None) => vec![vec![key(k, true)], vec![key(k, false)]],
+        };
+        inj.frames.extend(frames);
     }
 }
 
@@ -617,6 +782,28 @@ impl VarstotasApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_commands_parse_and_replace_os_input() {
+        assert_eq!(
+            parse_cmd("raw dragfast 10 20 30 40 3"),
+            Some(ScriptCmd::Raw(RawCmd::Drag { a: Pos2::new(10.0, 20.0), b: Pos2::new(30.0, 40.0), steps: 3, fast: true }))
+        );
+        let alt_shift = Modifiers { alt: true, shift: true, ..Modifiers::NONE };
+        assert_eq!(parse_cmd("raw mods shift+option"), Some(ScriptCmd::Raw(RawCmd::Mods(alt_shift))));
+        assert_eq!(parse_cmd("raw key Escape down"), Some(ScriptCmd::Raw(RawCmd::Key(Key::Escape, Some(true)))));
+        assert!(Script::parse("raw tap 1 2").raw.is_some());
+        assert!(Script::parse("clickpx 1 2").raw.is_none());
+
+        let mut inj = RawInjector::default();
+        inj.frames.push_back(vec![Event::PointerMoved(Pos2::new(5.0, 5.0))]);
+        let mut raw = egui::RawInput {
+            events: vec![Event::PointerMoved(Pos2::new(99.0, 99.0)), Event::ModifiersChanged(Modifiers::SHIFT)],
+            ..Default::default()
+        };
+        inj.apply(&mut raw);
+        assert_eq!(raw.events, vec![Event::PointerMoved(Pos2::new(5.0, 5.0))]);
+    }
 
     #[test]
     fn parses_script_lines() {

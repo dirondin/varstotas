@@ -146,6 +146,9 @@ pub struct VarstotasApp {
     last_title: String,
     allow_close: bool,
     pub(crate) tool_pressed: bool,
+    /// Primary button state after the last processed pointer event (see
+    /// `handle_viewport_input`).
+    primary_held: bool,
     pub(crate) last_pointer: Option<Pos2>,
     /// Where the primary button went down in the viewport (click vs drag detection).
     press_local: Option<Pos2>,
@@ -231,6 +234,7 @@ impl VarstotasApp {
             last_title: String::new(),
             allow_close: false,
             tool_pressed: false,
+            primary_held: false,
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
@@ -357,7 +361,7 @@ impl VarstotasApp {
         // Scripted runs inject keys, VCB text and modifiers themselves (`key`, `vcb`, `mods`);
         // real OS keyboard events (including modifier state carried by key events) must not
         // leak in and change tool behaviour.
-        if self.debug.script_active() {
+        if self.debug.synthetic_input() {
             return;
         }
         if ctx.text_edit_focused() || self.confirm.is_some() {
@@ -457,18 +461,22 @@ impl VarstotasApp {
             self.cam_anim = None;
         }
         let over = response.contains_pointer();
-        let (events, modifiers, primary_down) =
-            ctx.input(|i| (i.events.clone(), i.modifiers, i.pointer.primary_down()));
+        let (events, modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
+        // Primary-button state as of each event, NOT `i.pointer.primary_down()` (the state at
+        // the end of the frame): one frame often holds the last moves of a drag *and* the
+        // release (high-rate trackpads/mice), and those moves happened with the button down.
+        let mut primary_down = self.primary_held;
         // Scripted runs set modifiers with the `mods` command; real OS state must not reset them.
-        if !self.debug.script_active() {
+        if !self.debug.synthetic_input() {
             self.last_modifiers = modifiers;
         }
         if self.confirm.is_some() {
+            self.primary_held = ctx.input(|i| i.pointer.primary_down());
             return;
         }
         // Scripted runs drive the tools themselves; a real mouse resting over the window must
         // not inject pointer events (e.g. a move with the button up cancels a scripted drag).
-        let events = if self.debug.script_active() { Vec::new() } else { events };
+        let events = if self.debug.synthetic_input() { Vec::new() } else { events };
         for ev in events {
             match ev {
                 egui::Event::PointerMoved(p) => {
@@ -481,6 +489,9 @@ impl VarstotasApp {
                     }
                 }
                 egui::Event::PointerButton { pos, button, pressed, modifiers } => {
+                    if button == PointerButton::Primary {
+                        primary_down = pressed;
+                    }
                     if button == PointerButton::Middle {
                         continue;
                     }
@@ -511,6 +522,7 @@ impl VarstotasApp {
                 _ => {}
             }
         }
+        self.primary_held = primary_down;
         let clicks = if response.triple_clicked() {
             3
         } else if response.double_clicked() {
@@ -519,7 +531,7 @@ impl VarstotasApp {
             0
         };
         if clicks > 0
-            && !self.debug.script_active()
+            && !self.debug.synthetic_input()
             && let Some(local) = self.last_pointer {
                 let mut pi = self.pointer_info(local, egui::Vec2::ZERO, Some(PointerButton::Primary), false);
                 pi.click_count = clicks;
@@ -528,7 +540,7 @@ impl VarstotasApp {
         if over {
             let icon = if self.viewport.nav.is_dragging() { egui::CursorIcon::Grabbing } else { self.tool.cursor() };
             ctx.set_cursor_icon(icon);
-        } else if !self.tool_pressed && !self.debug.script_active() {
+        } else if !self.tool_pressed && !self.debug.synthetic_input() {
             self.last_pointer = None;
         }
     }
@@ -1069,9 +1081,7 @@ impl VarstotasApp {
     pub(crate) fn after_primary_click(&mut self, pos: Pos2, modifiers: Modifiers) {
         if self.tool_id() != ToolId::Select
             || self.doc.active_path.is_empty()
-            || modifiers.shift
-            || modifiers.command
-            || modifiers.ctrl
+            || crate::tools::select::sel_op(&modifiers) != crate::tools::select::SelOp::Replace
         {
             return;
         }
@@ -1263,6 +1273,10 @@ impl eframe::App for VarstotasApp {
             log::info!("{line}");
             self.debug.perf = None;
         }
+    }
+
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        self.debug.raw_input_hook(raw_input);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
