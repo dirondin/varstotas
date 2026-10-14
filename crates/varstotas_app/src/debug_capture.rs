@@ -171,7 +171,8 @@ pub enum ScriptCmd {
     Parallel(bool),
     /// `dragpx x0 y0 x1 y1` — primary-button drag in screen points (e.g. selection box).
     DragPx(Pos2, Pos2),
-    /// `zoompx factor x y` — wheel zoom toward the point under screen position (x, y).
+    /// `zoompx factor [x y]` — wheel zoom toward the point under screen position (x, y), or
+    /// under the last pointer position.
     ZoomPx(f64, Pos2),
     /// `orbitpx dx dy` / `panpx dx dy` — middle-button orbit / pan by a screen delta,
     /// pivoting on the point under the last pointer position.
@@ -185,6 +186,8 @@ pub enum ScriptCmd {
     Dump(String),
     /// `stress N` — insert an N×N grid of boxes (6 faces each) as one undo step.
     Stress(u32),
+    /// `box x y z w d h` — insert a push-pulled box (one undo step), e.g. far from the origin.
+    Box(DVec3, DVec3),
     /// `perf N` — log CPU frame-time statistics over the next N frames (non-blocking: the
     /// following commands run inside the measured window, one every 3 frames).
     Perf(u32),
@@ -261,12 +264,15 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             Pos2::new(nums[2] as f32, nums[3] as f32),
         ),
         "zoompx" if nums.len() >= 3 => ScriptCmd::ZoomPx(nums[0], Pos2::new(nums[1] as f32, nums[2] as f32)),
+        // `zoompx f` alone zooms toward the last pointer position (NaN marker).
+        "zoompx" if nums.len() == 1 => ScriptCmd::ZoomPx(nums[0], Pos2::new(f32::NAN, f32::NAN)),
         "orbitpx" if nums.len() >= 2 => ScriptCmd::OrbitPx(egui::vec2(nums[0] as f32, nums[1] as f32)),
         "panpx" if nums.len() >= 2 => ScriptCmd::PanPx(egui::vec2(nums[0] as f32, nums[1] as f32)),
         "dump" => ScriptCmd::Dump(rest.to_string()),
         "downpx" if nums.len() >= 2 => ScriptCmd::DownPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
         "uppx" if nums.len() >= 2 => ScriptCmd::UpPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
         "stress" => ScriptCmd::Stress(nums.first().copied().unwrap_or(41.0) as u32),
+        "box" if nums.len() >= 6 => ScriptCmd::Box(p3(0), p3(3)),
         "perf" => ScriptCmd::Perf(nums.first().copied().unwrap_or(60.0) as u32),
         "autosave" => ScriptCmd::Autosave,
         "save" if !rest.is_empty() => ScriptCmd::SaveTo(rest.to_string()),
@@ -486,6 +492,7 @@ impl VarstotasApp {
             }
             ScriptCmd::ZoomPx(f, at) => {
                 let vp = self.viewport.size();
+                let at = if at.x.is_nan() { self.last_pointer.unwrap_or((vp * 0.5).to_pos2()) } else { at };
                 let target = crate::nav::point_under(&self.doc.model, &self.camera, at, vp);
                 self.camera.zoom(f, target);
             }
@@ -509,6 +516,21 @@ impl VarstotasApp {
             }
             ScriptCmd::Dump(label) => log::info!("dump {label}: {}", self.debug_summary()),
             ScriptCmd::Stress(n) => self.insert_stress_grid(n),
+            ScriptCmd::Box(at, size) => {
+                self.doc.commit("Insert Box", |m| {
+                    let mesh = m.root_mesh_mut();
+                    let pts = [
+                        at,
+                        at + DVec3::new(size.x, 0.0, 0.0),
+                        at + DVec3::new(size.x, size.y, 0.0),
+                        at + DVec3::new(0.0, size.y, 0.0),
+                    ];
+                    if let Some(f) = mesh.add_face(&pts) {
+                        let up = mesh.faces.get(f).map(|f| f.normal.z >= 0.0).unwrap_or(true);
+                        let _ = mesh.push_pull(f, if up { size.z } else { -size.z }, false);
+                    }
+                });
+            }
             ScriptCmd::Perf(n) => {
                 self.debug.perf = Some(PerfWindow {
                     remaining: n.max(1),

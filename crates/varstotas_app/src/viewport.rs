@@ -27,6 +27,8 @@ pub struct Viewport {
     pub rebuild_count: u64,
     /// CPU time of the last rebuild (tessellation + upload), milliseconds.
     pub last_rebuild_ms: f64,
+    /// Render origin of the uploaded geometry (kept stable between rebuilds).
+    origin: Option<varstotas_kernel::glam::DVec3>,
 }
 
 impl Default for Viewport {
@@ -40,6 +42,7 @@ impl Default for Viewport {
             tri_count: 0,
             rebuild_count: 0,
             last_rebuild_ms: 0.0,
+            origin: None,
         }
     }
 }
@@ -59,6 +62,7 @@ impl Viewport {
     /// Force a geometry rebuild on the next paint (e.g. after loading a file).
     pub fn invalidate(&mut self) {
         self.built = None;
+        self.origin = None;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -102,9 +106,11 @@ impl Viewport {
                             selection: &doc.selection,
                             active_path: &doc.active_path,
                             face_style: style.face_style,
+                            prev_origin: self.origin,
                         },
                     );
                     self.tri_count = geo.tris.len() / 3;
+                    self.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
                     if let Err(e) = guarded(|| renderer.set_geometry(rs, &geo)) {
                         log::warn!("set_geometry failed: {e}");
