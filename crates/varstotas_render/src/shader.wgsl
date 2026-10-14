@@ -20,7 +20,38 @@ struct Globals {
     params: vec4<f32>,        // x: face mode (0 shaded, 1 mono, 2 hidden-line); y: alpha mul;
                               // z: line bias relative; w: 1 = encode gamma manually
     params2: vec4<f32>,       // x: line bias absolute (ndc); y: ground enabled
+    hl_selected: vec4<f32>,   // rgb: selection color (sRGB); w: face mix
+    hl_dim_face: vec4<f32>,   // rgb: dimmed-face target (sRGB); w: face mix
+    hl_dim_edge: vec4<f32>,   // dimmed edge color (linear)
 };
+
+// Highlight states (Rust `Highlight`): 0 none, 1 selected, 2 dimmed (outside the editing context).
+const HL_SELECTED: u32 = 1u;
+const HL_DIMMED: u32 = 2u;
+
+/// Face color (linear) with the highlight mix done in sRGB, like the app used to bake it.
+fn highlight_face(c: vec4<f32>, state: u32) -> vec4<f32> {
+    if state == 0u {
+        return c;
+    }
+    var t = g.hl_selected;
+    if state != HL_SELECTED {
+        t = g.hl_dim_face;
+    }
+    let m = mix(linear_to_srgb(clamp(c.rgb, vec3<f32>(0.0), vec3<f32>(1.0))), t.rgb, t.w);
+    return vec4<f32>(srgb_to_linear(m), mix(c.a, 1.0, t.w));
+}
+
+/// Edge / profile color (linear) for a highlight state.
+fn highlight_edge(c: vec4<f32>, state: u32) -> vec4<f32> {
+    if state == HL_SELECTED {
+        return vec4<f32>(srgb_to_linear(g.hl_selected.rgb), 1.0);
+    }
+    if state == HL_DIMMED {
+        return g.hl_dim_edge;
+    }
+    return c;
+}
 
 @group(0) @binding(0) var<uniform> g: Globals;
 
@@ -160,6 +191,7 @@ struct FaceIn {
     @location(1) normal: vec3<f32>,
     @location(2) color: vec4<f32>,
     @location(3) back: vec4<f32>,
+    @location(4) state: u32,
 };
 
 struct FaceOut {
@@ -167,6 +199,7 @@ struct FaceOut {
     @location(0) normal: vec3<f32>,
     @location(1) color: vec4<f32>,
     @location(2) back: vec4<f32>,
+    @location(3) @interpolate(flat) state: u32,
 };
 
 @vertex
@@ -176,6 +209,7 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.normal = v.normal;
     o.color = lin(v.color);
     o.back = lin(v.back);
+    o.state = v.state;
     return o;
 }
 
@@ -184,7 +218,8 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
     let mode = g.params.x;
     let alpha_mul = g.params.y;
     if mode > 1.5 {
-        return out_color(vec4<f32>(g.hidden_face.rgb, alpha_mul));
+        let h = highlight_face(vec4<f32>(g.hidden_face.rgb, 1.0), in.state);
+        return out_color(vec4<f32>(h.rgb, alpha_mul));
     }
     var n = in.normal;
     if dot(n, n) < 1e-12 {
@@ -200,6 +235,7 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
     if mode > 0.5 {
         c = select(g.mono_back, g.mono_front, ff);
     }
+    c = highlight_face(c, in.state);
     // Fixed world-space sun (Lambert) + ambient, plus a small camera fill so faces
     // turned away from the sun stay readable. Shade is defined perceptually (sRGB-ish)
     // and converted to linear so differences between planes stay visible.
@@ -233,11 +269,17 @@ fn edge_col(c: vec4<f32>) -> vec4<f32> {
     return lin(c);
 }
 
+struct EdgeIn {
+    @location(0) pos: vec3<f32>,
+    @location(1) color: vec4<f32>,
+    @location(2) state: u32,
+};
+
 @vertex
-fn vs_edge(v: LineIn) -> LineOut {
+fn vs_edge(v: EdgeIn) -> LineOut {
     var o: LineOut;
     o.pos = bias_clip(project(v.pos));
-    o.color = edge_col(v.color);
+    o.color = highlight_edge(edge_col(v.color), v.state);
     return o;
 }
 
@@ -283,7 +325,13 @@ fn thick_color(c: vec4<f32>, width: f32) -> vec4<f32> {
 
 @vertex
 fn vs_thick(@builtin(vertex_index) vi: u32, v: ThickIn) -> ThickOut {
-    return thick_vertex(vi, v);
+    return thick_vertex(vi, v, 0u);
+}
+
+// Static model edges / profiles, instanced fallback with a per-segment highlight stream.
+@vertex
+fn vs_thick_state(@builtin(vertex_index) vi: u32, v: ThickIn, @location(5) state: u32) -> ThickOut {
+    return thick_vertex(vi, v, state);
 }
 
 // Same segments read from a storage buffer: one non-instanced triangle list, 6 vertices per
@@ -297,6 +345,7 @@ struct Seg {
 };
 
 @group(1) @binding(0) var<storage, read> segs: array<Seg>;
+@group(1) @binding(1) var<storage, read> seg_states: array<u32>;
 
 @vertex
 fn vs_thick_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
@@ -307,10 +356,10 @@ fn vs_thick_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
     v.b = s.b;
     v.dash = s.dash;
     v.color = s.color;
-    return thick_vertex(vi % 6u, v);
+    return thick_vertex(vi % 6u, v, seg_states[vi / 6u]);
 }
 
-fn thick_vertex(vi: u32, v: ThickIn) -> ThickOut {
+fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {
     // corners: (end, side)
     var ends = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
     var sides = array<f32, 6>(-1.0, 1.0, 1.0, -1.0, 1.0, -1.0);
@@ -359,7 +408,7 @@ fn thick_vertex(vi: u32, v: ThickIn) -> ThickOut {
     }
     let off = (n * side * hw + d * ext) / half_vp * base.w;
     o.pos = bias_clip(vec4<f32>(base.xy + off, base.z, base.w));
-    o.color = thick_color(v.color, v.width);
+    o.color = highlight_edge(thick_color(v.color, v.width), state);
     o.along = (end * len + ext) / g.viewport.z; // in points
     o.dash = v.dash;
     return o;

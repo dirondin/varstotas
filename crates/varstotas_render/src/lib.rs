@@ -50,6 +50,35 @@ pub struct SceneGeometry {
     /// Put it near the model (e.g. bounding-box center) to keep f32 precision for models far
     /// from the world origin. Overlay coordinates stay in world space.
     pub origin: [f64; 3],
+    /// Optional highlight ids (see `Renderer::update_highlight`): one per triangle (`tris.len() / 3`),
+    /// e.g. the index of the source face. Empty = the triangle index is its id.
+    pub face_ids: Vec<u32>,
+    /// One per edge segment (`edges.len() / 2`). Empty = the segment index is its id.
+    pub edge_ids: Vec<u32>,
+    /// One per profile segment (`profile_edges.len() / 2`), in the same id space as `edge_ids`.
+    /// Empty = profiles are never highlighted.
+    pub profile_ids: Vec<u32>,
+}
+
+/// Per-primitive highlight state applied by the renderer (selection / editing context).
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Highlight {
+    #[default]
+    None = 0,
+    /// Faces tinted toward `HIGHLIGHT_SELECTED`, edges/profiles drawn in it.
+    Selected = 1,
+    /// Outside the active editing context: faces faded toward `DIM_FACE_TARGET`, edges `DIM_EDGE_COLOR`.
+    Dimmed = 2,
+}
+
+/// Full highlight state for `Renderer::update_highlight`, indexed by highlight id.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HighlightUpdate<'a> {
+    /// `faces[face_id]`; ids past the end are `Highlight::None`.
+    pub faces: &'a [Highlight],
+    /// `edges[edge_id]` (edges and profiles); ids past the end are `Highlight::None`.
+    pub edges: &'a [Highlight],
 }
 
 /// Per-frame 3D overlay line (tool previews, inference axes, guides).
@@ -114,5 +143,6 @@ pub struct RenderStyle {
 
 mod renderer;
 pub use renderer::{
-    DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, Renderer,
+    DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
+    DIM_FACE_TARGET, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, Renderer,
 };

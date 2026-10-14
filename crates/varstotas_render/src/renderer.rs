@@ -1,7 +1,9 @@
 //! wgpu renderer: offscreen MSAA color+depth, resolved into a texture registered with egui.
 
 use crate::wgpu;
-use crate::{Camera, FaceStyle, LineVertex, Overlay3d, RenderStyle, SceneGeometry, TriVertex};
+use crate::{
+    Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, RenderStyle, SceneGeometry, TriVertex,
+};
 use glam::{DMat4, DVec2, DVec3};
 use wgpu::util::DeviceExt;
 
@@ -29,6 +31,12 @@ struct Globals {
     hidden_face: [f32; 4],
     params: [f32; 4],
     params2: [f32; 4],
+    /// rgb: selection tint (sRGB); w: face mix factor.
+    hl_selected: [f32; 4],
+    /// rgb: dimmed-face target (sRGB); w: face mix factor.
+    hl_dim_face: [f32; 4],
+    /// Dimmed edge color (linear).
+    hl_dim_edge: [f32; 4],
 }
 
 /// One thick-line segment instance (screen-space quad expansion in the vertex shader).
@@ -114,6 +122,17 @@ struct StaticGeo {
     edges_bg: Option<wgpu::BindGroup>,
     profiles_bg: Option<wgpu::BindGroup>,
     radius: f64,
+    /// Highlight group of each triangle (vertex-buffer order) / edge segment / profile segment.
+    tri_groups: Vec<u32>,
+    edge_groups: Vec<u32>,
+    /// Empty = profiles are never highlighted.
+    profile_groups: Vec<u32>,
+    /// Highlight state streams (`Highlight as u32`): per face vertex, per edge vertex (line list),
+    /// per edge segment, per profile segment. Zero-initialised by `set_geometry`.
+    face_states: Option<wgpu::Buffer>,
+    edge_states_vtx: Option<wgpu::Buffer>,
+    edge_states_seg: Option<wgpu::Buffer>,
+    profile_states: Option<wgpu::Buffer>,
 }
 
 /// What the current back-to-front index buffer was sorted for.
@@ -164,6 +183,8 @@ struct Pipelines {
     /// tile-based GPUs. `None` when vertex-stage storage buffers are unavailable (GL).
     edge_thick_seg: Option<wgpu::RenderPipeline>,
     thick_depth_seg: Option<wgpu::RenderPipeline>,
+    /// Instanced profiles with a per-segment highlight stream (fallback when `thick_depth_seg` is None).
+    thick_depth_state: wgpu::RenderPipeline,
     edge: wgpu::RenderPipeline,
     thick_depth: wgpu::RenderPipeline,
     thick_top: wgpu::RenderPipeline,
@@ -190,6 +211,7 @@ pub struct Renderer {
     scratch_lines: Vec<ThickLine>,
     scratch_polys: Vec<LineVertex>,
     scratch_axes: Vec<ThickLine>,
+    scratch_states: Vec<u32>,
     max_buffer: u64,
     max_texture_dim: u32,
     /// Layout of the segment storage bind group (group 1); `None` = instanced fallback only.
@@ -243,6 +265,14 @@ impl Default for RenderStyle {
 pub const DEFAULT_LIGHT_DIR: [f32; 3] = [-0.4, -0.6, 0.7];
 /// Default ambient term (0..1, perceptual): faces turned away from the sun get this shade.
 pub const DEFAULT_AMBIENT: f32 = 0.68;
+
+/// Highlight colors applied by the renderer for `Highlight` states (sRGB; same as the app's
+/// previous baked-in selection colors). Faces mix toward the color, edges take it as-is.
+pub const HIGHLIGHT_SELECTED: [f32; 4] = [0.0, 0x50 as f32 / 255.0, 1.0, 1.0];
+pub const HIGHLIGHT_FACE_MIX: f32 = 0.45;
+pub const DIM_FACE_TARGET: [f32; 4] = [0.86, 0.86, 0.87, 1.0];
+pub const DIM_FACE_MIX: f32 = 0.6;
+pub const DIM_EDGE_COLOR: [f32; 4] = [0.62, 0.62, 0.64, 1.0];
 
 /// Default face colors used by `FaceStyle::Monochrome` (sRGB).
 pub const DEFAULT_FRONT_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -310,8 +340,8 @@ impl Renderer {
             .then(|| {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("varstotas segments"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
+                    entries: &[0, 1].map(|binding| wgpu::BindGroupLayoutEntry {
+                        binding,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -319,7 +349,7 @@ impl Renderer {
                             min_binding_size: None,
                         },
                         count: None,
-                    }],
+                    }),
                 })
             });
         let seg_layout = seg_bgl.as_ref().map(|sb| {
@@ -355,6 +385,13 @@ impl Renderer {
                 profile_count: 0,
                 edges_bg: None,
                 profiles_bg: None,
+                tri_groups: Vec::new(),
+                edge_groups: Vec::new(),
+                profile_groups: Vec::new(),
+                face_states: None,
+                edge_states_vtx: None,
+                edge_states_seg: None,
+                profile_states: None,
                 radius: 0.0,
             },
             overlay_lines: DynBuffer::new(device, "varstotas overlay lines", vb),
@@ -373,6 +410,7 @@ impl Renderer {
             scratch_lines: Vec::new(),
             scratch_polys: Vec::new(),
             scratch_axes: Vec::new(),
+            scratch_states: Vec::new(),
             max_buffer: device.limits().max_buffer_size,
             max_texture_dim: limits.max_texture_dimension_2d,
             seg_bgl,
@@ -405,14 +443,17 @@ impl Renderer {
         let mut backs: Vec<[f32; 4]> = Vec::with_capacity(n);
         let mut t_tris: Vec<TriVertex> = Vec::new();
         let mut t_backs: Vec<[f32; 4]> = Vec::new();
+        let mut groups: Vec<u32> = Vec::with_capacity(n / 3);
+        let mut t_groups: Vec<u32> = Vec::new();
         for t in 0..n / 3 {
             let i = t * 3;
             let translucent = (i..i + 3).any(|k| geo.tris[k].color[3] < 0.999 || back_of(k)[3] < 0.999);
-            let (dt, db) = if translucent {
-                (&mut t_tris, &mut t_backs)
+            let (dt, db, dg) = if translucent {
+                (&mut t_tris, &mut t_backs, &mut t_groups)
             } else {
-                (&mut tris, &mut backs)
+                (&mut tris, &mut backs, &mut groups)
             };
+            dg.push(geo.face_ids.get(t).copied().unwrap_or(t as u32));
             for k in i..i + 3 {
                 dt.push(geo.tris[k]);
                 db.push(back_of(k));
@@ -422,6 +463,8 @@ impl Renderer {
         let translucent_verts = t_tris.len() as u32;
         tris.extend_from_slice(&t_tris);
         backs.extend_from_slice(&t_backs);
+        groups.extend_from_slice(&t_groups);
+        self.geo.tri_groups = groups;
         self.geo.centroids.clear();
         self.geo.centroids.extend(tris.as_chunks::<3>().0.iter().map(|t| {
             let c = (glam::Vec3::from(t[0].pos) + glam::Vec3::from(t[1].pos) + glam::Vec3::from(t[2].pos))
@@ -444,6 +487,7 @@ impl Renderer {
         };
         self.geo.tris = mk("varstotas tris", bytemuck::cast_slice(&tris));
         self.geo.backs = mk("varstotas backs", bytemuck::cast_slice(&backs));
+        self.geo.face_states = self.state_buffer(device, "varstotas face states", tris.len(), false);
         self.geo.opaque_verts = opaque_verts;
         self.geo.translucent_verts = translucent_verts;
 
@@ -463,7 +507,16 @@ impl Renderer {
             })
             .collect();
         self.geo.edges_thick = self.seg_buffer(device, "varstotas edges thick", &edges_thick);
-        self.geo.edges_bg = self.seg_bind_group(device, self.geo.edges_thick.as_ref());
+        self.geo.edge_states_seg = self.state_buffer(device, "varstotas edge states", edges_thick.len(), true);
+        self.geo.edge_states_vtx = self.state_buffer(device, "varstotas edge vertex states", ne, false);
+        self.geo.edges_bg = self.seg_bind_group(
+            device,
+            self.geo.edges_thick.as_ref(),
+            self.geo.edge_states_seg.as_ref(),
+        );
+        self.geo.edge_groups = (0..ne as u32 / 2)
+            .map(|i| geo.edge_ids.get(i as usize).copied().unwrap_or(i))
+            .collect();
 
         let profiles: Vec<ThickLine> = geo
             .profile_edges
@@ -479,7 +532,19 @@ impl Renderer {
             })
             .collect();
         self.geo.profiles = self.seg_buffer(device, "varstotas profiles", &profiles);
-        self.geo.profiles_bg = self.seg_bind_group(device, self.geo.profiles.as_ref());
+        self.geo.profile_states = self.state_buffer(device, "varstotas profile states", profiles.len(), true);
+        self.geo.profiles_bg = self.seg_bind_group(
+            device,
+            self.geo.profiles.as_ref(),
+            self.geo.profile_states.as_ref(),
+        );
+        self.geo.profile_groups = if geo.profile_ids.is_empty() {
+            Vec::new()
+        } else {
+            (0..profiles.len())
+                .map(|i| geo.profile_ids.get(i).copied().unwrap_or(u32::MAX))
+                .collect()
+        };
         self.geo.profile_count = profiles.len() as u32;
         let origin = DVec3::from_array(geo.origin);
         self.geo.origin = if origin.is_finite() { origin } else { DVec3::ZERO };
@@ -491,6 +556,55 @@ impl Renderer {
                 n / 3,
                 translucent_verts / 3,
                 ne / 2,
+                t0.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+    }
+
+    /// Fast path for selection / editing-context changes: rewrites only the small per-vertex /
+    /// per-segment highlight streams (no geometry re-upload, no re-sort, no re-partition).
+    /// `faces[id]` / `edges[id]` are indexed by the ids given in `SceneGeometry::face_ids` /
+    /// `edge_ids` / `profile_ids` (or the triangle / edge-segment index when those are empty);
+    /// ids beyond the slices get `Highlight::None`. Replaces the whole previous state.
+    pub fn update_highlight(&mut self, rs: &egui_wgpu::RenderState, update: &HighlightUpdate<'_>) {
+        let t0 = std::time::Instant::now();
+        let queue = &rs.queue;
+        let state = |states: &[Highlight], id: u32| states.get(id as usize).map_or(0, |&h| h as u32);
+        let g = &self.geo;
+        let v = &mut self.scratch_states;
+
+        if let Some(buf) = &g.face_states {
+            v.clear();
+            v.extend(g.tri_groups.iter().flat_map(|&id| [state(update.faces, id); 3]));
+            queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+        }
+        if let Some(buf) = &g.edge_states_seg {
+            v.clear();
+            v.extend(g.edge_groups.iter().map(|&id| state(update.edges, id)));
+            queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+            if let Some(vb) = &g.edge_states_vtx {
+                // Expand in place (back to front) to two vertices per segment.
+                let n = v.len();
+                v.resize(n * 2, 0);
+                for i in (0..n).rev() {
+                    v[2 * i + 1] = v[i];
+                    v[2 * i] = v[i];
+                }
+                queue.write_buffer(vb, 0, bytemuck::cast_slice(v));
+            }
+        }
+        if let Some(buf) = &g.profile_states
+            && !g.profile_groups.is_empty()
+        {
+            v.clear();
+            v.extend(g.profile_groups.iter().map(|&id| state(update.edges, id)));
+            queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+        }
+        if self.timing.is_some() {
+            eprintln!(
+                "varstotas_render timing: update_highlight {} tris, {} edges: {:.3} ms",
+                g.tri_groups.len(),
+                g.edge_groups.len(),
                 t0.elapsed().as_secs_f64() * 1000.0
             );
         }
@@ -512,18 +626,46 @@ impl Renderer {
         }))
     }
 
-    fn seg_bind_group(&self, device: &wgpu::Device, buf: Option<&wgpu::Buffer>) -> Option<wgpu::BindGroup> {
-        let buf = buf?;
-        if !buf.usage().contains(wgpu::BufferUsages::STORAGE) {
+    /// Zero-initialised `u32` highlight-state stream (vertex buffer; also storage for segments).
+    fn state_buffer(&self, device: &wgpu::Device, label: &str, count: usize, seg: bool) -> Option<wgpu::Buffer> {
+        if count == 0 {
+            return None;
+        }
+        let mut usage = wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST;
+        if seg && self.seg_bgl.is_some() {
+            usage |= wgpu::BufferUsages::STORAGE;
+        }
+        Some(device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: count as u64 * 4,
+            usage,
+            mapped_at_creation: false,
+        }))
+    }
+
+    fn seg_bind_group(
+        &self,
+        device: &wgpu::Device,
+        buf: Option<&wgpu::Buffer>,
+        states: Option<&wgpu::Buffer>,
+    ) -> Option<wgpu::BindGroup> {
+        let (buf, states) = (buf?, states?);
+        if !buf.usage().contains(wgpu::BufferUsages::STORAGE) || !states.usage().contains(wgpu::BufferUsages::STORAGE) {
             return None;
         }
         Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("varstotas segments"),
             layout: self.seg_bgl.as_ref()?,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buf.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: states.as_entire_binding(),
+                },
+            ],
         }))
     }
 
@@ -709,6 +851,7 @@ impl Renderer {
             FaceStyle::Monochrome => 1.0,
             FaceStyle::HiddenLine => 2.0,
         };
+        let with_w = |c: [f32; 4], w: f32| [c[0], c[1], c[2], w];
         let v4 = |v: DVec3, w: f64| [v.x as f32, v.y as f32, v.z as f32, w as f32];
         let mut globals = Globals {
             view_proj: view_proj.as_mat4().to_cols_array_2d(),
@@ -738,6 +881,9 @@ impl Renderer {
                 if self.manual_gamma { 1.0 } else { 0.0 },
             ],
             params2: [bias_abs, if style.show_ground { 1.0 } else { 0.0 }, 0.0, 0.0],
+            hl_selected: with_w(HIGHLIGHT_SELECTED, HIGHLIGHT_FACE_MIX),
+            hl_dim_face: with_w(DIM_FACE_TARGET, DIM_FACE_MIX),
+            hl_dim_edge: conv(DIM_EDGE_COLOR),
         };
         globals.hidden_face[3] = 1.0;
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
@@ -839,9 +985,10 @@ impl Renderer {
             pass.draw(0..3, 0..1);
 
             let set_face_buffers = |pass: &mut wgpu::RenderPass<'_>| {
-                if let (Some(tb), Some(bb)) = (&g.tris, &g.backs) {
+                if let (Some(tb), Some(bb), Some(sb)) = (&g.tris, &g.backs, &g.face_states) {
                     pass.set_vertex_buffer(0, tb.slice(..));
                     pass.set_vertex_buffer(1, bb.slice(..));
+                    pass.set_vertex_buffer(2, sb.slice(..));
                     true
                 } else {
                     false
@@ -866,14 +1013,16 @@ impl Renderer {
                         pass.set_pipeline(pl);
                         pass.set_bind_group(1, bg, &[]);
                         pass.draw(0..g.edge_verts * 3, 0..1); // 6 vertices per segment
-                    } else if let Some(eb) = &g.edges_thick {
+                    } else if let (Some(eb), Some(sb)) = (&g.edges_thick, &g.edge_states_seg) {
                         pass.set_pipeline(&p.edge_thick);
                         pass.set_vertex_buffer(0, eb.slice(..));
+                        pass.set_vertex_buffer(1, sb.slice(..));
                         pass.draw(0..6, 0..g.edge_verts / 2);
                     }
-                } else if let Some(eb) = &g.edges {
+                } else if let (Some(eb), Some(sb)) = (&g.edges, &g.edge_states_vtx) {
                     pass.set_pipeline(&p.edge);
                     pass.set_vertex_buffer(0, eb.slice(..));
+                    pass.set_vertex_buffer(1, sb.slice(..));
                     pass.draw(0..g.edge_verts, 0..1);
                 }
             }
@@ -888,9 +1037,10 @@ impl Renderer {
                     pass.set_pipeline(pl);
                     pass.set_bind_group(1, bg, &[]);
                     pass.draw(0..g.profile_count * 6, 0..1);
-                } else {
-                    pass.set_pipeline(&p.thick_depth);
+                } else if let Some(sb) = &g.profile_states {
+                    pass.set_pipeline(&p.thick_depth_state);
                     pass.set_vertex_buffer(0, pb.slice(..));
+                    pass.set_vertex_buffer(1, sb.slice(..));
                     pass.draw(0..6, 0..g.profile_count);
                 }
             }
@@ -1033,6 +1183,9 @@ fn build_pipelines(
 ) -> Pipelines {
     let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4];
     let back_attrs = wgpu::vertex_attr_array![3 => Float32x4];
+    let face_state_attrs = wgpu::vertex_attr_array![4 => Uint32];
+    let edge_state_attrs = wgpu::vertex_attr_array![2 => Uint32];
+    let seg_state_attrs = wgpu::vertex_attr_array![5 => Uint32];
     let line_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x4];
     let thick_attrs = wgpu::vertex_attr_array![
         0 => Float32x3, 1 => Float32, 2 => Float32x3, 3 => Float32, 4 => Float32x4
@@ -1048,6 +1201,23 @@ fn build_pipelines(
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &back_attrs,
         }),
+        Some(wgpu::VertexBufferLayout {
+            array_stride: 4,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &face_state_attrs,
+        }),
+    ];
+    let edge_layouts = [
+        Some(wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<LineVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &line_attrs,
+        }),
+        Some(wgpu::VertexBufferLayout {
+            array_stride: 4,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &edge_state_attrs,
+        }),
     ];
     let line_layouts = [Some(wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<LineVertex>() as u64,
@@ -1059,6 +1229,14 @@ fn build_pipelines(
         step_mode: wgpu::VertexStepMode::Instance,
         attributes: &thick_attrs,
     })];
+    let thick_state_layouts = [
+        thick_layouts[0].clone(),
+        Some(wgpu::VertexBufferLayout {
+            array_stride: 4,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &seg_state_attrs,
+        }),
+    ];
 
     struct Desc<'a> {
         label: &'a str,
@@ -1195,9 +1373,9 @@ fn build_pipelines(
         }),
         edge_thick: make(Desc {
             label: "varstotas edges thick",
-            vs: "vs_thick",
+            vs: "vs_thick_state",
             fs: "fs_thick",
-            buffers: &thick_layouts,
+            buffers: &thick_state_layouts,
             topology: TriangleList,
             blend: true,
             depth_write: true,
@@ -1209,7 +1387,7 @@ fn build_pipelines(
             label: "varstotas edges",
             vs: "vs_edge",
             fs: "fs_flat",
-            buffers: &line_layouts,
+            buffers: &edge_layouts,
             topology: LineList,
             blend: true,
             depth_write: true,
@@ -1222,6 +1400,18 @@ fn build_pipelines(
             vs: "vs_thick",
             fs: "fs_thick",
             buffers: &thick_layouts,
+            topology: TriangleList,
+            blend: true,
+            depth_write: false,
+            depth_compare: GreaterEqual,
+            bias: no_bias,
+            cull: None,
+        }),
+        thick_depth_state: make(Desc {
+            label: "varstotas profiles (instanced)",
+            vs: "vs_thick_state",
+            fs: "fs_thick",
+            buffers: &thick_state_layouts,
             topology: TriangleList,
             blend: true,
             depth_write: false,
@@ -1274,7 +1464,7 @@ mod tests {
 
     #[test]
     fn layouts_match_shader() {
-        assert_eq!(std::mem::size_of::<Globals>(), 64 + 16 * 16);
+        assert_eq!(std::mem::size_of::<Globals>(), 64 + 19 * 16);
         assert_eq!(std::mem::size_of::<ThickLine>(), 48);
         assert_eq!(std::mem::size_of::<TriVertex>(), 40);
         assert_eq!(std::mem::size_of::<LineVertex>(), 28);
@@ -1290,6 +1480,14 @@ mod tests {
             wgpu::naga::valid::Capabilities::empty(),
         );
         v.validate(&module).expect("wgsl validate");
+    }
+
+    #[test]
+    fn highlight_values_match_shader() {
+        let src = include_str!("shader.wgsl");
+        assert_eq!(Highlight::None as u32, 0);
+        assert!(src.contains(&format!("const HL_SELECTED: u32 = {}u;", Highlight::Selected as u32)));
+        assert!(src.contains(&format!("const HL_DIMMED: u32 = {}u;", Highlight::Dimmed as u32)));
     }
 
     #[test]

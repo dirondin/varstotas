@@ -13,7 +13,7 @@
 use eframe::egui;
 use glam::{DVec2, DVec3, Vec3};
 use varstotas_render::{
-    Camera, FaceStyle, LineVertex, Overlay3d, OverlayLine, OverlayPolygon, RenderStyle, Renderer,
+    Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, OverlayLine, OverlayPolygon, RenderStyle, Renderer,
     SceneGeometry, StandardView, TriVertex,
 };
 
@@ -55,6 +55,8 @@ const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 #[derive(Default)]
 struct Builder {
     geo: SceneGeometry,
+    /// Highlight id of the next quad (one id per quad = one "face").
+    faces: u32,
 }
 
 impl Builder {
@@ -69,6 +71,9 @@ impl Builder {
             });
             self.geo.back_colors.push(back);
         }
+        // two triangles, one face id
+        self.geo.face_ids.extend([self.faces; 2]);
+        self.faces += 1;
     }
 
     fn edge(&mut self, a: Vec3, b: Vec3, color: [f32; 4]) {
@@ -76,7 +81,9 @@ impl Builder {
         self.geo.edges.push(LineVertex { pos: b.into(), color });
     }
 
+    /// Profile over the edge pushed last (shares its highlight id).
     fn profile(&mut self, a: Vec3, b: Vec3) {
+        self.geo.profile_ids.push((self.geo.edges.len() / 2) as u32 - 1);
         self.geo.profile_edges.push(LineVertex { pos: a.into(), color: BLACK });
         self.geo.profile_edges.push(LineVertex { pos: b.into(), color: BLACK });
     }
@@ -286,6 +293,8 @@ struct Viewer {
     fps_window: Option<std::time::Instant>,
     /// World offset of the demo model (`VARSTOTAS_OFFSET`).
     offset: DVec3,
+    /// (face ids, edge ids) for the stress-mode selection toggling.
+    highlight_counts: (usize, usize),
 }
 
 impl Viewer {
@@ -301,6 +310,18 @@ impl Viewer {
         min += off;
         max += off;
         renderer.set_geometry(rs, &geo);
+        let highlight_faces = geo.face_ids.last().map_or(0, |&f| f as usize + 1);
+        let highlight_edges = geo.edges.len() / 2;
+        if std::env::var("VARSTOTAS_HIGHLIGHT").is_ok() {
+            // Demo: white box dimmed, brown pillar selected (faces 0..6 / 6..12, edges 0..12 / 12..24).
+            let mut f = vec![Highlight::None; highlight_faces];
+            let mut e = vec![Highlight::None; highlight_edges];
+            f[..6].fill(Highlight::Dimmed);
+            e[..12].fill(Highlight::Dimmed);
+            f[6..12].fill(Highlight::Selected);
+            e[12..24].fill(Highlight::Selected);
+            renderer.update_highlight(rs, &HighlightUpdate { faces: &f, edges: &e });
+        }
 
         // Env knobs for automated screenshots.
         let env = |k: &str| std::env::var(k).unwrap_or_default().to_lowercase();
@@ -353,6 +374,7 @@ impl Viewer {
             style,
             bbox: (min, max),
             offset: off,
+            highlight_counts: (highlight_faces, highlight_edges),
             drag_point: None,
             frame_no: 0,
             screenshot: std::env::var("VARSTOTAS_SCREENSHOT").ok(),
@@ -433,6 +455,15 @@ impl eframe::App for Viewer {
         let Some(rs) = frame.wgpu_render_state() else {
             return;
         };
+        if std::env::var("VARSTOTAS_STRESS").is_ok() && self.frame_no.is_multiple_of(60) {
+            // Selection fast path: select / deselect every other face and edge.
+            let on = self.frame_no.is_multiple_of(120);
+            let (nf, ne) = self.highlight_counts;
+            let pick = |i: usize| if on && i.is_multiple_of(2) { Highlight::Selected } else { Highlight::None };
+            let f: Vec<Highlight> = (0..nf).map(pick).collect();
+            let e: Vec<Highlight> = (0..ne).map(pick).collect();
+            self.renderer.update_highlight(rs, &HighlightUpdate { faces: &f, edges: &e });
+        }
         let aspect_hint = {
             let r = ui.available_rect_before_wrap();
             (r.width() / r.height().max(1.0)) as f64
