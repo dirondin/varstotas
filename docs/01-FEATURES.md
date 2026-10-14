@@ -39,8 +39,8 @@
 | Scale (S) | ручки bbox; равномерно/по оси; VCB коэффициент | P1 | ✅ |
 | Offset (F) | смещённый контур грани/рёбер внутрь/наружу | P0 | ✅ |
 | Follow Me | выдавливание профиля по пути | P1 | ✅ |
-| Intersect Faces | пересечение с моделью/выделением | P1 | ⬜ |
-| Flip Along / Reverse Faces / Orient Faces | | P1 | ⬜ |
+| Intersect Faces | пересечение с моделью/выделением | P1 | ✅ |
+| Flip Along / Reverse Faces / Orient Faces | | P1 | ✅ |
 | Soften/Smooth edges | | P2 | ⬜ |
 | Solid tools (Union/Subtract/Intersect/Trim/Split) | | P2 | ⬜ |
 
@@ -59,8 +59,8 @@
 ## 5. Конструирование и аннотации
 | Инструмент | Поведение | Приор. | Статус |
 |---|---|---|---|
-| Tape Measure (T) | измерение; Ctrl — направляющая линия/точка; VCB — resize модели | P0 | 🟨 |
-| Направляющие (линии/точки) | выделение, Delete, Move/Rotate/копия, Edit → Delete Guides, скрытие/показ | P1 | ⬜ |
+| Tape Measure (T) | измерение; Ctrl — направляющая линия/точка; VCB — resize модели | P0 | ✅ |
+| Направляющие (линии/точки) | выделение, Delete, Move/Rotate/копия, Edit → Delete Guides, скрытие/показ | P1 | ✅ |
 | Protractor | угловые направляющие | P1 | ✅ |
 | Guides: Delete All | | P0 | ✅ |
 | Axes | переопределить систему координат рисования | P1 | ⬜ |
@@ -107,10 +107,10 @@
 | Свой формат `.vrst` (save/open, автосохранение) | P0 | ✅ |
 | Export OBJ, STL | P0 | ✅ |
 | Import OBJ / STL | P1 | ✅ |
-| Export PNG (скриншот вида) | P1 | ⬜ |
+| Export PNG (скриншот вида) | P1 | ✅ |
 | Import DXF / Export DXF | P2 | ⬜ |
 | Undo/Redo (Ctrl+Z / Ctrl+Y / Cmd+Shift+Z) | P0 | ✅ |
-| Copy/Paste/Paste in place | P1 | ⬜ |
+| Copy/Paste/Paste in place | P1 | ✅ |
 | Единицы модели, Model Info | P0 | ✅ |
-| Шаблоны (архитектурный мм/м, дюймы) | P1 | ⬜ |
+| Шаблоны (архитектурный мм/м, дюймы) | P1 | ✅ |
 | Instructor / подсказки по инструменту | P0 (статус-бар), P1 (панель) | ✅ |
