@@ -143,6 +143,71 @@ impl Overlay3d {
     }
 }
 
+/// Guide line / point colour (sRGB, classic dark grey); selected guides use `HIGHLIGHT_SELECTED`.
+pub const GUIDE_COLOR: [f32; 4] = [0x50 as f32 / 255.0, 0x50 as f32 / 255.0, 0x60 as f32 / 255.0, 1.0];
+/// Guide line width in logical points.
+pub const GUIDE_WIDTH: f32 = 1.0;
+/// Half size of the guide point cross in logical points.
+pub const GUIDE_POINT_SIZE: f32 = 4.0;
+
+impl Overlay3d {
+    /// Colour for a guide in the given selection state.
+    pub fn guide_color(selected: bool) -> [f32; 4] {
+        if selected { HIGHLIGHT_SELECTED } else { GUIDE_COLOR }
+    }
+
+    /// Infinite guide line through `origin` along `dir` (world space), drawn as one dashed,
+    /// depth-tested overlay line in `GUIDE_COLOR` / `HIGHLIGHT_SELECTED`. The segment is centred
+    /// on the point of the line closest to the camera target and long enough to look infinite;
+    /// the renderer clips it to the view (also behind the eye), so dashes stay crisp and stable.
+    /// Cost: one instance per guide; hundreds of guides are negligible.
+    pub fn add_guide_line(&mut self, camera: &Camera, origin: glam::DVec3, dir: glam::DVec3, selected: bool) {
+        let d = dir.normalize_or_zero();
+        if d == glam::DVec3::ZERO || !origin.is_finite() {
+            return;
+        }
+        let mid = origin + d * (camera.target - origin).dot(d);
+        // ~50 view sizes: endpoints are near the vanishing point in perspective, while the f32
+        // overlay coordinates keep ~1e-6 relative precision (the line does not drift).
+        let reach = camera.distance().max(camera.ortho_height).max(1.0) * 50.0;
+        self.add_guide_segment(mid - d * reach, mid + d * reach, selected);
+    }
+
+    /// Finite guide segment (e.g. a Tape Measure guide preview) with the guide style.
+    pub fn add_guide_segment(&mut self, a: glam::DVec3, b: glam::DVec3, selected: bool) {
+        self.lines.push(OverlayLine {
+            a: a.as_vec3().to_array(),
+            b: b.as_vec3().to_array(),
+            color: Self::guide_color(selected),
+            width_px: GUIDE_WIDTH,
+            dashed: true,
+            on_top: false,
+        });
+    }
+
+    /// Guide point as a small screen-aligned cross (`GUIDE_POINT_SIZE` points), depth-tested.
+    /// Drawn in 3D (unlike a 2D egui marker) so it also appears in `Renderer::render_to_image`.
+    /// `viewport` = viewport size in logical points (as for `Camera::pixel_size_at`).
+    pub fn add_guide_point(&mut self, camera: &Camera, viewport: glam::DVec2, p: glam::DVec3, selected: bool) {
+        if !p.is_finite() {
+            return;
+        }
+        let s = camera.pixel_size_at(p, viewport) * GUIDE_POINT_SIZE as f64;
+        let b = camera.basis();
+        let color = Self::guide_color(selected);
+        for (u, v) in [(b.right + b.up, -b.right - b.up), (b.right - b.up, b.up - b.right)] {
+            self.lines.push(OverlayLine {
+                a: (p + u * s).as_vec3().to_array(),
+                b: (p + v * s).as_vec3().to_array(),
+                color,
+                width_px: GUIDE_WIDTH,
+                dashed: false,
+                on_top: false,
+            });
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaceStyle {
     Shaded,
@@ -179,12 +244,36 @@ pub struct RenderStyle {
 mod renderer;
 pub use renderer::{
     DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
-    DIM_FACE_TARGET, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, Renderer,
+    DIM_FACE_TARGET, ExportError, ExportOptions, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, MAX_EXPORT_DIM,
+    OVERLAY_DASH_PERIOD, Renderer, RgbaImage,
 };
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guide_overlays() {
+        let cam = Camera::default();
+        let mut o = Overlay3d::default();
+        o.add_guide_line(&cam, glam::DVec3::new(100.0, 0.0, 0.0), glam::DVec3::Y, false);
+        o.add_guide_line(&cam, glam::DVec3::ZERO, glam::DVec3::ZERO, true); // degenerate: skipped
+        o.add_guide_point(&cam, glam::DVec2::new(800.0, 600.0), glam::DVec3::new(0.0, 0.0, 500.0), true);
+        assert_eq!(o.lines.len(), 3);
+        let g = &o.lines[0];
+        assert!(g.dashed && !g.on_top && g.color == GUIDE_COLOR);
+        assert!(g.a[0] == 100.0 && g.b[0] == 100.0 && g.a[1] < -1e4 && g.b[1] > 1e4);
+        // centred on the closest point to the camera target
+        let mid_y = (g.a[1] + g.b[1]) * 0.5;
+        assert!((mid_y as f64 - cam.target.y).abs() < 1.0);
+        assert!(o.lines[1..].iter().all(|l| l.color == HIGHLIGHT_SELECTED && !l.dashed));
+        // hundreds of guides: one overlay line each
+        let mut many = Overlay3d::default();
+        for i in 0..500 {
+            many.add_guide_line(&cam, glam::DVec3::new(i as f64 * 10.0, 0.0, 0.0), glam::DVec3::X + glam::DVec3::Y, i % 7 == 0);
+        }
+        assert_eq!(many.lines.len(), 500);
+    }
 
     #[test]
     fn aabb_overlay_has_12_axis_aligned_edges() {

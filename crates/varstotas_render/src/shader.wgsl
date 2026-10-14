@@ -19,15 +19,27 @@ struct Globals {
     hidden_face: vec4<f32>,
     params: vec4<f32>,        // x: face mode (0 shaded, 1 mono, 2 hidden-line); y: alpha mul;
                               // z: line bias relative; w: 1 = encode gamma manually
-    params2: vec4<f32>,       // x: line bias absolute (ndc); y: ground enabled
+    params2: vec4<f32>,       // x: line bias absolute (ndc); y: ground enabled;
+                              // z: highlight hide mask (bit 0 Selected, bit 1 Dimmed)
     hl_selected: vec4<f32>,   // rgb: selection color (sRGB); w: face mix
     hl_dim_face: vec4<f32>,   // rgb: dimmed-face target (sRGB); w: face mix
     hl_dim_edge: vec4<f32>,   // dimmed edge color (linear)
+    tile: vec4<f32>,          // tile NDC = full NDC * xy + zw (export tiling; (1,1,0,0) = whole image)
 };
 
 // Highlight states (Rust `Highlight`): 0 none, 1 selected, 2 dimmed (outside the editing context).
 const HL_SELECTED: u32 = 1u;
 const HL_DIMMED: u32 = 2u;
+
+/// Highlight state after the export filter (`params2.z`): image export can hide the selection
+/// (and optionally the editing-context dimming) without touching the state buffers.
+fn hl_state(s: u32) -> u32 {
+    let mask = u32(g.params2.z + 0.5); // bit 0: hide Selected, bit 1: hide Dimmed
+    if (s == HL_SELECTED && (mask & 1u) != 0u) || (s == HL_DIMMED && (mask & 2u) != 0u) {
+        return 0u;
+    }
+    return s;
+}
 
 /// Face color (linear) with the highlight mix done in sRGB, like the app used to bake it.
 fn highlight_face(c: vec4<f32>, state: u32) -> vec4<f32> {
@@ -104,7 +116,8 @@ fn vs_fullscreen(@builtin(vertex_index) vi: u32) -> FsOut {
     let y = f32(vi & 2u) * 2.0 - 1.0;
     var o: FsOut;
     o.pos = vec4<f32>(x, y, 0.0, 1.0);
-    o.ndc = vec2<f32>(x, y);
+    // Tile NDC -> NDC of the whole image (sky / ground rays are defined on the whole image).
+    o.ndc = (vec2<f32>(x, y) - g.tile.zw) / g.tile.xy;
     return o;
 }
 
@@ -225,8 +238,8 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.normal = v.normal;
     o.color = lin(v.color);
     o.back = lin(v.back);
-    o.state = v.state;
-    if g.params.x > 2.5 && v.state != HL_SELECTED {
+    o.state = hl_state(v.state);
+    if g.params.x > 2.5 && o.state != HL_SELECTED {
         o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // wireframe tint pass: drop unselected triangles
     }
     return o;
@@ -301,7 +314,7 @@ struct EdgeIn {
 fn vs_edge(v: EdgeIn) -> LineOut {
     var o: LineOut;
     o.pos = bias_clip(project(v.pos));
-    o.color = highlight_edge(edge_col(v.color), v.state);
+    o.color = highlight_edge(edge_col(v.color), hl_state(v.state));
     return o;
 }
 
@@ -384,6 +397,11 @@ fn vs_profile_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
     return seg_vertex(vi, -1.0); // profile width uniform
 }
 
+/// Tile clip coordinates -> clip coordinates of the whole image (inverse of the tile transform).
+fn full_clip(c: vec4<f32>) -> vec4<f32> {
+    return vec4<f32>((c.xy - g.tile.zw * c.w) / g.tile.xy, c.z, c.w);
+}
+
 fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {
     // corners: (end, side)
     var ends = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
@@ -393,19 +411,47 @@ fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {
 
     var ca = project(v.a);
     var cb = project(v.b);
-    // Clip the segment against a plane slightly in front of the eye (perspective only).
-    let wmin = 1e-5;
     var o: ThickOut;
-    if ca.w < wmin && cb.w < wmin {
+    // Clip the segment (homogeneous, Liang-Barsky) against a plane slightly in front of the eye
+    // and against the side planes of the WHOLE image widened by a margin. Very long lines (guides,
+    // axes) then never produce huge screen coordinates, which keeps rasterisation and the dash
+    // phase precise. Planes are in whole-image clip space (tile-independent), so export tiles agree.
+    let wmin = 1e-5;
+    let k = 1.5;
+    let fa = full_clip(ca);
+    let fb = full_clip(cb);
+    var da = array<f32, 5>(fa.w - wmin, k * fa.w - fa.x, k * fa.w + fa.x, k * fa.w - fa.y, k * fa.w + fa.y);
+    var db = array<f32, 5>(fb.w - wmin, k * fb.w - fb.x, k * fb.w + fb.x, k * fb.w - fb.y, k * fb.w + fb.y);
+    var t0 = 0.0;
+    var t1 = 1.0;
+    for (var p = 0; p < 5; p++) {
+        let a = da[p];
+        let b = db[p];
+        if a < 0.0 && b < 0.0 {
+            o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0);
+            return o;
+        }
+        if a < 0.0 {
+            t0 = max(t0, a / (a - b));
+        } else if b < 0.0 {
+            t1 = min(t1, a / (a - b));
+        }
+    }
+    if t0 > t1 {
         o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0);
         return o;
     }
-    if ca.w < wmin {
-        ca = mix(ca, cb, (wmin - ca.w) / (cb.w - ca.w));
-    } else if cb.w < wmin {
-        cb = mix(cb, ca, (wmin - cb.w) / (ca.w - cb.w));
-    }
     let half_vp = g.viewport.xy * 0.5;
+    // Dash phase: keep the pattern anchored at `a` when `a` is in front of the eye.
+    var phase = 0.0;
+    let ca0 = ca;
+    let c0 = mix(ca0, cb, t0);
+    let c1 = mix(ca0, cb, t1);
+    ca = c0;
+    cb = c1;
+    if t0 > 0.0 && ca0.w > wmin {
+        phase = length((ca.xy / ca.w - ca0.xy / ca0.w) * half_vp);
+    }
     let sa = ca.xy / ca.w * half_vp;
     let sb = cb.xy / cb.w * half_vp;
     var d = sb - sa;
@@ -433,8 +479,8 @@ fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {
     }
     let off = (n * side * hw + d * ext) / half_vp * base.w;
     o.pos = bias_clip(vec4<f32>(base.xy + off, base.z, base.w));
-    o.color = highlight_edge(thick_color(v.color, v.width), state);
-    o.along = (end * len + ext) / g.viewport.z; // in points
+    o.color = highlight_edge(thick_color(v.color, v.width), hl_state(state));
+    o.along = (phase + end * len + ext) / g.viewport.z; // in points
     o.dash = v.dash;
     return o;
 }

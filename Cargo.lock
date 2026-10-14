@@ -1878,6 +1878,7 @@ dependencies = [
  "env_logger",
  "glam",
  "log",
+ "png",
 ]
 
 [[package]]

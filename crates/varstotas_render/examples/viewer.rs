@@ -9,12 +9,16 @@
 //! every 8th box translucent. `VARSTOTAS_RENDER_TIMING=1` logs renderer CPU/GPU timings.
 //! `VARSTOTAS_STYLE=mono|hidden|wire|xray|noedges|noprofiles|noground` (comma list), `VARSTOTAS_ZOOM=<f>`,
 //! `VARSTOTAS_OFFSET=<mm>` (move the model far from the world origin via `SceneGeometry::origin`).
+//! `VARSTOTAS_EXPORT=<dir>`: after a few frames, export the view with `Renderer::render_to_image` at
+//! 1x and 4x the viewport pixel size, opaque and transparent (guides only, no selection, no tool
+//! overlays), write `<dir>/export_{1x,4x}_{opaque,transparent}.png` and quit.
+//! `VARSTOTAS_GUIDES=<n>` adds n extra guide lines (stress); a few demo guides are always shown.
 
 use eframe::egui;
 use glam::{DVec2, DVec3, Vec3};
 use varstotas_render::{
-    Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, OverlayLine, OverlayPolygon, RenderStyle, Renderer,
-    SceneGeometry, StandardView, TriVertex,
+    Camera, ExportOptions, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, OverlayLine, OverlayPolygon,
+    RenderStyle, Renderer, RgbaImage, SceneGeometry, StandardView, TriVertex,
 };
 
 fn main() -> eframe::Result {
@@ -297,6 +301,26 @@ struct Viewer {
     stress_geo: Option<SceneGeometry>,
     /// (face ids, edge ids) for the stress-mode selection toggling.
     highlight_counts: (usize, usize),
+    /// `VARSTOTAS_EXPORT` output directory.
+    export_dir: Option<String>,
+}
+
+/// Demo guides (world space, shifted by `offset`): a few lines (one selected, one passing right
+/// by the default eye so it is clipped at the near plane), two guide points, plus
+/// `VARSTOTAS_GUIDES=<n>` extra lines.
+fn guides(overlay: &mut Overlay3d, camera: &Camera, viewport: DVec2, offset: DVec3) {
+    let o = |x: f64, y: f64, z: f64| DVec3::new(x, y, z) + offset;
+    overlay.add_guide_line(camera, o(0.0, -500.0, 0.0), DVec3::X, false);
+    overlay.add_guide_line(camera, o(3300.0, 0.0, 2400.0), DVec3::Y, true);
+    overlay.add_guide_line(camera, o(-1000.0, 0.0, 0.0), DVec3::new(1.0, 1.0, 0.0), false);
+    overlay.add_guide_line(camera, camera.eye + DVec3::new(300.0, 0.0, -300.0), DVec3::new(0.3, 1.0, -0.2), false);
+    overlay.add_guide_point(camera, viewport, o(2000.0, 1500.0, 2400.0), false);
+    overlay.add_guide_point(camera, viewport, o(3300.0, 500.0, 2400.0), true);
+    let n: usize = std::env::var("VARSTOTAS_GUIDES").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    for i in 0..n {
+        let a = i as f64 * 0.37;
+        overlay.add_guide_line(camera, o(-8000.0 + 40.0 * i as f64, 0.0, 0.0), DVec3::new(a.cos(), a.sin(), 0.05), i % 5 == 0);
+    }
 }
 
 impl Viewer {
@@ -383,7 +407,50 @@ impl Viewer {
             screenshot: std::env::var("VARSTOTAS_SCREENSHOT").ok(),
             screenshot_sent: false,
             fps_window: None,
+            export_dir: std::env::var("VARSTOTAS_EXPORT").ok(),
         }
+    }
+
+    /// `VARSTOTAS_EXPORT`: write 1x / 4x, opaque / transparent images of the current view.
+    fn export(&mut self, rs: &eframe::egui_wgpu::RenderState, dir: &str, size_px: [u32; 2], ppp: f32) {
+        std::fs::create_dir_all(dir).expect("create export dir");
+        let vp = DVec2::new(size_px[0] as f64 / ppp as f64, size_px[1] as f64 / ppp as f64);
+        let mut overlay = Overlay3d::default(); // guides only: no tool previews / selection boxes
+        guides(&mut overlay, &self.camera, vp, self.offset);
+        for k in [1u32, 4] {
+            for transparent in [false, true] {
+                let opts = ExportOptions {
+                    transparent_background: transparent,
+                    line_scale: ppp * k as f32,
+                    ..Default::default()
+                };
+                let size = [size_px[0] * k, size_px[1] * k];
+                let t0 = std::time::Instant::now();
+                let img = self
+                    .renderer
+                    .render_to_image(rs, &self.camera, &overlay, &self.style, size, &opts)
+                    .expect("render_to_image");
+                let t_render = t0.elapsed();
+                let name = format!("{dir}/export_{k}x_{}.png", if transparent { "transparent" } else { "opaque" });
+                img.write_png(&name).expect("write png");
+                eprintln!(
+                    "exported {name}: {}x{} render {:.0} ms, total {:.0} ms",
+                    img.width,
+                    img.height,
+                    t_render.as_secs_f64() * 1000.0,
+                    t0.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+        }
+        let too_big = self.renderer.render_to_image(
+            rs,
+            &self.camera,
+            &overlay,
+            &self.style,
+            [varstotas_render::MAX_EXPORT_DIM + 1, 10],
+            &ExportOptions::default(),
+        );
+        eprintln!("oversized export: {}", too_big.unwrap_err());
     }
 
     /// Point under the cursor: ray ∩ ground plane, else at target depth.
@@ -575,6 +642,8 @@ impl eframe::App for Viewer {
                     );
                 }
 
+                guides(&mut overlay, &self.camera, vp, self.offset);
+
                 // --- render ---
                 let ppp = ui.ctx().pixels_per_point();
                 let size_px = [
@@ -584,6 +653,15 @@ impl eframe::App for Viewer {
                 let tex = self
                     .renderer
                     .render(rs, &self.camera, &overlay, &self.style, size_px, ppp);
+                if let Some(dir) = self.export_dir.clone()
+                    && self.frame_no == 5
+                {
+                    self.export(rs, &dir, size_px, ppp);
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                if self.export_dir.is_some() {
+                    ui.ctx().request_repaint();
+                }
                 ui.painter().image(
                     tex,
                     rect,
@@ -612,65 +690,12 @@ impl eframe::App for Viewer {
                 })
             });
             if let Some(img) = shot {
-                write_png(&path, img.size[0], img.size[1], img.as_raw()).expect("write png");
+                let img = RgbaImage { width: img.size[0] as u32, height: img.size[1] as u32, pixels: img.as_raw().to_vec() };
+                img.write_png(&path).expect("write png");
                 eprintln!("screenshot saved to {path}");
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
             ui.ctx().request_repaint();
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Minimal PNG writer (stored deflate blocks), to avoid extra dependencies.
-// ---------------------------------------------------------------------------
-
-fn write_png(path: &str, w: usize, h: usize, rgba: &[u8]) -> std::io::Result<()> {
-    fn crc32(data: &[u8]) -> u32 {
-        let mut c = 0xFFFF_FFFFu32;
-        for &b in data {
-            c ^= b as u32;
-            for _ in 0..8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
-            }
-        }
-        !c
-    }
-    fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
-        out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-        let mut c = kind.to_vec();
-        c.extend_from_slice(data);
-        out.extend_from_slice(&c);
-        out.extend_from_slice(&crc32(&c).to_be_bytes());
-    }
-    let mut raw = Vec::with_capacity((w * 4 + 1) * h);
-    for y in 0..h {
-        raw.push(0);
-        raw.extend_from_slice(&rgba[y * w * 4..(y + 1) * w * 4]);
-    }
-    let mut z = vec![0x78, 0x01];
-    let blocks: Vec<&[u8]> = raw.chunks(65535).collect();
-    for (i, b) in blocks.iter().enumerate() {
-        z.push(if i + 1 == blocks.len() { 1 } else { 0 });
-        let len = b.len() as u16;
-        z.extend_from_slice(&len.to_le_bytes());
-        z.extend_from_slice(&(!len).to_le_bytes());
-        z.extend_from_slice(b);
-    }
-    let (mut a, mut b) = (1u32, 0u32);
-    for &x in &raw {
-        a = (a + x as u32) % 65521;
-        b = (b + a) % 65521;
-    }
-    z.extend_from_slice(&((b << 16) | a).to_be_bytes());
-
-    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
-    let mut ihdr = Vec::new();
-    ihdr.extend_from_slice(&(w as u32).to_be_bytes());
-    ihdr.extend_from_slice(&(h as u32).to_be_bytes());
-    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
-    chunk(&mut out, b"IHDR", &ihdr);
-    chunk(&mut out, b"IDAT", &z);
-    chunk(&mut out, b"IEND", &[]);
-    std::fs::write(path, out)
 }

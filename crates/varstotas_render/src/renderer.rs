@@ -7,6 +7,30 @@ use crate::{
 use glam::{DMat4, DVec2, DVec3};
 
 const SAMPLES: u32 = 4;
+
+/// Straight-alpha colour blending; alpha accumulates with the "over" operator
+/// (a = a_src + a_dst * (1 - a_src)). On the normal opaque background this is identical to
+/// `ALPHA_BLENDING`; on a transparent export background it leaves premultiplied colour with
+/// correct coverage alpha (un-premultiplied on readback).
+const BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::SrcAlpha,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
+
+/// Dash period of `OverlayLine::dashed` lines in logical points (60 % on).
+pub const OVERLAY_DASH_PERIOD: f32 = 9.0;
+
+#[path = "export.rs"]
+mod export;
+pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage};
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Uniform block, mirrors `Globals` in shader.wgsl.
@@ -36,6 +60,37 @@ struct Globals {
     hl_dim_face: [f32; 4],
     /// Dimmed edge color (linear).
     hl_dim_edge: [f32; 4],
+    /// Export tiling: tile NDC = full-image NDC * xy + zw. `TILE_FULL` = the whole image.
+    tile: [f32; 4],
+}
+
+const TILE_FULL: [f32; 4] = [1.0, 1.0, 0.0, 0.0];
+
+/// `Globals::params2.z`: highlight states the shader ignores (bit 0 Selected, bit 1 Dimmed).
+const HL_SHOW_ALL: u32 = 0;
+const HL_HIDE_SELECTED: u32 = 1;
+const HL_HIDE_DIMMED: u32 = 2;
+
+/// Per-frame overlay / axes / blend draw counts produced by `prepare_frame`.
+#[derive(Clone, Copy, Default)]
+struct FrameCounts {
+    lines_depth: u32,
+    lines_top: u32,
+    polys_depth: u32,
+    polys_top: u32,
+    axes: u32,
+    blend: u32,
+}
+
+/// How `encode_scene` draws the frame.
+#[derive(Clone, Copy)]
+struct PassOpts {
+    /// Pixels per logical point (line widths, HiDPI edge path).
+    ppp: f32,
+    /// Sky + ground (false = transparent background: clear to 0 and skip both).
+    background: bool,
+    /// Draw the Wireframe selection tint pass.
+    selection_tint: bool,
 }
 
 /// One thick-line segment instance (screen-space quad expansion in the vertex shader).
@@ -799,8 +854,53 @@ impl Renderer {
         let device = &rs.device;
         let queue = &rs.queue;
 
-        // ---- uniforms -------------------------------------------------------
-        let aspect = size[0] as f64 / size[1] as f64;
+        let globals = self.globals(camera, style, size, size, ppp, TILE_FULL, HL_SHOW_ALL);
+        queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
+        let counts = self.prepare_frame(rs, camera, overlay, style);
+
+        let t = self.targets.as_ref().expect("targets");
+        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("varstotas render"),
+        });
+        let opts = PassOpts { ppp, background: true, selection_tint: true };
+        self.encode_scene(&mut enc, &t.msaa_view, &t.depth_view, &t.resolve_view, style, &counts, opts);
+        let submission = queue.submit(Some(enc.finish()));
+        if let Some(t) = self.timing.as_mut() {
+            t.cpu += t_start.elapsed();
+            let g0 = std::time::Instant::now();
+            let _ = device.poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None });
+            t.gpu += g0.elapsed();
+            t.frames += 1;
+            if t.frames >= 120 {
+                let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0 / t.frames as f64;
+                eprintln!(
+                    "varstotas_render timing ({} frames): cpu {:.3} ms/frame (incl. sort {:.3} ms, {} sorts), gpu wait {:.3} ms/frame",
+                    t.frames,
+                    ms(t.cpu),
+                    ms(t.sort),
+                    t.sorts,
+                    ms(t.gpu)
+                );
+                *t = Timing::default();
+            }
+        }
+        self.texture_id.expect("texture registered")
+    }
+
+    /// Uniforms for a frame of `image` pixels; `target` = size of the render target (the tile
+    /// when exporting in tiles, otherwise `image`), `tile` maps whole-image NDC to tile NDC.
+    #[allow(clippy::too_many_arguments)]
+    fn globals(
+        &self,
+        camera: &Camera,
+        style: &RenderStyle,
+        image: [u32; 2],
+        target: [u32; 2],
+        ppp: f32,
+        tile: [f32; 4],
+        hide_mask: u32,
+    ) -> Globals {
+        let aspect = image[0] as f64 / image[1] as f64;
         let b = camera.basis();
         let scene_radius = self.geo.radius;
         // Relative-to-eye: vertices are f32 relative to `geo.origin` (world, f64). The shader
@@ -808,11 +908,18 @@ impl Renderer {
         // matrix, so precision is relative to the camera, not to the world origin.
         let geo_origin = self.geo.origin;
         let origin = (camera.eye - geo_origin).as_vec3().as_dvec3();
-        let view_proj: DMat4 = camera.proj(aspect, scene_radius)
+        let tile_m = DMat4::from_cols_array(&[
+            tile[0] as f64, 0.0, 0.0, 0.0,
+            0.0, tile[1] as f64, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            tile[2] as f64, tile[3] as f64, 0.0, 1.0,
+        ]);
+        let view_proj: DMat4 = tile_m
+            * camera.proj(aspect, scene_radius)
             * camera.view()
             * DMat4::from_translation(geo_origin + origin);
         let eye_rel = camera.eye - geo_origin - origin;
-        let viewport_pts = DVec2::new(size[0] as f64 / ppp as f64, size[1] as f64 / ppp as f64);
+        let viewport_pts = DVec2::new(image[0] as f64 / ppp as f64, image[1] as f64 / ppp as f64);
         let (rw, uw) = if camera.ortho {
             let hh = camera.ortho_height * 0.5;
             (hh * aspect, hh)
@@ -853,8 +960,8 @@ impl Renderer {
             fwd: v4(b.forward, 0.0),
             light: v4(light, style.ambient.clamp(0.0, 1.0) as f64),
             viewport: [
-                size[0] as f32,
-                size[1] as f32,
+                target[0] as f32,
+                target[1] as f32,
                 ppp,
                 (style.profile_width_px * ppp).max(1.0),
             ],
@@ -871,15 +978,28 @@ impl Renderer {
                 bias_rel,
                 if self.manual_gamma { 1.0 } else { 0.0 },
             ],
-            params2: [bias_abs, if style.show_ground { 1.0 } else { 0.0 }, 0.0, 0.0],
+            params2: [bias_abs, if style.show_ground { 1.0 } else { 0.0 }, hide_mask as f32, 0.0],
             hl_selected: with_w(HIGHLIGHT_SELECTED, HIGHLIGHT_FACE_MIX),
             hl_dim_face: with_w(DIM_FACE_TARGET, DIM_FACE_MIX),
             hl_dim_edge: conv(DIM_EDGE_COLOR),
+            tile,
         };
         globals.hidden_face[3] = 1.0;
-        queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
+        globals
+    }
 
-        // ---- per-frame buffers (reused scratch vectors) --------------------
+    /// Upload the per-frame overlay / axes buffers and refresh the transparency sort.
+    fn prepare_frame(
+        &mut self,
+        rs: &egui_wgpu::RenderState,
+        camera: &Camera,
+        overlay: &Overlay3d,
+        style: &RenderStyle,
+    ) -> FrameCounts {
+        let device = &rs.device;
+        let queue = &rs.queue;
+        let geo_origin = self.geo.origin;
+        let scene_radius = self.geo.radius;
         // Overlay coordinates are world f32; shift them into the geometry's local frame.
         let to_local = |p: [f32; 3]| -> [f32; 3] {
             if geo_origin == DVec3::ZERO {
@@ -898,7 +1018,7 @@ impl Renderer {
                 a: to_local(l.a),
                 width: l.width_px.max(0.5),
                 b: to_local(l.b),
-                dash: if l.dashed { 9.0 } else { 0.0 },
+                dash: if l.dashed { OVERLAY_DASH_PERIOD } else { 0.0 },
                 color: l.color,
             }));
         }
@@ -932,187 +1052,183 @@ impl Renderer {
         // Translucent faces / X-ray: back-to-front index order (re-sorted on camera change).
         let draw_faces = style.face_style != FaceStyle::Wireframe;
         let opaque_all = matches!(style.face_style, FaceStyle::Monochrome | FaceStyle::HiddenLine);
-        let blend_count = if draw_faces && (style.xray || !opaque_all) {
+        let blend = if draw_faces && (style.xray || !opaque_all) {
             self.update_blend_order(rs, camera, style.xray)
         } else {
             0
         };
+        FrameCounts { lines_depth, lines_top, polys_depth, polys_top, axes: axes_count, blend }
+    }
 
-        // ---- encode --------------------------------------------------------
-        let t = self.targets.as_ref().expect("targets");
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("varstotas render"),
-        });
-        {
-            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("varstotas scene"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &t.msaa_view,
-                    depth_slice: None,
-                    resolve_target: Some(&t.resolve_view),
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                        store: wgpu::StoreOp::Discard,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &t.depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Discard,
-                    }),
-                    stencil_ops: None,
+    /// Record the scene render pass (globals and per-frame buffers must be up to date).
+    #[allow(clippy::too_many_arguments)]
+    fn encode_scene(
+        &self,
+        enc: &mut wgpu::CommandEncoder,
+        msaa_view: &wgpu::TextureView,
+        depth_view: &wgpu::TextureView,
+        resolve_view: &wgpu::TextureView,
+        style: &RenderStyle,
+        c: &FrameCounts,
+        opts: PassOpts,
+    ) {
+        let ppp = opts.ppp;
+        let draw_faces = style.face_style != FaceStyle::Wireframe;
+        let opaque_all = matches!(style.face_style, FaceStyle::Monochrome | FaceStyle::HiddenLine);
+        let clear = if opts.background { wgpu::Color::WHITE } else { wgpu::Color::TRANSPARENT };
+        let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("varstotas scene"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: msaa_view,
+                depth_slice: None,
+                resolve_target: Some(resolve_view),
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(clear),
+                    store: wgpu::StoreOp::Discard,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0.0),
+                    store: wgpu::StoreOp::Discard,
                 }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_bind_group(0, &self.bind_group, &[]);
-            let p = &self.pipelines;
-            let g = &self.geo;
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_bind_group(0, &self.bind_group, &[]);
+        let p = &self.pipelines;
+        let g = &self.geo;
 
-            // 1. sky
+        // 1. sky
+        if opts.background {
             pass.set_pipeline(&p.sky);
             pass.draw(0..3, 0..1);
+        }
 
-            let set_face_buffers = |pass: &mut wgpu::RenderPass<'_>| {
-                if let (Some(tb), Some(bb), Some(sb)) = (&g.tris, &g.backs, &g.face_states) {
-                    pass.set_vertex_buffer(0, tb.slice(..));
-                    pass.set_vertex_buffer(1, bb.slice(..));
-                    pass.set_vertex_buffer(2, sb.slice(..));
-                    true
-                } else {
-                    false
-                }
-            };
-            let total_face_verts = g.face_verts;
-
-            // 2. opaque faces
-            if draw_faces && !style.xray && set_face_buffers(&mut pass) {
-                pass.set_pipeline(&p.face_opaque);
-                if opaque_all || g.translucent.is_empty() {
-                    if total_face_verts > 0 {
-                        pass.draw(0..total_face_verts, 0..1);
-                    }
-                } else if g.opaque_index_count > 0
-                    && let Some(ib) = &g.opaque_index
-                {
-                    pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..g.opaque_index_count, 0, 0..1);
-                }
+        let set_face_buffers = |pass: &mut wgpu::RenderPass<'_>| {
+            if let (Some(tb), Some(bb), Some(sb)) = (&g.tris, &g.backs, &g.face_states) {
+                pass.set_vertex_buffer(0, tb.slice(..));
+                pass.set_vertex_buffer(1, bb.slice(..));
+                pass.set_vertex_buffer(2, sb.slice(..));
+                true
+            } else {
+                false
             }
+        };
+        let total_face_verts = g.face_verts;
 
-            // 3. edges (write depth so x-ray / translucent faces don't wash them out)
-            if (style.show_edges || style.face_style == FaceStyle::Wireframe) && g.edge_verts > 0 {
-                if ppp >= 1.5 {
-                    // HiDPI: 1 physical px is too faint; draw 1 logical point quads.
-                    if let (Some(pl), Some(bg)) = (&p.edge_thick_seg, &g.edges_bg) {
-                        pass.set_pipeline(pl);
-                        pass.set_bind_group(1, bg, &[]);
-                        pass.draw(0..g.edge_verts * 3, 0..1); // 6 vertices per segment
-                    } else if let (Some(eb), Some(sb)) = (&g.edges_thick, &g.edge_states_seg) {
-                        pass.set_pipeline(&p.edge_thick);
-                        pass.set_vertex_buffer(0, eb.slice(..));
-                        pass.set_vertex_buffer(1, sb.slice(..));
-                        pass.draw(0..6, 0..g.edge_verts / 2);
-                    }
-                } else if let (Some(eb), Some(sb)) = (&g.edges, &g.edge_states_vtx) {
-                    pass.set_pipeline(&p.edge);
-                    pass.set_vertex_buffer(0, eb.slice(..));
-                    pass.set_vertex_buffer(1, sb.slice(..));
-                    pass.draw(0..g.edge_verts, 0..1);
+        // 2. opaque faces
+        if draw_faces && !style.xray && set_face_buffers(&mut pass) {
+            pass.set_pipeline(&p.face_opaque);
+            if opaque_all || g.translucent.is_empty() {
+                if total_face_verts > 0 {
+                    pass.draw(0..total_face_verts, 0..1);
                 }
-            }
-
-            // 4. profiles
-            if style.profiles
-                && style.face_style != FaceStyle::Wireframe
-                && g.profile_count > 0
-                && let Some(pb) = &g.profiles
+            } else if g.opaque_index_count > 0
+                && let Some(ib) = &g.opaque_index
             {
-                if let (Some(pl), Some(bg)) = (&p.thick_depth_seg, &g.profiles_bg) {
+                pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..g.opaque_index_count, 0, 0..1);
+            }
+        }
+
+        // 3. edges (write depth so x-ray / translucent faces don't wash them out)
+        if (style.show_edges || style.face_style == FaceStyle::Wireframe) && g.edge_verts > 0 {
+            if ppp >= 1.5 {
+                // HiDPI: 1 physical px is too faint; draw 1 logical point quads.
+                if let (Some(pl), Some(bg)) = (&p.edge_thick_seg, &g.edges_bg) {
                     pass.set_pipeline(pl);
                     pass.set_bind_group(1, bg, &[]);
-                    pass.draw(0..g.profile_count * 6, 0..1);
-                } else if let Some(sb) = &g.profile_states {
-                    pass.set_pipeline(&p.thick_depth_state);
-                    pass.set_vertex_buffer(0, pb.slice(..));
+                    pass.draw(0..g.edge_verts * 3, 0..1); // 6 vertices per segment
+                } else if let (Some(eb), Some(sb)) = (&g.edges_thick, &g.edge_states_seg) {
+                    pass.set_pipeline(&p.edge_thick);
+                    pass.set_vertex_buffer(0, eb.slice(..));
                     pass.set_vertex_buffer(1, sb.slice(..));
-                    pass.draw(0..6, 0..g.profile_count);
+                    pass.draw(0..6, 0..g.edge_verts / 2);
                 }
-            }
-
-            // 5. axes
-            if axes_count > 0 {
-                pass.set_pipeline(&p.thick_depth);
-                pass.set_vertex_buffer(0, self.axes.buf.slice(..));
-                pass.draw(0..6, 0..axes_count);
-            }
-
-            // 6. ground (translucent, tints geometry below z = 0)
-            if style.show_ground {
-                pass.set_pipeline(&p.ground);
-                pass.draw(0..3, 0..1);
-            }
-
-            // 7. translucent faces / x-ray: sorted back-to-front, no depth write, both sides
-            //    in one pass (the fragment shader picks the front/back color).
-            if blend_count > 0 && set_face_buffers(&mut pass) {
-                pass.set_pipeline(&p.face_blend);
-                pass.set_index_buffer(self.blend.buf.buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..blend_count, 0, 0..1);
-            }
-
-            // 7b. Wireframe: selected faces as a flat translucent tint (the vertex shader drops
-            //     every other triangle; identical colours blend order-independently).
-            if style.face_style == FaceStyle::Wireframe && g.any_face_selected && set_face_buffers(&mut pass) {
-                pass.set_pipeline(&p.face_blend);
-                pass.draw(0..total_face_verts, 0..1);
-            }
-
-            // 8. overlays: depth-tested, then on top
-            if polys_depth > 0 {
-                pass.set_pipeline(&p.poly_depth);
-                pass.set_vertex_buffer(0, self.overlay_polys.buf.slice(..));
-                pass.draw(0..polys_depth, 0..1);
-            }
-            if lines_depth > 0 {
-                pass.set_pipeline(&p.thick_depth);
-                pass.set_vertex_buffer(0, self.overlay_lines.buf.slice(..));
-                pass.draw(0..6, 0..lines_depth);
-            }
-            if polys_top > 0 {
-                pass.set_pipeline(&p.poly_top);
-                pass.set_vertex_buffer(0, self.overlay_polys.buf.slice(..));
-                pass.draw(polys_depth..polys_depth + polys_top, 0..1);
-            }
-            if lines_top > 0 {
-                pass.set_pipeline(&p.thick_top);
-                pass.set_vertex_buffer(0, self.overlay_lines.buf.slice(..));
-                pass.draw(0..6, lines_depth..lines_depth + lines_top);
+            } else if let (Some(eb), Some(sb)) = (&g.edges, &g.edge_states_vtx) {
+                pass.set_pipeline(&p.edge);
+                pass.set_vertex_buffer(0, eb.slice(..));
+                pass.set_vertex_buffer(1, sb.slice(..));
+                pass.draw(0..g.edge_verts, 0..1);
             }
         }
-        let submission = queue.submit(Some(enc.finish()));
-        if let Some(t) = self.timing.as_mut() {
-            t.cpu += t_start.elapsed();
-            let g0 = std::time::Instant::now();
-            let _ = device.poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None });
-            t.gpu += g0.elapsed();
-            t.frames += 1;
-            if t.frames >= 120 {
-                let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0 / t.frames as f64;
-                eprintln!(
-                    "varstotas_render timing ({} frames): cpu {:.3} ms/frame (incl. sort {:.3} ms, {} sorts), gpu wait {:.3} ms/frame",
-                    t.frames,
-                    ms(t.cpu),
-                    ms(t.sort),
-                    t.sorts,
-                    ms(t.gpu)
-                );
-                *t = Timing::default();
+
+        // 4. profiles
+        if style.profiles
+            && style.face_style != FaceStyle::Wireframe
+            && g.profile_count > 0
+            && let Some(pb) = &g.profiles
+        {
+            if let (Some(pl), Some(bg)) = (&p.thick_depth_seg, &g.profiles_bg) {
+                pass.set_pipeline(pl);
+                pass.set_bind_group(1, bg, &[]);
+                pass.draw(0..g.profile_count * 6, 0..1);
+            } else if let Some(sb) = &g.profile_states {
+                pass.set_pipeline(&p.thick_depth_state);
+                pass.set_vertex_buffer(0, pb.slice(..));
+                pass.set_vertex_buffer(1, sb.slice(..));
+                pass.draw(0..6, 0..g.profile_count);
             }
         }
-        self.texture_id.expect("texture registered")
+
+        // 5. axes
+        if c.axes > 0 {
+            pass.set_pipeline(&p.thick_depth);
+            pass.set_vertex_buffer(0, self.axes.buf.slice(..));
+            pass.draw(0..6, 0..c.axes);
+        }
+
+        // 6. ground (translucent, tints geometry below z = 0)
+        if style.show_ground && opts.background {
+            pass.set_pipeline(&p.ground);
+            pass.draw(0..3, 0..1);
+        }
+
+        // 7. translucent faces / x-ray: sorted back-to-front, no depth write, both sides
+        //    in one pass (the fragment shader picks the front/back color).
+        if c.blend > 0 && set_face_buffers(&mut pass) {
+            pass.set_pipeline(&p.face_blend);
+            pass.set_index_buffer(self.blend.buf.buf.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..c.blend, 0, 0..1);
+        }
+
+        // 7b. Wireframe: selected faces as a flat translucent tint (the vertex shader drops
+        //     every other triangle; identical colours blend order-independently).
+        if style.face_style == FaceStyle::Wireframe
+            && g.any_face_selected
+            && opts.selection_tint
+            && set_face_buffers(&mut pass)
+        {
+            pass.set_pipeline(&p.face_blend);
+            pass.draw(0..total_face_verts, 0..1);
+        }
+
+        // 8. overlays: depth-tested, then on top
+        if c.polys_depth > 0 {
+            pass.set_pipeline(&p.poly_depth);
+            pass.set_vertex_buffer(0, self.overlay_polys.buf.slice(..));
+            pass.draw(0..c.polys_depth, 0..1);
+        }
+        if c.lines_depth > 0 {
+            pass.set_pipeline(&p.thick_depth);
+            pass.set_vertex_buffer(0, self.overlay_lines.buf.slice(..));
+            pass.draw(0..6, 0..c.lines_depth);
+        }
+        if c.polys_top > 0 {
+            pass.set_pipeline(&p.poly_top);
+            pass.set_vertex_buffer(0, self.overlay_polys.buf.slice(..));
+            pass.draw(c.polys_depth..c.polys_depth + c.polys_top, 0..1);
+        }
+        if c.lines_top > 0 {
+            pass.set_pipeline(&p.thick_top);
+            pass.set_vertex_buffer(0, self.overlay_lines.buf.slice(..));
+            pass.draw(0..6, c.lines_depth..c.lines_depth + c.lines_top);
+        }
     }
 
     /// The egui texture id of the resolved image (after the first `render`).
@@ -1355,7 +1471,7 @@ fn build_pipelines(
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: color_format,
-                    blend: if d.blend { Some(wgpu::BlendState::ALPHA_BLENDING) } else { None },
+                    blend: if d.blend { Some(BLEND) } else { None },
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -1536,7 +1652,7 @@ mod tests {
 
     #[test]
     fn layouts_match_shader() {
-        assert_eq!(std::mem::size_of::<Globals>(), 64 + 19 * 16);
+        assert_eq!(std::mem::size_of::<Globals>(), 64 + 20 * 16);
         assert_eq!(std::mem::size_of::<ThickLine>(), 48);
         assert_eq!(std::mem::size_of::<TriVertex>(), 40);
         assert_eq!(std::mem::size_of::<LineVertex>(), 28);
