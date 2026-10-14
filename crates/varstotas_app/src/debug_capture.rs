@@ -188,6 +188,8 @@ pub enum ScriptCmd {
     Stress(u32),
     /// `box x y z w d h` — insert a push-pulled box (one undo step), e.g. far from the origin.
     Box(DVec3, DVec3),
+    /// `style shaded|mono|hidden|wire` — View > Face Style.
+    Style(crate::app::FaceStylePref),
     /// `perf N` — log CPU frame-time statistics over the next N frames (non-blocking: the
     /// following commands run inside the measured window, one every 3 frames).
     Perf(u32),
@@ -273,6 +275,12 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "uppx" if nums.len() >= 2 => ScriptCmd::UpPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
         "stress" => ScriptCmd::Stress(nums.first().copied().unwrap_or(41.0) as u32),
         "box" if nums.len() >= 6 => ScriptCmd::Box(p3(0), p3(3)),
+        "style" => ScriptCmd::Style(match rest.to_ascii_lowercase().as_str() {
+            "mono" | "monochrome" => crate::app::FaceStylePref::Monochrome,
+            "hidden" | "hiddenline" => crate::app::FaceStylePref::HiddenLine,
+            "wire" | "wireframe" => crate::app::FaceStylePref::Wireframe,
+            _ => crate::app::FaceStylePref::Shaded,
+        }),
         "perf" => ScriptCmd::Perf(nums.first().copied().unwrap_or(60.0) as u32),
         "autosave" => ScriptCmd::Autosave,
         "save" if !rest.is_empty() => ScriptCmd::SaveTo(rest.to_string()),
@@ -539,6 +547,7 @@ impl VarstotasApp {
                 });
             }
             ScriptCmd::Autosave => self.autosave_now(),
+            ScriptCmd::Style(st) => self.prefs.face_style = st,
             ScriptCmd::SaveTo(p) => {
                 self.save_to(std::path::Path::new(&p));
             }
@@ -558,7 +567,7 @@ impl VarstotasApp {
         let insts = count(|e| matches!(e, EntityRef::Instance(_)));
         let (mf, me) = self.doc.active_mesh().map(|m| (m.faces.len(), m.edges.len())).unwrap_or_default();
         format!(
-            "tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms",
+            "tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms highlights={} last_highlight={:.1}ms",
             self.tool_id(),
             self.doc.active_path.len(),
             self.camera.ortho,
@@ -566,6 +575,8 @@ impl VarstotasApp {
             self.viewport.tri_count,
             self.viewport.rebuild_count,
             self.viewport.last_rebuild_ms,
+            self.viewport.highlight_count,
+            self.viewport.last_highlight_ms,
         )
     }
 

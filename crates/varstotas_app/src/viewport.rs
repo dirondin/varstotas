@@ -1,24 +1,37 @@
 //! The 3D view widget: renders through `varstotas_render::Renderer` into a texture shown as an
-//! image, rebuilds GPU geometry when the model/selection changes, paints 2D overlays on top.
+//! image, paints 2D overlays on top. GPU geometry is rebuilt only when the model or face style
+//! changes; selection / editing-context changes only push highlight states
+//! (`Renderer::update_highlight`) computed from the cached tessellation.
 
 use crate::document::{Document, guarded};
 use crate::nav::NavController;
 use crate::overlay::{Marker2d, OverlayPainter, hud_text};
-use crate::scene_builder::{self, BuildParams};
+use crate::scene_builder::{self, BuildParams, HighlightParams};
 use egui::{Align2, Color32, Pos2, Rect, Response, Sense, Shape, Ui, pos2, vec2};
-use varstotas_render::{Camera, FaceStyle, Overlay3d, RenderStyle, Renderer};
+use varstotas_kernel::{ContextPath, Tessellation};
+use varstotas_render::{Camera, FaceStyle, HighlightUpdate, Overlay3d, RenderStyle, Renderer};
 
+/// Inputs the uploaded geometry depends on.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct BuiltKey {
+struct GeometryKey {
     model: u64,
-    selection: u64,
     face_style: FaceStyle,
+}
+
+/// Inputs the uploaded highlight states depend on.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct HighlightKey {
+    selection: u64,
+    active_path: ContextPath,
 }
 
 pub struct Viewport {
     renderer: Option<Renderer>,
     renderer_error: Option<String>,
-    built: Option<BuiltKey>,
+    built: Option<GeometryKey>,
+    highlighted: Option<HighlightKey>,
+    /// Tessellation of the uploaded geometry (highlight ids index into it).
+    tess: Tessellation,
     pub nav: NavController,
     pub rect: Rect,
     /// Geometry stats for the HUD.
@@ -27,6 +40,10 @@ pub struct Viewport {
     pub rebuild_count: u64,
     /// CPU time of the last rebuild (tessellation + upload), milliseconds.
     pub last_rebuild_ms: f64,
+    /// Number of highlight-only updates (selection / context changes).
+    pub highlight_count: u64,
+    /// CPU time of the last highlight update, milliseconds.
+    pub last_highlight_ms: f64,
     /// Render origin of the uploaded geometry (kept stable between rebuilds).
     origin: Option<varstotas_kernel::glam::DVec3>,
 }
@@ -37,11 +54,15 @@ impl Default for Viewport {
             renderer: None,
             renderer_error: None,
             built: None,
+            highlighted: None,
+            tess: Tessellation::default(),
             nav: NavController::default(),
             rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
             tri_count: 0,
             rebuild_count: 0,
             last_rebuild_ms: 0.0,
+            highlight_count: 0,
+            last_highlight_ms: 0.0,
             origin: None,
         }
     }
@@ -62,6 +83,7 @@ impl Viewport {
     /// Force a geometry rebuild on the next paint (e.g. after loading a file).
     pub fn invalidate(&mut self) {
         self.built = None;
+        self.highlighted = None;
         self.origin = None;
     }
 
@@ -93,22 +115,17 @@ impl Viewport {
                 }
             }
             if let Some(renderer) = self.renderer.as_mut() {
-                let key = BuiltKey {
-                    model: doc.model_version,
-                    selection: doc.selection_version,
-                    face_style: style.face_style,
-                };
+                let key = GeometryKey { model: doc.model_version, face_style: style.face_style };
                 if self.built != Some(key) {
                     let t0 = std::time::Instant::now();
-                    let geo = scene_builder::build(
-                        &doc.model,
-                        &BuildParams {
-                            selection: &doc.selection,
-                            active_path: &doc.active_path,
-                            face_style: style.face_style,
-                            prev_origin: self.origin,
-                        },
-                    );
+                    self.tess = scene_builder::tessellate_model(&doc.model);
+                    let params = BuildParams { face_style: style.face_style, prev_origin: self.origin };
+                    let geo = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params))
+                        .unwrap_or_else(|e| {
+                            log::warn!("scene build failed: {e}");
+                            self.tess = Tessellation::default();
+                            varstotas_render::SceneGeometry { radius: 10_000.0, ..Default::default() }
+                        });
                     self.tri_count = geo.tris.len() / 3;
                     self.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
@@ -116,7 +133,25 @@ impl Viewport {
                         log::warn!("set_geometry failed: {e}");
                     }
                     self.built = Some(key);
+                    // set_geometry resets all highlight states.
+                    self.highlighted = None;
                     self.last_rebuild_ms = t0.elapsed().as_secs_f64() * 1e3;
+                }
+                let hkey = HighlightKey { selection: doc.selection_version, active_path: doc.active_path.clone() };
+                if self.highlighted.as_ref() != Some(&hkey) {
+                    let t0 = std::time::Instant::now();
+                    let (faces, edges) = scene_builder::highlight(
+                        &self.tess,
+                        &HighlightParams { selection: &doc.selection, active_path: &doc.active_path },
+                    );
+                    if let Err(e) =
+                        guarded(|| renderer.update_highlight(rs, &HighlightUpdate { faces: &faces, edges: &edges }))
+                    {
+                        log::warn!("update_highlight failed: {e}");
+                    }
+                    self.highlighted = Some(hkey);
+                    self.highlight_count += 1;
+                    self.last_highlight_ms = t0.elapsed().as_secs_f64() * 1e3;
                 }
                 let size_px = [
                     ((rect.width() * ppp).round() as u32).max(1),
