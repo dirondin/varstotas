@@ -73,7 +73,7 @@ pub struct Document {
     pub selection_version: u64,
     /// Selected entities, all living in the mesh at `active_path`.
     pub selection: Vec<EntityRef>,
-    /// Selected guides (model-level, world space; selectable in any context).
+    /// Selected guides of the active context (like `selection`).
     pub guide_sel: Vec<GuideRef>,
     /// Editing context (empty = model root).
     pub active_path: ContextPath,
@@ -176,8 +176,25 @@ impl Document {
         label: &str,
         f: impl FnOnce(&mut Model) -> Result<R, E>,
     ) -> Option<R> {
+        self.try_commit_if(label, f, |_| true)
+    }
+
+    /// [`Self::try_commit`] that records the step only when `changed(&result)`; otherwise the
+    /// model is restored untouched (no empty undo step, document not dirtied) and the result
+    /// is still returned.
+    pub fn try_commit_if<R, E: std::fmt::Display>(
+        &mut self,
+        label: &str,
+        f: impl FnOnce(&mut Model) -> Result<R, E>,
+        changed: impl FnOnce(&R) -> bool,
+    ) -> Option<R> {
         let before = self.model.clone();
         match guarded(|| f(&mut self.model)) {
+            Ok(Ok(r)) if !changed(&r) => {
+                self.model = before;
+                self.last_error = None;
+                Some(r)
+            }
             Ok(Ok(r)) => {
                 self.history.push(label, before);
                 self.after_change();
@@ -240,7 +257,7 @@ impl Document {
             sel.retain(|e| entity_alive(mesh, *e) && seen.insert(*e));
         }
         let mut seen = std::collections::HashSet::new();
-        guides.retain(|g| self.model.has_guide(*g) && seen.insert(*g));
+        guides.retain(|g| self.model.has_guide_in(&self.active_path, *g) && seen.insert(*g));
         if sel != self.selection || guides != self.guide_sel {
             self.selection = sel;
             self.guide_sel = guides;
@@ -359,7 +376,7 @@ impl Document {
                 .filter(|(_, i)| !i.hidden)
                 .map(|(id, _)| EntityRef::Instance(id)),
         );
-        let guides = if self.model.guides_hidden { Vec::new() } else { self.model.all_guides() };
+        let guides = if self.model.guides_hidden { Vec::new() } else { self.model.all_guides_in(&self.active_path) };
         self.set_selection_with_guides(sel, guides);
     }
 
@@ -391,7 +408,8 @@ impl Document {
         }
         let ng = self.guide_sel.len();
         let model = &self.model;
-        self.guide_sel.retain(|g| !model.guides_hidden && model.has_guide(*g));
+        let path = &self.active_path;
+        self.guide_sel.retain(|g| !model.guides_hidden && model.has_guide_in(path, *g));
         if ng != self.guide_sel.len() {
             self.selection_version += 1;
         }
@@ -421,7 +439,7 @@ impl Document {
         let guides = std::mem::take(&mut self.guide_sel);
         let path = self.active_path.clone();
         self.commit(label, |m| {
-            m.remove_guides(&guides);
+            m.remove_guides_in(&path, &guides);
             if !sel.is_empty()
                 && let Some(mesh) = m.mesh_at_mut(&path)
             {
@@ -431,9 +449,9 @@ impl Document {
         self.selection_version += 1;
     }
 
-    /// Edit > Delete Guides: remove every guide (one undo step).
+    /// Edit > Delete Guides: remove every guide, in all contexts (one undo step).
     pub fn delete_all_guides(&mut self) -> bool {
-        if self.model.guides.is_empty() && self.model.guide_points.is_empty() {
+        if !self.model.has_any_guides() {
             return false;
         }
         self.commit("Delete Guides", |m| m.delete_all_guides());
@@ -448,5 +466,40 @@ pub fn entity_alive(mesh: &varstotas_kernel::Mesh, e: EntityRef) -> bool {
         EntityRef::Edge(x) => mesh.edges.contains_key(x),
         EntityRef::Face(f) => mesh.faces.contains_key(f),
         EntityRef::Instance(i) => mesh.instances.contains_key(i),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_commit_if_skips_unchanged_results() {
+        let mut doc = Document::new();
+        // Op mutates the model but reports "nothing happened": restored, no undo step, not dirty.
+        let r = doc.try_commit_if(
+            "Noop",
+            |m| {
+                m.unit = varstotas_kernel::LengthUnit::Inch;
+                Ok::<_, String>(0usize)
+            },
+            |n| *n > 0,
+        );
+        assert_eq!(r, Some(0));
+        assert_eq!(doc.history.undo_label(), None);
+        assert!(!doc.dirty);
+        assert_ne!(doc.model.unit, varstotas_kernel::LengthUnit::Inch);
+        // Same op reporting a change records the step.
+        let r = doc.try_commit_if(
+            "Real",
+            |m| {
+                m.unit = varstotas_kernel::LengthUnit::Inch;
+                Ok::<_, String>(1usize)
+            },
+            |n| *n > 0,
+        );
+        assert_eq!(r, Some(1));
+        assert_eq!(doc.history.undo_label(), Some("Real"));
+        assert!(doc.dirty);
     }
 }

@@ -151,6 +151,8 @@ use varstotas_render::StandardView;
 /// One script line. Points are world coordinates (mm) unless the command ends in `px`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ScriptCmd {
+    /// `material <palette name>|default` — set the Paint Bucket material.
+    Material(String),
     /// `tool line|rectangle|circle|polygon|arc|eraser|paint|pushpull|move|rotate|scale|offset|followme|tape|protractor|select`
     Tool(ToolId),
     /// `move x y z` — hover a world point.
@@ -390,6 +392,7 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "select_all" => ScriptCmd::SelectAll,
         "select_none" => ScriptCmd::SelectNone,
         "undo" => ScriptCmd::Undo,
+        "material" => ScriptCmd::Material(rest.to_string()),
         "screenshot" => ScriptCmd::Screenshot(rest.to_string()),
         "quit" => ScriptCmd::Quit,
         "parallel" | "ortho" => ScriptCmd::Parallel(matches!(rest.to_ascii_lowercase().as_str(), "on" | "1" | "true" | "")),
@@ -629,6 +632,12 @@ impl VarstotasApp {
             ScriptCmd::Undo => {
                 self.doc.undo();
             }
+            ScriptCmd::Material(name) => {
+                self.doc.current_material = crate::ui::tray::PALETTE
+                    .iter()
+                    .find(|(n, _)| n.eq_ignore_ascii_case(&name))
+                    .map(|(n, c)| crate::document::PaletteMaterial { name: n.to_string(), color: crate::ui::tray::rgb(*c) });
+            }
             ScriptCmd::Screenshot(path) => {
                 if let Some(s) = self.debug.script.as_mut() {
                     s.shot = Some(path);
@@ -747,6 +756,10 @@ impl VarstotasApp {
             "flip_blue" => Action::FlipAlong(2),
             "export_dialog" => Action::ExportImage,
             "new" => Action::New,
+            "preferences" => Action::Preferences,
+            "about" => Action::About,
+            "undo" => Action::Undo,
+            "redo" => Action::Redo,
             "template_chooser" => {
                 self.show_templates = true;
                 return;
@@ -837,15 +850,26 @@ impl VarstotasApp {
         let m = &self.doc.model;
         let all_faces: usize = m.defs.values().map(|d| d.mesh.faces.len()).sum();
         let guides = format!(
-            "guides L={} P={} sel={} hidden={} defs={} model_faces={all_faces} unit={:?} undo={:?}",
+            "guides L={} P={} inner={} sel={} hidden={} defs={} model_faces={all_faces} unit={:?} undo={:?}",
             m.guides.len(),
             m.guide_points.len(),
+            m.defs.values().map(|d| d.guides.lines.len() + d.guides.points.len()).sum::<usize>(),
             self.doc.guide_sel.len(),
             m.guides_hidden,
             m.defs.len(),
             m.unit,
             self.doc.history.undo_label(),
         );
+        // Paint: current material and front-material histogram of the active mesh.
+        let mut mats = std::collections::BTreeMap::<String, usize>::new();
+        if let Some(mesh) = self.doc.active_mesh() {
+            for f in mesh.faces.values() {
+                let n = f.front.and_then(|id| m.materials.get(id)).map_or("-".to_string(), |mm| mm.name.clone());
+                *mats.entry(n).or_default() += 1;
+            }
+        }
+        let cur = self.doc.current_material.as_ref().map_or("Default", |p| p.name.as_str());
+        let guides = format!("{guides} paint={cur} mats={mats:?}");
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
             self.tool_id(),

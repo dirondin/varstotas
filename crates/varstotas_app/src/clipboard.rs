@@ -10,7 +10,7 @@
 use crate::document::Document;
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{
-    Aabb, DefId, EntityRef, GuideLine, GuideRef, Instance, InstanceId, MaterialId, Mesh, Model, OpError, OpResult,
+    Aabb, DefId, EntityRef, GuideGeom, GuideLine, GuideRef, Instance, InstanceId, MaterialId, Mesh, Model, OpError, OpResult,
     TagId,
 };
 use std::collections::{HashMap, HashSet};
@@ -119,13 +119,19 @@ impl Clipboard {
         if !keep.contains(&root) {
             model.defs[root].mesh = Mesh::new();
         }
-        let guides: Vec<GuideLine> =
-            guide_sel.iter().filter_map(|g| if let GuideRef::Line(id) = g { model.guides.get(*id).copied() } else { None }).collect();
-        let guide_points: Vec<DVec3> = guide_sel
-            .iter()
-            .filter_map(|g| if let GuideRef::Point(id) = g { model.guide_points.get(*id).copied() } else { None })
-            .collect();
-        model.delete_all_guides();
+        // Guides in world space (the selected ones belong to the context `path`).
+        let mut guides = Vec::new();
+        let mut guide_points = Vec::new();
+        for g in guide_sel {
+            match src.guide_geom_in(path, *g) {
+                Some(GuideGeom::Line(l)) => guides.push(l),
+                Some(GuideGeom::Point(p)) => guide_points.push(p),
+                None => {}
+            }
+        }
+        // Model-level guides are not part of the copy (guides inside copied groups are).
+        model.guides.clear();
+        model.guide_points.clear();
 
         let mut pts: Vec<DVec3> = guide_points.clone();
         if let Some(b) = def.and_then(|d| model.def_bounds(d)) {
@@ -187,13 +193,12 @@ impl Clipboard {
             let mesh = model.mesh_at(path).ok_or(OpError::NotFound)?;
             ents.retain(|e| crate::document::entity_alive(mesh, *e) && seen.insert(*e));
         }
-        let mut guides = Vec::new();
-        for g in &self.guides {
-            guides.push(GuideRef::Line(model.add_guide_line(g.transformed(t_world))));
-        }
-        for p in &self.guide_points {
-            guides.push(GuideRef::Point(model.add_guide_point(t_world.transform_point3(*p))));
-        }
+        let geoms = self
+            .guides
+            .iter()
+            .map(|g| GuideGeom::Line(*g))
+            .chain(self.guide_points.iter().map(|p| GuideGeom::Point(*p)));
+        let guides = geoms.filter_map(|g| model.add_guide_in(path, g.transformed(t_world))).collect();
         Ok((ents, guides))
     }
 

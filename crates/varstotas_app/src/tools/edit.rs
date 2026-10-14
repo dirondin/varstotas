@@ -67,7 +67,7 @@ impl EraserTool {
             let guides: Vec<GuideRef> =
                 marked.iter().filter_map(|t| if let EraseTarget::Guide(g) = t { Some(*g) } else { None }).collect();
             if !hide && !soften {
-                model.remove_guides(&guides);
+                model.remove_guides_in(&path, &guides);
             }
             let Some(mesh) = model.mesh_at_mut(&path) else { return };
             let ents: Vec<EntityRef> = marked
@@ -178,6 +178,42 @@ impl Tool for EraserTool {
 // Paint Bucket
 // ===========================================================================
 
+/// Paint Bucket modifier help, per platform (conventions).
+pub const PAINT_MODS_HELP: &str = if cfg!(target_os = "macos") {
+    "Cmd = sample, Option = connected faces with the same material, Shift = all matching faces, Option+Shift = matching connected faces"
+} else {
+    "Alt = sample, Ctrl = connected faces with the same material, Shift = all matching faces, Ctrl+Shift = matching connected faces"
+};
+
+/// What a Paint Bucket click does, decoded from the modifiers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct PaintMods {
+    /// Eyedropper: pick up the clicked material instead of painting.
+    sample: bool,
+    /// Fill the connected faces that share the clicked face's material.
+    connected: bool,
+    /// Replace every face in the context that shares the clicked face's material.
+    same: bool,
+}
+
+impl PaintMods {
+    fn from(m: &egui::Modifiers) -> Self {
+        Self::decode(m, cfg!(target_os = "macos"))
+    }
+
+    /// Mac: Cmd = sample, Option = connected, Shift = all matching,
+    /// Option+Shift = connected matching. Windows/Linux: Alt = sample, Ctrl = connected,
+    /// Shift = all matching, Ctrl+Shift = connected matching.
+    fn decode(m: &egui::Modifiers, mac: bool) -> Self {
+        let (sample, connected) = if mac { (m.mac_cmd || m.command, m.alt) } else { (m.alt, m.ctrl) };
+        if sample {
+            return Self { sample: true, ..Self::default() };
+        }
+        // Connected wins over Shift: Ctrl/Option+Shift replaces matching faces on the connected object.
+        Self { sample: false, connected, same: m.shift && !connected }
+    }
+}
+
 #[derive(Default)]
 pub struct PaintTool {
     hover: Option<Hover>,
@@ -203,7 +239,8 @@ impl Tool for PaintTool {
             Hover::Face { plane, .. } => ray_dir.dot(plane.normal) < 0.0,
             _ => true,
         };
-        if m.alt {
+        let pm = PaintMods::from(&m);
+        if pm.sample {
             // Sample.
             let mat = guarded(|| {
                 let mesh = ctx.doc.model.mesh_at(&path)?;
@@ -224,8 +261,7 @@ impl Tool for PaintTool {
             return;
         }
         let palette = ctx.doc.current_material.clone();
-        let connected = m.ctrl || m.command;
-        let same = m.shift;
+        let PaintMods { connected, same, .. } = pm;
         ctx.doc.commit("Paint", |model| {
             let mat = palette.as_ref().map(|p| p.ensure_in(model));
             let Some(mesh) = model.mesh_at_mut(&path) else { return };
@@ -269,8 +305,7 @@ impl Tool for PaintTool {
         });
     }
     fn status_text(&self) -> String {
-        "Click a face or group to paint. Alt/Option = sample, Ctrl = connected faces with the same material, Shift = all faces with the same material."
-            .into()
+        format!("Click a face or group to paint. {PAINT_MODS_HELP}.")
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(h) = &self.hover {
@@ -859,6 +894,34 @@ impl Tool for FollowMeTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paint_mods_per_platform() {
+        let m = |f: fn(&mut egui::Modifiers)| {
+            let mut m = egui::Modifiers::NONE;
+            f(&mut m);
+            m
+        };
+        let pm = |sample, connected, same| PaintMods { sample, connected, same };
+        let cmd = m(|m| (m.command, m.mac_cmd) = (true, true));
+        let alt = m(|m| m.alt = true);
+        let shift = m(|m| m.shift = true);
+        let alt_shift = m(|m| (m.alt, m.shift) = (true, true));
+        // egui on Windows/Linux sets `command` together with `ctrl`.
+        let ctrl = m(|m| (m.ctrl, m.command) = (true, true));
+        let ctrl_shift = m(|m| (m.ctrl, m.command, m.shift) = (true, true, true));
+        // macOS (for Mac).
+        assert_eq!(PaintMods::decode(&cmd, true), pm(true, false, false));
+        assert_eq!(PaintMods::decode(&alt, true), pm(false, true, false));
+        assert_eq!(PaintMods::decode(&shift, true), pm(false, false, true));
+        assert_eq!(PaintMods::decode(&alt_shift, true), pm(false, true, false));
+        assert_eq!(PaintMods::decode(&egui::Modifiers::NONE, true), pm(false, false, false));
+        // Windows/Linux.
+        assert_eq!(PaintMods::decode(&alt, false), pm(true, false, false));
+        assert_eq!(PaintMods::decode(&ctrl, false), pm(false, true, false));
+        assert_eq!(PaintMods::decode(&shift, false), pm(false, false, true));
+        assert_eq!(PaintMods::decode(&ctrl_shift, false), pm(false, true, false));
+    }
 
     #[test]
     fn inside_depth_square() {

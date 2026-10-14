@@ -143,7 +143,7 @@ impl VarstotasApp {
                 let has_sel = !self.doc.selection.is_empty();
                 self.clipboard_items(ui);
                 self.item(ui, "Delete", Some("Delete"), any_sel, Action::Delete);
-                let has_guides = !self.doc.model.guides.is_empty() || !self.doc.model.guide_points.is_empty();
+                let has_guides = self.doc.model.has_any_guides();
                 self.item(ui, "Delete Guides", None, has_guides, Action::DeleteGuides);
                 ui.separator();
                 self.item(ui, "Select All", Some(&cmd("A")), true, Action::SelectAll);

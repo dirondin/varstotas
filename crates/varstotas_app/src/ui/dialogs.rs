@@ -25,7 +25,9 @@ impl VarstotasApp {
                         choice = Some(1);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(egui::Button::new(RichText::new("Save").strong())).clicked() {
+                        if ui.add(egui::Button::new(RichText::new("Save").strong())).clicked()
+                            || ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        {
                             choice = Some(2);
                         }
                         if ui.button("Cancel").clicked() {
@@ -112,15 +114,21 @@ impl VarstotasApp {
                     RichText::new(format!("Everything in it is scaled by {:.4} about its origin.", f))
                         .color(theme::TEXT_DIM),
                 );
+                ui.label(RichText::new("Enter = Yes · Esc = No").small().color(theme::TEXT_DIM));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(RichText::new("Yes").strong())).clicked() {
+                    let yes = ui.add(egui::Button::new(RichText::new("Yes").strong()));
+                    if yes.clicked() {
                         choice = Some(true);
                     }
                     if ui.button("No").clicked() {
                         choice = Some(false);
                     }
                 });
+                // Yes is the default button.
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    choice = Some(true);
+                }
             });
             if resp.should_close() && choice.is_none() {
                 choice = Some(false);
@@ -135,6 +143,7 @@ impl VarstotasApp {
 
         if let Some(mut d) = self.export_dialog.clone() {
             let vp = self.viewport.size();
+            let ppp = ctx.pixels_per_point();
             let aspect = (vp.x / vp.y.max(1.0)).max(1e-3) as f64;
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("export_png")).show(ctx, |ui| {
@@ -159,9 +168,10 @@ impl VarstotasApp {
                 });
                 ui.checkbox(&mut d.lock_aspect, "Use view aspect ratio");
                 ui.horizontal(|ui| {
-                    if ui.button("Viewport size").clicked() {
-                        d.width = vp.x.round().max(1.0) as u32;
-                        d.height = vp.y.round().max(1.0) as u32;
+                    let px = vp * ppp;
+                    if ui.button("Viewport size").on_hover_text(format!("{} × {} px (screen pixels)", px.x.round(), px.y.round())).clicked() {
+                        d.width = px.x.round().max(1.0) as u32;
+                        d.height = px.y.round().max(1.0) as u32;
                     }
                     if ui.button("×2").on_hover_text("Double the image size").clicked() {
                         d.width = (d.width * 2).min(max);
@@ -240,12 +250,11 @@ impl VarstotasApp {
         }
 
         if self.show_prefs {
-            let mut open = true;
-            egui::Window::new("Preferences")
-                .open(&mut open)
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
+            // Modal (centred over the window, below nothing): blocks the model behind it.
+            let resp = Modal::new(Id::new("preferences")).show(ctx, |ui| {
+                    ui.set_width(360.0);
+                    ui.heading("Preferences");
+                    ui.add_space(6.0);
                     ui.label(RichText::new("General").strong());
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut self.prefs.autosave, "Auto-save every");
@@ -276,8 +285,15 @@ impl VarstotasApp {
                         self.prefs.template = Some(t);
                     }
                     ui.label(RichText::new("Used by File → New.").small().color(theme::TEXT_DIM));
+                    ui.add_space(10.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add(egui::Button::new(RichText::new("Done").strong())).clicked()
+                    })
+                    .inner
                 });
-            self.show_prefs = open;
+            if resp.inner || resp.should_close() {
+                self.show_prefs = false;
+            }
         }
 
         if self.show_about {

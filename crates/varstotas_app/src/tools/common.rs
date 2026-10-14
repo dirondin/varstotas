@@ -8,7 +8,7 @@ use crate::overlay::Marker2d;
 use egui::{Color32, Pos2};
 use varstotas_kernel::glam::{DMat4, DVec2, DVec3};
 use varstotas_kernel::{
-    ContextPath, EdgeId, EntityRef, FaceId, GuideLine, GuideRef, InstanceId, LengthUnit, Mesh, Model, Plane, units,
+    ContextPath, EdgeId, EntityRef, FaceId, GuideGeom, GuideLine, GuideRef, InstanceId, LengthUnit, Mesh, Model, Plane, units,
 };
 use varstotas_render::{Overlay3d, OverlayPolygon};
 use std::collections::HashSet;
@@ -693,7 +693,12 @@ pub fn guide_segment(cam: &varstotas_render::Camera, g: &GuideLine) -> Option<(D
 /// Guides hidden behind faces are skipped; nothing is picked while guides are hidden.
 pub fn pick_guide_at(doc: &Document, cam: &varstotas_render::Camera, viewport: egui::Vec2, pos: Pos2) -> Option<GuideRef> {
     let model = &doc.model;
-    if model.guides_hidden || (model.guides.is_empty() && model.guide_points.is_empty()) {
+    if model.guides_hidden {
+        return None;
+    }
+    // Only guides of the active context are picked (like its entities).
+    let guides = model.guides_in(&doc.active_path);
+    if guides.is_empty() {
         return None;
     }
     let vp = DVec2::new(viewport.x as f64, viewport.y as f64);
@@ -706,17 +711,19 @@ pub fn pick_guide_at(doc: &Document, cam: &varstotas_render::Camera, viewport: e
         hit.as_ref().is_none_or(|h| h.t >= depth - tol)
     };
     let mut best: Option<(f64, GuideRef)> = None;
-    for (id, p) in model.guide_points.iter() {
-        let Some(s) = cam.world_to_screen(*p, vp) else { continue };
+    for (g, geom) in &guides {
+        let GuideGeom::Point(p) = *geom else { continue };
+        let Some(s) = cam.world_to_screen(p, vp) else { continue };
         let d = s.distance(c);
-        if d <= GUIDE_POINT_PICK_PX && best.is_none_or(|b| d < b.0) && visible(*p) {
-            best = Some((d, GuideRef::Point(id)));
+        if d <= GUIDE_POINT_PICK_PX && best.is_none_or(|b| d < b.0) && visible(p) {
+            best = Some((d, *g));
         }
     }
     if best.is_some() {
         return best.map(|b| b.1);
     }
-    for (id, g) in model.guides.iter() {
+    for (id, geom) in &guides {
+        let GuideGeom::Line(g) = geom else { continue };
         let d = g.dir.normalize_or_zero();
         if d == DVec3::ZERO {
             continue;
@@ -728,7 +735,7 @@ pub fn pick_guide_at(doc: &Document, cam: &varstotas_render::Camera, viewport: e
         let Some(s) = cam.world_to_screen(p, vp) else { continue };
         let dist = s.distance(c);
         if dist <= inference::EDGE_PICK_PX && best.is_none_or(|b| dist < b.0) && visible(p) {
-            best = Some((dist, GuideRef::Line(id)));
+            best = Some((dist, *id));
         }
     }
     best.map(|b| b.1)
@@ -749,20 +756,16 @@ pub fn draw_guide(
     out3d: &mut Overlay3d,
     out2d: &mut Vec<Marker2d>,
 ) {
-    let model = &view.doc.model;
-    match g {
-        GuideRef::Line(id) => {
-            if let Some(gl) = model.guides.get(id)
-                && let Some((a, b)) = guide_segment(view.camera, &gl.transformed(t))
-            {
+    match view.doc.model.guide_geom_in(&view.doc.active_path, g).map(|x| x.transformed(t)) {
+        Some(GuideGeom::Line(gl)) => {
+            if let Some((a, b)) = guide_segment(view.camera, &gl) {
                 push_line(out3d, a, b, color, width, true, false);
             }
         }
-        GuideRef::Point(id) => {
-            if let Some(p) = model.guide_points.get(id) {
-                out2d.push(Marker2d::Point { at: t.transform_point3(*p), shape: crate::overlay::MarkerShape::Cross, color });
-            }
+        Some(GuideGeom::Point(p)) => {
+            out2d.push(Marker2d::Point { at: p, shape: crate::overlay::MarkerShape::Cross, color });
         }
+        None => {}
     }
 }
 
@@ -770,16 +773,20 @@ pub fn draw_guide(
 /// lines, so they also appear in PNG exports. Called by the app.
 pub fn draw_guides(view: &OverlayView, out3d: &mut Overlay3d) {
     let model = &view.doc.model;
-    if model.guides_hidden || (model.guides.is_empty() && model.guide_points.is_empty()) {
+    if model.guides_hidden {
         return;
     }
+    // Guides of the open context and of the contexts around it (guides inside closed groups
+    // / components are only shown while editing them).
+    let path = &view.doc.active_path;
     let sel = &view.doc.guide_sel;
-    for (id, g) in model.guides.iter() {
-        out3d.add_guide_line(view.camera, g.origin, g.dir, sel.contains(&GuideRef::Line(id)));
-    }
     let vp = DVec2::new(view.viewport.x as f64, view.viewport.y as f64);
-    for (id, p) in model.guide_points.iter() {
-        out3d.add_guide_point(view.camera, vp, *p, sel.contains(&GuideRef::Point(id)));
+    for (depth, g, geom) in model.visible_guides(path) {
+        let selected = depth == path.len() && sel.contains(&g);
+        match geom {
+            GuideGeom::Line(l) => out3d.add_guide_line(view.camera, l.origin, l.dir, selected),
+            GuideGeom::Point(p) => out3d.add_guide_point(view.camera, vp, p, selected),
+        }
     }
 }
 

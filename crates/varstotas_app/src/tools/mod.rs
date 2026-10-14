@@ -201,11 +201,19 @@ impl ToolId {
             ToolId::Eraser => {
                 "Click or drag over edges to erase them. Erasing an edge removes the faces it bounds."
             }
+            ToolId::Paint if cfg!(target_os = "macos") => {
+                "Pick a material in the Materials panel, then click faces.\n\
+                 • Cmd: sample a material.\n\
+                 • Option: fill connected faces with the same material.\n\
+                 • Shift: replace the material on all matching faces.\n\
+                 • Option+Shift: replace it on matching connected faces."
+            }
             ToolId::Paint => {
                 "Pick a material in the Materials panel, then click faces.\n\
-                 • Alt/Option: sample a material.\n\
-                 • Ctrl: fill connected faces.\n\
-                 • Shift: replace everywhere."
+                 • Alt: sample a material.\n\
+                 • Ctrl: fill connected faces with the same material.\n\
+                 • Shift: replace the material on all matching faces.\n\
+                 • Ctrl+Shift: replace it on matching connected faces."
             }
             ToolId::Line => {
                 "Click to start, click to end. Each end starts a new segment.\n\

@@ -15,6 +15,10 @@ pub struct Definition {
     pub mesh: Mesh,
     /// Groups are definitions with exactly one instance and `is_group = true`.
     pub is_group: bool,
+    /// Guides created inside this group / component (local coordinates; see
+    /// [`crate::guides`]). Omitted from files when empty.
+    #[serde(default, skip_serializing_if = "crate::guides::DefGuides::is_empty")]
+    pub guides: crate::guides::DefGuides,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -96,7 +100,7 @@ impl Model {
     /// Empty model: a root definition, no materials/tags, millimetres.
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default() });
         Self {
             defs,
             root,
@@ -299,7 +303,7 @@ impl Model {
         for v in touched {
             parent.remove_if_orphan(v);
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: Default::default() });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -350,6 +354,8 @@ impl Model {
         let instance = self.defs[pd].mesh.instances.get(inst).ok_or(OpError::NotFound)?.clone();
         let child = self.defs.get(instance.def).ok_or(OpError::NotFound)?.mesh.clone();
         let t = instance.transform;
+        // Guides inside the exploded group / component move to the parent context.
+        self.lift_guides(path, instance.def, &t);
         let mirror = t.determinant() < 0.0;
         let parent = &mut self.defs[pd].mesh;
         parent.ensure();

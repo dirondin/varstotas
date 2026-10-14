@@ -244,7 +244,7 @@ pub struct Query<'a> {
     pub viewport: DVec2,
     /// Viewport-local cursor position (logical points).
     pub cursor: DVec2,
-    #[allow(dead_code)] // reserved: geometry outside the active context is inferred too
+    /// Open context (its guides and those of enclosing contexts are inferred).
     pub active_path: &'a [InstanceId],
     /// The tool's previous click (enables direction inferences).
     pub anchor: Option<DVec3>,
@@ -260,7 +260,7 @@ pub struct Query<'a> {
 /// Snapping engine with per-frame caches and hover memory. One per tool instance.
 #[derive(Default)]
 struct SharedCaches {
-    /// ((model address, model version), candidates).
+    /// ((model address, hash of model version + context path), candidates).
     geo: Option<((usize, u64), Rc<GeoCache>)>,
     screen: Option<(CamKey, Rc<ScreenCache>)>,
 }
@@ -396,12 +396,20 @@ impl InferenceEngine {
     }
 
     fn infer_inner(&mut self, q: &Query) -> InferenceResult {
-        let model_key = (q.model as *const Model as usize, q.model_version);
+        // Guides of the open context (and its parents) are candidates, so the key includes
+        // the context path.
+        let path_key = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            (q.model_version, q.active_path).hash(&mut h);
+            h.finish()
+        };
+        let model_key = (q.model as *const Model as usize, path_key);
         // World candidates and their screen projections are shared by all engines (every tool
         // has one), so switching tools does not rebuild them on big models.
         let (geo, screen) = SHARED.with_borrow_mut(|sh| {
             if sh.geo.as_ref().is_none_or(|(k, _)| *k != model_key) {
-                sh.geo = Some((model_key, Rc::new(GeoCache::build(q.model, q.model_version))));
+                sh.geo = Some((model_key, Rc::new(GeoCache::build(q.model, path_key, q.active_path))));
                 sh.screen = None;
             }
             let geo = sh.geo.as_ref().map(|(_, g)| g.clone()).unwrap_or_default();

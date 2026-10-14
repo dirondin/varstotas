@@ -34,7 +34,7 @@ mod topology;
 pub mod triangulate;
 pub mod units;
 
-pub use guides::{GuideId, GuidePointId, GuideRef};
+pub use guides::{DefGuides, GuideGeom, GuideId, GuidePointId, GuideRef};
 pub use history::History;
 pub use mesh::Mesh;
 pub use ops::IntersectScope;

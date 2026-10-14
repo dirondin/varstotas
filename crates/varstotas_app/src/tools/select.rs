@@ -207,7 +207,7 @@ impl SelectTool {
         .unwrap_or_default();
         let guides = guarded(|| {
             let proj = BoxProjector { camera: ctx.camera, viewport: ctx.viewport_d(), rect, mode };
-            proj.guides(&ctx.doc.model)
+            proj.guides(&ctx.doc.model, &ctx.doc.active_path)
         })
         .unwrap_or_default();
 
@@ -288,19 +288,22 @@ impl BoxProjector<'_> {
 
     /// Guides in the box: guide points inside it (both modes); guide lines are infinite, so
     /// only a crossing box (touching the visible line) selects them.
-    fn guides(&self, model: &varstotas_kernel::Model) -> Vec<GuideRef> {
+    /// Only guides of the active context `path` are considered.
+    fn guides(&self, model: &varstotas_kernel::Model, path: &[varstotas_kernel::InstanceId]) -> Vec<GuideRef> {
         if model.guides_hidden {
             return Vec::new();
         }
-        let mut out: Vec<GuideRef> =
-            model.guide_points.iter().filter(|(_, p)| self.inside(**p)).map(|(id, _)| GuideRef::Point(id)).collect();
-        if self.mode == BoxMode::Crossing {
-            for (id, g) in model.guides.iter() {
-                if let Some((a, b)) = super::common::guide_segment(self.camera, g)
-                    && self.segment(a, b)
-                {
-                    out.push(GuideRef::Line(id));
+        let mut out = Vec::new();
+        for (g, geom) in model.guides_in(path) {
+            let hit = match geom {
+                varstotas_kernel::GuideGeom::Point(p) => self.inside(p),
+                varstotas_kernel::GuideGeom::Line(l) => {
+                    self.mode == BoxMode::Crossing
+                        && super::common::guide_segment(self.camera, &l).is_some_and(|(a, b)| self.segment(a, b))
                 }
+            };
+            if hit {
+                out.push(g);
             }
         }
         out

@@ -63,7 +63,9 @@ impl OverlayPainter<'_> {
                 }
                 Marker2d::CursorTooltip { text } => {
                     if let Some(c) = self.cursor {
-                        tooltip(self.painter, c + vec2(14.0, 18.0), text);
+                        // Right of the tool cursor glyph (crosshair + icon box spanning
+                        // c + 7..31 px), so the glyph never covers the text.
+                        tooltip(self.painter, c + vec2(TOOLTIP_DX, 12.0), text);
                     }
                 }
                 Marker2d::Label { at, text } => {
@@ -100,6 +102,9 @@ impl OverlayPainter<'_> {
         }
     }
 }
+
+/// Horizontal offset of the cursor tooltip from the hotspot (clears the tool icon).
+const TOOLTIP_DX: f32 = 35.0;
 
 /// Crosshair at the hotspot `c` plus a small tool icon to its lower right.
 pub fn paint_tool_cursor(painter: &Painter, c: Pos2, icon: crate::ui::icons::Icon, plus: bool) {

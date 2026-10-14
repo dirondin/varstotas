@@ -431,7 +431,7 @@ impl VarstotasApp {
         if self.debug.synthetic_input() {
             return;
         }
-        if ctx.text_edit_focused() || self.confirm.is_some() {
+        if ctx.text_edit_focused() || self.modal_open() {
             return;
         }
         let cmd = Modifiers::COMMAND;
@@ -534,12 +534,38 @@ impl VarstotasApp {
                 _ => {}
             }
         }
+        // A key that opened a dialog (e.g. Enter submitting a Tape resize) must not also
+        // answer it in the same frame.
+        if self.modal_open() {
+            ctx.input_mut(|i| {
+                i.events.retain(|e| !matches!(e, egui::Event::Key { key: Key::Enter | Key::Escape, .. }))
+            });
+        }
+    }
+
+    /// A modal dialog (or the Preferences window) is open: model / tool shortcuts and
+    /// viewport input are blocked; Enter / Esc belong to the dialog.
+    pub(crate) fn modal_open(&self) -> bool {
+        self.confirm.is_some()
+            || !self.autosave.recoveries.is_empty()
+            || self.resize_confirm.is_some()
+            || self.export_dialog.is_some()
+            || self.show_templates
+            || self.show_prefs
+            || self.show_about
     }
 
     // ---- viewport input ---------------------------------------------------
 
     fn handle_viewport_input(&mut self, ctx: &egui::Context, response: &Response) {
         let rect = self.viewport.rect;
+        if self.modal_open() {
+            // Nothing behind a dialog reacts (navigation, tools, clicks).
+            self.primary_held = ctx.input(|i| i.pointer.primary_down());
+            self.tool_pressed = false;
+            self.press_local = None;
+            return;
+        }
         let user_nav = self.viewport.nav.handle(response, rect, &self.doc.model, &mut self.camera);
         if user_nav {
             self.cam_anim = None;
@@ -553,10 +579,6 @@ impl VarstotasApp {
         // Scripted runs set modifiers with the `mods` command; real OS state must not reset them.
         if !self.debug.synthetic_input() {
             self.last_modifiers = modifiers;
-        }
-        if self.confirm.is_some() {
-            self.primary_held = ctx.input(|i| i.pointer.primary_down());
-            return;
         }
         // Scripted runs drive the tools themselves; a real mouse resting over the window must
         // not inject pointer events (e.g. a move with the button up cancels a scripted drag).
@@ -585,6 +607,9 @@ impl VarstotasApp {
                         // A new click supersedes any stale error message.
                         if self.flash.as_ref().is_some_and(|f| f.2) {
                             self.flash = None;
+                        }
+                        if button == PointerButton::Secondary {
+                            self.context_select(local);
                         }
                         self.tool_pressed = true;
                         self.last_pointer = Some(local);
@@ -626,6 +651,32 @@ impl VarstotasApp {
             ctx.set_cursor_icon(icon);
         } else if !self.tool_pressed && !self.debug.synthetic_input() {
             self.last_pointer = None;
+        }
+    }
+
+    /// Right-click: an entity (or guide) under the cursor that isn't selected becomes the
+    /// selection, so the context menu acts on it; a right-click inside the
+    /// selection or on empty space keeps the selection.
+    fn context_select(&mut self, local: Pos2) {
+        use crate::tools::common::{pick_edge_at, pick_face, pick_guide};
+        let pi = self.pointer_info(local, egui::Vec2::ZERO, None, false);
+        let (ent, guide) = self.with_tool(pi, |_, c| {
+            if let Some(e) = pick_edge_at(c, c.pointer.pos, crate::inference::EDGE_PICK_PX as f32) {
+                return (Some(e.entity()), None);
+            }
+            if let Some(g) = pick_guide(c) {
+                return (None, Some(g));
+            }
+            (pick_face(c).map(|h| h.entity()), None)
+        });
+        if let Some(e) = ent
+            && !self.doc.selection.contains(&e)
+        {
+            self.doc.set_selection(vec![e]);
+        } else if let Some(g) = guide
+            && !self.doc.guide_sel.contains(&g)
+        {
+            self.doc.set_selection_with_guides(Vec::new(), vec![g]);
         }
     }
 
@@ -846,7 +897,8 @@ impl VarstotasApp {
                 self.doc.prune_selection();
             }
             Action::ExportImage => {
-                let s = self.viewport.size();
+                // Physical pixels (what the viewport shows on a Retina screen).
+                let s = self.viewport.size() * ctx.pixels_per_point();
                 self.export_dialog = Some(ExportDialog {
                     width: s.x.round().max(1.0) as u32,
                     height: s.y.round().max(1.0) as u32,
@@ -917,7 +969,9 @@ impl VarstotasApp {
             IntersectScope::Selection => "Intersect With Selection",
             IntersectScope::Context => "Intersect With Context",
         };
-        if let Some(edges) = self.doc.try_commit(label, |m| m.intersect_faces(&path, &sel, scope)) {
+        // Nothing created → no (empty) undo step.
+        let r = self.doc.try_commit_if(label, |m| m.intersect_faces(&path, &sel, scope), |e| !e.is_empty());
+        if let Some(edges) = r {
             self.doc.prune_selection();
             self.flash(match edges.len() {
                 0 => "No intersections found".to_string(),
@@ -976,6 +1030,8 @@ impl VarstotasApp {
     /// Apply a confirmed Tape Measure resize.
     pub(crate) fn apply_resize(&mut self, factor: f64) {
         if crate::tools::construct::resize_active(&mut self.doc, factor) {
+            // The Tape's measurement is stale after resizing.
+            self.set_tool(self.tool_id());
             self.flash(format!("Resized ×{factor:.4}"));
         }
     }

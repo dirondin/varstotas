@@ -53,19 +53,25 @@ pub fn circumcenter(a: DVec3, b: DVec3, c: DVec3) -> Option<DVec3> {
 }
 
 impl GeoCache {
-    pub fn build(model: &Model, version: u64) -> Self {
+    /// `version` identifies the model state + open context (`active`) for cache keys.
+    pub fn build(model: &Model, version: u64, active: &[varstotas_kernel::InstanceId]) -> Self {
         let mut g = GeoCache { version, ..Default::default() };
         let mut path = Vec::new();
         g.collect(model, model.root, DMat4::IDENTITY, &mut path, 0);
         if !model.guides_hidden {
-            for gl in model.guides.values() {
-                let d = gl.dir.normalize_or_zero();
-                if d != DVec3::ZERO && gl.origin.is_finite() {
-                    g.guides.push((gl.origin, d));
+            // Guides of the open context and the contexts around it (not of closed groups).
+            for (_, _, geom) in model.visible_guides(active) {
+                match geom {
+                    varstotas_kernel::GuideGeom::Line(gl) => {
+                        let d = gl.dir.normalize_or_zero();
+                        if d != DVec3::ZERO && gl.origin.is_finite() {
+                            g.guides.push((gl.origin, d));
+                        }
+                    }
+                    varstotas_kernel::GuideGeom::Point(p) => {
+                        g.points.push(PointCand { pos: p, kind: InferenceKind::GuidePoint, r: None });
+                    }
                 }
-            }
-            for p in model.guide_points.values() {
-                g.points.push(PointCand { pos: *p, kind: InferenceKind::GuidePoint, r: None });
             }
         }
         // The model origin is always a snap target (the classic "Origin" inference).

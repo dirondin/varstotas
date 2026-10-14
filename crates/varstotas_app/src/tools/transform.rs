@@ -87,10 +87,10 @@ fn run_transform(
         let mut out = Targets::default();
         if copy {
             for w in &world {
-                out.guides.extend(model.copy_guides(&guides, w));
+                out.guides.extend(model.copy_guides_in(&path, &guides, w));
             }
         } else if let Some(w) = world.first() {
-            model.transform_guides(&guides, w);
+            model.transform_guides_in(&path, &guides, w);
             out.guides = guides.clone();
         }
         if ents.is_empty() {

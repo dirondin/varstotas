@@ -32,7 +32,7 @@ struct SelSummary {
 }
 
 /// Default palette (name, sRGB).
-const PALETTE: [(&str, [u8; 3]); 24] = [
+pub(crate) const PALETTE: [(&str, [u8; 3]); 24] = [
     ("White", [0xFF, 0xFF, 0xFF]),
     ("Light Grey", [0xD4, 0xD6, 0xDA]),
     ("Grey", [0x9A, 0x9E, 0xA6]),
@@ -59,7 +59,7 @@ const PALETTE: [(&str, [u8; 3]); 24] = [
     ("Dark Wood", [0x6E, 0x48, 0x2C]),
 ];
 
-fn rgb(c: [u8; 3]) -> [f32; 4] {
+pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
     [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0]
 }
 
@@ -143,6 +143,17 @@ impl VarstotasApp {
             ui.label(RichText::new("Default Tray").strong().size(14.0));
         });
         ui.add_space(4.0);
+        // The tray's width is the user's (drag the edge); content never widens it, so the
+        // viewport doesn't jump with the selection. Content lives in a fixed-width, clipped
+        // child (long values wrap) (`allocate_rect` reports exactly the available rect to the panel).
+        let rect = ui.available_rect_before_wrap();
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
+        child.set_clip_rect(ui.clip_rect());
+        self.tray_cards(&mut child);
+        ui.allocate_rect(rect, Sense::hover());
+    }
+
+    fn tray_cards(&mut self, ui: &mut Ui) {
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             card(ui, "Entity Info", Icon::Info, true, |ui| self.entity_info(ui));
             card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui));
@@ -314,7 +325,7 @@ impl VarstotasApp {
                         ui.end_row();
                         if !is_group {
                             ui.label("Definition");
-                            ui.label(model.defs.get(inst.def).map(|d| d.name.clone()).unwrap_or_default());
+                            ui.add(egui::Label::new(model.defs.get(inst.def).map(|d| d.name.clone()).unwrap_or_default()).truncate());
                             ui.end_row();
                         }
                         ui.label("Material");
@@ -348,7 +359,7 @@ impl VarstotasApp {
                             parts.push(plural(guides, "Guide", "Guides"));
                         }
                         ui.label("Contains");
-                        ui.label(parts.join(", "));
+                        ui.add(egui::Label::new(parts.join(", ")).wrap());
                         ui.end_row();
                         if faces > 0 {
                             ui.label("Area");
@@ -431,27 +442,27 @@ impl VarstotasApp {
         let pt = |p: varstotas_kernel::glam::DVec3| {
             format!("{}, {}, {}", fmt_len(p.x, unit), fmt_len(p.y, unit), fmt_len(p.z, unit))
         };
-        egui::Grid::new("entity_info_guide").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| match g {
-            GuideRef::Line(id) => {
-                let Some(l) = model.guides.get(id) else { return };
+        let geom = model.guide_geom_in(&self.doc.active_path, g);
+        egui::Grid::new("entity_info_guide").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| match geom {
+            Some(varstotas_kernel::GuideGeom::Line(l)) => {
                 ui.label(RichText::new("Guide Line").strong());
                 ui.end_row();
                 ui.label("Through");
-                ui.label(pt(l.origin));
+                ui.add(egui::Label::new(pt(l.origin)).wrap());
                 ui.end_row();
                 let d = l.dir.normalize_or_zero();
                 ui.label("Direction");
                 ui.label(format!("{:.3}, {:.3}, {:.3}", d.x, d.y, d.z));
                 ui.end_row();
             }
-            GuideRef::Point(id) => {
-                let Some(p) = model.guide_points.get(id) else { return };
+            Some(varstotas_kernel::GuideGeom::Point(p)) => {
                 ui.label(RichText::new("Guide Point").strong());
                 ui.end_row();
                 ui.label("Position");
-                ui.label(pt(*p));
+                ui.add(egui::Label::new(pt(p)).wrap());
                 ui.end_row();
             }
+            None => {}
         });
     }
 

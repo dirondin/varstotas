@@ -8,7 +8,7 @@ use crate::inference::{self, InferenceEngine, InferenceKind, InferenceResult};
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::{Color32, CursorIcon, Key};
 use varstotas_kernel::glam::{DMat4, DVec3};
-use varstotas_kernel::{GuideLine, Plane, TOL};
+use varstotas_kernel::{GuideGeom, GuideLine, Plane, TOL};
 use varstotas_render::Overlay3d;
 
 const GUIDE: Color32 = Color32::from_rgb(0x50, 0x50, 0x60);
@@ -44,8 +44,8 @@ pub struct TapeTool {
     unit: Option<varstotas_kernel::LengthUnit>,
 }
 
-/// Uniformly scale everything in the active context (and the model's guides at the root)
-/// about the context origin. Inside a component this resizes its definition (all instances).
+/// Uniformly scale everything in the active context (including its guides) about the
+/// context origin. Inside a component this resizes its definition (all instances).
 pub(crate) fn resize_active(doc: &mut crate::document::Document, factor: f64) -> bool {
     let path = doc.active_path.clone();
     let root = path.is_empty();
@@ -61,14 +61,9 @@ pub(crate) fn resize_active(doc: &mut crate::document::Document, factor: f64) ->
             for (_, inst) in mesh.instances.iter_mut() {
                 inst.transform = m * inst.transform;
             }
-            if root {
-                for g in model.guides.values_mut() {
-                    g.origin *= factor;
-                }
-                for p in model.guide_points.values_mut() {
-                    *p *= factor;
-                }
-            }
+            // The context's own guides (local coordinates) scale with it.
+            let d = model.def_at(&path)?;
+            model.transform_def_guides(d, &m);
             Some(())
         })
         .flatten()
@@ -127,12 +122,14 @@ impl TapeTool {
         if m.0 < TOL {
             return;
         }
+        // Guides belong to the open group / component (stored in its local coordinates).
+        let path = ctx.doc.active_path.clone();
         ctx.doc.commit("Create Guide", |model| {
             if let Some(g) = gl {
-                model.add_guide_line(g);
+                model.add_guide_in(&path, GuideGeom::Line(g));
             }
             if let Some(p) = gp {
-                model.add_guide_point(p);
+                model.add_guide_in(&path, GuideGeom::Point(p));
             }
         });
     }
@@ -199,8 +196,9 @@ impl Tool for TapeTool {
                 return false;
             }
             // The app asks for confirmation in a dialog, then resizes.
+            // The measurement is kept: after "No" another value can be typed (the app resets
+            // the tool after a confirmed resize).
             ctx.requests.push(super::ToolRequest::ConfirmResize(v / base));
-            self.resize_base = None;
             return true;
         }
         // While measuring: the value sets the guide distance.
@@ -316,7 +314,8 @@ impl ProtractorTool {
     fn finish(&mut self, ctx: &mut ToolContext, c: DVec3, n: DVec3, zero: DVec3, deg: f64) {
         self.stage = None;
         let dir = DMat4::from_axis_angle(n, deg.to_radians()).transform_vector3(zero);
-        ctx.doc.commit("Create Guide", |m| m.add_guide_line(GuideLine { origin: c, dir }));
+        let path = ctx.doc.active_path.clone();
+        ctx.doc.commit("Create Guide", |m| m.add_guide_in(&path, GuideGeom::Line(GuideLine { origin: c, dir })));
     }
 
     fn click(&mut self, ctx: &mut ToolContext) {
