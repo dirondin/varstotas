@@ -25,5 +25,13 @@ crates/varstotas_app     — приложение: UI, инструменты, i
 ```
 
 ## Сборка релизов
-- macOS: `cargo build --release -p varstotas_app` (universal: `--target aarch64-apple-darwin` + `x86_64-apple-darwin`, затем `lipo`).
-- Windows: `cargo build --release -p varstotas_app --target x86_64-pc-windows-msvc`.
+Артефакты складываются в `dist/` (в git не попадает).
+
+```bash
+scripts/build-macos.sh      # macOS universal (arm64 + x86_64)
+scripts/build-windows.sh    # Windows x86_64, кросс-сборка с macOS
+```
+
+- **macOS** — `scripts/build-macos.sh [--no-dmg]`: при необходимости ставит target `x86_64-apple-darwin`, собирает release под обе архитектуры, склеивает через `lipo`, собирает `dist/Varstotas.app` (Info.plist: `dev.vrst.app`, версия из Cargo, macOS ≥ 11, Retina), рисует иконку (`scripts/make_icon.py` → `iconutil` → `.icns`), подписывает ad-hoc (`codesign -s -`) и упаковывает `Varstotas-<версия>-macos-universal.zip` и `.dmg`. Подписи Developer ID и нотаризации нет — при первом запуске: правый клик → «Открыть».
+- **Windows** — `scripts/build-windows.sh`: ставит target `x86_64-pc-windows-gnu` и `mingw-w64` (через brew), собирает `varstotas.exe` (GUI-подсистема, без консоли; иконка и version-ресурс встраиваются через `crates/varstotas_app/build.rs` / `winresource` + `windres`) и кладёт его в `dist/varstotas-windows-x86_64.zip`. Нужен Windows 10+ (UCRT); внешних DLL нет.
+- Проверка сборки без UI-клика: `VARSTOTAS_SCREENSHOT=shot.bmp dist/Varstotas.app/Contents/MacOS/varstotas` — снимет окно и выйдет.
