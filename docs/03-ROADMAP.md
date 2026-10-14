@@ -21,8 +21,11 @@
 - QA-проход по UX, исправление багов топологии, производительность (10k+ граней @ 60 FPS).
 - Сборка релизов: macOS `.app` (universal), Windows `.exe`.
 
-## M4 — Вторая волна
-- Components + Outliner, Tags, Scenes, Follow Me, Scale, Rotated Rectangle, 3-point arc, Protractor, Axes, Dimensions, Intersect Faces, текстуры, импорт OBJ/STL, экспорт PNG.
+## M4 — Вторая волна 🟨
+- **Партия 1:** направляющие как полноценные объекты (выделение, Delete, Move/Rotate/копия, Entity Info, Edit → Delete Guides, скрытие/показ), Tape Measure: resize модели через VCB; Intersect Faces (с моделью / с выделением / с контекстом), Reverse / Orient Faces, Flip Along; Copy / Paste / Paste in Place; экспорт PNG; шаблоны (архитектурный мм/м, дюймы).
+- **Партия 2:** Arc (центр + 2 точки), 3 Point Arc, Pie, привязка «касательная в вершине»; Rotated Rectangle; Axes; Dimensions.
+- **Партия 3:** текстуры (изображения, UV, сохранение в `.vrst`); анимация переходов между сценами.
+- Уже сделано раньше: Components + Outliner, Tags, Scenes, Follow Me, Scale, Protractor, импорт OBJ/STL.
 
 ## M5 — Дальше
 - Solid tools, Section planes, тени, Text/3D Text, DXF, Soften edges, Walk.
