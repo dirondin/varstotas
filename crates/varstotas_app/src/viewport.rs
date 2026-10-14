@@ -23,6 +23,10 @@ pub struct Viewport {
     pub rect: Rect,
     /// Geometry stats for the HUD.
     pub tri_count: usize,
+    /// Number of scene geometry rebuilds so far (perf diagnostics).
+    pub rebuild_count: u64,
+    /// CPU time of the last rebuild (tessellation + upload), milliseconds.
+    pub last_rebuild_ms: f64,
 }
 
 impl Default for Viewport {
@@ -34,6 +38,8 @@ impl Default for Viewport {
             nav: NavController::default(),
             rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
             tri_count: 0,
+            rebuild_count: 0,
+            last_rebuild_ms: 0.0,
         }
     }
 }
@@ -89,6 +95,7 @@ impl Viewport {
                     face_style: style.face_style,
                 };
                 if self.built != Some(key) {
+                    let t0 = std::time::Instant::now();
                     let geo = scene_builder::build(
                         &doc.model,
                         &BuildParams {
@@ -98,10 +105,12 @@ impl Viewport {
                         },
                     );
                     self.tri_count = geo.tris.len() / 3;
+                    self.rebuild_count += 1;
                     if let Err(e) = guarded(|| renderer.set_geometry(rs, &geo)) {
                         log::warn!("set_geometry failed: {e}");
                     }
                     self.built = Some(key);
+                    self.last_rebuild_ms = t0.elapsed().as_secs_f64() * 1e3;
                 }
                 let size_px = [
                     ((rect.width() * ppp).round() as u32).max(1),

@@ -15,6 +15,38 @@ pub struct DebugCapture {
     /// Set once the capture is written: the app should close without the save prompt.
     pub force_close: bool,
     script: Option<Script>,
+    /// Frame-time measurement window started by the `perf` script command.
+    pub perf: Option<PerfWindow>,
+}
+
+/// Collects CPU time of `N` frames (`ui()` duration) and logs the statistics.
+#[derive(Default)]
+pub struct PerfWindow {
+    pub remaining: u32,
+    pub samples: Vec<f64>,
+    pub rebuilds_at_start: u64,
+}
+
+impl PerfWindow {
+    /// Record one frame; returns a summary line once the window is complete.
+    pub fn record(&mut self, ms: f64, rebuilds: u64) -> Option<String> {
+        self.samples.push(ms);
+        self.remaining = self.remaining.saturating_sub(1);
+        if self.remaining > 0 {
+            return None;
+        }
+        let n = self.samples.len().max(1) as f64;
+        let avg = self.samples.iter().sum::<f64>() / n;
+        let max = self.samples.iter().copied().fold(0.0, f64::max);
+        let mut sorted = self.samples.clone();
+        sorted.sort_by(f64::total_cmp);
+        let med = sorted.get(sorted.len() / 2).copied().unwrap_or(0.0);
+        Some(format!(
+            "perf: frames={} avg={avg:.2}ms median={med:.2}ms max={max:.2}ms scene_rebuilds={}",
+            self.samples.len(),
+            rebuilds - self.rebuilds_at_start
+        ))
+    }
 }
 
 impl DebugCapture {
@@ -135,6 +167,33 @@ pub enum ScriptCmd {
     /// `screenshot <file.bmp>`
     Screenshot(String),
     Quit,
+    /// `parallel on|off` — Camera > Parallel Projection / Perspective.
+    Parallel(bool),
+    /// `dragpx x0 y0 x1 y1` — primary-button drag in screen points (e.g. selection box).
+    DragPx(Pos2, Pos2),
+    /// `zoompx factor x y` — wheel zoom toward the point under screen position (x, y).
+    ZoomPx(f64, Pos2),
+    /// `orbitpx dx dy` / `panpx dx dy` — middle-button orbit / pan by a screen delta,
+    /// pivoting on the point under the last pointer position.
+    OrbitPx(egui::Vec2),
+    PanPx(egui::Vec2),
+    /// `downpx x y` / `uppx x y` — press / release the primary button (with `movepx` in
+    /// between while held, e.g. to screenshot a selection box mid-drag).
+    DownPx(Pos2),
+    UpPx(Pos2),
+    /// `dump [label]` — log selection / model statistics.
+    Dump(String),
+    /// `stress N` — insert an N×N grid of boxes (6 faces each) as one undo step.
+    Stress(u32),
+    /// `perf N` — log CPU frame-time statistics over the next N frames (non-blocking: the
+    /// following commands run inside the measured window, one every 3 frames).
+    Perf(u32),
+    /// `save <path>` — save the document to `path` (no file dialog).
+    SaveTo(String),
+    /// `autosave` — write the autosave now.
+    Autosave,
+    /// `recover yes|no|later` — answer the autosave recovery prompt.
+    Recover(Option<bool>),
 }
 
 fn tool_by_name(s: &str) -> Option<ToolId> {
@@ -196,6 +255,26 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "undo" => ScriptCmd::Undo,
         "screenshot" => ScriptCmd::Screenshot(rest.to_string()),
         "quit" => ScriptCmd::Quit,
+        "parallel" | "ortho" => ScriptCmd::Parallel(matches!(rest.to_ascii_lowercase().as_str(), "on" | "1" | "true" | "")),
+        "dragpx" if nums.len() >= 4 => ScriptCmd::DragPx(
+            Pos2::new(nums[0] as f32, nums[1] as f32),
+            Pos2::new(nums[2] as f32, nums[3] as f32),
+        ),
+        "zoompx" if nums.len() >= 3 => ScriptCmd::ZoomPx(nums[0], Pos2::new(nums[1] as f32, nums[2] as f32)),
+        "orbitpx" if nums.len() >= 2 => ScriptCmd::OrbitPx(egui::vec2(nums[0] as f32, nums[1] as f32)),
+        "panpx" if nums.len() >= 2 => ScriptCmd::PanPx(egui::vec2(nums[0] as f32, nums[1] as f32)),
+        "dump" => ScriptCmd::Dump(rest.to_string()),
+        "downpx" if nums.len() >= 2 => ScriptCmd::DownPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
+        "uppx" if nums.len() >= 2 => ScriptCmd::UpPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
+        "stress" => ScriptCmd::Stress(nums.first().copied().unwrap_or(41.0) as u32),
+        "perf" => ScriptCmd::Perf(nums.first().copied().unwrap_or(60.0) as u32),
+        "autosave" => ScriptCmd::Autosave,
+        "save" if !rest.is_empty() => ScriptCmd::SaveTo(rest.to_string()),
+        "recover" => ScriptCmd::Recover(match rest.to_ascii_lowercase().as_str() {
+            "yes" | "y" | "recover" => Some(true),
+            "no" | "n" | "discard" => Some(false),
+            _ => None,
+        }),
         _ => {
             log::warn!("script: unknown command `{line}`");
             return None;
@@ -246,6 +325,7 @@ impl VarstotasApp {
     }
 
     fn script_move(&mut self, pos: Pos2, primary_down: bool) {
+        let primary_down = primary_down || self.tool_pressed;
         let delta = self.last_pointer.map(|l| pos - l).unwrap_or_default();
         self.last_pointer = Some(pos);
         let pi = self.pointer_info(pos, delta, None, primary_down);
@@ -395,7 +475,106 @@ impl VarstotasApp {
                     s.pc = s.cmds.len();
                 }
             }
+            ScriptCmd::Parallel(on) => self.actions.push(crate::app::Action::SetParallel(on)),
+            ScriptCmd::DragPx(a, b) => {
+                self.script_move(a, false);
+                self.script_button(a, true);
+                for i in 1..=10 {
+                    self.script_move(a.lerp(b, i as f32 / 10.0), true);
+                }
+                self.script_button(b, false);
+            }
+            ScriptCmd::ZoomPx(f, at) => {
+                let vp = self.viewport.size();
+                let target = crate::nav::point_under(&self.doc.model, &self.camera, at, vp);
+                self.camera.zoom(f, target);
+            }
+            ScriptCmd::OrbitPx(d) | ScriptCmd::PanPx(d) => {
+                let vp = self.viewport.size();
+                let at = self.last_pointer.unwrap_or((vp * 0.5).to_pos2());
+                let pivot = crate::nav::point_under(&self.doc.model, &self.camera, at, vp);
+                if matches!(cmd, ScriptCmd::OrbitPx(_)) {
+                    self.camera.orbit(crate::nav::dvec2(d), pivot);
+                } else {
+                    self.camera.pan(crate::nav::dvec2(d), pivot, crate::nav::dvec2(vp));
+                }
+            }
+            ScriptCmd::DownPx(p) => {
+                self.script_move(p, false);
+                self.script_button(p, true);
+            }
+            ScriptCmd::UpPx(p) => {
+                self.script_move(p, true);
+                self.script_button(p, false);
+            }
+            ScriptCmd::Dump(label) => log::info!("dump {label}: {}", self.debug_summary()),
+            ScriptCmd::Stress(n) => self.insert_stress_grid(n),
+            ScriptCmd::Perf(n) => {
+                self.debug.perf = Some(PerfWindow {
+                    remaining: n.max(1),
+                    samples: Vec::new(),
+                    rebuilds_at_start: self.viewport.rebuild_count,
+                });
+            }
+            ScriptCmd::Autosave => self.autosave_now(),
+            ScriptCmd::SaveTo(p) => {
+                self.save_to(std::path::Path::new(&p));
+            }
+            ScriptCmd::Recover(c) => self.resolve_recovery(c),
         }
+    }
+}
+
+impl VarstotasApp {
+    /// One-line state summary for `dump`.
+    pub(crate) fn debug_summary(&self) -> String {
+        use varstotas_kernel::EntityRef;
+        let sel = &self.doc.selection;
+        let count = |f: fn(&EntityRef) -> bool| sel.iter().filter(|e| f(e)).count();
+        let faces = count(|e| matches!(e, EntityRef::Face(_)));
+        let edges = count(|e| matches!(e, EntityRef::Edge(_)));
+        let insts = count(|e| matches!(e, EntityRef::Instance(_)));
+        let (mf, me) = self.doc.active_mesh().map(|m| (m.faces.len(), m.edges.len())).unwrap_or_default();
+        format!(
+            "tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms",
+            self.tool_id(),
+            self.doc.active_path.len(),
+            self.camera.ortho,
+            self.doc.dirty,
+            self.viewport.tri_count,
+            self.viewport.rebuild_count,
+            self.viewport.last_rebuild_ms,
+        )
+    }
+
+    /// Stress model: `n`×`n` separate boxes (6 faces each), one undo step.
+    pub(crate) fn insert_stress_grid(&mut self, n: u32) {
+        let t0 = std::time::Instant::now();
+        self.doc.commit("Insert Stress Grid", |m| {
+            let mesh = m.root_mesh_mut();
+            for i in 0..n {
+                for j in 0..n {
+                    let (x, y) = (i as f64 * 1500.0, j as f64 * 1500.0);
+                    let h = 500.0 + ((i * 7 + j * 13) % 10) as f64 * 200.0;
+                    let pts = [
+                        DVec3::new(x, y, 0.0),
+                        DVec3::new(x + 1000.0, y, 0.0),
+                        DVec3::new(x + 1000.0, y + 1000.0, 0.0),
+                        DVec3::new(x, y + 1000.0, 0.0),
+                    ];
+                    if let Some(f) = mesh.add_face(&pts) {
+                        let up = mesh.faces.get(f).map(|f| f.normal.z >= 0.0).unwrap_or(true);
+                        let _ = mesh.push_pull(f, if up { h } else { -h }, false);
+                    }
+                }
+            }
+        });
+        log::info!(
+            "stress: {n}x{n} boxes, {} faces, built in {:?}",
+            self.doc.model.root_mesh().faces.len(),
+            t0.elapsed()
+        );
+        self.actions.push(crate::app::Action::ZoomExtents);
     }
 }
 
@@ -411,5 +590,23 @@ mod tests {
         assert_eq!(parse_cmd("vcb 3000,2000"), Some(ScriptCmd::Vcb("3000,2000".into())));
         assert_eq!(parse_cmd("key ArrowUp"), Some(ScriptCmd::Key(Key::ArrowUp)));
         assert_eq!(parse_cmd("# only comment"), None);
+        assert_eq!(parse_cmd("parallel on"), Some(ScriptCmd::Parallel(true)));
+        assert_eq!(parse_cmd("parallel off"), Some(ScriptCmd::Parallel(false)));
+        assert_eq!(
+            parse_cmd("dragpx 10 20 300 400"),
+            Some(ScriptCmd::DragPx(Pos2::new(10.0, 20.0), Pos2::new(300.0, 400.0)))
+        );
+        assert_eq!(parse_cmd("recover yes"), Some(ScriptCmd::Recover(Some(true))));
+        assert_eq!(parse_cmd("recover later"), Some(ScriptCmd::Recover(None)));
+        assert_eq!(parse_cmd("stress 10"), Some(ScriptCmd::Stress(10)));
+    }
+
+    #[test]
+    fn perf_window_summarizes() {
+        let mut w = PerfWindow { remaining: 3, samples: Vec::new(), rebuilds_at_start: 5 };
+        assert!(w.record(1.0, 5).is_none());
+        assert!(w.record(3.0, 5).is_none());
+        let s = w.record(2.0, 6).unwrap();
+        assert!(s.contains("frames=3") && s.contains("avg=2.00ms") && s.contains("scene_rebuilds=1"), "{s}");
     }
 }

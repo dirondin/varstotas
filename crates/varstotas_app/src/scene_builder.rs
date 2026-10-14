@@ -3,7 +3,7 @@
 use crate::document::guarded;
 use varstotas_kernel::{ContextPath, EntityRef, InstanceId, MaterialId, Model, Tessellation, tessellate};
 use varstotas_render::{FaceStyle, LineVertex, SceneGeometry, TriVertex};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub const FRONT_DEFAULT: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 pub const BACK_DEFAULT: [f32; 4] = [0xA4 as f32 / 255.0, 0xB0 as f32 / 255.0, 0xC8 as f32 / 255.0, 1.0];
@@ -32,15 +32,16 @@ pub struct BuildParams<'a> {
 }
 
 /// Selection / dimming state of a primitive owned by `owner_path`.
-fn classify(owner_path: &[InstanceId], own: EntityRef, p: &BuildParams) -> (bool, bool) {
+/// `selected_set` is `p.selection` as a set (selection can hold tens of thousands of refs).
+fn classify(owner_path: &[InstanceId], own: EntityRef, p: &BuildParams, selected_set: &HashSet<EntityRef>) -> (bool, bool) {
     let active = p.active_path.as_slice();
     if !starts_with(owner_path, active) {
         return (false, !active.is_empty());
     }
     let selected = if owner_path.len() == active.len() {
-        p.selection.contains(&own)
+        selected_set.contains(&own)
     } else {
-        p.selection.contains(&EntityRef::Instance(owner_path[active.len()]))
+        selected_set.contains(&EntityRef::Instance(owner_path[active.len()]))
     };
     (selected, false)
 }
@@ -58,6 +59,7 @@ pub fn build(model: &Model, params: &BuildParams) -> SceneGeometry {
 
 fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneGeometry {
     let mut geo = SceneGeometry::default();
+    let sel: HashSet<EntityRef> = p.selection.iter().copied().collect();
     let mono = p.face_style != FaceStyle::Shaded;
     let mat_color = |id: Option<MaterialId>| -> Option<[f32; 4]> {
         if mono {
@@ -69,7 +71,7 @@ fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneGeome
     let mut max_r2: f64 = 0.0;
     for f in &tess.faces {
         let own = f.face.map(EntityRef::Face).unwrap_or(EntityRef::Instance(InstanceId::default()));
-        let (selected, dimmed) = classify(&f.owner_path, own, p);
+        let (selected, dimmed) = classify(&f.owner_path, own, p, &sel);
         let mut front = mat_color(f.front.or(f.inherited)).unwrap_or(FRONT_DEFAULT);
         let mut back = mat_color(f.back.or(f.inherited)).unwrap_or(BACK_DEFAULT);
         if selected {
@@ -94,7 +96,7 @@ fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneGeome
         if e.soft {
             continue;
         }
-        let (selected, dimmed) = classify(&e.owner_path, EntityRef::Edge(e.edge), p);
+        let (selected, dimmed) = classify(&e.owner_path, EntityRef::Edge(e.edge), p, &sel);
         let color = if selected {
             SELECTED
         } else if dimmed {

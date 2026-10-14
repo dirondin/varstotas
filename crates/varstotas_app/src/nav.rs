@@ -13,7 +13,23 @@ pub fn dvec2(v: Vec2) -> DVec2 {
 
 /// World ray through a viewport-local point.
 pub fn ray_at(camera: &Camera, local: Pos2, viewport: Vec2) -> Ray {
-    let (origin, dir) = camera.screen_ray(DVec2::new(local.x as f64, local.y as f64), dvec2(viewport));
+    screen_ray(camera, DVec2::new(local.x as f64, local.y as f64), dvec2(viewport))
+}
+
+/// How far behind the eye plane parallel-projection pick rays start. The ortho renderer also
+/// shows geometry behind the eye plane (zooming in moves the eye toward the model), so rays
+/// must start well behind it or such geometry could not be picked / inferred.
+pub fn ortho_ray_back(camera: &Camera) -> f64 {
+    (camera.distance() + camera.ortho_height) * 4.0 + camera.eye.length() + camera.target.length() + 1.0e6
+}
+
+/// Pick ray through a screen point (logical points). For parallel projection the origin is
+/// moved back along the view direction by [`ortho_ray_back`].
+pub fn screen_ray(camera: &Camera, px: DVec2, viewport: DVec2) -> Ray {
+    let (mut origin, dir) = camera.screen_ray(px, viewport);
+    if camera.ortho {
+        origin -= dir * ortho_ray_back(camera);
+    }
     Ray { origin, dir }
 }
 
@@ -24,9 +40,10 @@ pub fn point_under(model: &Model, camera: &Camera, local: Pos2, viewport: Vec2) 
         return hit.point;
     }
     let dist = (camera.eye - camera.target).length().max(1.0);
+    let max_t = if camera.ortho { ortho_ray_back(camera) + dist * 20.0 } else { dist * 20.0 };
     if ray.dir.z.abs() > 1e-6 {
         let t = -ray.origin.z / ray.dir.z;
-        if t > 0.0 && t < dist * 20.0 {
+        if t > 0.0 && t < max_t {
             return ray.origin + ray.dir * t;
         }
     }
@@ -242,4 +259,55 @@ pub fn standard_view_camera(model: &Model, camera: &Camera, v: StandardView, asp
     let mut cam = camera.clone();
     cam.set_standard_view(v);
     zoom_extents_camera(model, &cam, aspect)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model_with_face(z: f64) -> Model {
+        let mut m = Model::new();
+        m.root_mesh_mut().add_face(&[
+            DVec3::new(-1000.0, -1000.0, z),
+            DVec3::new(1000.0, -1000.0, z),
+            DVec3::new(1000.0, 1000.0, z),
+            DVec3::new(-1000.0, 1000.0, z),
+        ]);
+        m
+    }
+
+    #[test]
+    fn ortho_pick_reaches_geometry_behind_the_eye_plane() {
+        // Parallel top view whose eye sits *below* a face (possible after zooming in).
+        let model = model_with_face(5000.0);
+        let mut cam = Camera { target: DVec3::ZERO, ..Camera::default() };
+        cam.set_standard_view(StandardView::Top);
+        cam.set_ortho(true);
+        cam.eye = DVec3::new(0.0, 0.0, 100.0);
+        let vp = Vec2::new(800.0, 600.0);
+        let ray = ray_at(&cam, Pos2::new(400.0, 300.0), vp);
+        let hit = model.raycast(&ray).expect("face above the eye plane is pickable");
+        assert!((hit.point.z - 5000.0).abs() < 1e-6);
+        // Same screen position as the plain camera ray.
+        let s = cam.world_to_screen(hit.point, dvec2(vp)).unwrap();
+        assert!((s - DVec2::new(400.0, 300.0)).length() < 1e-6);
+        // Empty space falls back to the ground plane.
+        let p = point_under(&Model::new(), &cam, Pos2::new(100.0, 100.0), vp);
+        assert!(p.z.abs() < 1e-6);
+    }
+
+    #[test]
+    fn standard_views_keep_projection_mode() {
+        let model = model_with_face(0.0);
+        for ortho in [false, true] {
+            let mut cam = startup_camera();
+            cam.set_ortho(ortho);
+            for v in [StandardView::Top, StandardView::Front, StandardView::Right, StandardView::Iso] {
+                let c = standard_view_camera(&model, &cam, v, 1.5);
+                assert_eq!(c.ortho, ortho);
+                let s = c.world_to_screen(DVec3::ZERO, DVec2::new(1500.0, 1000.0)).unwrap();
+                assert!(s.x > 0.0 && s.x < 1500.0 && s.y > 0.0 && s.y < 1000.0, "{v:?} ortho={ortho} {s:?}");
+            }
+        }
+    }
 }

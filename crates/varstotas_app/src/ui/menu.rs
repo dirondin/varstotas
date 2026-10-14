@@ -168,6 +168,8 @@ impl VarstotasApp {
                 if ui.checkbox(&mut open, "Default Tray").clicked() {
                     self.actions.push(Action::ToggleTray);
                 }
+                ui.separator();
+                self.item(ui, "Preferences…", None, true, Action::Preferences);
             });
 
             ui.menu_button("Help", |ui| {

@@ -390,8 +390,8 @@ impl InferenceEngine {
     fn infer_with(&mut self, q: &Query, geo: &GeoCache) -> InferenceResult {
         let cam = q.camera;
         let vp = q.viewport;
-        let (ro, rd) = cam.screen_ray(q.cursor, vp);
-        let ray = Ray { origin: ro, dir: rd };
+        let ray = crate::nav::screen_ray(cam, q.cursor, vp);
+        let (ro, rd) = (ray.origin, ray.dir);
         let to_screen = |p: DVec3| cam.world_to_screen(p, vp);
         let px_dist = |p: DVec3| to_screen(p).map(|s| s.distance(q.cursor)).unwrap_or(f64::INFINITY);
 
@@ -692,7 +692,8 @@ pub fn free_point(q: &Query, ray: &Ray, plane: Plane) -> DVec3 {
     let dist = (q.camera.eye - q.camera.target).length().max(1.0);
     if let Some(t) = plane.intersect_ray(ray) {
         let grazing = ray.dir.dot(plane.normal).abs() < 0.02;
-        if t > 0.0 && t < dist * 50.0 && !grazing {
+        // Parallel projection has no horizon: any non-grazing hit in front is fine.
+        if t > 0.0 && (q.camera.ortho || t < dist * 50.0) && !grazing {
             let p = ray.at(t);
             if p.is_finite() {
                 return p;

@@ -49,6 +49,9 @@ pub struct Prefs {
     pub show_axes: bool,
     pub show_ground: bool,
     pub recent: Vec<PathBuf>,
+    /// Autosave every `autosave_minutes` while the document has unsaved changes.
+    pub autosave: bool,
+    pub autosave_minutes: u32,
 }
 
 impl Default for Prefs {
@@ -62,6 +65,8 @@ impl Default for Prefs {
             show_axes: true,
             show_ground: true,
             recent: Vec::new(),
+            autosave: true,
+            autosave_minutes: crate::autosave::DEFAULT_MINUTES,
         }
     }
 }
@@ -103,6 +108,7 @@ pub enum Action {
     DeleteScene(usize),
     ActivateScene(usize),
     About,
+    Preferences,
 }
 
 /// Something waiting for "save changes?" confirmation.
@@ -140,6 +146,25 @@ pub struct VarstotasApp {
     press_local: Option<Pos2>,
     pub(crate) last_modifiers: Modifiers,
     now: f64,
+    pub(crate) show_prefs: bool,
+    pub(crate) autosave: AutosaveState,
+}
+
+/// Autosave bookkeeping (see [`crate::autosave`]).
+pub(crate) struct AutosaveState {
+    worker: crate::autosave::Autosaver,
+    /// Directory for untitled autosaves.
+    dir: Option<PathBuf>,
+    /// False for scripted runs without `VARSTOTAS_AUTOSAVE_DIR` (keeps test runs hermetic).
+    allowed: bool,
+    /// Time of the last autosave (or of the last moment the document was clean).
+    last: f64,
+    /// `model_version` written by the last autosave.
+    version: u64,
+    /// Autosave file owned by the current document (deleted on clean save / close).
+    written: Option<PathBuf>,
+    /// Autosaves waiting for the user's recover/discard decision.
+    pub(crate) recoveries: Vec<crate::autosave::Recovery>,
 }
 
 fn fallback_style() -> RenderStyle {
@@ -172,6 +197,14 @@ impl VarstotasApp {
         if crate::debug_capture::DebugCapture::demo_requested() {
             actions.push(Action::InsertDemo);
         }
+        let debug = crate::debug_capture::DebugCapture::from_env();
+        let autosave_dir = crate::autosave::data_dir();
+        let allowed = !debug.script_active() || std::env::var_os("VARSTOTAS_AUTOSAVE_DIR").is_some_and(|v| !v.is_empty());
+        let recoveries = if allowed {
+            crate::autosave::startup_recoveries(&prefs.recent, autosave_dir.as_deref())
+        } else {
+            Vec::new()
+        };
         Self {
             doc: Document::new(),
             camera: nav::startup_camera(),
@@ -187,7 +220,7 @@ impl VarstotasApp {
             show_about: false,
             flash: None,
             tray: TrayState::default(),
-            debug: crate::debug_capture::DebugCapture::from_env(),
+            debug,
             last_title: String::new(),
             allow_close: false,
             tool_pressed: false,
@@ -195,6 +228,16 @@ impl VarstotasApp {
             press_local: None,
             last_modifiers: Modifiers::NONE,
             now: 0.0,
+            show_prefs: false,
+            autosave: AutosaveState {
+                worker: crate::autosave::Autosaver::new(),
+                dir: autosave_dir,
+                allowed,
+                last: 0.0,
+                version: 0,
+                written: None,
+                recoveries,
+            },
         }
     }
 
@@ -385,7 +428,7 @@ impl VarstotasApp {
                         }
                     }
                 }
-                egui::Event::ModifiersChanged(m) => self.last_modifiers = m,
+                egui::Event::ModifiersChanged(m) if !self.debug.script_active() => self.last_modifiers = m,
                 _ => {}
             }
         }
@@ -402,10 +445,16 @@ impl VarstotasApp {
         let over = response.contains_pointer();
         let (events, modifiers, primary_down) =
             ctx.input(|i| (i.events.clone(), i.modifiers, i.pointer.primary_down()));
-        self.last_modifiers = modifiers;
+        // Scripted runs set modifiers with the `mods` command; real OS state must not reset them.
+        if !self.debug.script_active() {
+            self.last_modifiers = modifiers;
+        }
         if self.confirm.is_some() {
             return;
         }
+        // Scripted runs drive the tools themselves; a real mouse resting over the window must
+        // not inject pointer events (e.g. a move with the button up cancels a scripted drag).
+        let events = if self.debug.script_active() { Vec::new() } else { events };
         for ev in events {
             match ev {
                 egui::Event::PointerMoved(p) => {
@@ -456,6 +505,7 @@ impl VarstotasApp {
             0
         };
         if clicks > 0
+            && !self.debug.script_active()
             && let Some(local) = self.last_pointer {
                 let mut pi = self.pointer_info(local, egui::Vec2::ZERO, Some(PointerButton::Primary), false);
                 pi.click_count = clicks;
@@ -665,6 +715,7 @@ impl VarstotasApp {
                 }
             }
             Action::About => self.show_about = true,
+            Action::Preferences => self.show_prefs = true,
         }
     }
 
@@ -714,6 +765,12 @@ impl VarstotasApp {
     }
 
     fn replace_document(&mut self, doc: Document) {
+        // The old document was saved or its changes discarded: its autosave is obsolete.
+        if let Some(p) = self.autosave.written.take() {
+            self.autosave.worker.delete(p);
+        }
+        self.autosave.version = doc.model_version;
+        self.autosave.last = self.now;
         self.doc = doc;
         self.viewport.invalidate();
         self.tool = tools::make_tool(ToolId::Select);
@@ -740,6 +797,12 @@ impl VarstotasApp {
                 self.replace_document(Document::from_model(model, Some(path.to_path_buf())));
                 self.add_recent(path);
                 self.flash(format!("Opened {}", path.display()));
+                if self.autosave.allowed
+                    && let Some(r) = crate::autosave::find_recovery(Some(path), None)
+                    && !self.autosave.recoveries.iter().any(|x| x.autosave == r.autosave)
+                {
+                    self.autosave.recoveries.insert(0, r);
+                }
             }
             Ok(Err(e)) => self.flash(format!("Could not open {}: {e}", path.display())),
             Err(e) => self.flash(format!("Could not open {}: {e}", path.display())),
@@ -774,11 +837,22 @@ impl VarstotasApp {
         self.save_to(&path)
     }
 
-    fn save_to(&mut self, path: &Path) -> bool {
+    pub(crate) fn save_to(&mut self, path: &Path) -> bool {
         match guarded(|| io::save(&self.doc.model, path)) {
             Ok(Ok(())) => {
                 self.doc.path = Some(path.to_path_buf());
                 self.doc.dirty = false;
+                // Clean save: drop the autosave we wrote (untitled or old name) and any stale
+                // autosave next to the new file.
+                if let Some(p) = self.autosave.written.take() {
+                    self.autosave.worker.delete(p);
+                }
+                if let Some(p) = crate::autosave::path_for(Some(path), None) {
+                    self.autosave.worker.delete(p);
+                }
+                self.autosave.recoveries.retain(|r| r.original.as_deref() != Some(path));
+                self.autosave.version = self.doc.model_version;
+                self.autosave.last = self.now;
                 self.add_recent(path);
                 self.flash(format!("Saved {}", path.display()));
                 true
@@ -873,6 +947,86 @@ impl VarstotasApp {
             self.actions.push(Action::ZoomExtents);
         } else if let Some(e) = self.doc.last_error.clone() {
             self.flash_error(e);
+        }
+    }
+
+    // ---- autosave ---------------------------------------------------------------
+
+    /// Write an autosave now (if the document has changes since the last one).
+    pub(crate) fn autosave_now(&mut self) {
+        if !self.autosave.allowed {
+            return;
+        }
+        let Some(path) = crate::autosave::path_for(self.doc.path.as_deref(), self.autosave.dir.as_deref()) else {
+            return;
+        };
+        if let Some(old) = self.autosave.written.take()
+            && old != path
+        {
+            self.autosave.worker.delete(old);
+        }
+        self.autosave.worker.write(path.clone(), self.doc.model.clone());
+        self.autosave.written = Some(path);
+        self.autosave.version = self.doc.model_version;
+        self.autosave.last = self.now;
+    }
+
+    /// Per-frame autosave timer.
+    fn autosave_tick(&mut self, ctx: &egui::Context) {
+        for r in self.autosave.worker.poll() {
+            if let Err(e) = r.result {
+                self.flash_error(format!("Autosave to {} failed: {e}", r.path.display()));
+            }
+        }
+        if !self.autosave.allowed || !self.prefs.autosave {
+            return;
+        }
+        let minutes = self.prefs.autosave_minutes.max(1);
+        if !self.doc.dirty || self.doc.model_version == self.autosave.version {
+            // Nothing new to protect: the interval starts at the first unsaved change.
+            self.autosave.last = self.now;
+            return;
+        }
+        // Don't hitch an in-progress drag; try again on the next frame.
+        if !self.tool_pressed
+            && crate::autosave::is_due(
+                minutes,
+                self.now,
+                self.autosave.last,
+                self.doc.dirty,
+                self.doc.model_version,
+                self.autosave.version,
+            )
+        {
+            self.autosave_now();
+        }
+        let wait = crate::autosave::seconds_until_due(minutes, self.now, self.autosave.last);
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait.max(0.5)));
+    }
+
+    /// Apply the user's choice for the first pending recovery.
+    pub(crate) fn resolve_recovery(&mut self, recover: Option<bool>) {
+        if self.autosave.recoveries.is_empty() {
+            return;
+        }
+        let r = self.autosave.recoveries.remove(0);
+        match recover {
+            Some(true) => match guarded(|| io::load(&r.autosave)) {
+                Ok(Ok(model)) => {
+                    let mut doc = Document::from_model(model, r.original.clone());
+                    doc.dirty = true;
+                    doc.model_version += 1;
+                    self.replace_document(doc);
+                    // Keep the autosave until the recovered model is saved (or discarded).
+                    self.autosave.written = Some(r.autosave.clone());
+                    self.autosave.version = 0;
+                    self.flash(format!("Recovered {} from autosave", r.display_name()));
+                }
+                Ok(Err(e)) => self.flash_error(format!("Could not recover {}: {e}", r.display_name())),
+                Err(e) => self.flash_error(format!("Could not recover {}: {e}", r.display_name())),
+            },
+            Some(false) => self.autosave.worker.delete(r.autosave),
+            None => {}
         }
     }
 
@@ -1000,6 +1154,7 @@ fn all_refs(mesh: &varstotas_kernel::Mesh) -> std::collections::HashSet<EntityRe
 
 impl eframe::App for VarstotasApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let frame_start = std::time::Instant::now();
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
@@ -1045,6 +1200,7 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.run_actions(&ctx);
+        self.autosave_tick(&ctx);
         self.update_title(&ctx);
         if self.debug.update(&ctx) {
             self.actions.push(Action::SelectAll);
@@ -1059,9 +1215,30 @@ impl eframe::App for VarstotasApp {
             // The red Measurements border expires together with the error message.
             self.vcb_error = false;
         }
+        if let Some(w) = self.debug.perf.as_mut()
+            && let Some(line) = w.record(frame_start.elapsed().as_secs_f64() * 1e3, self.viewport.rebuild_count)
+        {
+            log::info!("{line}");
+            self.debug.perf = None;
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        // Scripted (test) runs must not leak into the user's preferences / recent files.
+        if self.debug.script_active() {
+            return;
+        }
         eframe::set_value(storage, PREFS_KEY, &self.prefs);
+    }
+
+    fn on_exit(&mut self) {
+        // A normal close of a saved/discarded document removes its autosave; a dirty document
+        // (forced close) keeps it for recovery.
+        if !self.doc.dirty
+            && let Some(p) = self.autosave.written.take()
+        {
+            self.autosave.worker.delete(p);
+        }
+        self.autosave.worker.flush();
     }
 }

@@ -2,6 +2,7 @@
 
 use varstotas_kernel::{ContextPath, EntityRef, History, MaterialId, Mesh, Model};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 /// Material chosen in the Materials panel. Stored by name/colour (not id) so it survives
@@ -204,24 +205,42 @@ impl Document {
     }
 
     pub fn add_to_selection(&mut self, ents: impl IntoIterator<Item = EntityRef>) {
-        let mut changed = false;
+        let mut have: HashSet<EntityRef> = self.selection.iter().copied().collect();
+        let n = self.selection.len();
         for e in ents {
-            if !self.selection.contains(&e) {
+            if have.insert(e) {
                 self.selection.push(e);
-                changed = true;
             }
         }
-        if changed {
+        if n != self.selection.len() {
             self.selection_version += 1;
         }
     }
 
     pub fn remove_from_selection(&mut self, ents: &[EntityRef]) {
         let n = self.selection.len();
-        self.selection.retain(|e| !ents.contains(e));
+        let gone: HashSet<EntityRef> = ents.iter().copied().collect();
+        self.selection.retain(|e| !gone.contains(e));
         if n != self.selection.len() {
             self.selection_version += 1;
         }
+    }
+
+    /// Toggle each entity (Shift + selection box): selected ones are removed, others added.
+    pub fn toggle_many(&mut self, ents: &[EntityRef]) {
+        if ents.is_empty() {
+            return;
+        }
+        let toggled: HashSet<EntityRef> = ents.iter().copied().collect();
+        let had: HashSet<EntityRef> = self.selection.iter().copied().collect();
+        self.selection.retain(|e| !toggled.contains(e));
+        let mut seen = HashSet::new();
+        for e in ents {
+            if !had.contains(e) && seen.insert(*e) {
+                self.selection.push(*e);
+            }
+        }
+        self.selection_version += 1;
     }
 
     /// Select every visible entity of the active context.

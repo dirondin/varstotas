@@ -5,7 +5,7 @@ use super::{OverlayView, Tool, ToolContext, ToolId};
 use crate::document::guarded;
 use crate::overlay::Marker2d;
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2, Rect};
-use varstotas_kernel::glam::DVec3;
+use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{ContextPath, EntityRef};
 use varstotas_render::Overlay3d;
 
@@ -123,7 +123,7 @@ impl SelectTool {
 
     fn box_select(&mut self, ctx: &mut ToolContext, a: Pos2, b: Pos2) {
         let rect = Rect::from_two_pos(a, b);
-        let crossing = b.x < a.x;
+        let mode = if b.x < a.x { BoxMode::Crossing } else { BoxMode::Window };
         let active = ctx.doc.active_path.clone();
         let found = guarded(|| {
             let model = &ctx.doc.model;
@@ -131,28 +131,11 @@ impl SelectTool {
             let Some(mesh) = model.mesh_at(&active) else {
                 return out;
             };
+            let proj = BoxProjector { camera: ctx.camera, viewport: ctx.viewport_d(), rect, mode };
             let xf = model.transform_at(&active);
-            let proj = |p: DVec3| ctx.to_screen(xf.transform_point3(p));
-            let poly_test = |pts: &[Option<Pos2>], closed: bool| -> bool {
-                if pts.iter().any(|p| p.is_none()) {
-                    return false;
-                }
-                let pts: Vec<Pos2> = pts.iter().map(|p| p.unwrap_or_default()).collect();
-                if crossing {
-                    let n = pts.len();
-                    let segs = if closed { n } else { n.saturating_sub(1) };
-                    pts.iter().any(|p| rect.contains(*p))
-                        || (0..segs).any(|i| segment_hits_rect(pts[i], pts[(i + 1) % n], rect))
-                } else {
-                    pts.iter().all(|p| rect.contains(*p))
-                }
-            };
+            let world = |v: varstotas_kernel::VertexId| xf.transform_point3(mesh.vertices[v].pos);
             for (id, e) in mesh.edges.iter() {
-                if e.hidden {
-                    continue;
-                }
-                let pts = [proj(mesh.vertices[e.v[0]].pos), proj(mesh.vertices[e.v[1]].pos)];
-                if poly_test(&pts, false) {
+                if !e.hidden && proj.segment(world(e.v[0]), world(e.v[1])) {
                     out.push(EntityRef::Edge(id));
                 }
             }
@@ -160,8 +143,8 @@ impl SelectTool {
                 if f.hidden {
                     continue;
                 }
-                let pts: Vec<Option<Pos2>> = f.outer.iter().map(|v| proj(mesh.vertices[*v].pos)).collect();
-                if poly_test(&pts, true) {
+                let pts: Vec<DVec3> = f.outer.iter().map(|v| world(*v)).collect();
+                if proj.polygon(&pts) {
                     out.push(EntityRef::Face(id));
                 }
             }
@@ -169,28 +152,9 @@ impl SelectTool {
                 if inst.hidden {
                     continue;
                 }
-                let Some(def) = model.defs.get(inst.def) else { continue };
-                let Some(bb) = def.mesh.bounds() else { continue };
-                let m = xf * inst.transform;
-                let pts: Vec<Option<Pos2>> = (0..8)
-                    .map(|i| {
-                        let c = DVec3::new(
-                            if i & 1 == 0 { bb.min.x } else { bb.max.x },
-                            if i & 2 == 0 { bb.min.y } else { bb.max.y },
-                            if i & 4 == 0 { bb.min.z } else { bb.max.z },
-                        );
-                        ctx.to_screen(m.transform_point3(c))
-                    })
-                    .collect();
-                let hit = if crossing {
-                    pts.iter().all(|p| p.is_some()) && {
-                        let r = Rect::from_points(&pts.iter().map(|p| p.unwrap_or_default()).collect::<Vec<_>>());
-                        r.intersects(rect)
-                    }
-                } else {
-                    poly_test(&pts, false)
-                };
-                if hit {
+                let mut geo = InstanceGeo::default();
+                collect_instance_geo(model, inst.def, xf * inst.transform, &mut geo, 0);
+                if proj.instance(&geo) {
                     out.push(EntityRef::Instance(id));
                 }
             }
@@ -203,14 +167,137 @@ impl SelectTool {
         match (add, m.shift) {
             (true, true) => ctx.doc.remove_from_selection(&found),
             (true, false) => ctx.doc.add_to_selection(found),
-            (false, true) => {
-                for e in found {
-                    ctx.doc.toggle_selected(e);
-                }
-            }
+            (false, true) => ctx.doc.toggle_many(&found),
             (false, false) => ctx.doc.set_selection(found),
         }
     }
+}
+
+/// Window (left→right: entirely inside) or crossing (right→left: touching) selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BoxMode {
+    Window,
+    Crossing,
+}
+
+/// Tests world-space primitives against a screen selection rectangle.
+struct BoxProjector<'a> {
+    camera: &'a varstotas_render::Camera,
+    viewport: DVec2,
+    rect: Rect,
+    mode: BoxMode,
+}
+
+impl BoxProjector<'_> {
+    fn screen(&self, p: DVec3) -> Option<Pos2> {
+        self.camera.world_to_screen(p, self.viewport).map(|s| Pos2::new(s.x as f32, s.y as f32))
+    }
+
+    /// Visible (near-clipped) part of a segment on screen.
+    fn clipped(&self, a: DVec3, b: DVec3) -> Option<(Pos2, Pos2)> {
+        let (sa, sb) = crate::inference::geo::project_segment(self.camera, self.viewport, a, b)?;
+        Some((Pos2::new(sa.x as f32, sa.y as f32), Pos2::new(sb.x as f32, sb.y as f32)))
+    }
+
+    fn inside(&self, p: DVec3) -> bool {
+        self.screen(p).is_some_and(|s| self.rect.contains(s))
+    }
+
+    fn segment(&self, a: DVec3, b: DVec3) -> bool {
+        match self.mode {
+            BoxMode::Window => self.inside(a) && self.inside(b),
+            BoxMode::Crossing => self.clipped(a, b).is_some_and(|(sa, sb)| segment_hits_rect(sa, sb, self.rect)),
+        }
+    }
+
+    /// Closed planar polygon (face outer loop): window = all corners inside; crossing = any
+    /// boundary segment touches the box, or the box lies inside the polygon.
+    fn polygon(&self, pts: &[DVec3]) -> bool {
+        if pts.is_empty() {
+            return false;
+        }
+        match self.mode {
+            BoxMode::Window => pts.iter().all(|p| self.inside(*p)),
+            BoxMode::Crossing => {
+                let n = pts.len();
+                if (0..n).any(|i| self.segment(pts[i], pts[(i + 1) % n])) {
+                    return true;
+                }
+                // The box may be entirely inside the face (no boundary touches it).
+                let screen: Option<Vec<Pos2>> = pts.iter().map(|p| self.screen(*p)).collect();
+                screen.is_some_and(|poly| point_in_polygon(self.rect.center(), &poly))
+            }
+        }
+    }
+
+    /// Group/component: window = all its geometry inside; crossing = any of it touches.
+    fn instance(&self, g: &InstanceGeo) -> bool {
+        if g.segments.is_empty() && g.faces.is_empty() {
+            return false;
+        }
+        match self.mode {
+            BoxMode::Window => {
+                g.segments.iter().all(|(a, b)| self.segment(*a, *b)) && g.faces.iter().all(|f| self.polygon(f))
+            }
+            BoxMode::Crossing => {
+                g.segments.iter().any(|(a, b)| self.segment(*a, *b)) || g.faces.iter().any(|f| self.polygon(f))
+            }
+        }
+    }
+}
+
+/// World-space geometry of an instance (recursively through nested instances).
+#[derive(Default)]
+struct InstanceGeo {
+    segments: Vec<(DVec3, DVec3)>,
+    faces: Vec<Vec<DVec3>>,
+}
+
+fn collect_instance_geo(
+    model: &varstotas_kernel::Model,
+    def: varstotas_kernel::DefId,
+    m: varstotas_kernel::glam::DMat4,
+    out: &mut InstanceGeo,
+    depth: usize,
+) {
+    if depth > 16 {
+        return;
+    }
+    let Some(d) = model.defs.get(def) else { return };
+    let mesh = &d.mesh;
+    for (_, e) in mesh.edges.iter() {
+        if !e.hidden {
+            out.segments.push((
+                m.transform_point3(mesh.vertices[e.v[0]].pos),
+                m.transform_point3(mesh.vertices[e.v[1]].pos),
+            ));
+        }
+    }
+    for (_, f) in mesh.faces.iter() {
+        if !f.hidden {
+            out.faces.push(f.outer.iter().map(|v| m.transform_point3(mesh.vertices[*v].pos)).collect());
+        }
+    }
+    for inst in mesh.instances.values() {
+        if !inst.hidden {
+            collect_instance_geo(model, inst.def, m * inst.transform, out, depth + 1);
+        }
+    }
+}
+
+/// Even-odd point-in-polygon test (screen space).
+fn point_in_polygon(p: Pos2, poly: &[Pos2]) -> bool {
+    let mut inside = false;
+    let n = poly.len();
+    let mut j = n.wrapping_sub(1);
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[j]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 impl Tool for SelectTool {
@@ -333,5 +420,90 @@ impl Tool for SelectTool {
 
     fn is_busy(&self) -> bool {
         self.press.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use varstotas_render::{Camera, StandardView};
+
+    const VP: DVec2 = DVec2::new(1000.0, 800.0);
+
+    /// Parallel top view: world (x, y) at the origin is the viewport centre, 10 mm per point.
+    fn top_camera() -> Camera {
+        let mut c = Camera { target: DVec3::ZERO, ..Camera::default() };
+        c.set_standard_view(StandardView::Top);
+        c.set_ortho(true);
+        c.ortho_height = 8000.0;
+        c
+    }
+
+    fn proj(c: &Camera, a: Pos2, b: Pos2) -> BoxProjector<'_> {
+        BoxProjector {
+            camera: c,
+            viewport: VP,
+            rect: Rect::from_two_pos(a, b),
+            mode: if b.x < a.x { BoxMode::Crossing } else { BoxMode::Window },
+        }
+    }
+
+    fn square(x: f64, y: f64, s: f64) -> Vec<DVec3> {
+        vec![
+            DVec3::new(x, y, 0.0),
+            DVec3::new(x + s, y, 0.0),
+            DVec3::new(x + s, y + s, 0.0),
+            DVec3::new(x, y + s, 0.0),
+        ]
+    }
+
+    #[test]
+    fn polygon_helpers() {
+        let sq = [Pos2::new(0.0, 0.0), Pos2::new(10.0, 0.0), Pos2::new(10.0, 10.0), Pos2::new(0.0, 10.0)];
+        assert!(point_in_polygon(Pos2::new(5.0, 5.0), &sq));
+        assert!(!point_in_polygon(Pos2::new(15.0, 5.0), &sq));
+        let r = Rect::from_min_max(Pos2::new(2.0, 2.0), Pos2::new(4.0, 4.0));
+        assert!(segment_hits_rect(Pos2::new(0.0, 3.0), Pos2::new(10.0, 3.0), r));
+        assert!(!segment_hits_rect(Pos2::new(0.0, 5.0), Pos2::new(10.0, 5.0), r));
+    }
+
+    #[test]
+    fn window_needs_fully_inside_crossing_needs_touch() {
+        let c = top_camera();
+        // 1000 mm square at the origin = screen (500,400)-(600,300).
+        let face = square(0.0, 0.0, 1000.0);
+        let s0 = c.world_to_screen(DVec3::ZERO, VP).unwrap();
+        assert!((s0 - DVec2::new(500.0, 400.0)).length() < 1e-6);
+
+        // Window around it: selected; window covering half: not selected.
+        assert!(proj(&c, Pos2::new(450.0, 250.0), Pos2::new(650.0, 450.0)).polygon(&face));
+        assert!(!proj(&c, Pos2::new(450.0, 250.0), Pos2::new(550.0, 450.0)).polygon(&face));
+        // Crossing (right→left) touching half: selected.
+        assert!(proj(&c, Pos2::new(550.0, 450.0), Pos2::new(450.0, 250.0)).polygon(&face));
+        // Crossing box entirely inside the face (touches no edge): selected.
+        assert!(proj(&c, Pos2::new(560.0, 360.0), Pos2::new(540.0, 340.0)).polygon(&face));
+        // Crossing box away from it: not selected.
+        assert!(!proj(&c, Pos2::new(800.0, 700.0), Pos2::new(700.0, 600.0)).polygon(&face));
+        // Edges.
+        let (a, b) = (DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0));
+        assert!(!proj(&c, Pos2::new(540.0, 450.0), Pos2::new(560.0, 350.0)).segment(a, b));
+        assert!(proj(&c, Pos2::new(560.0, 450.0), Pos2::new(540.0, 350.0)).segment(a, b));
+    }
+
+    #[test]
+    fn instance_uses_geometry_not_bounding_box() {
+        let c = top_camera();
+        // L-shaped group: two squares; the bbox corner (1000..2000, 1000..2000) is empty.
+        let g = InstanceGeo {
+            segments: Vec::new(),
+            faces: vec![square(0.0, 0.0, 1000.0), square(1000.0, 0.0, 1000.0), square(0.0, 1000.0, 1000.0)],
+        };
+        // Crossing box in the empty corner: not touching the group.
+        assert!(!proj(&c, Pos2::new(690.0, 210.0), Pos2::new(610.0, 290.0)).instance(&g));
+        // Crossing box over one leg: touching.
+        assert!(proj(&c, Pos2::new(560.0, 210.0), Pos2::new(520.0, 290.0)).instance(&g));
+        // Window around all of it.
+        assert!(proj(&c, Pos2::new(490.0, 190.0), Pos2::new(710.0, 410.0)).instance(&g));
+        assert!(!proj(&c, Pos2::new(490.0, 190.0), Pos2::new(650.0, 410.0)).instance(&g));
     }
 }

@@ -1,6 +1,10 @@
 //! Varstotas application entry point. Owner: `shell` agent (tools/ and inference/ — `tools` agent).
 
+// Release builds on Windows: GUI subsystem, no console window.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
+mod autosave;
 mod debug_capture;
 mod document;
 mod inference;
