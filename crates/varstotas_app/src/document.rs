@@ -1,9 +1,47 @@
 //! The open document: model + undo history + file state + selection + editing context.
 
-use varstotas_kernel::{ContextPath, EntityRef, History, MaterialId, Mesh, Model};
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use varstotas_kernel::{ContextPath, EntityRef, History, MaterialId, Mesh, Model, ModelHit, Ray};
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_MODEL_VERSION: AtomicU64 = AtomicU64::new(1);
+
+/// A model version never used before in this process, so caches keyed by version can't
+/// confuse two documents (a fresh document does not restart at version 1).
+pub fn next_model_version() -> u64 {
+    NEXT_MODEL_VERSION.fetch_add(1, Ordering::Relaxed)
+}
+
+type RayKey = (usize, u64, [u64; 6]);
+
+thread_local! {
+    /// The last few model raycasts. One pointer event typically raycasts the same pick ray
+    /// several times (inference, hover picking, edge occlusion); on big models each raycast
+    /// is a full scan, so repeats are served from here.
+    static RAYCASTS: RefCell<Vec<(RayKey, Option<ModelHit>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// `model.raycast(ray)` (panic-guarded), memoized per (`version`, exact ray).
+/// `version` must change whenever the model does (use [`Document::model_version`]).
+pub fn cached_raycast(model: &Model, version: u64, ray: &Ray) -> Option<ModelHit> {
+    let (o, d) = (ray.origin, ray.dir);
+    let key = (model as *const Model as usize, version, [o.x, o.y, o.z, d.x, d.y, d.z].map(f64::to_bits));
+    if let Some(hit) = RAYCASTS.with_borrow(|c| c.iter().find(|(k, _)| *k == key).map(|(_, h)| h.clone())) {
+        return hit;
+    }
+    let hit = guarded(|| model.raycast(ray)).ok().flatten();
+    RAYCASTS.with_borrow_mut(|c| {
+        c.retain(|(k, _)| k.0 == key.0 && k.1 == version);
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((key, hit.clone()));
+    });
+    hit
+}
 
 /// Material chosen in the Materials panel. Stored by name/colour (not id) so it survives
 /// undo/redo; the Paint tool resolves it with [`PaletteMaterial::ensure_in`] inside a commit.
@@ -73,7 +111,7 @@ impl Document {
             history: History::default(),
             path,
             dirty: false,
-            model_version: 1,
+            model_version: next_model_version(),
             selection_version: 1,
             selection: Vec::new(),
             active_path: Vec::new(),
@@ -161,7 +199,7 @@ impl Document {
 
     fn after_change(&mut self) {
         self.dirty = true;
-        self.model_version += 1;
+        self.model_version = next_model_version();
         self.prune_selection();
     }
 

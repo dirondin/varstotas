@@ -66,6 +66,8 @@ impl GeoCache {
         for p in &model.guide_points {
             g.points.push(PointCand { pos: *p, kind: InferenceKind::GuidePoint, r: None });
         }
+        // The model origin is always a snap target (the classic "Origin" inference).
+        g.points.push(PointCand { pos: DVec3::ZERO, kind: InferenceKind::Origin, r: None });
         g
     }
 

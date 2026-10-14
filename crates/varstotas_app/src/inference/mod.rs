@@ -15,10 +15,12 @@ pub mod geo;
 use crate::document::guarded;
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::Color32;
-use geo::{GeoCache, ScreenCache, closest_on_line_to_ray, closest_on_seg_to_ray, dist_point_seg2};
+use geo::{CamKey, GeoCache, ScreenCache, closest_on_line_to_ray, closest_on_seg_to_ray, dist_point_seg2};
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, Model, Plane, Ray};
 use varstotas_render::{Camera, Overlay3d, OverlayLine};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Pick radius for points (px).
 pub const POINT_PICK_PX: f64 = 12.0;
@@ -48,6 +50,8 @@ pub enum InferenceKind {
     OnFace,
     GuidePoint,
     OnGuide,
+    /// The model (world) origin.
+    Origin,
     /// Tool-level shape inferences (tooltip only).
     Square,
     GoldenSection,
@@ -74,6 +78,7 @@ impl InferenceKind {
             Self::OnFace => "On Face",
             Self::GuidePoint => "Guide Point",
             Self::OnGuide => "On Line",
+            Self::Origin => "Origin",
             Self::Square => "Square",
             Self::GoldenSection => "Golden Section",
             Self::HalfCircle => "Half Circle",
@@ -85,6 +90,7 @@ impl InferenceKind {
     pub fn color(self) -> Color32 {
         match self {
             Self::Endpoint | Self::Center => Color32::from_rgb(0x00, 0xC0, 0x00),
+            Self::Origin => Color32::from_rgb(0xE0, 0xA0, 0x00),
             Self::Midpoint => Color32::from_rgb(0x00, 0xC0, 0xFF),
             Self::OnEdge | Self::Intersection | Self::OnRedAxis => Color32::from_rgb(0xFF, 0x00, 0x00),
             Self::OnGreenAxis => Color32::from_rgb(0x00, 0xB0, 0x00),
@@ -98,7 +104,7 @@ impl InferenceKind {
 
     pub fn marker(self) -> Option<MarkerShape> {
         Some(match self {
-            Self::Endpoint | Self::Midpoint | Self::GuidePoint => MarkerShape::Dot,
+            Self::Endpoint | Self::Midpoint | Self::GuidePoint | Self::Origin => MarkerShape::Dot,
             Self::Center => MarkerShape::Ring,
             Self::Intersection => MarkerShape::Cross,
             Self::OnEdge | Self::OnGuide => MarkerShape::Square,
@@ -109,7 +115,10 @@ impl InferenceKind {
 
     /// Point-type inferences (ranked above edges/directions).
     pub fn is_point(self) -> bool {
-        matches!(self, Self::Endpoint | Self::Midpoint | Self::Center | Self::Intersection | Self::GuidePoint)
+        matches!(
+            self,
+            Self::Endpoint | Self::Midpoint | Self::Center | Self::Intersection | Self::GuidePoint | Self::Origin
+        )
     }
 
     pub fn is_direction(self) -> bool {
@@ -122,6 +131,7 @@ impl InferenceKind {
     fn point_rank(self) -> u8 {
         match self {
             Self::Endpoint => 0,
+            Self::Origin => 1,
             Self::Midpoint | Self::Center => 1,
             Self::GuidePoint => 1,
             Self::Intersection => 2,
@@ -249,9 +259,18 @@ pub struct Query<'a> {
 
 /// Snapping engine with per-frame caches and hover memory. One per tool instance.
 #[derive(Default)]
+struct SharedCaches {
+    /// ((model address, model version), candidates).
+    geo: Option<((usize, u64), Rc<GeoCache>)>,
+    screen: Option<(CamKey, Rc<ScreenCache>)>,
+}
+
+thread_local! {
+    static SHARED: RefCell<SharedCaches> = RefCell::new(SharedCaches::default());
+}
+
+#[derive(Default)]
 pub struct InferenceEngine {
-    geo: Option<GeoCache>,
-    screen: ScreenCache,
     /// Recently hovered edges (world), most recent last.
     pub recent_edges: Vec<(DVec3, DVec3)>,
     hover: Option<(DVec3, f64)>,
@@ -377,17 +396,28 @@ impl InferenceEngine {
     }
 
     fn infer_inner(&mut self, q: &Query) -> InferenceResult {
-        if self.geo.as_ref().is_none_or(|g| g.version != q.model_version) {
-            self.geo = Some(GeoCache::build(q.model, q.model_version));
-        }
-        let geo = self.geo.take().unwrap_or_default();
-        self.screen.update(&geo, q.camera, q.viewport);
-        let r = self.infer_with(q, &geo);
-        self.geo = Some(geo);
-        r
+        let model_key = (q.model as *const Model as usize, q.model_version);
+        // World candidates and their screen projections are shared by all engines (every tool
+        // has one), so switching tools does not rebuild them on big models.
+        let (geo, screen) = SHARED.with_borrow_mut(|sh| {
+            if sh.geo.as_ref().is_none_or(|(k, _)| *k != model_key) {
+                sh.geo = Some((model_key, Rc::new(GeoCache::build(q.model, q.model_version))));
+                sh.screen = None;
+            }
+            let geo = sh.geo.as_ref().map(|(_, g)| g.clone()).unwrap_or_default();
+            let cam = CamKey::of(q.camera, q.viewport);
+            if sh.screen.as_ref().is_none_or(|(k, _)| *k != cam) {
+                let mut sc = ScreenCache::default();
+                sc.update(&geo, q.camera, q.viewport);
+                sh.screen = Some((cam, Rc::new(sc)));
+            }
+            let screen = sh.screen.as_ref().map(|(_, s)| s.clone()).unwrap_or_default();
+            (geo, screen)
+        });
+        self.infer_with(q, &geo, &screen)
     }
 
-    fn infer_with(&mut self, q: &Query, geo: &GeoCache) -> InferenceResult {
+    fn infer_with(&mut self, q: &Query, geo: &GeoCache, screen: &ScreenCache) -> InferenceResult {
         let cam = q.camera;
         let vp = q.viewport;
         let ray = crate::nav::screen_ray(cam, q.cursor, vp);
@@ -396,7 +426,7 @@ impl InferenceEngine {
         let px_dist = |p: DVec3| to_screen(p).map(|s| s.distance(q.cursor)).unwrap_or(f64::INFINITY);
 
         // Face under the cursor.
-        let hit = q.model.raycast(&ray);
+        let hit = crate::document::cached_raycast(q.model, q.model_version, &ray);
         let face = hit.as_ref().and_then(|h| {
             let m = q.model.transform_at(&h.path);
             let mesh = q.model.mesh_at(&h.path)?;
@@ -414,7 +444,7 @@ impl InferenceEngine {
 
         // ---- point candidates -------------------------------------------------
         let mut pts: Vec<(u8, f64, usize)> = Vec::new();
-        for (i, s) in self.screen.points.iter().enumerate() {
+        for (i, s) in screen.points.iter().enumerate() {
             if let Some(s) = s {
                 let d = s.distance(q.cursor);
                 if d <= POINT_PICK_PX {
@@ -427,7 +457,7 @@ impl InferenceEngine {
 
         // ---- edge candidates ----------------------------------------------------
         let mut near_edges: Vec<(f64, usize)> = Vec::new();
-        for (i, s) in self.screen.edges.iter().enumerate() {
+        for (i, s) in screen.edges.iter().enumerate() {
             if let Some((a, b)) = s {
                 let (d, _) = dist_point_seg2(q.cursor, *a, *b);
                 if d <= EDGE_PICK_PX * 1.5 {
@@ -848,6 +878,17 @@ mod tests {
 
     fn screen(cam: &Camera, p: DVec3) -> DVec2 {
         cam.world_to_screen(p, DVec2::new(800.0, 600.0)).unwrap()
+    }
+
+    #[test]
+    fn origin_snaps_exactly() {
+        let m = Model::new();
+        let cam = camera_top();
+        let mut e = InferenceEngine::default();
+        let s = screen(&cam, DVec3::ZERO) + DVec2::new(2.5, -1.5);
+        let r = e.infer(&query(&m, &cam, s, None));
+        assert_eq!(r.kind, InferenceKind::Origin);
+        assert_eq!(r.point, DVec3::ZERO);
     }
 
     #[test]

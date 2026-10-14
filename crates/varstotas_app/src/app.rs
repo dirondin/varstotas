@@ -120,6 +120,11 @@ pub enum Pending {
     Quit,
 }
 
+/// World-space corners of an oriented box (index bits: 1 = x, 2 = y, 4 = z).
+type BoxCorners = [[f32; 3]; 8];
+/// ((model version, selection version), selected instances' boxes).
+type SelBoxes = ((u64, u64), Vec<BoxCorners>);
+
 pub struct VarstotasApp {
     pub(crate) doc: Document,
     pub(crate) camera: Camera,
@@ -145,6 +150,8 @@ pub struct VarstotasApp {
     /// Where the primary button went down in the viewport (click vs drag detection).
     press_local: Option<Pos2>,
     pub(crate) last_modifiers: Modifiers,
+    /// Selected instances' bounding boxes ((model, selection) version → world corners).
+    sel_boxes: std::cell::RefCell<Option<SelBoxes>>,
     now: f64,
     pub(crate) show_prefs: bool,
     pub(crate) autosave: AutosaveState,
@@ -227,6 +234,7 @@ impl VarstotasApp {
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
+            sel_boxes: Default::default(),
             now: 0.0,
             show_prefs: false,
             autosave: AutosaveState {
@@ -346,6 +354,12 @@ impl VarstotasApp {
     // ---- keyboard ---------------------------------------------------------
 
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
+        // Scripted runs inject keys, VCB text and modifiers themselves (`key`, `vcb`, `mods`);
+        // real OS keyboard events (including modifier state carried by key events) must not
+        // leak in and change tool behaviour.
+        if self.debug.script_active() {
+            return;
+        }
         if ctx.text_edit_focused() || self.confirm.is_some() {
             return;
         }
@@ -428,7 +442,7 @@ impl VarstotasApp {
                         }
                     }
                 }
-                egui::Event::ModifiersChanged(m) if !self.debug.script_active() => self.last_modifiers = m,
+                egui::Event::ModifiersChanged(m) => self.last_modifiers = m,
                 _ => {}
             }
         }
@@ -1015,7 +1029,7 @@ impl VarstotasApp {
                 Ok(Ok(model)) => {
                     let mut doc = Document::from_model(model, r.original.clone());
                     doc.dirty = true;
-                    doc.model_version += 1;
+                    doc.model_version = crate::document::next_model_version();
                     self.replace_document(doc);
                     // Keep the autosave until the recovered model is saved (or discarded).
                     self.autosave.written = Some(r.autosave.clone());
@@ -1116,6 +1130,33 @@ impl VarstotasApp {
         }
     }
 
+    /// Oriented bounding boxes of the selected groups / component instances (their contents
+    /// are not tinted). Cached by (model, selection) version.
+    fn selection_boxes(&self, out: &mut Overlay3d) {
+        let key = (self.doc.model_version, self.doc.selection_version);
+        let mut cache = self.sel_boxes.borrow_mut();
+        if cache.as_ref().is_none_or(|(k, _)| *k != key) {
+            let model = &self.doc.model;
+            let mut boxes = Vec::new();
+            for e in &self.doc.selection {
+                let EntityRef::Instance(i) = e else { continue };
+                let mut path = self.doc.active_path.clone();
+                path.push(*i);
+                if let Ok(Some((b, xf))) = guarded(|| {
+                    model.def_at(&path).and_then(|d| model.def_bounds(d)).map(|b| (b, model.transform_at(&path)))
+                }) {
+                    boxes.push(b.corners().map(|p| xf.transform_point3(p).as_vec3().to_array()));
+                }
+            }
+            *cache = Some((key, boxes));
+        }
+        if let Some((_, boxes)) = cache.as_ref() {
+            for c in boxes {
+                out.add_box(*c, varstotas_render::HIGHLIGHT_SELECTED, 1.0);
+            }
+        }
+    }
+
     fn tool_overlays(&self) -> (Overlay3d, Vec<Marker2d>) {
         let mut o3 = Overlay3d::default();
         let mut o2 = Vec::new();
@@ -1127,6 +1168,7 @@ impl VarstotasApp {
         };
         tools::common::draw_guides(&view, &mut o3, &mut o2);
         self.context_box_lines(&mut o3);
+        self.selection_boxes(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
         o2.extend(self.tool.cursor_glyph());
         (o3, o2)

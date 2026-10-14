@@ -324,7 +324,7 @@ impl ToolContext<'_> {
 
     /// Closest face hit under the pointer (whole model).
     pub fn pick(&self) -> Option<ModelHit> {
-        crate::document::guarded(|| self.doc.model.raycast(&self.pointer.ray)).ok().flatten()
+        crate::document::cached_raycast(&self.doc.model, self.doc.model_version, &self.pointer.ray)
     }
 
     /// World point under the pointer (model, else ground plane, else target depth).

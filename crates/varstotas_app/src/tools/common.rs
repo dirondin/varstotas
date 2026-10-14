@@ -162,6 +162,64 @@ pub fn pick_face(ctx: &ToolContext) -> Option<Hover> {
     Some(Hover::Face { face: hit.face, point: hit.point, plane: Plane::new(hit.point, n) })
 }
 
+/// Screen projections of the active context's edges, reused while the model, the camera
+/// and the context are unchanged (projecting every edge per pointer event is the dominant
+/// hover cost on big models).
+struct EdgeProjections {
+    key: (u64, inference::geo::CamKey, ContextPath),
+    /// (edge, world a, world b, screen a, screen b) for visible edges in front of the camera.
+    edges: Vec<(EdgeId, DVec3, DVec3, DVec2, DVec2)>,
+}
+
+thread_local! {
+    static EDGE_PROJ: std::cell::RefCell<Option<EdgeProjections>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Edges of the active context whose screen projection is within `radius` px of `c`,
+/// nearest first: (screen distance, edge, world a, world b).
+fn edges_near(ctx: &ToolContext, c: DVec2, radius: f64) -> Vec<(f64, EdgeId, DVec3, DVec3)> {
+    let vp = ctx.viewport_d();
+    let key = (ctx.doc.model_version, inference::geo::CamKey::of(ctx.camera, vp), ctx.doc.active_path.clone());
+    EDGE_PROJ.with_borrow_mut(|cache| {
+        if cache.as_ref().is_none_or(|p| p.key != key) {
+            let mut edges = Vec::new();
+            if let Some(mesh) = ctx.doc.model.mesh_at(&key.2) {
+                let xf = context_xf(ctx.doc);
+                edges.reserve(mesh.edges.len());
+                for (id, e) in mesh.edges.iter() {
+                    if e.hidden {
+                        continue;
+                    }
+                    let (a, b) = mesh.edge_segment(id);
+                    let (a, b) = (xf.transform_point3(a), xf.transform_point3(b));
+                    if let Some((sa, sb)) = inference::geo::project_segment(ctx.camera, vp, a, b) {
+                        edges.push((id, a, b, sa, sb));
+                    }
+                }
+            }
+            *cache = Some(EdgeProjections { key, edges });
+        }
+        let proj = cache.as_ref().map(|p| p.edges.as_slice()).unwrap_or_default();
+        let mut cands: Vec<(f64, EdgeId, DVec3, DVec3)> = proj
+            .iter()
+            .filter_map(|(id, a, b, sa, sb)| {
+                // Cheap bounding-box reject before the exact distance.
+                if c.x < sa.x.min(sb.x) - radius
+                    || c.x > sa.x.max(sb.x) + radius
+                    || c.y < sa.y.min(sb.y) - radius
+                    || c.y > sa.y.max(sb.y) + radius
+                {
+                    return None;
+                }
+                let (d, _) = inference::geo::dist_point_seg2(c, *sa, *sb);
+                (d <= radius).then_some((d, *id, *a, *b))
+            })
+            .collect();
+        cands.sort_by(|x, y| x.0.total_cmp(&y.0));
+        cands
+    })
+}
+
 /// Edge of the active context within `radius` px of the pointer (not occluded).
 ///
 /// Candidates are tried nearest-first; the 3D point is the perspective-correct closest
@@ -171,26 +229,28 @@ pub fn pick_face(ctx: &ToolContext) -> Option<Hover> {
 pub fn pick_edge_at(ctx: &ToolContext, pos: Pos2, radius: f32) -> Option<Hover> {
     let active = ctx.doc.active_path.clone();
     let mesh = ctx.doc.model.mesh_at(&active)?;
-    let xf = context_xf(ctx.doc);
-    let vp = ctx.viewport_d();
     let c = DVec2::new(pos.x as f64, pos.y as f64);
     let ray = ctx.ray_at(pos);
-    let mut cands: Vec<(f64, EdgeId, DVec3, DVec3)> = Vec::new();
-    for (id, e) in mesh.edges.iter() {
-        if e.hidden {
-            continue;
-        }
-        let (a, b) = mesh.edge_segment(id);
-        let (a, b) = (xf.transform_point3(a), xf.transform_point3(b));
-        let Some((sa, sb)) = inference::geo::project_segment(ctx.camera, vp, a, b) else { continue };
-        let (d, _) = inference::geo::dist_point_seg2(c, sa, sb);
-        if d <= radius as f64 {
-            cands.push((d, id, a, b));
-        }
+    let cands = edges_near(ctx, c, radius as f64);
+    if cands.is_empty() {
+        return None;
     }
-    cands.sort_by(|x, y| x.0.total_cmp(&y.0));
+    // The face under the cursor answers most occlusion questions without a raycast per
+    // candidate (each one is a scan of the whole model on big models).
+    let cursor_hit = crate::document::cached_raycast(&ctx.doc.model, ctx.doc.model_version, &ray);
+    let mut full_tests = 0;
     for (_, edge, a, b) in cands.into_iter().take(8) {
         let p = inference::geo::closest_on_seg_to_ray(a, b, ray.origin, ray.dir);
+        match quick_occlusion(ctx, mesh, &active, edge, p, cursor_hit.as_ref()) {
+            Some(false) => return Some(Hover::Edge { edge, a, b }),
+            Some(true) => continue,
+            None => {}
+        }
+        // Undecided (near a silhouette): exact test, bounded per event.
+        if full_tests >= 3 {
+            continue;
+        }
+        full_tests += 1;
         if !edge_point_occluded(ctx, &active, edge, p) {
             return Some(Hover::Edge { edge, a, b });
         }
@@ -198,6 +258,43 @@ pub fn pick_edge_at(ctx: &ToolContext, pos: Pos2, radius: f32) -> Option<Hover> 
     None
 }
 
+/// Occlusion of edge point `p` decided from the face under the cursor, when possible:
+/// - the cursor is on one of the edge's own faces → visible;
+/// - the ray towards `p` crosses the cursor's face in front of `p` → occluded;
+/// - nothing under the cursor in front of `p`, and the cursor's face (if any) is not crossed
+///   by the ray towards `p` → undecided (`None`): another face might still cover `p`.
+fn quick_occlusion(
+    ctx: &ToolContext,
+    mesh: &Mesh,
+    active: &ContextPath,
+    edge: EdgeId,
+    p: DVec3,
+    hit: Option<&varstotas_kernel::ModelHit>,
+) -> Option<bool> {
+    let hit = hit?;
+    if hit.path == *active && mesh.edge_faces(edge).contains(&hit.face) {
+        return Some(false);
+    }
+    let sp = ctx.to_screen(p)?;
+    let ray = ctx.ray_at(sp);
+    let depth = (p - ray.origin).dot(ray.dir);
+    let vp = ctx.viewport_d();
+    let tol = (ctx.camera.pixel_size_at(p, vp) * 2.0).max(depth.abs() * 1e-6).max(1e-3);
+    // Does the ray towards p cross the cursor's face in front of p?
+    let hmesh = ctx.doc.model.mesh_at(&hit.path)?;
+    let f = hmesh.faces.get(hit.face)?;
+    let inv = ctx.doc.model.transform_at(&hit.path).inverse();
+    let (lo, ld) = (inv.transform_point3(ray.origin), inv.transform_vector3(ray.dir));
+    let v0 = hmesh.vertices.get(*f.outer.first()?)?.pos;
+    let den = ld.dot(f.normal);
+    if den.abs() > 1e-12 {
+        let t = (v0 - lo).dot(f.normal) / den;
+        if t > 0.0 && t < depth - tol && hmesh.face_point_loc(hit.face, lo + ld * t) != varstotas_kernel::geom::PointLoc::Outside {
+            return Some(true);
+        }
+    }
+    None
+}
 /// True when a face other than those bounding `edge` lies in front of world point `p`.
 fn edge_point_occluded(ctx: &ToolContext, active: &ContextPath, edge: EdgeId, p: DVec3) -> bool {
     let Some(sp) = ctx.to_screen(p) else { return true };

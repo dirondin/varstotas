@@ -5,10 +5,13 @@
 //! change only recomputes [`highlight`] from the cached `Tessellation`.
 
 use crate::document::guarded;
-use varstotas_kernel::glam::DVec3;
-use varstotas_kernel::{ContextPath, EntityRef, InstanceId, MaterialId, Model, Tessellation, tessellate};
+use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
+use varstotas_kernel::tessellate::triangulate_face;
+use varstotas_kernel::{
+    ContextPath, EntityRef, FaceId, InstanceId, MaterialId, Model, TessEdge, TessFace, Tessellation, tessellate,
+};
 use varstotas_render::{FaceStyle, Highlight, LineVertex, SceneGeometry, TriVertex};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 pub const FRONT_DEFAULT: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 pub const BACK_DEFAULT: [f32; 4] = [0xA4 as f32 / 255.0, 0xB0 as f32 / 255.0, 0xC8 as f32 / 255.0, 1.0];
@@ -54,20 +57,123 @@ fn classify(owner_path: &[InstanceId], own: EntityRef, active: &[InstanceId], se
     if !starts_with(owner_path, active) {
         return (false, !active.is_empty());
     }
-    let selected = if owner_path.len() == active.len() {
-        selected_set.contains(&own)
-    } else {
-        selected_set.contains(&EntityRef::Instance(owner_path[active.len()]))
-    };
-    (selected, false)
+    // Only entities selected directly in the active context are tinted. A selected group /
+    // component is shown by its bounding box (an overlay), not by tinting its contents
+    // (behaviour, QA2-005).
+    (owner_path.len() == active.len() && selected_set.contains(&own), false)
 }
 
 /// Tessellate the model; never panics (an empty tessellation is returned on failure).
+///
+/// Same output (content and order) as `varstotas_kernel::tessellate`, but face triangulation
+/// of big meshes is spread over worker threads: it dominates scene rebuilds on 100k-face
+/// models.
 pub fn tessellate_model(model: &Model) -> Tessellation {
-    guarded(|| tessellate(model)).unwrap_or_else(|e| {
+    guarded(|| {
+        let mut out = Tessellation::default();
+        tess_rec(model, model.root, DMat4::IDENTITY, &mut Vec::new(), None, &mut out, 0);
+        out
+    })
+    .or_else(|e| {
+        log::debug!("parallel tessellation failed ({e}); falling back");
+        guarded(|| tessellate(model))
+    })
+    .unwrap_or_else(|e| {
         log::debug!("tessellate unavailable: {e}");
         Tessellation::default()
     })
+}
+
+fn tag_visible(model: &Model, t: Option<varstotas_kernel::TagId>) -> bool {
+    t.and_then(|t| model.tags.get(t)).is_none_or(|t| t.visible)
+}
+
+/// Faces per worker below which triangulation stays on the calling thread.
+const PAR_CHUNK: usize = 4096;
+
+fn tess_rec(
+    model: &Model,
+    d: varstotas_kernel::DefId,
+    m: DMat4,
+    path: &mut ContextPath,
+    inherited: Option<MaterialId>,
+    out: &mut Tessellation,
+    depth: usize,
+) {
+    if depth > 64 {
+        return;
+    }
+    let Some(def) = model.defs.get(d) else { return };
+    let mesh = &def.mesh;
+    let nm = DMat3::from_mat4(m).inverse().transpose();
+    let mirror = m.determinant() < 0.0;
+    let faces: Vec<FaceId> = mesh
+        .faces
+        .iter()
+        .filter(|(_, f)| !f.hidden && tag_visible(model, f.tag))
+        .map(|(id, _)| id)
+        .collect();
+    let owner: &ContextPath = path;
+    let tess_face = |fid: FaceId| -> TessFace {
+        let face = &mesh.faces[fid];
+        let tris = triangulate_face(mesh, fid);
+        let mut positions = Vec::with_capacity(tris.len() * 3);
+        for t in tris {
+            let (a, b, c) = (m.transform_point3(t[0]), m.transform_point3(t[1]), m.transform_point3(t[2]));
+            if mirror {
+                positions.extend([a, c, b]);
+            } else {
+                positions.extend([a, b, c]);
+            }
+        }
+        TessFace {
+            owner_path: owner.clone(),
+            face: Some(fid),
+            positions,
+            normal: (nm * face.normal).normalize_or_zero(),
+            front: face.front,
+            back: face.back,
+            inherited,
+        }
+    };
+    let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(16);
+    if faces.len() >= PAR_CHUNK * 2 && workers > 1 {
+        let chunk = faces.len().div_ceil(workers).max(PAR_CHUNK);
+        let parts: Vec<Vec<TessFace>> = std::thread::scope(|sc| {
+            let handles: Vec<_> = faces
+                .chunks(chunk)
+                .map(|c| sc.spawn(|| c.iter().map(|f| tess_face(*f)).collect::<Vec<_>>()))
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))).collect()
+        });
+        out.faces.reserve(faces.len());
+        for p in parts {
+            out.faces.extend(p);
+        }
+    } else {
+        out.faces.extend(faces.iter().map(|f| tess_face(*f)));
+    }
+    for (eid, ed) in &mesh.edges {
+        if ed.hidden || !tag_visible(model, ed.tag) {
+            continue;
+        }
+        let (a, b) = mesh.edge_segment(eid);
+        out.edges.push(TessEdge {
+            owner_path: path.clone(),
+            edge: eid,
+            a: m.transform_point3(a),
+            b: m.transform_point3(b),
+            soft: ed.soft,
+        });
+    }
+    for (iid, inst) in &mesh.instances {
+        if inst.hidden || !tag_visible(model, inst.tag) {
+            continue;
+        }
+        path.push(iid);
+        tess_rec(model, inst.def, m * inst.transform, path, inst.material.or(inherited), out, depth + 1);
+        path.pop();
+    }
 }
 
 /// Build render geometry (tessellates). Used by tests; the viewport keeps the tessellation.
@@ -133,6 +239,10 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
     geo.origin = origin.to_array();
     let rel = |q: DVec3| (q - origin).as_vec3().to_array();
     let mut max_r2: f64 = 0.0;
+    let n_verts: usize = tess.faces.iter().map(|f| f.positions.len()).sum();
+    geo.tris.reserve(n_verts);
+    geo.back_colors.reserve(n_verts);
+    geo.face_ids.reserve(n_verts / 3);
     for (fi, f) in tess.faces.iter().enumerate() {
         let front = mat_color(f.front.or(f.inherited)).unwrap_or(FRONT_DEFAULT);
         let back = mat_color(f.back.or(f.inherited)).unwrap_or(BACK_DEFAULT);
@@ -145,9 +255,12 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
         }
     }
 
-    // Border edges (fewer than two faces) are drawn as profiles.
-    let mut face_count: HashMap<(ContextPath, varstotas_kernel::EdgeId), usize> = HashMap::new();
-    let mut mesh_cache: HashMap<ContextPath, bool> = HashMap::new();
+    // Border edges (fewer than two faces) are drawn as profiles. Edges of one context are
+    // contiguous in the tessellation, so the mesh lookup is done once per run.
+    let n_edges = tess.edges.iter().filter(|e| !e.soft).count();
+    geo.edges.reserve(n_edges * 2);
+    geo.edge_ids.reserve(n_edges);
+    let mut cur: Option<(&ContextPath, Option<&varstotas_kernel::Mesh>)> = None;
     for (ei, e) in tess.edges.iter().enumerate() {
         if e.soft {
             continue;
@@ -159,14 +272,11 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
         geo.edges.push(a);
         geo.edges.push(b);
 
-        let has_mesh = *mesh_cache
-            .entry(e.owner_path.clone())
-            .or_insert_with(|| model.mesh_at(&e.owner_path).is_some());
-        if has_mesh {
-            let n = *face_count.entry((e.owner_path.clone(), e.edge)).or_insert_with(|| {
-                guarded(|| model.mesh_at(&e.owner_path).map(|m| m.edge_faces(e.edge).len()).unwrap_or(2))
-                    .unwrap_or(2)
-            });
+        if cur.is_none_or(|(p, _)| *p != e.owner_path) {
+            cur = Some((&e.owner_path, model.mesh_at(&e.owner_path)));
+        }
+        if let Some((_, Some(mesh))) = cur {
+            let n = guarded(|| mesh.edge_faces(e.edge).len()).unwrap_or(2);
             if n < 2 {
                 geo.profile_edges.push(a);
                 geo.profile_edges.push(b);
@@ -182,6 +292,49 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
 mod tests {
     use super::*;
     use varstotas_kernel::glam::DVec3;
+
+    /// The threaded tessellation matches the kernel's (content and order), including nested
+    /// and mirrored instances and meshes big enough to be split across workers.
+    #[test]
+    fn parallel_tessellation_matches_kernel() {
+        let mut m = Model::new();
+        {
+            let mesh = m.root_mesh_mut();
+            for i in 0..60 {
+                for j in 0..60 {
+                    let (x, y) = (i as f64 * 1500.0, j as f64 * 1500.0);
+                    let f = mesh.add_face(&[
+                        DVec3::new(x, y, 0.0),
+                        DVec3::new(x + 1000.0, y, 0.0),
+                        DVec3::new(x + 1000.0, y + 1000.0, 0.0),
+                        DVec3::new(x, y + 1000.0, 0.0),
+                    ]);
+                    if let Some(f) = f {
+                        let _ = mesh.push_pull(f, -500.0, false);
+                    }
+                }
+            }
+        }
+        // A group made from one box, then mirrored.
+        let ents: Vec<EntityRef> = m.root_mesh().faces.keys().take(6).map(EntityRef::Face).collect();
+        if let Ok(g) = m.make_group(&[], &ents)
+            && let Some(inst) = m.root_mesh_mut().instances.get_mut(g)
+        {
+            inst.transform = DMat4::from_scale(DVec3::new(-1.0, 1.0, 1.0)) * inst.transform;
+        }
+        let ours = tessellate_model(&m);
+        let theirs = tessellate(&m);
+        assert!(ours.faces.len() > PAR_CHUNK * 2, "{}", ours.faces.len());
+        assert_eq!(ours.faces.len(), theirs.faces.len());
+        assert_eq!(ours.edges.len(), theirs.edges.len());
+        for (a, b) in ours.faces.iter().zip(&theirs.faces) {
+            assert_eq!((&a.owner_path, a.face, &a.positions, a.normal), (&b.owner_path, b.face, &b.positions, b.normal));
+            assert_eq!((a.front, a.back, a.inherited), (b.front, b.back, b.inherited));
+        }
+        for (a, b) in ours.edges.iter().zip(&theirs.edges) {
+            assert_eq!((&a.owner_path, a.edge, a.a, a.b, a.soft), (&b.owner_path, b.edge, b.a, b.b, b.soft));
+        }
+    }
 
     #[test]
     fn origin_is_bbox_centre_and_stable() {
@@ -269,16 +422,19 @@ mod tests {
         assert!(geo.tris.iter().all(|v| v.color == FRONT_DEFAULT));
         assert!(geo.edges.iter().all(|v| v.color == EDGE));
 
-        // Root context, group selected: its faces are Selected, loose ones None.
+        // Root context, group selected: its contents are not tinted (the app draws a
+        // bounding box instead); a directly selected loose face is.
         let root: ContextPath = Vec::new();
-        let sel = [EntityRef::Instance(g)];
+        let loose = tess.faces.iter().find(|f| f.owner_path.is_empty()).and_then(|f| f.face).expect("loose face");
+        let sel = [EntityRef::Instance(g), EntityRef::Face(loose)];
         let (f, e) = highlight(&tess, &HighlightParams { selection: &sel, active_path: &root });
         assert_eq!(f.len(), tess.faces.len());
         assert_eq!(e.len(), tess.edges.len());
         for (st, tf) in f.iter().zip(&tess.faces) {
-            let want = if tf.owner_path.is_empty() { Highlight::None } else { Highlight::Selected };
+            let want = if tf.owner_path.is_empty() && tf.face == Some(loose) { Highlight::Selected } else { Highlight::None };
             assert_eq!(*st, want);
         }
+        assert!(e.iter().all(|h| *h == Highlight::None));
         // Inside the group with nothing selected: everything outside is dimmed.
         let inside = vec![g];
         let (f, e) = highlight(&tess, &HighlightParams { selection: &[], active_path: &inside });
@@ -289,3 +445,4 @@ mod tests {
         assert!(e.contains(&Highlight::Dimmed) && e.contains(&Highlight::None));
     }
 }
+

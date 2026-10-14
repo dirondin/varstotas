@@ -399,7 +399,15 @@ impl Tool for RectangleTool {
         if w.abs() < TOL || h.abs() < TOL {
             return false;
         }
-        if let Some(s) = self.spec {
+        // First corner placed but the mouse has not moved yet: no preview spec exists, so
+        // build one on the default plane (the corner's face plane, else ground).
+        let spec = self.spec.or_else(|| {
+            self.c1.map(|(c1, fixed)| {
+                let (_, u, v) = rect_frame(c1, fixed, c1);
+                RectSpec { c1, u, v, w: 1.0, h: 1.0 }
+            })
+        });
+        if let Some(s) = spec {
             let sw = if s.w < 0.0 { -1.0 } else { 1.0 };
             let sh = if s.h < 0.0 { -1.0 } else { 1.0 };
             self.commit(ctx, RectSpec { w: w * sw, h: h * sh, ..s });

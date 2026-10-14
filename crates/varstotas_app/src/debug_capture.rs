@@ -567,7 +567,7 @@ impl VarstotasApp {
         let insts = count(|e| matches!(e, EntityRef::Instance(_)));
         let (mf, me) = self.doc.active_mesh().map(|m| (m.faces.len(), m.edges.len())).unwrap_or_default();
         format!(
-            "tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms highlights={} last_highlight={:.1}ms",
+            "tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
             self.tool_id(),
             self.doc.active_path.len(),
             self.camera.ortho,
@@ -575,6 +575,9 @@ impl VarstotasApp {
             self.viewport.tri_count,
             self.viewport.rebuild_count,
             self.viewport.last_rebuild_ms,
+            self.viewport.last_rebuild_parts[0],
+            self.viewport.last_rebuild_parts[1],
+            self.viewport.last_rebuild_parts[2],
             self.viewport.highlight_count,
             self.viewport.last_highlight_ms,
         )

@@ -40,6 +40,8 @@ pub struct Viewport {
     pub rebuild_count: u64,
     /// CPU time of the last rebuild (tessellation + upload), milliseconds.
     pub last_rebuild_ms: f64,
+    /// Breakdown of the last rebuild: (tessellate, build, upload) milliseconds.
+    pub last_rebuild_parts: [f64; 3],
     /// Number of highlight-only updates (selection / context changes).
     pub highlight_count: u64,
     /// CPU time of the last highlight update, milliseconds.
@@ -61,6 +63,7 @@ impl Default for Viewport {
             tri_count: 0,
             rebuild_count: 0,
             last_rebuild_ms: 0.0,
+            last_rebuild_parts: [0.0; 3],
             highlight_count: 0,
             last_highlight_ms: 0.0,
             origin: None,
@@ -118,7 +121,12 @@ impl Viewport {
                 let key = GeometryKey { model: doc.model_version, face_style: style.face_style };
                 if self.built != Some(key) {
                     let t0 = std::time::Instant::now();
-                    self.tess = scene_builder::tessellate_model(&doc.model);
+                    let old = std::mem::replace(&mut self.tess, scene_builder::tessellate_model(&doc.model));
+                    // Freeing 100k+ tessellated faces takes milliseconds: do it off the UI thread.
+                    if old.faces.len() + old.edges.len() > 10_000 {
+                        std::thread::spawn(move || drop(old));
+                    }
+                    let t1 = std::time::Instant::now();
                     let params = BuildParams { face_style: style.face_style, prev_origin: self.origin };
                     let geo = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params))
                         .unwrap_or_else(|e| {
@@ -129,9 +137,12 @@ impl Viewport {
                     self.tri_count = geo.tris.len() / 3;
                     self.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
+                    let t2 = std::time::Instant::now();
                     if let Err(e) = guarded(|| renderer.set_geometry(rs, &geo)) {
                         log::warn!("set_geometry failed: {e}");
                     }
+                    let ms = |a: std::time::Instant, b: std::time::Instant| (b - a).as_secs_f64() * 1e3;
+                    self.last_rebuild_parts = [ms(t0, t1), ms(t1, t2), ms(t2, std::time::Instant::now())];
                     self.built = Some(key);
                     // set_geometry resets all highlight states.
                     self.highlighted = None;

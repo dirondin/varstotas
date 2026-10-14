@@ -47,6 +47,9 @@ struct LastXf {
     ents: Vec<EntityRef>,
     kind: XfKind,
     copy: bool,
+    /// The array applied after the copy (`5x` / `/5`); a later distance/angle edit keeps it
+    /// and only changes the spacing.
+    arr: Option<ArrayInput>,
 }
 
 /// Apply (or copy / array) a transform to entities of the active context as one undo step.
@@ -105,6 +108,9 @@ fn vcb_after(ctx: &mut ToolContext, last: &mut Option<LastXf>, input: &str, labe
         return Some(false);
     }
     let ok = run_transform(ctx, label, &l.ents, l.kind, true, Some(arr)).is_some();
+    if ok {
+        *last = Some(LastXf { arr: Some(arr), ..l });
+    }
     Some(ok)
 }
 
@@ -149,7 +155,7 @@ impl MoveTool {
         let kind = XfKind::Translate(v);
         let copy = self.copy.on;
         if run_transform(ctx, if copy { "Copy" } else { "Move" }, &ents, kind, copy, None).is_some() {
-            self.last = Some(LastXf { ents, kind, copy });
+            self.last = Some(LastXf { ents, kind, copy, arr: None });
         }
         self.copy.reset();
     }
@@ -229,8 +235,12 @@ impl Tool for MoveTool {
                 return false;
             }
             let kind = XfKind::Translate(v.normalize_or(DVec3::X) * len);
-            let label = if l.copy { "Copy" } else { "Move" };
-            if run_transform(ctx, label, &l.ents, kind, l.copy, None).is_some() {
+            let label = match (l.copy, l.arr) {
+                (true, Some(_)) => "Copy Array",
+                (true, None) => "Copy",
+                _ => "Move",
+            };
+            if run_transform(ctx, label, &l.ents, kind, l.copy, l.arr).is_some() {
                 self.last = Some(LastXf { kind, ..l });
                 return true;
             }
@@ -393,7 +403,7 @@ impl RotateTool {
         let kind = XfKind::Rotate { center: c, axis: n, deg };
         let copy = self.copy.on;
         if run_transform(ctx, if copy { "Copy" } else { "Rotate" }, &ents, kind, copy, None).is_some() {
-            self.last = Some(LastXf { ents, kind, copy });
+            self.last = Some(LastXf { ents, kind, copy, arr: None });
         }
         self.copy.reset();
     }
@@ -484,7 +494,8 @@ impl Tool for RotateTool {
                 return false;
             }
             let kind = XfKind::Rotate { center, axis, deg: a };
-            if run_transform(ctx, "Rotate", &l.ents, kind, l.copy, None).is_some() {
+            let label = if l.arr.is_some() { "Rotate Array" } else { "Rotate" };
+            if run_transform(ctx, label, &l.ents, kind, l.copy, l.arr).is_some() {
                 self.last = Some(LastXf { kind, ..l });
                 return true;
             }
@@ -760,7 +771,7 @@ impl ScaleTool {
         let kind = XfKind::Scale { anchor, factor };
         let ents = self.ents.clone();
         if run_transform(ctx, "Scale", &ents, kind, false, None).is_some() {
-            self.last = Some((LastXf { ents, kind, copy: false }, axes));
+            self.last = Some((LastXf { ents, kind, copy: false, arr: None }, axes));
         }
         self.bbox = None;
     }

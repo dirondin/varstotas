@@ -15,6 +15,19 @@ pub struct TrayState {
     scene_rename: Option<(usize, String)>,
     inst_name: Option<(InstanceId, String)>,
     custom_color: Option<Color32>,
+    /// Multi-selection summary, cached by (model, selection) version: summing face areas of
+    /// a huge selection every frame is too slow.
+    sel_summary: Option<((u64, u64), SelSummary)>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SelSummary {
+    count: usize,
+    faces: usize,
+    edges: usize,
+    groups: usize,
+    components: usize,
+    area: f64,
 }
 
 /// Default palette (name, sRGB).
@@ -141,9 +154,45 @@ impl VarstotasApp {
 
     // ---- Entity Info -------------------------------------------------------
 
+    fn selection_summary(&mut self) -> SelSummary {
+        let key = (self.doc.model_version, self.doc.selection_version);
+        if let Some((k, s)) = self.tray.sel_summary
+            && k == key
+        {
+            return s;
+        }
+        let model = &self.doc.model;
+        let mut s = SelSummary { count: self.doc.selection.len(), ..Default::default() };
+        if let Some(mesh) = model.mesh_at(&self.doc.active_path) {
+            for e in &self.doc.selection {
+                match e {
+                    EntityRef::Face(f) => {
+                        s.faces += 1;
+                        s.area += guarded(|| mesh.face_area(*f)).unwrap_or(0.0);
+                    }
+                    EntityRef::Edge(_) => s.edges += 1,
+                    EntityRef::Instance(i) => {
+                        let def = mesh.instances.get(*i).and_then(|inst| model.defs.get(inst.def));
+                        if def.is_none_or(|d| d.is_group) {
+                            s.groups += 1;
+                        } else {
+                            s.components += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.tray.sel_summary = Some((key, s));
+        s
+    }
+
     fn entity_info(&mut self, ui: &mut Ui) {
         let unit = self.doc.model.unit;
-        let sel = self.doc.selection.clone();
+        let summary = self.selection_summary();
+        // Only the first two entities are needed to pick the layout; the multi-selection
+        // details come from the cached summary (selections can hold 100k+ entities).
+        let sel: Vec<EntityRef> = self.doc.selection.iter().take(2).cloned().collect();
         let path = self.doc.active_path.clone();
         let mut set_tag: Option<Option<TagId>> = None;
         let mut rename: Option<(InstanceId, String)> = None;
@@ -186,8 +235,16 @@ impl VarstotasApp {
                         ui.label("Edges");
                         ui.label(mesh.edges.len().to_string());
                         ui.end_row();
+                        let groups = mesh
+                            .instances
+                            .iter()
+                            .filter(|(_, i)| model.defs.get(i.def).is_none_or(|d| d.is_group))
+                            .count();
                         ui.label("Groups");
-                        ui.label(mesh.instances.len().to_string());
+                        ui.label(groups.to_string());
+                        ui.end_row();
+                        ui.label("Components");
+                        ui.label((mesh.instances.len() - groups).to_string());
                         ui.end_row();
                     }
                     [EntityRef::Face(id)] => {
@@ -255,30 +312,28 @@ impl VarstotasApp {
                         set_tag = tag_combo(ui, model, inst.tag, "inst");
                         ui.end_row();
                     }
-                    many => {
-                        let faces = many.iter().filter(|e| matches!(e, EntityRef::Face(_))).count();
-                        let edges = many.iter().filter(|e| matches!(e, EntityRef::Edge(_))).count();
-                        let insts = many.iter().filter(|e| matches!(e, EntityRef::Instance(_))).count();
-                        ui.label(RichText::new(format!("{} Entities", many.len())).strong());
+                    _ => {
+                        let SelSummary { count, faces, edges, groups, components, area } = summary;
+                        ui.label(RichText::new(format!("{count} Entities")).strong());
                         ui.end_row();
+                        let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
                         let mut parts = Vec::new();
                         if faces > 0 {
-                            parts.push(format!("{faces} Face{}", if faces == 1 { "" } else { "s" }));
+                            parts.push(plural(faces, "Face", "Faces"));
                         }
                         if edges > 0 {
-                            parts.push(format!("{edges} Edge{}", if edges == 1 { "" } else { "s" }));
+                            parts.push(plural(edges, "Edge", "Edges"));
                         }
-                        if insts > 0 {
-                            parts.push(format!("{insts} Group{}", if insts == 1 { "" } else { "s" }));
+                        if groups > 0 {
+                            parts.push(plural(groups, "Group", "Groups"));
+                        }
+                        if components > 0 {
+                            parts.push(plural(components, "Component", "Components"));
                         }
                         ui.label("Contains");
                         ui.label(parts.join(", "));
                         ui.end_row();
                         if faces > 0 {
-                            let area: f64 = many
-                                .iter()
-                                .filter_map(|e| if let EntityRef::Face(f) = e { Some(mesh.face_area(*f)) } else { None })
-                                .sum();
                             ui.label("Area");
                             ui.label(fmt_area(area, unit));
                             ui.end_row();
