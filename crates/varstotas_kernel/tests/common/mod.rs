@@ -91,3 +91,59 @@ pub fn volume(m: &Mesh) -> f64 {
     }
     vol
 }
+
+/// Two edges touching other than at a shared endpoint (crossing, T-junction, overlap)?
+pub fn edges_touch(m: &Mesh) -> Option<(DVec3, DVec3, DVec3, DVec3)> {
+    let segs: Vec<(DVec3, DVec3)> = m.edges.values().map(|e| (m.vertices[e.v[0]].pos, m.vertices[e.v[1]].pos)).collect();
+    let tol = 1e-4;
+    let interior = |p: DVec3, a: DVec3, b: DVec3| geom::point_seg_dist(p, a, b).0 < tol && p.distance(a) > tol && p.distance(b) > tol;
+    for (i, &(a, b)) in segs.iter().enumerate() {
+        for &(c, d) in &segs[i + 1..] {
+            if interior(c, a, b) || interior(d, a, b) || interior(a, c, d) || interior(b, c, d) {
+                return Some((a, b, c, d));
+            }
+            if let Some((_, _, p, q)) = geom::seg_seg_closest(a, b, c, d)
+                && p.distance(q) < tol && interior(p, a, b) && interior(q, c, d) {
+                    return Some((a, b, c, d));
+                }
+        }
+    }
+    None
+}
+
+/// Coplanar faces sharing interior area?
+pub fn coplanar_overlap(m: &Mesh) -> Option<(FaceId, FaceId)> {
+    use geom::PointLoc;
+    for (f, face) in &m.faces {
+        let sample = tessellate::triangulate_face(m, f)
+            .into_iter()
+            .max_by(|a, b| (a[1] - a[0]).cross(a[2] - a[0]).length().total_cmp(&(b[1] - b[0]).cross(b[2] - b[0]).length()))
+            .map(|t| (t[0] + t[1] + t[2]) / 3.0)?;
+        for (g, gf) in &m.faces {
+            if g == f || gf.normal.dot(face.normal).abs() < 1.0 - 1e-6 || m.face_plane(g).distance(sample).abs() > TOL {
+                continue;
+            }
+            if m.face_point_loc(g, sample) == PointLoc::Inside {
+                return Some((f, g));
+            }
+        }
+    }
+    None
+}
+
+/// Valid topology, no edges touching without a vertex, no overlapping coplanar faces.
+pub fn sane(m: &Mesh) {
+    ok(m);
+    if let Some(t) = edges_touch(m) {
+        panic!("edges touch without a shared vertex: {t:?}");
+    }
+    if let Some(o) = coplanar_overlap(m) {
+        panic!("overlapping coplanar faces: {o:?}");
+    }
+}
+
+/// Closed box [lo, hi] built with sticky ops in `m` (outward normals).
+pub fn box_at(m: &mut Mesh, lo: DVec3, hi: DVec3) {
+    let f = m.add_face_exact(&[v(lo.x, lo.y, lo.z), v(lo.x, hi.y, lo.z), v(hi.x, hi.y, lo.z), v(hi.x, lo.y, lo.z)]).unwrap();
+    m.push_pull(f, -(hi.z - lo.z), false).unwrap();
+}

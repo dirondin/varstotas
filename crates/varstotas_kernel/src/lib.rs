@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod geom;
 mod grid;
+pub mod guides;
 pub mod history;
 pub mod io;
 pub mod mesh;
@@ -33,8 +34,10 @@ mod topology;
 pub mod triangulate;
 pub mod units;
 
+pub use guides::{GuideId, GuidePointId, GuideRef};
 pub use history::History;
 pub use mesh::Mesh;
+pub use ops::IntersectScope;
 pub use model::{
     ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, Tag,
 };

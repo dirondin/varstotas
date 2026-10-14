@@ -52,11 +52,7 @@ pub struct Scene {
     pub ortho: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GuideLine {
-    pub origin: DVec3,
-    pub dir: DVec3,
-}
+pub use crate::guides::GuideLine;
 
 /// A path from the root into nested instances, identifying an editing context.
 pub type ContextPath = Vec<InstanceId>;
@@ -68,8 +64,15 @@ pub struct Model {
     pub materials: SlotMap<MaterialId, Material>,
     pub tags: SlotMap<TagId, Tag>,
     pub scenes: Vec<Scene>,
-    pub guides: Vec<GuideLine>,
-    pub guide_points: Vec<DVec3>,
+    /// Guide lines (world space). Serialized as a plain array; see [`crate::guides`].
+    #[serde(with = "crate::guides::slotmap_vec", default)]
+    pub guides: crate::guides::GuideLines,
+    /// Guide points (world space). Serialized as a plain array.
+    #[serde(with = "crate::guides::slotmap_vec", default)]
+    pub guide_points: crate::guides::GuidePoints,
+    /// View > Guides off: guides are not drawn, picked or inferred.
+    #[serde(default)]
+    pub guides_hidden: bool,
     pub unit: LengthUnit,
 }
 
@@ -100,8 +103,9 @@ impl Model {
             materials: SlotMap::with_key(),
             tags: SlotMap::with_key(),
             scenes: Vec::new(),
-            guides: Vec::new(),
-            guide_points: Vec::new(),
+            guides: SlotMap::with_key(),
+            guide_points: SlotMap::with_key(),
+            guides_hidden: false,
             unit: LengthUnit::Millimeter,
         }
     }
@@ -395,6 +399,12 @@ impl Model {
             }
             out.push(EntityRef::Instance(parent.instances.insert(c)));
         }
+        // Weld to the parent's geometry: T-junctions, crossings, faces split by edges lying in
+        // them and coplanar overlaps merged.
+        let mut verts: Vec<VertexId> = vmap.values().copied().collect();
+        verts.sort(); // deterministic welding order
+        verts.dedup();
+        let out = parent.absorb_refs(&verts, out);
         if self.instance_count(instance.def) == 0 && instance.def != self.root {
             self.defs.remove(instance.def);
         }

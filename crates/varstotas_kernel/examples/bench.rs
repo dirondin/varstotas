@@ -88,6 +88,20 @@ fn sphere_obj(seg: usize, r: f64) -> String {
     s
 }
 
+/// `sphere_obj` moved by `d`.
+fn sphere_obj_at(seg: usize, r: f64, d: DVec3) -> String {
+    let mut out = String::new();
+    for line in sphere_obj(seg, r).lines() {
+        if let Some(rest) = line.strip_prefix("v ") {
+            let c: Vec<f64> = rest.split_whitespace().map(|x| x.parse().unwrap()).collect();
+            let _ = writeln!(out, "v {} {} {}", c[0] + d.x, c[1] + d.y, c[2] + d.z);
+        } else {
+            let _ = writeln!(out, "{line}");
+        }
+    }
+    out
+}
+
 /// Wavy terrain: N×N quads split into 2 triangles each (non-coplanar).
 fn terrain_obj(n: usize) -> String {
     let mut s = String::new();
@@ -391,6 +405,44 @@ fn main() {
         let _m2 = io::load(&p).unwrap();
         let tl = ms(t.elapsed());
         b.report(name, ts + tl, format!("save {ts:.1} ms + load {tl:.1} ms"));
+    }
+
+    // ---- intersect faces -------------------------------------------------------------
+    // Two ~10k-triangle spheres overlapping by half a radius.
+    let name = "intersect with model: sphere group vs loose sphere (2x~10k tris)";
+    if b.on(name) {
+        let pa = tmp.join("ix_a.obj");
+        let pb = tmp.join("ix_b.obj");
+        std::fs::write(&pa, sphere_obj(71, 5000.0)).unwrap();
+        std::fs::write(&pb, sphere_obj_at(71, 5000.0, v(5000.0, 1234.5, 777.7))).unwrap();
+        let mut model = Model::new();
+        io::import_obj(&mut model, &pa).unwrap();
+        let all: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();
+        model.make_group(&[], &all).unwrap();
+        io::import_obj(&mut model, &pb).unwrap();
+        let sel: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();
+        let f0 = sel.len();
+        let t = Instant::now();
+        let new = model.intersect_with_model(&[], &sel).unwrap();
+        let dt = ms(t.elapsed());
+        let m = model.root_mesh();
+        b.report(name, dt, format!("{f0} sel faces -> {} faces, {} new edges", m.faces.len(), new.len()));
+    }
+    let name = "intersect_all: two loose spheres (2x~10k tris)";
+    if b.on(name) {
+        let pa = tmp.join("ix_a.obj");
+        let pb = tmp.join("ix_b.obj");
+        std::fs::write(&pa, sphere_obj(71, 5000.0)).unwrap();
+        std::fs::write(&pb, sphere_obj_at(71, 5000.0, v(5000.0, 1234.5, 777.7))).unwrap();
+        let mut model = Model::new();
+        io::import_obj(&mut model, &pa).unwrap();
+        io::import_obj(&mut model, &pb).unwrap();
+        let mesh = model.root_mesh_mut();
+        let f0 = mesh.faces.len();
+        let t = Instant::now();
+        let new = mesh.intersect_all();
+        let dt = ms(t.elapsed());
+        b.report(name, dt, format!("{f0} -> {} faces, {} new edges", mesh.faces.len(), new.len()));
     }
 
     let _ = std::fs::remove_dir_all(&tmp);

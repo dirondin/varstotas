@@ -202,7 +202,7 @@ impl Mesh {
                 created.push(g);
             }
         }
-        let mut touched = self.resolve_overlaps(&created);
+        let mut touched = self.resolve_overlaps(&created, false);
         // Faces whose boundary got a new vertex may now have an existing edge as a chord.
         let mut check = created.clone();
         for v in split_at {
@@ -324,7 +324,7 @@ impl Mesh {
             .filter_map(|(x, y)| self.edge_between(x, y))
             .collect();
         let split_at = self.split_crossings(side_edges);
-        self.resolve_overlaps(&sides);
+        self.resolve_overlaps(&sides, false);
         let mut check = sides.clone();
         for v in split_at {
             if self.vertices.contains_key(v) {
@@ -551,7 +551,9 @@ impl Mesh {
 
     /// Split faces of `faces` by existing in-plane edges lying inside them (an edge
     /// drawn across a face splits it; new faces must honour edges already there).
-    pub(crate) fn split_faces_by_inner_edges(&mut self, faces: &[FaceId]) {
+    /// Returns how many faces were rebuilt.
+    pub(crate) fn split_faces_by_inner_edges(&mut self, faces: &[FaceId]) -> usize {
+        let mut rebuilt = 0;
         for &f in faces {
             if !self.faces.contains_key(f) {
                 continue;
@@ -583,12 +585,14 @@ impl Mesh {
                 let mut seen = HashSet::new();
                 let seeds: Vec<VertexId> = self.faces[f].loops().flatten().copied().filter(|v| seen.insert(*v)).collect();
                 self.refresh_plane(plane, &seeds, &[f], &Classify::None, Orient::auto());
+                rebuilt += 1;
             }
         }
+        rebuilt
     }
 
     /// `s` and the coplanar faces whose area overlaps it.
-    fn overlap_group(&self, s: FaceId) -> Vec<FaceId> {
+    pub(crate) fn overlap_group(&self, s: FaceId) -> Vec<FaceId> {
         let plane = self.face_plane(s);
         let n = plane.normal;
         let pr = Projector::new(plane.origin, n);
@@ -618,8 +622,10 @@ impl Mesh {
     }
 
     /// Overlay each face of `faces` with existing coplanar faces it overlaps: coverage with
-    /// opposite orientations cancels. Returns the vertices involved.
-    pub(crate) fn resolve_overlaps(&mut self, faces: &[FaceId]) -> Vec<VertexId> {
+    /// opposite orientations cancels (with `union`, nothing cancels: the faces are merged into
+    /// one partition, the smallest covering face winning on each overlap). Returns the vertices
+    /// involved.
+    pub(crate) fn resolve_overlaps(&mut self, faces: &[FaceId], union: bool) -> Vec<VertexId> {
         let mut touched = Vec::new();
         let mut segs: Vec<(DVec3, DVec3)> = Vec::new();
         // A work queue: overlaying one group rebuilds the plane around it, which may replace
@@ -667,7 +673,7 @@ impl Mesh {
                 polys.push((outer, holes, face));
                 self.f_remove(g);
             }
-            let rebuilt = self.refresh_plane(plane, &seeds, &[], &Classify::Overlay(&polys), Orient::auto());
+            let rebuilt = self.refresh_plane(plane, &seeds, &[], &Classify::Overlay(&polys, union), Orient::auto());
             if budget > 0 {
                 budget -= 1;
                 queue.extend(rebuilt.iter().map(|r| r.face));

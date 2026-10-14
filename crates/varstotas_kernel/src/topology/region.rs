@@ -29,7 +29,9 @@ pub(crate) enum Classify<'a> {
     Region { outer: Vec<DVec3>, holes: Vec<Vec<DVec3>> },
     /// Overlay of coplanar faces (outer, holes, attributes incl. normal): regions get the net
     /// orientation of the faces covering them; opposite faces cancel out (no face).
-    Overlay(&'a [OverlayPoly]),
+    /// With `union = true` nothing cancels: every covered region becomes a face with the
+    /// attributes and orientation of the smallest polygon covering it.
+    Overlay(&'a [OverlayPoly], bool),
     /// Regions strictly containing one of these points become faces with that face's
     /// attributes and orientation (merging faces whose shared edges were removed: the regions
     /// of the remaining boundary are unions of the old faces, each containing their samples).
@@ -323,7 +325,7 @@ impl Mesh {
                         let k = outer.len();
                         (0..k).all(|i| in_cls_poly((outer[i] + outer[(i + 1) % k]) * 0.5))
                     }
-                    Classify::Overlay(_) | Classify::Covered(_) => true,
+                    Classify::Overlay(..) | Classify::Covered(_) => true,
                 };
                 let Some(bb) = Aabb::from_points(r.outer.verts.iter().map(|i| self.pos(vids_[*i]))) else { continue };
                 let bb = bb.inflate(TOL);
@@ -420,7 +422,7 @@ impl Mesh {
             .collect();
         type Poly2 = (Vec<DVec2>, Vec<Vec<DVec2>>, i32);
         let overlay: Vec<Poly2> = match cls {
-            Classify::Overlay(polys) => polys
+            Classify::Overlay(polys, _) => polys
                 .iter()
                 .map(|(o, h, f)| {
                     (
@@ -433,6 +435,8 @@ impl Mesh {
             _ => Vec::new(),
         };
 
+        let overlay_area: Vec<f64> =
+            overlay.iter().map(|(o, h, _)| geom::signed_area(o).abs() - h.iter().map(|l| geom::signed_area(l).abs()).sum::<f64>()).collect();
         #[derive(Clone, Copy, PartialEq)]
         enum Kind {
             Skip,
@@ -521,7 +525,7 @@ impl Mesh {
                             None => Kind::Skip,
                         }
                     }
-                    Classify::Overlay(_) => {
+                    Classify::Overlay(_, union) => {
                         let inside: Vec<usize> = (0..overlay.len())
                             .filter(|i| {
                                 let (o, h, _) = &overlay[*i];
@@ -529,7 +533,27 @@ impl Mesh {
                             })
                             .collect();
                         let net: i32 = inside.iter().map(|i| overlay[*i].2).sum();
-                        if net == 0 {
+                        if *union {
+                            // Smallest covering face wins; equal ones (coincident faces) are
+                            // decided by a canonical normal direction (order independent).
+                            let canon = |i: usize| {
+                                let nn = if let Classify::Overlay(p, _) = cls { p[i].2.normal } else { DVec3::Z };
+                                let c = [nn.x, nn.y, nn.z].into_iter().find(|c| c.abs() > 1e-9).unwrap_or(0.0);
+                                c > 0.0
+                            };
+                            let best = inside.iter().copied().min_by(|a, b| {
+                                let (x, y) = (overlay_area[*a], overlay_area[*b]);
+                                if (x - y).abs() <= 1e-9 * x.max(y).max(1.0) {
+                                    canon(*b).cmp(&canon(*a))
+                                } else {
+                                    x.total_cmp(&y)
+                                }
+                            });
+                            match best {
+                                Some(i) => Kind::Forced(overlay[i].2 < 0, i),
+                                None => Kind::Skip,
+                            }
+                        } else if net == 0 {
                             Kind::Skip
                         } else {
                             let idx = inside.iter().copied().find(|i| overlay[*i].2 == net.signum()).unwrap();
@@ -610,7 +634,7 @@ impl Mesh {
                     (t, flip)
                 }
                 Kind::Forced(flip, idx) => match cls {
-                    Classify::Overlay(polys) => (polys[idx].2.clone(), flip),
+                    Classify::Overlay(polys, _) => (polys[idx].2.clone(), flip),
                     Classify::Covered(pts) => (pts[idx].1.clone(), flip),
                     _ => unreachable!(),
                 },
@@ -953,6 +977,12 @@ mod tests {
         PushPull(usize, f64),
         /// Line between two lattice points of the bounding box of the k-th face (in its plane).
         LineOnFace(usize, [u64; 4]),
+        /// Closed box [lo, hi] built from an elevated rectangle (crosses other solids).
+        FloatBox(DVec3, DVec3),
+        /// Intersect every face with every other one.
+        Intersect,
+        /// Copy the connected geometry of the k-th face, shifted.
+        Duplicate(usize, DVec3),
     }
 
     fn apply(m: &mut Mesh, op: Op, full: bool) {
@@ -1000,6 +1030,35 @@ mod tests {
                     }
                 }
             }
+            Op::FloatBox(lo, hi) => {
+                let pts = [lo, DVec3::new(lo.x, hi.y, lo.z), DVec3::new(hi.x, hi.y, lo.z), DVec3::new(hi.x, lo.y, lo.z)];
+                if m.add_face_exact(&pts).is_some() {
+                    // The piece at a fixed corner (the returned face is the largest piece,
+                    // ties depend on id order, which differs between gather modes).
+                    let p = lo + DVec3::new(10.0, 10.0, 0.0);
+                    let mut fs: Vec<_> = m.faces.keys().collect();
+                    fs.sort_by_key(|f| canon(m.faces[*f].outer.iter().map(|v| q(m.vertices[*v].pos)).collect()));
+                    let f = fs.into_iter().find(|f| {
+                        m.faces[*f].normal.z.abs() > 0.999
+                            && m.face_plane(*f).distance(p).abs() < TOL
+                            && m.face_point_loc(*f, p) == crate::geom::PointLoc::Inside
+                    });
+                    if let Some(f) = f {
+                        let d = if m.faces[f].normal.z < 0.0 { lo.z - hi.z } else { hi.z - lo.z };
+                        let _ = m.push_pull(f, d, false);
+                    }
+                }
+            }
+            Op::Intersect => {
+                m.intersect_all();
+            }
+            Op::Duplicate(k, off) => {
+                if let Some(f) = kth_face(m, k) {
+                    let mut ents: Vec<EntityRef> = m.connected(EntityRef::Face(f)).into_iter().collect();
+                    ents.sort_by_key(|e| format!("{e:?}"));
+                    m.duplicate(&ents, &glam::DMat4::from_translation(off));
+                }
+            }
         }
         FULL_GATHER.with(|c| c.set(false));
     }
@@ -1040,6 +1099,25 @@ mod tests {
             5..=7 => Op::LineOnFace(r.below(1000) as usize, [r.below(5), r.below(5), r.below(5), r.below(5)]),
             8 => Op::EraseEdge(r.below(1000) as usize),
             _ => Op::EraseFace(r.below(1000) as usize),
+        }
+    }
+
+    /// [`random_op_3d`] plus floating boxes crossing other solids, Intersect Faces and copies.
+    fn random_op_3d_ix(r: &mut Rng) -> Op {
+        match r.below(16) {
+            0..=9 => random_op_3d(r),
+            10..=12 => {
+                let c = |r: &mut Rng| r.below(8) as f64 * 50.0;
+                let lo = DVec3::new(c(r), c(r), 25.0 + r.below(4) as f64 * 50.0);
+                let s = |r: &mut Rng| (1 + r.below(4)) as f64 * 50.0;
+                let hi = lo + DVec3::new(s(r), s(r), s(r));
+                Op::FloatBox(lo, hi)
+            }
+            13..=14 => Op::Intersect,
+            _ => {
+                let o = |r: &mut Rng| (r.below(5) as f64 - 2.0) * 50.0;
+                Op::Duplicate(r.below(1000) as usize, DVec3::new(o(r), o(r), 0.0))
+            }
         }
     }
 
@@ -1385,6 +1463,87 @@ mod tests {
                     panic!("{v}: seed {seed}, step {i}, ops {ops:?}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn random_sessions_with_intersect_keep_invariants() {
+        // Crossing solids, Intersect Faces and copies welded into existing geometry: every
+        // invariant holds after every step, and the localized refresh matches the reference.
+        for seed in std::env::var("IXF").map(|s| s.parse().unwrap()).unwrap_or(20_000u64)..std::env::var("IXN").map(|s| s.parse().unwrap()).unwrap_or(20_200) {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut local = Mesh::new();
+            let mut reference = Mesh::new();
+            let mut ops = Vec::new();
+            for i in 0..30 {
+                let op = random_op_3d_ix(&mut r);
+                ops.push(op);
+                apply(&mut local, op, false);
+                apply(&mut reference, op, true);
+                let ctx = || format!("seed {seed}, step {i}, ops {ops:?}");
+                if let Some(v) = violation(&local) {
+                    panic!("{v}: {}", ctx());
+                }
+                same(edge_keys(&local), edge_keys(&reference), "edges", ctx);
+                same(face_keys(&local), face_keys(&reference), "faces", ctx);
+            }
+        }
+    }
+
+    /// `IXS_FROM=.. IXS_N=.. cargo test --release -p varstotas_kernel --lib ix_survey -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn ix_survey() {
+        let from: u64 = std::env::var("IXS_FROM").map(|s| s.parse().unwrap()).unwrap_or(30_000);
+        let n: u64 = std::env::var("IXS_N").map(|s| s.parse().unwrap()).unwrap_or(1000);
+        let mut cats: std::collections::BTreeMap<String, Vec<(u64, usize)>> = Default::default();
+        for seed in from..from + n {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut local = Mesh::new();
+            let mut reference = Mesh::new();
+            let noix = std::env::var("NOIX").is_ok();
+            for i in 0..30 {
+                let op = random_op_3d_ix(&mut r);
+                if noix && matches!(op, Op::Intersect | Op::Duplicate(..)) {
+                    continue;
+                }
+                apply(&mut local, op, false);
+                apply(&mut reference, op, true);
+                let kind = format!("{op:?}").split('(').next().unwrap().to_string();
+                let bad = if let Some(v) = violation(&local) {
+                    Some(format!("local {v}"))
+                } else if let Some(v) = violation(&reference) {
+                    Some(format!("ref {v}"))
+                } else if edge_keys(&local) != edge_keys(&reference) || face_keys(&local) != face_keys(&reference) {
+                    Some("mismatch".to_string())
+                } else {
+                    None
+                };
+                if let Some(b) = bad {
+                    cats.entry(format!("{b} @ {kind}")).or_default().push((seed, i));
+                    break;
+                }
+            }
+        }
+        for (k, v) in &cats {
+            eprintln!("{k}: {} e.g. {:?}", v.len(), &v[..v.len().min(6)]);
+        }
+    }
+
+    #[test]
+    fn intersect_twice_changes_nothing() {
+        for seed in 21_000u64..21_060 {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut m = Mesh::new();
+            for _ in 0..20 {
+                apply(&mut m, random_op_3d_ix(&mut r), false);
+            }
+            m.intersect_all();
+            let (e, f) = (edge_keys(&m), face_keys(&m));
+            let again = m.intersect_all();
+            assert!(again.is_empty(), "seed {seed}: second intersect created {} edges", again.len());
+            assert_eq!(edge_keys(&m), e, "seed {seed}");
+            assert_eq!(face_keys(&m), f, "seed {seed}");
         }
     }
 
