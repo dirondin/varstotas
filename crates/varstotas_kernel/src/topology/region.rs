@@ -1448,6 +1448,33 @@ mod tests {
     }
 
     #[test]
+    fn regression_seeds_with_intersect_keep_invariants() {
+        // Sessions with intersect/duplicate that broke the kernel: a push/pull stretching a
+        // hole of a perpendicular neighbour out through its outer loop (30431, 30585, 32381;
+        // the first and last also fail without intersect/duplicate ops).
+        for seed in [30_431u64, 30_585, 32_381] {
+            for noix in [false, true] {
+                let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+                let mut local = Mesh::new();
+                let mut reference = Mesh::new();
+                for i in 0..30 {
+                    let op = random_op_3d_ix(&mut r);
+                    if noix && matches!(op, Op::Intersect | Op::Duplicate(..)) {
+                        continue;
+                    }
+                    apply(&mut local, op, false);
+                    apply(&mut reference, op, true);
+                    if let Some(v) = violation(&local) {
+                        panic!("{v}: seed {seed}, step {i}, noix {noix}");
+                    }
+                    same(edge_keys(&local), edge_keys(&reference), "edges", || format!("seed {seed}, step {i}"));
+                    same(face_keys(&local), face_keys(&reference), "faces", || format!("seed {seed}, step {i}"));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn random_3d_sessions_keep_invariants() {
         // Valid topology, no edges touching without a shared vertex, no overlapping coplanar
         // faces, no holes outside faces, no unsplit chords -- after every step.
@@ -1525,6 +1552,8 @@ mod tests {
                 }
             }
         }
+        let bad: usize = cats.values().map(|v| v.len()).sum();
+        eprintln!("IX SURVEY {from}..{}: ok {} of {n}", from + n, n as usize - bad);
         for (k, v) in &cats {
             eprintln!("{k}: {} e.g. {:?}", v.len(), &v[..v.len().min(6)]);
         }

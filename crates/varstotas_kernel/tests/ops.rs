@@ -716,3 +716,30 @@ fn push_pull_stretched_face_does_not_fold_onto_itself() {
     let ground: Vec<_> = m.faces.iter().filter(|(id, f)| f.normal.z < -0.999 && face_centroid(&m, *id).z.abs() < 1e-6).map(|(id, _)| m.face_area(id)).collect();
     assert_eq!(ground, vec![20_000.0, 20_000.0]);
 }
+
+#[test]
+fn push_pull_does_not_stretch_a_hole_out_of_its_face() {
+    // A small box sticking out of a big box's wall (its end is a hole in the wall). Pushing
+    // the small box's side past the big box's edge must not stretch the hole through the
+    // wall's outer loop: the wall gets a notch, and the part outside gets its own face.
+    let mut m = Mesh::new();
+    box_at(&mut m, v(300., 150., 75.), v(400., 450., 275.));
+    box_at(&mut m, v(150., 200., 125.), v(300., 350., 175.));
+    let side = m.faces.iter().find(|(id, f)| f.normal.y < -0.9 && face_centroid(&m, *id).x < 300.).unwrap().0;
+    m.push_pull(side, 200., false).unwrap();
+    sane(&m);
+    for (id, f) in &m.faces {
+        for h in &f.holes {
+            let p = m.vertices[h[0]].pos;
+            assert!(m.face_point_loc(id, p) != geom::PointLoc::Outside, "hole outside its face");
+        }
+    }
+    let wall: Vec<_> = m.faces.iter().filter(|(id, f)| f.normal.x < -0.999 && face_centroid(&m, *id).x > 299.).map(|(id, f)| (id, f.holes.len())).collect();
+    assert_eq!(wall.len(), 1);
+    assert_eq!(wall[0].1, 0, "the wall is notched, not holed");
+    assert!((m.face_area(wall[0].0) - (300. * 200. - 200. * 50.)).abs() < 1e-6);
+    let outside: Vec<f64> = m.faces.iter().filter(|(id, f)| f.normal.x > 0.999 && face_centroid(&m, *id).x < 301.).map(|(id, _)| m.face_area(id)).collect();
+    assert_eq!(outside, vec![150. * 50.]);
+    assert_closed_consistent(&m);
+    assert!((volume(&m) - (100. * 300. * 200. + 150. * 350. * 50.)).abs() < 1e-3, "volume {}", volume(&m));
+}

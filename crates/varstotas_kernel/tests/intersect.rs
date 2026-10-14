@@ -461,3 +461,107 @@ fn duplicate_welds_t_junctions_and_overlaps() {
     m.duplicate(&ents, &DMat4::from_translation(v(100., 50., 0.)));
     sane(&m);
 }
+
+/// Loose prism of a regular `k`-gon (radius `r`, centre `c`) from z = z0 to z = z1.
+fn prism(m: &mut Mesh, c: DVec3, r: f64, k: usize, z0: f64, z1: f64) {
+    let pts: Vec<DVec3> = (0..k)
+        .map(|i| {
+            let a = i as f64 / k as f64 * std::f64::consts::TAU;
+            v(c.x + r * a.cos(), c.y + r * a.sin(), z0)
+        })
+        .collect();
+    m.add_polyline(&pts, true, true);
+    let disc = m.faces.iter().find(|(id, _)| (face_centroid(m, *id) - v(c.x, c.y, z0)).length() < 1e-6).unwrap().0;
+    let d = if m.faces[disc].normal.z < 0.0 { -(z1 - z0) } else { z1 - z0 };
+    m.push_pull(disc, d, false).unwrap();
+}
+
+#[test]
+fn cylinder_through_box_makes_disc_faces() {
+    // The intersection loops close inside the box's top and bottom faces: each is split into
+    // a disc and a ring (a cylinder pushed through a box face leaves a circular face).
+    let mut m = Mesh::new();
+    box_at(&mut m, v(0., 0., 0.), v(100., 100., 100.));
+    prism(&mut m, v(50., 50., -50.), 30., 24, -50., 150.);
+    let (area, vol) = (total_area(&m), volume(&m));
+    let new = m.intersect_all();
+    sane(&m);
+    assert_eq!(new.len(), 48, "two 24-gon loops");
+    assert!((total_area(&m) - area).abs() < 1e-6);
+    assert!((volume(&m) - vol).abs() < 1e-3);
+    let disc_area = 0.5 * 24.0 * 30.0 * 30.0 * (std::f64::consts::TAU / 24.0).sin();
+    for (z, n) in [(100.0, DVec3::Z), (0.0, -DVec3::Z)] {
+        let mut a: Vec<(f64, usize)> = m
+            .faces
+            .iter()
+            .filter(|(id, f)| f.normal.dot(n) > 0.999 && (m.face_plane(*id).distance(v(0., 0., z))).abs() < 1e-9)
+            .map(|(id, f)| (m.face_area(id), f.holes.len()))
+            .collect();
+        a.sort_by(|x, y| x.0.total_cmp(&y.0));
+        assert_eq!(a.len(), 2, "z = {z}: {a:?}");
+        assert!((a[0].0 - disc_area).abs() < 1e-6 && a[0].1 == 0, "{a:?}");
+        assert!((a[1].0 - (10_000.0 - disc_area)).abs() < 1e-6 && a[1].1 == 1, "{a:?}");
+    }
+    // Each cylinder side is cut at z = 0 and z = 100.
+    let sides = m.faces.values().filter(|f| f.normal.z.abs() < 1e-9 && f.outer.iter().all(|v| (m.vertices[*v].pos.truncate() - varstotas_kernel::glam::DVec2::new(50., 50.)).length() < 30.0 + 1e-6)).count();
+    assert_eq!(sides, 72);
+    assert!(m.intersect_all().is_empty());
+}
+
+#[test]
+fn group_prism_through_loose_face_makes_inner_face() {
+    let mut model = Model::new();
+    model.root_mesh_mut().add_face(&[v(-100., -100., 50.), v(300., -100., 50.), v(300., 300., 50.), v(-100., 300., 50.)]).unwrap();
+    let mut scratch = Mesh::new();
+    prism(&mut scratch, v(100., 100., 0.), 40., 7, 0., 100.);
+    // Put the prism into a group.
+    let mut s = Model::new();
+    *s.root_mesh_mut() = scratch;
+    let all = all_faces(s.root_mesh());
+    let g = s.make_group(&[], &all).unwrap();
+    let def = s.root_mesh().instances[g].def;
+    let d = s.defs.remove(def).unwrap();
+    let nd = model.defs.insert(d);
+    let r = model.root;
+    let g = model.defs[r].mesh.instances.insert(Instance { def: nd, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false });
+    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    assert_eq!(new.len(), 7);
+    let m = model.root_mesh();
+    sane(m);
+    let mut faces: Vec<(f64, usize)> = m.faces.iter().map(|(id, f)| (m.face_area(id), f.holes.len())).collect();
+    faces.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let hepta = 0.5 * 7.0 * 40.0 * 40.0 * (std::f64::consts::TAU / 7.0).sin();
+    assert_eq!(faces.len(), 2);
+    assert!((faces[0].0 - hepta).abs() < 1e-3 && faces[0].1 == 0, "{faces:?} {hepta}");
+    assert!((faces[1].0 - (160_000.0 - hepta)).abs() < 1e-3 && faces[1].1 == 1);
+}
+
+#[test]
+fn group_box_across_face_edge_splits_inside_part() {
+    // The loop is closed partly by new edges and partly by the face's own boundary.
+    let mut model = Model::new();
+    model.root_mesh_mut().add_face(&[v(0., 0., 50.), v(200., 0., 50.), v(200., 200., 50.), v(0., 200., 50.)]).unwrap();
+    let g = group_box(&mut model, v(-50., 50., 0.), v(50., 150., 100.));
+    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    assert_eq!(new.len(), 3);
+    let m = model.root_mesh();
+    sane(m);
+    let mut areas: Vec<f64> = m.faces.keys().map(|f| m.face_area(f)).collect();
+    areas.sort_by(f64::total_cmp);
+    assert_eq!(areas.len(), 2);
+    assert!((areas[0] - 5_000.0).abs() < 1e-6 && (areas[1] - 35_000.0).abs() < 1e-6, "{areas:?}");
+}
+
+#[test]
+fn group_vs_group_leaves_edges_only() {
+    // Neither participant has faces in the active context: the outline lands as edges
+    // (classic); no faces are invented in empty space.
+    let mut model = Model::new();
+    let a = group_box(&mut model, v(0., 0., 0.), v(100., 100., 100.));
+    group_box(&mut model, v(50., 50., 50.), v(150., 150., 150.));
+    let new = model.intersect_with_model(&[], &[EntityRef::Instance(a)]).unwrap();
+    let m = model.root_mesh();
+    sane(m);
+    assert_eq!(new.len(), 6);
+    assert_eq!(m.faces.len(), 0);
+}

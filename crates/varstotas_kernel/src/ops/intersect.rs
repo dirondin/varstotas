@@ -11,7 +11,8 @@
 //!
 //! The resulting segments become edges of the active context (also for faces
 //! inside instances) through the sticky insertion machinery, and the faces of the active
-//! context they lie on are split. No new faces are created from closed loops of new edges.
+//! context they lie on are split (a loop closing inside a face cuts out a new face). Loops in
+//! empty space (no active face there, e.g. two groups) stay edges: no faces are invented.
 
 use crate::geom::{self, PointLoc, Projector};
 use crate::mesh::{Mesh, PTOL};

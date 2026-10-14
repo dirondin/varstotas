@@ -80,19 +80,50 @@ impl Mesh {
                 slid.insert(*v, ok);
             }
             loop {
-                let mut changed = false;
-                for (e, a, b) in &bedges {
-                    if !(cand[e] && slid[a] && slid[b]) {
-                        for v in [a, b] {
-                            if slid[v] {
-                                slid.insert(*v, false);
-                                changed = true;
+                loop {
+                    let mut changed = false;
+                    for (e, a, b) in &bedges {
+                        if !(cand[e] && slid[a] && slid[b]) {
+                            for v in [a, b] {
+                                if slid[v] {
+                                    slid.insert(*v, false);
+                                    changed = true;
+                                }
                             }
                         }
                     }
+                    if !changed {
+                        break;
+                    }
                 }
-                if !changed {
+                // A stretched neighbour must stay a valid face: sliding must not drag one of
+                // its loops across another (e.g. a hole pulled out through the outer loop) or
+                // across itself. Such vertices are extruded instead (new side faces, whose
+                // overlaps with the neighbour are then resolved), and the analysis repeats.
+                // Collapse check for stretched vertices (an edge along the motion would vanish
+                // or flip): refused outright.
+                for (v, s) in &slid {
+                    if !*s {
+                        continue;
+                    }
+                    let pv = self.pos(*v);
+                    for e in self.vertex_edges(*v) {
+                        if bset.contains(&e) {
+                            continue;
+                        }
+                        let w = self.pos(self.edges[e].other(*v));
+                        let (old, new) = (w - pv, w - (pv + off));
+                        if new.dot(old) <= 0.0 || new.length() < TOL {
+                            return Err(OpError::Invalid("push/pull would collapse geometry".into()));
+                        }
+                    }
+                }
+                let bad = self.stretch_breaks_faces(f, &slid, off);
+                if bad.is_empty() {
                     break;
+                }
+                for v in bad {
+                    slid.insert(v, false);
                 }
             }
         }
@@ -106,24 +137,6 @@ impl Mesh {
             && let Some(h) = self.find_through_target(f, &loops, off)
         {
             return self.push_through(f, &loops, &bedges, off, h);
-        }
-
-        // ---- collapse check for stretched vertices --------------------------------------
-        for (v, s) in &slid {
-            if !*s {
-                continue;
-            }
-            let pv = self.pos(*v);
-            for e in self.vertex_edges(*v) {
-                if bset.contains(&e) {
-                    continue;
-                }
-                let w = self.pos(self.edges[e].other(*v));
-                let (old, new) = (w - pv, w - (pv + off));
-                if new.dot(old) <= 0.0 || new.length() < TOL {
-                    return Err(OpError::Invalid("push/pull would collapse geometry".into()));
-                }
-            }
         }
 
         // ---- build ------------------------------------------------------------------------
@@ -358,6 +371,48 @@ impl Mesh {
                 }
             }
         }
+    }
+
+    /// Vertices of `slid` (true entries) in faces other than `f` that would become invalid if
+    /// those vertices moved by `off`: two non-adjacent edges of the face's loops would touch.
+    fn stretch_breaks_faces(&self, f: FaceId, slid: &HashMap<VertexId, bool>, off: DVec3) -> Vec<VertexId> {
+        let moved = |v: VertexId| slid.get(&v).copied().unwrap_or(false);
+        let mut faces: Vec<FaceId> = Vec::new();
+        for (v, s) in slid {
+            if *s {
+                for g in self.faces_of_vertex(*v) {
+                    if g != f && !faces.contains(&g) {
+                        faces.push(g);
+                    }
+                }
+            }
+        }
+        let mut bad: Vec<VertexId> = Vec::new();
+        for g in faces {
+            let face = &self.faces[g];
+            let pr = Projector::new(self.pos(face.outer[0]), face.normal);
+            let p2 = |v: VertexId| pr.to2(self.pos(v) + if moved(v) { off } else { DVec3::ZERO });
+            let segs: Vec<(VertexId, VertexId, DVec2, DVec2)> = face
+                .loops()
+                .flat_map(|l| (0..l.len()).map(move |i| (l[i], l[(i + 1) % l.len()])))
+                .map(|(a, b)| (a, b, p2(a), p2(b)))
+                .collect();
+            let broken = segs.iter().enumerate().any(|(i, s1)| {
+                (moved(s1.0) || moved(s1.1))
+                    && segs.iter().enumerate().any(|(j, s2)| {
+                        j != i
+                            && s1.0 != s2.0
+                            && s1.0 != s2.1
+                            && s1.1 != s2.0
+                            && s1.1 != s2.1
+                            && geom::segs_intersect_2d(s1.2, s1.3, s2.2, s2.3, TOL)
+                    })
+            });
+            if broken {
+                bad.extend(face.loops().flatten().copied().filter(|v| moved(*v)));
+            }
+        }
+        bad
     }
 
     /// Is face `f` part of a solid's boundary (material behind it, against its normal)?
