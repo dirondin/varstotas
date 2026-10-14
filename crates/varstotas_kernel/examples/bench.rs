@@ -151,6 +151,32 @@ fn main() {
     let tmp = std::env::temp_dir().join(format!("varstotas_bench_{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
 
+    // Picking at 100k faces: grid walk vs testing every face (caches invalidated), steep and
+    // grazing rays, plus Model::raycast (what the app calls per mouse event).
+    if b.on("raycast") {
+        let n = 317;
+        let mut model = grid_model(n);
+        let m = model.root_mesh_mut().clone();
+        let mut brute = m.clone();
+        brute.invalidate_caches();
+        let rays: Vec<Ray> = (0..50)
+            .map(|r| {
+                let x = (r * 13 % n) as f64 * 100.0 + 30.0;
+                let dir = if r % 2 == 0 { v(0.1, 0.2, -1.0) } else { v(1.0, 0.7, -0.05) };
+                Ray { origin: v(x, x * 0.5, 1000.0), dir: dir.normalize() }
+            })
+            .collect();
+        for (name, mesh) in [("raycast_faces grid (100k faces)", &m), ("raycast_faces brute force (100k faces)", &brute)] {
+            let t = Instant::now();
+            let hits: usize = rays.iter().map(|ray| mesh.raycast_faces(ray).is_some() as usize).sum();
+            b.report(name, ms(t.elapsed()) / rays.len() as f64, format!("avg of {}, hits {hits}", rays.len()));
+        }
+        model.root_mesh_mut().rebuild_caches();
+        let t = Instant::now();
+        let hits: usize = rays.iter().map(|ray| model.raycast(ray).is_some() as usize).sum();
+        b.report("Model::raycast (100k faces)", ms(t.elapsed()) / rays.len() as f64, format!("avg of {}, hits {hits}", rays.len()));
+    }
+
     for n in [100usize, 200] {
         let faces = n * n;
         let tag = format!("{}k", faces / 1000);
@@ -336,6 +362,20 @@ fn main() {
         let dt = ms(t.elapsed());
         let m = model.root_mesh();
         b.report(name, dt, format!("faces {}, edges {}", m.faces.len(), m.edges.len()));
+    }
+    // The same imports without merging coplanar triangles (the cost of the merge).
+    for (name, text) in [("import OBJ sphere no merge (~50k tris)", sphere_obj(158, 5000.0)), ("import OBJ flat coplanar no merge (20k tris)", flat_obj(100))] {
+        if b.on(name) {
+            let path = tmp.join("nomerge.obj");
+            std::fs::write(&path, text).unwrap();
+            let mut model = Model::new();
+            let opts = io::ImportOptions { merge_coplanar: false, ..Default::default() };
+            let t = Instant::now();
+            io::import_obj_with(&mut model, &path, &opts).unwrap();
+            let dt = ms(t.elapsed());
+            let m = model.root_mesh();
+            b.report(name, dt, format!("faces {}, edges {}", m.faces.len(), m.edges.len()));
+        }
     }
     let name = "save/load .vrst (sphere 50k)";
     if b.on(name) {

@@ -351,3 +351,157 @@ fn obj_numbers_are_clean_for_rotated_groups() {
         }
     }
 }
+
+fn obj_round_trip(model: &Model, name: &str, opts: &io::ImportOptions) -> Model {
+    let dir = tmpdir(name);
+    let p = dir.join("m.obj");
+    io::export_obj(model, &p).unwrap();
+    let mut m2 = Model::new();
+    io::import_obj_with(&mut m2, &p, opts).unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+    m2
+}
+
+#[test]
+fn obj_round_trip_merges_triangles_and_keeps_materials() {
+    let mut model = box_model();
+    let red = model.add_material("Red Brick", [1., 0., 0., 1.]);
+    let glass = model.add_material("Glass", [0.2, 0.4, 0.6, 0.5]);
+    let fs: Vec<FaceId> = model.root_mesh().faces.keys().collect();
+    model.root_mesh_mut().faces[fs[0]].front = Some(red);
+    model.root_mesh_mut().faces[fs[1]].front = Some(glass);
+    let m2 = obj_round_trip(&model, "objrt", &io::ImportOptions::default());
+    let r = m2.root_mesh();
+    ok(r);
+    assert_closed_consistent(r);
+    assert_eq!((r.faces.len(), r.edges.len(), r.vertices.len()), (6, 12, 8), "triangles merged back into quads");
+    assert!((volume(r) - 150_000.).abs() < 1e-3);
+    assert_eq!(m2.materials.len(), 2);
+    let by_name = |n: &str| m2.materials.iter().find(|(_, m)| m.name == n).map(|(id, m)| (id, m.color)).unwrap();
+    let (red2, c) = by_name("Red_Brick");
+    assert_eq!(c, [1., 0., 0., 1.]);
+    let (glass2, c) = by_name("Glass");
+    assert_eq!(c, [0.2, 0.4, 0.6, 0.5]);
+    assert_eq!(r.faces.values().filter(|f| f.front == Some(red2)).count(), 1);
+    assert_eq!(r.faces.values().filter(|f| f.front == Some(glass2)).count(), 1);
+    assert_eq!(r.faces.values().filter(|f| f.front.is_none()).count(), 4);
+    // Without merging: the exported triangles.
+    let opts = io::ImportOptions { merge_coplanar: false, materials: false };
+    let m3 = obj_round_trip(&model, "objrt_raw", &opts);
+    assert_eq!(m3.root_mesh().faces.len(), 12);
+    assert!(m3.materials.is_empty());
+}
+
+#[test]
+fn obj_round_trip_face_with_hole_and_same_material_neighbours() {
+    // Box with a square hole through it: the rings come back as faces with holes.
+    let mut model = Model::new();
+    let m = model.root_mesh_mut();
+    make_box(m, 100., 100., 30.);
+    rect_lines(m, 30., 30., 60., 60., 30.);
+    let inner = m.faces.iter().find(|(id, f)| f.normal.z > 0.9 && f.holes.is_empty() && (m.face_area(*id) - 900.).abs() < 1e-6).unwrap().0;
+    m.push_pull(inner, -30.0, false).unwrap();
+    let (nf, ne) = (m.faces.len(), m.edges.len());
+    let m2 = obj_round_trip(&model, "objhole", &io::ImportOptions::default());
+    let r = m2.root_mesh();
+    ok(r);
+    assert_eq!((r.faces.len(), r.edges.len()), (nf, ne));
+    assert_eq!(r.faces.values().filter(|f| f.holes.len() == 1).count(), 2);
+    // Two coplanar faces with different materials stay apart.
+    let mut model = Model::new();
+    let m = model.root_mesh_mut();
+    rect_lines(m, 0., 0., 100., 100., 0.);
+    m.add_line(DVec3::new(50., 0., 0.), DVec3::new(50., 100., 0.));
+    let red = model.add_material("Red", [1., 0., 0., 1.]);
+    let f = model.root_mesh().faces.keys().next().unwrap();
+    model.root_mesh_mut().faces[f].front = Some(red);
+    let m2 = obj_round_trip(&model, "objmat2", &io::ImportOptions::default());
+    assert_eq!(m2.root_mesh().faces.len(), 2);
+    ok(m2.root_mesh());
+}
+
+#[test]
+fn obj_import_reads_mtl_details() {
+    let dir = tmpdir("objmtl");
+    std::fs::write(
+        dir.join("a.mtl"),
+        "newmtl Wood Oak\nKd 0.5 0.25 0.125\nTr 0.25\nmap_Kd -s 1 1 1 textures/oak.png\n\nnewmtl Clear\nKd 1 1 1\nd 0.3\nTr 0.9\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("a.obj"),
+        "mtllib a.mtl\nv 0 0 0\nv 10 0 0\nv 10 10 0\nv 0 10 0\nv 20 0 0\nv 20 10 0\nusemtl Wood Oak\nf 1 2 3\nf 1 3 4\nusemtl Clear\nf 2 5 6 3\nusemtl Missing\nf 5 6 3\n",
+    )
+    .unwrap();
+    let mut m = Model::new();
+    io::import_obj(&mut m, &dir.join("a.obj")).unwrap();
+    let wood = m.materials.values().find(|x| x.name == "Wood Oak").unwrap();
+    assert_eq!(wood.color, [0.5, 0.25, 0.125, 0.75]);
+    assert_eq!(wood.texture.as_deref(), Some("textures/oak.png"));
+    let clear = m.materials.values().find(|x| x.name == "Clear").unwrap();
+    assert_eq!(clear.color[3], 0.3, "d wins over Tr");
+    assert_eq!(m.materials.len(), 2, "undefined materials are not invented");
+    let r = m.root_mesh();
+    ok(r);
+    // The two Wood triangles merge into one square.
+    let wood_id = m.materials.iter().find(|(_, x)| x.name == "Wood Oak").unwrap().0;
+    let woods: Vec<_> = r.faces.iter().filter(|(_, f)| f.front == Some(wood_id)).collect();
+    assert_eq!(woods.len(), 1);
+    assert!((r.face_area(woods[0].0) - 100.).abs() < 1e-9);
+    // Importing the same file again reuses the materials.
+    io::import_obj(&mut m, &dir.join("a.obj")).unwrap();
+    assert_eq!(m.materials.len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn stl_import_merges_coplanar_triangles() {
+    let model = box_model();
+    let dir = tmpdir("stlmerge");
+    let p = dir.join("box.stl");
+    io::export_stl(&model, &p).unwrap();
+    let mut m2 = Model::new();
+    io::import_stl(&mut m2, &p).unwrap();
+    assert_eq!(m2.root_mesh().faces.len(), 6);
+    let mut m3 = Model::new();
+    io::import_stl_with(&mut m3, &p, &io::ImportOptions { merge_coplanar: false, materials: true }).unwrap();
+    assert_eq!(m3.root_mesh().faces.len(), 12);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn obj_import_merges_flat_triangle_grids() {
+    // n x n cells of two triangles; with `hole` the centre cell is missing (a ring with a hole).
+    // Odd sizes put the merged square's centre on a cell diagonal.
+    for (n, hole) in [(1usize, false), (2, false), (3, false), (3, true), (5, true), (10, false)] {
+        let mut s = String::new();
+        for j in 0..=n {
+            for i in 0..=n {
+                s += &format!("v {} {} 0\n", i as f64 * 100.0, j as f64 * 100.0);
+            }
+        }
+        let at = |i: usize, j: usize| j * (n + 1) + i + 1;
+        for j in 0..n {
+            for i in 0..n {
+                if hole && i == n / 2 && j == n / 2 {
+                    continue;
+                }
+                s += &format!("f {} {} {}\nf {} {} {}\n", at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j), at(i + 1, j + 1), at(i, j + 1));
+            }
+        }
+        let dir = tmpdir(&format!("flat{n}{hole}"));
+        std::fs::write(dir.join("f.obj"), s).unwrap();
+        let mut m = Model::new();
+        io::import_obj(&mut m, &dir.join("f.obj")).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+        let r = m.root_mesh();
+        ok(r);
+        assert_eq!(r.faces.len(), 1, "n {n} hole {hole}");
+        let (f, face) = r.faces.iter().next().unwrap();
+        assert!(face.normal.z > 0.999);
+        assert_eq!(face.holes.len(), hole as usize);
+        let area = (n * n - hole as usize) as f64 * 10_000.0;
+        assert!((r.face_area(f) - area).abs() < 1e-6, "n {n} hole {hole}");
+        assert_eq!(r.edges.len(), if hole { 8 } else { 4 }, "collinear boundary pieces healed");
+    }
+}

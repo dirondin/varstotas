@@ -618,3 +618,101 @@ fn coordinates_have_no_float_noise() {
     m.transform_vertices(&vs, &DMat4::from_rotation_z(std::f64::consts::FRAC_PI_2));
     assert!(m.vertices.values().all(|v| v.pos.to_array().iter().all(|c| *c == c.round())));
 }
+
+/// Do two edges touch anywhere other than at a shared endpoint?
+fn edges_touch_without_vertex(m: &Mesh) -> bool {
+    let segs: Vec<(DVec3, DVec3)> = m.edges.values().map(|e| (m.vertices[e.v[0]].pos, m.vertices[e.v[1]].pos)).collect();
+    let dist = |p: DVec3, a: DVec3, b: DVec3| {
+        let d = b - a;
+        let t = ((p - a).dot(d) / d.length_squared()).clamp(0.0, 1.0);
+        (a + d * t).distance(p)
+    };
+    let interior = |p: DVec3, a: DVec3, b: DVec3| dist(p, a, b) < 1e-4 && p.distance(a) > 1e-4 && p.distance(b) > 1e-4;
+    for (i, &(a, b)) in segs.iter().enumerate() {
+        for &(c, d) in &segs[i + 1..] {
+            if interior(c, a, b) || interior(d, a, b) || interior(a, c, d) || interior(b, c, d) {
+                return true;
+            }
+            // Proper crossing: sample the closest points.
+            let (d1, d2, r) = (b - a, d - c, a - c);
+            let (aa, ee, bb, cc, ff) = (d1.dot(d1), d2.dot(d2), d1.dot(d2), d1.dot(r), d2.dot(r));
+            let den = aa * ee - bb * bb;
+            if den <= 1e-9 * aa * ee {
+                continue;
+            }
+            let s = ((bb * ff - cc * ee) / den).clamp(0.0, 1.0);
+            let t = ((bb * s + ff) / ee).clamp(0.0, 1.0);
+            let (p, q) = (a + d1 * s, c + d2 * t);
+            if p.distance(q) < 1e-4 && interior(p, a, b) && interior(q, c, d) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn no_edge_used_twice_by_a_face(m: &Mesh) -> bool {
+    m.faces.values().all(|f| {
+        let mut seen = HashSet::new();
+        f.loops().all(|l| (0..l.len()).all(|i| {
+            let (a, b) = (l[i], l[(i + 1) % l.len()]);
+            seen.insert(if a < b { (a, b) } else { (b, a) })
+        }))
+    })
+}
+
+#[test]
+fn push_pull_splits_edges_it_crosses() {
+    // A line floating at z=30 across the footprint; pulling the rectangle up to z=30 makes the
+    // top edges cross it: they must be split at the crossings (and the line splits the top).
+    let mut m = Mesh::new();
+    rect_lines(&mut m, 0., 0., 100., 100., 0.);
+    m.add_line(v(50., -50., 30.), v(50., 150., 30.));
+    let f = face_with_normal(&m, DVec3::NEG_Z)[0];
+    m.push_pull(f, -30.0, false).unwrap();
+    ok(&m);
+    assert!(!edges_touch_without_vertex(&m));
+    let tops = face_with_normal(&m, DVec3::Z);
+    assert_eq!(tops.len(), 2, "the line splits the new top");
+    assert!(tops.iter().all(|t| (m.face_area(*t) - 5000.).abs() < 1e-6));
+}
+
+#[test]
+fn push_pull_side_onto_dangling_line_t_junction() {
+    // Stretching a box side so its new top edge ends on an existing line (T-junction).
+    let mut m = Mesh::new();
+    make_box(&mut m, 100., 100., 30.);
+    m.add_line(v(150., 20., 30.), v(150., 80., 30.));
+    m.add_line(v(150., 50., 30.), v(250., 50., 30.));
+    let side = face_with_normal(&m, DVec3::X)[0];
+    m.push_pull(side, 100.0, false).unwrap();
+    ok(&m);
+    assert!(!edges_touch_without_vertex(&m));
+}
+
+#[test]
+fn push_pull_stretched_face_does_not_fold_onto_itself() {
+    // A ground face around a pocket; sliding the pocket wall onto the ground face's outer
+    // edge collapses the strip between them: the ground face must become two faces, not one
+    // face whose loop runs along an edge twice.
+    let mut m = Mesh::new();
+    rect_lines(&mut m, 0., 0., 300., 200., 0.);
+    rect_lines(&mut m, 100., 100., 200., 200., 0.);
+    let inner = m.faces.iter().find(|(id, _)| (m.face_area(*id) - 10_000.).abs() < 1e-6).unwrap().0;
+    let d = if m.faces[inner].normal.z < 0.0 { 50.0 } else { -50.0 };
+    m.push_pull(inner, d, false).unwrap();
+    ok(&m);
+    let wall = m
+        .faces
+        .iter()
+        .find(|(id, f)| f.normal.y.abs() > 0.999 && (face_centroid(&m, *id).y - 100.).abs() < 1e-6)
+        .unwrap();
+    let (wall, wn) = (wall.0, wall.1.normal);
+    m.push_pull(wall, if wn.y < 0.0 { 100.0 } else { -100.0 }, false).unwrap();
+    ok(&m);
+    assert!(no_edge_used_twice_by_a_face(&m));
+    assert!(!edges_touch_without_vertex(&m));
+    // The original ground face (facing down) is left as two strips beside the stretched pocket.
+    let ground: Vec<_> = m.faces.iter().filter(|(id, f)| f.normal.z < -0.999 && face_centroid(&m, *id).z.abs() < 1e-6).map(|(id, _)| m.face_area(id)).collect();
+    assert_eq!(ground, vec![20_000.0, 20_000.0]);
+}

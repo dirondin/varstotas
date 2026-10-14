@@ -30,6 +30,10 @@ pub(crate) enum Classify<'a> {
     /// Overlay of coplanar faces (outer, holes, attributes incl. normal): regions get the net
     /// orientation of the faces covering them; opposite faces cancel out (no face).
     Overlay(&'a [OverlayPoly]),
+    /// Regions strictly containing one of these points become faces with that face's
+    /// attributes and orientation (merging faces whose shared edges were removed: the regions
+    /// of the remaining boundary are unions of the old faces, each containing their samples).
+    Covered(&'a [(DVec3, Face)]),
 }
 
 /// Orientation policy for brand-new faces.
@@ -319,7 +323,7 @@ impl Mesh {
                         let k = outer.len();
                         (0..k).all(|i| in_cls_poly((outer[i] + outer[(i + 1) % k]) * 0.5))
                     }
-                    Classify::Overlay(_) => true,
+                    Classify::Overlay(_) | Classify::Covered(_) => true,
                 };
                 let Some(bb) = Aabb::from_points(r.outer.verts.iter().map(|i| self.pos(vids_[*i]))) else { continue };
                 let bb = bb.inflate(TOL);
@@ -506,6 +510,17 @@ impl Mesh {
                         let (o, h) = cls_poly.as_ref().unwrap();
                         if geom::point_in_region(sample, o, h, TOL) == PointLoc::Inside { Kind::New } else { Kind::Skip }
                     }
+                    Classify::Covered(pts) => {
+                        let (lo, hi) = outer_pts.iter().fold((DVec2::splat(f64::MAX), DVec2::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
+                        let hit = pts.iter().position(|(p, _)| {
+                            let q = pr.to2(*p);
+                            q.cmpge(lo).all() && q.cmple(hi).all() && geom::point_in_region(q, &outer_pts, &holes_pts, TOL) == PointLoc::Inside
+                        });
+                        match hit {
+                            Some(i) => Kind::Forced(pts[i].1.normal.dot(n) < 0.0, i),
+                            None => Kind::Skip,
+                        }
+                    }
                     Classify::Overlay(_) => {
                         let inside: Vec<usize> = (0..overlay.len())
                             .filter(|i| {
@@ -596,6 +611,7 @@ impl Mesh {
                 }
                 Kind::Forced(flip, idx) => match cls {
                     Classify::Overlay(polys) => (polys[idx].2.clone(), flip),
+                    Classify::Covered(pts) => (pts[idx].1.clone(), flip),
                     _ => unreachable!(),
                 },
                 _ => (Face::template(), self.choose_flip(&plane, &outer, orient)),
@@ -1029,7 +1045,7 @@ mod tests {
 
     /// Independent geometric sanity: holes lie inside their outer loop and coplanar faces do
     /// not overlap (interior sample of one face is not strictly inside another).
-    fn sane(m: &Mesh) -> bool {
+    fn insanity(m: &Mesh) -> Option<&'static str> {
         use crate::geom::{self, PointLoc, Projector};
         let ids: Vec<_> = m.faces.keys().collect();
         for &f in &ids {
@@ -1038,7 +1054,7 @@ mod tests {
             let o: Vec<_> = face.outer.iter().map(|v| pr.to2(m.pos(*v))).collect();
             for h in &face.holes {
                 if h.iter().any(|v| geom::point_in_polygon(pr.to2(m.pos(*v)), &o, TOL) == PointLoc::Outside) {
-                    return false;
+                    return Some("hole outside face");
                 }
             }
             let hs: Vec<Vec<_>> = face.holes.iter().map(|h| h.iter().map(|v| pr.to2(m.pos(*v))).collect()).collect();
@@ -1051,26 +1067,26 @@ mod tests {
                     continue;
                 }
                 if m.face_point_loc(g, sample) == PointLoc::Inside {
-                    return false;
+                    return Some("overlapping coplanar faces");
+                }
+                // Partial overlaps: a boundary vertex or edge midpoint strictly inside.
+                for l in face.loops() {
+                    let k = l.len();
+                    for i in 0..k {
+                        let (a, b) = (m.pos(l[i]), m.pos(l[(i + 1) % k]));
+                        if m.face_point_loc(g, a) == PointLoc::Inside || m.face_point_loc(g, (a + b) * 0.5) == PointLoc::Inside {
+                            return Some("partially overlapping coplanar faces");
+                        }
+                    }
                 }
             }
         }
-        true
+        None
     }
 
-    /// Returns false if the scenario was cut short because the reference became invalid.
-    #[derive(Debug, PartialEq)]
-    enum Outcome {
-        /// Both strategies produced identical meshes at every step.
-        Same,
-        /// The reference (full gather) hit a pre-existing kernel defect; comparison stopped.
-        ReferenceBroken,
-        /// The results differ while both are valid and geometrically sane (the differing step
-        /// is ambiguous for the kernel's heuristics); comparison stopped.
-        Diverged(String),
-    }
-
-    fn run_3d(seed: u64, steps: usize) -> Outcome {
+    /// Random 3D editing session: the localized path must satisfy every invariant after every
+    /// step and match the full-gather reference exactly.
+    fn run_3d(seed: u64, steps: usize) {
         let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
         let mut local = Mesh::new();
         let mut reference = Mesh::new();
@@ -1078,66 +1094,32 @@ mod tests {
         for i in 0..steps {
             let op = random_op_3d(&mut r);
             ops.push(op);
-            let before = edge_keys(&reference);
             apply(&mut local, op, false);
             apply(&mut reference, op, true);
             let ctx = || format!("seed {seed}, step {i}, ops {ops:?}");
-            if reference.validate().is_err() {
-                return Outcome::ReferenceBroken;
+            if let Some(v) = violation(&local) {
+                panic!("localized mesh broken ({v}): {}", ctx());
             }
-            if let Err(e) = local.validate() {
-                panic!("localized mesh invalid ({e}): {}", ctx());
+            if let Some(v) = violation(&reference) {
+                panic!("reference mesh broken ({v}): {}", ctx());
             }
-            let (le, re) = (edge_keys(&local), edge_keys(&reference));
-            if le == re && face_keys(&local) == face_keys(&reference) {
-                continue;
-            }
-            if !sane(&reference) || invents_edges(&before, &le, &re) || touching_edges(&re) {
-                return Outcome::ReferenceBroken;
-            }
-            assert!(sane(&local), "localized result is geometrically wrong: {}", ctx());
-            return Outcome::Diverged(ctx());
+            same(edge_keys(&local), edge_keys(&reference), "edges", ctx);
+            same(face_keys(&local), face_keys(&reference), "faces", ctx);
         }
-        Outcome::Same
-    }
-
-    /// Does `reference` contain an edge that lies on no edge of the pre-state and on no edge
-    /// both strategies agree on (i.e. an edge neither the user nor the operation drew)?
-    fn invents_edges(before: &[[[i64; 3]; 2]], local: &[[[i64; 3]; 2]], reference: &[[[i64; 3]; 2]]) -> bool {
-        let f = |p: [i64; 3]| DVec3::new(p[0] as f64, p[1] as f64, p[2] as f64);
-        let legit: Vec<[DVec3; 2]> = before
-            .iter()
-            .chain(local.iter().filter(|e| reference.contains(e)))
-            .map(|e| [f(e[0]), f(e[1])])
-            .collect();
-        let on = |p: DVec3, s: &[DVec3; 2]| {
-            let d = s[1] - s[0];
-            let t = ((p - s[0]).dot(d) / d.length_squared()).clamp(0.0, 1.0);
-            (s[0] + d * t).distance(p) < 2.0
-        };
-        reference.iter().filter(|e| !local.contains(e)).any(|e| {
-            let (a, b) = (f(e[0]), f(e[1]));
-            !legit.iter().any(|s| on(a, s) && on(b, s) && on((a + b) * 0.5, s))
-        })
     }
 
     /// Do two edges touch anywhere except at a shared endpoint (crossing without a vertex,
-    /// T-junction, collinear overlap)? Push/pull can leave such non-planar edge graphs; plane
-    /// arrangements over them are not well defined, so the reference is not meaningful.
-    fn touching_edges(edges: &[[[i64; 3]; 2]]) -> bool {
-        let f = |p: [i64; 3]| DVec3::new(p[0] as f64, p[1] as f64, p[2] as f64);
-        let segs: Vec<[DVec3; 2]> = edges.iter().map(|e| [f(e[0]), f(e[1])]).collect();
-        let on = |p: DVec3, s: &[DVec3; 2]| {
-            let d = s[1] - s[0];
-            let t = ((p - s[0]).dot(d) / d.length_squared()).clamp(0.0, 1.0);
-            (s[0] + d * t).distance(p) < 2.0
-        };
-        let interior = |p: DVec3, s: &[DVec3; 2]| on(p, s) && p.distance(s[0]) > 2.0 && p.distance(s[1]) > 2.0;
+    /// T-junction, collinear overlap), within the kernel tolerance?
+    fn touching_edges(m: &Mesh) -> Option<([DVec3; 2], [DVec3; 2])> {
+        let segs: Vec<[DVec3; 2]> = m.edges.values().map(|e| [m.pos(e.v[0]), m.pos(e.v[1])]).collect();
+        let tol = TOL * 0.99;
+        let on = |p: DVec3, s: &[DVec3; 2]| crate::geom::point_seg_dist(p, s[0], s[1]).0 < tol;
+        let interior = |p: DVec3, s: &[DVec3; 2]| on(p, s) && p.distance(s[0]) > tol && p.distance(s[1]) > tol;
         for (i, s) in segs.iter().enumerate() {
             for t in &segs[i + 1..] {
                 // T-junctions and overlaps: an endpoint inside the other edge.
                 if interior(t[0], s) || interior(t[1], s) || interior(s[0], t) || interior(s[1], t) {
-                    return true;
+                    return Some((*s, *t));
                 }
                 // Proper crossing.
                 let (d1, d2, r) = (s[1] - s[0], t[1] - t[0], s[0] - t[0]);
@@ -1149,12 +1131,12 @@ mod tests {
                 let sp = ((b * ff - c * e) / den).clamp(0.0, 1.0);
                 let tp = ((b * sp + ff) / e).clamp(0.0, 1.0);
                 let (p, q) = (s[0] + d1 * sp, t[0] + d2 * tp);
-                if p.distance(q) < 2.0 && interior(p, s) && interior(q, t) {
-                    return true;
+                if p.distance(q) < tol && interior(p, s) && interior(q, t) {
+                    return Some((*s, *t));
                 }
             }
         }
-        false
+        None
     }
 
     fn run(seed: u64, steps: usize, planar: bool) {
@@ -1184,25 +1166,226 @@ mod tests {
         }
     }
 
-    #[test]
-    fn localized_refresh_matches_full_gather_3d() {
-        // Random 3D editing (rectangles, lines on faces, push/pull, erasing). The full-gather
-        // reference has known defects in long push/pull sequences (duplicate edges, invented
-        // chords, holes outside faces); those scenarios are skipped. The localized result must
-        // always be valid and sane, and must match the reference in the vast majority of runs.
-        let (mut same, mut broken, mut diverged) = (0, 0, Vec::new());
-        for seed in 1000..=1400 {
-            match run_3d(seed, 30) {
-                Outcome::Same => same += 1,
-                Outcome::ReferenceBroken => broken += 1,
-                Outcome::Diverged(ctx) => diverged.push(ctx),
+    /// First invariant violation of a mesh, by category.
+    fn violation(m: &Mesh) -> Option<String> {
+        if let Err(e) = m.validate() {
+            let e = if e.starts_with("face") { e.split_once(' ').map(|x| x.1.split_once(' ').map(|y| y.1.to_string()).unwrap_or_default()).unwrap_or(e) } else { e };
+            return Some(format!("invalid: {e}"));
+        }
+        if touching_edges(m).is_some() {
+            return Some("edges touch without a shared vertex".into());
+        }
+        for face in m.faces.values() {
+            let mut seen = std::collections::HashSet::new();
+            for l in face.loops() {
+                for i in 0..l.len() {
+                    let (a, b) = (l[i], l[(i + 1) % l.len()]);
+                    if !seen.insert(if a < b { (a, b) } else { (b, a) }) {
+                        return Some("face loops run along an edge twice".into());
+                    }
+                }
             }
         }
-        eprintln!("3d: same {same}, reference broken {broken}, diverged {}", diverged.len());
-        for d in &diverged {
-            eprintln!("  diverged: {d}");
+        if let Some(s) = insanity(m) {
+            return Some(s.to_string());
         }
-        assert!(diverged.len() * 50 <= same, "too many divergences: {diverged:#?}");
+        // A chord: an edge inside a face joining two vertices of one of its loops must split it
+        // (a bridge between a hole and the outer loop does not).
+        for (f, face) in &m.faces {
+            for lp in face.loops() {
+                let vs: std::collections::HashSet<_> = lp.iter().copied().collect();
+                for &v in &vs {
+                    for e in m.vertex_edges(v) {
+                        let o = m.edges[e].other(v);
+                        // Edges of faces in other planes (faces intersecting without Intersect
+                        // Faces) are not required to split.
+                        if !vs.contains(&o)
+                            || m.edge_faces(e).iter().any(|g| *g == f || m.faces[*g].normal.dot(face.normal).abs() < 1.0 - 1e-6)
+                        {
+                            continue;
+                        }
+                        let mid = (m.pos(v) + m.pos(o)) * 0.5;
+                        if m.face_plane(f).distance(mid).abs() < TOL && m.face_point_loc(f, mid) == crate::geom::PointLoc::Inside {
+                            return Some("unsplit chord inside a face".into());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Statistics of invariant violations of the (default, localized) kernel over random 3D
+    /// editing sessions. `cargo test -p varstotas_kernel --lib invariants_survey -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn invariants_survey() {
+        let mut cats: std::collections::BTreeMap<String, Vec<(u64, usize, String)>> = Default::default();
+        let mut ok = 0;
+        let n: u64 = std::env::var("SURVEY_N").map(|s| s.parse().unwrap()).unwrap_or(600);
+        let steps: usize = std::env::var("SURVEY_STEPS").map(|s| s.parse().unwrap()).unwrap_or(30);
+        let from: u64 = std::env::var("SURVEY_FROM").map(|s| s.parse().unwrap()).unwrap_or(1000);
+        for seed in from..from + n {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut m = Mesh::new();
+            let mut bad = None;
+            for i in 0..steps {
+                let op = random_op_3d(&mut r);
+                apply(&mut m, op, false);
+                if let Some(v) = violation(&m) {
+                    let kind = format!("{op:?}");
+                    bad = Some((v, i, kind.split('(').next().unwrap().to_string()));
+                    break;
+                }
+            }
+            match bad {
+                None => ok += 1,
+                Some((v, i, k)) => cats.entry(v).or_default().push((seed, i, k)),
+            }
+        }
+        eprintln!("SURVEY ok {ok}");
+        for (k, v) in &cats {
+            eprintln!("  {k}: {} e.g. {:?}", v.len(), &v[..v.len().min(8)]);
+        }
+    }
+
+    #[test]
+    fn localized_refresh_matches_full_gather_3d() {
+        // Random 3D editing (rectangles, lines on faces, push/pull, push-through, erasing).
+        for seed in 1000..=1400 {
+            run_3d(seed, 30);
+        }
+    }
+
+    #[test]
+    fn grid_raycast_matches_brute_force() {
+        // Random 3D models; rays from random points towards vertices, edge midpoints (ties
+        // between faces sharing an edge), face samples and random directions, incl. axis
+        // aligned and unnormalized ones.
+        let mut hits = 0;
+        for seed in 9000u64..9040 {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut m = Mesh::new();
+            for _ in 0..30 {
+                apply(&mut m, random_op_3d(&mut r), false);
+            }
+            m.ensure();
+            let mut brute = m.clone();
+            brute.invalidate_caches();
+            let f = |r: &mut Rng, s: f64| (r.below(20001) as f64 / 10000.0 - 1.0) * s;
+            let verts: Vec<DVec3> = m.vertices.values().map(|v| v.pos).collect();
+            let mids: Vec<DVec3> = m.edges.values().map(|e| (m.pos(e.v[0]) + m.pos(e.v[1])) * 0.5).collect();
+            for k in 0..300 {
+                let origin = DVec3::new(f(&mut r, 1500.0) + 400.0, f(&mut r, 1500.0) + 400.0, f(&mut r, 800.0));
+                let target = match k % 5 {
+                    0 if !verts.is_empty() => verts[r.below(verts.len() as u64) as usize],
+                    1 if !mids.is_empty() => mids[r.below(mids.len() as u64) as usize],
+                    2 => DVec3::new(origin.x, origin.y, origin.z - 1.0 - r.below(3) as f64),
+                    3 => DVec3::new(r.below(9) as f64 * 100.0, r.below(9) as f64 * 100.0, r.below(5) as f64 * 50.0 - 100.0),
+                    _ => origin + DVec3::new(f(&mut r, 1.0), f(&mut r, 1.0), f(&mut r, 1.0)),
+                };
+                let dir = (target - origin) * (0.001 + r.below(1000) as f64 / 10.0);
+                let a = m.raycast_faces_filtered(origin, dir, |_| true);
+                let b = brute.raycast_faces_filtered(origin, dir, |_| true);
+                assert_eq!(a, b, "seed {seed} ray {k}: {origin:?} {dir:?}");
+                hits += a.is_some() as usize;
+            }
+        }
+        assert!(hits > 3000, "too few hits to be meaningful: {hits}");
+        // A dense grid of small faces with a pushed cell; grazing rays cross many cells.
+        let mut m = Mesh::new();
+        for i in 0..=30 {
+            let x = i as f64 * 10.0;
+            apply(&mut m, Op::Line(DVec3::new(x, 0.0, 0.0), DVec3::new(x, 300.0, 0.0)), false);
+            apply(&mut m, Op::Line(DVec3::new(0.0, x, 0.0), DVec3::new(300.0, x, 0.0)), false);
+        }
+        let f = m.faces.keys().nth(400).unwrap();
+        m.push_pull(f, -15.0, false).unwrap();
+        m.ensure();
+        let mut brute = m.clone();
+        brute.invalidate_caches();
+        let mut r = Rng(77);
+        let mut hits = 0;
+        for k in 0..3000 {
+            let origin = DVec3::new(r.below(3001) as f64 / 10.0 - 50.0, r.below(3001) as f64 / 10.0 - 50.0, 1.0 + r.below(400) as f64 / 10.0);
+            let target = DVec3::new(r.below(31) as f64 * 10.0, r.below(31) as f64 * 10.0 + if k % 2 == 0 { 0.0 } else { 5.0 }, 0.0);
+            let dir = target - origin;
+            let a = m.raycast_faces_filtered(origin, dir, |_| true);
+            assert_eq!(a, brute.raycast_faces_filtered(origin, dir, |_| true), "grid ray {k}");
+            hits += a.is_some() as usize;
+        }
+        assert!(hits > 2500);
+    }
+
+    #[test]
+    fn obj_round_trip_of_random_models_keeps_area_and_validity() {
+        let dir = std::env::temp_dir().join(format!("varstotas_objrt_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let area = |m: &Mesh| m.faces.keys().map(|f| m.face_area(f)).sum::<f64>();
+        for seed in 6000u64..6040 {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut model = crate::Model::new();
+            for _ in 0..30 {
+                apply(model.root_mesh_mut(), random_op_3d(&mut r), false);
+            }
+            let p = dir.join(format!("{seed}.obj"));
+            crate::io::export_obj(&model, &p).unwrap();
+            let mut back = crate::Model::new();
+            crate::io::import_obj(&mut back, &p).unwrap();
+            let (a, b) = (model.root_mesh(), back.root_mesh());
+            b.validate().unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+            assert!((area(a) - area(b)).abs() < 1e-6 * area(a).max(1.0), "seed {seed}: area {} -> {}", area(a), area(b));
+            // Merging never makes more faces than the original had.
+            assert!(b.faces.len() <= a.faces.len(), "seed {seed}: {} -> {} faces", a.faces.len(), b.faces.len());
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn regression_seeds_keep_invariants() {
+        // Random sessions that broke the kernel (seed, failing step): crossing diagonal after
+        // push/pull (1002), duplicate walls from push-through (1150), T-junction in
+        // push-through (1204), side top edge overlapping an edge (1458), missed crossing of a
+        // split piece (1069), partial coplanar overlap (1507), stretched face overlapping
+        // (1688), re-split pieces (2426), slid vertex merged before its faces were collected
+        // (3758), new side not split by a dangling line (1065), faceless side pieces after
+        // merging (1332), chord after a split at a vertex (3522), order-dependent leftover
+        // edge (1386), stretched face folded onto itself (2201), overlay of a neighbouring
+        // pending face (7476).
+        let cases = [
+            (1002, 12), (1150, 11), (1204, 13), (1458, 18), (1069, 25), (1507, 12), (1688, 3), (2426, 13),
+            (3758, 34), (1065, 10), (1332, 16), (3522, 29), (1386, 29), (2201, 16), (7476, 32),
+        ];
+        for (seed, step) in cases {
+            let mut r = Rng((seed as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut m = Mesh::new();
+            for i in 0..=step {
+                let op = random_op_3d(&mut r);
+                apply(&mut m, op, false);
+                if let Some(v) = violation(&m) {
+                    panic!("{v}: seed {seed}, step {i}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn random_3d_sessions_keep_invariants() {
+        // Valid topology, no edges touching without a shared vertex, no overlapping coplanar
+        // faces, no holes outside faces, no unsplit chords -- after every step.
+        for seed in 5000u64..5300 {
+            let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut m = Mesh::new();
+            let mut ops = Vec::new();
+            for i in 0..40 {
+                let op = random_op_3d(&mut r);
+                ops.push(op);
+                apply(&mut m, op, false);
+                if let Some(v) = violation(&m) {
+                    panic!("{v}: seed {seed}, step {i}, ops {ops:?}");
+                }
+            }
+        }
     }
 
     #[test]

@@ -21,7 +21,7 @@ use crate::geom::{self, PointLoc, Projector};
 use crate::mesh::{Mesh, PTOL};
 use crate::topology::{Classify, Orient};
 use crate::{EdgeId, Face, FaceId, OpError, OpResult, TOL, VertexId};
-use glam::DVec3;
+use glam::{DVec2, DVec3};
 use std::collections::{HashMap, HashSet};
 
 impl Mesh {
@@ -165,7 +165,8 @@ impl Mesh {
             f
         };
         // Merge candidates are kept as segments: welding may split the edges.
-        let mut merge_segs: Vec<(DVec3, DVec3)> = Vec::new();
+        // (segment, is a new edge from an original vertex to its moved copy)
+        let mut merge_segs: Vec<(DVec3, DVec3, bool)> = Vec::new();
         let mut created: Vec<FaceId> = vec![cap];
         for (e, a, b) in &bedges {
             if slid[a] && slid[b] {
@@ -175,20 +176,48 @@ impl Mesh {
             let side = if cap_flip { vec![*b, *a, a2, b2] } else { vec![*a, *b, b2, a2] };
             created.push(self.f_new(side, Vec::new(), &Face::template()));
             if !lone {
-                merge_segs.push(self.edge_segment(*e));
+                let (p, q) = self.edge_segment(*e);
+                merge_segs.push((p, q, false));
             }
             for (x, y) in [(*a, a2), (*b, b2)] {
                 if x != y {
-                    merge_segs.push((self.pos(x), self.pos(y)));
+                    merge_segs.push((self.pos(x), self.pos(y), true));
                 }
             }
         }
         self.soften_sides(&loops, &map);
         let new_verts: Vec<VertexId> = loops.iter().flatten().filter(|v| !slid[*v]).map(|v| map[v]).collect();
-        self.weld(&new_verts);
+        // Slid vertices in loop order (not hash order) so the result is deterministic.
+        let mut seen = HashSet::new();
+        let slid_verts: Vec<VertexId> = loops.iter().flatten().copied().filter(|v| slid[v] && seen.insert(*v)).collect();
+        let moved: Vec<VertexId> = new_verts.iter().chain(&slid_verts).copied().collect();
+        let mut stretched: Vec<FaceId> = Vec::new();
+        for v in &slid_verts {
+            stretched.extend(self.faces_of_vertex(*v));
+        }
+        let split_at = self.weld(&moved);
+        // Stretched neighbours grew and may now overlap coplanar faces too.
+        for g in stretched {
+            if !created.contains(&g) && self.faces.contains_key(g) {
+                created.push(g);
+            }
+        }
         let mut touched = self.resolve_overlaps(&created);
+        // Faces whose boundary got a new vertex may now have an existing edge as a chord.
+        let mut check = created.clone();
+        for v in split_at {
+            if self.vertices.contains_key(v) {
+                for g in self.faces_of_vertex(v) {
+                    if !check.contains(&g) {
+                        check.push(g);
+                    }
+                }
+            }
+        }
+        self.split_faces_by_inner_edges(&check);
         let mut cands: Vec<EdgeId> = Vec::new();
-        for (a, b) in &merge_segs {
+        let mut new_pieces: Vec<EdgeId> = Vec::new();
+        for (a, b, fresh) in &merge_segs {
             for e in self.cache.egrid.query_segment(*a, *b) {
                 if cands.contains(&e) || !self.edges.contains_key(e) {
                     continue;
@@ -196,11 +225,22 @@ impl Mesh {
                 let (p, q) = self.edge_segment(e);
                 if geom::point_seg_dist(p, *a, *b).0 <= TOL && geom::point_seg_dist(q, *a, *b).0 <= TOL {
                     cands.push(e);
+                    if *fresh {
+                        new_pieces.push(e);
+                    }
                 }
             }
         }
         if !keep_original {
             self.merge_coplanar_at(&cands);
+            // Pieces of a new side edge (split by crossings) left without faces once the
+            // sides merged are not geometry anybody drew.
+            for e in new_pieces {
+                if self.edges.contains_key(e) && self.edge_faces(e).is_empty() {
+                    touched.extend(self.edges[e].v);
+                    self.e_remove(e);
+                }
+            }
             touched.extend(loops.iter().flatten().copied());
             touched.extend(new_verts);
             self.cleanup_vertices(&touched);
@@ -272,11 +312,26 @@ impl Mesh {
         }
         self.f_remove(f);
         let mut merge_candidates = Vec::new();
+        let mut sides = Vec::new();
         for (e, a, b) in bedges {
             let (a2, b2) = (map[a], map[b]);
-            self.f_new(vec![*a, *b, b2, a2], Vec::new(), &Face::template());
+            sides.push(self.f_new(vec![*a, *b, b2, a2], Vec::new(), &Face::template()));
             merge_candidates.push(*e);
         }
+        let side_edges: Vec<EdgeId> = bedges
+            .iter()
+            .flat_map(|(_, a, b)| [(*a, map[a]), (map[a], map[b])])
+            .filter_map(|(x, y)| self.edge_between(x, y))
+            .collect();
+        let split_at = self.split_crossings(side_edges);
+        self.resolve_overlaps(&sides);
+        let mut check = sides.clone();
+        for v in split_at {
+            if self.vertices.contains_key(v) {
+                check.extend(self.faces_of_vertex(v));
+            }
+        }
+        self.split_faces_by_inner_edges(&check);
         self.soften_sides(loops, &map);
         self.merge_coplanar_at(&merge_candidates);
         Ok(keep.map(|(_, f)| f).filter(|f| self.faces.contains_key(*f)).unwrap_or(h))
@@ -380,8 +435,9 @@ impl Mesh {
     }
 
     /// Make new vertices sticky: merge them with coincident vertices, split edges they lie on,
-    /// and split their edges at existing vertices lying on them.
-    pub(crate) fn weld(&mut self, verts: &[VertexId]) {
+    /// split their edges at existing vertices lying on them and at crossings with other edges.
+    /// Returns the vertices at which edges were split.
+    pub(crate) fn weld(&mut self, verts: &[VertexId]) -> Vec<VertexId> {
         let d = DVec3::splat(TOL);
         let mut alive: Vec<VertexId> = Vec::new();
         for &v in verts {
@@ -410,91 +466,192 @@ impl Mesh {
                 }
             }
         }
-        let interior = |m: &Mesh, p: DVec3, e: EdgeId| {
-            let (a, b) = m.edge_segment(e);
-            geom::point_seg_dist(p, a, b).0 <= TOL && (p - a).length() > TOL && (p - b).length() > TOL
-        };
-        for &v in &alive {
-            loop {
-                if !self.vertices.contains_key(v) {
-                    break;
-                }
-                let p = self.pos(v);
-                let hit = self
-                    .cache
-                    .egrid
-                    .query_box(p - d, p + d)
-                    .into_iter()
-                    .find(|e| self.edges.get(*e).is_some_and(|ed| !ed.has(v)) && interior(self, p, *e));
-                match hit {
-                    Some(e) => {
-                        self.split_edge_at(e, v);
-                    }
-                    None => break,
-                }
-            }
-        }
-        let mut work: Vec<EdgeId> =
+        let work: Vec<EdgeId> =
             alive.iter().filter(|v| self.vertices.contains_key(**v)).flat_map(|v| self.vertex_edges(*v)).collect();
+        self.split_crossings(work)
+    }
+
+    /// Split edges of `work` and existing edges crossing them in their interiors at a shared
+    /// vertex (plane arrangements need an edge graph without crossings).
+    pub(crate) fn split_crossings(&mut self, mut work: Vec<EdgeId>) -> Vec<VertexId> {
+        let mut at: Vec<VertexId> = Vec::new();
+        let mut guard = 0;
         while let Some(e) = work.pop() {
+            guard += 1;
+            if guard > 100_000 {
+                break;
+            }
             let Some(ed) = self.edges.get(e).cloned() else { continue };
             let (a, b) = self.edge_segment(e);
-            let mut best: Option<(f64, VertexId)> = None;
-            for w in self.cache.vgrid.query_segment(a, b) {
-                if ed.has(w) || !self.vertices.contains_key(w) {
+            let interior = |p: DVec3, x: DVec3, y: DVec3| {
+                geom::point_seg_dist(p, x, y).0 <= TOL && (p - x).length() > TOL && (p - y).length() > TOL
+            };
+            // Existing vertices inside the edge (T-junctions, collinear overlaps).
+            let on_e = self.cache.vgrid.query_segment(a, b).into_iter().find(|w| {
+                !ed.has(*w) && self.vertices.get(*w).is_some_and(|x| interior(x.pos, a, b))
+            });
+            if let Some(w) = on_e {
+                at.push(w);
+                work.extend(self.split_edge_at(e, w));
+                continue;
+            }
+            // Endpoints of the edge inside other edges.
+            let d = DVec3::splat(TOL);
+            let mut t_hit = None;
+            for (v, p) in [(ed.v[0], a), (ed.v[1], b)] {
+                t_hit = self.cache.egrid.query_box(p - d, p + d).into_iter().find(|e2| {
+                    self.edges.get(*e2).is_some_and(|x| !x.has(v)) && {
+                        let (c, dd) = self.edge_segment(*e2);
+                        interior(p, c, dd)
+                    }
+                }).map(|e2| (e2, v));
+                if t_hit.is_some() {
+                    break;
+                }
+            }
+            if let Some((e2, v)) = t_hit {
+                at.push(v);
+                work.extend(self.split_edge_at(e2, v));
+                work.push(e);
+                continue;
+            }
+            let mut hit: Option<(EdgeId, DVec3)> = None;
+            for e2 in self.cache.egrid.query_segment(a, b) {
+                let Some(ed2) = self.edges.get(e2) else { continue };
+                if e2 == e || ed2.has(ed.v[0]) || ed2.has(ed.v[1]) {
                     continue;
                 }
-                let p = self.pos(w);
-                if interior(self, p, e) {
-                    let t = (p - a).length();
-                    if best.is_none_or(|(bt, _)| t < bt) {
-                        best = Some((t, w));
-                    }
+                let (c, d) = self.edge_segment(e2);
+                let Some((_, _, p1, p2)) = geom::seg_seg_closest(a, b, c, d) else { continue };
+                if (p1 - p2).length() > TOL {
+                    continue;
+                }
+                let far = |p: DVec3, x: DVec3, y: DVec3| (p - x).length() > TOL && (p - y).length() > TOL;
+                if far(p1, a, b) && far(p2, c, d) {
+                    hit = Some((e2, p1));
+                    break;
                 }
             }
-            if let Some((_, w)) = best {
-                work.extend(self.split_edge_at(e, w));
+            if let Some((e2, p)) = hit {
+                let v = match self.v_find(p, TOL) {
+                    Some(v) => v,
+                    None => self.v_new(p),
+                };
+                at.push(v);
+                if !self.edges[e2].has(v) {
+                    work.extend(self.split_edge_at(e2, v));
+                }
+                if !self.edges[e].has(v) {
+                    work.extend(self.split_edge_at(e, v));
+                }
             }
         }
+        at
+    }
+
+    /// Split faces of `faces` by existing in-plane edges lying inside them (an edge
+    /// drawn across a face splits it; new faces must honour edges already there).
+    pub(crate) fn split_faces_by_inner_edges(&mut self, faces: &[FaceId]) {
+        for &f in faces {
+            if !self.faces.contains_key(f) {
+                continue;
+            }
+            let plane = self.face_plane(f);
+            let Some(bb) = self.face_aabb(f) else { continue };
+            let bb = bb.inflate(TOL);
+            let fe: HashSet<VertexId> = self.faces[f].loops().flatten().copied().collect();
+            let inner = self.cache.egrid.query_box(bb.min, bb.max).into_iter().any(|e| {
+                let Some(ed) = self.edges.get(e) else { return false };
+                let (a, b) = self.edge_segment(e);
+                if plane.distance(a).abs() > PTOL || plane.distance(b).abs() > PTOL {
+                    return false;
+                }
+                if fe.contains(&ed.v[0]) && fe.contains(&ed.v[1]) && self.edge_faces(e).contains(&f) {
+                    return false;
+                }
+                [(a + b) * 0.5, a, b].iter().any(|p| self.face_point_loc(f, *p) == PointLoc::Inside)
+            });
+            // A loop running along an edge twice (a stretched face collapsed onto itself).
+            let mut seen = HashSet::new();
+            let folded = self.faces[f].loops().any(|l| {
+                (0..l.len()).any(|i| {
+                    let (a, b) = (l[i], l[(i + 1) % l.len()]);
+                    !seen.insert(if a < b { (a, b) } else { (b, a) })
+                })
+            });
+            if inner || folded {
+                let mut seen = HashSet::new();
+                let seeds: Vec<VertexId> = self.faces[f].loops().flatten().copied().filter(|v| seen.insert(*v)).collect();
+                self.refresh_plane(plane, &seeds, &[f], &Classify::None, Orient::auto());
+            }
+        }
+    }
+
+    /// `s` and the coplanar faces whose area overlaps it.
+    fn overlap_group(&self, s: FaceId) -> Vec<FaceId> {
+        let plane = self.face_plane(s);
+        let n = plane.normal;
+        let pr = Projector::new(plane.origin, n);
+        let to2 = |l: &[VertexId]| l.iter().map(|v| pr.to2(self.pos(*v))).collect::<Vec<_>>();
+        let so = to2(&self.faces[s].outer);
+        let sh: Vec<_> = self.faces[s].holes.iter().map(|h| to2(h)).collect();
+        let ss = crate::topology::interior_sample(&so, &sh);
+        let mut group = vec![s];
+        let Some(bb) = self.face_aabb(s) else { return group };
+        let bb = bb.inflate(TOL);
+        for g in self.cache.fgrid.query_box(bb.min, bb.max) {
+            let Some(gf) = self.faces.get(g) else { continue };
+            if group.contains(&g) || gf.normal.dot(n).abs() < 1.0 - 1e-6 {
+                continue;
+            }
+            if gf.loops().flatten().any(|v| plane.distance(self.pos(*v)).abs() > PTOL) {
+                continue;
+            }
+            let go = to2(&gf.outer);
+            let gh: Vec<_> = gf.holes.iter().map(|h| to2(h)).collect();
+            let gs = crate::topology::interior_sample(&go, &gh);
+            if regions_overlap((&so, &sh, ss), (&go, &gh, gs)) {
+                group.push(g);
+            }
+        }
+        group
     }
 
     /// Overlay each face of `faces` with existing coplanar faces it overlaps: coverage with
     /// opposite orientations cancels. Returns the vertices involved.
     pub(crate) fn resolve_overlaps(&mut self, faces: &[FaceId]) -> Vec<VertexId> {
         let mut touched = Vec::new();
-        for &s in faces {
+        let mut segs: Vec<(DVec3, DVec3)> = Vec::new();
+        // A work queue: overlaying one group rebuilds the plane around it, which may replace
+        // other faces still to be checked (new ids), so the rebuilt faces are checked too.
+        let mut queue: std::collections::VecDeque<FaceId> = faces.iter().copied().collect();
+        let mut budget = 4 * faces.len() + 64;
+        while let Some(s) = queue.pop_front() {
             if !self.faces.contains_key(s) {
                 continue;
             }
-            let plane = self.face_plane(s);
-            let n = plane.normal;
-            let pr = Projector::new(plane.origin, n);
-            let to2 = |m: &Mesh, l: &[VertexId]| l.iter().map(|v| pr.to2(m.pos(*v))).collect::<Vec<_>>();
-            let so = to2(self, &self.faces[s].outer);
-            let sh: Vec<_> = self.faces[s].holes.iter().map(|h| to2(self, h)).collect();
-            let ss = crate::topology::interior_sample(&so, &sh);
-            let Some(bb) = self.face_aabb(s) else { continue };
-            let bb = bb.inflate(TOL);
-            let mut group = vec![s];
-            for g in self.cache.fgrid.query_box(bb.min, bb.max) {
-                let Some(gf) = self.faces.get(g) else { continue };
-                if group.contains(&g) || gf.normal.dot(n).abs() < 1.0 - 1e-6 {
-                    continue;
-                }
-                if gf.loops().flatten().any(|v| plane.distance(self.pos(*v)).abs() > PTOL) {
-                    continue;
-                }
-                let go = to2(self, &gf.outer);
-                let gh: Vec<_> = gf.holes.iter().map(|h| to2(self, h)).collect();
-                let gs = crate::topology::interior_sample(&go, &gh);
-                if geom::point_in_region(ss, &go, &gh, TOL) == PointLoc::Inside
-                    || geom::point_in_region(gs, &so, &sh, TOL) == PointLoc::Inside
-                {
-                    group.push(g);
-                }
-            }
+            let mut group = self.overlap_group(s);
             if group.len() < 2 {
                 continue;
+            }
+            // Overlaying rebuilds the plane around the group, so every pending overlap in the
+            // same plane goes into the same overlay (else a neighbouring face still to be
+            // checked would be rebuilt without its overlap being resolved).
+            let plane = self.face_plane(s);
+            let pending: Vec<FaceId> = queue.iter().copied().filter(|q| !group.contains(q)).collect();
+            for q in pending {
+                let Some(qf) = self.faces.get(q) else { continue };
+                if qf.normal.dot(plane.normal).abs() < 1.0 - 1e-6 || qf.outer.iter().any(|v| plane.distance(self.pos(*v)).abs() > PTOL) {
+                    continue;
+                }
+                let more = self.overlap_group(q);
+                if more.len() >= 2 {
+                    for g in more {
+                        if !group.contains(&g) {
+                            group.push(g);
+                        }
+                    }
+                }
             }
             let mut polys = Vec::new();
             let mut seeds: Vec<VertexId> = Vec::new();
@@ -510,16 +667,44 @@ impl Mesh {
                 polys.push((outer, holes, face));
                 self.f_remove(g);
             }
-            self.refresh_plane(plane, &seeds, &[], &Classify::Overlay(&polys), Orient::auto());
-            for (a, b) in pairs {
-                if let Some(e) = self.edge_between(a, b)
-                    && self.edge_faces(e).is_empty()
-                {
+            let rebuilt = self.refresh_plane(plane, &seeds, &[], &Classify::Overlay(&polys), Orient::auto());
+            if budget > 0 {
+                budget -= 1;
+                queue.extend(rebuilt.iter().map(|r| r.face));
+            }
+            segs.extend(pairs.iter().map(|(a, b)| (self.pos(*a), self.pos(*b))));
+            touched.extend(seeds);
+        }
+        // Edges along the boundaries of the overlaid faces left without any face (cancelled
+        // coverage). Checked by geometry once all groups are done (later groups may split
+        // them), so the result does not depend on the order of the groups.
+        for (a, b) in segs {
+            for e in self.cache.egrid.query_segment(a, b) {
+                if !self.edges.contains_key(e) || !self.edge_faces(e).is_empty() {
+                    continue;
+                }
+                let (p, q) = self.edge_segment(e);
+                if geom::point_seg_dist(p, a, b).0 <= TOL && geom::point_seg_dist(q, a, b).0 <= TOL {
                     self.e_remove(e);
                 }
             }
-            touched.extend(seeds);
         }
         touched
     }
+}
+
+type Region2<'a> = (&'a [DVec2], &'a [Vec<DVec2>], DVec2);
+
+/// Do two polygons with holes share interior area? Besides interior samples, partial overlaps
+/// show up as a vertex or an edge midpoint of one lying strictly inside the other (edges are
+/// split at crossings before this is used).
+fn regions_overlap(s: Region2, g: Region2) -> bool {
+    let inside = |p: DVec2, r: &Region2| geom::point_in_region(p, r.0, r.1, TOL) == PointLoc::Inside;
+    let probes = |r: &Region2, other: &Region2| {
+        std::iter::once(r.0).chain(r.1.iter().map(|h| h.as_slice())).any(|l| {
+            let k = l.len();
+            (0..k).any(|i| inside(l[i], other) || inside((l[i] + l[(i + 1) % k]) * 0.5, other))
+        })
+    };
+    inside(s.2, &g) || inside(g.2, &s) || probes(&s, &g) || probes(&g, &s)
 }

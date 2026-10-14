@@ -341,6 +341,9 @@ impl Mesh {
     }
 
     /// Raycast with an unnormalized direction (`t` is in units of `dir`) and a face filter.
+    /// Uses the face grid when the caches are valid (walking the ray through it front to
+    /// back), else tests every face; both give the same result (on equal `t` the face first in
+    /// iteration order, i.e. the smallest id, wins).
     pub(crate) fn raycast_faces_filtered(
         &self,
         origin: DVec3,
@@ -348,24 +351,54 @@ impl Mesh {
         mut keep: impl FnMut(&Face) -> bool,
     ) -> Option<(FaceId, f64)> {
         let mut best: Option<(FaceId, f64)> = None;
-        for (fid, face) in &self.faces {
+        let mut test = |m: &Self, fid: FaceId, best: &mut Option<(FaceId, f64)>| {
+            let face = &m.faces[fid];
             if face.outer.len() < 3 || !keep(face) {
-                continue;
+                return;
             }
             let n = face.normal;
             let den = dir.dot(n);
             if den.abs() < 1e-12 {
-                continue;
+                return;
             }
-            let o = self.pos(face.outer[0]);
+            let o = m.pos(face.outer[0]);
             let t = (o - origin).dot(n) / den;
-            if t < 0.0 || best.is_some_and(|(_, bt)| t >= bt) {
-                continue;
+            if t < 0.0 || best.is_some_and(|(bf, bt)| t > bt || (t == bt && fid > bf)) {
+                return;
             }
             let p = origin + dir * t;
-            if self.face_point_loc(fid, p) != PointLoc::Outside {
-                best = Some((fid, t));
+            if m.face_point_loc(fid, p) != PointLoc::Outside {
+                *best = Some((fid, t));
             }
+        };
+        let len = dir.length();
+        if !(self.cache.valid && len.is_finite() && len > 0.0 && origin.is_finite()) {
+            for fid in self.faces.keys() {
+                test(self, fid, &mut best);
+            }
+            return best;
+        }
+        // Hits lie within the face tolerance of the face's box.
+        let pad = DVec3::splat(TOL * 8.0);
+        let (lo, hi) = self.cache.fgrid.extent()?;
+        let (t0, t1) = clip_ray(origin, dir, lo - pad, hi + pad)?;
+        // Walk the ray in chunks of a few cells. Every face whose hit point lies within the
+        // query padding of a visited chunk is a candidate of that chunk, so once the best hit
+        // is before the end of the chunk no later face can be closer.
+        let step = self.cache.fgrid.cell * 4.0 / len;
+        let mut seen: HashSet<FaceId> = HashSet::new();
+        let mut ta = t0;
+        loop {
+            let tb = (ta + step).min(t1);
+            for fid in self.cache.fgrid.query_segment(origin + dir * ta, origin + dir * tb) {
+                if self.faces.contains_key(fid) && seen.insert(fid) {
+                    test(self, fid, &mut best);
+                }
+            }
+            if tb >= t1 || best.is_some_and(|(_, bt)| bt < tb) {
+                break;
+            }
+            ta = tb;
         }
         best
     }
@@ -459,4 +492,21 @@ pub(crate) fn loop_has_pair(l: &[VertexId], a: VertexId, b: VertexId) -> bool {
         let (x, y) = (l[i], l[(i + 1) % n]);
         (x == a && y == b) || (x == b && y == a)
     })
+}
+
+/// Parameter range `[t0, t1]` (t0 >= 0) of the ray `origin + t * dir` inside the box.
+fn clip_ray(origin: DVec3, dir: DVec3, lo: DVec3, hi: DVec3) -> Option<(f64, f64)> {
+    let (mut t0, mut t1) = (0.0f64, f64::INFINITY);
+    for i in 0..3 {
+        if dir[i] == 0.0 {
+            if origin[i] < lo[i] || origin[i] > hi[i] {
+                return None;
+            }
+        } else {
+            let (a, b) = ((lo[i] - origin[i]) / dir[i], (hi[i] - origin[i]) / dir[i]);
+            t0 = t0.max(a.min(b));
+            t1 = t1.min(a.max(b));
+        }
+    }
+    (t0 <= t1 && t1.is_finite()).then_some((t0, t1))
 }

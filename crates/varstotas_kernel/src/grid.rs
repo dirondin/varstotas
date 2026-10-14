@@ -36,6 +36,8 @@ pub(crate) struct Grid<K: Key> {
     cells: HashMap<Cell, Vec<K>>,
     big: Vec<K>,
     entries: SecondaryMap<K, Entry>,
+    /// Box enclosing all geometry ever inserted (conservative: never shrinks on removal).
+    extent: Option<(DVec3, DVec3)>,
 }
 
 impl<K: Key + Ord> Default for Grid<K> {
@@ -101,7 +103,7 @@ pub(crate) fn segment_cells(a: DVec3, b: DVec3, pad: f64, cell: f64, max_cells: 
 
 impl<K: Key + Ord> Grid<K> {
     pub fn new(cell: f64) -> Self {
-        Self { cell, cells: HashMap::new(), big: Vec::new(), entries: SecondaryMap::new() }
+        Self { cell, cells: HashMap::new(), big: Vec::new(), entries: SecondaryMap::new(), extent: None }
     }
 
     fn insert_cells(&mut self, k: K, cells: Option<Vec<Cell>>) {
@@ -120,17 +122,36 @@ impl<K: Key + Ord> Grid<K> {
         }
     }
 
+    fn grow(&mut self, min: DVec3, max: DVec3) {
+        if !(min.is_finite() && max.is_finite()) {
+            return;
+        }
+        self.extent = Some(match self.extent {
+            Some((lo, hi)) => (lo.min(min), hi.max(max)),
+            None => (min, max),
+        });
+    }
+
+    /// A box containing every item's geometry (possibly larger), `None` if nothing (finite)
+    /// was ever inserted.
+    pub fn extent(&self) -> Option<(DVec3, DVec3)> {
+        self.extent
+    }
+
     pub fn insert_point(&mut self, k: K, p: DVec3) {
+        self.grow(p, p);
         let c = p.is_finite().then(|| vec![cell_of(p, self.cell)]);
         self.insert_cells(k, c);
     }
 
     pub fn insert_segment(&mut self, k: K, a: DVec3, b: DVec3) {
+        self.grow(a.min(b), a.max(b));
         let cs = segment_cells(a, b, 0.0, self.cell, MAX_ITEM_CELLS);
         self.insert_cells(k, cs);
     }
 
     pub fn insert_box(&mut self, k: K, min: DVec3, max: DVec3) {
+        self.grow(min, max);
         let cs = box_cells(min, max, self.cell, MAX_ITEM_CELLS);
         self.insert_cells(k, cs);
     }

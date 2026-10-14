@@ -137,6 +137,10 @@ impl Mesh {
     pub(crate) fn e_split(&mut self, e: EdgeId, v: VertexId) -> EdgeId {
         let tmpl = self.edges[e].clone();
         let [a, b] = tmpl.v;
+        if self.edge_between(a, v).is_some() || self.edge_between(v, b).is_some() {
+            // A piece already exists (collinear overlap): reuse it instead of duplicating.
+            return self.split_edge_at(e, v)[1];
+        }
         self.e_repoint(e, b, v);
         // e_repoint replaced endpoint b by v: e is now (a, v)
         let e2 = self.e_new(v, b, Some(&tmpl));
