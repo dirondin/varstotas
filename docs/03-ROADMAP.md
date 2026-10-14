@@ -16,7 +16,7 @@
 
 **Демо M2:** нарисовать дом из `00-VISION.md`.
 
-## M3 — Полировка MVP 🟨 (QA-раунд 1 закрыт: docs/qa/M3-report.md; осталось: релизные сборки mac universal / win, 2-й QA-раунд, производительность)
+## M3 — Полировка MVP ✅ (QA: docs/qa/M3-report.md, docs/qa/M3-round2-report.md)
 - Groups edit-контекст, Entity Info, Materials, стили, Zoom Extents, стандартные виды, undo всего, автосохранение.
 - QA-проход по UX, исправление багов топологии, производительность (10k+ граней @ 60 FPS).
 - Сборка релизов: macOS `.app` (universal), Windows `.exe`.
