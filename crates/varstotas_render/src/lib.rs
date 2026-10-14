@@ -149,6 +149,8 @@ pub const GUIDE_COLOR: [f32; 4] = [0x50 as f32 / 255.0, 0x50 as f32 / 255.0, 0x6
 pub const GUIDE_WIDTH: f32 = 1.0;
 /// Half size of the guide point cross in logical points.
 pub const GUIDE_POINT_SIZE: f32 = 4.0;
+/// Guide point depth offset toward the eye, in cross arm lengths (see `Overlay3d::add_guide_point`).
+pub const GUIDE_POINT_PULL: f32 = 6.0;
 
 impl Overlay3d {
     /// Colour for a guide in the given selection state.
@@ -188,17 +190,32 @@ impl Overlay3d {
     /// Guide point as a small screen-aligned cross (`GUIDE_POINT_SIZE` points), depth-tested.
     /// Drawn in 3D (unlike a 2D egui marker) so it also appears in `Renderer::render_to_image`.
     /// `viewport` = viewport size in logical points (as for `Camera::pixel_size_at`).
+    ///
+    /// The cross is screen-aligned, so on a face that does not face the camera half of each arm
+    /// would lie behind the face (QA4-002). It is therefore moved toward the eye along the view
+    /// ray by `GUIDE_POINT_PULL` arm lengths (same screen position and size): fully visible on
+    /// faces tilted up to ~75° from the view, still hidden by geometry further in front.
     pub fn add_guide_point(&mut self, camera: &Camera, viewport: glam::DVec2, p: glam::DVec3, selected: bool) {
         if !p.is_finite() {
             return;
         }
-        let s = camera.pixel_size_at(p, viewport) * GUIDE_POINT_SIZE as f64;
         let b = camera.basis();
+        let pull = camera.pixel_size_at(p, viewport) * (GUIDE_POINT_SIZE * GUIDE_POINT_PULL) as f64;
+        let q = if camera.ortho {
+            p - b.forward * pull
+        } else {
+            let to_p = p - camera.eye;
+            let dist = to_p.length();
+            // never past half-way to the eye
+            let k = if dist > 1e-9 { 1.0 - (pull / dist).min(0.5) } else { 1.0 };
+            camera.eye + to_p * k
+        };
+        let s = camera.pixel_size_at(q, viewport) * GUIDE_POINT_SIZE as f64;
         let color = Self::guide_color(selected);
         for (u, v) in [(b.right + b.up, -b.right - b.up), (b.right - b.up, b.up - b.right)] {
             self.lines.push(OverlayLine {
-                a: (p + u * s).as_vec3().to_array(),
-                b: (p + v * s).as_vec3().to_array(),
+                a: (q + u * s).as_vec3().to_array(),
+                b: (q + v * s).as_vec3().to_array(),
                 color,
                 width_px: GUIDE_WIDTH,
                 dashed: false,
@@ -267,6 +284,26 @@ mod tests {
         let mid_y = (g.a[1] + g.b[1]) * 0.5;
         assert!((mid_y as f64 - cam.target.y).abs() < 1.0);
         assert!(o.lines[1..].iter().all(|l| l.color == HIGHLIGHT_SELECTED && !l.dashed));
+        // guide point: pulled toward the eye, same screen position, arms still GUIDE_POINT_SIZE pts
+        let vp = glam::DVec2::new(800.0, 600.0);
+        let p = glam::DVec3::new(300.0, 200.0, 500.0);
+        for ortho in [false, true] {
+            let mut cam = Camera::default();
+            cam.set_ortho(ortho);
+            let mut o = Overlay3d::default();
+            o.add_guide_point(&cam, vp, p, false);
+            let f = |v: [f32; 3]| glam::Vec3::from(v).as_dvec3();
+            let centre = (f(o.lines[0].a) + f(o.lines[0].b)) * 0.5;
+            let sp = cam.world_to_screen(p, vp).unwrap();
+            let sc = cam.world_to_screen(centre, vp).unwrap();
+            assert!((sp - sc).length() < 0.05, "{sp} vs {sc}");
+            let fwd = cam.basis().forward;
+            let pulled = (p - centre).dot(fwd);
+            let arm = cam.pixel_size_at(p, vp) * GUIDE_POINT_SIZE as f64;
+            assert!(pulled > arm * 4.0, "pulled {pulled} arm {arm}");
+            let a = cam.world_to_screen(f(o.lines[0].a), vp).unwrap();
+            assert!(((a - sc).length() - GUIDE_POINT_SIZE as f64 * 2f64.sqrt()).abs() < 0.05);
+        }
         // hundreds of guides: one overlay line each
         let mut many = Overlay3d::default();
         for i in 0..500 {

@@ -316,6 +316,15 @@ fn guides(overlay: &mut Overlay3d, camera: &Camera, viewport: DVec2, offset: DVe
     overlay.add_guide_line(camera, camera.eye + DVec3::new(300.0, 0.0, -300.0), DVec3::new(0.3, 1.0, -0.2), false);
     overlay.add_guide_point(camera, viewport, o(2000.0, 1500.0, 2400.0), false);
     overlay.add_guide_point(camera, viewport, o(3300.0, 500.0, 2400.0), true);
+    // QA4-002: guide points lying on faces (white box top / front, green cube top) and guide
+    // lines lying in face planes must be fully visible.
+    overlay.add_guide_point(camera, viewport, o(1000.0, 750.0, 1200.0), false);
+    overlay.add_guide_point(camera, viewport, o(1700.0, 0.0, 900.0), true);
+    overlay.add_guide_point(camera, viewport, o(-1000.0, 2000.0, 800.0), false);
+    // on the hidden back face of the white box: must stay hidden
+    overlay.add_guide_point(camera, viewport, o(1000.0, 1500.0, 600.0), true);
+    overlay.add_guide_line(camera, o(0.0, 1000.0, 1200.0), DVec3::X, false);
+    overlay.add_guide_line(camera, o(0.0, 0.0, 300.0), DVec3::X, false);
     let n: usize = std::env::var("VARSTOTAS_GUIDES").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     for i in 0..n {
         let a = i as f64 * 0.37;
