@@ -22,7 +22,7 @@ pub use camera::{Camera, CameraBasis, StandardView};
 pub struct TriVertex {
     pub pos: [f32; 3],
     pub normal: [f32; 3],
-    /// sRGB color, alpha < 1 = translucent (sorted/OIT left to renderer).
+    /// sRGB color, alpha < 1 = translucent (drawn after opaque, sorted back-to-front).
     pub color: [f32; 4],
 }
 
@@ -44,8 +44,12 @@ pub struct SceneGeometry {
     pub edges: Vec<LineVertex>,
     /// Edges drawn as thick "profiles" (silhouette-ish outlines), line list pairs.
     pub profile_edges: Vec<LineVertex>,
-    /// Scene radius around origin for clip planes.
+    /// Scene radius around `origin` for clip planes.
     pub radius: f32,
+    /// World position (f64) that all positions above are relative to (default: world origin).
+    /// Put it near the model (e.g. bounding-box center) to keep f32 precision for models far
+    /// from the world origin. Overlay coordinates stay in world space.
+    pub origin: [f64; 3],
 }
 
 /// Per-frame 3D overlay line (tool previews, inference axes, guides).

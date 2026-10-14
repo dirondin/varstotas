@@ -4,6 +4,11 @@
 //!
 //! Left drag = orbit, right drag / Shift+left drag = pan, wheel = zoom to cursor.
 //! Env `VARSTOTAS_SCREENSHOT=out.png` saves a window screenshot after a few frames and quits.
+//! `VARSTOTAS_STRESS=<faces>` (>= 100) adds a grid of boxes, `=1` a 1M-triangle height field; stress mode
+//! orbits every frame without vsync and logs the average frame time. `VARSTOTAS_STRESS_GLASS=1` makes
+//! every 8th box translucent. `VARSTOTAS_RENDER_TIMING=1` logs renderer CPU/GPU timings.
+//! `VARSTOTAS_STYLE=mono|hidden|wire|xray|noedges|noprofiles|noground` (comma list), `VARSTOTAS_ZOOM=<f>`,
+//! `VARSTOTAS_OFFSET=<mm>` (move the model far from the world origin via `SceneGeometry::origin`).
 
 use eframe::egui;
 use glam::{DVec2, DVec3, Vec3};
@@ -19,6 +24,18 @@ fn main() -> eframe::Result {
             .with_inner_size([1200.0, 800.0])
             .with_title("varstotas_render viewer"),
         renderer: eframe::Renderer::Wgpu,
+        // Stress mode measures real frame time: no vsync cap.
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            surface: eframe::egui_wgpu::SurfaceConfig {
+                present_mode: if std::env::var("VARSTOTAS_STRESS").is_ok() {
+                    varstotas_render::wgpu::PresentMode::AutoNoVsync
+                } else {
+                    varstotas_render::wgpu::PresentMode::AutoVsync
+                },
+                ..eframe::egui_wgpu::SurfaceConfig::LOW_LATENCY
+            },
+            ..Default::default()
+        },
         ..Default::default()
     };
     eframe::run_native(
@@ -195,8 +212,36 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
             b.edge(p, q, BLACK);
         }
     }
-    if std::env::var("VARSTOTAS_STRESS").is_ok() {
-        // ~1M triangles: a wavy height-field 708 x 708 cells (2 tris each).
+    let stress = std::env::var("VARSTOTAS_STRESS").unwrap_or_default();
+    let stress_faces: usize = stress.trim().parse().unwrap_or(if stress.is_empty() { 0 } else { 1 });
+    if stress_faces >= 100 {
+        // `VARSTOTAS_STRESS=<faces>`: a grid of boxes (6 faces, 12 tris, 12 edges + 12 profiles each).
+        // `VARSTOTAS_STRESS_GLASS=1`: every 8th box is translucent (exercises the sorted blend pass).
+        let glass = std::env::var("VARSTOTAS_STRESS_GLASS").is_ok_and(|v| v == "1");
+        let boxes = stress_faces.div_ceil(6);
+        let side = (boxes as f64).sqrt().ceil() as usize;
+        let (pitch, w) = (1000.0f32, 600.0f32);
+        let x0 = -2000.0 - side as f32 * pitch; // left of the demo scene
+        for k in 0..boxes {
+            let (i, j) = (k % side, k / side);
+            let hgt = 300.0 + ((i * 7 + j * 13) % 17) as f32 * 120.0;
+            let min = Vec3::new(x0 + i as f32 * pitch, j as f32 * pitch - side as f32 * pitch * 0.5, 0.0);
+            let col = if glass && k % 8 == 0 {
+                [0.45, 0.65, 1.0, 0.4]
+            } else {
+                [0.6 + (i % 5) as f32 * 0.08, 0.7, 0.6 + (j % 5) as f32 * 0.08, 1.0]
+            };
+            b.cuboid(min, min + Vec3::new(w, w, hgt), col, true);
+        }
+        eprintln!(
+            "stress: {} boxes, {} faces, {} triangles, {} edges",
+            boxes,
+            boxes * 6,
+            b.geo.tris.len() / 3,
+            b.geo.edges.len() / 2
+        );
+    } else if stress_faces > 0 {
+        // `VARSTOTAS_STRESS=1`: ~1M triangles: a wavy height-field 708 x 708 cells (2 tris each).
         let n = 708;
         let size = 20000.0f32;
         let h = |i: usize, j: usize| {
@@ -217,11 +262,12 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
         }
         eprintln!("stress: {} triangles", b.geo.tris.len() / 3);
     }
-    (
-        b.finish(),
-        DVec3::new(-4500.0, -3000.0, -600.0),
-        DVec3::new(6000.0, 5400.0, 2400.0),
-    )
+    let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    for v in &b.geo.tris {
+        min = min.min(Vec3::from(v.pos));
+        max = max.max(Vec3::from(v.pos));
+    }
+    (b.finish(), min.as_dvec3(), max.as_dvec3())
 }
 
 // ---------------------------------------------------------------------------
@@ -237,18 +283,30 @@ struct Viewer {
     frame_no: u64,
     screenshot: Option<String>,
     screenshot_sent: bool,
+    fps_window: Option<std::time::Instant>,
+    /// World offset of the demo model (`VARSTOTAS_OFFSET`).
+    offset: DVec3,
 }
 
 impl Viewer {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let rs = cc.wgpu_render_state.as_ref().expect("wgpu backend required");
         let mut renderer = Renderer::new(rs);
-        let (geo, min, max) = build_scene();
+        let (mut geo, mut min, mut max) = build_scene();
+        // `VARSTOTAS_OFFSET=<mm>`: move the whole model far along +X (e.g. 5000000 = 5 km) via
+        // `SceneGeometry::origin`, to check relative-to-eye precision.
+        let offset = std::env::var("VARSTOTAS_OFFSET").ok().and_then(|o| o.parse::<f64>().ok()).unwrap_or(0.0);
+        let off = DVec3::new(offset, 0.0, 0.0);
+        geo.origin = off.to_array();
+        min += off;
+        max += off;
         renderer.set_geometry(rs, &geo);
 
         // Env knobs for automated screenshots.
         let env = |k: &str| std::env::var(k).unwrap_or_default().to_lowercase();
         let mut camera = Camera::default();
+        camera.eye += off;
+        camera.target += off;
         let mut style = RenderStyle::default();
         let view = match env("VARSTOTAS_VIEW").as_str() {
             "top" => Some(StandardView::Top),
@@ -265,8 +323,11 @@ impl Viewer {
         if env("VARSTOTAS_ORTHO") == "1" {
             camera.set_ortho(true);
         }
-        if env("VARSTOTAS_EXTENTS") == "1" {
+        if env("VARSTOTAS_EXTENTS") == "1" || std::env::var("VARSTOTAS_STRESS").is_ok() {
             camera.zoom_extents(min, max, 1.5);
+        }
+        if let Some(z) = std::env::var("VARSTOTAS_ZOOM").ok().and_then(|z| z.parse::<f64>().ok()) {
+            camera.zoom(z, camera.target);
         }
         if let Ok(o) = std::env::var("VARSTOTAS_ORBIT") {
             let v: Vec<f64> = o.split(',').filter_map(|x| x.trim().parse().ok()).collect();
@@ -280,6 +341,9 @@ impl Viewer {
                 "hidden" => style.face_style = FaceStyle::HiddenLine,
                 "wire" => style.face_style = FaceStyle::Wireframe,
                 "xray" => style.xray = true,
+                "noedges" => style.show_edges = false,
+                "noprofiles" => style.profiles = false,
+                "noground" => style.show_ground = false,
                 _ => {}
             }
         }
@@ -288,10 +352,12 @@ impl Viewer {
             camera,
             style,
             bbox: (min, max),
+            offset: off,
             drag_point: None,
             frame_no: 0,
             screenshot: std::env::var("VARSTOTAS_SCREENSHOT").ok(),
             screenshot_sent: false,
+            fps_window: None,
         }
     }
 
@@ -351,9 +417,14 @@ impl Viewer {
 impl eframe::App for Viewer {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         self.frame_no += 1;
-        if self.frame_no.is_multiple_of(120) && std::env::var("VARSTOTAS_STRESS").is_ok() {
-            let dt = ui.input(|i| i.stable_dt);
-            eprintln!("frame {} dt {:.2} ms", self.frame_no, dt * 1000.0);
+        if std::env::var("VARSTOTAS_STRESS").is_ok() {
+            let now = std::time::Instant::now();
+            let start = *self.fps_window.get_or_insert(now);
+            if self.frame_no.is_multiple_of(120) {
+                let ms = now.duration_since(start).as_secs_f64() * 1000.0 / 120.0;
+                eprintln!("frame {} avg frame time {:.2} ms ({:.0} fps)", self.frame_no, ms, 1000.0 / ms);
+                self.fps_window = Some(now);
+            }
         }
         if std::env::var("VARSTOTAS_STRESS").is_ok() {
             self.camera.orbit(DVec2::new(1.0, 0.0), self.camera.target);
@@ -441,6 +512,18 @@ impl eframe::App for Viewer {
                     }],
                 };
 
+                let mut overlay = overlay;
+                if self.offset != DVec3::ZERO {
+                    let sh = |p: &mut [f32; 3]| *p = (DVec3::from(p.map(|x| x as f64)) + self.offset).as_vec3().to_array();
+                    for l in &mut overlay.lines {
+                        sh(&mut l.a);
+                        sh(&mut l.b);
+                    }
+                    for p in &mut overlay.polygons {
+                        p.tris.iter_mut().for_each(sh);
+                    }
+                }
+
                 // --- render ---
                 let ppp = ui.ctx().pixels_per_point();
                 let size_px = [
@@ -458,7 +541,7 @@ impl eframe::App for Viewer {
                 );
 
                 // 2D marker example: project the origin
-                if let Some(s) = self.camera.world_to_screen(DVec3::ZERO, vp) {
+                if let Some(s) = self.camera.world_to_screen(self.offset, vp) {
                     let p = rect.min + egui::vec2(s.x as f32, s.y as f32);
                     ui.painter().circle_stroke(p, 5.0, (2.0, egui::Color32::from_rgb(0, 192, 0)));
                 }

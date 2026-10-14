@@ -93,6 +93,12 @@ struct Targets {
 }
 
 struct StaticGeo {
+    /// Bumped on every `set_geometry` (invalidates the translucent sort).
+    revision: u64,
+    /// World position of the local frame the f32 vertex positions are relative to.
+    origin: DVec3,
+    /// Triangle centroids (local frame), same order as the vertex buffer (opaque, then translucent).
+    centroids: Vec<[f32; 3]>,
     tris: Option<wgpu::Buffer>,
     backs: Option<wgpu::Buffer>,
     /// Vertex counts: opaque range first, then translucent.
@@ -104,17 +110,60 @@ struct StaticGeo {
     edge_verts: u32,
     profiles: Option<wgpu::Buffer>,
     profile_count: u32,
+    /// Storage-buffer bind groups for `edges_thick` / `profiles` (fast non-instanced path).
+    edges_bg: Option<wgpu::BindGroup>,
+    profiles_bg: Option<wgpu::BindGroup>,
     radius: f64,
+}
+
+/// What the current back-to-front index buffer was sorted for.
+#[derive(Clone, Copy, PartialEq)]
+struct SortKey {
+    revision: u64,
+    /// true = all triangles (X-ray), false = only the translucent range.
+    all: bool,
+    eye: [f64; 3],
+    fwd: [f64; 3],
+    ortho: bool,
+}
+
+/// Back-to-front order of the blended triangles, kept in a persistent index buffer and
+/// re-sorted only when the camera, the blended set or the geometry changes.
+struct BlendSort {
+    key: Option<SortKey>,
+    keys: Vec<u32>,
+    tris: Vec<u32>,
+    tmp_keys: Vec<u32>,
+    tmp_tris: Vec<u32>,
+    indices: Vec<u32>,
+    buf: DynBuffer,
+    /// Number of indices in `buf` valid for `key`.
+    count: u32,
+}
+
+/// Optional frame timing (`VARSTOTAS_RENDER_TIMING=1`): averages logged to stderr every 120 frames.
+/// GPU time is measured by blocking until the frame's submission completes (debug only).
+#[derive(Default)]
+struct Timing {
+    frames: u32,
+    cpu: std::time::Duration,
+    sort: std::time::Duration,
+    gpu: std::time::Duration,
+    sorts: u32,
 }
 
 struct Pipelines {
     sky: wgpu::RenderPipeline,
     ground: wgpu::RenderPipeline,
     face_opaque: wgpu::RenderPipeline,
-    /// Translucent faces: back faces first (cull front), then front faces (cull back).
-    face_blend_back: wgpu::RenderPipeline,
-    face_blend_front: wgpu::RenderPipeline,
+    /// Translucent / X-ray faces: indexed back-to-front, no cull, no depth write.
+    face_blend: wgpu::RenderPipeline,
     edge_thick: wgpu::RenderPipeline,
+    /// Same as `edge_thick` / `thick_depth`, but segments are read from a storage buffer and
+    /// drawn as a plain (non-instanced) triangle list: tiny 6-vertex instances are slow on
+    /// tile-based GPUs. `None` when vertex-stage storage buffers are unavailable (GL).
+    edge_thick_seg: Option<wgpu::RenderPipeline>,
+    thick_depth_seg: Option<wgpu::RenderPipeline>,
     edge: wgpu::RenderPipeline,
     thick_depth: wgpu::RenderPipeline,
     thick_top: wgpu::RenderPipeline,
@@ -136,7 +185,17 @@ pub struct Renderer {
     overlay_lines: DynBuffer,
     overlay_polys: DynBuffer,
     axes: DynBuffer,
+    blend: BlendSort,
+    /// Reused per-frame scratch (no per-frame allocations).
+    scratch_lines: Vec<ThickLine>,
+    scratch_polys: Vec<LineVertex>,
+    scratch_axes: Vec<ThickLine>,
     max_buffer: u64,
+    max_texture_dim: u32,
+    /// Layout of the segment storage bind group (group 1); `None` = instanced fallback only.
+    seg_bgl: Option<wgpu::BindGroupLayout>,
+    max_storage_binding: u64,
+    timing: Option<Timing>,
 }
 
 fn srgb_to_linear(c: [f32; 4]) -> [f32; 4] {
@@ -245,7 +304,32 @@ impl Renderer {
             immediate_size: 0,
         });
 
-        let pipelines = build_pipelines(device, &shader, &layout, color_format);
+        let limits = device.limits();
+        let seg_bgl = (limits.max_storage_buffers_per_shader_stage > 0
+            && rs.adapter.get_info().backend != wgpu::Backend::Gl)
+            .then(|| {
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("varstotas segments"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                })
+            });
+        let seg_layout = seg_bgl.as_ref().map(|sb| {
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("varstotas segments"),
+                bind_group_layouts: &[Some(&bgl), Some(sb)],
+                immediate_size: 0,
+            })
+        });
+        let pipelines = build_pipelines(device, &shader, &layout, seg_layout.as_ref(), color_format);
         let vb = wgpu::BufferUsages::VERTEX;
         Renderer {
             color_format,
@@ -257,6 +341,9 @@ impl Renderer {
             targets: None,
             texture_id: None,
             geo: StaticGeo {
+                revision: 0,
+                origin: DVec3::ZERO,
+                centroids: Vec::new(),
                 tris: None,
                 backs: None,
                 opaque_verts: 0,
@@ -266,17 +353,39 @@ impl Renderer {
                 edge_verts: 0,
                 profiles: None,
                 profile_count: 0,
+                edges_bg: None,
+                profiles_bg: None,
                 radius: 0.0,
             },
             overlay_lines: DynBuffer::new(device, "varstotas overlay lines", vb),
             overlay_polys: DynBuffer::new(device, "varstotas overlay polys", vb),
             axes: DynBuffer::new(device, "varstotas axes", vb),
+            blend: BlendSort {
+                key: None,
+                keys: Vec::new(),
+                tris: Vec::new(),
+                tmp_keys: Vec::new(),
+                tmp_tris: Vec::new(),
+                indices: Vec::new(),
+                buf: DynBuffer::new(device, "varstotas blend indices", wgpu::BufferUsages::INDEX),
+                count: 0,
+            },
+            scratch_lines: Vec::new(),
+            scratch_polys: Vec::new(),
+            scratch_axes: Vec::new(),
             max_buffer: device.limits().max_buffer_size,
+            max_texture_dim: limits.max_texture_dimension_2d,
+            seg_bgl,
+            max_storage_binding: limits.max_storage_buffer_binding_size,
+            timing: std::env::var("VARSTOTAS_RENDER_TIMING")
+                .is_ok_and(|v| !v.is_empty() && v != "0")
+                .then(Timing::default),
         }
     }
 
     /// Upload new static geometry.
     pub fn set_geometry(&mut self, rs: &egui_wgpu::RenderState, geo: &SceneGeometry) {
+        let t0 = std::time::Instant::now();
         let device = &rs.device;
         let max_tris_verts = (self.max_buffer / std::mem::size_of::<TriVertex>() as u64) as usize;
         let mut n = geo.tris.len() - geo.tris.len() % 3;
@@ -313,6 +422,14 @@ impl Renderer {
         let translucent_verts = t_tris.len() as u32;
         tris.extend_from_slice(&t_tris);
         backs.extend_from_slice(&t_backs);
+        self.geo.centroids.clear();
+        self.geo.centroids.extend(tris.as_chunks::<3>().0.iter().map(|t| {
+            let c = (glam::Vec3::from(t[0].pos) + glam::Vec3::from(t[1].pos) + glam::Vec3::from(t[2].pos))
+                / 3.0;
+            c.to_array()
+        }));
+        self.geo.revision += 1;
+        self.blend.key = None;
 
         let mk = |label: &str, data: &[u8]| -> Option<wgpu::Buffer> {
             if data.is_empty() {
@@ -345,7 +462,8 @@ impl Renderer {
                 color: p[0].color,
             })
             .collect();
-        self.geo.edges_thick = mk("varstotas edges thick", bytemuck::cast_slice(&edges_thick));
+        self.geo.edges_thick = self.seg_buffer(device, "varstotas edges thick", &edges_thick);
+        self.geo.edges_bg = self.seg_bind_group(device, self.geo.edges_thick.as_ref());
 
         let profiles: Vec<ThickLine> = geo
             .profile_edges
@@ -360,9 +478,101 @@ impl Renderer {
                 color: p[0].color,
             })
             .collect();
-        self.geo.profiles = mk("varstotas profiles", bytemuck::cast_slice(&profiles));
+        self.geo.profiles = self.seg_buffer(device, "varstotas profiles", &profiles);
+        self.geo.profiles_bg = self.seg_bind_group(device, self.geo.profiles.as_ref());
         self.geo.profile_count = profiles.len() as u32;
-        self.geo.radius = geo.radius.max(0.0) as f64;
+        let origin = DVec3::from_array(geo.origin);
+        self.geo.origin = if origin.is_finite() { origin } else { DVec3::ZERO };
+        // The camera treats the scene as a ball around the world origin.
+        self.geo.radius = geo.radius.max(0.0) as f64 + self.geo.origin.length();
+        if self.timing.is_some() {
+            eprintln!(
+                "varstotas_render timing: set_geometry {} tris ({} translucent), {} edges: {:.2} ms",
+                n / 3,
+                translucent_verts / 3,
+                ne / 2,
+                t0.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+    }
+
+    /// Thick-line segment buffer, usable as instanced vertex buffer and (if supported) storage.
+    fn seg_buffer(&self, device: &wgpu::Device, label: &str, segs: &[ThickLine]) -> Option<wgpu::Buffer> {
+        if segs.is_empty() {
+            return None;
+        }
+        let mut usage = wgpu::BufferUsages::VERTEX;
+        if self.seg_bgl.is_some() && std::mem::size_of_val(segs) as u64 <= self.max_storage_binding {
+            usage |= wgpu::BufferUsages::STORAGE;
+        }
+        Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(label),
+            contents: bytemuck::cast_slice(segs),
+            usage,
+        }))
+    }
+
+    fn seg_bind_group(&self, device: &wgpu::Device, buf: Option<&wgpu::Buffer>) -> Option<wgpu::BindGroup> {
+        let buf = buf?;
+        if !buf.usage().contains(wgpu::BufferUsages::STORAGE) {
+            return None;
+        }
+        Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("varstotas segments"),
+            layout: self.seg_bgl.as_ref()?,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buf.as_entire_binding(),
+            }],
+        }))
+    }
+
+    /// Re-sort the blended triangles back-to-front if the camera or the set changed.
+    /// Returns the number of indices to draw from `blend.buf`.
+    fn update_blend_order(&mut self, rs: &egui_wgpu::RenderState, camera: &Camera, all: bool) -> u32 {
+        let g = &self.geo;
+        let total = g.opaque_verts / 3 + g.translucent_verts / 3;
+        let first = if all { 0 } else { g.opaque_verts / 3 };
+        let n = (total - first) as usize;
+        if n == 0 {
+            return 0;
+        }
+        let eye_local = camera.eye - g.origin;
+        let fwd = camera.basis().forward;
+        let key = SortKey {
+            revision: g.revision,
+            all,
+            eye: eye_local.to_array(),
+            fwd: fwd.to_array(),
+            ortho: camera.ortho,
+        };
+        if self.blend.key == Some(key) {
+            return self.blend.count;
+        }
+        let t0 = std::time::Instant::now();
+        let s = &mut self.blend;
+        let eye = eye_local.as_vec3();
+        let f = fwd.as_vec3();
+        let cents = &g.centroids[first as usize..total as usize];
+        s.keys.clear();
+        s.tris.clear();
+        if camera.ortho {
+            s.keys.extend(cents.iter().map(|c| !depth_key((glam::Vec3::from(*c) - eye).dot(f))));
+        } else {
+            s.keys.extend(cents.iter().map(|c| !depth_key((glam::Vec3::from(*c) - eye).length_squared())));
+        }
+        s.tris.extend(first..total);
+        radix_sort_pairs(&mut s.keys, &mut s.tris, &mut s.tmp_keys, &mut s.tmp_tris);
+        s.indices.clear();
+        s.indices.extend(s.tris.iter().flat_map(|&t| [t * 3, t * 3 + 1, t * 3 + 2]));
+        s.buf.write(&rs.device, &rs.queue, bytemuck::cast_slice(&s.indices));
+        s.count = s.indices.len() as u32;
+        s.key = Some(key);
+        if let Some(t) = self.timing.as_mut() {
+            t.sort += t0.elapsed();
+            t.sorts += 1;
+        }
+        s.count
     }
 
     fn ensure_targets(&mut self, rs: &egui_wgpu::RenderState, size: [u32; 2]) {
@@ -450,7 +660,8 @@ impl Renderer {
         size_px: [u32; 2],
         pixels_per_point: f32,
     ) -> egui::TextureId {
-        let max_dim = rs.device.limits().max_texture_dimension_2d;
+        let t_start = std::time::Instant::now();
+        let max_dim = self.max_texture_dim;
         let size = [size_px[0].clamp(1, max_dim), size_px[1].clamp(1, max_dim)];
         self.ensure_targets(rs, size);
         let ppp = if pixels_per_point > 0.0 { pixels_per_point } else { 1.0 };
@@ -461,10 +672,15 @@ impl Renderer {
         let aspect = size[0] as f64 / size[1] as f64;
         let b = camera.basis();
         let scene_radius = self.geo.radius;
-        let origin = camera.eye.as_vec3().as_dvec3(); // f32-representable origin
-        let view_proj: DMat4 =
-            camera.proj(aspect, scene_radius) * camera.view() * DMat4::from_translation(origin);
-        let eye_rel = camera.eye - origin;
+        // Relative-to-eye: vertices are f32 relative to `geo.origin` (world, f64). The shader
+        // subtracts `origin` (≈ eye in that local frame, f32-representable) before the f32
+        // matrix, so precision is relative to the camera, not to the world origin.
+        let geo_origin = self.geo.origin;
+        let origin = (camera.eye - geo_origin).as_vec3().as_dvec3();
+        let view_proj: DMat4 = camera.proj(aspect, scene_radius)
+            * camera.view()
+            * DMat4::from_translation(geo_origin + origin);
+        let eye_rel = camera.eye - geo_origin - origin;
         let viewport_pts = DVec2::new(size[0] as f64 / ppp as f64, size[1] as f64 / ppp as f64);
         let (rw, uw) = if camera.ortho {
             let hh = camera.ortho_height * 0.5;
@@ -496,7 +712,7 @@ impl Renderer {
         let v4 = |v: DVec3, w: f64| [v.x as f32, v.y as f32, v.z as f32, w as f32];
         let mut globals = Globals {
             view_proj: view_proj.as_mat4().to_cols_array_2d(),
-            origin: v4(origin, 0.0),
+            origin: v4(origin, geo_origin.z),
             eye_rel: v4(eye_rel, if camera.ortho { 1.0 } else { 0.0 }),
             right: v4(b.right, rw),
             up: v4(b.up, uw),
@@ -526,42 +742,64 @@ impl Renderer {
         globals.hidden_face[3] = 1.0;
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
 
-        // ---- per-frame buffers -------------------------------------------
+        // ---- per-frame buffers (reused scratch vectors) --------------------
+        // Overlay coordinates are world f32; shift them into the geometry's local frame.
+        let to_local = |p: [f32; 3]| -> [f32; 3] {
+            if geo_origin == DVec3::ZERO {
+                p
+            } else {
+                (DVec3::new(p[0] as f64, p[1] as f64, p[2] as f64) - geo_origin)
+                    .as_vec3()
+                    .to_array()
+            }
+        };
         // Overlay lines: depth-tested first, then on-top.
-        let mut lines: Vec<ThickLine> = Vec::with_capacity(overlay.lines.len());
+        let lines = &mut self.scratch_lines;
+        lines.clear();
         for pass_top in [false, true] {
             lines.extend(overlay.lines.iter().filter(|l| l.on_top == pass_top).map(|l| ThickLine {
-                a: l.a,
+                a: to_local(l.a),
                 width: l.width_px.max(0.5),
-                b: l.b,
+                b: to_local(l.b),
                 dash: if l.dashed { 9.0 } else { 0.0 },
                 color: l.color,
             }));
         }
         let lines_depth = overlay.lines.iter().filter(|l| !l.on_top).count() as u32;
         let lines_top = lines.len() as u32 - lines_depth;
-        self.overlay_lines.write(device, queue, bytemuck::cast_slice(&lines));
+        self.overlay_lines.write(device, queue, bytemuck::cast_slice(lines));
 
-        let mut polys: Vec<LineVertex> = Vec::new();
+        let polys = &mut self.scratch_polys;
+        polys.clear();
         let mut polys_depth = 0u32;
         for pass_top in [false, true] {
             for p in overlay.polygons.iter().filter(|p| p.on_top == pass_top) {
                 let n = p.tris.len() - p.tris.len() % 3;
-                polys.extend(p.tris[..n].iter().map(|&pos| LineVertex { pos, color: p.color }));
+                polys.extend(p.tris[..n].iter().map(|&pos| LineVertex { pos: to_local(pos), color: p.color }));
             }
             if !pass_top {
                 polys_depth = polys.len() as u32;
             }
         }
         let polys_top = polys.len() as u32 - polys_depth;
-        self.overlay_polys.write(device, queue, bytemuck::cast_slice(&polys));
+        self.overlay_polys.write(device, queue, bytemuck::cast_slice(polys));
 
-        let axes = if style.show_axes {
-            axes_lines(camera, scene_radius)
+        let axes = &mut self.scratch_axes;
+        axes.clear();
+        if style.show_axes {
+            axes_lines(axes, camera, scene_radius, to_local([0.0; 3]));
+        }
+        let axes_count = axes.len() as u32;
+        self.axes.write(device, queue, bytemuck::cast_slice(axes));
+
+        // Translucent faces / X-ray: back-to-front index order (re-sorted on camera change).
+        let draw_faces = style.face_style != FaceStyle::Wireframe;
+        let opaque_all = matches!(style.face_style, FaceStyle::Monochrome | FaceStyle::HiddenLine);
+        let blend_count = if draw_faces && (style.xray || !opaque_all) {
+            self.update_blend_order(rs, camera, style.xray)
         } else {
-            Vec::new()
+            0
         };
-        self.axes.write(device, queue, bytemuck::cast_slice(&axes));
 
         // ---- encode --------------------------------------------------------
         let t = self.targets.as_ref().expect("targets");
@@ -600,8 +838,6 @@ impl Renderer {
             pass.set_pipeline(&p.sky);
             pass.draw(0..3, 0..1);
 
-            let draw_faces = style.face_style != FaceStyle::Wireframe;
-            let opaque_all = matches!(style.face_style, FaceStyle::Monochrome | FaceStyle::HiddenLine);
             let set_face_buffers = |pass: &mut wgpu::RenderPass<'_>| {
                 if let (Some(tb), Some(bb)) = (&g.tris, &g.backs) {
                     pass.set_vertex_buffer(0, tb.slice(..));
@@ -626,7 +862,11 @@ impl Renderer {
             if (style.show_edges || style.face_style == FaceStyle::Wireframe) && g.edge_verts > 0 {
                 if ppp >= 1.5 {
                     // HiDPI: 1 physical px is too faint; draw 1 logical point quads.
-                    if let Some(eb) = &g.edges_thick {
+                    if let (Some(pl), Some(bg)) = (&p.edge_thick_seg, &g.edges_bg) {
+                        pass.set_pipeline(pl);
+                        pass.set_bind_group(1, bg, &[]);
+                        pass.draw(0..g.edge_verts * 3, 0..1); // 6 vertices per segment
+                    } else if let Some(eb) = &g.edges_thick {
                         pass.set_pipeline(&p.edge_thick);
                         pass.set_vertex_buffer(0, eb.slice(..));
                         pass.draw(0..6, 0..g.edge_verts / 2);
@@ -644,16 +884,22 @@ impl Renderer {
                 && g.profile_count > 0
                 && let Some(pb) = &g.profiles
             {
-                pass.set_pipeline(&p.thick_depth);
-                pass.set_vertex_buffer(0, pb.slice(..));
-                pass.draw(0..6, 0..g.profile_count);
+                if let (Some(pl), Some(bg)) = (&p.thick_depth_seg, &g.profiles_bg) {
+                    pass.set_pipeline(pl);
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.draw(0..g.profile_count * 6, 0..1);
+                } else {
+                    pass.set_pipeline(&p.thick_depth);
+                    pass.set_vertex_buffer(0, pb.slice(..));
+                    pass.draw(0..6, 0..g.profile_count);
+                }
             }
 
             // 5. axes
-            if !axes.is_empty() {
+            if axes_count > 0 {
                 pass.set_pipeline(&p.thick_depth);
                 pass.set_vertex_buffer(0, self.axes.buf.slice(..));
-                pass.draw(0..6, 0..axes.len() as u32);
+                pass.draw(0..6, 0..axes_count);
             }
 
             // 6. ground (translucent, tints geometry below z = 0)
@@ -662,21 +908,12 @@ impl Renderer {
                 pass.draw(0..3, 0..1);
             }
 
-            // 7. translucent faces / x-ray
-            if draw_faces && set_face_buffers(&mut pass) {
-                let range = if style.xray {
-                    0..total_face_verts
-                } else if opaque_all {
-                    0..0
-                } else {
-                    g.opaque_verts..total_face_verts
-                };
-                if !range.is_empty() {
-                    pass.set_pipeline(&p.face_blend_back);
-                    pass.draw(range.clone(), 0..1);
-                    pass.set_pipeline(&p.face_blend_front);
-                    pass.draw(range, 0..1);
-                }
+            // 7. translucent faces / x-ray: sorted back-to-front, no depth write, both sides
+            //    in one pass (the fragment shader picks the front/back color).
+            if blend_count > 0 && set_face_buffers(&mut pass) {
+                pass.set_pipeline(&p.face_blend);
+                pass.set_index_buffer(self.blend.buf.buf.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..blend_count, 0, 0..1);
             }
 
             // 8. overlays: depth-tested, then on top
@@ -701,7 +938,26 @@ impl Renderer {
                 pass.draw(0..6, lines_depth..lines_depth + lines_top);
             }
         }
-        queue.submit(Some(enc.finish()));
+        let submission = queue.submit(Some(enc.finish()));
+        if let Some(t) = self.timing.as_mut() {
+            t.cpu += t_start.elapsed();
+            let g0 = std::time::Instant::now();
+            let _ = device.poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None });
+            t.gpu += g0.elapsed();
+            t.frames += 1;
+            if t.frames >= 120 {
+                let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0 / t.frames as f64;
+                eprintln!(
+                    "varstotas_render timing ({} frames): cpu {:.3} ms/frame (incl. sort {:.3} ms, {} sorts), gpu wait {:.3} ms/frame",
+                    t.frames,
+                    ms(t.cpu),
+                    ms(t.sort),
+                    t.sorts,
+                    ms(t.gpu)
+                );
+                *t = Timing::default();
+            }
+        }
         self.texture_id.expect("texture registered")
     }
 
@@ -712,7 +968,7 @@ impl Renderer {
 }
 
 /// classic axes: solid in the positive direction, dotted in the negative.
-fn axes_lines(camera: &Camera, scene_radius: f64) -> Vec<ThickLine> {
+fn axes_lines(v: &mut Vec<ThickLine>, camera: &Camera, scene_radius: f64, o: [f32; 3]) {
     // Long enough to look infinite at the current zoom level.
     let len = (camera.distance() * 50.0)
         .max(scene_radius * 4.0)
@@ -724,22 +980,55 @@ fn axes_lines(camera: &Camera, scene_radius: f64) -> Vec<ThickLine> {
         [0.0, 0.62, 0.0, 1.0],
         [0.0, 0.0, 0.9, 1.0],
     ];
-    let mut v = Vec::with_capacity(6);
     for (i, c) in cols.iter().enumerate() {
-        let mut e = [0.0f32; 3];
-        e[i] = len;
-        let mut ne = [0.0f32; 3];
-        ne[i] = -len;
-        v.push(ThickLine { a: [0.0; 3], width: 1.0, b: e, dash: 0.0, color: *c });
-        v.push(ThickLine { a: [0.0; 3], width: 1.0, b: ne, dash: -4.0, color: *c });
+        let mut e = o;
+        e[i] += len;
+        let mut ne = o;
+        ne[i] -= len;
+        v.push(ThickLine { a: o, width: 1.0, b: e, dash: 0.0, color: *c });
+        v.push(ThickLine { a: o, width: 1.0, b: ne, dash: -4.0, color: *c });
     }
-    v
+}
+
+/// Order-preserving map of an f32 to u32 (ascending floats -> ascending keys).
+fn depth_key(d: f32) -> u32 {
+    let b = d.to_bits();
+    if b & 0x8000_0000 != 0 { !b } else { b | 0x8000_0000 }
+}
+
+/// LSD radix sort of `vals` by `keys` (ascending), 3 passes of 11 bits. O(n), stable.
+fn radix_sort_pairs(keys: &mut Vec<u32>, vals: &mut Vec<u32>, tmp_k: &mut Vec<u32>, tmp_v: &mut Vec<u32>) {
+    let n = keys.len();
+    tmp_k.resize(n, 0);
+    tmp_v.resize(n, 0);
+    for shift in [0u32, 11, 22] {
+        let mut count = [0usize; 2048];
+        for &k in keys.iter() {
+            count[((k >> shift) & 2047) as usize] += 1;
+        }
+        let mut sum = 0;
+        for c in count.iter_mut() {
+            let x = *c;
+            *c = sum;
+            sum += x;
+        }
+        for i in 0..n {
+            let k = keys[i];
+            let b = ((k >> shift) & 2047) as usize;
+            tmp_k[count[b]] = k;
+            tmp_v[count[b]] = vals[i];
+            count[b] += 1;
+        }
+        std::mem::swap(keys, tmp_k);
+        std::mem::swap(vals, tmp_v);
+    }
 }
 
 fn build_pipelines(
     device: &wgpu::Device,
     shader: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
+    seg_layout: Option<&wgpu::PipelineLayout>,
     color_format: wgpu::TextureFormat,
 ) -> Pipelines {
     let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4];
@@ -783,7 +1072,7 @@ fn build_pipelines(
         bias: wgpu::DepthBiasState,
         cull: Option<wgpu::Face>,
     }
-    let make = |d: Desc<'_>| {
+    let make_with = |d: Desc<'_>, layout: &wgpu::PipelineLayout| {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(d.label),
             layout: Some(layout),
@@ -824,6 +1113,7 @@ fn build_pipelines(
             cache: None,
         })
     };
+    let make = |d: Desc<'_>| make_with(d, layout);
     use wgpu::CompareFunction::{Always, GreaterEqual};
     use wgpu::PrimitiveTopology::{LineList, TriangleList};
     let no_bias = wgpu::DepthBiasState::default();
@@ -833,7 +1123,28 @@ fn build_pipelines(
         slope_scale: -1.5,
         clamp: 0.0,
     };
+    let seg = |label: &'static str, depth_write: bool| {
+        seg_layout.map(|l| {
+            make_with(
+                Desc {
+                    label,
+                    vs: "vs_thick_seg",
+                    fs: "fs_thick",
+                    buffers: &[],
+                    topology: TriangleList,
+                    blend: true,
+                    depth_write,
+                    depth_compare: GreaterEqual,
+                    bias: no_bias,
+                    cull: None,
+                },
+                l,
+            )
+        })
+    };
     Pipelines {
+        edge_thick_seg: seg("varstotas edges thick (storage)", true),
+        thick_depth_seg: seg("varstotas thick lines (storage)", false),
         sky: make(Desc {
             label: "varstotas sky",
             vs: "vs_fullscreen",
@@ -870,8 +1181,8 @@ fn build_pipelines(
             bias: face_bias,
             cull: None,
         }),
-        face_blend_back: make(Desc {
-            label: "varstotas faces blend back",
+        face_blend: make(Desc {
+            label: "varstotas faces blend",
             vs: "vs_face",
             fs: "fs_face",
             buffers: &tri_layouts,
@@ -880,19 +1191,7 @@ fn build_pipelines(
             depth_write: false,
             depth_compare: GreaterEqual,
             bias: face_bias,
-            cull: Some(wgpu::Face::Front),
-        }),
-        face_blend_front: make(Desc {
-            label: "varstotas faces blend front",
-            vs: "vs_face",
-            fs: "fs_face",
-            buffers: &tri_layouts,
-            topology: TriangleList,
-            blend: true,
-            depth_write: false,
-            depth_compare: GreaterEqual,
-            bias: face_bias,
-            cull: Some(wgpu::Face::Back),
+            cull: None,
         }),
         edge_thick: make(Desc {
             label: "varstotas edges thick",
@@ -991,6 +1290,36 @@ mod tests {
             wgpu::naga::valid::Capabilities::empty(),
         );
         v.validate(&module).expect("wgsl validate");
+    }
+
+    #[test]
+    fn depth_key_is_monotonic() {
+        let xs = [-1e30f32, -5.0, -1.0, -1e-20, -0.0, 0.0, 1e-20, 0.5, 1.0, 7.0, 1e30];
+        for w in xs.windows(2) {
+            assert!(depth_key(w[0]) <= depth_key(w[1]), "{} vs {}", w[0], w[1]);
+        }
+    }
+
+    #[test]
+    fn radix_sort_back_to_front() {
+        // Pseudo-random depths; sorting by !depth_key gives descending depth (far first).
+        let mut seed = 12345u32;
+        let depths: Vec<f32> = (0..5000)
+            .map(|_| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (seed >> 8) as f32 / 1000.0 - 3000.0
+            })
+            .collect();
+        let mut keys: Vec<u32> = depths.iter().map(|&d| !depth_key(d)).collect();
+        let mut vals: Vec<u32> = (0..depths.len() as u32).collect();
+        let (mut tk, mut tv) = (Vec::new(), Vec::new());
+        radix_sort_pairs(&mut keys, &mut vals, &mut tk, &mut tv);
+        for w in vals.windows(2) {
+            assert!(depths[w[0] as usize] >= depths[w[1] as usize]);
+        }
+        let mut seen = vals.clone();
+        seen.sort_unstable();
+        assert_eq!(seen, (0..depths.len() as u32).collect::<Vec<_>>());
     }
 
     #[test]

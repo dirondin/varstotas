@@ -3,7 +3,7 @@
 
 struct Globals {
     view_proj: mat4x4<f32>,   // world-relative-to-`origin` -> clip
-    origin: vec4<f32>,        // xyz: render origin (≈ eye) in world mm
+    origin: vec4<f32>,        // xyz: render origin (≈ eye) in the geometry's local frame; w: local frame world z
     eye_rel: vec4<f32>,       // xyz: eye - origin; w: 1 = ortho
     right: vec4<f32>,         // xyz: camera right; w: tan_half_x (persp) | half width (ortho)
     up: vec4<f32>,            // xyz: camera up;    w: tan_half_y (persp) | half height (ortho)
@@ -117,8 +117,9 @@ struct GroundOut {
 fn fs_ground(in: FsOut) -> GroundOut {
     let r = pixel_ray(in.ndc);
     let ortho = g.eye_rel.w > 0.5;
-    let plane_z = -g.origin.z; // world z = 0 in relative coords
-    let eye_world_z = g.eye_rel.z + g.origin.z;
+    // origin.w = world z of the geometry's local frame (SceneGeometry::origin.z).
+    let plane_z = -(g.origin.z + g.origin.w); // world z = 0 in relative coords
+    let eye_world_z = g.eye_rel.z + g.origin.z + g.origin.w;
     // Only visible from above.
     var valid = r.d.z < -1e-6 && (ortho || eye_world_z > 0.0);
     var t = 0.0;
@@ -282,6 +283,34 @@ fn thick_color(c: vec4<f32>, width: f32) -> vec4<f32> {
 
 @vertex
 fn vs_thick(@builtin(vertex_index) vi: u32, v: ThickIn) -> ThickOut {
+    return thick_vertex(vi, v);
+}
+
+// Same segments read from a storage buffer: one non-instanced triangle list, 6 vertices per
+// segment (avoids tiny instances, which are slow on tile-based GPUs).
+struct Seg {
+    a: vec3<f32>,
+    width: f32,
+    b: vec3<f32>,
+    dash: f32,
+    color: vec4<f32>,
+};
+
+@group(1) @binding(0) var<storage, read> segs: array<Seg>;
+
+@vertex
+fn vs_thick_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
+    let s = segs[vi / 6u];
+    var v: ThickIn;
+    v.a = s.a;
+    v.width = s.width;
+    v.b = s.b;
+    v.dash = s.dash;
+    v.color = s.color;
+    return thick_vertex(vi % 6u, v);
+}
+
+fn thick_vertex(vi: u32, v: ThickIn) -> ThickOut {
     // corners: (end, side)
     var ends = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
     var sides = array<f32, 6>(-1.0, 1.0, 1.0, -1.0, 1.0, -1.0);
