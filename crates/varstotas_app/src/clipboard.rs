@@ -79,17 +79,31 @@ impl Clipboard {
         if !doc.has_selection() {
             return Err(OpError::Invalid("nothing selected".into()));
         }
-        let mut model = doc.model.clone();
-        let path = doc.active_path.clone();
-        let src_xf = model.transform_at(&path);
+        Self::from_parts(&doc.model, doc.uid, &doc.active_path, &doc.selection, &doc.guide_sel)
+    }
+
+    /// Copy entities `ents` of the context `path` of `src` (document `src_doc`) and `guide_sel`.
+    pub fn from_parts(
+        src: &Model,
+        src_doc: u64,
+        path: &[InstanceId],
+        ents: &[EntityRef],
+        guide_sel: &[GuideRef],
+    ) -> OpResult<Clipboard> {
+        let mut model = src.clone();
+        let src_xf = model.transform_at(path);
         let mut def = None;
-        let mut count = doc.guide_sel.len();
-        let ents: Vec<EntityRef> =
-            doc.selection.iter().copied().filter(|e| !matches!(e, EntityRef::Vertex(_))).collect();
+        let mut count = guide_sel.len();
+        let alive = model.mesh_at(path).ok_or(OpError::NotFound)?;
+        let ents: Vec<EntityRef> = ents
+            .iter()
+            .copied()
+            .filter(|e| !matches!(e, EntityRef::Vertex(_)) && crate::document::entity_alive(alive, *e))
+            .collect();
         if !ents.is_empty() {
             count += ents.len();
-            let inst = model.make_group(&path, &ents)?;
-            let d = model.mesh_at(&path).and_then(|m| m.instances.get(inst)).map(|i| i.def).ok_or(OpError::NotFound)?;
+            let inst = model.make_group(path, &ents)?;
+            let d = model.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def).ok_or(OpError::NotFound)?;
             def = Some(d);
         }
         // Keep only what the copied definition needs (the root stays, emptied).
@@ -106,9 +120,8 @@ impl Clipboard {
             model.defs[root].mesh = Mesh::new();
         }
         let guides: Vec<GuideLine> =
-            doc.guide_sel.iter().filter_map(|g| if let GuideRef::Line(id) = g { model.guides.get(*id).copied() } else { None }).collect();
-        let guide_points: Vec<DVec3> = doc
-            .guide_sel
+            guide_sel.iter().filter_map(|g| if let GuideRef::Line(id) = g { model.guides.get(*id).copied() } else { None }).collect();
+        let guide_points: Vec<DVec3> = guide_sel
             .iter()
             .filter_map(|g| if let GuideRef::Point(id) = g { model.guide_points.get(*id).copied() } else { None })
             .collect();
@@ -126,7 +139,7 @@ impl Clipboard {
         if let Some(d) = def {
             collect_edges(&model, d, src_xf, &mut preview, 0);
         }
-        Ok(Clipboard { model, def, src_xf, src_doc: doc.uid, guides, guide_points, bounds, preview, count })
+        Ok(Clipboard { model, def, src_xf, src_doc, guides, guide_points, bounds, preview, count })
     }
 
     /// Point of the content that follows the cursor while pasting (bounding-box min corner).
@@ -168,9 +181,11 @@ impl Clipboard {
             };
             let iid = model.mesh_at_mut(path).ok_or(OpError::NotFound)?.instances.insert(inst);
             ents = model.explode(path, iid)?;
-            // Explode may report a face/edge more than once (shared or welded).
+            // Explode may report a face/edge more than once (shared or welded), or one that a
+            // later weld of the same explode merged away.
             let mut seen = HashSet::new();
-            ents.retain(|e| seen.insert(*e));
+            let mesh = model.mesh_at(path).ok_or(OpError::NotFound)?;
+            ents.retain(|e| crate::document::entity_alive(mesh, *e) && seen.insert(*e));
         }
         let mut guides = Vec::new();
         for g in &self.guides {
@@ -342,6 +357,36 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(doc.model.mesh_at(&[g]).unwrap().faces.len(), before * 2);
+    }
+
+    #[test]
+    fn array_of_touching_copies_welds_and_returns_live_refs() {
+        let mut doc = boxed_doc();
+        doc.select_all();
+        let uid = doc.uid;
+        let ents = doc.selection.clone();
+        let (out, faces) = doc
+            .commit("Copy", |m| {
+                let clip = Clipboard::from_parts(m, uid, &[], &ents, &[]).unwrap();
+                let mut out = Vec::new();
+                for k in 1..=5 {
+                    let t = DMat4::from_translation(DVec3::X * 1000.0 * k as f64);
+                    out.extend(clip.paste_into(m, uid, &[], &t).unwrap().0);
+                }
+                (out, m.root_mesh().faces.len())
+            })
+            .unwrap();
+        let mesh = doc.model.root_mesh();
+        assert!(out.iter().all(|e| crate::document::entity_alive(mesh, *e)));
+        // Every copy landed (the source refs were never welded away mid-array).
+        let b = doc.model.bounds().unwrap();
+        assert!((b.max.x - 6000.0).abs() < 1e-6, "{b:?}");
+        // 6 boxes in a row: 4 outer faces each + 2 ends + 5 shared walls (merged, not doubled).
+        assert!((6 * 4 + 2..=6 * 6).contains(&faces), "{faces}");
+        // Later copies share (welded) edges with earlier ones; the selection dedupes them.
+        let unique: HashSet<EntityRef> = out.iter().copied().collect();
+        doc.set_selection(out);
+        assert_eq!(doc.selection.len(), unique.len());
     }
 
     #[test]

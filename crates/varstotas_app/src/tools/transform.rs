@@ -82,6 +82,7 @@ fn run_transform(
     let mats: Vec<DMat4> = world.iter().map(|t| world_to_local_xf(ctx.doc, t)).collect();
     let (ents, guides) = (tg.ents.clone(), tg.guides.clone());
     let path = ctx.doc.active_path.clone();
+    let uid = ctx.doc.uid;
     let r = ctx.doc.commit(label, |model| {
         let mut out = Targets::default();
         if copy {
@@ -92,9 +93,20 @@ fn run_transform(
             model.transform_guides(&guides, w);
             out.guides = guides.clone();
         }
-        if !ents.is_empty()
-            && let Some(mesh) = model.mesh_at_mut(&path)
-        {
+        if ents.is_empty() {
+            return out;
+        }
+        // Copies weld into the context (coincident faces / edges merge), which can kill refs
+        // of the source and of earlier copies. So copies are made from a snapshot of the
+        // source entities (like Paste), never from the live, possibly welded, refs.
+        let clip = if copy { crate::clipboard::Clipboard::from_parts(model, uid, &path, &ents, &[]).ok() } else { None };
+        if let Some(clip) = clip {
+            for w in &world {
+                if let Ok((e, _)) = clip.paste_into(model, uid, &path, w) {
+                    out.ents.extend(e);
+                }
+            }
+        } else if let Some(mesh) = model.mesh_at_mut(&path) {
             if copy {
                 for m in &mats {
                     out.ents.extend(mesh.duplicate(&ents, m));
@@ -102,6 +114,11 @@ fn run_transform(
             } else if let Some(m) = mats.first() {
                 out.ents = apply_transform(mesh, &ents, m, false);
             }
+        }
+        // Keep only refs that survived all welds (set_selection filters too).
+        if let Some(mesh) = model.mesh_at(&path) {
+            let mut seen = std::collections::HashSet::new();
+            out.ents.retain(|e| crate::document::entity_alive(mesh, *e) && seen.insert(*e));
         }
         out
     })?;

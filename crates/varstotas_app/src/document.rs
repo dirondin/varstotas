@@ -233,7 +233,14 @@ impl Document {
     }
 
     /// Replace the selection with entities and guides.
-    pub fn set_selection_with_guides(&mut self, sel: Vec<EntityRef>, guides: Vec<GuideRef>) {
+    /// Dead refs (e.g. entities merged away by a kernel weld) and duplicates are dropped.
+    pub fn set_selection_with_guides(&mut self, mut sel: Vec<EntityRef>, mut guides: Vec<GuideRef>) {
+        if let Some(mesh) = self.model.mesh_at(&self.active_path) {
+            let mut seen = std::collections::HashSet::new();
+            sel.retain(|e| entity_alive(mesh, *e) && seen.insert(*e));
+        }
+        let mut seen = std::collections::HashSet::new();
+        guides.retain(|g| self.model.has_guide(*g) && seen.insert(*g));
         if sel != self.selection || guides != self.guide_sel {
             self.selection = sel;
             self.guide_sel = guides;
@@ -394,12 +401,7 @@ impl Document {
             return;
         };
         let n = self.selection.len();
-        self.selection.retain(|e| match *e {
-            EntityRef::Vertex(id) => mesh.vertices.contains_key(id),
-            EntityRef::Edge(id) => mesh.edges.contains_key(id),
-            EntityRef::Face(id) => mesh.faces.contains_key(id),
-            EntityRef::Instance(id) => mesh.instances.contains_key(id),
-        });
+        self.selection.retain(|e| entity_alive(mesh, *e));
         if n != self.selection.len() {
             self.selection_version += 1;
         }
@@ -436,5 +438,15 @@ impl Document {
         }
         self.commit("Delete Guides", |m| m.delete_all_guides());
         true
+    }
+}
+
+/// `e` still exists in `mesh`.
+pub fn entity_alive(mesh: &varstotas_kernel::Mesh, e: EntityRef) -> bool {
+    match e {
+        EntityRef::Vertex(v) => mesh.vertices.contains_key(v),
+        EntityRef::Edge(x) => mesh.edges.contains_key(x),
+        EntityRef::Face(f) => mesh.faces.contains_key(f),
+        EntityRef::Instance(i) => mesh.instances.contains_key(i),
     }
 }
