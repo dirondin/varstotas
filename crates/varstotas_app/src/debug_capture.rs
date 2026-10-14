@@ -214,6 +214,13 @@ pub enum ScriptCmd {
     Autosave,
     /// `recover yes|no|later` — answer the autosave recovery prompt.
     Recover(Option<bool>),
+    /// `open <path>` — open a model file (no file dialog, no "save changes?" prompt).
+    Open(String),
+    /// `export_png <path> [w h] [transparent]` — File → Export → 2D Graphic without dialogs
+    /// (default size: the viewport's).
+    ExportPng(String, Option<[u32; 2]>, bool),
+    /// `action <name>` — run a menu action (see `script_action`).
+    Action(String),
 }
 
 fn tool_by_name(s: &str) -> Option<ToolId> {
@@ -253,10 +260,15 @@ fn parse_raw(rest: &str) -> Option<RawCmd> {
         "up" => RawCmd::Up(p(0)?),
         "click" => RawCmd::Click(p(0)?),
         "tap" => RawCmd::Tap(p(0)?),
+        "rclick" => RawCmd::RightClick(p(0)?),
         "dblclick" => RawCmd::DoubleClick(p(0)?),
         "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
         "dragfast" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: true },
         "mods" => RawCmd::Mods(parse_mods(args)),
+        "copy" => RawCmd::Copy,
+        "cut" => RawCmd::Cut,
+        "paste" => RawCmd::Paste(if args.is_empty() { "Varstotas".into() } else { args.to_string() }),
+        "text" if !args.is_empty() => RawCmd::Text(args.to_string()),
         "key" => {
             let (k, st) = args.split_once(char::is_whitespace).unwrap_or((args, "tap"));
             let key = Key::from_name(k.trim())?;
@@ -286,6 +298,8 @@ pub enum RawCmd {
     Click(Pos2),
     /// `raw tap x y` — move + press + release in ONE frame (trackpad tap-to-click).
     Tap(Pos2),
+    /// `raw rclick x y` — move, secondary press, release (3 frames): context menu.
+    RightClick(Pos2),
     /// `raw dblclick x y` — move, press, release, press, release (5 frames).
     DoubleClick(Pos2),
     /// `raw drag x0 y0 x1 y1 [steps]` — move, press, `steps` moves (one per frame), release.
@@ -297,6 +311,14 @@ pub enum RawCmd {
     Mods(Modifiers),
     /// `raw key <Name> [down|up]` — Key event(s); without down/up: press then release.
     Key(Key, Option<bool>),
+    /// `raw copy` / `raw cut` — what egui-winit emits for Cmd+C / Cmd+X.
+    Copy,
+    Cut,
+    /// `raw paste [text]` — what egui-winit emits for Cmd+V (with the OS clipboard text);
+    /// combine with `raw mods cmd+shift` for Paste in Place.
+    Paste(String),
+    /// `raw text <s>` — typed text (e.g. VCB input).
+    Text(String),
 }
 
 /// Pending raw events, one `Vec` per frame, plus the scripted modifier state (copied into
@@ -394,6 +416,16 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "perf" => ScriptCmd::Perf(nums.first().copied().unwrap_or(60.0) as u32),
         "autosave" => ScriptCmd::Autosave,
         "save" if !rest.is_empty() => ScriptCmd::SaveTo(rest.to_string()),
+        "open" if !rest.is_empty() => ScriptCmd::Open(rest.to_string()),
+        "export_png" if !rest.is_empty() => {
+            let mut it = rest.split_whitespace();
+            let path = it.next()?.to_string();
+            let tail: Vec<&str> = it.collect();
+            let n: Vec<u32> = tail.iter().filter_map(|t| t.parse().ok()).collect();
+            let size = (n.len() >= 2).then(|| [n[0], n[1]]);
+            ScriptCmd::ExportPng(path, size, tail.iter().any(|t| t.eq_ignore_ascii_case("transparent")))
+        }
+        "action" if !rest.is_empty() => ScriptCmd::Action(rest.to_ascii_lowercase()),
         "recover" => ScriptCmd::Recover(match rest.to_ascii_lowercase().as_str() {
             "yes" | "y" | "recover" => Some(true),
             "no" | "n" | "discard" => Some(false),
@@ -670,9 +702,67 @@ impl VarstotasApp {
             ScriptCmd::SaveTo(p) => {
                 self.save_to(std::path::Path::new(&p));
             }
-            ScriptCmd::Recover(c) => self.resolve_recovery(c),
+            ScriptCmd::Recover(c) => {
+                if self.autosave.recoveries.is_empty() {
+                    log::warn!("script: `recover` but no autosave recovery is pending (already answered, or none found)");
+                }
+                self.resolve_recovery(c)
+            }
+            ScriptCmd::Open(p) => {
+                self.doc.dirty = false;
+                self.actions.push(crate::app::Action::OpenPath(p.into()));
+            }
+            ScriptCmd::ExportPng(p, size, transparent) => {
+                let vp = self.viewport.size();
+                let size = size.unwrap_or([vp.x.round() as u32, vp.y.round() as u32]);
+                self.export_png_to(p.into(), size, transparent);
+            }
+            ScriptCmd::Action(name) => self.script_action(&name),
             ScriptCmd::Raw(r) => self.queue_raw(r),
         }
+    }
+
+    /// `action <name>`: menu actions by name.
+    fn script_action(&mut self, name: &str) {
+        use crate::app::Action;
+        use varstotas_kernel::IntersectScope;
+        let a = match name {
+            "copy" => Action::Copy,
+            "cut" => Action::Cut,
+            "paste" => Action::Paste,
+            "paste_in_place" => Action::PasteInPlace,
+            "delete" => Action::Delete,
+            "delete_guides" => Action::DeleteGuides,
+            "toggle_guides" => Action::ToggleGuides,
+            "make_group" => Action::MakeGroup,
+            "explode" => Action::Explode,
+            "exit_context" => Action::ExitContext,
+            "intersect_model" => Action::IntersectFaces(IntersectScope::Model),
+            "intersect_selection" => Action::IntersectFaces(IntersectScope::Selection),
+            "intersect_context" => Action::IntersectFaces(IntersectScope::Context),
+            "reverse_faces" => Action::ReverseFaces,
+            "orient_faces" => Action::OrientFaces,
+            "flip_red" => Action::FlipAlong(0),
+            "flip_green" => Action::FlipAlong(1),
+            "flip_blue" => Action::FlipAlong(2),
+            "export_dialog" => Action::ExportImage,
+            "new" => Action::New,
+            "template_chooser" => {
+                self.show_templates = true;
+                return;
+            }
+            n => match crate::templates::Template::ALL
+                .iter()
+                .find(|t| format!("template_{t:?}").eq_ignore_ascii_case(n))
+            {
+                Some(t) => Action::NewFromTemplate(*t),
+                None => {
+                    log::warn!("script: unknown action `{n}`");
+                    return;
+                }
+            },
+        };
+        self.actions.push(a);
     }
 
     fn queue_raw(&mut self, cmd: RawCmd) {
@@ -693,6 +783,15 @@ impl VarstotasApp {
             RawCmd::Up(p) => vec![vec![mv(p)], vec![btn(p, false)]],
             RawCmd::Click(p) => vec![vec![mv(p)], vec![btn(p, true)], vec![btn(p, false)]],
             RawCmd::Tap(p) => vec![vec![mv(p), btn(p, true), btn(p, false)]],
+            RawCmd::RightClick(p) => {
+                let rb = |pressed: bool| Event::PointerButton {
+                    pos: p + origin,
+                    button: PointerButton::Secondary,
+                    pressed,
+                    modifiers: m,
+                };
+                vec![vec![mv(p)], vec![rb(true)], vec![rb(false)]]
+            }
             RawCmd::DoubleClick(p) => {
                 vec![vec![mv(p)], vec![btn(p, true)], vec![btn(p, false)], vec![btn(p, true)], vec![btn(p, false)]]
             }
@@ -716,6 +815,10 @@ impl VarstotasApp {
             }
             RawCmd::Key(k, Some(p)) => vec![vec![key(k, p)]],
             RawCmd::Key(k, None) => vec![vec![key(k, true)], vec![key(k, false)]],
+            RawCmd::Copy => vec![vec![Event::Copy]],
+            RawCmd::Cut => vec![vec![Event::Cut]],
+            RawCmd::Paste(t) => vec![vec![Event::Paste(t)]],
+            RawCmd::Text(t) => vec![vec![Event::Text(t)]],
         };
         inj.frames.extend(frames);
     }
@@ -731,8 +834,20 @@ impl VarstotasApp {
         let edges = count(|e| matches!(e, EntityRef::Edge(_)));
         let insts = count(|e| matches!(e, EntityRef::Instance(_)));
         let (mf, me) = self.doc.active_mesh().map(|m| (m.faces.len(), m.edges.len())).unwrap_or_default();
+        let m = &self.doc.model;
+        let all_faces: usize = m.defs.values().map(|d| d.mesh.faces.len()).sum();
+        let guides = format!(
+            "guides L={} P={} sel={} hidden={} defs={} model_faces={all_faces} unit={:?} undo={:?}",
+            m.guides.len(),
+            m.guide_points.len(),
+            self.doc.guide_sel.len(),
+            m.guides_hidden,
+            m.defs.len(),
+            m.unit,
+            self.doc.history.undo_label(),
+        );
         format!(
-            "tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
+            "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
             self.tool_id(),
             self.doc.active_path.len(),
             self.camera.ortho,
@@ -822,6 +937,16 @@ mod tests {
         assert_eq!(parse_cmd("recover yes"), Some(ScriptCmd::Recover(Some(true))));
         assert_eq!(parse_cmd("recover later"), Some(ScriptCmd::Recover(None)));
         assert_eq!(parse_cmd("stress 10"), Some(ScriptCmd::Stress(10)));
+        assert_eq!(parse_cmd("raw paste"), Some(ScriptCmd::Raw(RawCmd::Paste("Varstotas".into()))));
+        assert_eq!(parse_cmd("raw copy"), Some(ScriptCmd::Raw(RawCmd::Copy)));
+        assert_eq!(parse_cmd("raw rclick 3 4"), Some(ScriptCmd::Raw(RawCmd::RightClick(Pos2::new(3.0, 4.0)))));
+        assert_eq!(
+            parse_cmd("export_png a.png 640 480 transparent"),
+            Some(ScriptCmd::ExportPng("a.png".into(), Some([640, 480]), true))
+        );
+        assert_eq!(parse_cmd("export_png a.png"), Some(ScriptCmd::ExportPng("a.png".into(), None, false)));
+        assert_eq!(parse_cmd("open x.vrst"), Some(ScriptCmd::Open("x.vrst".into())));
+        assert_eq!(parse_cmd("action Flip_Red"), Some(ScriptCmd::Action("flip_red".into())));
     }
 
     #[test]

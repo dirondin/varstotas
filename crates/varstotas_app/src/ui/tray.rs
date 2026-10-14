@@ -5,7 +5,7 @@ use super::{color_f32, color32, fmt_area, fmt_len, small_icon_button, swatch, th
 use crate::app::{Action, VarstotasApp};
 use crate::document::{PaletteMaterial, guarded};
 use egui::{Color32, Frame, Margin, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
-use varstotas_kernel::{ContextPath, EntityRef, InstanceId, LengthUnit, Mesh, Model, TagId};
+use varstotas_kernel::{ContextPath, EntityRef, GuideRef, InstanceId, LengthUnit, Mesh, Model, TagId};
 
 #[derive(Default)]
 pub struct TrayState {
@@ -27,6 +27,7 @@ struct SelSummary {
     edges: usize,
     groups: usize,
     components: usize,
+    guides: usize,
     area: f64,
 }
 
@@ -162,7 +163,11 @@ impl VarstotasApp {
             return s;
         }
         let model = &self.doc.model;
-        let mut s = SelSummary { count: self.doc.selection.len(), ..Default::default() };
+        let mut s = SelSummary {
+            count: self.doc.selection.len() + self.doc.guide_sel.len(),
+            guides: self.doc.guide_sel.len(),
+            ..Default::default()
+        };
         if let Some(mesh) = model.mesh_at(&self.doc.active_path) {
             for e in &self.doc.selection {
                 match e {
@@ -193,6 +198,13 @@ impl VarstotasApp {
         // Only the first two entities are needed to pick the layout; the multi-selection
         // details come from the cached summary (selections can hold 100k+ entities).
         let sel: Vec<EntityRef> = self.doc.selection.iter().take(2).cloned().collect();
+        let guides: Vec<GuideRef> = self.doc.guide_sel.iter().take(2).cloned().collect();
+        if sel.is_empty() && guides.len() == 1 {
+            self.guide_info(ui, guides[0]);
+            return;
+        }
+        // Mixed entity + guide selections use the multi-selection layout.
+        let sel = if guides.is_empty() || sel.len() > 1 { sel } else { vec![sel.first().copied().unwrap_or(EntityRef::Vertex(Default::default())); 2] };
         let path = self.doc.active_path.clone();
         let mut set_tag: Option<Option<TagId>> = None;
         let mut rename: Option<(InstanceId, String)> = None;
@@ -313,8 +325,10 @@ impl VarstotasApp {
                         ui.end_row();
                     }
                     _ => {
-                        let SelSummary { count, faces, edges, groups, components, area } = summary;
-                        ui.label(RichText::new(format!("{count} Entities")).strong());
+                        let SelSummary { count, faces, edges, groups, components, guides, area } = summary;
+                        let only_guides = guides == count;
+                        let title = if only_guides { format!("{count} Guides") } else { format!("{count} Entities") };
+                        ui.label(RichText::new(title).strong());
                         ui.end_row();
                         let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
                         let mut parts = Vec::new();
@@ -330,6 +344,9 @@ impl VarstotasApp {
                         if components > 0 {
                             parts.push(plural(components, "Component", "Components"));
                         }
+                        if guides > 0 {
+                            parts.push(plural(guides, "Guide", "Guides"));
+                        }
                         ui.label("Contains");
                         ui.label(parts.join(", "));
                         ui.end_row();
@@ -338,9 +355,11 @@ impl VarstotasApp {
                             ui.label(fmt_area(area, unit));
                             ui.end_row();
                         }
-                        ui.label("Tag");
-                        set_tag = tag_combo(ui, model, None, "many");
-                        ui.end_row();
+                        if !only_guides {
+                            ui.label("Tag");
+                            set_tag = tag_combo(ui, model, None, "many");
+                            ui.end_row();
+                        }
                     }
                 }
             });
@@ -376,6 +395,8 @@ impl VarstotasApp {
             });
         }
         if let Some(tag) = set_tag {
+            // All selected entities (`sel` only holds the first two, for the layout).
+            let sel = self.doc.selection.clone();
             self.doc.commit("Set Tag", |m| {
                 if let Some(mesh) = m.mesh_at_mut(&path) {
                     for e in &sel {
@@ -401,6 +422,37 @@ impl VarstotasApp {
                 }
             });
         }
+    }
+
+    /// Entity Info for a single selected guide line / guide point (world coordinates).
+    fn guide_info(&mut self, ui: &mut Ui, g: GuideRef) {
+        let model = &self.doc.model;
+        let unit = model.unit;
+        let pt = |p: varstotas_kernel::glam::DVec3| {
+            format!("{}, {}, {}", fmt_len(p.x, unit), fmt_len(p.y, unit), fmt_len(p.z, unit))
+        };
+        egui::Grid::new("entity_info_guide").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| match g {
+            GuideRef::Line(id) => {
+                let Some(l) = model.guides.get(id) else { return };
+                ui.label(RichText::new("Guide Line").strong());
+                ui.end_row();
+                ui.label("Through");
+                ui.label(pt(l.origin));
+                ui.end_row();
+                let d = l.dir.normalize_or_zero();
+                ui.label("Direction");
+                ui.label(format!("{:.3}, {:.3}, {:.3}", d.x, d.y, d.z));
+                ui.end_row();
+            }
+            GuideRef::Point(id) => {
+                let Some(p) = model.guide_points.get(id) else { return };
+                ui.label(RichText::new("Guide Point").strong());
+                ui.end_row();
+                ui.label("Position");
+                ui.label(pt(*p));
+                ui.end_row();
+            }
+        });
     }
 
     // ---- Materials ---------------------------------------------------------

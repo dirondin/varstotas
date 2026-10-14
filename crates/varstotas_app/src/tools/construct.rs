@@ -41,19 +41,18 @@ pub struct TapeTool {
     last_measure: Option<f64>,
     /// Last completed point-to-point measurement (typing a value then offers a resize).
     resize_base: Option<f64>,
-    /// Pending "Resize the model?" confirmation: uniform factor.
-    resize_pending: Option<f64>,
     unit: Option<varstotas_kernel::LengthUnit>,
 }
 
 /// Uniformly scale everything in the active context (and the model's guides at the root)
-/// about the context origin.
-fn resize_active(ctx: &mut ToolContext, factor: f64) -> bool {
-    let path = ctx.doc.active_path.clone();
+/// about the context origin. Inside a component this resizes its definition (all instances).
+pub(crate) fn resize_active(doc: &mut crate::document::Document, factor: f64) -> bool {
+    let path = doc.active_path.clone();
     let root = path.is_empty();
     let m = DMat4::from_scale(DVec3::splat(factor));
-    ctx.doc
-        .commit("Resize Model", |model| {
+    let label = if root { "Resize Model" } else { "Resize" };
+    doc
+        .commit(label, |model| {
             let mesh = model.mesh_at_mut(&path)?;
             let vs: std::collections::HashSet<_> = mesh.vertices.keys().collect();
             if !vs.is_empty() {
@@ -63,10 +62,10 @@ fn resize_active(ctx: &mut ToolContext, factor: f64) -> bool {
                 inst.transform = m * inst.transform;
             }
             if root {
-                for g in &mut model.guides {
+                for g in model.guides.values_mut() {
                     g.origin *= factor;
                 }
-                for p in &mut model.guide_points {
+                for p in model.guide_points.values_mut() {
                     *p *= factor;
                 }
             }
@@ -87,7 +86,6 @@ impl Default for TapeTool {
             clicker: Clicker::default(),
             last_measure: None,
             resize_base: None,
-            resize_pending: None,
             unit: None,
         }
     }
@@ -131,10 +129,10 @@ impl TapeTool {
         }
         ctx.doc.commit("Create Guide", |model| {
             if let Some(g) = gl {
-                model.guides.push(g);
+                model.add_guide_line(g);
             }
             if let Some(p) = gp {
-                model.guide_points.push(p);
+                model.add_guide_point(p);
             }
         });
     }
@@ -150,7 +148,6 @@ impl TapeTool {
                 };
                 self.start = Some(TapeStart { a: r.point, edge_dir });
                 self.resize_base = None;
-                self.resize_pending = None;
             }
             Some(_) => {
                 if let Some(m) = self.measure() {
@@ -182,21 +179,6 @@ impl Tool for TapeTool {
         if !pressed {
             return false;
         }
-        if let Some(f) = self.resize_pending {
-            match key {
-                Key::Enter => {
-                    self.resize_pending = None;
-                    self.resize_base = None;
-                    resize_active(ctx, f);
-                    return true;
-                }
-                Key::Escape => {
-                    self.resize_pending = None;
-                    return true;
-                }
-                _ => {}
-            }
-        }
         if key == Key::Escape {
             self.start = None;
             self.engine.clear_locks();
@@ -216,7 +198,9 @@ impl Tool for TapeTool {
             if v <= TOL {
                 return false;
             }
-            self.resize_pending = Some(v / base);
+            // The app asks for confirmation in a dialog, then resizes.
+            ctx.requests.push(super::ToolRequest::ConfirmResize(v / base));
+            self.resize_base = None;
             return true;
         }
         // While measuring: the value sets the guide distance.
@@ -247,9 +231,6 @@ impl Tool for TapeTool {
     }
     fn status_text(&self) -> String {
         let g = if self.guides { "guides on" } else { "measure only" };
-        if let Some(f) = self.resize_pending {
-            return format!("Resize the model (×{f:.4})? Enter = Yes, Esc = No.");
-        }
         if self.start.is_none() && self.resize_base.is_some() {
             return format!("Type a new length to resize the model, or select a start point ({g}).");
         }
@@ -272,10 +253,6 @@ impl Tool for TapeTool {
             }
             label(out2d, r.point, fmt_len(model, d));
         }
-        if let Some(f) = self.resize_pending {
-            out2d.push(Marker2d::CursorTooltip { text: format!("Resize the model ×{f:.4}?  Enter = Yes · Esc = No") });
-            return;
-        }
         if let Some(r) = &self.cur {
             inference::draw_result(r, out3d, out2d);
             if self.start.is_none() && self.guides {
@@ -290,7 +267,7 @@ impl Tool for TapeTool {
         CursorIcon::None
     }
     fn is_busy(&self) -> bool {
-        self.start.is_some() || self.resize_pending.is_some()
+        self.start.is_some()
     }
 }
 
@@ -339,7 +316,7 @@ impl ProtractorTool {
     fn finish(&mut self, ctx: &mut ToolContext, c: DVec3, n: DVec3, zero: DVec3, deg: f64) {
         self.stage = None;
         let dir = DMat4::from_axis_angle(n, deg.to_radians()).transform_vector3(zero);
-        ctx.doc.commit("Create Guide", |m| m.guides.push(GuideLine { origin: c, dir }));
+        ctx.doc.commit("Create Guide", |m| m.add_guide_line(GuideLine { origin: c, dir }));
     }
 
     fn click(&mut self, ctx: &mut ToolContext) {

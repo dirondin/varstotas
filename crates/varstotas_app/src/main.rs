@@ -5,12 +5,14 @@
 
 mod app;
 mod autosave;
+mod clipboard;
 mod debug_capture;
 mod document;
 mod inference;
 mod nav;
 mod overlay;
 mod scene_builder;
+mod templates;
 mod tools;
 mod ui;
 mod viewport;

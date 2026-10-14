@@ -8,7 +8,9 @@ use crate::ui::tray::TrayState;
 use crate::viewport::Viewport;
 use egui::{Key, KeyboardShortcut, Modifiers, PointerButton, Pos2, Response, ViewportCommand};
 use varstotas_kernel::glam::DVec3;
-use varstotas_kernel::{ContextPath, EntityRef, InstanceId, Model, Scene, io};
+use crate::templates::Template;
+use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, IntersectScope, Model, Scene, io};
+use std::rc::Rc;
 use varstotas_render::{Camera, FaceStyle, Overlay3d, RenderStyle, StandardView};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -52,6 +54,8 @@ pub struct Prefs {
     /// Autosave every `autosave_minutes` while the document has unsaved changes.
     pub autosave: bool,
     pub autosave_minutes: u32,
+    /// Template for File → New (None until chosen on first start).
+    pub template: Option<Template>,
 }
 
 impl Default for Prefs {
@@ -67,6 +71,7 @@ impl Default for Prefs {
             recent: Vec::new(),
             autosave: true,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
+            template: None,
         }
     }
 }
@@ -109,12 +114,53 @@ pub enum Action {
     ActivateScene(usize),
     About,
     Preferences,
+    Cut,
+    Copy,
+    /// Paste attached to the cursor (click places it).
+    Paste,
+    /// Paste at the original position.
+    PasteInPlace,
+    DeleteGuides,
+    /// View → Guides (show / hide).
+    ToggleGuides,
+    /// File → Export → 2D Graphic… (opens the export dialog).
+    ExportImage,
+    NewFromTemplate(Template),
+    IntersectFaces(IntersectScope),
+    ReverseFaces,
+    OrientFaces,
+    /// Flip Along the context's red (0), green (1) or blue (2) axis.
+    FlipAlong(usize),
+}
+
+/// File → Export → 2D Graphic… dialog state.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportDialog {
+    pub width: u32,
+    pub height: u32,
+    /// Keep width / height at the viewport's aspect ratio.
+    pub lock_aspect: bool,
+    pub transparent: bool,
+}
+
+/// A PNG export waiting for the next paint (the renderer lives in the paint callback).
+#[derive(Clone, Debug)]
+pub struct ExportJob {
+    pub path: PathBuf,
+    /// Guides only (no tool previews, no selection boxes).
+    pub overlay: Overlay3d,
+    pub camera: Camera,
+    pub size: [u32; 2],
+    pub transparent: bool,
+    /// Line widths scale with the image (image pixels per viewport point).
+    pub line_scale: f32,
 }
 
 /// Something waiting for "save changes?" confirmation.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pending {
     New,
+    NewFrom(Template),
     Open,
     OpenPath(PathBuf),
     Quit,
@@ -158,6 +204,13 @@ pub struct VarstotasApp {
     now: f64,
     pub(crate) show_prefs: bool,
     pub(crate) autosave: AutosaveState,
+    /// Copied entities (Edit → Copy / Cut).
+    pub(crate) clipboard: Option<Rc<crate::clipboard::Clipboard>>,
+    /// Tape Measure resize waiting for confirmation (uniform factor).
+    pub(crate) resize_confirm: Option<f64>,
+    pub(crate) export_dialog: Option<ExportDialog>,
+    /// Template chooser shown (first start / File → New from Template…).
+    pub(crate) show_templates: bool,
 }
 
 /// Autosave bookkeeping (see [`crate::autosave`]).
@@ -215,9 +268,16 @@ impl VarstotasApp {
         } else {
             Vec::new()
         };
-        Self {
-            doc: Document::new(),
-            camera: nav::startup_camera(),
+        // Scripted (test) runs always start in millimeters, whatever the user's default is.
+        let template = if debug.script_active() {
+            Template::ArchitecturalMm
+        } else {
+            prefs.template.unwrap_or(Template::ArchitecturalMm)
+        };
+        let show_templates = prefs.template.is_none() && !debug.script_active();
+        let mut app = Self {
+            doc: Document::from_model(template.new_model(), None),
+            camera: template.camera(nav::startup_camera()),
             cam_anim: None,
             viewport: Viewport::default(),
             tool: tools::make_tool(ToolId::Select),
@@ -241,6 +301,10 @@ impl VarstotasApp {
             sel_boxes: Default::default(),
             now: 0.0,
             show_prefs: false,
+            clipboard: None,
+            resize_confirm: None,
+            export_dialog: None,
+            show_templates: false,
             autosave: AutosaveState {
                 worker: crate::autosave::Autosaver::new(),
                 dir: autosave_dir,
@@ -250,7 +314,9 @@ impl VarstotasApp {
                 written: None,
                 recoveries,
             },
-        }
+        };
+        app.show_templates = show_templates;
+        app
     }
 
     pub fn render_style(&self) -> RenderStyle {
@@ -320,6 +386,7 @@ impl VarstotasApp {
             match req {
                 ToolRequest::SwitchTool(id) => self.actions.push(Action::SetTool(id)),
                 ToolRequest::ZoomExtents => self.actions.push(Action::ZoomExtents),
+                ToolRequest::ConfirmResize(f) => self.resize_confirm = Some(f),
             }
         }
         r
@@ -446,7 +513,24 @@ impl VarstotasApp {
                         }
                     }
                 }
-                egui::Event::ModifiersChanged(m) => self.last_modifiers = m,
+                egui::Event::ModifiersChanged(m) => {
+                    if m != self.last_modifiers {
+                        self.last_modifiers = m;
+                        // Modifier toggles (Move copy, Tape guides, …) react without a mouse move.
+                        if self.last_pointer.is_some() {
+                            let p = self.current_pointer();
+                            self.with_tool(p, |t, c| t.on_pointer_move(c));
+                        }
+                    }
+                }
+                egui::Event::Copy => self.actions.push(Action::Copy),
+                egui::Event::Cut => self.actions.push(Action::Cut),
+                // Cmd+V: egui reads the OS clipboard text; Varstotas pastes its own clipboard
+                // (the OS clipboard only carries a marker). Cmd+Shift+V = Paste in Place.
+                egui::Event::Paste(_) => {
+                    let shift = ctx.input(|i| i.modifiers.shift) || self.last_modifiers.shift;
+                    self.actions.push(if shift { Action::PasteInPlace } else { Action::Paste });
+                }
                 _ => {}
             }
         }
@@ -742,7 +826,178 @@ impl VarstotasApp {
             }
             Action::About => self.show_about = true,
             Action::Preferences => self.show_prefs = true,
+            Action::Copy => {
+                self.copy(ctx);
+            }
+            Action::Cut => {
+                if self.copy(ctx) {
+                    self.doc.erase_selection_labeled("Cut");
+                }
+            }
+            Action::Paste | Action::PasteInPlace => self.paste(action == Action::PasteInPlace),
+            Action::DeleteGuides => {
+                if !self.doc.delete_all_guides() {
+                    self.flash("There are no guides");
+                }
+            }
+            Action::ToggleGuides => {
+                let hidden = !self.doc.model.guides_hidden;
+                self.doc.mutate_untracked(|m| m.guides_hidden = hidden);
+                self.doc.prune_selection();
+            }
+            Action::ExportImage => {
+                let s = self.viewport.size();
+                self.export_dialog = Some(ExportDialog {
+                    width: s.x.round().max(1.0) as u32,
+                    height: s.y.round().max(1.0) as u32,
+                    lock_aspect: true,
+                    transparent: false,
+                });
+            }
+            Action::NewFromTemplate(t) => {
+                self.prefs.template.get_or_insert(t);
+                self.guard_dirty(Pending::NewFrom(t));
+            }
+            Action::IntersectFaces(scope) => self.intersect(scope),
+            Action::ReverseFaces => {
+                let faces = self.selected_faces();
+                if faces.is_empty() {
+                    self.flash("Select faces to reverse");
+                    return;
+                }
+                let path = self.doc.active_path.clone();
+                self.doc.commit("Reverse Faces", |m| m.mesh_at_mut(&path).map(|mesh| mesh.reverse_faces(&faces)));
+            }
+            Action::OrientFaces => {
+                let Some(f) = self.selected_faces().first().copied() else {
+                    self.flash("Select a face to orient its neighbours like it");
+                    return;
+                };
+                let path = self.doc.active_path.clone();
+                let n = self
+                    .doc
+                    .commit("Orient Faces", |m| m.mesh_at_mut(&path).map(|mesh| mesh.orient_faces_like(f)).unwrap_or(0));
+                if let Some(n) = n {
+                    self.flash(match n {
+                        0 => "All connected faces already agree".to_string(),
+                        1 => "1 face reversed".to_string(),
+                        n => format!("{n} faces reversed"),
+                    });
+                }
+            }
+            Action::FlipAlong(axis) => {
+                let sel: Vec<EntityRef> = self.doc.selection.clone();
+                if sel.is_empty() {
+                    self.flash("Select something to flip");
+                    return;
+                }
+                let path = self.doc.active_path.clone();
+                let a = [DVec3::X, DVec3::Y, DVec3::Z][axis.min(2)];
+                let label = ["Flip Along Red", "Flip Along Green", "Flip Along Blue"][axis.min(2)];
+                self.doc.try_commit(label, |m| m.flip_along(&path, &sel, a));
+                self.doc.prune_selection();
+            }
         }
+    }
+
+    fn selected_faces(&self) -> Vec<FaceId> {
+        self.doc.selection.iter().filter_map(|e| if let EntityRef::Face(f) = e { Some(*f) } else { None }).collect()
+    }
+
+    fn intersect(&mut self, scope: IntersectScope) {
+        let sel = self.doc.selection.clone();
+        let usable = sel.iter().any(|e| matches!(e, EntityRef::Face(_) | EntityRef::Instance(_)));
+        if !usable {
+            self.flash("Select faces, groups or components to intersect");
+            return;
+        }
+        let path = self.doc.active_path.clone();
+        let label = match scope {
+            IntersectScope::Model => "Intersect With Model",
+            IntersectScope::Selection => "Intersect With Selection",
+            IntersectScope::Context => "Intersect With Context",
+        };
+        if let Some(edges) = self.doc.try_commit(label, |m| m.intersect_faces(&path, &sel, scope)) {
+            self.doc.prune_selection();
+            self.flash(match edges.len() {
+                0 => "No intersections found".to_string(),
+                1 => "1 intersection edge created".to_string(),
+                n => format!("{n} intersection edges created"),
+            });
+        }
+    }
+
+    /// Edit → Copy: returns true when something was copied.
+    fn copy(&mut self, ctx: &egui::Context) -> bool {
+        if !self.doc.has_selection() {
+            self.flash("Nothing selected to copy");
+            return false;
+        }
+        match guarded(|| crate::clipboard::Clipboard::from_selection(&self.doc)) {
+            Ok(Ok(c)) => {
+                let n = c.count;
+                self.clipboard = Some(Rc::new(c));
+                // The OS clipboard gets a text marker (other apps then don't paste stale text
+                // instead; Cmd+V only produces a paste event when the clipboard has text).
+                if !self.debug.script_active() {
+                    ctx.copy_text(format!("Varstotas: {n} entities"));
+                }
+                true
+            }
+            Ok(Err(e)) => {
+                self.flash_error(format!("Copy failed: {e}"));
+                false
+            }
+            Err(e) => {
+                self.flash_error(format!("Copy failed: {e}"));
+                false
+            }
+        }
+    }
+
+    fn paste(&mut self, in_place: bool) {
+        let Some(clip) = self.clipboard.clone() else {
+            self.flash("The clipboard is empty");
+            return;
+        };
+        if in_place {
+            crate::tools::transform::paste_clipboard(&mut self.doc, &clip, &varstotas_kernel::glam::DMat4::IDENTITY);
+            return;
+        }
+        let p = self.current_pointer();
+        self.with_tool(p.clone(), |t, ctx| t.deactivate(ctx));
+        self.tool = Box::new(crate::tools::transform::PasteTool::new(clip));
+        self.with_tool(p, |t, ctx| t.activate(ctx));
+        self.vcb.clear();
+        self.vcb_error = false;
+        self.tool_pressed = false;
+    }
+
+    /// Apply a confirmed Tape Measure resize.
+    pub(crate) fn apply_resize(&mut self, factor: f64) {
+        if crate::tools::construct::resize_active(&mut self.doc, factor) {
+            self.flash(format!("Resized ×{factor:.4}"));
+        }
+    }
+
+    /// Run a pending PNG export with the viewport's renderer.
+    pub(crate) fn export_png_to(&mut self, path: PathBuf, size: [u32; 2], transparent: bool) {
+        let vp = self.viewport.size();
+        let k = (size[0] as f32 / vp.x.max(1.0)).max(size[1] as f32 / vp.y.max(1.0));
+        // Pixels per logical point of the image (lines keep their on-screen look).
+        let line_scale = k.max(0.25);
+        // Guide point crosses keep their on-screen size relative to the image.
+        let pts = egui::vec2(size[0] as f32, size[1] as f32) / line_scale;
+        let mut overlay = Overlay3d::default();
+        // Exported guides are never drawn as selected.
+        let sel = std::mem::take(&mut self.doc.guide_sel);
+        {
+            let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
+            tools::common::draw_guides(&view, &mut overlay);
+        }
+        self.doc.guide_sel = sel;
+        let camera = self.camera.clone();
+        self.viewport.export = Some(ExportJob { path, overlay, camera, size, transparent, line_scale });
     }
 
     fn scene_from_camera(&self, name: String) -> Scene {
@@ -773,7 +1028,11 @@ impl VarstotasApp {
     /// Continue a pending operation after the user confirmed (or nothing was dirty).
     pub(crate) fn proceed(&mut self, p: Pending) {
         match p {
-            Pending::New => self.replace_document(Document::new()),
+            Pending::New => {
+                let t = self.prefs.template.unwrap_or(Template::ArchitecturalMm);
+                self.new_from_template(t);
+            }
+            Pending::NewFrom(t) => self.new_from_template(t),
             Pending::Open => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Varstotas model", &["vrst"])
@@ -788,6 +1047,11 @@ impl VarstotasApp {
                 self.tray.close_requested = true;
             }
         }
+    }
+
+    fn new_from_template(&mut self, t: Template) {
+        self.replace_document(Document::from_model(t.new_model(), None));
+        self.camera = t.camera(nav::startup_camera());
     }
 
     fn replace_document(&mut self, doc: Document) {
@@ -1176,7 +1440,7 @@ impl VarstotasApp {
             viewport: self.viewport.size(),
             pointer: self.last_pointer,
         };
-        tools::common::draw_guides(&view, &mut o3, &mut o2);
+        tools::common::draw_guides(&view, &mut o3);
         self.context_box_lines(&mut o3);
         self.selection_boxes(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
@@ -1235,6 +1499,7 @@ impl eframe::App for VarstotasApp {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let response = self.viewport.allocate(ui);
             self.handle_viewport_input(&ctx, &response);
+            response.context_menu(|ui| self.viewport_context_menu(ui));
             if let Some(anim) = self.cam_anim.as_mut() {
                 if !anim.step(dt, &mut self.camera) {
                     self.cam_anim = None;
@@ -1249,6 +1514,17 @@ impl eframe::App for VarstotasApp {
             });
             self.viewport.paint(ui, frame, &self.doc, &self.camera, &style, &o3, &o2, cursor);
         });
+        match self.viewport.export_result.take() {
+            Some(Ok(p)) => {
+                log::info!("exported {}", p.display());
+                self.flash(format!("Exported {}", p.display()));
+            }
+            Some(Err(e)) => {
+                log::warn!("PNG export failed: {e}");
+                self.flash_error(format!("Export failed: {e}"));
+            }
+            None => {}
+        }
 
         self.dialogs(&ctx);
         self.run_actions(&ctx);

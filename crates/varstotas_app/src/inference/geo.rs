@@ -57,14 +57,16 @@ impl GeoCache {
         let mut g = GeoCache { version, ..Default::default() };
         let mut path = Vec::new();
         g.collect(model, model.root, DMat4::IDENTITY, &mut path, 0);
-        for gl in &model.guides {
-            let d = gl.dir.normalize_or_zero();
-            if d != DVec3::ZERO && gl.origin.is_finite() {
-                g.guides.push((gl.origin, d));
+        if !model.guides_hidden {
+            for gl in model.guides.values() {
+                let d = gl.dir.normalize_or_zero();
+                if d != DVec3::ZERO && gl.origin.is_finite() {
+                    g.guides.push((gl.origin, d));
+                }
             }
-        }
-        for p in &model.guide_points {
-            g.points.push(PointCand { pos: *p, kind: InferenceKind::GuidePoint, r: None });
+            for p in model.guide_points.values() {
+                g.points.push(PointCand { pos: *p, kind: InferenceKind::GuidePoint, r: None });
+            }
         }
         // The model origin is always a snap target (the classic "Origin" inference).
         g.points.push(PointCand { pos: DVec3::ZERO, kind: InferenceKind::Origin, r: None });

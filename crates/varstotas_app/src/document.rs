@@ -1,6 +1,6 @@
 //! The open document: model + undo history + file state + selection + editing context.
 
-use varstotas_kernel::{ContextPath, EntityRef, History, MaterialId, Mesh, Model, ModelHit, Ray};
+use varstotas_kernel::{ContextPath, EntityRef, GuideRef, History, MaterialId, Mesh, Model, ModelHit, Ray};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -73,12 +73,17 @@ pub struct Document {
     pub selection_version: u64,
     /// Selected entities, all living in the mesh at `active_path`.
     pub selection: Vec<EntityRef>,
+    /// Selected guides (model-level, world space; selectable in any context).
+    pub guide_sel: Vec<GuideRef>,
     /// Editing context (empty = model root).
     pub active_path: ContextPath,
     /// Current paint material (None = "Default", i.e. remove material).
     pub current_material: Option<PaletteMaterial>,
     /// Last error from a guarded kernel call, shown in the status bar.
     pub last_error: Option<String>,
+    /// Process-unique id of this document (clipboard: share component definitions only when
+    /// pasting back into the same document).
+    pub uid: u64,
 }
 
 impl Default for Document {
@@ -114,9 +119,14 @@ impl Document {
             model_version: next_model_version(),
             selection_version: 1,
             selection: Vec::new(),
+            guide_sel: Vec::new(),
             active_path: Vec::new(),
             current_material: None,
             last_error: None,
+            uid: {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            },
         }
     }
 
@@ -217,15 +227,62 @@ impl Document {
 
     // ---- selection -------------------------------------------------------
 
+    /// Replace the selection with `sel` (entities of the active context; no guides).
     pub fn set_selection(&mut self, sel: Vec<EntityRef>) {
-        if sel != self.selection {
+        self.set_selection_with_guides(sel, Vec::new());
+    }
+
+    /// Replace the selection with entities and guides.
+    pub fn set_selection_with_guides(&mut self, sel: Vec<EntityRef>, guides: Vec<GuideRef>) {
+        if sel != self.selection || guides != self.guide_sel {
             self.selection = sel;
+            self.guide_sel = guides;
             self.selection_version += 1;
         }
     }
 
     pub fn clear_selection(&mut self) {
         self.set_selection(Vec::new());
+    }
+
+    /// Anything (entities or guides) selected.
+    pub fn has_selection(&self) -> bool {
+        !self.selection.is_empty() || !self.guide_sel.is_empty()
+    }
+
+    /// Apply a selection operation to guides (mirrors the entity ops).
+    pub fn add_guides(&mut self, gs: &[GuideRef]) {
+        let n = self.guide_sel.len();
+        for g in gs {
+            if !self.guide_sel.contains(g) {
+                self.guide_sel.push(*g);
+            }
+        }
+        if n != self.guide_sel.len() {
+            self.selection_version += 1;
+        }
+    }
+
+    pub fn remove_guides_from_selection(&mut self, gs: &[GuideRef]) {
+        let n = self.guide_sel.len();
+        self.guide_sel.retain(|g| !gs.contains(g));
+        if n != self.guide_sel.len() {
+            self.selection_version += 1;
+        }
+    }
+
+    pub fn toggle_guides(&mut self, gs: &[GuideRef]) {
+        if gs.is_empty() {
+            return;
+        }
+        let had = self.guide_sel.clone();
+        self.guide_sel.retain(|g| !gs.contains(g));
+        for g in gs {
+            if !had.contains(g) && !self.guide_sel.contains(g) {
+                self.guide_sel.push(*g);
+            }
+        }
+        self.selection_version += 1;
     }
 
     #[allow(dead_code)]
@@ -295,7 +352,8 @@ impl Document {
                 .filter(|(_, i)| !i.hidden)
                 .map(|(id, _)| EntityRef::Instance(id)),
         );
-        self.set_selection(sel);
+        let guides = if self.model.guides_hidden { Vec::new() } else { self.model.all_guides() };
+        self.set_selection_with_guides(sel, guides);
     }
 
     /// Enter an editing context (double-click on group).
@@ -303,6 +361,7 @@ impl Document {
         if path != self.active_path {
             self.active_path = path;
             self.selection.clear();
+            self.guide_sel.clear();
             self.selection_version += 1;
         }
     }
@@ -313,6 +372,7 @@ impl Document {
             return false;
         };
         self.selection = vec![EntityRef::Instance(last)];
+        self.guide_sel.clear();
         self.selection_version += 1;
         true
     }
@@ -321,6 +381,12 @@ impl Document {
     pub fn prune_selection(&mut self) {
         if guarded(|| self.model.mesh_at(&self.active_path).is_none()).unwrap_or(true) {
             self.active_path.clear();
+        }
+        let ng = self.guide_sel.len();
+        let model = &self.model;
+        self.guide_sel.retain(|g| !model.guides_hidden && model.has_guide(*g));
+        if ng != self.guide_sel.len() {
+            self.selection_version += 1;
         }
         let Ok(Some(mesh)) = guarded(|| self.model.mesh_at(&self.active_path)) else {
             self.selection.clear();
@@ -341,16 +407,34 @@ impl Document {
 
     /// Erase the current selection from the active context (one undo step).
     pub fn erase_selection(&mut self) {
-        if self.selection.is_empty() {
+        self.erase_selection_labeled("Erase");
+    }
+
+    /// [`Self::erase_selection`] with an undo label (e.g. "Cut").
+    pub fn erase_selection_labeled(&mut self, label: &str) {
+        if !self.has_selection() {
             return;
         }
         let sel = std::mem::take(&mut self.selection);
+        let guides = std::mem::take(&mut self.guide_sel);
         let path = self.active_path.clone();
-        self.commit("Erase", |m| {
-            if let Some(mesh) = m.mesh_at_mut(&path) {
+        self.commit(label, |m| {
+            m.remove_guides(&guides);
+            if !sel.is_empty()
+                && let Some(mesh) = m.mesh_at_mut(&path)
+            {
                 mesh.erase(&sel);
             }
         });
         self.selection_version += 1;
+    }
+
+    /// Edit > Delete Guides: remove every guide (one undo step).
+    pub fn delete_all_guides(&mut self) -> bool {
+        if self.model.guides.is_empty() && self.model.guide_points.is_empty() {
+            return false;
+        }
+        self.commit("Delete Guides", |m| m.delete_all_guides());
+        true
     }
 }

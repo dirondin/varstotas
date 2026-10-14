@@ -216,7 +216,7 @@ impl CameraAnimation {
 /// therefore deliberately ignored.
 pub fn extents_bounds(model: &Model) -> Option<Aabb> {
     let geom = guarded(|| model.bounds()).ok().flatten();
-    let pts = Aabb::from_points(model.guide_points.iter().copied().filter(|p| p.is_finite()));
+    let pts = Aabb::from_points(model.guide_points.values().copied().filter(|p| p.is_finite() && !model.guides_hidden));
     match (geom, pts) {
         (Some(a), Some(b)) => Some(a.union(&b)),
         (a, b) => a.or(b),

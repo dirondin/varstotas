@@ -6,7 +6,7 @@ use crate::document::guarded;
 use crate::overlay::Marker2d;
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2, Rect};
 use varstotas_kernel::glam::{DVec2, DVec3};
-use varstotas_kernel::{ContextPath, EntityRef};
+use varstotas_kernel::{ContextPath, EntityRef, GuideRef};
 use varstotas_render::Overlay3d;
 
 const EDGE_PICK_PX: f32 = 6.0;
@@ -128,9 +128,26 @@ impl SelectTool {
         }
     }
 
+    /// A guide under the cursor wins over faces/instances (not over edges of the context).
+    fn pick_guide(&self, ctx: &ToolContext, picked: &Option<Picked>) -> Option<GuideRef> {
+        if matches!(picked, Some(Picked { entity: EntityRef::Edge(_), .. })) {
+            return None;
+        }
+        super::common::pick_guide(ctx)
+    }
+
     fn click(&mut self, ctx: &mut ToolContext) {
         let op = sel_op(&ctx.pointer.modifiers);
         let picked = self.pick(ctx);
+        if let Some(g) = self.pick_guide(ctx, &picked) {
+            match op {
+                SelOp::Remove => ctx.doc.remove_guides_from_selection(&[g]),
+                SelOp::Add => ctx.doc.add_guides(&[g]),
+                SelOp::Toggle => ctx.doc.toggle_guides(&[g]),
+                SelOp::Replace => ctx.doc.set_selection_with_guides(Vec::new(), vec![g]),
+            }
+            return;
+        }
         let Some(p) = picked else {
             if op == SelOp::Replace {
                 ctx.doc.clear_selection();
@@ -188,12 +205,26 @@ impl SelectTool {
             out
         })
         .unwrap_or_default();
+        let guides = guarded(|| {
+            let proj = BoxProjector { camera: ctx.camera, viewport: ctx.viewport_d(), rect, mode };
+            proj.guides(&ctx.doc.model)
+        })
+        .unwrap_or_default();
 
         match sel_op(&ctx.pointer.modifiers) {
-            SelOp::Remove => ctx.doc.remove_from_selection(&found),
-            SelOp::Add => ctx.doc.add_to_selection(found),
-            SelOp::Toggle => ctx.doc.toggle_many(&found),
-            SelOp::Replace => ctx.doc.set_selection(found),
+            SelOp::Remove => {
+                ctx.doc.remove_from_selection(&found);
+                ctx.doc.remove_guides_from_selection(&guides);
+            }
+            SelOp::Add => {
+                ctx.doc.add_to_selection(found);
+                ctx.doc.add_guides(&guides);
+            }
+            SelOp::Toggle => {
+                ctx.doc.toggle_many(&found);
+                ctx.doc.toggle_guides(&guides);
+            }
+            SelOp::Replace => ctx.doc.set_selection_with_guides(found, guides),
         }
     }
 }
@@ -253,6 +284,26 @@ impl BoxProjector<'_> {
                 screen.is_some_and(|poly| point_in_polygon(self.rect.center(), &poly))
             }
         }
+    }
+
+    /// Guides in the box: guide points inside it (both modes); guide lines are infinite, so
+    /// only a crossing box (touching the visible line) selects them.
+    fn guides(&self, model: &varstotas_kernel::Model) -> Vec<GuideRef> {
+        if model.guides_hidden {
+            return Vec::new();
+        }
+        let mut out: Vec<GuideRef> =
+            model.guide_points.iter().filter(|(_, p)| self.inside(**p)).map(|(id, _)| GuideRef::Point(id)).collect();
+        if self.mode == BoxMode::Crossing {
+            for (id, g) in model.guides.iter() {
+                if let Some((a, b)) = super::common::guide_segment(self.camera, g)
+                    && self.segment(a, b)
+                {
+                    out.push(GuideRef::Line(id));
+                }
+            }
+        }
+        out
     }
 
     /// Group/component: window = all its geometry inside; crossing = any of it touches.
@@ -365,7 +416,11 @@ impl Tool for SelectTool {
     }
 
     fn on_double_click(&mut self, ctx: &mut ToolContext) {
-        let Some(p) = self.pick(ctx) else { return };
+        let picked = self.pick(ctx);
+        if self.pick_guide(ctx, &picked).is_some() {
+            return;
+        }
+        let Some(p) = picked else { return };
         if p.context != ctx.doc.active_path {
             return;
         }
@@ -410,7 +465,7 @@ impl Tool for SelectTool {
         if self.press.is_some() {
             self.press = None;
             self.box_end = None;
-        } else if !ctx.doc.selection.is_empty() {
+        } else if ctx.doc.has_selection() {
             ctx.doc.clear_selection();
         } else {
             ctx.doc.exit_context();

@@ -9,7 +9,7 @@ use crate::overlay::{Marker2d, OverlayPainter, hud_text};
 use crate::scene_builder::{self, BuildParams, HighlightParams};
 use egui::{Align2, Color32, Pos2, Rect, Response, Sense, Shape, Ui, pos2, vec2};
 use varstotas_kernel::{ContextPath, Tessellation};
-use varstotas_render::{Camera, FaceStyle, HighlightUpdate, Overlay3d, RenderStyle, Renderer};
+use varstotas_render::{Camera, ExportOptions, FaceStyle, HighlightUpdate, Overlay3d, RenderStyle, Renderer};
 
 /// Inputs the uploaded geometry depends on.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -48,6 +48,10 @@ pub struct Viewport {
     pub last_highlight_ms: f64,
     /// Render origin of the uploaded geometry (kept stable between rebuilds).
     origin: Option<varstotas_kernel::glam::DVec3>,
+    /// PNG export to run at the next paint (needs the GPU renderer).
+    pub export: Option<crate::app::ExportJob>,
+    /// Outcome of the last export (path written or error), taken by the app.
+    pub export_result: Option<Result<std::path::PathBuf, String>>,
 }
 
 impl Default for Viewport {
@@ -67,6 +71,8 @@ impl Default for Viewport {
             highlight_count: 0,
             last_highlight_ms: 0.0,
             origin: None,
+            export: None,
+            export_result: None,
         }
     }
 }
@@ -168,6 +174,19 @@ impl Viewport {
                     ((rect.width() * ppp).round() as u32).max(1),
                     ((rect.height() * ppp).round() as u32).max(1),
                 ];
+                if let Some(job) = self.export.take() {
+                    let opts = ExportOptions {
+                        transparent_background: job.transparent,
+                        line_scale: job.line_scale,
+                        show_selection: false,
+                        show_context_dimming: true,
+                    };
+                    let r = guarded(|| renderer.render_to_image(rs, &job.camera, &job.overlay, style, job.size, &opts))
+                        .and_then(|r| r.map_err(|e| e.to_string()))
+                        .and_then(|img| img.write_png(&job.path).map_err(|e| e.to_string()))
+                        .map(|_| job.path.clone());
+                    self.export_result = Some(r);
+                }
                 match guarded(|| renderer.render(rs, camera, overlay3d, style, size_px, ppp)) {
                     Ok(tex) => {
                         painter.image(tex, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
@@ -182,6 +201,9 @@ impl Viewport {
             }
         }
         if !drew {
+            if self.export.take().is_some() {
+                self.export_result = Some(Err("the 3D renderer is not available".into()));
+            }
             paint_fallback_background(&painter, rect);
             let msg = match &self.renderer_error {
                 Some(e) => format!("3D renderer not available yet ({e})"),

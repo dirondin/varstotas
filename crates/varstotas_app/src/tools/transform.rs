@@ -7,7 +7,7 @@ use crate::inference::{self, InferenceEngine, InferenceKind, InferenceResult};
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::{Color32, CursorIcon, Key};
 use varstotas_kernel::glam::{DMat4, DVec2, DVec3};
-use varstotas_kernel::{Aabb, EntityRef, Plane, TOL};
+use varstotas_kernel::{Aabb, EntityRef, GuideRef, Plane, TOL};
 use varstotas_render::Overlay3d;
 
 /// A parametric transform that can be repeated/divided for arrays.
@@ -42,9 +42,25 @@ pub fn array_transforms(kind: &XfKind, arr: Option<ArrayInput>) -> Vec<DMat4> {
     }
 }
 
+/// What a transform tool operates on: entities of the active context and/or guides.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Targets {
+    pub ents: Vec<EntityRef>,
+    pub guides: Vec<GuideRef>,
+}
+
+impl Targets {
+    pub fn is_empty(&self) -> bool {
+        self.ents.is_empty() && self.guides.is_empty()
+    }
+    fn ents(ents: Vec<EntityRef>) -> Self {
+        Self { ents, guides: Vec::new() }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct LastXf {
-    ents: Vec<EntityRef>,
+    tg: Targets,
     kind: XfKind,
     copy: bool,
     /// The array applied after the copy (`5x` / `/5`); a later distance/angle edit keeps it
@@ -52,48 +68,82 @@ struct LastXf {
     arr: Option<ArrayInput>,
 }
 
-/// Apply (or copy / array) a transform to entities of the active context as one undo step.
+/// Apply (or copy / array) a transform to entities of the active context and to guides
+/// (world space) as one undo step. Returns the transformed (or new) targets.
 fn run_transform(
     ctx: &mut ToolContext,
     label: &str,
-    ents: &[EntityRef],
+    tg: &Targets,
     kind: XfKind,
     copy: bool,
     arr: Option<ArrayInput>,
-) -> Option<Vec<EntityRef>> {
-    let mats: Vec<DMat4> = array_transforms(&kind, arr).iter().map(|t| world_to_local_xf(ctx.doc, t)).collect();
-    let ents = ents.to_vec();
-    let r = commit_mesh(ctx, label, |mesh| {
-        let mut out = Vec::new();
+) -> Option<Targets> {
+    let world = array_transforms(&kind, arr);
+    let mats: Vec<DMat4> = world.iter().map(|t| world_to_local_xf(ctx.doc, t)).collect();
+    let (ents, guides) = (tg.ents.clone(), tg.guides.clone());
+    let path = ctx.doc.active_path.clone();
+    let r = ctx.doc.commit(label, |model| {
+        let mut out = Targets::default();
         if copy {
-            for m in &mats {
-                out.extend(mesh.duplicate(&ents, m));
+            for w in &world {
+                out.guides.extend(model.copy_guides(&guides, w));
             }
-        } else if let Some(m) = mats.first() {
-            out = apply_transform(mesh, &ents, m, false);
+        } else if let Some(w) = world.first() {
+            model.transform_guides(&guides, w);
+            out.guides = guides.clone();
+        }
+        if !ents.is_empty()
+            && let Some(mesh) = model.mesh_at_mut(&path)
+        {
+            if copy {
+                for m in &mats {
+                    out.ents.extend(mesh.duplicate(&ents, m));
+                }
+            } else if let Some(m) = mats.first() {
+                out.ents = apply_transform(mesh, &ents, m, false);
+            }
         }
         out
     })?;
     if copy {
-        ctx.doc.set_selection(r.clone());
+        ctx.doc.set_selection_with_guides(r.ents.clone(), r.guides.clone());
     }
     Some(r)
 }
 
-fn targets(ctx: &ToolContext, hover: &Option<Hover>) -> Vec<EntityRef> {
-    if !ctx.doc.selection.is_empty() {
-        return ctx.doc.selection.clone();
+/// The selection (entities + guides), else the hovered entity or guide.
+fn targets(ctx: &ToolContext, hover: &Option<Hover>, hover_guide: Option<GuideRef>) -> Targets {
+    if ctx.doc.has_selection() {
+        return Targets { ents: ctx.doc.selection.clone(), guides: ctx.doc.guide_sel.clone() };
     }
-    hover.as_ref().map(|h| vec![h.entity()]).unwrap_or_default()
+    Targets { ents: hover.as_ref().map(|h| vec![h.entity()]).unwrap_or_default(), guides: hover_guide.into_iter().collect() }
 }
 
 fn hover_if_no_selection(ctx: &ToolContext) -> Option<Hover> {
-    if ctx.doc.selection.is_empty() { pick_entity(ctx) } else { None }
+    if ctx.doc.has_selection() { None } else { pick_entity(ctx) }
 }
 
-fn draw_preview(view: &OverlayView, ents: &[EntityRef], t: &DMat4, out3d: &mut Overlay3d) {
-    for (a, b) in transformed_preview(view.doc, ents, t, 6000) {
+/// Hovered entity or guide when nothing is selected: edges of the context first, then guides,
+/// then faces / instances.
+fn hover_with_guides(ctx: &ToolContext) -> (Option<Hover>, Option<GuideRef>) {
+    if ctx.doc.has_selection() {
+        return (None, None);
+    }
+    if let Some(e) = pick_edge_at(ctx, ctx.pointer.pos, inference::EDGE_PICK_PX as f32) {
+        return (Some(e), None);
+    }
+    if let Some(g) = pick_guide(ctx) {
+        return (None, Some(g));
+    }
+    (pick_face(ctx), None)
+}
+
+fn draw_preview(view: &OverlayView, tg: &Targets, t: &DMat4, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
+    for (a, b) in transformed_preview(view.doc, &tg.ents, t, 6000) {
         line(out3d, a, b, SELECT_BLUE, 1.5);
+    }
+    for g in &tg.guides {
+        draw_guide(view, *g, t, SELECT_BLUE, 1.5, out3d, out2d);
     }
 }
 
@@ -107,7 +157,7 @@ fn vcb_after(ctx: &mut ToolContext, last: &mut Option<LastXf>, input: &str, labe
     if !undo_last(ctx) {
         return Some(false);
     }
-    let ok = run_transform(ctx, label, &l.ents, l.kind, true, Some(arr)).is_some();
+    let ok = run_transform(ctx, label, &l.tg, l.kind, true, Some(arr)).is_some();
     if ok {
         *last = Some(LastXf { arr: Some(arr), ..l });
     }
@@ -122,7 +172,8 @@ fn vcb_after(ctx: &mut ToolContext, last: &mut Option<LastXf>, input: &str, labe
 pub struct MoveTool {
     engine: InferenceEngine,
     hover: Option<Hover>,
-    ents: Vec<EntityRef>,
+    hover_guide: Option<GuideRef>,
+    tg: Targets,
     from: Option<DVec3>,
     cur: Option<InferenceResult>,
     copy: ModToggle,
@@ -136,7 +187,7 @@ impl MoveTool {
         self.unit = Some(ctx.doc.model.unit);
         self.copy.update(copy_mod(&ctx.pointer.modifiers));
         if self.from.is_none() {
-            self.hover = hover_if_no_selection(ctx);
+            (self.hover, self.hover_guide) = hover_with_guides(ctx);
         }
         self.cur = Some(infer(&mut self.engine, ctx, self.from, None, None));
     }
@@ -146,16 +197,16 @@ impl MoveTool {
     }
 
     fn finish(&mut self, ctx: &mut ToolContext, v: DVec3) {
-        let ents = std::mem::take(&mut self.ents);
+        let tg = std::mem::take(&mut self.tg);
         self.from = None;
         self.engine.arrow_lock = None;
-        if v.length() < TOL || ents.is_empty() {
+        if v.length() < TOL || tg.is_empty() {
             return;
         }
         let kind = XfKind::Translate(v);
         let copy = self.copy.on;
-        if run_transform(ctx, if copy { "Copy" } else { "Move" }, &ents, kind, copy, None).is_some() {
-            self.last = Some(LastXf { ents, kind, copy, arr: None });
+        if run_transform(ctx, if copy { "Copy" } else { "Move" }, &tg, kind, copy, None).is_some() {
+            self.last = Some(LastXf { tg, kind, copy, arr: None });
         }
         self.copy.reset();
     }
@@ -164,11 +215,11 @@ impl MoveTool {
         self.update(ctx);
         match self.from {
             None => {
-                let ents = targets(ctx, &self.hover);
-                if ents.is_empty() {
+                let tg = targets(ctx, &self.hover, self.hover_guide);
+                if tg.is_empty() {
                     return;
                 }
-                self.ents = ents;
+                self.tg = tg;
                 self.from = self.cur.as_ref().map(|r| r.point);
             }
             Some(_) => {
@@ -203,7 +254,7 @@ impl Tool for MoveTool {
         }
         if key == Key::Escape {
             self.from = None;
-            self.ents.clear();
+            self.tg = Targets::default();
             self.engine.clear_locks();
             return true;
         }
@@ -240,7 +291,7 @@ impl Tool for MoveTool {
                 (true, None) => "Copy",
                 _ => "Move",
             };
-            if run_transform(ctx, label, &l.ents, kind, l.copy, l.arr).is_some() {
+            if run_transform(ctx, label, &l.tg, kind, l.copy, l.arr).is_some() {
                 self.last = Some(LastXf { kind, ..l });
                 return true;
             }
@@ -273,12 +324,14 @@ impl Tool for MoveTool {
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let (Some(from), Some(r)) = (self.from, &self.cur) {
             let t = DMat4::from_translation(r.point - from);
-            draw_preview(view, &self.ents, &t, out3d);
+            draw_preview(view, &self.tg, &t, out3d, out2d);
             let c = if r.kind.is_direction() { r.kind.color() } else { Color32::from_gray(60) };
             dashed(out3d, from, r.point, c, 1.5);
             label(out2d, (from + r.point) * 0.5, fmt_len(&view.doc.model, from.distance(r.point)));
         } else if let Some(h) = &self.hover {
             highlight_hover(view, h, out3d);
+        } else if let Some(g) = self.hover_guide {
+            draw_guide(view, g, &DMat4::IDENTITY, SELECT_BLUE, 2.0, out3d, out2d);
         }
         if let Some(r) = &self.cur {
             inference::draw_result(r, out3d, out2d);
@@ -343,7 +396,8 @@ pub fn draw_protractor(view: &OverlayView, c: DVec3, n: DVec3, zero: Option<DVec
 pub struct RotateTool {
     engine: InferenceEngine,
     hover: Option<Hover>,
-    ents: Vec<EntityRef>,
+    hover_guide: Option<GuideRef>,
+    tg: Targets,
     stage: Option<RotStage>,
     cur: Option<InferenceResult>,
     angle: f64,
@@ -358,7 +412,8 @@ impl Default for RotateTool {
         Self {
             engine: InferenceEngine::default(),
             hover: None,
-            ents: Vec::new(),
+            hover_guide: None,
+            tg: Targets::default(),
             stage: None,
             cur: None,
             angle: 0.0,
@@ -374,7 +429,7 @@ impl RotateTool {
     fn update(&mut self, ctx: &ToolContext) {
         self.copy.update(copy_mod(&ctx.pointer.modifiers));
         if self.stage.is_none() {
-            self.hover = hover_if_no_selection(ctx);
+            (self.hover, self.hover_guide) = hover_with_guides(ctx);
         }
         let (anchor, plane) = match self.stage {
             Some(RotStage::Center { c, n }) | Some(RotStage::Angle { c, n, .. }) => (Some(c), Some(Plane::new(c, n))),
@@ -395,15 +450,15 @@ impl RotateTool {
     }
 
     fn finish(&mut self, ctx: &mut ToolContext, c: DVec3, n: DVec3, deg: f64) {
-        let ents = std::mem::take(&mut self.ents);
+        let tg = std::mem::take(&mut self.tg);
         self.stage = None;
-        if deg.abs() < 1e-9 || ents.is_empty() {
+        if deg.abs() < 1e-9 || tg.is_empty() {
             return;
         }
         let kind = XfKind::Rotate { center: c, axis: n, deg };
         let copy = self.copy.on;
-        if run_transform(ctx, if copy { "Copy" } else { "Rotate" }, &ents, kind, copy, None).is_some() {
-            self.last = Some(LastXf { ents, kind, copy, arr: None });
+        if run_transform(ctx, if copy { "Copy" } else { "Rotate" }, &tg, kind, copy, None).is_some() {
+            self.last = Some(LastXf { tg, kind, copy, arr: None });
         }
         self.copy.reset();
     }
@@ -413,11 +468,11 @@ impl RotateTool {
         let Some(r) = self.cur.clone() else { return };
         match self.stage {
             None => {
-                let ents = targets(ctx, &self.hover);
-                if ents.is_empty() {
+                let tg = targets(ctx, &self.hover, self.hover_guide);
+                if tg.is_empty() {
                     return;
                 }
-                self.ents = ents;
+                self.tg = tg;
                 let n = protractor_normal(&self.engine, &r);
                 self.engine.arrow_lock = None;
                 self.stage = Some(RotStage::Center { c: r.point, n });
@@ -461,7 +516,7 @@ impl Tool for RotateTool {
         }
         if key == Key::Escape {
             self.stage = None;
-            self.ents.clear();
+            self.tg = Targets::default();
             self.engine.clear_locks();
             return true;
         }
@@ -495,7 +550,7 @@ impl Tool for RotateTool {
             }
             let kind = XfKind::Rotate { center, axis, deg: a };
             let label = if l.arr.is_some() { "Rotate Array" } else { "Rotate" };
-            if run_transform(ctx, label, &l.ents, kind, l.copy, l.arr).is_some() {
+            if run_transform(ctx, label, &l.tg, kind, l.copy, l.arr).is_some() {
                 self.last = Some(LastXf { kind, ..l });
                 return true;
             }
@@ -528,6 +583,8 @@ impl Tool for RotateTool {
             None => {
                 if let Some(h) = &self.hover {
                     highlight_hover(view, h, out3d);
+                } else if let Some(g) = self.hover_guide {
+                    draw_guide(view, g, &DMat4::IDENTITY, SELECT_BLUE, 2.0, out3d, out2d);
                 }
                 if let Some(r) = r {
                     draw_protractor(view, r.point, protractor_normal(&self.engine, r), None, out3d);
@@ -549,7 +606,7 @@ impl Tool for RotateTool {
                 let cur = DMat4::from_axis_angle(n, self.angle.to_radians()).transform_vector3(zero);
                 line(out3d, c, c + cur * len, PREVIEW, 2.0);
                 let t = rotation_about(c, n, self.angle);
-                draw_preview(view, &self.ents, &t, out3d);
+                draw_preview(view, &self.tg, &t, out3d, out2d);
                 out2d.push(Marker2d::CursorTooltip { text: fmt_angle(self.angle) });
                 out2d.push(Marker2d::Point { at: c, shape: MarkerShape::Ring, color: normal_color(n) });
             }
@@ -713,7 +770,7 @@ impl ScaleTool {
             return;
         }
         self.hover = hover_if_no_selection(ctx);
-        let ents = targets(ctx, &self.hover);
+        let ents = targets(ctx, &self.hover, None).ents;
         if ents != self.ents || self.bbox.is_none() {
             self.bbox = entities_bounds(ctx.doc, &ents);
             self.ents = ents;
@@ -769,9 +826,9 @@ impl ScaleTool {
             return;
         }
         let kind = XfKind::Scale { anchor, factor };
-        let ents = self.ents.clone();
-        if run_transform(ctx, "Scale", &ents, kind, false, None).is_some() {
-            self.last = Some((LastXf { ents, kind, copy: false, arr: None }, axes));
+        let tg = Targets::ents(self.ents.clone());
+        if run_transform(ctx, "Scale", &tg, kind, false, None).is_some() {
+            self.last = Some((LastXf { tg, kind, copy: false, arr: None }, axes));
         }
         self.bbox = None;
     }
@@ -836,7 +893,7 @@ impl Tool for ScaleTool {
                 return false;
             }
             let kind = XfKind::Scale { anchor, factor: factors_from(axes, &v) };
-            if run_transform(ctx, "Scale", &l.ents, kind, false, None).is_some() {
+            if run_transform(ctx, "Scale", &l.tg, kind, false, None).is_some() {
                 self.last = Some((LastXf { kind, ..l }, axes));
                 return true;
             }
@@ -879,7 +936,7 @@ impl Tool for ScaleTool {
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(d) = self.drag {
             let t = XfKind::Scale { anchor: d.anchor, factor: d.factor }.at(1.0);
-            draw_preview(view, &self.ents, &t, out3d);
+            draw_preview(view, &Targets::ents(self.ents.clone()), &t, out3d, out2d);
             let target = t.transform_point3(d.grip.pos);
             dashed(out3d, d.anchor, target, Color32::from_gray(60), 1.5);
             out2d.push(Marker2d::Point { at: d.anchor, shape: MarkerShape::Ring, color: Color32::from_rgb(0xFF, 0, 0) });
@@ -912,6 +969,113 @@ impl Tool for ScaleTool {
     fn is_busy(&self) -> bool {
         self.drag.is_some()
     }
+}
+
+// ===========================================================================
+// Paste (Edit → Paste): the clipboard content follows the cursor like a Move
+// ===========================================================================
+
+/// Places the clipboard content: its reference point (bounding-box min corner) follows the
+/// cursor with inference; a click pastes it there, Esc cancels. Shown as the Move tool.
+pub struct PasteTool {
+    clip: std::rc::Rc<crate::clipboard::Clipboard>,
+    engine: InferenceEngine,
+    cur: Option<InferenceResult>,
+    clicker: Clicker,
+}
+
+impl PasteTool {
+    pub fn new(clip: std::rc::Rc<crate::clipboard::Clipboard>) -> Self {
+        Self { clip, engine: InferenceEngine::default(), cur: None, clicker: Clicker::default() }
+    }
+
+    fn offset(&self) -> Option<DMat4> {
+        Some(DMat4::from_translation(self.cur.as_ref()?.point - self.clip.reference_point()))
+    }
+
+    fn update(&mut self, ctx: &ToolContext) {
+        self.cur = Some(infer(&mut self.engine, ctx, None, None, None));
+    }
+}
+
+/// Paste `clip` into the document's active context moved by `t` (world); selects the result.
+pub fn paste_clipboard(doc: &mut crate::document::Document, clip: &crate::clipboard::Clipboard, t: &DMat4) -> bool {
+    let path = doc.active_path.clone();
+    let uid = doc.uid;
+    match doc.try_commit("Paste", |m| clip.paste_into(m, uid, &path, t)) {
+        Some((ents, guides)) => {
+            doc.set_selection_with_guides(ents, guides);
+            true
+        }
+        None => false,
+    }
+}
+
+impl Tool for PasteTool {
+    fn id(&self) -> ToolId {
+        ToolId::Move
+    }
+    fn activate(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+    }
+    fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+    }
+    fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
+        if !self.clicker.down(ctx) {
+            return;
+        }
+        self.update(ctx);
+        if let Some(t) = self.offset()
+            && paste_clipboard(ctx.doc, &self.clip, &t)
+        {
+            ctx.requests.push(super::ToolRequest::SwitchTool(ToolId::Select));
+        }
+    }
+    fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
+        if !pressed {
+            return false;
+        }
+        if key == Key::Escape {
+            ctx.requests.push(super::ToolRequest::SwitchTool(ToolId::Select));
+            return true;
+        }
+        let r = self.engine.handle_arrow(key);
+        if r {
+            self.update(ctx);
+        }
+        r
+    }
+    fn status_text(&self) -> String {
+        format!("Click to place the pasted {} (Esc cancels).", plural(self.clip.count, "entity", "entities"))
+    }
+    fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
+        let Some(t) = self.offset() else { return };
+        for (a, b) in &self.clip.preview {
+            line(out3d, t.transform_point3(*a), t.transform_point3(*b), SELECT_BLUE, 1.5);
+        }
+        for g in self.clip.guide_lines() {
+            let g = g.transformed(&t);
+            out3d.add_guide_line(view.camera, g.origin, g.dir, true);
+        }
+        let vp = DVec2::new(view.viewport.x as f64, view.viewport.y as f64);
+        for p in self.clip.guide_points() {
+            out3d.add_guide_point(view.camera, vp, t.transform_point3(*p), true);
+        }
+        if let Some(r) = &self.cur {
+            inference::draw_result(r, out3d, out2d);
+        }
+    }
+    fn cursor(&self) -> CursorIcon {
+        CursorIcon::None
+    }
+    fn is_busy(&self) -> bool {
+        true
+    }
+}
+
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 #[cfg(test)]

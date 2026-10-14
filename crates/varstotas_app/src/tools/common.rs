@@ -7,7 +7,9 @@ use crate::inference::{self, Constraint, InferenceEngine, InferenceResult, Query
 use crate::overlay::Marker2d;
 use egui::{Color32, Pos2};
 use varstotas_kernel::glam::{DMat4, DVec2, DVec3};
-use varstotas_kernel::{ContextPath, EdgeId, EntityRef, FaceId, InstanceId, LengthUnit, Mesh, Model, Plane, units};
+use varstotas_kernel::{
+    ContextPath, EdgeId, EntityRef, FaceId, GuideLine, GuideRef, InstanceId, LengthUnit, Mesh, Model, Plane, units,
+};
 use varstotas_render::{Overlay3d, OverlayPolygon};
 use std::collections::HashSet;
 
@@ -667,26 +669,117 @@ pub fn normal_color(n: DVec3) -> Color32 {
     axis_kind_of(n).map(InferenceKind::color).unwrap_or(Color32::from_rgb(0x80, 0x80, 0x80))
 }
 
-/// Draw guide lines and guide points of the model (dashed, always visible). Called by the app.
-pub fn draw_guides(view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
-    let model = &view.doc.model;
-    if model.guides.is_empty() && model.guide_points.is_empty() {
-        return;
+/// Pick radius for guide points (px).
+pub const GUIDE_POINT_PICK_PX: f64 = 8.0;
+
+/// How far guide lines are drawn either side of the point nearest the camera target.
+pub fn guide_reach(cam: &varstotas_render::Camera) -> f64 {
+    (cam.eye - cam.target).length().max(1000.0) * 20.0
+}
+
+/// Visible segment used to draw / box-select an (infinite) guide line.
+pub fn guide_segment(cam: &varstotas_render::Camera, g: &GuideLine) -> Option<(DVec3, DVec3)> {
+    let d = g.dir.normalize_or_zero();
+    if d == DVec3::ZERO || !g.origin.is_finite() {
+        return None;
     }
-    let cam = view.camera;
-    let reach = (cam.eye - cam.target).length().max(1000.0) * 20.0;
-    let c = Color32::from_rgb(0x50, 0x50, 0x60);
-    for g in &model.guides {
+    let reach = guide_reach(cam);
+    let mid = g.origin + d * (cam.target - g.origin).dot(d);
+    Some((mid - d * reach, mid + d * reach))
+}
+
+/// Guide under screen position `pos` (viewport-local): guide points within
+/// [`GUIDE_POINT_PICK_PX`] first, then guide lines within the edge pick radius, nearest first.
+/// Guides hidden behind faces are skipped; nothing is picked while guides are hidden.
+pub fn pick_guide_at(doc: &Document, cam: &varstotas_render::Camera, viewport: egui::Vec2, pos: Pos2) -> Option<GuideRef> {
+    let model = &doc.model;
+    if model.guides_hidden || (model.guides.is_empty() && model.guide_points.is_empty()) {
+        return None;
+    }
+    let vp = DVec2::new(viewport.x as f64, viewport.y as f64);
+    let c = DVec2::new(pos.x as f64, pos.y as f64);
+    let ray = crate::nav::ray_at(cam, pos, viewport);
+    let hit = crate::document::cached_raycast(model, doc.model_version, &ray);
+    let visible = |p: DVec3| {
+        let depth = (p - ray.origin).dot(ray.dir);
+        let tol = (cam.pixel_size_at(p, vp) * 3.0).max(depth.abs() * 1e-6).max(1e-3);
+        hit.as_ref().is_none_or(|h| h.t >= depth - tol)
+    };
+    let mut best: Option<(f64, GuideRef)> = None;
+    for (id, p) in model.guide_points.iter() {
+        let Some(s) = cam.world_to_screen(*p, vp) else { continue };
+        let d = s.distance(c);
+        if d <= GUIDE_POINT_PICK_PX && best.is_none_or(|b| d < b.0) && visible(*p) {
+            best = Some((d, GuideRef::Point(id)));
+        }
+    }
+    if best.is_some() {
+        return best.map(|b| b.1);
+    }
+    for (id, g) in model.guides.iter() {
         let d = g.dir.normalize_or_zero();
         if d == DVec3::ZERO {
             continue;
         }
-        // Center the drawn segment on the point of the guide closest to the camera target.
-        let mid = g.origin + d * (cam.target - g.origin).dot(d);
-        push_line(out3d, mid - d * reach, mid + d * reach, c, 1.0, true, false);
+        let Some(p) = inference::geo::closest_on_line_to_ray(g.origin, d, ray.origin, ray.dir) else { continue };
+        if (p - ray.origin).dot(ray.dir) <= 0.0 {
+            continue;
+        }
+        let Some(s) = cam.world_to_screen(p, vp) else { continue };
+        let dist = s.distance(c);
+        if dist <= inference::EDGE_PICK_PX && best.is_none_or(|b| dist < b.0) && visible(p) {
+            best = Some((dist, GuideRef::Line(id)));
+        }
     }
-    for p in &model.guide_points {
-        out2d.push(Marker2d::Point { at: *p, shape: crate::overlay::MarkerShape::Cross, color: c });
+    best.map(|b| b.1)
+}
+
+/// [`pick_guide_at`] for the tool pointer.
+pub fn pick_guide(ctx: &ToolContext) -> Option<GuideRef> {
+    pick_guide_at(ctx.doc, ctx.camera, ctx.viewport, ctx.pointer.pos)
+}
+
+/// Draw one guide (line or point) with `t` applied, in `color`.
+pub fn draw_guide(
+    view: &OverlayView,
+    g: GuideRef,
+    t: &DMat4,
+    color: Color32,
+    width: f32,
+    out3d: &mut Overlay3d,
+    out2d: &mut Vec<Marker2d>,
+) {
+    let model = &view.doc.model;
+    match g {
+        GuideRef::Line(id) => {
+            if let Some(gl) = model.guides.get(id)
+                && let Some((a, b)) = guide_segment(view.camera, &gl.transformed(t))
+            {
+                push_line(out3d, a, b, color, width, true, false);
+            }
+        }
+        GuideRef::Point(id) => {
+            if let Some(p) = model.guide_points.get(id) {
+                out2d.push(Marker2d::Point { at: t.transform_point3(*p), shape: crate::overlay::MarkerShape::Cross, color });
+            }
+        }
+    }
+}
+
+/// Draw guide lines and guide points of the model (dashed; selected ones blue) as 3D overlay
+/// lines, so they also appear in PNG exports. Called by the app.
+pub fn draw_guides(view: &OverlayView, out3d: &mut Overlay3d) {
+    let model = &view.doc.model;
+    if model.guides_hidden || (model.guides.is_empty() && model.guide_points.is_empty()) {
+        return;
+    }
+    let sel = &view.doc.guide_sel;
+    for (id, g) in model.guides.iter() {
+        out3d.add_guide_line(view.camera, g.origin, g.dir, sel.contains(&GuideRef::Line(id)));
+    }
+    let vp = DVec2::new(view.viewport.x as f64, view.viewport.y as f64);
+    for (id, p) in model.guide_points.iter() {
+        out3d.add_guide_point(view.camera, vp, *p, sel.contains(&GuideRef::Point(id)));
     }
 }
 

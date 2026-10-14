@@ -9,7 +9,7 @@ use crate::overlay::Marker2d;
 use egui::{Color32, CursorIcon, Key, PointerButton};
 use varstotas_kernel::geom::{PointLoc, Projector, point_in_region, point_seg_dist2};
 use varstotas_kernel::glam::{DVec2, DVec3};
-use varstotas_kernel::{EdgeId, EntityRef, FaceId, InstanceId, Plane, TOL};
+use varstotas_kernel::{EdgeId, EntityRef, FaceId, GuideRef, InstanceId, Plane, TOL};
 use varstotas_render::Overlay3d;
 
 // ===========================================================================
@@ -20,7 +20,7 @@ use varstotas_render::Overlay3d;
 enum EraseTarget {
     Edge(EdgeId, DVec3, DVec3),
     Instance(InstanceId),
-    Guide(usize),
+    Guide(GuideRef),
 }
 
 #[derive(Default)]
@@ -28,26 +28,6 @@ pub struct EraserTool {
     hover: Option<EraseTarget>,
     marked: Vec<EraseTarget>,
     dragging: bool,
-}
-
-fn pick_guide(ctx: &ToolContext) -> Option<usize> {
-    let ray = ctx.pointer.ray;
-    let vp = ctx.viewport_d();
-    let c = DVec2::new(ctx.pointer.pos.x as f64, ctx.pointer.pos.y as f64);
-    let mut best: Option<(f64, usize)> = None;
-    for (i, g) in ctx.doc.model.guides.iter().enumerate() {
-        let d = g.dir.normalize_or_zero();
-        if d == DVec3::ZERO {
-            continue;
-        }
-        let Some(p) = inference::geo::closest_on_line_to_ray(g.origin, d, ray.origin, ray.dir) else { continue };
-        let Some(s) = ctx.camera.world_to_screen(p, vp) else { continue };
-        let dist = s.distance(c);
-        if dist <= inference::EDGE_PICK_PX && best.is_none_or(|b| dist < b.0) {
-            best = Some((dist, i));
-        }
-    }
-    best.map(|b| b.1)
 }
 
 impl EraserTool {
@@ -84,18 +64,10 @@ impl EraserTool {
             "Erase"
         };
         ctx.doc.commit(label, |model| {
-            let mut guides: Vec<usize> = marked
-                .iter()
-                .filter_map(|t| if let EraseTarget::Guide(i) = t { Some(*i) } else { None })
-                .collect();
-            guides.sort_unstable();
-            guides.dedup();
+            let guides: Vec<GuideRef> =
+                marked.iter().filter_map(|t| if let EraseTarget::Guide(g) = t { Some(*g) } else { None }).collect();
             if !hide && !soften {
-                for i in guides.into_iter().rev() {
-                    if i < model.guides.len() {
-                        model.guides.remove(i);
-                    }
-                }
+                model.remove_guides(&guides);
             }
             let Some(mesh) = model.mesh_at_mut(&path) else { return };
             let ents: Vec<EntityRef> = marked
@@ -179,24 +151,19 @@ impl Tool for EraserTool {
         "Click or drag over edges, guides or groups to erase. Shift = hide, Ctrl = soften, Ctrl+Shift = unsoften."
             .into()
     }
-    fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, _out2d: &mut Vec<Marker2d>) {
-        let draw = |t: &EraseTarget, out3d: &mut Overlay3d| match t {
+    fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
+        let draw = |t: &EraseTarget, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>| match t {
             EraseTarget::Edge(_, a, b) => line(out3d, *a, *b, SELECT_BLUE, 3.0),
             EraseTarget::Instance(id) => highlight_hover(view, &Hover::Instance { id: *id, point: DVec3::ZERO }, out3d),
-            EraseTarget::Guide(i) => {
-                if let Some(g) = view.doc.model.guides.get(*i) {
-                    let d = g.dir.normalize_or(DVec3::X);
-                    let r = (view.camera.eye - view.camera.target).length() * 20.0;
-                    let mid = g.origin + d * (view.camera.target - g.origin).dot(d);
-                    line(out3d, mid - d * r, mid + d * r, SELECT_BLUE, 2.0);
-                }
+            EraseTarget::Guide(g) => {
+                draw_guide(view, *g, &varstotas_kernel::glam::DMat4::IDENTITY, SELECT_BLUE, 2.0, out3d, out2d);
             }
         };
         for t in &self.marked {
-            draw(t, out3d);
+            draw(t, out3d, out2d);
         }
         if let Some(h) = &self.hover {
-            draw(h, out3d);
+            draw(h, out3d, out2d);
         }
     }
     fn cursor(&self) -> CursorIcon {

@@ -10,12 +10,12 @@
 #![allow(dead_code)]
 
 pub mod common;
-mod construct;
+pub(crate) mod construct;
 mod draw;
 mod edit;
 mod nav_tools;
 pub(crate) mod select;
-mod transform;
+pub(crate) mod transform;
 
 use crate::document::Document;
 use crate::overlay::Marker2d;
@@ -296,6 +296,8 @@ pub struct PointerInfo {
 pub enum ToolRequest {
     SwitchTool(ToolId),
     ZoomExtents,
+    /// Tape Measure: ask "resize the model / group?" (uniform factor) in a dialog.
+    ConfirmResize(f64),
 }
 
 /// Everything a tool can touch while handling an event.
