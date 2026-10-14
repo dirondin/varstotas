@@ -130,10 +130,26 @@ fn fs_sky(in: FsOut) -> @location(0) vec4<f32> {
     var t: f32;
     if g.eye_rel.w > 0.5 {
         t = clamp(in.ndc.y * 0.5 + 0.5, 0.0, 1.0);
+        // Parallel side views look exactly along the ground plane, so the ground pass sees no
+        // intersection: paint everything below world z = 0 with the ground colour (QA2-008).
+        let r = pixel_ray(in.ndc);
+        let world_z = r.o.z + g.origin.z + g.origin.w;
+        if g.params2.y > 0.5 && r.d.z >= -1e-6 && world_z < 0.0 {
+            let sky = mix(g.sky_horizon.rgb, g.sky_top.rgb, t);
+            return out_color(vec4<f32>(mix(sky, g.ground.rgb, g.ground.a), 1.0));
+        }
     } else {
         let r = pixel_ray(in.ndc);
         t = clamp(r.d.z / 0.6, 0.0, 1.0);
         t = sqrt(t);
+        // Eye exactly on the ground plane (standard side views): the ground pass cannot
+        // intersect, so paint the lower half with the ground colour as background (QA2-008).
+        let eye_z = g.eye_rel.z + g.origin.z + g.origin.w;
+        if g.params2.y > 0.5 && r.d.z < -1e-6 && eye_z <= 1e-3 && eye_z > -1.0 {
+            let sky = mix(g.sky_horizon.rgb, g.sky_top.rgb, t);
+            let a = g.ground.a * smoothstep(0.0, 0.035, -r.d.z);
+            return out_color(vec4<f32>(mix(sky, g.ground.rgb, a), 1.0));
+        }
     }
     let c = mix(g.sky_horizon.rgb, g.sky_top.rgb, t);
     return out_color(vec4<f32>(c, 1.0));
@@ -152,7 +168,7 @@ fn fs_ground(in: FsOut) -> GroundOut {
     let plane_z = -(g.origin.z + g.origin.w); // world z = 0 in relative coords
     let eye_world_z = g.eye_rel.z + g.origin.z + g.origin.w;
     // Only visible from above.
-    var valid = r.d.z < -1e-6 && (ortho || eye_world_z > 0.0);
+    var valid = r.d.z < -1e-6 && (ortho || eye_world_z > 1e-3);
     var t = 0.0;
     if valid {
         t = (plane_z - r.o.z) / r.d.z;
@@ -210,6 +226,9 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.color = lin(v.color);
     o.back = lin(v.back);
     o.state = v.state;
+    if g.params.x > 2.5 && v.state != HL_SELECTED {
+        o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // wireframe tint pass: drop unselected triangles
+    }
     return o;
 }
 
@@ -217,6 +236,9 @@ fn vs_face(v: FaceIn) -> FaceOut {
 fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
     let mode = g.params.x;
     let alpha_mul = g.params.y;
+    if mode > 2.5 {
+        return out_color(vec4<f32>(srgb_to_linear(g.hl_selected.rgb), 0.3));
+    }
     if mode > 1.5 {
         let h = highlight_face(vec4<f32>(g.hidden_face.rgb, 1.0), in.state);
         return out_color(vec4<f32>(h.rgb, alpha_mul));
@@ -334,29 +356,32 @@ fn vs_thick_state(@builtin(vertex_index) vi: u32, v: ThickIn, @location(5) state
     return thick_vertex(vi, v, state);
 }
 
-// Same segments read from a storage buffer: one non-instanced triangle list, 6 vertices per
-// segment (avoids tiny instances, which are slow on tile-based GPUs).
-struct Seg {
-    a: vec3<f32>,
-    width: f32,
-    b: vec3<f32>,
-    dash: f32,
-    color: vec4<f32>,
-};
-
-@group(1) @binding(0) var<storage, read> segs: array<Seg>;
+// Static edges / profiles read straight from the raw `LineVertex` buffer (storage, 7 floats per
+// vertex: pos.xyz, color.rgba; 2 vertices per segment) as one non-instanced triangle list,
+// 6 vertices per segment (tiny instances are slow on tile-based GPUs).
+@group(1) @binding(0) var<storage, read> seg_lines: array<f32>;
 @group(1) @binding(1) var<storage, read> seg_states: array<u32>;
 
-@vertex
-fn vs_thick_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
-    let s = segs[vi / 6u];
+fn seg_vertex(vi: u32, width: f32) -> ThickOut {
+    let i = vi / 6u;
+    let o = i * 14u;
     var v: ThickIn;
-    v.a = s.a;
-    v.width = s.width;
-    v.b = s.b;
-    v.dash = s.dash;
-    v.color = s.color;
-    return thick_vertex(vi % 6u, v, seg_states[vi / 6u]);
+    v.a = vec3<f32>(seg_lines[o], seg_lines[o + 1u], seg_lines[o + 2u]);
+    v.color = vec4<f32>(seg_lines[o + 3u], seg_lines[o + 4u], seg_lines[o + 5u], seg_lines[o + 6u]);
+    v.b = vec3<f32>(seg_lines[o + 7u], seg_lines[o + 8u], seg_lines[o + 9u]);
+    v.width = width;
+    v.dash = 0.0;
+    return thick_vertex(vi % 6u, v, seg_states[i]);
+}
+
+@vertex
+fn vs_edge_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
+    return seg_vertex(vi, 0.0); // model edge: 1 logical point, style edge colour
+}
+
+@vertex
+fn vs_profile_seg(@builtin(vertex_index) vi: u32) -> ThickOut {
+    return seg_vertex(vi, -1.0); // profile width uniform
 }
 
 fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {

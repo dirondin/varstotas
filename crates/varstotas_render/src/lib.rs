@@ -108,6 +108,41 @@ pub struct Overlay3d {
     pub polygons: Vec<OverlayPolygon>,
 }
 
+impl Overlay3d {
+    /// Add the 12 edges of a (possibly transformed) box as depth-tested solid lines, e.g. the
+    /// classic bounding box of a selected group / component instance (QA2-005):
+    /// `overlay.add_box(corners, HIGHLIGHT_SELECTED, 1.0)`.
+    /// `corners[i]` is the corner with x = max if `i & 1`, y = max if `i & 2`, z = max if `i & 4`
+    /// (local min/max mapped through the instance transform), in world coordinates.
+    pub fn add_box(&mut self, corners: [[f32; 3]; 8], color: [f32; 4], width_px: f32) {
+        const EDGES: [(usize, usize); 12] = [
+            (0, 1), (2, 3), (4, 5), (6, 7), // along x
+            (0, 2), (1, 3), (4, 6), (5, 7), // along y
+            (0, 4), (1, 5), (2, 6), (3, 7), // along z
+        ];
+        self.lines.extend(EDGES.iter().map(|&(a, b)| OverlayLine {
+            a: corners[a],
+            b: corners[b],
+            color,
+            width_px,
+            dashed: false,
+            on_top: false,
+        }));
+    }
+
+    /// Axis-aligned convenience for `add_box`.
+    pub fn add_aabb(&mut self, min: [f32; 3], max: [f32; 3], color: [f32; 4], width_px: f32) {
+        let c = |i: usize| {
+            [
+                if i & 1 == 0 { min[0] } else { max[0] },
+                if i & 2 == 0 { min[1] } else { max[1] },
+                if i & 4 == 0 { min[2] } else { max[2] },
+            ]
+        };
+        self.add_box(std::array::from_fn(c), color, width_px);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaceStyle {
     Shaded,
@@ -146,3 +181,25 @@ pub use renderer::{
     DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
     DIM_FACE_TARGET, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, Renderer,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn aabb_overlay_has_12_axis_aligned_edges() {
+        let mut o = Overlay3d::default();
+        o.add_aabb([0.0, 0.0, 0.0], [1.0, 2.0, 3.0], HIGHLIGHT_SELECTED, 1.0);
+        assert_eq!(o.lines.len(), 12);
+        let mut per_axis = [0; 3];
+        for l in &o.lines {
+            let d: Vec<f32> = (0..3).map(|k| (l.b[k] - l.a[k]).abs()).collect();
+            let axis = d.iter().position(|&x| x > 0.0).unwrap();
+            assert_eq!(d.iter().filter(|&&x| x > 0.0).count(), 1);
+            assert_eq!(d[axis], [1.0, 2.0, 3.0][axis]);
+            per_axis[axis] += 1;
+            assert!(!l.on_top && !l.dashed);
+        }
+        assert_eq!(per_axis, [4, 4, 4]);
+    }
+}

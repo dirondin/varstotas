@@ -5,7 +5,6 @@ use crate::{
     Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, RenderStyle, SceneGeometry, TriVertex,
 };
 use glam::{DMat4, DVec2, DVec3};
-use wgpu::util::DeviceExt;
 
 const SAMPLES: u32 = 4;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -110,8 +109,14 @@ struct StaticGeo {
     tris: Option<wgpu::Buffer>,
     backs: Option<wgpu::Buffer>,
     /// Vertex counts: opaque range first, then translucent.
-    opaque_verts: u32,
-    translucent_verts: u32,
+    /// Triangle vertices in `tris` (source order, never reordered).
+    face_verts: u32,
+    /// Source indices of translucent triangles (blend pass when not X-ray).
+    translucent: Vec<u32>,
+    /// Index buffer of the opaque triangles; only used when some triangles are translucent
+    /// (otherwise the opaque pass draws `0..face_verts` directly).
+    opaque_index: Option<wgpu::Buffer>,
+    opaque_index_count: u32,
     edges: Option<wgpu::Buffer>,
     /// Same edges as thick-line instances (used on HiDPI: 1 logical point wide).
     edges_thick: Option<wgpu::Buffer>,
@@ -133,6 +138,17 @@ struct StaticGeo {
     edge_states_vtx: Option<wgpu::Buffer>,
     edge_states_seg: Option<wgpu::Buffer>,
     profile_states: Option<wgpu::Buffer>,
+    /// Some face is `Highlight::Selected` (Wireframe draws a selection tint only then).
+    any_face_selected: bool,
+}
+
+/// CPU scratch reused by `set_geometry` (avoids re-allocating / page-faulting large vectors).
+#[derive(Default)]
+struct GeoScratch {
+    backs: Vec<[f32; 4]>,
+    opaque_idx: Vec<u32>,
+    thick: Vec<ThickLine>,
+    zeros: Vec<u32>,
 }
 
 /// What the current back-to-front index buffer was sorted for.
@@ -212,6 +228,7 @@ pub struct Renderer {
     scratch_polys: Vec<LineVertex>,
     scratch_axes: Vec<ThickLine>,
     scratch_states: Vec<u32>,
+    scratch_geo: GeoScratch,
     max_buffer: u64,
     max_texture_dim: u32,
     /// Layout of the segment storage bind group (group 1); `None` = instanced fallback only.
@@ -376,8 +393,10 @@ impl Renderer {
                 centroids: Vec::new(),
                 tris: None,
                 backs: None,
-                opaque_verts: 0,
-                translucent_verts: 0,
+                face_verts: 0,
+                translucent: Vec::new(),
+                opaque_index: None,
+                opaque_index_count: 0,
                 edges: None,
                 edges_thick: None,
                 edge_verts: 0,
@@ -392,6 +411,7 @@ impl Renderer {
                 edge_states_vtx: None,
                 edge_states_seg: None,
                 profile_states: None,
+                any_face_selected: false,
                 radius: 0.0,
             },
             overlay_lines: DynBuffer::new(device, "varstotas overlay lines", vb),
@@ -411,6 +431,7 @@ impl Renderer {
             scratch_polys: Vec::new(),
             scratch_axes: Vec::new(),
             scratch_states: Vec::new(),
+            scratch_geo: GeoScratch::default(),
             max_buffer: device.limits().max_buffer_size,
             max_texture_dim: limits.max_texture_dimension_2d,
             seg_bgl,
@@ -421,10 +442,13 @@ impl Renderer {
         }
     }
 
-    /// Upload new static geometry.
+    /// Upload new static geometry. GPU buffers are reused when the new data fits (grow-only),
+    /// opaque-only scenes are uploaded straight from `geo` (no partition copy), and CPU scratch
+    /// vectors are kept between calls. Resets all highlight states to `Highlight::None`.
     pub fn set_geometry(&mut self, rs: &egui_wgpu::RenderState, geo: &SceneGeometry) {
         let t0 = std::time::Instant::now();
         let device = &rs.device;
+        let queue = &rs.queue;
         let max_tris_verts = (self.max_buffer / std::mem::size_of::<TriVertex>() as u64) as usize;
         let mut n = geo.tris.len() - geo.tris.len() % 3;
         if n > max_tris_verts {
@@ -435,126 +459,141 @@ impl Renderer {
             );
             n = max_tris_verts - max_tris_verts % 3;
         }
-        let default_back = DEFAULT_BACK_COLOR;
-        let back_of = |i: usize| geo.back_colors.get(i).copied().unwrap_or(default_back);
+        let src = &geo.tris[..n];
+        let back_of = |i: usize| geo.back_colors.get(i).copied().unwrap_or(DEFAULT_BACK_COLOR);
+        let group_of = |t: usize| geo.face_ids.get(t).copied().unwrap_or(t as u32);
+        let ntris = n / 3;
+        let sc = &mut self.scratch_geo;
+        let g = &mut self.geo;
 
-        // Split triangles into opaque and translucent ranges.
-        let mut tris: Vec<TriVertex> = Vec::with_capacity(n);
-        let mut backs: Vec<[f32; 4]> = Vec::with_capacity(n);
-        let mut t_tris: Vec<TriVertex> = Vec::new();
-        let mut t_backs: Vec<[f32; 4]> = Vec::new();
-        let mut groups: Vec<u32> = Vec::with_capacity(n / 3);
-        let mut t_groups: Vec<u32> = Vec::new();
-        for t in 0..n / 3 {
-            let i = t * 3;
-            let translucent = (i..i + 3).any(|k| geo.tris[k].color[3] < 0.999 || back_of(k)[3] < 0.999);
-            let (dt, db, dg) = if translucent {
-                (&mut t_tris, &mut t_backs, &mut t_groups)
-            } else {
-                (&mut tris, &mut backs, &mut groups)
-            };
-            dg.push(geo.face_ids.get(t).copied().unwrap_or(t as u32));
-            for k in i..i + 3 {
-                dt.push(geo.tris[k]);
-                db.push(back_of(k));
+        // ---- faces: uploaded in source order; translucent triangles are drawn via indices ----
+        g.translucent.clear();
+        g.translucent.extend((0..ntris as u32).filter(|&t| {
+            let t = t as usize;
+            (t * 3..t * 3 + 3).any(|k| src[k].color[3] < 0.999 || back_of(k)[3] < 0.999)
+        }));
+        let translucent_tris = g.translucent.len();
+        g.tri_groups.clear();
+        g.tri_groups.extend((0..ntris).map(group_of));
+        let backs: &[[f32; 4]] = if geo.back_colors.len() >= n {
+            &geo.back_colors[..n]
+        } else {
+            sc.backs.clear();
+            sc.backs.extend((0..n).map(back_of));
+            &sc.backs
+        };
+        let tris = src;
+        let usage_v = wgpu::BufferUsages::VERTEX;
+        upload(device, queue, &mut g.tris, "varstotas tris", usage_v, bytemuck::cast_slice(tris));
+        upload(device, queue, &mut g.backs, "varstotas backs", usage_v, bytemuck::cast_slice(backs));
+        g.face_verts = n as u32;
+        g.opaque_index_count = 0;
+        if translucent_tris > 0 {
+            sc.opaque_idx.clear();
+            let mut next = g.translucent.iter().copied().peekable();
+            for t in 0..ntris as u32 {
+                if next.peek() == Some(&t) {
+                    next.next();
+                } else {
+                    sc.opaque_idx.extend([t * 3, t * 3 + 1, t * 3 + 2]);
+                }
             }
+            g.opaque_index_count = sc.opaque_idx.len() as u32;
+            upload(
+                device,
+                queue,
+                &mut g.opaque_index,
+                "varstotas opaque indices",
+                wgpu::BufferUsages::INDEX,
+                bytemuck::cast_slice(&sc.opaque_idx),
+            );
         }
-        let opaque_verts = tris.len() as u32;
-        let translucent_verts = t_tris.len() as u32;
-        tris.extend_from_slice(&t_tris);
-        backs.extend_from_slice(&t_backs);
-        groups.extend_from_slice(&t_groups);
-        self.geo.tri_groups = groups;
-        self.geo.centroids.clear();
-        self.geo.centroids.extend(tris.as_chunks::<3>().0.iter().map(|t| {
-            let c = (glam::Vec3::from(t[0].pos) + glam::Vec3::from(t[1].pos) + glam::Vec3::from(t[2].pos))
-                / 3.0;
+        g.centroids.clear();
+        g.centroids.extend(tris.as_chunks::<3>().0.iter().map(|t| {
+            let c = (glam::Vec3::from(t[0].pos) + glam::Vec3::from(t[1].pos) + glam::Vec3::from(t[2].pos)) / 3.0;
             c.to_array()
         }));
-        self.geo.revision += 1;
+        g.revision += 1;
         self.blend.key = None;
 
-        let mk = |label: &str, data: &[u8]| -> Option<wgpu::Buffer> {
-            if data.is_empty() {
-                None
-            } else {
-                Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(label),
-                    contents: data,
-                    usage: wgpu::BufferUsages::VERTEX,
-                }))
-            }
-        };
-        self.geo.tris = mk("varstotas tris", bytemuck::cast_slice(&tris));
-        self.geo.backs = mk("varstotas backs", bytemuck::cast_slice(&backs));
-        self.geo.face_states = self.state_buffer(device, "varstotas face states", tris.len(), false);
-        self.geo.opaque_verts = opaque_verts;
-        self.geo.translucent_verts = translucent_verts;
-
-        let ne = geo.edges.len() - geo.edges.len() % 2;
-        self.geo.edges = mk("varstotas edges", bytemuck::cast_slice(&geo.edges[..ne]));
-        self.geo.edge_verts = ne as u32;
-        let edges_thick: Vec<ThickLine> = geo.edges[..ne]
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|p| ThickLine {
-                a: p[0].pos,
-                width: 0.0, // 0 = one logical point
-                b: p[1].pos,
-                dash: 0.0,
-                color: p[0].color,
-            })
-            .collect();
-        self.geo.edges_thick = self.seg_buffer(device, "varstotas edges thick", &edges_thick);
-        self.geo.edge_states_seg = self.state_buffer(device, "varstotas edge states", edges_thick.len(), true);
-        self.geo.edge_states_vtx = self.state_buffer(device, "varstotas edge vertex states", ne, false);
-        self.geo.edges_bg = self.seg_bind_group(
-            device,
-            self.geo.edges_thick.as_ref(),
-            self.geo.edge_states_seg.as_ref(),
-        );
-        self.geo.edge_groups = (0..ne as u32 / 2)
-            .map(|i| geo.edge_ids.get(i as usize).copied().unwrap_or(i))
-            .collect();
-
-        let profiles: Vec<ThickLine> = geo
-            .profile_edges
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|p| ThickLine {
-                a: p[0].pos,
-                width: -1.0,
-                b: p[1].pos,
-                dash: 0.0,
-                color: p[0].color,
-            })
-            .collect();
-        self.geo.profiles = self.seg_buffer(device, "varstotas profiles", &profiles);
-        self.geo.profile_states = self.state_buffer(device, "varstotas profile states", profiles.len(), true);
-        self.geo.profiles_bg = self.seg_bind_group(
-            device,
-            self.geo.profiles.as_ref(),
-            self.geo.profile_states.as_ref(),
-        );
-        self.geo.profile_groups = if geo.profile_ids.is_empty() {
-            Vec::new()
+        // ---- edges & profiles -------------------------------------------------------------
+        // Storage path: the thick-line shader reads the raw `LineVertex` pairs (no conversion,
+        // one buffer shared with the 1 px line-list path). Fallback: instanced `ThickLine`s.
+        let seg_bytes = |segs: usize| (segs * 2 * std::mem::size_of::<LineVertex>()) as u64;
+        let can_seg = |segs: usize| self.seg_bgl.is_some() && segs > 0 && seg_bytes(segs) <= self.max_storage_binding;
+        let seg_usage = if self.seg_bgl.is_some() {
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE
         } else {
-            (0..profiles.len())
-                .map(|i| geo.profile_ids.get(i).copied().unwrap_or(u32::MAX))
-                .collect()
+            wgpu::BufferUsages::VERTEX
         };
-        self.geo.profile_count = profiles.len() as u32;
+        let ne = geo.edges.len() - geo.edges.len() % 2;
+        let edge_segs = ne / 2;
+        let edges_seg = can_seg(edge_segs);
+        let edge_usage = if edges_seg { usage_v | wgpu::BufferUsages::STORAGE } else { usage_v };
+        upload(device, queue, &mut g.edges, "varstotas edges", edge_usage, bytemuck::cast_slice(&geo.edges[..ne]));
+        g.edge_verts = ne as u32;
+        let to_thick = |p: &[LineVertex; 2], width: f32| ThickLine {
+            a: p[0].pos,
+            width,
+            b: p[1].pos,
+            dash: 0.0,
+            color: p[0].color,
+        };
+        if !edges_seg {
+            sc.thick.clear();
+            sc.thick.extend(geo.edges[..ne].as_chunks::<2>().0.iter().map(|p| to_thick(p, 0.0))); // 0 = 1 pt
+            upload(device, queue, &mut g.edges_thick, "varstotas edges thick", usage_v, bytemuck::cast_slice(&sc.thick));
+        }
+        g.edge_groups.clear();
+        g.edge_groups.extend((0..edge_segs as u32).map(|i| geo.edge_ids.get(i as usize).copied().unwrap_or(i)));
+
+        let np = geo.profile_edges.len() - geo.profile_edges.len() % 2;
+        let profile_segs = np / 2;
+        let profiles_seg = can_seg(profile_segs);
+        if profiles_seg {
+            let usage = usage_v | wgpu::BufferUsages::STORAGE;
+            upload(device, queue, &mut g.profiles, "varstotas profiles", usage, bytemuck::cast_slice(&geo.profile_edges[..np]));
+        } else {
+            sc.thick.clear();
+            sc.thick.extend(geo.profile_edges[..np].as_chunks::<2>().0.iter().map(|p| to_thick(p, -1.0)));
+            upload(device, queue, &mut g.profiles, "varstotas profiles thick", usage_v, bytemuck::cast_slice(&sc.thick));
+        }
+        g.profile_count = profile_segs as u32;
+        g.profile_groups.clear();
+        if !geo.profile_ids.is_empty() {
+            g.profile_groups
+                .extend((0..profile_segs).map(|i| geo.profile_ids.get(i).copied().unwrap_or(u32::MAX)));
+        }
+
+        // ---- highlight states (reset to None) ---------------------------------------------
+        sc.zeros.clear();
+        sc.zeros.resize(n.max(ne).max(profile_segs), 0);
+        let zeros = |count: usize| -> &[u8] { bytemuck::cast_slice(&sc.zeros[..count]) };
+        let state_usage = wgpu::BufferUsages::VERTEX;
+        upload(device, queue, &mut g.face_states, "varstotas face states", state_usage, zeros(n));
+        upload(device, queue, &mut g.edge_states_vtx, "varstotas edge vertex states", state_usage, zeros(ne));
+        upload(device, queue, &mut g.edge_states_seg, "varstotas edge states", seg_usage, zeros(edge_segs));
+        upload(device, queue, &mut g.profile_states, "varstotas profile states", seg_usage, zeros(profile_segs));
+        g.any_face_selected = false;
+
+        let bind = |on: bool, segs: &Option<wgpu::Buffer>, states: &Option<wgpu::Buffer>, count: usize| {
+            if !on {
+                return None;
+            }
+            seg_bind_group(device, self.seg_bgl.as_ref()?, segs.as_ref()?, states.as_ref()?, count)
+        };
+        g.edges_bg = bind(edges_seg, &g.edges, &g.edge_states_seg, edge_segs);
+        g.profiles_bg = bind(profiles_seg, &g.profiles, &g.profile_states, profile_segs);
+
         let origin = DVec3::from_array(geo.origin);
-        self.geo.origin = if origin.is_finite() { origin } else { DVec3::ZERO };
+        g.origin = if origin.is_finite() { origin } else { DVec3::ZERO };
         // The camera treats the scene as a ball around the world origin.
-        self.geo.radius = geo.radius.max(0.0) as f64 + self.geo.origin.length();
+        g.radius = geo.radius.max(0.0) as f64 + g.origin.length();
         if self.timing.is_some() {
             eprintln!(
                 "varstotas_render timing: set_geometry {} tris ({} translucent), {} edges: {:.2} ms",
-                n / 3,
-                translucent_verts / 3,
+                ntris,
+                translucent_tris,
                 ne / 2,
                 t0.elapsed().as_secs_f64() * 1000.0
             );
@@ -570,18 +609,24 @@ impl Renderer {
         let t0 = std::time::Instant::now();
         let queue = &rs.queue;
         let state = |states: &[Highlight], id: u32| states.get(id as usize).map_or(0, |&h| h as u32);
-        let g = &self.geo;
+        let write = |buf: &wgpu::Buffer, v: &[u32]| {
+            if !v.is_empty() {
+                queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+            }
+        };
+        let g = &mut self.geo;
         let v = &mut self.scratch_states;
 
         if let Some(buf) = &g.face_states {
             v.clear();
             v.extend(g.tri_groups.iter().flat_map(|&id| [state(update.faces, id); 3]));
-            queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+            write(buf, v);
+            g.any_face_selected = v.contains(&(Highlight::Selected as u32));
         }
         if let Some(buf) = &g.edge_states_seg {
             v.clear();
             v.extend(g.edge_groups.iter().map(|&id| state(update.edges, id)));
-            queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+            write(buf, v);
             if let Some(vb) = &g.edge_states_vtx {
                 // Expand in place (back to front) to two vertices per segment.
                 let n = v.len();
@@ -590,7 +635,7 @@ impl Renderer {
                     v[2 * i + 1] = v[i];
                     v[2 * i] = v[i];
                 }
-                queue.write_buffer(vb, 0, bytemuck::cast_slice(v));
+                write(vb, v);
             }
         }
         if let Some(buf) = &g.profile_states
@@ -598,7 +643,7 @@ impl Renderer {
         {
             v.clear();
             v.extend(g.profile_groups.iter().map(|&id| state(update.edges, id)));
-            queue.write_buffer(buf, 0, bytemuck::cast_slice(v));
+            write(buf, v);
         }
         if self.timing.is_some() {
             eprintln!(
@@ -610,72 +655,11 @@ impl Renderer {
         }
     }
 
-    /// Thick-line segment buffer, usable as instanced vertex buffer and (if supported) storage.
-    fn seg_buffer(&self, device: &wgpu::Device, label: &str, segs: &[ThickLine]) -> Option<wgpu::Buffer> {
-        if segs.is_empty() {
-            return None;
-        }
-        let mut usage = wgpu::BufferUsages::VERTEX;
-        if self.seg_bgl.is_some() && std::mem::size_of_val(segs) as u64 <= self.max_storage_binding {
-            usage |= wgpu::BufferUsages::STORAGE;
-        }
-        Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(label),
-            contents: bytemuck::cast_slice(segs),
-            usage,
-        }))
-    }
-
-    /// Zero-initialised `u32` highlight-state stream (vertex buffer; also storage for segments).
-    fn state_buffer(&self, device: &wgpu::Device, label: &str, count: usize, seg: bool) -> Option<wgpu::Buffer> {
-        if count == 0 {
-            return None;
-        }
-        let mut usage = wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST;
-        if seg && self.seg_bgl.is_some() {
-            usage |= wgpu::BufferUsages::STORAGE;
-        }
-        Some(device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(label),
-            size: count as u64 * 4,
-            usage,
-            mapped_at_creation: false,
-        }))
-    }
-
-    fn seg_bind_group(
-        &self,
-        device: &wgpu::Device,
-        buf: Option<&wgpu::Buffer>,
-        states: Option<&wgpu::Buffer>,
-    ) -> Option<wgpu::BindGroup> {
-        let (buf, states) = (buf?, states?);
-        if !buf.usage().contains(wgpu::BufferUsages::STORAGE) || !states.usage().contains(wgpu::BufferUsages::STORAGE) {
-            return None;
-        }
-        Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("varstotas segments"),
-            layout: self.seg_bgl.as_ref()?,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: states.as_entire_binding(),
-                },
-            ],
-        }))
-    }
-
     /// Re-sort the blended triangles back-to-front if the camera or the set changed.
     /// Returns the number of indices to draw from `blend.buf`.
     fn update_blend_order(&mut self, rs: &egui_wgpu::RenderState, camera: &Camera, all: bool) -> u32 {
         let g = &self.geo;
-        let total = g.opaque_verts / 3 + g.translucent_verts / 3;
-        let first = if all { 0 } else { g.opaque_verts / 3 };
-        let n = (total - first) as usize;
+        let n = if all { g.face_verts as usize / 3 } else { g.translucent.len() };
         if n == 0 {
             return 0;
         }
@@ -695,15 +679,20 @@ impl Renderer {
         let s = &mut self.blend;
         let eye = eye_local.as_vec3();
         let f = fwd.as_vec3();
-        let cents = &g.centroids[first as usize..total as usize];
-        s.keys.clear();
         s.tris.clear();
-        if camera.ortho {
-            s.keys.extend(cents.iter().map(|c| !depth_key((glam::Vec3::from(*c) - eye).dot(f))));
+        if all {
+            s.tris.extend(0..n as u32);
         } else {
-            s.keys.extend(cents.iter().map(|c| !depth_key((glam::Vec3::from(*c) - eye).length_squared())));
+            s.tris.extend_from_slice(&g.translucent);
         }
-        s.tris.extend(first..total);
+        let cents = &g.centroids;
+        let c = |t: u32| glam::Vec3::from(cents[t as usize]) - eye;
+        s.keys.clear();
+        if camera.ortho {
+            s.keys.extend(s.tris.iter().map(|&t| !depth_key(c(t).dot(f))));
+        } else {
+            s.keys.extend(s.tris.iter().map(|&t| !depth_key(c(t).length_squared())));
+        }
         radix_sort_pairs(&mut s.keys, &mut s.tris, &mut s.tmp_keys, &mut s.tmp_tris);
         s.indices.clear();
         s.indices.extend(s.tris.iter().flat_map(|&t| [t * 3, t * 3 + 1, t * 3 + 2]));
@@ -847,7 +836,9 @@ impl Renderer {
         // Shading is done in linear space; uniforms are converted once here.
         let conv = srgb_to_linear;
         let face_mode = match style.face_style {
-            FaceStyle::Shaded | FaceStyle::Wireframe => 0.0,
+            FaceStyle::Shaded => 0.0,
+            // Wireframe: faces are only drawn as a flat selection tint (QA2-006).
+            FaceStyle::Wireframe => 3.0,
             FaceStyle::Monochrome => 1.0,
             FaceStyle::HiddenLine => 2.0,
         };
@@ -994,14 +985,20 @@ impl Renderer {
                     false
                 }
             };
-            let total_face_verts = g.opaque_verts + g.translucent_verts;
+            let total_face_verts = g.face_verts;
 
             // 2. opaque faces
             if draw_faces && !style.xray && set_face_buffers(&mut pass) {
                 pass.set_pipeline(&p.face_opaque);
-                let end = if opaque_all { total_face_verts } else { g.opaque_verts };
-                if end > 0 {
-                    pass.draw(0..end, 0..1);
+                if opaque_all || g.translucent.is_empty() {
+                    if total_face_verts > 0 {
+                        pass.draw(0..total_face_verts, 0..1);
+                    }
+                } else if g.opaque_index_count > 0
+                    && let Some(ib) = &g.opaque_index
+                {
+                    pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..g.opaque_index_count, 0, 0..1);
                 }
             }
 
@@ -1066,6 +1063,13 @@ impl Renderer {
                 pass.draw_indexed(0..blend_count, 0, 0..1);
             }
 
+            // 7b. Wireframe: selected faces as a flat translucent tint (the vertex shader drops
+            //     every other triangle; identical colours blend order-independently).
+            if style.face_style == FaceStyle::Wireframe && g.any_face_selected && set_face_buffers(&mut pass) {
+                pass.set_pipeline(&p.face_blend);
+                pass.draw(0..total_face_verts, 0..1);
+            }
+
             // 8. overlays: depth-tested, then on top
             if polys_depth > 0 {
                 pass.set_pipeline(&p.poly_depth);
@@ -1115,6 +1119,74 @@ impl Renderer {
     pub fn texture_id(&self) -> Option<egui::TextureId> {
         self.texture_id
     }
+}
+
+/// Write `data` into `slot`, reusing the buffer when it is large enough (grow-only, 25 % slack).
+/// Empty data keeps the old buffer (draws are gated by counts).
+fn upload(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    slot: &mut Option<wgpu::Buffer>,
+    label: &str,
+    usage: wgpu::BufferUsages,
+    data: &[u8],
+) {
+    if data.is_empty() {
+        return;
+    }
+    let usage = usage | wgpu::BufferUsages::COPY_DST;
+    let len = data.len() as u64;
+    if let Some(b) = slot
+        && b.size() >= len
+        && b.usage() == usage
+    {
+        queue.write_buffer(b, 0, data);
+        return;
+    }
+    let size = (len + len / 4).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT);
+    let b = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage,
+        mapped_at_creation: true,
+    });
+    match b.slice(..len).get_mapped_range_mut() {
+        Ok(mut view) => view.copy_from_slice(data),
+        Err(_) => {
+            b.unmap();
+            queue.write_buffer(&b, 0, data);
+            *slot = Some(b);
+            return;
+        }
+    }
+    b.unmap();
+    *slot = Some(b);
+}
+
+/// Storage bind group (segments + per-segment states) for the non-instanced thick-line path.
+fn seg_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    segs: &wgpu::Buffer,
+    states: &wgpu::Buffer,
+    count: usize,
+) -> Option<wgpu::BindGroup> {
+    // Raw `LineVertex` pairs: 2 x 28 bytes per segment.
+    let seg_bytes = (count * 2 * std::mem::size_of::<LineVertex>()) as u64;
+    if count == 0 || !segs.usage().contains(wgpu::BufferUsages::STORAGE) {
+        return None;
+    }
+    fn binding(b: &wgpu::Buffer, size: u64) -> wgpu::BindingResource<'_> {
+        wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: b, offset: 0, size: std::num::NonZeroU64::new(size) })
+    }
+    Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("varstotas segments"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: binding(segs, seg_bytes) },
+            wgpu::BindGroupEntry { binding: 1, resource: binding(states, count as u64 * 4) },
+        ],
+    }))
 }
 
 /// classic axes: solid in the positive direction, dotted in the negative.
@@ -1301,12 +1373,12 @@ fn build_pipelines(
         slope_scale: -1.5,
         clamp: 0.0,
     };
-    let seg = |label: &'static str, depth_write: bool| {
+    let seg = |label: &'static str, vs: &'static str, depth_write: bool| {
         seg_layout.map(|l| {
             make_with(
                 Desc {
                     label,
-                    vs: "vs_thick_seg",
+                    vs,
                     fs: "fs_thick",
                     buffers: &[],
                     topology: TriangleList,
@@ -1321,8 +1393,8 @@ fn build_pipelines(
         })
     };
     Pipelines {
-        edge_thick_seg: seg("varstotas edges thick (storage)", true),
-        thick_depth_seg: seg("varstotas thick lines (storage)", false),
+        edge_thick_seg: seg("varstotas edges thick (storage)", "vs_edge_seg", true),
+        thick_depth_seg: seg("varstotas profiles (storage)", "vs_profile_seg", false),
         sky: make(Desc {
             label: "varstotas sky",
             vs: "vs_fullscreen",

@@ -293,6 +293,8 @@ struct Viewer {
     fps_window: Option<std::time::Instant>,
     /// World offset of the demo model (`VARSTOTAS_OFFSET`).
     offset: DVec3,
+    /// Stress mode: the scene, re-uploaded every 180 frames to time `set_geometry` (buffer reuse).
+    stress_geo: Option<SceneGeometry>,
     /// (face ids, edge ids) for the stress-mode selection toggling.
     highlight_counts: (usize, usize),
 }
@@ -375,6 +377,7 @@ impl Viewer {
             bbox: (min, max),
             offset: off,
             highlight_counts: (highlight_faces, highlight_edges),
+            stress_geo: std::env::var("VARSTOTAS_STRESS").is_ok().then_some(geo),
             drag_point: None,
             frame_no: 0,
             screenshot: std::env::var("VARSTOTAS_SCREENSHOT").ok(),
@@ -455,6 +458,11 @@ impl eframe::App for Viewer {
         let Some(rs) = frame.wgpu_render_state() else {
             return;
         };
+        if let Some(geo) = &self.stress_geo
+            && self.frame_no.is_multiple_of(180)
+        {
+            self.renderer.set_geometry(rs, geo);
+        }
         if std::env::var("VARSTOTAS_STRESS").is_ok() && self.frame_no.is_multiple_of(60) {
             // Selection fast path: select / deselect every other face and edge.
             let on = self.frame_no.is_multiple_of(120);
@@ -553,6 +561,18 @@ impl eframe::App for Viewer {
                     for p in &mut overlay.polygons {
                         p.tris.iter_mut().for_each(sh);
                     }
+                }
+
+                if std::env::var("VARSTOTAS_HIGHLIGHT").is_ok() {
+                    // Selected "group": classic bounding box around the green cube.
+                    let o = self.offset.as_vec3();
+                    let p = |v: [f32; 3]| (Vec3::from(v) + o).to_array();
+                    overlay.add_aabb(
+                        p([-1500.0, 1500.0, -600.0]),
+                        p([-500.0, 2500.0, 800.0]),
+                        varstotas_render::HIGHLIGHT_SELECTED,
+                        1.0,
+                    );
                 }
 
                 // --- render ---
