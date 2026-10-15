@@ -78,7 +78,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |
 | `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF (`to_pdf_pages`: one page per drawing) |
-| `layout.rs` | Sheets on paper: `viewport_drawing` (scene camera → `view_lines`, fit or 1:N, clipped), `sheet_drawing` (border, title block, texts), `sheets_pdf`, `scene_camera` / `camera_scene` |
+| `layout.rs` | Sheets on paper: `viewport_drawing` (scene camera → `view_lines`, fit or 1:N, clipped), `sheet_drawing` (border, title block, texts, parts tables), `standard_views` (3 views + iso at a standard scale), overall dims (`auto_dims`), `table_rows` / `table_size`, `sheets_pdf`, `scene_camera` / `camera_scene` |
 | `ui/sheets.rs` | Window → Sheets…: sheet list, paper, title block, item properties, preview with pick / move / resize (working copy → one undo step), `export_sheets`, harness dumps |
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation |

@@ -17,6 +17,9 @@ pub struct LayoutSheet {
     pub viewports: Vec<SheetViewport>,
     #[serde(default)]
     pub texts: Vec<SheetText>,
+    /// Parts tables (rows from `report::model_report`, filled when drawn).
+    #[serde(default)]
+    pub tables: Vec<SheetTable>,
     /// Title block in the bottom-right corner (`None`: no block).
     #[serde(default)]
     pub title: Option<TitleBlock>,
@@ -24,7 +27,7 @@ pub struct LayoutSheet {
 
 impl LayoutSheet {
     pub fn new(name: impl Into<String>, size: DVec2) -> Self {
-        Self { name: name.into(), size, viewports: Vec::new(), texts: Vec::new(), title: Some(TitleBlock::default()) }
+        Self { name: name.into(), size, viewports: Vec::new(), texts: Vec::new(), tables: Vec::new(), title: Some(TitleBlock::default()) }
     }
 }
 
@@ -55,6 +58,9 @@ pub struct SheetViewport {
     /// Caption under the viewport: the scene name and the scale.
     #[serde(default = "yes")]
     pub caption: bool,
+    /// Overall width and height dimensions (parallel projection only).
+    #[serde(default)]
+    pub auto_dims: bool,
 }
 
 fn yes() -> bool {
@@ -63,7 +69,7 @@ fn yes() -> bool {
 
 impl SheetViewport {
     pub fn new(min: DVec2, size: DVec2, view: Scene) -> Self {
-        Self { min, size, view, scene: None, scale: None, profiles: true, hidden: false, dims: true, sections: true, frame: false, caption: true }
+        Self { min, size, view, scene: None, scale: None, profiles: true, hidden: false, dims: true, sections: true, frame: false, caption: true, auto_dims: false }
     }
 
     pub fn contains(&self, p: DVec2) -> bool {
@@ -78,6 +84,14 @@ pub struct SheetText {
     /// Text height, mm.
     pub size: f64,
     pub text: String,
+}
+
+/// A parts list of the model's groups and components; `at` is its top-left corner.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SheetTable {
+    pub at: DVec2,
+    /// Text height, mm (rows are twice as tall).
+    pub size: f64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

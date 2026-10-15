@@ -949,6 +949,7 @@ impl VarstotasApp {
                     Some(("scale", v)) => vp.scale = v.parse().ok(),
                     _ if a == "frame" => vp.frame = true,
                     _ if a == "hidden" => vp.hidden = true,
+                    _ if a == "autodims" => vp.auto_dims = true,
                     _ => nums.extend(a.parse::<f64>().ok()),
                 }
             }
@@ -980,6 +981,22 @@ impl VarstotasApp {
                     _ => tb.title = v,
                 }
             });
+            return;
+        }
+        // `sheet_views [scale=N]`: standard views on the current sheet; `sheet_table x y [h]`.
+        if let Some(args) = name.strip_prefix("sheet_views") {
+            let scale = args.trim().strip_prefix("scale=").and_then(|v| v.parse().ok());
+            let Some(sheet) = self.doc.model.sheets.get(self.sheets.current) else { return };
+            let views = crate::layout::standard_views(&self.doc.model, sheet, scale);
+            self.edit_sheet("Standard Views", |s| s.viewports.extend(views));
+            return;
+        }
+        if let Some(args) = name.strip_prefix("sheet_table ") {
+            let n: Vec<f64> = args.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+            if let [x, y, ..] = n[..] {
+                let t = varstotas_kernel::layout::SheetTable { at: DVec2::new(x, y), size: n.get(2).copied().unwrap_or(3.0) };
+                self.edit_sheet("Add Table", |s| s.tables.push(t));
+            }
             return;
         }
         if let Some(i) = name.strip_prefix("sheet_select ") {
@@ -1335,7 +1352,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

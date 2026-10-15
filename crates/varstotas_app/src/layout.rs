@@ -1,15 +1,15 @@
 //! Layout sheets on paper (a light page layout): each viewport is the line drawing of a scene
 //! (`vector_export::view_lines`) fitted into its rectangle or drawn to scale 1:N, clipped to
-//! the rectangle; plus free texts, a border and a title block. Exported as PDF (a page per
-//! sheet) or SVG (one sheet).
+//! the rectangle, with optional overall dimensions; plus free texts, parts tables, a border
+//! and a title block. `standard_views` lays out front / top / left / iso views at a common
+//! standard scale. Exported as PDF (a page per sheet) or SVG (one sheet).
 
 use crate::vector_export::{Drawing, Pen, Text2, VectorOptions, view_lines};
-use varstotas_kernel::Model;
-use varstotas_kernel::Scene;
-use varstotas_kernel::glam::DVec2;
-use varstotas_kernel::layout::{LayoutSheet, SheetViewport};
 use crate::ui::unfold::scale_label;
-use varstotas_render::Camera;
+use varstotas_kernel::glam::{DVec2, DVec3};
+use varstotas_kernel::layout::{LayoutSheet, SheetTable, SheetViewport};
+use varstotas_kernel::{LengthUnit, Model, Scene};
+use varstotas_render::{Camera, StandardView};
 
 /// Border inset from the paper edge, mm.
 pub const BORDER: f64 = 10.0;
@@ -18,6 +18,15 @@ const PX_PER_MM: f64 = 4.0;
 /// Title block: width and row heights, mm.
 const TB_W: f64 = 180.0;
 const TB_ROWS: [f64; 3] = [10.0, 7.0, 7.0];
+/// Height kept free above the title block for new viewports, mm.
+pub const TITLE_ROOM: f64 = 30.0;
+/// Margin around a standard view's content (dimensions, caption), mm.
+const VIEW_MARGIN: f64 = 14.0;
+/// Overall dimensions: distance from the content and text height, mm.
+const DIM_OFFSET: f64 = 7.0;
+const DIM_TEXT: f64 = 2.5;
+/// Standard reduction scales (GOST 2.302), 1:N.
+const SCALES: [f64; 18] = [1.0, 2.0, 2.5, 4.0, 5.0, 10.0, 15.0, 20.0, 25.0, 40.0, 50.0, 75.0, 100.0, 200.0, 400.0, 500.0, 800.0, 1000.0];
 
 /// The camera a scene stores (parallel projection: visible height from the eye distance).
 pub fn scene_camera(s: &Scene) -> Camera {
@@ -91,25 +100,35 @@ pub fn viewport_drawing(model: &Model, vp: &SheetViewport) -> Drawing {
     let (lo, hi) = (vp.min, vp.min + vp.size);
     let centre = vp.min + vp.size * 0.5;
     let mut out = Drawing::default();
-    let placed = match (viewport_scale(model, vp), lines.bounds()) {
+    // Screen point p → paper: off + p * k.
+    let map = match (viewport_scale(model, vp), lines.bounds()) {
         (Some(n), _) => {
             let k = cam.pixel_size_at(cam.target, px) / n;
-            Some(lines.on_paper(Drawing::default(), move |p| centre + (p - px * 0.5) * k))
+            Some((centre - px * 0.5 * k, k))
         }
         (None, Some((a, b))) => {
-            let pad = 3.0f64.min(vp.size.min_element() * 0.1);
+            let pad = if vp.auto_dims { VIEW_MARGIN } else { 3.0 }.min(vp.size.min_element() * 0.2);
             let ext = (b - a).max(DVec2::splat(1e-6));
             let k = ((vp.size.x - 2.0 * pad) / ext.x).min((vp.size.y - 2.0 * pad) / ext.y).max(1e-9);
-            let mid = (a + b) * 0.5;
-            Some(lines.on_paper(Drawing::default(), move |p| centre + (p - mid) * k))
+            Some((centre - (a + b) * 0.5 * k, k))
         }
         (None, None) => None,
     };
-    if let Some(d) = placed {
+    if let Some((off, k)) = map {
+        let d = lines.on_paper(Drawing::default(), move |p| off + p * k);
         out.lines.extend(d.lines.into_iter().filter_map(|(a, b, pen)| clip(a, b, lo, hi).map(|(a, b)| (a, b, pen))));
         let inside = |p: DVec2| p.x >= lo.x && p.y >= lo.y && p.x <= hi.x && p.y <= hi.y;
         out.fills.extend(d.fills.into_iter().filter(|f| f.iter().all(|p| inside(*p))));
         out.texts.extend(d.texts.into_iter().filter(|t| inside(t.at)));
+        // Overall dimensions of the model's lines (world size = screen size × point size).
+        let mut b = (DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY));
+        for (p, q, _) in &lines.strokes {
+            b = (b.0.min(p.min(*q)), b.1.max(p.max(*q)));
+        }
+        if vp.auto_dims && cam.ortho && b.0.is_finite() {
+            let world = (b.1 - b.0) * cam.pixel_size_at(cam.target, px);
+            overall_dims(&mut out, off + b.0 * k, off + b.1 * k, world, model.unit);
+        }
     }
     if vp.frame {
         rect_lines(&mut out, lo, hi, Pen::Dim);
@@ -127,13 +146,157 @@ pub fn viewport_drawing(model: &Model, vp: &SheetViewport) -> Drawing {
     out
 }
 
-/// The scale for the title block: one common scale, "As shown", or "-".
+/// A dimension value: plain millimetres on drawings, else with the unit.
+fn dim_text(v: f64, unit: LengthUnit) -> String {
+    if unit == LengthUnit::Millimeter {
+        let s = format!("{v:.1}");
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        varstotas_kernel::units::format_length(v, unit)
+    }
+}
+
+/// An arrowhead at `tip` pointing along `dir` (unit).
+fn arrow(d: &mut Drawing, tip: DVec2, dir: DVec2) {
+    let (c, s) = (15f64.to_radians().cos(), 15f64.to_radians().sin());
+    for side in [-1.0, 1.0] {
+        let r = DVec2::new(dir.x * c - dir.y * s * side, dir.x * s * side + dir.y * c);
+        d.lines.push((tip, tip - r * 2.5, Pen::Dim));
+    }
+}
+
+/// Width below and height right of the paper box `lo`–`hi` (world sizes `world`).
+fn overall_dims(d: &mut Drawing, lo: DVec2, hi: DVec2, world: DVec2, unit: LengthUnit) {
+    if hi.x - lo.x > 1.0 {
+        let y = hi.y + DIM_OFFSET;
+        for x in [lo.x, hi.x] {
+            d.lines.push((DVec2::new(x, hi.y + 1.0), DVec2::new(x, y + 1.5), Pen::Dim));
+        }
+        d.lines.push((DVec2::new(lo.x, y), DVec2::new(hi.x, y), Pen::Dim));
+        arrow(d, DVec2::new(lo.x, y), DVec2::NEG_X);
+        arrow(d, DVec2::new(hi.x, y), DVec2::X);
+        let at = DVec2::new((lo.x + hi.x) * 0.5, y - 1.0);
+        d.texts.push(Text2 { at, angle: 0.0, size: DIM_TEXT, lines: vec![dim_text(world.x, unit)], left: false });
+    }
+    if hi.y - lo.y > 1.0 {
+        let x = hi.x + DIM_OFFSET;
+        for y in [lo.y, hi.y] {
+            d.lines.push((DVec2::new(hi.x + 1.0, y), DVec2::new(x + 1.5, y), Pen::Dim));
+        }
+        d.lines.push((DVec2::new(x, lo.y), DVec2::new(x, hi.y), Pen::Dim));
+        arrow(d, DVec2::new(x, lo.y), DVec2::NEG_Y);
+        arrow(d, DVec2::new(x, hi.y), DVec2::Y);
+        let at = DVec2::new(x - 1.0, (lo.y + hi.y) * 0.5);
+        d.texts.push(Text2 { at, angle: -std::f64::consts::FRAC_PI_2, size: DIM_TEXT, lines: vec![dim_text(world.y, unit)], left: false });
+    }
+}
+
+/// Rows of a parts table (header first) from the model's groups and components.
+pub fn table_rows(model: &Model) -> Vec<[String; 5]> {
+    let (parts, _) = varstotas_kernel::report::model_report(model);
+    let mut rows = vec![["#", "Name", "Qty", "Size", "Material"].map(String::from)];
+    for (i, p) in parts.iter().enumerate() {
+        let size = p.size.map(|v| dim_text(v, model.unit)).join(" × ");
+        let name = format!("{}{}", "  ".repeat(p.depth), p.name);
+        let material = if p.material.is_empty() { "-".to_string() } else { p.material.clone() };
+        rows.push([(i + 1).to_string(), name, p.count.to_string(), size, material]);
+    }
+    if parts.is_empty() {
+        rows.push(["".into(), "No groups or components".into(), "".into(), "".into(), "".into()]);
+    }
+    rows
+}
+
+/// Column widths and the row height of a table, mm.
+fn table_layout(rows: &[[String; 5]], size: f64) -> (Vec<f64>, f64) {
+    let widths = (0..5).map(|c| rows.iter().map(|r| r[c].chars().count()).max().unwrap_or(1) as f64 * size * 0.62 + size * 1.2).collect();
+    (widths, size * 2.0)
+}
+
+/// Size of a table on paper, mm.
+pub fn table_size(model: &Model, t: &SheetTable) -> DVec2 {
+    let rows = table_rows(model);
+    let (w, h) = table_layout(&rows, t.size);
+    DVec2::new(w.iter().sum(), h * rows.len() as f64)
+}
+
+fn table_drawing(d: &mut Drawing, model: &Model, t: &SheetTable) {
+    let rows = table_rows(model);
+    let (widths, h) = table_layout(&rows, t.size);
+    let total = DVec2::new(widths.iter().sum(), h * rows.len() as f64);
+    rect_lines(d, t.at, t.at + total, Pen::Profile);
+    for r in 1..rows.len() {
+        let y = t.at.y + h * r as f64;
+        d.lines.push((DVec2::new(t.at.x, y), DVec2::new(t.at.x + total.x, y), if r == 1 { Pen::Profile } else { Pen::Edge }));
+    }
+    let mut x = t.at.x;
+    for (c, w) in widths.iter().enumerate() {
+        if c > 0 {
+            d.lines.push((DVec2::new(x, t.at.y), DVec2::new(x, t.at.y + total.y), Pen::Edge));
+        }
+        for (r, row) in rows.iter().enumerate() {
+            d.texts.push(text(DVec2::new(x + t.size * 0.6, t.at.y + h * r as f64 + h * 0.5 + t.size * 0.4), t.size, row[c].clone()));
+        }
+        x += w;
+    }
+}
+
+/// Front, top and left views at a common standard scale (first-angle projection: top under
+/// the front, left to its right) with overall dimensions, and an iso view in the free corner.
+/// `scale` 1:N, or the largest standard scale that fits.
+pub fn standard_views(model: &Model, sheet: &LayoutSheet, scale: Option<f64>) -> Vec<SheetViewport> {
+    let Some(b) = model.bounds() else { return Vec::new() };
+    let ext = (b.max - b.min).max(DVec3::splat(1.0));
+    let centre = (b.min + b.max) * 0.5;
+    let lo = DVec2::splat(BORDER + 5.0);
+    let room = sheet.size - lo * 2.0 - DVec2::new(0.0, if sheet.title.is_some() { TITLE_ROOM } else { 0.0 });
+    let m2 = 4.0 * VIEW_MARGIN;
+    let fits = |n: f64| (ext.x + ext.y) / n + m2 <= room.x && (ext.z + ext.y) / n + m2 <= room.y;
+    let n = scale.filter(|n| *n > 0.0).unwrap_or_else(|| SCALES.into_iter().find(|n| fits(*n)).unwrap_or_else(|| {
+        let need = ((ext.x + ext.y) / (room.x - m2).max(10.0)).max((ext.z + ext.y) / (room.y - m2).max(10.0));
+        (need / 1000.0).ceil() * 1000.0
+    }));
+    let view = |name: &str, v: StandardView, ortho: bool| {
+        let mut c = Camera { target: centre, eye: centre + DVec3::Z, ..Default::default() };
+        c.set_standard_view(v);
+        c.ortho = ortho;
+        // Well outside the model: the eye distance sets the parallel size.
+        let d = ext.length() * 1.5 + 1000.0;
+        c.eye = centre + (c.eye - centre).normalize() * d;
+        let t = (c.fov_y_deg.to_radians() * 0.5).tan();
+        c.ortho_height = 2.0 * d * t;
+        camera_scene(name, &c)
+    };
+    let cell = |w: f64, h: f64| DVec2::new(w / n, h / n) + DVec2::splat(2.0 * VIEW_MARGIN);
+    let (front, top, left) = (cell(ext.x, ext.z), cell(ext.x, ext.y), cell(ext.y, ext.z));
+    let make = |min: DVec2, size: DVec2, s: Scene| {
+        let mut vp = SheetViewport::new(min, size, s);
+        vp.scale = Some(n);
+        vp.auto_dims = true;
+        vp
+    };
+    let mut out = vec![
+        make(lo, front, view("Front", StandardView::Front, true)),
+        make(lo + DVec2::new(0.0, front.y), top, view("Top", StandardView::Top, true)),
+        make(lo + DVec2::new(front.x, 0.0), left, view("Left", StandardView::Left, true)),
+    ];
+    let iso_min = lo + front;
+    let iso_size = DVec2::new(lo.x + room.x - iso_min.x, top.y.min(lo.y + room.y - iso_min.y));
+    if iso_size.min_element() >= 30.0 {
+        out.push(SheetViewport::new(iso_min, iso_size, view("Iso", StandardView::Iso, true)));
+    }
+    out
+}
+
+/// The scale for the title block: the one scale of the scaled viewports (fitted ones, like
+/// an iso view, do not count), "As shown" when they differ, or "-".
 fn sheet_scale(model: &Model, sheet: &LayoutSheet) -> String {
     let mut scales: Vec<f64> = sheet.viewports.iter().filter_map(|v| viewport_scale(model, v)).collect();
+    scales.sort_by(f64::total_cmp);
     scales.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
     match scales.as_slice() {
         [] => "-".into(),
-        [n] if sheet.viewports.iter().all(|v| viewport_scale(model, v).is_some()) => scale_label(*n),
+        [n] => scale_label(*n),
         _ => "As shown".into(),
     }
 }
@@ -148,6 +311,9 @@ pub fn sheet_drawing(model: &Model, sheet: &LayoutSheet, index: usize, total: us
         d.lines.extend(v.lines);
         d.fills.extend(v.fills);
         d.texts.extend(v.texts);
+    }
+    for t in &sheet.tables {
+        table_drawing(&mut d, model, t);
     }
     for t in &sheet.texts {
         d.texts.push(Text2 { at: t.at, angle: 0.0, size: t.size, lines: t.text.lines().map(str::to_string).collect(), left: true });
@@ -186,7 +352,6 @@ mod tests {
     use super::*;
     use varstotas_kernel::glam::DVec3;
     use varstotas_kernel::layout::SheetText;
-    use varstotas_render::StandardView;
 
     fn boxed() -> Model {
         let mut m = Model::new();
@@ -258,6 +423,56 @@ mod tests {
         assert!((longest - 100.0).abs() < 0.5, "{longest}");
         let pdf = sheets_pdf(&model, "box");
         assert!(pdf.starts_with(b"%PDF") && pdf.windows(10).filter(|w| w == b"/Type /Pag").count() >= 2);
+    }
+
+    #[test]
+    fn standard_views_scale_dimensions_and_table() {
+        let mut model = boxed();
+        let sheet = LayoutSheet::new("S", DVec2::new(420., 297.));
+        let views = standard_views(&model, &sheet, None);
+        // 1000 + 500 wide and 400 + 500 tall with margins: 1:5 on A3 landscape.
+        assert_eq!(views.len(), 4);
+        assert!(views[..3].iter().all(|v| v.scale == Some(5.0) && v.auto_dims));
+        assert_eq!(views[0].view.name, "Front");
+        // Aligned: top under front (same column), left beside it (same row).
+        assert_eq!(views[1].min.x, views[0].min.x);
+        assert_eq!(views[1].size.x, views[0].size.x);
+        assert_eq!(views[2].min.y, views[0].min.y);
+        assert_eq!(views[2].size.y, views[0].size.y);
+        let dims = |vp: &SheetViewport| -> Vec<String> {
+            viewport_drawing(&model, vp).texts.iter().filter(|t| t.size == DIM_TEXT).map(|t| t.lines[0].clone()).collect()
+        };
+        assert_eq!(dims(&views[0]), ["1000", "400"]);
+        assert_eq!(dims(&views[1]), ["1000", "500"]);
+        assert_eq!(dims(&views[2]), ["500", "400"]);
+        // The front view is 1000 / 5 = 200 mm wide on paper.
+        let d = viewport_drawing(&model, &views[0]);
+        let xs: Vec<f64> = d.lines.iter().filter(|l| l.2 != Pen::Dim).flat_map(|l| [l.0.x, l.1.x]).collect();
+        let w = xs.iter().cloned().fold(f64::MIN, f64::max) - xs.iter().cloned().fold(f64::MAX, f64::min);
+        assert!((w - 200.0).abs() < 0.5, "{w}");
+        // A fixed scale is kept; a small sheet gets a smaller scale.
+        assert!(standard_views(&model, &sheet, Some(10.0)).iter().take(3).all(|v| v.scale == Some(10.0)));
+        let a4 = LayoutSheet::new("S", DVec2::new(210., 297.));
+        assert_eq!(standard_views(&model, &a4, None)[0].scale, Some(15.0));
+        // Parts table: the box made a group, twice the same part.
+        let rows = table_rows(&model);
+        assert_eq!(rows[1][1], "No groups or components");
+        let mesh = model.root_mesh_mut();
+        let ents: Vec<_> = mesh.faces.keys().map(varstotas_kernel::EntityRef::Face).chain(mesh.edges.keys().map(varstotas_kernel::EntityRef::Edge)).collect();
+        let g = model.make_component(&[], &ents, "Crate").unwrap();
+        let mut copy = model.root_mesh().instances[g].clone();
+        copy.transform = varstotas_kernel::glam::DMat4::from_translation(DVec3::new(3000., 0., 0.));
+        model.root_mesh_mut().instances.insert(copy);
+        let rows = table_rows(&model);
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!(rows[1], ["1", "Crate", "2", "1000 × 500 × 400", "-"].map(String::from));
+        let mut sheet = sheet;
+        let t = SheetTable { at: DVec2::new(20., 200.), size: 3.0 };
+        let size = table_size(&model, &t);
+        assert!((size.y - 12.0).abs() < 1e-9 && size.x > 40.0, "{size}");
+        sheet.tables.push(t);
+        let d = sheet_drawing(&model, &sheet, 0, 1, "x");
+        assert!(d.texts.iter().any(|t| t.lines[0] == "1000 × 500 × 400"));
     }
 
     #[test]

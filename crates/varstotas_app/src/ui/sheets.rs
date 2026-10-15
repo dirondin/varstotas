@@ -4,12 +4,13 @@
 //! Edits go to a working copy that becomes one undo step when the mouse and keyboard let go.
 
 use crate::app::VarstotasApp;
-use crate::layout::{BORDER, camera_scene, sheet_drawing, sheets_pdf, viewport_scale};
+use crate::layout::{BORDER, TITLE_ROOM, camera_scene, sheet_drawing, sheets_pdf, standard_views, table_size, viewport_scale};
 use crate::ui::theme;
 use crate::vector_export::{Drawing, Pen};
 use egui::{Color32, Context, Pos2, Rect, RichText, Sense, Stroke, pos2, vec2};
 use varstotas_kernel::glam::DVec2;
-use varstotas_kernel::layout::{LayoutSheet, PAPERS, SheetText, SheetViewport, TitleBlock};
+use varstotas_kernel::Model;
+use varstotas_kernel::layout::{LayoutSheet, PAPERS, SheetTable, SheetText, SheetViewport, TitleBlock};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -17,13 +18,12 @@ use std::rc::Rc;
 const PREVIEW: egui::Vec2 = vec2(620.0, 440.0);
 /// Grab radius of the resize handle, points.
 const HANDLE: f32 = 7.0;
-/// Room left above the title block for a new viewport, mm.
-const TITLE_ROOM: f64 = 30.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SheetItem {
     Viewport(usize),
     Text(usize),
+    Table(usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -60,12 +60,18 @@ fn text_box(t: &SheetText) -> (DVec2, DVec2) {
     (DVec2::new(t.at.x, t.at.y - t.size), DVec2::new(w, h))
 }
 
-/// The topmost item at `p` (mm): texts above viewports, later above earlier.
-fn hit(sheet: &LayoutSheet, p: DVec2) -> Option<SheetItem> {
+/// The topmost item at `p` (mm): texts, tables, then viewports; later above earlier.
+fn hit(model: &Model, sheet: &LayoutSheet, p: DVec2) -> Option<SheetItem> {
+    let within = |a: DVec2, s: DVec2| p.x >= a.x && p.y >= a.y && p.x <= a.x + s.x && p.y <= a.y + s.y;
     for (i, t) in sheet.texts.iter().enumerate().rev() {
         let (a, s) = text_box(t);
-        if p.x >= a.x && p.y >= a.y && p.x <= a.x + s.x && p.y <= a.y + s.y {
+        if within(a, s) {
             return Some(SheetItem::Text(i));
+        }
+    }
+    for (i, t) in sheet.tables.iter().enumerate().rev() {
+        if within(t.at, table_size(model, t)) {
+            return Some(SheetItem::Table(i));
         }
     }
     sheet.viewports.iter().rposition(|v| v.contains(p)).map(SheetItem::Viewport)
@@ -194,12 +200,24 @@ impl VarstotasApp {
         Some((m.sheets.len(), i + 1, s.viewports.len(), s.texts.len(), lines))
     }
 
-    /// Position and size of the selected viewport, whole mm (`dump`).
+    /// Texts on the current sheet (lines joined with `|`), for `expect`.
+    pub(crate) fn sheet_texts_dump(&self) -> Vec<String> {
+        let m = &self.doc.model;
+        let Some(s) = m.sheets.get(self.sheets.current) else { return Vec::new() };
+        sheet_drawing(m, s, self.sheets.current, m.sheets.len(), "").texts.iter().map(|t| t.lines.join("|")).collect()
+    }
+
+    /// Position and size of the selected viewport or table, whole mm (`dump`).
     pub(crate) fn sheet_vp_dump(&self) -> Option<(i64, i64, i64, i64)> {
-        let Some(SheetItem::Viewport(v)) = self.sheets.selected else { return None };
-        let vp = self.doc.model.sheets.get(self.sheets.current)?.viewports.get(v)?;
+        let m = &self.doc.model;
+        let sheet = m.sheets.get(self.sheets.current)?;
+        let (min, size) = match self.sheets.selected? {
+            SheetItem::Viewport(v) => sheet.viewports.get(v).map(|vp| (vp.min, vp.size))?,
+            SheetItem::Table(t) => sheet.tables.get(t).map(|t| (t.at, table_size(m, t)))?,
+            SheetItem::Text(_) => return None,
+        };
         let r = |x: f64| x.round() as i64;
-        Some((r(vp.min.x), r(vp.min.y), r(vp.size.x), r(vp.size.y)))
+        Some((r(min.x), r(min.y), r(size.x), r(size.y)))
     }
 
     /// PDF of all sheets, or SVG of the current one (by extension).
@@ -346,8 +364,25 @@ impl VarstotasApp {
                                 Some(SheetItem::Text(i)) if i < sheet.texts.len() => {
                                     sheet.texts.remove(i);
                                 }
+                                Some(SheetItem::Table(i)) if i < sheet.tables.len() => {
+                                    sheet.tables.remove(i);
+                                }
                                 _ => {}
                             }
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        let views = ui.add_enabled(model.bounds().is_some(), egui::Button::new("+ Standard Views"));
+                        if views.on_hover_text("Front, top and left at a standard scale with overall dimensions, and an iso view").clicked() {
+                            sheet.viewports.extend(standard_views(model, sheet, None));
+                            st.selected = None;
+                        }
+                        if ui.button("+ Parts Table").on_hover_text("Groups and components with sizes").clicked() {
+                            let mut t = SheetTable { at: DVec2::ZERO, size: 3.0 };
+                            let h = table_size(model, &t).y;
+                            t.at = DVec2::new(BORDER + 5.0, sheet.size.y - BORDER - 5.0 - h);
+                            sheet.tables.push(t);
+                            st.selected = Some(SheetItem::Table(sheet.tables.len() - 1));
                         }
                     });
                     match st.selected {
@@ -410,6 +445,7 @@ impl VarstotasApp {
                                 ui.checkbox(&mut vp.sections, "Sections");
                                 ui.checkbox(&mut vp.frame, "Frame");
                                 ui.checkbox(&mut vp.caption, "Caption");
+                                ui.add_enabled(model.viewport_scene(vp).ortho, egui::Checkbox::new(&mut vp.auto_dims, "Overall dimensions"));
                             });
                         }
                         Some(SheetItem::Text(i)) if i < sheet.texts.len() => {
@@ -419,6 +455,19 @@ impl VarstotasApp {
                             ui.horizontal(|ui| {
                                 ui.label("Height");
                                 ui.add(egui::DragValue::new(&mut t.size).range(1.0..=100.0).speed(0.1).suffix(" mm"));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("Position");
+                                ui.add(egui::DragValue::new(&mut t.at.x).speed(0.5).suffix(" mm"));
+                                ui.add(egui::DragValue::new(&mut t.at.y).speed(0.5).suffix(" mm"));
+                            });
+                        }
+                        Some(SheetItem::Table(i)) if i < sheet.tables.len() => {
+                            let t = &mut sheet.tables[i];
+                            ui.label(RichText::new(format!("Parts table {}", i + 1)).strong());
+                            ui.horizontal(|ui| {
+                                ui.label("Text height");
+                                ui.add(egui::DragValue::new(&mut t.size).range(1.0..=20.0).speed(0.1).suffix(" mm"));
                             });
                             ui.horizontal(|ui| {
                                 ui.label("Position");
@@ -456,7 +505,7 @@ impl VarstotasApp {
                             Some(SheetItem::Viewport(i)) => sheet.viewports.get(i).filter(|v| sp(v.min + v.size).distance(pp) <= HANDLE).map(|_| i),
                             _ => None,
                         };
-                        let item = if handle.is_some() { st.selected } else { hit(sheet, mm(pp)) };
+                        let item = if handle.is_some() { st.selected } else { hit(model, sheet, mm(pp)) };
                         st.selected = item;
                         st.drag = None;
                         if resp.drag_started() {
@@ -466,6 +515,7 @@ impl VarstotasApp {
                                     Some(Drag { item: SheetItem::Viewport(i), resize: handle.is_some(), min: v.min, size: v.size })
                                 }
                                 Some(SheetItem::Text(i)) => Some(Drag { item: SheetItem::Text(i), resize: false, min: sheet.texts[i].at, size: DVec2::ZERO }),
+                                Some(SheetItem::Table(i)) => Some(Drag { item: SheetItem::Table(i), resize: false, min: sheet.tables[i].at, size: DVec2::ZERO }),
                                 None => None,
                             };
                         }
@@ -484,6 +534,7 @@ impl VarstotasApp {
                                 }
                             }
                             SheetItem::Text(i) if i < sheet.texts.len() => sheet.texts[i].at = snap(d.min + delta),
+                            SheetItem::Table(i) if i < sheet.tables.len() => sheet.tables[i].at = snap(d.min + delta),
                             _ => {}
                         }
                     }
@@ -497,6 +548,7 @@ impl VarstotasApp {
                             let (a, s) = text_box(t);
                             (a, s, false)
                         }),
+                        Some(SheetItem::Table(i)) => sheet.tables.get(i).map(|t| (t.at, table_size(model, t), false)),
                         None => None,
                     };
                     if let Some((a, s, handle)) = sel {

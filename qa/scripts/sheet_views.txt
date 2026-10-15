@@ -1,0 +1,41 @@
+# Standard views on a sheet: front / top / left at a common standard scale with overall
+# dimensions plus an iso view; a parts table picked and moved with the real mouse.
+action script let b = box(vec3(0, 0, 0), 1000, 500, 400); let c = component(b, "Crate"); copy(c, vec3(1500, 0, 0));
+wait 5
+view iso
+zoom_extents
+wait 5
+action sheet_add a3
+wait 3
+action sheet_views
+wait 5
+# 2500 + 500 wide and 400 + 500 tall: 1:10 on A3 landscape
+expect sheets=Some((1, 1, 4, 0,
+expect "Scale: 1:10"
+expect "Front  1:10"
+expect "2500", "400"
+expect "2500", "500"
+expect "500", "400"
+action sheet_table 20 200
+wait 5
+expect "Crate"
+screenshot shots/sheet_views.bmp
+sheetp click 22 202
+wait 3
+expect sheet_sel=Some(Table(0))
+expect sheet_vp=Some((20, 200,
+sheetp drag 22 202 42 222
+wait 5
+expect sheet_vp=Some((40, 220,
+action undo
+wait 3
+expect sheet_vp=Some((20, 200,
+action export_sheets sheet_views.pdf
+# a fixed scale
+action undo
+action undo
+wait 3
+expect sheets=Some((1, 1, 0, 0,
+action sheet_views scale=20
+wait 5
+expect "Front  1:20"
