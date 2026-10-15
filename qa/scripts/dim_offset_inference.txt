@@ -1,3 +1,4 @@
+# QA4B-002: dimension offset step uses full inference (endpoint), arrow and Shift locks
 box 0 0 0 2000 1000 500
 wait 10
 view iso
@@ -33,4 +34,5 @@ screenshot shots/dim3_04_shift.bmp
 raw mods none
 rawp click 1300 -1000 600
 dump placed
+expect dims=1
 quit

@@ -16,6 +16,7 @@ for n in $names; do
   ok=$(grep -c 'expect ok' $out/$n.log)
   if (( code != 0 || bad > 0 )); then
     echo "FAIL $n (exit $code, $bad failures, $ok ok)"; grep -E 'expect FAIL|panicked' $out/$n.log | cut -c1-300; fail=1
+    cp $out/$n.log $out/$n.fail.log; echo "     log: $out/$n.fail.log (last: $(grep 'script:' $out/$n.log | tail -1 | sed -E 's/.*script: //' | cut -c1-80))"
   else
     echo "ok   $n ($ok checks)"
   fi
