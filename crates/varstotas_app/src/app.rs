@@ -105,9 +105,13 @@ pub enum Action {
     ImportObj,
     ImportStl,
     ImportDxf,
+    ImportGltf,
     ExportObj,
     ExportStl,
     ExportDxf,
+    ExportGlb,
+    Export3mf,
+    ExportReport,
     InsertDemo,
     Quit,
     Undo,
@@ -915,8 +919,12 @@ impl VarstotasApp {
             Action::ImportStl => self.import(&["stl"], "STL"),
             Action::ExportObj => self.export("obj"),
             Action::ImportDxf => self.import(&["dxf"], "DXF"),
+            Action::ImportGltf => self.import(&["glb", "gltf"], "glTF"),
             Action::ExportStl => self.export("stl"),
             Action::ExportDxf => self.export("dxf"),
+            Action::ExportGlb => self.export("glb"),
+            Action::Export3mf => self.export("3mf"),
+            Action::ExportReport => self.export("csv"),
             Action::InsertDemo => self.insert_demo(),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
@@ -1740,11 +1748,20 @@ impl VarstotasApp {
         if path.extension().is_none() {
             path.set_extension(ext);
         }
+        self.export_to(&path);
+    }
+
+    /// Export the model to `path`; the format follows the extension.
+    pub(crate) fn export_to(&mut self, path: &std::path::Path) {
         let model = &self.doc.model;
-        let r = guarded(|| match ext {
-            "obj" => io::export_obj(model, &path),
-            "dxf" => io::export_dxf(model, &path),
-            _ => io::export_stl(model, &path),
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+        let r = guarded(|| match ext.as_str() {
+            "obj" => io::export_obj(model, path),
+            "dxf" => io::export_dxf(model, path),
+            "glb" => io::export_glb(model, path),
+            "3mf" => io::export_3mf(model, path),
+            "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
+            _ => io::export_stl(model, path),
         });
         match r {
             Ok(Ok(())) => self.flash(format!("Exported {}", path.display())),
@@ -1757,11 +1774,17 @@ impl VarstotasApp {
         let Some(path) = rfd::FileDialog::new().add_filter(label, exts).pick_file() else {
             return;
         };
-        let ext = exts.first().copied().unwrap_or_default();
-        let r = self.doc.try_commit(&format!("Import {label}"), |m| match ext {
-            "obj" => io::import_obj(m, &path),
-            "dxf" => io::import_dxf(m, &path),
-            _ => io::import_stl(m, &path),
+        self.import_from(&path, label);
+    }
+
+    /// Import `path` (format by extension) as one undo step "Import <label>".
+    pub(crate) fn import_from(&mut self, path: &std::path::Path, label: &str) {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+        let r = self.doc.try_commit(&format!("Import {label}"), |m| match ext.as_str() {
+            "obj" => io::import_obj(m, path),
+            "dxf" => io::import_dxf(m, path),
+            "glb" | "gltf" => io::import_gltf(m, path),
+            _ => io::import_stl(m, path),
         });
         if r.is_some() {
             self.flash(format!("Imported {}", path.display()));

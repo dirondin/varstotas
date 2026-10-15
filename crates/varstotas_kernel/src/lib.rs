@@ -32,6 +32,7 @@ pub mod history;
 pub mod io;
 pub mod mesh;
 pub mod model;
+pub mod report;
 pub mod section;
 pub mod shadows;
 mod ops;

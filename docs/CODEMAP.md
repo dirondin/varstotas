@@ -21,7 +21,8 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `dims.rs` | linear dimensions, stored per definition, anchored to vertices |
 | `guides.rs` | guide lines and points, stored per definition |
 | `history.rs` | undo; each snapshot is a full model clone |
-| `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL, DXF (`dxf.rs`: R12 export, LINE/POLYLINE/3DFACE/CIRCLE/ARC import) |
+| `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL, DXF (`dxf.rs`: R12 export, LINE/POLYLINE/3DFACE/CIRCLE/ARC import), glTF (`gltf.rs`: GLB export, .gltf/.glb import), 3MF export (`threemf.rs`, own stored ZIP) |
+| `report.rs` | parts list (cut-list sizes, counts, area, volume) and material areas → CSV |
 | `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |

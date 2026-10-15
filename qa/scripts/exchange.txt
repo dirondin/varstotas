@@ -1,0 +1,34 @@
+# Exchange formats: export a box group to GLB / 3MF / DXF, delete it, import it back.
+box 0 0 0 2000 1000 500
+view iso
+zoom_extents
+wait 10
+select_all
+action make_group
+wait 2
+action export_file models/exchange.glb
+action export_file models/exchange.3mf
+action export_file models/exchange.dxf
+wait 2
+select_all
+action delete
+wait 2
+# (the erased group's definition stays in the model: 6 faces)
+expect undo=Some("Erase")
+expect sel F=0 E=0 I=0
+action import_file models/exchange.glb
+wait 5
+expect defs=3 model_faces=12
+expect undo=Some("Import GLB")
+screenshot shots/exchange_glb.bmp
+# parts report of the imported group
+action export_file models/exchange.csv
+action undo
+wait 2
+expect defs=2 model_faces=6
+action import_file models/exchange.dxf
+wait 5
+# loose faces in the root
+expect defs=2 model_faces=12
+expect mats={"-": 6}
+expect undo=Some("Import DXF")

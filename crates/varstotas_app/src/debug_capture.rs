@@ -846,6 +846,18 @@ impl VarstotasApp {
             self.actions.push(Action::PlaceText3d(p));
             return;
         }
+        // `export_file <path>` / `import_file <path>`: File → Export / Import without dialogs
+        // (the format follows the extension).
+        if let Some(path) = name.strip_prefix("export_file ") {
+            self.export_to(std::path::Path::new(path.trim()));
+            return;
+        }
+        if let Some(path) = name.strip_prefix("import_file ") {
+            let path = std::path::PathBuf::from(path.trim());
+            let label = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_uppercase();
+            self.import_from(&path, &label);
+            return;
+        }
         // `solid <outer_shell|intersect|union|subtract|trim|split>`: Solid Tools (selection or tool).
         if let Some(arg) = name.strip_prefix("solid ") {
             let arg = arg.trim().replace('_', " ");

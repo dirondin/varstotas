@@ -152,6 +152,7 @@ impl VarstotasApp {
                     self.item(ui, "OBJ…", None, true, Action::ImportObj);
                     self.item(ui, "STL…", None, true, Action::ImportStl);
                     self.item(ui, "DXF…", None, true, Action::ImportDxf);
+                    self.item(ui, "glTF / GLB…", None, true, Action::ImportGltf);
                 });
                 ui.menu_button("Export", |ui| {
                     self.item(ui, "2D Graphic (PNG)…", None, true, Action::ExportImage);
@@ -159,6 +160,10 @@ impl VarstotasApp {
                     self.item(ui, "OBJ…", None, true, Action::ExportObj);
                     self.item(ui, "STL…", None, true, Action::ExportStl);
                     self.item(ui, "DXF…", None, true, Action::ExportDxf);
+                    self.item(ui, "glTF (GLB)…", None, true, Action::ExportGlb);
+                    self.item(ui, "3MF (3D printing)…", None, true, Action::Export3mf);
+                    ui.separator();
+                    self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
                 });
                 ui.separator();
                 self.item(ui, "Insert Demo Geometry", None, true, Action::InsertDemo);

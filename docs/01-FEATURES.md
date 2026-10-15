@@ -110,6 +110,9 @@
 | Import OBJ / STL | P1 | ✅ |
 | Export PNG (скриншот вида) | P1 | ✅ |
 | Import DXF / Export DXF | P2 | ✅ |
+| glTF / GLB: импорт и экспорт | P2 | ✅ |
+| Export 3MF для 3D-печати | P2 | ✅ |
+| Отчёт: детали групп/компонентов с размерами для раскроя, площади по материалам (CSV) | P2 | ✅ |
 | Undo/Redo (Ctrl+Z / Ctrl+Y / Cmd+Shift+Z) | P0 | ✅ |
 | Copy/Paste/Paste in place | P1 | ✅ |
 | Единицы модели, Model Info | P0 | ✅ |
