@@ -47,14 +47,15 @@ pub fn array_transforms(kind: &XfKind, arr: Option<ArrayInput>) -> Vec<DMat4> {
 pub struct Targets {
     pub ents: Vec<EntityRef>,
     pub guides: Vec<GuideRef>,
+    pub dims: Vec<varstotas_kernel::DimId>,
 }
 
 impl Targets {
     pub fn is_empty(&self) -> bool {
-        self.ents.is_empty() && self.guides.is_empty()
+        self.ents.is_empty() && self.guides.is_empty() && self.dims.is_empty()
     }
     fn ents(ents: Vec<EntityRef>) -> Self {
-        Self { ents, guides: Vec::new() }
+        Self { ents, ..Default::default() }
     }
 }
 
@@ -80,7 +81,7 @@ fn run_transform(
 ) -> Option<Targets> {
     let world = array_transforms(&kind, arr);
     let mats: Vec<DMat4> = world.iter().map(|t| world_to_local_xf(ctx.doc, t)).collect();
-    let (ents, guides) = (tg.ents.clone(), tg.guides.clone());
+    let (ents, guides, dims) = (tg.ents.clone(), tg.guides.clone(), tg.dims.clone());
     let path = ctx.doc.active_path.clone();
     let uid = ctx.doc.uid;
     let r = ctx.doc.commit(label, |model| {
@@ -93,7 +94,35 @@ fn run_transform(
             model.transform_guides_in(&path, &guides, w);
             out.guides = guides.clone();
         }
+        let dims_before: Vec<_> = if copy {
+            Vec::new()
+        } else {
+            let w = world.first().copied().unwrap_or(DMat4::IDENTITY);
+            dims.iter().map(|id| (*id, dim_after_transform(model, &path, *id, &ents, &w))).collect()
+        };
+        // Dimensions: anchors on moved vertices follow them; free anchors move here. Copies
+        // are made after the geometry so they attach to the copied vertices.
+        let dims_after = |model: &mut varstotas_kernel::Model, out: &mut Targets| {
+            if dims.is_empty() {
+                return;
+            }
+            if copy {
+                for w in &world {
+                    out.dims.extend(model.copy_dimensions_in(&path, &dims, w));
+                }
+            } else if let Some(w) = world.first() {
+                // `dims_before` was computed before the geometry moved.
+                model.transform_dimensions_in(&path, &dims, w);
+                for (id, g) in &dims_before {
+                    if let Some(g) = g {
+                        model.set_dimension_offset_in(&path, *id, g.offset);
+                    }
+                }
+                out.dims = dims.clone();
+            }
+        };
         if ents.is_empty() {
+            dims_after(model, &mut out);
             return out;
         }
         // Copies weld into the context (coincident faces / edges merge), which can kill refs
@@ -120,10 +149,11 @@ fn run_transform(
             let mut seen = std::collections::HashSet::new();
             out.ents.retain(|e| crate::document::entity_alive(mesh, *e) && seen.insert(*e));
         }
+        dims_after(model, &mut out);
         out
     })?;
     if copy {
-        ctx.doc.set_selection_with_guides(r.ents.clone(), r.guides.clone());
+        ctx.doc.set_selection_full(r.ents.clone(), r.guides.clone(), r.dims.clone());
     }
     Some(r)
 }
@@ -131,9 +161,17 @@ fn run_transform(
 /// The selection (entities + guides), else the hovered entity or guide.
 fn targets(ctx: &ToolContext, hover: &Option<Hover>, hover_guide: Option<GuideRef>) -> Targets {
     if ctx.doc.has_selection() {
-        return Targets { ents: ctx.doc.selection.clone(), guides: ctx.doc.guide_sel.clone() };
+        return Targets {
+            ents: ctx.doc.selection.clone(),
+            guides: ctx.doc.guide_sel.clone(),
+            dims: ctx.doc.dim_sel.clone(),
+        };
     }
-    Targets { ents: hover.as_ref().map(|h| vec![h.entity()]).unwrap_or_default(), guides: hover_guide.into_iter().collect() }
+    Targets {
+        ents: hover.as_ref().map(|h| vec![h.entity()]).unwrap_or_default(),
+        guides: hover_guide.into_iter().collect(),
+        dims: Vec::new(),
+    }
 }
 
 fn hover_if_no_selection(ctx: &ToolContext) -> Option<Hover> {
@@ -161,6 +199,9 @@ fn draw_preview(view: &OverlayView, tg: &Targets, t: &DMat4, out3d: &mut Overlay
     }
     for g in &tg.guides {
         draw_guide(view, *g, t, SELECT_BLUE, 1.5, out3d, out2d);
+    }
+    for d in &tg.dims {
+        draw_dim_moved(view, *d, &tg.ents, t, out3d);
     }
 }
 
@@ -380,7 +421,7 @@ fn protractor_normal(engine: &InferenceEngine, r: &InferenceResult) -> DVec3 {
     if let Some((d, _)) = engine.arrow_dir() {
         return d;
     }
-    r.face.as_ref().map(|f| f.plane.normal).unwrap_or(DVec3::Z)
+    r.face.as_ref().map(|f| f.plane.normal).unwrap_or(crate::axes::current().z)
 }
 
 fn on_plane(ctx: &ToolContext, r: &InferenceResult, pl: &Plane) -> DVec3 {
@@ -1019,9 +1060,13 @@ impl PasteTool {
 pub fn paste_clipboard(doc: &mut crate::document::Document, clip: &crate::clipboard::Clipboard, t: &DMat4) -> bool {
     let path = doc.active_path.clone();
     let uid = doc.uid;
-    match doc.try_commit("Paste", |m| clip.paste_into(m, uid, &path, t)) {
-        Some((ents, guides)) => {
-            doc.set_selection_with_guides(ents, guides);
+    match doc.try_commit("Paste", |m| {
+        let (e, g) = clip.paste_into(m, uid, &path, t)?;
+        let d = clip.paste_dims_into(m, &path, t);
+        Ok::<_, varstotas_kernel::OpError>((e, g, d))
+    }) {
+        Some((ents, guides, dims)) => {
+            doc.set_selection_full(ents, guides, dims);
             true
         }
         None => false,

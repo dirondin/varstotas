@@ -1,6 +1,6 @@
 //! The open document: model + undo history + file state + selection + editing context.
 
-use varstotas_kernel::{ContextPath, EntityRef, GuideRef, History, MaterialId, Mesh, Model, ModelHit, Ray};
+use varstotas_kernel::{ContextPath, DimId, EntityRef, GuideRef, History, MaterialId, Mesh, Model, ModelHit, Ray};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -75,6 +75,8 @@ pub struct Document {
     pub selection: Vec<EntityRef>,
     /// Selected guides of the active context (like `selection`).
     pub guide_sel: Vec<GuideRef>,
+    /// Selected dimensions of the active context (like `selection`).
+    pub dim_sel: Vec<DimId>,
     /// Editing context (empty = model root).
     pub active_path: ContextPath,
     /// Current paint material (None = "Default", i.e. remove material).
@@ -120,6 +122,7 @@ impl Document {
             selection_version: 1,
             selection: Vec::new(),
             guide_sel: Vec::new(),
+            dim_sel: Vec::new(),
             active_path: Vec::new(),
             current_material: None,
             last_error: None,
@@ -251,16 +254,24 @@ impl Document {
 
     /// Replace the selection with entities and guides.
     /// Dead refs (e.g. entities merged away by a kernel weld) and duplicates are dropped.
-    pub fn set_selection_with_guides(&mut self, mut sel: Vec<EntityRef>, mut guides: Vec<GuideRef>) {
+    pub fn set_selection_with_guides(&mut self, sel: Vec<EntityRef>, guides: Vec<GuideRef>) {
+        self.set_selection_full(sel, guides, Vec::new());
+    }
+
+    /// Replace the selection with entities, guides and dimensions.
+    pub fn set_selection_full(&mut self, mut sel: Vec<EntityRef>, mut guides: Vec<GuideRef>, mut dims: Vec<DimId>) {
         if let Some(mesh) = self.model.mesh_at(&self.active_path) {
             let mut seen = std::collections::HashSet::new();
             sel.retain(|e| entity_alive(mesh, *e) && seen.insert(*e));
         }
         let mut seen = std::collections::HashSet::new();
         guides.retain(|g| self.model.has_guide_in(&self.active_path, *g) && seen.insert(*g));
-        if sel != self.selection || guides != self.guide_sel {
+        let mut seen = std::collections::HashSet::new();
+        dims.retain(|d| self.model.has_dimension_in(&self.active_path, *d) && seen.insert(*d));
+        if sel != self.selection || guides != self.guide_sel || dims != self.dim_sel {
             self.selection = sel;
             self.guide_sel = guides;
+            self.dim_sel = dims;
             self.selection_version += 1;
         }
     }
@@ -271,7 +282,42 @@ impl Document {
 
     /// Anything (entities or guides) selected.
     pub fn has_selection(&self) -> bool {
-        !self.selection.is_empty() || !self.guide_sel.is_empty()
+        !self.selection.is_empty() || !self.guide_sel.is_empty() || !self.dim_sel.is_empty()
+    }
+
+    /// Apply a selection operation to dimensions (mirrors the entity ops).
+    pub fn add_dims(&mut self, ds: &[DimId]) {
+        let n = self.dim_sel.len();
+        for d in ds {
+            if !self.dim_sel.contains(d) {
+                self.dim_sel.push(*d);
+            }
+        }
+        if n != self.dim_sel.len() {
+            self.selection_version += 1;
+        }
+    }
+
+    pub fn remove_dims_from_selection(&mut self, ds: &[DimId]) {
+        let n = self.dim_sel.len();
+        self.dim_sel.retain(|d| !ds.contains(d));
+        if n != self.dim_sel.len() {
+            self.selection_version += 1;
+        }
+    }
+
+    pub fn toggle_dims(&mut self, ds: &[DimId]) {
+        if ds.is_empty() {
+            return;
+        }
+        let had = self.dim_sel.clone();
+        self.dim_sel.retain(|d| !ds.contains(d));
+        for d in ds {
+            if !had.contains(d) && !self.dim_sel.contains(d) {
+                self.dim_sel.push(*d);
+            }
+        }
+        self.selection_version += 1;
     }
 
     /// Apply a selection operation to guides (mirrors the entity ops).
@@ -314,6 +360,7 @@ impl Document {
         self.selection.contains(e)
     }
 
+    #[allow(dead_code)]
     pub fn toggle_selected(&mut self, e: EntityRef) {
         if let Some(i) = self.selection.iter().position(|x| *x == e) {
             self.selection.remove(i);
@@ -377,7 +424,8 @@ impl Document {
                 .map(|(id, _)| EntityRef::Instance(id)),
         );
         let guides = if self.model.guides_hidden { Vec::new() } else { self.model.all_guides_in(&self.active_path) };
-        self.set_selection_with_guides(sel, guides);
+        let dims = self.model.all_dimensions_in(&self.active_path);
+        self.set_selection_full(sel, guides, dims);
     }
 
     /// Enter an editing context (double-click on group).
@@ -386,6 +434,7 @@ impl Document {
             self.active_path = path;
             self.selection.clear();
             self.guide_sel.clear();
+            self.dim_sel.clear();
             self.selection_version += 1;
         }
     }
@@ -397,6 +446,7 @@ impl Document {
         };
         self.selection = vec![EntityRef::Instance(last)];
         self.guide_sel.clear();
+        self.dim_sel.clear();
         self.selection_version += 1;
         true
     }
@@ -410,7 +460,9 @@ impl Document {
         let model = &self.model;
         let path = &self.active_path;
         self.guide_sel.retain(|g| !model.guides_hidden && model.has_guide_in(path, *g));
-        if ng != self.guide_sel.len() {
+        let nd = self.dim_sel.len();
+        self.dim_sel.retain(|d| model.has_dimension_in(path, *d));
+        if ng != self.guide_sel.len() || nd != self.dim_sel.len() {
             self.selection_version += 1;
         }
         let Ok(Some(mesh)) = guarded(|| self.model.mesh_at(&self.active_path)) else {
@@ -437,9 +489,11 @@ impl Document {
         }
         let sel = std::mem::take(&mut self.selection);
         let guides = std::mem::take(&mut self.guide_sel);
+        let dims = std::mem::take(&mut self.dim_sel);
         let path = self.active_path.clone();
         self.commit(label, |m| {
             m.remove_guides_in(&path, &guides);
+            m.remove_dimensions_in(&path, &dims);
             if !sel.is_empty()
                 && let Some(mesh) = m.mesh_at_mut(&path)
             {

@@ -2,6 +2,7 @@
 //! modifier semantics, entering/leaving group contexts.
 
 use super::{OverlayView, Tool, ToolContext, ToolId};
+use super::common::DimPart;
 use crate::document::guarded;
 use crate::overlay::Marker2d;
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2, Rect};
@@ -136,9 +137,27 @@ impl SelectTool {
         super::common::pick_guide(ctx)
     }
 
+    /// A dimension under the cursor: its text always wins; its lines like guides.
+    fn pick_dim(&self, ctx: &ToolContext, picked: &Option<Picked>) -> Option<(varstotas_kernel::DimId, DimPart)> {
+        let d = super::common::pick_dim(ctx)?;
+        if d.1 == DimPart::Line && matches!(picked, Some(Picked { entity: EntityRef::Edge(_), .. })) {
+            return None;
+        }
+        Some(d)
+    }
+
     fn click(&mut self, ctx: &mut ToolContext) {
         let op = sel_op(&ctx.pointer.modifiers);
         let picked = self.pick(ctx);
+        if let Some((d, _)) = self.pick_dim(ctx, &picked) {
+            match op {
+                SelOp::Remove => ctx.doc.remove_dims_from_selection(&[d]),
+                SelOp::Add => ctx.doc.add_dims(&[d]),
+                SelOp::Toggle => ctx.doc.toggle_dims(&[d]),
+                SelOp::Replace => ctx.doc.set_selection_full(Vec::new(), Vec::new(), vec![d]),
+            }
+            return;
+        }
         if let Some(g) = self.pick_guide(ctx, &picked) {
             match op {
                 SelOp::Remove => ctx.doc.remove_guides_from_selection(&[g]),
@@ -157,11 +176,16 @@ impl SelectTool {
         if p.context != ctx.doc.active_path {
             ctx.doc.set_active_path(p.context);
         }
+        // An edge of an arc / circle selects the whole curve.
+        let ents = guarded(|| ctx.doc.model.mesh_at(&ctx.doc.active_path).map(|m| curve_unit(m, p.entity)))
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| vec![p.entity]);
         match op {
-            SelOp::Remove => ctx.doc.remove_from_selection(&[p.entity]),
-            SelOp::Add => ctx.doc.add_to_selection([p.entity]),
-            SelOp::Toggle => ctx.doc.toggle_selected(p.entity),
-            SelOp::Replace => ctx.doc.set_selection(vec![p.entity]),
+            SelOp::Remove => ctx.doc.remove_from_selection(&ents),
+            SelOp::Add => ctx.doc.add_to_selection(ents),
+            SelOp::Toggle => ctx.doc.toggle_many(&ents),
+            SelOp::Replace => ctx.doc.set_selection(ents),
         }
     }
 
@@ -211,22 +235,43 @@ impl SelectTool {
         })
         .unwrap_or_default();
 
+        let dims = guarded(|| {
+            let proj = BoxProjector { camera: ctx.camera, viewport: ctx.viewport_d(), rect, mode };
+            proj.dims(&ctx.doc.model, &ctx.doc.active_path)
+        })
+        .unwrap_or_default();
+
         match sel_op(&ctx.pointer.modifiers) {
             SelOp::Remove => {
                 ctx.doc.remove_from_selection(&found);
                 ctx.doc.remove_guides_from_selection(&guides);
+                ctx.doc.remove_dims_from_selection(&dims);
             }
             SelOp::Add => {
                 ctx.doc.add_to_selection(found);
                 ctx.doc.add_guides(&guides);
+                ctx.doc.add_dims(&dims);
             }
             SelOp::Toggle => {
                 ctx.doc.toggle_many(&found);
                 ctx.doc.toggle_guides(&guides);
+                ctx.doc.toggle_dims(&dims);
             }
-            SelOp::Replace => ctx.doc.set_selection_with_guides(found, guides),
+            SelOp::Replace => ctx.doc.set_selection_full(found, guides, dims),
         }
     }
+}
+
+/// `e` and, for an edge of a curve, all edges of that curve.
+pub fn curve_unit(mesh: &varstotas_kernel::Mesh, e: EntityRef) -> Vec<EntityRef> {
+    if let EntityRef::Edge(id) = e
+        && let Some(cid) = mesh.edges.get(id).and_then(|x| x.curve)
+    {
+        let mut v: Vec<EntityRef> = vec![e];
+        v.extend(mesh.curve_edges(cid).into_iter().filter(|x| *x != id).map(EntityRef::Edge));
+        return v;
+    }
+    vec![e]
 }
 
 /// Window (left→right: entirely inside) or crossing (right→left: touching) selection.
@@ -304,6 +349,23 @@ impl BoxProjector<'_> {
             };
             if hit {
                 out.push(g);
+            }
+        }
+        out
+    }
+
+    /// Dimensions of the context `path` in the box: window = anchors and dimension line inside;
+    /// crossing = any of its lines touches the box.
+    fn dims(&self, model: &varstotas_kernel::Model, path: &[varstotas_kernel::InstanceId]) -> Vec<varstotas_kernel::DimId> {
+        let mut out = Vec::new();
+        for (id, g) in model.dimensions_in(path) {
+            let (p, q) = g.line();
+            let hit = match self.mode {
+                BoxMode::Window => [g.a, g.b, p, q].iter().all(|x| self.inside(*x)),
+                BoxMode::Crossing => [(p, q), (g.a, p), (g.b, q)].iter().any(|(a, b)| self.segment(*a, *b)),
+            };
+            if hit {
+                out.push(id);
             }
         }
         out
@@ -420,6 +482,13 @@ impl Tool for SelectTool {
 
     fn on_double_click(&mut self, ctx: &mut ToolContext) {
         let picked = self.pick(ctx);
+        if let Some((d, _)) = self.pick_dim(ctx, &picked) {
+            // Double-click a dimension (its text or lines): edit the text.
+            if ctx.pointer.click_count == 2 {
+                ctx.requests.push(super::ToolRequest::EditDimensionText(d));
+            }
+            return;
+        }
         if self.pick_guide(ctx, &picked).is_some() {
             return;
         }

@@ -5,6 +5,7 @@
 
 mod app;
 mod autosave;
+mod axes;
 mod clipboard;
 mod debug_capture;
 mod document;

@@ -72,13 +72,19 @@ impl VarstotasApp {
 
     /// Right-click menu of the 3D view.
     pub(crate) fn viewport_context_menu(&mut self, ui: &mut Ui) {
+        if self.ctx_on_axes {
+            self.item(ui, "Place", None, true, Action::PlaceAxes);
+            self.item(ui, "Move…", None, true, Action::MoveAxes);
+            self.item(ui, "Reset", None, self.doc.model.axes.is_some(), Action::ResetAxes);
+            return;
+        }
         let has_sel = self.doc.has_selection();
         self.clipboard_items(ui);
         self.item(ui, "Erase", Some("Delete"), has_sel, Action::Delete);
         ui.separator();
         self.item(ui, "Hide", None, !self.doc.selection.is_empty(), Action::HideSelected);
-        self.item(ui, "Make Group", Some("G"), !self.doc.selection.is_empty(), Action::MakeGroup);
-        self.item(ui, "Make Component…", None, !self.doc.selection.is_empty(), Action::MakeComponent);
+        self.item(ui, "Make Group", Some("G"), has_sel, Action::MakeGroup);
+        self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
         let has_inst = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Instance(_)));
         self.item(ui, "Explode", None, has_inst, Action::Explode);
         ui.separator();
@@ -212,7 +218,13 @@ impl VarstotasApp {
             });
 
             ui.menu_button("Draw", |ui| {
-                for id in [ToolId::Line, ToolId::Arc, ToolId::Rectangle, ToolId::Circle, ToolId::Polygon] {
+                self.tool_item(ui, ToolId::Line);
+                ui.separator();
+                for id in [ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie] {
+                    self.tool_item(ui, id);
+                }
+                ui.separator();
+                for id in [ToolId::Rectangle, ToolId::RotatedRectangle, ToolId::Circle, ToolId::Polygon] {
                     self.tool_item(ui, id);
                 }
             });
@@ -233,7 +245,7 @@ impl VarstotasApp {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
-                for id in [ToolId::Tape, ToolId::Protractor] {
+                for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes] {
                     self.tool_item(ui, id);
                 }
             });

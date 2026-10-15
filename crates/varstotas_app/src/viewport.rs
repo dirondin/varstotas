@@ -170,6 +170,9 @@ impl Viewport {
                     self.highlight_count += 1;
                     self.last_highlight_ms = t0.elapsed().as_secs_f64() * 1e3;
                 }
+                // Custom drawing axes (Axes tool) replace the main axes.
+                let frame = doc.model.axes.map(|a| varstotas_render::AxesFrame::from_transform(&varstotas_kernel::glam::DMat4::from(a)));
+                renderer.set_axes_frame(frame);
                 let size_px = [
                     ((rect.width() * ppp).round() as u32).max(1),
                     ((rect.height() * ppp).round() as u32).max(1),

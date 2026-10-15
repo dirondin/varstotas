@@ -1,4 +1,4 @@
-//! Construction tools: Tape Measure (measure + guides) and Protractor (angled guides).
+//! Construction tools: Tape Measure (measure + guides), Protractor (angled guides), Axes.
 
 use super::common::*;
 use super::draw::Clicker;
@@ -328,7 +328,7 @@ impl ProtractorTool {
                     .arrow_dir()
                     .map(|d| d.0)
                     .or(r.face.as_ref().map(|f| f.plane.normal))
-                    .unwrap_or(DVec3::Z);
+                    .unwrap_or(crate::axes::current().z);
                 self.engine.arrow_lock = None;
                 self.stage = Some(ProStage::Center { c: r.point, n });
             }
@@ -407,7 +407,7 @@ impl Tool for ProtractorTool {
         match self.stage {
             None => {
                 if let Some(r) = r {
-                    let n = self.engine.arrow_dir().map(|d| d.0).or(r.face.as_ref().map(|f| f.plane.normal)).unwrap_or(DVec3::Z);
+                    let n = self.engine.arrow_dir().map(|d| d.0).or(r.face.as_ref().map(|f| f.plane.normal)).unwrap_or(crate::axes::current().z);
                     draw_protractor(view, r.point, n, None, out3d);
                     inference::draw_result(r, out3d, out2d);
                 }
@@ -433,6 +433,179 @@ impl Tool for ProtractorTool {
     }
     fn is_busy(&self) -> bool {
         self.stage.is_some()
+    }
+}
+
+// ===========================================================================
+// Axes
+// ===========================================================================
+
+#[derive(Clone, Copy, Debug)]
+enum AxStage {
+    Idle,
+    Origin { o: DVec3 },
+    Red { o: DVec3, x: DVec3 },
+}
+
+pub struct AxesTool {
+    engine: InferenceEngine,
+    stage: AxStage,
+    cur: Option<InferenceResult>,
+    clicker: Clicker,
+}
+
+impl Default for AxesTool {
+    fn default() -> Self {
+        Self { engine: InferenceEngine::default(), stage: AxStage::Idle, cur: None, clicker: Clicker::default() }
+    }
+}
+
+/// Length of the tentative axes drawn by the tool (screen px).
+const AXES_PREVIEW_PX: f64 = 120.0;
+
+impl AxesTool {
+    fn update(&mut self, ctx: &ToolContext) {
+        let (anchor, fallback) = match self.stage {
+            AxStage::Idle => (None, None),
+            AxStage::Origin { o } => (Some(o), Some(Plane::new(o, crate::axes::current().z))),
+            AxStage::Red { o, x } => {
+                // Green point: on the plane through the red axis facing the current blue.
+                let cz = crate::axes::current().z;
+                let n = if x.cross(cz).length() > 1e-6 { cz - x * cz.dot(x) } else { crate::axes::current().y };
+                (Some(o), Some(Plane::new(o, n.normalize())))
+            }
+        };
+        let r = infer(&mut self.engine, ctx, anchor, None, fallback);
+        self.cur = Some(r);
+    }
+
+    /// The axes the tool would set now (preview).
+    fn preview(&self) -> Option<crate::axes::Axes> {
+        let p = self.cur.as_ref()?.point;
+        let cur = crate::axes::current();
+        match self.stage {
+            AxStage::Idle => Some(crate::axes::Axes { origin: p, ..cur }),
+            AxStage::Origin { o } => {
+                let x = (p - o).normalize_or_zero();
+                if x == DVec3::ZERO {
+                    return Some(crate::axes::Axes { origin: o, ..cur });
+                }
+                // Keep blue as close to the current blue as possible.
+                let y_hint = cur.z.cross(x);
+                let y_hint = if y_hint.length() > 1e-6 { y_hint } else { cur.y };
+                crate::axes::Axes::from_dirs(o, x, y_hint)
+            }
+            AxStage::Red { o, x } => crate::axes::Axes::from_dirs(o, x, p - o),
+        }
+    }
+
+    fn click(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+        let Some(r) = self.cur.clone() else { return };
+        match self.stage {
+            AxStage::Idle => self.stage = AxStage::Origin { o: r.point },
+            AxStage::Origin { o } => {
+                if o.distance(r.point) > TOL {
+                    self.stage = AxStage::Red { o, x: (r.point - o).normalize() };
+                }
+            }
+            AxStage::Red { .. } => {
+                if let Some(a) = self.preview() {
+                    self.commit(ctx, a);
+                }
+            }
+        }
+        self.engine.arrow_lock = None;
+    }
+
+    fn commit(&mut self, ctx: &mut ToolContext, a: crate::axes::Axes) {
+        if ctx.doc.try_commit("Place Axes", |m| m.set_axes(a.origin, a.x, a.y)).is_some() {
+            crate::axes::set_current(a);
+            ctx.requests.push(super::ToolRequest::SwitchTool(ToolId::Select));
+        }
+        self.stage = AxStage::Idle;
+    }
+}
+
+impl Tool for AxesTool {
+    fn id(&self) -> ToolId {
+        ToolId::Axes
+    }
+    fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+    }
+    fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
+        if self.clicker.down(ctx) {
+            self.click(ctx);
+        }
+    }
+    fn on_pointer_up(&mut self, ctx: &mut ToolContext) {
+        if self.clicker.up_is_drag(ctx) && !matches!(self.stage, AxStage::Idle) {
+            self.click(ctx);
+        }
+    }
+    fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
+        if !pressed {
+            return false;
+        }
+        if key == Key::Escape {
+            self.stage = AxStage::Idle;
+            self.engine.clear_locks();
+            return true;
+        }
+        let r = self.engine.handle_arrow(key);
+        if r {
+            self.update(ctx);
+        }
+        r
+    }
+    fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
+        // `x,y,z`: origin in the current axes' coordinates (before the first click).
+        if !matches!(self.stage, AxStage::Idle) {
+            return false;
+        }
+        let Some(v) = parse_lens(ctx.doc.model.unit, input).filter(|v| v.len() == 3) else { return false };
+        let cur = crate::axes::current();
+        let o = cur.origin + cur.world_vec(DVec3::new(v[0], v[1], v[2]));
+        self.stage = AxStage::Origin { o };
+        self.update(ctx);
+        true
+    }
+    fn vcb_label(&self) -> &str {
+        match self.stage {
+            AxStage::Idle => "Origin",
+            _ => "Measurements",
+        }
+    }
+    fn status_text(&self) -> String {
+        match self.stage {
+            AxStage::Idle => "Select the new origin, or type x,y,z.".into(),
+            AxStage::Origin { .. } => "Select a point along the new red axis.".into(),
+            AxStage::Red { .. } => "Select a point toward the new green axis.".into(),
+        }
+    }
+    fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
+        if let Some(a) = self.preview() {
+            let vp = varstotas_kernel::glam::DVec2::new(view.viewport.x as f64, view.viewport.y as f64);
+            let len = view.camera.pixel_size_at(a.origin, vp) * AXES_PREVIEW_PX;
+            for (d, k) in [
+                (a.x, InferenceKind::OnRedAxis),
+                (a.y, InferenceKind::OnGreenAxis),
+                (a.z, InferenceKind::OnBlueAxis),
+            ] {
+                line(out3d, a.origin, a.origin + d * len, k.color(), 2.5);
+                dashed(out3d, a.origin, a.origin - d * len * 0.5, k.color(), 1.5);
+            }
+        }
+        if let Some(r) = &self.cur {
+            inference::draw_result(r, out3d, out2d);
+        }
+    }
+    fn cursor(&self) -> CursorIcon {
+        CursorIcon::None
+    }
+    fn is_busy(&self) -> bool {
+        !matches!(self.stage, AxStage::Idle)
     }
 }
 

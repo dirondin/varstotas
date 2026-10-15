@@ -31,6 +31,8 @@ pub struct Clipboard {
     src_doc: u64,
     guides: Vec<GuideLine>,
     guide_points: Vec<DVec3>,
+    /// Selected dimensions (world space).
+    dims: Vec<varstotas_kernel::DimGeom>,
     /// World bounds of the copied content.
     pub bounds: Aabb,
     /// World-space edges of the copied content at its original position (capped).
@@ -79,7 +81,37 @@ impl Clipboard {
         if !doc.has_selection() {
             return Err(OpError::Invalid("nothing selected".into()));
         }
-        Self::from_parts(&doc.model, doc.uid, &doc.active_path, &doc.selection, &doc.guide_sel)
+        let dims: Vec<varstotas_kernel::DimGeom> =
+            doc.dim_sel.iter().filter_map(|d| doc.model.dimension_in(&doc.active_path, *d)).collect();
+        if doc.selection.is_empty() && doc.guide_sel.is_empty() {
+            // Dimensions only.
+            let pts: Vec<DVec3> = dims.iter().flat_map(|g| [g.a, g.b, g.line().0, g.line().1]).collect();
+            let bounds = Aabb::from_points(pts).ok_or(OpError::Invalid("nothing to copy".into()))?;
+            let preview = dims.iter().map(|g| g.line()).collect();
+            let mut model = doc.model.clone();
+            let root = model.root;
+            model.defs.retain(|k, _| k == root);
+            model.defs[root].mesh = Mesh::new();
+            model.guides.clear();
+            model.guide_points.clear();
+            let count = dims.len();
+            return Ok(Clipboard {
+                model,
+                def: None,
+                src_xf: DMat4::IDENTITY,
+                src_doc: doc.uid,
+                guides: Vec::new(),
+                guide_points: Vec::new(),
+                dims,
+                bounds,
+                preview,
+                count,
+            });
+        }
+        let mut c = Self::from_parts(&doc.model, doc.uid, &doc.active_path, &doc.selection, &doc.guide_sel)?;
+        c.count += dims.len();
+        c.dims = dims;
+        Ok(c)
     }
 
     /// Copy entities `ents` of the context `path` of `src` (document `src_doc`) and `guide_sel`.
@@ -145,7 +177,7 @@ impl Clipboard {
         if let Some(d) = def {
             collect_edges(&model, d, src_xf, &mut preview, 0);
         }
-        Ok(Clipboard { model, def, src_xf, src_doc, guides, guide_points, bounds, preview, count })
+        Ok(Clipboard { model, def, src_xf, src_doc, guides, guide_points, dims: Vec::new(), bounds, preview, count })
     }
 
     /// Point of the content that follows the cursor while pasting (bounding-box min corner).
@@ -200,6 +232,23 @@ impl Clipboard {
             .chain(self.guide_points.iter().map(|p| GuideGeom::Point(*p)));
         let guides = geoms.filter_map(|g| model.add_guide_in(path, g.transformed(t_world))).collect();
         Ok((ents, guides))
+    }
+
+    /// Paste the copied dimensions into the context `path` moved by `t_world` (after
+    /// [`Self::paste_into`], so their anchors attach to the pasted vertices).
+    pub fn paste_dims_into(&self, model: &mut Model, path: &[InstanceId], t_world: &DMat4) -> Vec<varstotas_kernel::DimId> {
+        let mut out = Vec::new();
+        for g in &self.dims {
+            let (a, b) = (t_world.transform_point3(g.a), t_world.transform_point3(g.b));
+            let off = t_world.transform_vector3(g.offset);
+            if let Some(id) = model.add_dimension_in(path, a, b, off) {
+                if g.text.is_some() {
+                    model.set_dimension_text_in(path, id, g.text.clone());
+                }
+                out.push(id);
+            }
+        }
+        out
     }
 
     /// Copy definition `d` of the clipboard model into `model`; returns the new id.

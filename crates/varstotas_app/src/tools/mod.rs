@@ -10,7 +10,9 @@
 #![allow(dead_code)]
 
 pub mod common;
+mod arcs;
 pub(crate) mod construct;
+mod dims;
 mod draw;
 mod edit;
 mod nav_tools;
@@ -35,7 +37,11 @@ pub enum ToolId {
     Paint,
     Line,
     Arc,
+    ArcCenter,
+    Arc3,
+    Pie,
     Rectangle,
+    RotatedRectangle,
     Circle,
     Polygon,
     PushPull,
@@ -46,19 +52,25 @@ pub enum ToolId {
     FollowMe,
     Tape,
     Protractor,
+    Axes,
+    Dimension,
     Orbit,
     Pan,
     Zoom,
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 19] = [
+    pub const ALL: [ToolId; 25] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
         ToolId::Line,
         ToolId::Arc,
+        ToolId::ArcCenter,
+        ToolId::Arc3,
+        ToolId::Pie,
         ToolId::Rectangle,
+        ToolId::RotatedRectangle,
         ToolId::Circle,
         ToolId::Polygon,
         ToolId::PushPull,
@@ -69,6 +81,8 @@ impl ToolId {
         ToolId::FollowMe,
         ToolId::Tape,
         ToolId::Protractor,
+        ToolId::Axes,
+        ToolId::Dimension,
         ToolId::Orbit,
         ToolId::Pan,
         ToolId::Zoom,
@@ -80,8 +94,12 @@ impl ToolId {
             ToolId::Eraser => "Eraser",
             ToolId::Paint => "Paint Bucket",
             ToolId::Line => "Line",
-            ToolId::Arc => "Arc",
+            ToolId::Arc => "2 Point Arc",
+            ToolId::ArcCenter => "Arc",
+            ToolId::Arc3 => "3 Point Arc",
+            ToolId::Pie => "Pie",
             ToolId::Rectangle => "Rectangle",
+            ToolId::RotatedRectangle => "Rotated Rectangle",
             ToolId::Circle => "Circle",
             ToolId::Polygon => "Polygon",
             ToolId::PushPull => "Push/Pull",
@@ -92,6 +110,8 @@ impl ToolId {
             ToolId::FollowMe => "Follow Me",
             ToolId::Tape => "Tape Measure",
             ToolId::Protractor => "Protractor",
+            ToolId::Axes => "Axes",
+            ToolId::Dimension => "Dimensions",
             ToolId::Orbit => "Orbit",
             ToolId::Pan => "Pan",
             ToolId::Zoom => "Zoom",
@@ -117,7 +137,15 @@ impl ToolId {
             ToolId::Orbit => Key::O,
             ToolId::Pan => Key::H,
             ToolId::Zoom => Key::Z,
-            ToolId::Polygon | ToolId::FollowMe | ToolId::Protractor => return None,
+            ToolId::Polygon
+            | ToolId::FollowMe
+            | ToolId::Protractor
+            | ToolId::ArcCenter
+            | ToolId::Arc3
+            | ToolId::Pie
+            | ToolId::RotatedRectangle
+            | ToolId::Axes
+            | ToolId::Dimension => return None,
         })
     }
 
@@ -133,7 +161,11 @@ impl ToolId {
             ToolId::Paint => Icon::Paint,
             ToolId::Line => Icon::Line,
             ToolId::Arc => Icon::Arc,
+            ToolId::ArcCenter => Icon::ArcCenter,
+            ToolId::Arc3 => Icon::Arc3,
+            ToolId::Pie => Icon::Pie,
             ToolId::Rectangle => Icon::Rectangle,
+            ToolId::RotatedRectangle => Icon::RotatedRectangle,
             ToolId::Circle => Icon::Circle,
             ToolId::Polygon => Icon::Polygon,
             ToolId::PushPull => Icon::PushPull,
@@ -144,6 +176,8 @@ impl ToolId {
             ToolId::FollowMe => Icon::FollowMe,
             ToolId::Tape => Icon::Tape,
             ToolId::Protractor => Icon::Protractor,
+            ToolId::Axes => Icon::Axes,
+            ToolId::Dimension => Icon::Dimension,
             ToolId::Orbit => Icon::Orbit,
             ToolId::Pan => Icon::Pan,
             ToolId::Zoom => Icon::Zoom,
@@ -157,8 +191,12 @@ impl ToolId {
             ToolId::Eraser => "Erase edges, guides and other entities.",
             ToolId::Paint => "Apply a material to faces and groups.",
             ToolId::Line => "Draw edges. Closed planar loops become faces.",
-            ToolId::Arc => "Draw a 2-point arc.",
+            ToolId::Arc => "Draw an arc from two end points and a bulge.",
+            ToolId::ArcCenter => "Draw an arc from its center and two points.",
+            ToolId::Arc3 => "Draw an arc through three points.",
+            ToolId::Pie => "Draw a closed pie-shaped face from a center and two points.",
             ToolId::Rectangle => "Draw a rectangular face from two corners.",
+            ToolId::RotatedRectangle => "Draw a rectangle at any angle from an edge and a width.",
             ToolId::Circle => "Draw a circle from center and radius.",
             ToolId::Polygon => "Draw a regular polygon.",
             ToolId::PushPull => "Push or pull a face to add or remove volume.",
@@ -169,6 +207,8 @@ impl ToolId {
             ToolId::FollowMe => "Sweep a face along a path.",
             ToolId::Tape => "Measure distances and create guides.",
             ToolId::Protractor => "Measure angles and create angled guides.",
+            ToolId::Axes => "Move or reorient the drawing axes.",
+            ToolId::Dimension => "Place linear dimensions between points or on edges.",
             ToolId::Orbit => "Rotate the camera around the model.",
             ToolId::Pan => "Move the camera sideways.",
             ToolId::Zoom => "Zoom the camera in or out.",
@@ -220,8 +260,29 @@ impl ToolId {
                  Type a length and press Enter for precision.\n\
                  Shift locks the inference direction; arrow keys lock axes."
             }
-            ToolId::Arc => "Click start, click end, then move to set the bulge and click.",
+            ToolId::Arc => {
+                "Click the start point, click the end point, then move to set the bulge and click.\n\
+                 • Type a length for the chord, then a bulge (or `500r` for a radius); `12s` sets segments.\n\
+                 • Starting at the end of an edge, a cyan arc is tangent to it.\n\
+                 • Double-click to draw an arc tangent to the previous one."
+            }
+            ToolId::ArcCenter => {
+                "Click the center, click the start point (radius), then move around and click the end.\n\
+                 Type a radius after the first click, then an angle. `12s` sets segments."
+            }
+            ToolId::Arc3 => {
+                "Click the start point, click a point the arc passes through, then click the end.\n\
+                 Type a length after the first click, an angle after the second."
+            }
+            ToolId::Pie => {
+                "Click the center, click the start point (radius), then click the end to make a closed pie face.\n\
+                 Type a radius, then an angle."
+            }
             ToolId::Rectangle => "Click the first corner, then the opposite corner. Type width,height to be exact.",
+            ToolId::RotatedRectangle => {
+                "Click the first corner, click the second (the first edge), then move to set the width and click.\n\
+                 Type a length (or `l,w`) for the edge, then the width (or `w,angle`)."
+            }
             ToolId::Circle => "Click the center, then move and click to set the radius. Type `24s` before clicking to set segments.",
             ToolId::Polygon => "Click the center, then the radius. Type `6s` to set the number of sides.",
             ToolId::PushPull => {
@@ -235,6 +296,14 @@ impl ToolId {
             ToolId::FollowMe => "Select a path, then click the profile face to sweep it.",
             ToolId::Tape => "Click two points to measure. Starting on an edge creates a parallel guide.",
             ToolId::Protractor => "Click the center, click the base direction, click the angle to create a guide.",
+            ToolId::Axes => {
+                "Click the new origin, click a point along the red axis, then a point toward the green axis.\n\
+                 Type `x,y,z` for the origin. Right-click the axes for Place / Move / Reset."
+            }
+            ToolId::Dimension => {
+                "Click a start point and an end point (or click an edge), then move to offset the dimension and click.\n\
+                 Double-click a dimension's text with Select to edit it; empty text restores the measured length."
+            }
             ToolId::Orbit => {
                 "Drag to orbit around the point under the cursor.\n\
                  Middle mouse button orbits in any tool; Shift+middle pans.\n\
@@ -266,6 +335,12 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Circle => Box::new(draw::CircleTool::new(false)),
         ToolId::Polygon => Box::new(draw::CircleTool::new(true)),
         ToolId::Arc => Box::new(draw::ArcTool::default()),
+        ToolId::ArcCenter => Box::new(arcs::ArcCenterTool::new(false)),
+        ToolId::Pie => Box::new(arcs::ArcCenterTool::new(true)),
+        ToolId::Arc3 => Box::new(arcs::Arc3Tool::default()),
+        ToolId::RotatedRectangle => Box::new(arcs::RotatedRectTool::default()),
+        ToolId::Axes => Box::new(construct::AxesTool::default()),
+        ToolId::Dimension => Box::new(dims::DimensionTool::default()),
         ToolId::Eraser => Box::new(edit::EraserTool::default()),
         ToolId::Paint => Box::new(edit::PaintTool::default()),
         ToolId::PushPull => Box::new(edit::PushPullTool::default()),
@@ -306,6 +381,8 @@ pub enum ToolRequest {
     ZoomExtents,
     /// Tape Measure: ask "resize the model / group?" (uniform factor) in a dialog.
     ConfirmResize(f64),
+    /// Select: edit the text of a dimension of the active context.
+    EditDimensionText(varstotas_kernel::DimId),
 }
 
 /// Everything a tool can touch while handling an event.

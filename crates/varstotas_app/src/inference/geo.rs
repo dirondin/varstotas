@@ -75,7 +75,7 @@ impl GeoCache {
             }
         }
         // The model origin is always a snap target (the classic "Origin" inference).
-        g.points.push(PointCand { pos: DVec3::ZERO, kind: InferenceKind::Origin, r: None });
+        g.points.push(PointCand { pos: crate::axes::current().origin, kind: InferenceKind::Origin, r: None });
         g
     }
 

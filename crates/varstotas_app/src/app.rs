@@ -131,6 +131,28 @@ pub enum Action {
     OrientFaces,
     /// Flip Along the context's red (0), green (1) or blue (2) axis.
     FlipAlong(usize),
+    /// Axes context menu: Place (Axes tool), Move… (dialog), Reset (world axes).
+    PlaceAxes,
+    MoveAxes,
+    ResetAxes,
+}
+
+/// What a [`TextPrompt`] edits.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PromptKind {
+    DimText(ContextPath, varstotas_kernel::DimId),
+    /// `dx, dy, dz[, angle]`: move the axes along themselves, rotate about blue (degrees).
+    MoveAxes,
+}
+
+/// One-line text input dialog.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextPrompt {
+    pub kind: PromptKind,
+    pub title: String,
+    pub hint: String,
+    pub value: String,
+    pub focused: bool,
 }
 
 /// File → Export → 2D Graphic… dialog state.
@@ -209,6 +231,10 @@ pub struct VarstotasApp {
     /// Tape Measure resize waiting for confirmation (uniform factor).
     pub(crate) resize_confirm: Option<f64>,
     pub(crate) export_dialog: Option<ExportDialog>,
+    /// One-line text prompt (dimension text, Move Axes).
+    pub(crate) text_prompt: Option<TextPrompt>,
+    /// The last right-click hit the drawing axes (context menu shows the axes items).
+    pub(crate) ctx_on_axes: bool,
     /// Template chooser shown (first start / File → New from Template…).
     pub(crate) show_templates: bool,
 }
@@ -303,6 +329,8 @@ impl VarstotasApp {
             show_prefs: false,
             clipboard: None,
             resize_confirm: None,
+            text_prompt: None,
+            ctx_on_axes: false,
             export_dialog: None,
             show_templates: false,
             autosave: AutosaveState {
@@ -387,6 +415,18 @@ impl VarstotasApp {
                 ToolRequest::SwitchTool(id) => self.actions.push(Action::SetTool(id)),
                 ToolRequest::ZoomExtents => self.actions.push(Action::ZoomExtents),
                 ToolRequest::ConfirmResize(f) => self.resize_confirm = Some(f),
+                ToolRequest::EditDimensionText(id) => {
+                    let path = self.doc.active_path.clone();
+                    if let Some(g) = self.doc.model.dimension_in(&path, id) {
+                        self.text_prompt = Some(TextPrompt {
+                            kind: PromptKind::DimText(path, id),
+                            title: "Edit Dimension Text".into(),
+                            hint: "Empty restores the measured length; `<>` stands for it.".into(),
+                            value: g.text.unwrap_or_default(),
+                            focused: false,
+                        });
+                    }
+                }
             }
         }
         r
@@ -549,6 +589,7 @@ impl VarstotasApp {
         self.confirm.is_some()
             || !self.autosave.recoveries.is_empty()
             || self.resize_confirm.is_some()
+            || self.text_prompt.is_some()
             || self.export_dialog.is_some()
             || self.show_templates
             || self.show_prefs
@@ -660,16 +701,26 @@ impl VarstotasApp {
     fn context_select(&mut self, local: Pos2) {
         use crate::tools::common::{pick_edge_at, pick_face, pick_guide};
         let pi = self.pointer_info(local, egui::Vec2::ZERO, None, false);
-        let (ent, guide) = self.with_tool(pi, |_, c| {
+        let (ent, guide, dim) = self.with_tool(pi, |_, c| {
+            let dim = crate::tools::common::pick_dim(c).map(|d| d.0);
             if let Some(e) = pick_edge_at(c, c.pointer.pos, crate::inference::EDGE_PICK_PX as f32) {
-                return (Some(e.entity()), None);
+                return (Some(e.entity()), None, None);
+            }
+            if dim.is_some() {
+                return (None, None, dim);
             }
             if let Some(g) = pick_guide(c) {
-                return (None, Some(g));
+                return (None, Some(g), None);
             }
-            (pick_face(c).map(|h| h.entity()), None)
+            (pick_face(c).map(|h| h.entity()), None, None)
         });
-        if let Some(e) = ent
+        // Nothing under the cursor but the drawing axes: the menu offers Place / Move / Reset.
+        self.ctx_on_axes = ent.is_none() && guide.is_none() && dim.is_none() && self.axes_near(local);
+        if let Some(d) = dim {
+            if !self.doc.dim_sel.contains(&d) {
+                self.doc.set_selection_full(Vec::new(), Vec::new(), vec![d]);
+            }
+        } else if let Some(e) = ent
             && !self.doc.selection.contains(&e)
         {
             self.doc.set_selection(vec![e]);
@@ -678,6 +729,56 @@ impl VarstotasApp {
         {
             self.doc.set_selection_with_guides(Vec::new(), vec![g]);
         }
+    }
+
+    /// Apply the text prompt's value. Returns false (dialog stays open) when it is invalid.
+    pub(crate) fn apply_prompt(&mut self, p: &TextPrompt) -> bool {
+        match &p.kind {
+            PromptKind::DimText(path, id) => {
+                let (path, id) = (path.clone(), *id);
+                let text = Some(p.value.trim().to_string()).filter(|t| !t.is_empty());
+                self.doc.commit("Edit Dimension Text", |m| m.set_dimension_text_in(&path, id, text));
+                true
+            }
+            PromptKind::MoveAxes => {
+                let parts: Vec<&str> = p.value.split([',', ';']).map(str::trim).collect();
+                if !(3..=4).contains(&parts.len()) {
+                    return false;
+                }
+                let unit = self.doc.model.unit;
+                let lens: Option<Vec<f64>> =
+                    parts[..3].iter().map(|s| varstotas_kernel::units::parse_length(s, unit)).collect();
+                let Some(l) = lens else { return false };
+                let ang = match parts.get(3) {
+                    Some(s) => match crate::tools::common::parse_angle(s) {
+                        Some(a) => a,
+                        None => return false,
+                    },
+                    None => 0.0,
+                };
+                let a = crate::axes::current();
+                let origin = a.origin + a.world_vec(DVec3::new(l[0], l[1], l[2]));
+                let r = ang.to_radians();
+                let x = a.x * r.cos() + a.y * r.sin();
+                let y = a.y * r.cos() - a.x * r.sin();
+                if self.doc.try_commit("Move Axes", |m| m.set_axes(origin, x, y)).is_some() {
+                    crate::axes::sync(&self.doc.model);
+                }
+                true
+            }
+        }
+    }
+
+    /// Viewport point `local` lies on one of the drawing axes (positive half, on screen).
+    fn axes_near(&self, local: Pos2) -> bool {
+        let a = crate::axes::current();
+        let vp = varstotas_kernel::glam::DVec2::new(self.viewport.size().x as f64, self.viewport.size().y as f64);
+        let c = varstotas_kernel::glam::DVec2::new(local.x as f64, local.y as f64);
+        let len = (self.camera.eye - self.camera.target).length() * 4.0;
+        a.dirs().iter().any(|d| {
+            crate::inference::geo::project_segment(&self.camera, vp, a.origin, a.origin + *d * len)
+                .is_some_and(|(p, q)| crate::inference::geo::dist_point_seg2(c, p, q).0 <= 6.0)
+        })
     }
 
     // ---- actions ------------------------------------------------------------
@@ -722,18 +823,21 @@ impl VarstotasApp {
             Action::SelectNone => self.doc.clear_selection(),
             Action::Delete => self.doc.erase_selection(),
             Action::MakeGroup | Action::MakeComponent => {
-                if self.doc.selection.is_empty() {
+                if !self.doc.has_selection() {
                     self.flash("Select something to group first");
                     return;
                 }
                 let sel = self.doc.selection.clone();
+                let guides = self.doc.guide_sel.clone();
+                let dims = self.doc.dim_sel.clone();
                 let path = self.doc.active_path.clone();
                 let r = if action == Action::MakeGroup {
-                    self.doc.try_commit("Make Group", |m| m.make_group(&path, &sel))
+                    self.doc.try_commit("Make Group", |m| m.make_group_with(&path, &sel, &guides, &dims))
                 } else {
                     let n = self.doc.model.defs.len();
-                    self.doc
-                        .try_commit("Make Component", |m| m.make_component(&path, &sel, &format!("Component#{n}")))
+                    self.doc.try_commit("Make Component", |m| {
+                        m.make_component_with(&path, &sel, &guides, &dims, &format!("Component#{n}"))
+                    })
                 };
                 if let Some(id) = r {
                     self.doc.set_selection(vec![EntityRef::Instance(id)]);
@@ -937,6 +1041,22 @@ impl VarstotasApp {
                     });
                 }
             }
+            Action::PlaceAxes => self.set_tool(ToolId::Axes),
+            Action::MoveAxes => {
+                self.text_prompt = Some(TextPrompt {
+                    kind: PromptKind::MoveAxes,
+                    title: "Move Axes".into(),
+                    hint: "Offset along red, green, blue and an optional rotation about blue: `dx, dy, dz[, angle]`.".into(),
+                    value: "0, 0, 0".into(),
+                    focused: false,
+                });
+            }
+            Action::ResetAxes => {
+                if self.doc.model.axes.is_some() {
+                    self.doc.commit("Reset Axes", |m| m.reset_axes());
+                    crate::axes::sync(&self.doc.model);
+                }
+            }
             Action::FlipAlong(axis) => {
                 let sel: Vec<EntityRef> = self.doc.selection.clone();
                 if sel.is_empty() {
@@ -944,7 +1064,8 @@ impl VarstotasApp {
                     return;
                 }
                 let path = self.doc.active_path.clone();
-                let a = [DVec3::X, DVec3::Y, DVec3::Z][axis.min(2)];
+                // Drawing axes at the top level; inside a group its own (local) axes.
+                let a = if path.is_empty() { crate::axes::current().dir(axis) } else { [DVec3::X, DVec3::Y, DVec3::Z][axis.min(2)] };
                 let label = ["Flip Along Red", "Flip Along Green", "Flip Along Blue"][axis.min(2)];
                 self.doc.try_commit(label, |m| m.flip_along(&path, &sel, a));
                 self.doc.prune_selection();
@@ -1052,6 +1173,13 @@ impl VarstotasApp {
             tools::common::draw_guides(&view, &mut overlay);
         }
         self.doc.guide_sel = sel;
+        // Dimensions too (never selected in the image).
+        let dsel = std::mem::take(&mut self.doc.dim_sel);
+        {
+            let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
+            tools::common::draw_dims(&view, &mut overlay);
+        }
+        self.doc.dim_sel = dsel;
         let camera = self.camera.clone();
         self.viewport.export = Some(ExportJob { path, overlay, camera, size, transparent, line_scale });
     }
@@ -1497,6 +1625,7 @@ impl VarstotasApp {
             pointer: self.last_pointer,
         };
         tools::common::draw_guides(&view, &mut o3);
+        tools::common::draw_dims(&view, &mut o3);
         self.context_box_lines(&mut o3);
         self.selection_boxes(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
@@ -1531,8 +1660,10 @@ impl eframe::App for VarstotasApp {
         self.now = ctx.input(|i| i.time);
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
 
+        crate::axes::sync(&self.doc.model);
         self.handle_close_request(&ctx);
         self.handle_keyboard(&ctx);
+        crate::axes::sync(&self.doc.model);
 
         egui::Panel::top("menu_bar")
             .frame(crate::ui::theme::bar_frame(&ctx))

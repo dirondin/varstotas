@@ -21,6 +21,7 @@ enum EraseTarget {
     Edge(EdgeId, DVec3, DVec3),
     Instance(InstanceId),
     Guide(GuideRef),
+    Dim(varstotas_kernel::DimId),
 }
 
 #[derive(Default)]
@@ -34,6 +35,9 @@ impl EraserTool {
     fn pick(ctx: &ToolContext) -> Option<EraseTarget> {
         if let Some(Hover::Edge { edge, a, b }) = pick_edge_at(ctx, ctx.pointer.pos, inference::EDGE_PICK_PX as f32) {
             return Some(EraseTarget::Edge(edge, a, b));
+        }
+        if let Some((d, _)) = pick_dim(ctx) {
+            return Some(EraseTarget::Dim(d));
         }
         if let Some(g) = pick_guide(ctx) {
             return Some(EraseTarget::Guide(g));
@@ -66,8 +70,11 @@ impl EraserTool {
         ctx.doc.commit(label, |model| {
             let guides: Vec<GuideRef> =
                 marked.iter().filter_map(|t| if let EraseTarget::Guide(g) = t { Some(*g) } else { None }).collect();
+            let dims: Vec<varstotas_kernel::DimId> =
+                marked.iter().filter_map(|t| if let EraseTarget::Dim(d) = t { Some(*d) } else { None }).collect();
             if !hide && !soften {
                 model.remove_guides_in(&path, &guides);
+                model.remove_dimensions_in(&path, &dims);
             }
             let Some(mesh) = model.mesh_at_mut(&path) else { return };
             let ents: Vec<EntityRef> = marked
@@ -75,7 +82,7 @@ impl EraserTool {
                 .filter_map(|t| match t {
                     EraseTarget::Edge(e, ..) => Some(EntityRef::Edge(*e)),
                     EraseTarget::Instance(i) => Some(EntityRef::Instance(*i)),
-                    EraseTarget::Guide(_) => None,
+                    EraseTarget::Guide(_) | EraseTarget::Dim(_) => None,
                 })
                 .collect();
             if hide || soften {
@@ -148,7 +155,7 @@ impl Tool for EraserTool {
         false
     }
     fn status_text(&self) -> String {
-        "Click or drag over edges, guides or groups to erase. Shift = hide, Ctrl = soften, Ctrl+Shift = unsoften."
+        "Click or drag over edges, guides, dimensions or groups to erase. Shift = hide, Ctrl = soften, Ctrl+Shift = unsoften."
             .into()
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -158,6 +165,7 @@ impl Tool for EraserTool {
             EraseTarget::Guide(g) => {
                 draw_guide(view, *g, &varstotas_kernel::glam::DMat4::IDENTITY, SELECT_BLUE, 2.0, out3d, out2d);
             }
+            EraseTarget::Dim(d) => draw_dim_moved(view, *d, &[], &varstotas_kernel::glam::DMat4::IDENTITY, out3d),
         };
         for t in &self.marked {
             draw(t, out3d, out2d);

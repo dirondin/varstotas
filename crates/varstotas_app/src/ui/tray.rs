@@ -18,6 +18,9 @@ pub struct TrayState {
     /// Multi-selection summary, cached by (model, selection) version: summing face areas of
     /// a huge selection every frame is too slow.
     sel_summary: Option<((u64, u64), SelSummary)>,
+    /// Entity Info edit buffers: curve (id, radius, segments) and dimension (id, text).
+    curve_edit: Option<(u32, String, String)>,
+    dim_text: Option<(varstotas_kernel::DimId, String)>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -28,6 +31,7 @@ struct SelSummary {
     groups: usize,
     components: usize,
     guides: usize,
+    dims: usize,
     area: f64,
 }
 
@@ -175,8 +179,9 @@ impl VarstotasApp {
         }
         let model = &self.doc.model;
         let mut s = SelSummary {
-            count: self.doc.selection.len() + self.doc.guide_sel.len(),
+            count: self.doc.selection.len() + self.doc.guide_sel.len() + self.doc.dim_sel.len(),
             guides: self.doc.guide_sel.len(),
+            dims: self.doc.dim_sel.len(),
             ..Default::default()
         };
         if let Some(mesh) = model.mesh_at(&self.doc.active_path) {
@@ -210,10 +215,24 @@ impl VarstotasApp {
         // details come from the cached summary (selections can hold 100k+ entities).
         let sel: Vec<EntityRef> = self.doc.selection.iter().take(2).cloned().collect();
         let guides: Vec<GuideRef> = self.doc.guide_sel.iter().take(2).cloned().collect();
-        if sel.is_empty() && guides.len() == 1 {
+        if sel.is_empty() && guides.len() == 1 && self.doc.dim_sel.is_empty() {
             self.guide_info(ui, guides[0]);
             return;
         }
+        if sel.is_empty() && guides.is_empty() && self.doc.dim_sel.len() == 1 {
+            self.dim_info(ui, self.doc.dim_sel[0]);
+            return;
+        }
+        if guides.is_empty() && self.doc.dim_sel.is_empty() && let Some(cid) = self.selected_curve() {
+            self.curve_info(ui, cid);
+            return;
+        }
+        // Dimensions mixed with other things: multi-selection layout.
+        let sel = if self.doc.dim_sel.is_empty() || sel.len() > 1 {
+            sel
+        } else {
+            vec![sel.first().copied().unwrap_or(EntityRef::Vertex(Default::default())); 2]
+        };
         // Mixed entity + guide selections use the multi-selection layout.
         let sel = if guides.is_empty() || sel.len() > 1 { sel } else { vec![sel.first().copied().unwrap_or(EntityRef::Vertex(Default::default())); 2] };
         let path = self.doc.active_path.clone();
@@ -336,9 +355,15 @@ impl VarstotasApp {
                         ui.end_row();
                     }
                     _ => {
-                        let SelSummary { count, faces, edges, groups, components, guides, area } = summary;
-                        let only_guides = guides == count;
-                        let title = if only_guides { format!("{count} Guides") } else { format!("{count} Entities") };
+                        let SelSummary { count, faces, edges, groups, components, guides, dims, area } = summary;
+                        let only_guides = guides + dims == count;
+                        let title = if guides == count {
+                            format!("{count} Guides")
+                        } else if dims == count {
+                            format!("{count} Dimensions")
+                        } else {
+                            format!("{count} Entities")
+                        };
                         ui.label(RichText::new(title).strong());
                         ui.end_row();
                         let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
@@ -357,6 +382,9 @@ impl VarstotasApp {
                         }
                         if guides > 0 {
                             parts.push(plural(guides, "Guide", "Guides"));
+                        }
+                        if dims > 0 {
+                            parts.push(plural(dims, "Dimension", "Dimensions"));
                         }
                         ui.label("Contains");
                         ui.add(egui::Label::new(parts.join(", ")).wrap());
@@ -432,6 +460,129 @@ impl VarstotasApp {
                     }
                 }
             });
+        }
+    }
+
+    /// The curve (arc / circle / polygon with metadata) when the selection is exactly its edges.
+    fn selected_curve(&self) -> Option<u32> {
+        let mesh = self.doc.model.mesh_at(&self.doc.active_path)?;
+        let mut cid = None;
+        let mut n = 0;
+        for e in &self.doc.selection {
+            let EntityRef::Edge(id) = e else { return None };
+            let c = mesh.edges.get(*id)?.curve?;
+            if cid.is_some_and(|x| x != c) {
+                return None;
+            }
+            cid = Some(c);
+            n += 1;
+        }
+        let cid = cid?;
+        (n == mesh.curve_edges(cid).len() && mesh.curve_info(cid).is_some()).then_some(cid)
+    }
+
+    /// Entity Info for an arc / circle / polygon: radius and segments are editable.
+    fn curve_info(&mut self, ui: &mut Ui, cid: u32) {
+        let path = self.doc.active_path.clone();
+        let unit = self.doc.model.unit;
+        let Some(info) = self.doc.model.mesh_at(&path).and_then(|m| m.curve_info(cid)) else { return };
+        let r_text = fmt_len(info.radius, unit);
+        let s_text = info.segments.to_string();
+        if self.tray.curve_edit.as_ref().map(|c| c.0) != Some(cid) {
+            self.tray.curve_edit = Some((cid, r_text.clone(), s_text.clone()));
+        }
+        let mut apply: Option<(Option<f64>, Option<u32>)> = None;
+        let mut bad = false;
+        egui::Grid::new("entity_info_curve").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            let title = match info.kind {
+                varstotas_kernel::CurveKind::Arc => "Arc",
+                varstotas_kernel::CurveKind::Circle => "Circle",
+                varstotas_kernel::CurveKind::Polygon => "Polygon",
+            };
+            ui.label(RichText::new(title).strong());
+            ui.end_row();
+            let Some((_, rb, sb)) = self.tray.curve_edit.as_mut() else { return };
+            ui.label("Radius");
+            let resp = ui.add(egui::TextEdit::singleline(rb).desired_width(120.0));
+            if resp.lost_focus() && *rb != r_text {
+                match varstotas_kernel::units::parse_length(rb, unit).filter(|r| *r > 0.0) {
+                    Some(r) => apply = Some((Some(r), None)),
+                    None => bad = true,
+                }
+            } else if !resp.has_focus() && *rb != r_text {
+                *rb = r_text.clone();
+            }
+            ui.end_row();
+            ui.label(if info.kind == varstotas_kernel::CurveKind::Polygon { "Sides" } else { "Segments" });
+            let resp = ui.add(egui::TextEdit::singleline(sb).desired_width(120.0));
+            if resp.lost_focus() && *sb != s_text {
+                match sb.trim().trim_end_matches(['s', 'S']).trim().parse::<u32>() {
+                    Ok(n) => apply = Some((None, Some(n))),
+                    Err(_) => bad = true,
+                }
+            } else if !resp.has_focus() && *sb != s_text {
+                *sb = s_text.clone();
+            }
+            ui.end_row();
+            ui.label(if info.is_closed() { "Circumference" } else { "Arc Length" });
+            ui.label(fmt_len(info.length(), unit));
+            ui.end_row();
+            if info.kind == varstotas_kernel::CurveKind::Arc {
+                ui.label("Angle");
+                ui.label(crate::tools::common::fmt_angle(info.sweep().to_degrees()));
+                ui.end_row();
+            }
+        });
+        if bad {
+            self.tray.curve_edit = None;
+            self.flash_error("Invalid value");
+        }
+        if let Some((r, n)) = apply {
+            let label = if r.is_some() { "Edit Radius" } else { "Edit Segments" };
+            let edges = self.doc.try_commit(label, |m| match m.mesh_at_mut(&path) {
+                Some(mesh) => mesh.set_curve(cid, r, n),
+                None => Err(varstotas_kernel::OpError::NotFound),
+            });
+            self.tray.curve_edit = None;
+            if let Some(es) = edges {
+                // Keep the regenerated curve selected.
+                self.doc.set_selection(es.into_iter().map(EntityRef::Edge).collect());
+            } else if let Some(e) = self.doc.last_error.clone() {
+                self.flash_error(e);
+            }
+        }
+    }
+
+    /// Entity Info for a dimension: length and editable text.
+    fn dim_info(&mut self, ui: &mut Ui, id: varstotas_kernel::DimId) {
+        let path = self.doc.active_path.clone();
+        let unit = self.doc.model.unit;
+        let Some(g) = self.doc.model.dimension_in(&path, id) else { return };
+        let text = g.text.clone().unwrap_or_default();
+        if self.tray.dim_text.as_ref().map(|d| d.0) != Some(id) {
+            self.tray.dim_text = Some((id, text.clone()));
+        }
+        let mut apply: Option<String> = None;
+        egui::Grid::new("entity_info_dim").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new("Linear Dimension").strong());
+            ui.end_row();
+            ui.label("Length");
+            ui.label(fmt_len(g.length(), unit));
+            ui.end_row();
+            let Some((_, buf)) = self.tray.dim_text.as_mut() else { return };
+            ui.label("Text");
+            let resp = ui.add(egui::TextEdit::singleline(buf).hint_text("<>").desired_width(150.0));
+            if resp.lost_focus() && *buf != text {
+                apply = Some(buf.clone());
+            } else if !resp.has_focus() && *buf != text {
+                *buf = text.clone();
+            }
+            ui.end_row();
+        });
+        if let Some(t) = apply {
+            let t = Some(t.trim().to_string()).filter(|t| !t.is_empty());
+            self.doc.commit("Edit Dimension Text", |m| m.set_dimension_text_in(&path, id, t));
+            self.tray.dim_text = None;
         }
     }
 

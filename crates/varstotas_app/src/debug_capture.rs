@@ -173,6 +173,9 @@ pub enum ScriptCmd {
     Mods(Modifiers),
     /// `raw ...` — see [`RawCmd`].
     Raw(RawCmd),
+    /// `rawp <sub> x y z [x y z] [steps]` — like `raw <sub>` but with world points, projected
+    /// with the camera when the command runs (pointer subcommands only).
+    RawWorld(String, Vec<DVec3>, Option<u32>),
     /// `wait N` frames.
     Wait(u32),
     /// `view iso|top|front|right|left|back|bottom`
@@ -351,6 +354,9 @@ impl RawInjector {
                     | Event::WindowFocused(_)
             )
         });
+        // The scripted window counts as focused (it usually isn't the frontmost app while a
+        // script runs; egui's `Response::has_focus` requires a focused window).
+        raw.focused = true;
         if let Some(evs) = self.frames.pop_front() {
             raw.events.extend(evs);
         }
@@ -378,6 +384,16 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "key" => ScriptCmd::Key(Key::from_name(rest)?),
         "mods" => ScriptCmd::Mods(parse_mods(rest)),
         "raw" => ScriptCmd::Raw(parse_raw(rest)?),
+        "rawp" => {
+            let (sub, args) = rest.split_once(char::is_whitespace)?;
+            let v: Vec<f64> = args.split(|c: char| c.is_whitespace() || c == ',').filter_map(|t| t.parse().ok()).collect();
+            let pts: Vec<DVec3> = v.as_chunks::<3>().0.iter().map(|c| DVec3::new(c[0], c[1], c[2])).collect();
+            if pts.is_empty() {
+                return None;
+            }
+            let steps = (v.len() % 3 == 1).then(|| v[v.len() - 1] as u32);
+            ScriptCmd::RawWorld(sub.to_string(), pts, steps)
+        }
         "wait" => ScriptCmd::Wait(nums.first().copied().unwrap_or(1.0) as u32),
         "view" => ScriptCmd::View(match rest.to_ascii_lowercase().as_str() {
             "top" => StandardView::Top,
@@ -459,7 +475,7 @@ pub struct Script {
 impl Script {
     pub fn parse(text: &str) -> Self {
         let cmds: Vec<ScriptCmd> = text.lines().filter_map(parse_cmd).collect();
-        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_))).then(RawInjector::default);
+        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..))).then(RawInjector::default);
         Self {
             cmds,
             raw,
@@ -728,6 +744,20 @@ impl VarstotasApp {
             }
             ScriptCmd::Action(name) => self.script_action(&name),
             ScriptCmd::Raw(r) => self.queue_raw(r),
+            ScriptCmd::RawWorld(sub, pts, steps) => {
+                let mut txt = sub.clone();
+                for p in &pts {
+                    let s = self.script_screen(*p);
+                    txt.push_str(&format!(" {} {}", s.x, s.y));
+                }
+                if let Some(n) = steps {
+                    txt.push_str(&format!(" {n}"));
+                }
+                match parse_raw(&txt) {
+                    Some(r) => self.queue_raw(r),
+                    None => log::warn!("script: bad rawp `{txt}`"),
+                }
+            }
         }
     }
 
@@ -870,6 +900,29 @@ impl VarstotasApp {
         }
         let cur = self.doc.current_material.as_ref().map_or("Default", |p| p.name.as_str());
         let guides = format!("{guides} paint={cur} mats={mats:?}");
+        // M4: dimensions, curves (arcs/circles) of the active mesh, custom axes.
+        let dims = m.all_dimensions_world();
+        let dim_txt: Vec<String> = dims
+            .iter()
+            .map(|(p, id, g)| format!("{}:{}", p.len(), m.dimension_label_in(p, *id).unwrap_or_else(|| format!("{:.0}", g.a.distance(g.b)))))
+            .collect();
+        let curves: Vec<String> = self
+            .doc
+            .active_mesh()
+            .map(|me| {
+                me.curves
+                    .values()
+                    .map(|c| format!("{:?}r{:.1}s{}a{:.0}", c.kind, c.radius, c.segments, (c.end_angle - c.start_angle).to_degrees()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ax = crate::axes::Axes::of_model(m);
+        let guides = format!(
+            "{guides} dims={} {dim_txt:?} dimsel={} curves={curves:?} axes={}",
+            dims.len(),
+            self.doc.dim_sel.len(),
+            if m.axes.is_some() { format!("o({:.0},{:.0},{:.0}) x({:.2},{:.2},{:.2})", ax.origin.x, ax.origin.y, ax.origin.z, ax.x.x, ax.x.y, ax.x.z) } else { "world".into() }
+        );
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
             self.tool_id(),

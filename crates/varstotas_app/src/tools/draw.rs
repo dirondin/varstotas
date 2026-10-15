@@ -1,4 +1,5 @@
 //! Drawing tools: Line, Rectangle, Circle / Polygon, Arc (2-point).
+//! Arc (centre), 3-point arc, Pie and Rotated Rectangle live in `arcs.rs`.
 
 use super::common::*;
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -6,7 +7,7 @@ use crate::inference::{self, Constraint, InferenceEngine, InferenceKind, Inferen
 use crate::overlay::Marker2d;
 use egui::{CursorIcon, Key, PointerButton, Pos2};
 use varstotas_kernel::glam::{DVec2, DVec3};
-use varstotas_kernel::{Plane, TOL};
+use varstotas_kernel::{CurveInfo, Plane, TOL};
 use varstotas_render::Overlay3d;
 
 /// Shared click / drag-release bookkeeping.
@@ -34,7 +35,7 @@ impl Clicker {
     }
 }
 
-fn plane_point(ctx: &ToolContext, res: &InferenceResult, plane: &Plane) -> DVec3 {
+pub(super) fn plane_point(ctx: &ToolContext, res: &InferenceResult, plane: &Plane) -> DVec3 {
     if res.is_geometry_snap() || res.kind.is_direction() || res.kind == InferenceKind::FromPoint {
         return plane.project(res.point);
     }
@@ -46,7 +47,7 @@ fn plane_point(ctx: &ToolContext, res: &InferenceResult, plane: &Plane) -> DVec3
 }
 
 /// Plane normal for shapes started at `res`: arrow lock > face under cursor > horizontal.
-fn shape_normal(engine: &InferenceEngine, res: &InferenceResult) -> (DVec3, bool) {
+pub(super) fn shape_normal(engine: &InferenceEngine, res: &InferenceResult) -> (DVec3, bool) {
     if let Some((d, _)) = engine.arrow_dir() {
         return (d, true);
     }
@@ -55,7 +56,7 @@ fn shape_normal(engine: &InferenceEngine, res: &InferenceResult) -> (DVec3, bool
     {
         return (f.plane.normal, true);
     }
-    (DVec3::Z, false)
+    (crate::axes::current().z, false)
 }
 
 // ===========================================================================
@@ -222,10 +223,12 @@ impl Tool for LineTool {
 
 /// Drawing frame of a rectangle: (normal, u, v).
 pub fn rect_frame(c1: DVec3, fixed_normal: Option<DVec3>, p: DVec3) -> (DVec3, DVec3, DVec3) {
+    // Work in drawing-axes coordinates (red / green / blue), then map back to world.
+    let ax = crate::axes::current();
     let n = match fixed_normal {
-        Some(n) => n.normalize_or(DVec3::Z),
+        Some(n) => ax.local_vec(n.normalize_or(ax.z)),
         None => {
-            let d = p - c1;
+            let d = ax.local_vec(p - c1);
             let horiz = DVec2::new(d.x, d.y).length();
             if d.z.abs() > 1e-6 && d.z.abs() > horiz * 0.02 {
                 // Vertical plane along the dominant horizontal axis.
@@ -235,11 +238,12 @@ pub fn rect_frame(c1: DVec3, fixed_normal: Option<DVec3>, p: DVec3) -> (DVec3, D
             }
         }
     };
-    let (u, v) = plane_axes(n);
+    let (u, v) = plane_axes(ax.world_vec(n));
+    let (u, v) = (ax.local_vec(u), ax.local_vec(v));
     // Prefer the vertical direction as v for vertical planes.
     let (u, v) = if n.z.abs() < 1e-9 && u.z.abs() > v.z.abs() { (v, u) } else { (u, v) };
     let v = if n.z.abs() < 1e-9 && v.z < 0.0 { -v } else { v };
-    (n, u, v)
+    (ax.world_vec(n), ax.world_vec(u), ax.world_vec(v))
 }
 
 pub const GOLDEN: f64 = std::f64::consts::GOLDEN_RATIO;
@@ -278,7 +282,7 @@ impl RectangleTool {
         // An arrow key pressed after the first corner locks the rectangle's plane normal
         // (not a line), so the second corner moves freely on that plane.
         let lock = self.c1.and_then(|_| self.engine.arrow_dir().map(|(d, _)| d));
-        let fallback = self.c1.map(|(c, n)| Plane::new(c, lock.or(n).unwrap_or(DVec3::Z)));
+        let fallback = self.c1.map(|(c, n)| Plane::new(c, lock.or(n).unwrap_or(crate::axes::current().z)));
         let constraint = match (self.c1, lock) {
             (Some((c, _)), Some(d)) => Some(Constraint::Plane(Plane::new(c, d))),
             _ => None,
@@ -542,10 +546,15 @@ impl CircleTool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, s: CircleSpec) {
-        let pts: Vec<DVec3> =
-            circle_points(s.c, s.n, s.start, s.r, s.segs).into_iter().map(|p| to_local(ctx.doc, p)).collect();
         let label = if self.polygon { "Polygon" } else { "Circle" };
-        if commit_mesh(ctx, label, |m| m.add_polyline(&pts, true, true)).is_some() {
+        let info = if self.polygon {
+            CurveInfo::polygon(s.c, s.n, s.start, s.r, s.segs)
+        } else {
+            CurveInfo::circle(s.c, s.n, s.start, s.r, s.segs)
+        };
+        if let Some(info) = info
+            && commit_curve(ctx, label, &info, false)
+        {
             self.last = Some(s);
         }
         self.center = None;
@@ -683,12 +692,13 @@ struct ArcSpec {
 
 /// Plane normal for an arc with chord a→b (no other hints).
 pub fn arc_default_normal(a: DVec3, b: DVec3) -> DVec3 {
-    let d = (b - a).normalize_or(DVec3::X);
-    if d.z.abs() < 1e-6 {
-        DVec3::Z
+    let ax = crate::axes::current();
+    let d = (b - a).normalize_or(ax.x);
+    if d.dot(ax.z).abs() < 1e-6 {
+        ax.z
     } else {
-        let n = d.cross(DVec3::Z);
-        if n.length_squared() > 1e-12 { n.normalize() } else { DVec3::Y }
+        let n = d.cross(ax.z);
+        if n.length_squared() > 1e-12 { n.normalize() } else { ax.y }
     }
 }
 
@@ -696,10 +706,14 @@ pub struct ArcTool {
     engine: InferenceEngine,
     segs: u32,
     a: Option<(DVec3, Option<DVec3>)>,
+    /// "Tangent at vertex" direction at the start point (edge / arc ending there).
+    tangent: Option<DVec3>,
     b: Option<DVec3>,
     cur: Option<InferenceResult>,
     spec: Option<ArcSpec>,
     half: bool,
+    /// The bulge snapped to the arc tangent to `tangent` (cyan).
+    tangent_snap: bool,
     clicker: Clicker,
     last: Option<ArcSpec>,
 }
@@ -710,13 +724,27 @@ impl Default for ArcTool {
             engine: InferenceEngine::default(),
             segs: 12,
             a: None,
+            tangent: None,
             b: None,
             cur: None,
             spec: None,
             half: false,
+            tangent_snap: false,
             clicker: Clicker::default(),
             last: None,
         }
+    }
+}
+
+/// Cyan used for tangent-arc previews.
+pub fn tangent_color() -> egui::Color32 {
+    InferenceKind::Tangent.color()
+}
+
+impl ArcSpec {
+    /// The arc as curve metadata (None for a zero bulge / chord).
+    fn info(&self) -> Option<CurveInfo> {
+        CurveInfo::arc_2pt(self.a, self.b, self.side, self.bulge, self.segs)
     }
 }
 
@@ -733,6 +761,15 @@ impl ArcTool {
         {
             return n;
         }
+        // Plane of the tangent at the start vertex and the chord.
+        if let Some(t) = self.tangent {
+            let n = t.cross(chord);
+            if n.length() > 1e-6 * chord.length() {
+                let n = n.normalize();
+                // Keep the sign of the default normal so `side` stays stable.
+                return if n.dot(arc_default_normal(a, b)) < 0.0 { -n } else { n };
+            }
+        }
         if r.is_geometry_snap() {
             let n = chord.cross(r.point - a);
             if n.length() > 1e-6 * chord.length_squared() {
@@ -742,17 +779,24 @@ impl ArcTool {
         arc_default_normal(a, b)
     }
 
+    /// The arc from the start point to `b` tangent to the start vertex's edge.
+    fn tangent_arc(&self, b: DVec3) -> Option<CurveInfo> {
+        let (a, _) = self.a?;
+        CurveInfo::arc_tangent(a, self.tangent?, b, self.segs)
+    }
+
     fn update(&mut self, ctx: &ToolContext) {
         let anchor = self.b.or(self.a.map(|a| a.0));
         let fallback = match (self.a, self.b) {
             (Some((a, _)), Some(b)) => Some(Plane::new(a, arc_default_normal(a, b))),
-            (Some((a, n)), None) => Some(Plane::new(a, n.unwrap_or(DVec3::Z))),
+            (Some((a, n)), None) => Some(Plane::new(a, n.unwrap_or_else(|| crate::axes::current().z))),
             _ => None,
         };
         let constraint = None::<Constraint>;
         let r = infer(&mut self.engine, ctx, anchor, constraint, fallback);
         self.spec = None;
         self.half = false;
+        self.tangent_snap = false;
         if let (Some((a, fnorm)), Some(b)) = (self.a, self.b) {
             let n = self.normal(a, b, fnorm, &r);
             let plane = Plane::new(a, n);
@@ -763,7 +807,16 @@ impl ArcTool {
             let mut h = (q - m).dot(side);
             let half = chord.length() * 0.5;
             let px = ctx.camera.pixel_size_at(q, ctx.viewport_d()) * 10.0;
-            if (h.abs() - half).abs() <= px {
+            let tan = self.tangent.and_then(|t| {
+                let (tb, ts) = tangent_bulge(a, b, t)?;
+                (ts.dot(n).abs() < 1e-6).then(|| tb * ts.dot(side).signum())
+            });
+            if let Some(ht) = tan
+                && (h - ht).abs() <= px
+            {
+                h = ht;
+                self.tangent_snap = true;
+            } else if (h.abs() - half).abs() <= px {
                 h = half * h.signum();
                 self.half = true;
             }
@@ -782,15 +835,20 @@ impl ArcTool {
             (None, _) => {
                 let (n, fixed) = shape_normal(&self.engine, &r);
                 self.a = Some((r.point, fixed.then_some(n)));
+                self.tangent =
+                    if r.kind == InferenceKind::Endpoint { tangent_at_point(ctx.doc, r.point) } else { None };
             }
             (Some((a, _)), None) => {
                 if a.distance(r.point) > TOL {
                     self.b = Some(r.point);
                     self.engine.arrow_lock = None;
+                    self.update(ctx);
                 }
             }
             (Some(_), Some(_)) => {
-                if let Some(s) = self.spec {
+                // A click with no bulge (e.g. the 2nd click of a double-click on the end point)
+                // does nothing; the double-click handler draws the tangent arc.
+                if let Some(s) = self.spec.filter(|s| s.bulge.abs() > TOL) {
                     self.commit(ctx, s);
                 }
             }
@@ -798,15 +856,21 @@ impl ArcTool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, s: ArcSpec) {
-        let pts: Vec<DVec3> =
-            arc_points(s.a, s.b, s.side, s.bulge, s.segs).into_iter().map(|p| to_local(ctx.doc, p)).collect();
-        let curve = s.bulge.abs() > TOL;
-        if commit_mesh(ctx, "Arc", |m| m.add_polyline(&pts, false, curve)).is_some() {
+        if let Some(info) = s.info()
+            && commit_curve(ctx, "Arc", &info, false)
+        {
             self.last = Some(s);
         }
+        self.reset();
+    }
+
+    fn reset(&mut self) {
         self.a = None;
         self.b = None;
+        self.tangent = None;
         self.spec = None;
+        self.half = false;
+        self.tangent_snap = false;
     }
 }
 
@@ -827,14 +891,23 @@ impl Tool for ArcTool {
             self.click(ctx);
         }
     }
+    fn on_double_click(&mut self, ctx: &mut ToolContext) {
+        // Double-click on the end point: the arc tangent to the edge at the start point.
+        // (A fast click on the start point may make egui count this as a triple click.)
+        let (Some((a, _)), Some(b)) = (self.a, self.b) else { return };
+        if ctx.pointer.click_count < 2 {
+            return;
+        }
+        let Some(t) = self.tangent else { return };
+        let Some((h, side)) = tangent_bulge(a, b, t) else { return };
+        self.commit(ctx, ArcSpec { a, b, side, bulge: h, segs: self.segs });
+    }
     fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
         if !pressed {
             return false;
         }
         if key == Key::Escape {
-            self.a = None;
-            self.b = None;
-            self.spec = None;
+            self.reset();
             self.engine.clear_locks();
             return true;
         }
@@ -845,6 +918,7 @@ impl Tool for ArcTool {
         r
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
+        let unit = ctx.doc.model.unit;
         if let Some(n) = parse_segments(input) {
             self.segs = n;
             if self.a.is_none()
@@ -858,30 +932,36 @@ impl Tool for ArcTool {
             self.update(ctx);
             return true;
         }
-        let Some(v) = parse_len(ctx.doc.model.unit, input) else { return false };
+        // Bulge from `500r` (radius) or a plain distance, keeping the side the arc bends to.
+        let bulge_of = |s: &ArcSpec| -> Option<f64> {
+            let sign = if s.bulge < 0.0 { -1.0 } else { 1.0 };
+            if let Some(r) = parse_radius(unit, input) {
+                return bulge_for_radius(s.a.distance(s.b), r).map(|h| h * sign);
+            }
+            parse_len(unit, input).filter(|v| v.abs() > TOL).map(|v| v.abs() * sign)
+        };
         match (self.a, self.b) {
             (Some((a, _)), None) => {
+                let Some(v) = parse_len(unit, input).filter(|v| v.abs() > TOL) else { return false };
                 let dir = self.cur.as_ref().map(|r| r.point - a).filter(|d| d.length() > 1e-9);
                 let Some(dir) = dir else { return false };
-                if v.abs() < TOL {
-                    return false;
-                }
                 self.b = Some(a + dir.normalize() * v);
                 self.update(ctx);
                 true
             }
             (Some(_), Some(_)) => {
                 let Some(s) = self.spec else { return false };
-                let sign = if s.bulge < 0.0 { -1.0 } else { 1.0 };
-                self.commit(ctx, ArcSpec { bulge: v * sign, ..s });
+                let Some(h) = bulge_of(&s) else { return false };
+                self.commit(ctx, ArcSpec { bulge: h, ..s });
                 true
             }
             (None, _) => {
                 let Some(s) = self.last else { return false };
+                let Some(h) = bulge_of(&s) else { return false };
                 if !undo_last(ctx) {
                     return false;
                 }
-                self.commit(ctx, ArcSpec { bulge: v * s.bulge.signum(), ..s });
+                self.commit(ctx, ArcSpec { bulge: h, ..s });
                 true
             }
         }
@@ -891,23 +971,37 @@ impl Tool for ArcTool {
     }
     fn status_text(&self) -> String {
         match (self.a, self.b) {
-            (None, _) => "Select the start point of the arc.".into(),
+            (None, _) => "Select the start point of the arc. Start at the end of an edge to draw tangent to it.".into(),
+            (Some(_), None) if self.tangent.is_some() => {
+                "Select the end point (double-click it for the cyan tangent arc) or type the chord length.".into()
+            }
             (Some(_), None) => "Select the end point or type the chord length.".into(),
-            _ => "Move to set the bulge and click, or type a bulge distance. Type `12s` for segments.".into(),
+            _ => "Move to set the bulge and click, or type a bulge (`500r` for a radius). Type `12s` for segments.".into(),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(s) = self.spec {
             if self.b.is_some() {
-                let pts = arc_points(s.a, s.b, s.side, s.bulge, s.segs);
-                polyline(out3d, &pts, false, PREVIEW, 2.0);
+                let color = if self.tangent_snap { tangent_color() } else { PREVIEW };
+                match s.info() {
+                    Some(info) => polyline(out3d, &info.points(), false, color, 2.0),
+                    None => line(out3d, s.a, s.b, color, 2.0),
+                }
                 dashed(out3d, s.a, s.b, egui::Color32::from_gray(90), 1.0);
                 let apex = (s.a + s.b) * 0.5 + s.side * s.bulge;
                 label(out2d, apex, fmt_len(&view.doc.model, s.bulge.abs()));
+                if self.tangent_snap {
+                    out2d.push(Marker2d::CursorTooltip { text: InferenceKind::Tangent.label().into() });
+                    return;
+                }
                 if self.half {
                     out2d.push(Marker2d::CursorTooltip { text: InferenceKind::HalfCircle.label().into() });
                     return;
                 }
+            } else if let Some(info) = self.tangent_arc(s.b) {
+                // Starting at an edge end: preview the tangent arc in cyan.
+                polyline(out3d, &info.points(), false, tangent_color(), 2.0);
+                line(out3d, s.a, s.b, egui::Color32::from_gray(120), 1.0);
             } else {
                 line(out3d, s.a, s.b, PREVIEW, 1.5);
             }

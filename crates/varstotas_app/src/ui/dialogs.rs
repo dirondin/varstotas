@@ -141,6 +141,55 @@ impl VarstotasApp {
             }
         }
 
+        if let Some(mut p) = self.text_prompt.clone() {
+            let mut choice: Option<bool> = None;
+            let resp = Modal::new(Id::new("text_prompt")).show(ctx, |ui| {
+                ui.set_width(380.0);
+                ui.heading(&p.title);
+                ui.add_space(4.0);
+                let mut out = egui::TextEdit::singleline(&mut p.value).desired_width(f32::INFINITY).show(ui);
+                if !p.focused {
+                    // Focus with the whole value selected, so typing replaces it.
+                    out.response.request_focus();
+                    let n = p.value.chars().count();
+                    out.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                        egui::text::CCursor::new(0),
+                        egui::text::CCursor::new(n),
+                    )));
+                    out.state.store(ui.ctx(), out.response.id);
+                    p.focused = true;
+                }
+                ui.label(RichText::new(&p.hint).small().color(theme::TEXT_DIM));
+                ui.add_space(10.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Button::new(RichText::new("OK").strong())).clicked() {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(false);
+                    }
+                });
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    choice = Some(true);
+                }
+            });
+            if resp.should_close() && choice.is_none() {
+                choice = Some(false);
+            }
+            match choice {
+                Some(true) => {
+                    if self.apply_prompt(&p) {
+                        self.text_prompt = None;
+                    } else {
+                        self.flash_error("Invalid value");
+                        self.text_prompt = Some(p);
+                    }
+                }
+                Some(false) => self.text_prompt = None,
+                None => self.text_prompt = Some(p),
+            }
+        }
+
         if let Some(mut d) = self.export_dialog.clone() {
             let vp = self.viewport.size();
             let ppp = ctx.pixels_per_point();

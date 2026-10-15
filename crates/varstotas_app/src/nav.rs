@@ -212,11 +212,18 @@ impl CameraAnimation {
     }
 }
 
-/// Bounds used for zoom extents: model geometry plus guide points. Guide lines are infinite and
+/// Bounds used for zoom extents: model geometry plus guide points (all contexts) and dimensions. Guide lines are infinite and
 /// therefore deliberately ignored.
 pub fn extents_bounds(model: &Model) -> Option<Aabb> {
     let geom = guarded(|| model.bounds()).ok().flatten();
-    let pts = Aabb::from_points(model.guide_points.values().copied().filter(|p| p.is_finite() && !model.guides_hidden));
+    // Guide points of every context (nested groups too) and dimensions.
+    let mut extra: Vec<DVec3> = if model.guides_hidden {
+        Vec::new()
+    } else {
+        guarded(|| model.guide_points_world()).unwrap_or_default()
+    };
+    extra.extend(guarded(|| model.dimension_points_world()).unwrap_or_default());
+    let pts = Aabb::from_points(extra.into_iter().filter(|p| p.is_finite()));
     match (geom, pts) {
         (Some(a), Some(b)) => Some(a.union(&b)),
         (a, b) => a.or(b),

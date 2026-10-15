@@ -12,7 +12,11 @@ pub enum Icon {
     Paint,
     Line,
     Arc,
+    ArcCenter,
+    Arc3,
+    Pie,
     Rectangle,
+    RotatedRectangle,
     Circle,
     Polygon,
     PushPull,
@@ -23,6 +27,8 @@ pub enum Icon {
     FollowMe,
     Tape,
     Protractor,
+    Axes,
+    Dimension,
     Orbit,
     Pan,
     Zoom,
@@ -216,6 +222,50 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dot((3.0, 17.0), 2.0, RED);
             pen.dot((21.0, 17.0), 2.0, RED);
             pen.dot((12.0, 8.0), 1.6, BLUE);
+        }
+        Icon::ArcCenter => {
+            pen.arc((8.0, 16.0), 11.0, 270.0, 360.0, pen.stroke());
+            pen.line_c(&[(8.0, 16.0), (19.0, 16.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
+            pen.line_c(&[(8.0, 16.0), (8.0, 5.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
+            pen.dot((8.0, 16.0), 1.8, BLUE);
+            pen.dot((19.0, 16.0), 2.0, RED);
+            pen.dot((8.0, 5.0), 2.0, RED);
+        }
+        Icon::Arc3 => {
+            pen.arc((12.0, 17.0), 9.0, 180.0, 360.0, pen.stroke());
+            pen.dot((3.0, 17.0), 2.0, RED);
+            pen.dot((18.4, 10.6), 2.0, RED);
+            pen.dot((21.0, 17.0), 2.0, RED);
+        }
+        Icon::Pie => {
+            let mut pts = vec![pen.p(6.0, 18.0)];
+            pts.extend(pen.arc_pts((6.0, 18.0), 14.0, 270.0, 360.0));
+            pen.painter.add(Shape::convex_polygon(pts, BLUE_SOFT, pen.stroke()));
+            pen.dot((6.0, 18.0), 1.8, RED);
+        }
+        Icon::RotatedRectangle => {
+            pen.poly(&[(3.0, 13.0), (12.0, 4.0), (21.0, 13.0), (12.0, 22.0)], BLUE_SOFT);
+            for c in [(3.0, 13.0), (12.0, 4.0), (21.0, 13.0)] {
+                pen.dot(c, 2.0, RED);
+            }
+        }
+        Icon::Axes => {
+            let o = (8.0, 15.0);
+            pen.line_c(&[o, (21.0, 15.0)], Stroke::new(1.8 * pen.s, RED));
+            pen.line_c(&[o, (16.0, 8.0)], Stroke::new(1.8 * pen.s, GREEN));
+            pen.line_c(&[o, (8.0, 3.0)], Stroke::new(1.8 * pen.s, BLUE));
+            pen.line_c(&[o, (3.0, 20.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
+            pen.dot(o, 2.0, YELLOW);
+        }
+        Icon::Dimension => {
+            let thin = Stroke::new(1.0 * pen.s, SHADE_DARK);
+            pen.line_c(&[(3.0, 20.0), (3.0, 9.0)], thin);
+            pen.line_c(&[(21.0, 20.0), (21.0, 9.0)], thin);
+            pen.line_c(&[(4.0, 12.0), (20.0, 12.0)], pen.thin());
+            pen.head((3.5, 12.0), (-1.0, 0.0), 3.0, pen.ink);
+            pen.head((20.5, 12.0), (1.0, 0.0), 3.0, pen.ink);
+            pen.painter.rect_filled(Rect::from_min_max(pen.p(8.0, 4.5), pen.p(16.0, 9.5)), 1.0 * pen.s, YELLOW);
+            pen.line_c(&[(3.0, 20.0), (21.0, 20.0)], pen.stroke());
         }
         Icon::Polygon => {
             let pts: Vec<(f32, f32)> = (0..6)

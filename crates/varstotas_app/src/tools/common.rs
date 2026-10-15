@@ -8,7 +8,7 @@ use crate::overlay::Marker2d;
 use egui::{Color32, Pos2};
 use varstotas_kernel::glam::{DMat4, DVec2, DVec3};
 use varstotas_kernel::{
-    ContextPath, EdgeId, EntityRef, FaceId, GuideGeom, GuideLine, GuideRef, InstanceId, LengthUnit, Mesh, Model, Plane, units,
+    ContextPath, CurveInfo, EdgeId, EntityRef, FaceId, GuideGeom, GuideLine, GuideRef, InstanceId, LengthUnit, Mesh, Model, Plane, units,
 };
 use varstotas_render::{Overlay3d, OverlayPolygon};
 use std::collections::HashSet;
@@ -102,6 +102,30 @@ pub fn local_scale_along(doc: &Document, world_dir: DVec3) -> f64 {
 pub fn commit_mesh<R>(ctx: &mut ToolContext, label: &str, f: impl FnOnce(&mut Mesh) -> R) -> Option<R> {
     let path = ctx.doc.active_path.clone();
     ctx.doc.commit(label, |m| m.mesh_at_mut(&path).map(f)).flatten()
+}
+
+/// Add a curve given in world coordinates to the active context (one undo step).
+/// `pie` also adds the two radii closing it into a face.
+pub fn commit_curve(ctx: &mut ToolContext, label: &str, info: &CurveInfo, pie: bool) -> bool {
+    let Some(local) = info.transformed(&context_xf(ctx.doc).inverse()) else { return false };
+    commit_mesh(ctx, label, |m| if pie { m.add_pie(&local) } else { m.add_curve(&local) })
+        .is_some_and(|es| !es.is_empty())
+}
+
+/// "Tangent at vertex" direction (world, unit) at the active-context vertex at world point `p`:
+/// leaving an arc ending there, or continuing the single edge that ends there.
+pub fn tangent_at_point(doc: &Document, p: DVec3) -> Option<DVec3> {
+    guarded(|| {
+        let mesh = doc.active_mesh()?;
+        let xf = context_xf(doc);
+        let lp = xf.inverse().transform_point3(p);
+        let tol = 1e-3_f64.max(lp.length() * 1e-9);
+        let (v, _) = mesh.vertices.iter().find(|(_, v)| v.pos.distance(lp) <= tol)?;
+        let t = mesh.tangent_at_vertex(v)?;
+        xf.transform_vector3(t).try_normalize()
+    })
+    .ok()
+    .flatten()
 }
 
 /// Run a fallible op on the active mesh as one undo step (restored on error).
@@ -384,10 +408,11 @@ pub fn fmt_len(model: &Model, mm: f64) -> String {
 
 /// In-plane basis (u, v) with u preferring the red axis (then green).
 pub fn plane_axes(n: DVec3) -> (DVec3, DVec3) {
-    let n = n.normalize_or(DVec3::Z);
-    let mut u = DVec3::X - n * DVec3::X.dot(n);
+    let ax = crate::axes::current();
+    let n = n.normalize_or(ax.z);
+    let mut u = ax.x - n * ax.x.dot(n);
     if u.length_squared() < 1e-6 {
-        u = DVec3::Y - n * DVec3::Y.dot(n);
+        u = ax.y - n * ax.y.dot(n);
     }
     let u = u.normalize();
     (u, n.cross(u))
@@ -456,6 +481,54 @@ pub fn arc_points(a: DVec3, b: DVec3, side: DVec3, bulge: f64, segs: u32) -> Vec
             center + (u * t.cos() + v * t.sin()) * r
         })
         .collect()
+}
+
+/// Arc around `c` in the plane with normal `n`: starts at `c + start_dir * r` and sweeps
+/// `sweep` radians (positive = counter-clockwise about `n`). Returns `segs + 1` points.
+pub fn arc_points_center(c: DVec3, n: DVec3, start_dir: DVec3, r: f64, sweep: f64, segs: u32) -> Vec<DVec3> {
+    let segs = segs.max(1);
+    let n = n.normalize_or(DVec3::Z);
+    let u = (start_dir - n * start_dir.dot(n)).normalize_or(plane_axes(n).0);
+    let v = n.cross(u);
+    (0..=segs)
+        .map(|i| {
+            let a = sweep * i as f64 / segs as f64;
+            c + (u * a.cos() + v * a.sin()) * r
+        })
+        .collect()
+}
+
+/// Sagitta (bulge) of the minor arc with chord length `chord` and radius `r`
+/// (None when the radius is shorter than half the chord).
+pub fn bulge_for_radius(chord: f64, r: f64) -> Option<f64> {
+    let h2 = r * r - chord * chord / 4.0;
+    (h2 >= -1e-9 && r > 0.0).then(|| r - h2.max(0.0).sqrt())
+}
+
+/// Bulge of the arc over chord `a → b` that leaves `a` along the unit tangent `t`, and the
+/// in-plane side direction it bulges to. None when `t` is parallel to the chord.
+pub fn tangent_bulge(a: DVec3, b: DVec3, t: DVec3) -> Option<(f64, DVec3)> {
+    let chord = b - a;
+    let len = chord.length();
+    if len < 1e-9 {
+        return None;
+    }
+    let cd = chord / len;
+    let perp = t - cd * t.dot(cd);
+    if perp.length() < 1e-6 {
+        return None;
+    }
+    let side = perp.normalize();
+    // Angle between the tangent and the chord; the sweep is twice that.
+    let theta = t.dot(cd).clamp(-1.0, 1.0).acos();
+    Some(((len * 0.5) * (theta * 0.5).tan(), side))
+}
+
+/// `500r` → 500 (radius, in model units).
+pub fn parse_radius(unit: LengthUnit, s: &str) -> Option<f64> {
+    let t = s.trim();
+    let t = t.strip_suffix('r').or_else(|| t.strip_suffix('R'))?;
+    parse_len(unit, t).filter(|r| *r > 0.0)
 }
 
 /// Rotation by `deg` degrees about the axis through `center` with direction `axis`.
@@ -790,9 +863,174 @@ pub fn draw_guides(view: &OverlayView, out3d: &mut Overlay3d) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Dimensions
+// ---------------------------------------------------------------------------
+
+/// Colour of selected dimensions.
+pub const DIM_SELECTED: [f32; 4] = [0.0, 0.31, 1.0, 1.0];
+
+/// Look of a dimension (selected ones blue).
+pub fn dim_style(selected: bool) -> varstotas_render::DimensionStyle {
+    let mut s = varstotas_render::DimensionStyle::default();
+    if selected {
+        s.color = DIM_SELECTED;
+        s.text_color = DIM_SELECTED;
+        s.width_px = 2.0;
+    }
+    s
+}
+
+/// Which part of a dimension is under the cursor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DimPart {
+    Text,
+    Line,
+}
+
+/// Approximate screen box of a dimension's text: centre and half extents along / across the
+/// line (the renderer puts it centred just above the dimension line).
+fn dim_text_box(cam: &varstotas_render::Camera, vp: DVec2, g: &varstotas_kernel::DimGeom, label: &str) -> Option<(DVec2, DVec2, f64)> {
+    let (p, q) = g.line();
+    let (sp, sq) = (cam.world_to_screen(p, vp)?, cam.world_to_screen(q, vp)?);
+    let mut along = (sq - sp).normalize_or(DVec2::X);
+    if along.x < 0.0 {
+        along = -along;
+    }
+    // "Up" on screen relative to the (readable) text.
+    let mut up = DVec2::new(along.y, -along.x);
+    if up.y > 0.0 {
+        up = -up;
+    }
+    let half_w = 3.6 * label.chars().count() as f64 + 4.0;
+    let centre = (sp + sq) * 0.5 + up * 10.0;
+    Some((centre, along, half_w))
+}
+
+/// Dimension of the active context under `pos`: its text (generous box) or its dimension /
+/// extension lines (edge pick radius). Nearest wins; text first.
+pub fn pick_dim_at(
+    doc: &Document,
+    cam: &varstotas_render::Camera,
+    viewport: egui::Vec2,
+    pos: Pos2,
+) -> Option<(varstotas_kernel::DimId, DimPart)> {
+    let model = &doc.model;
+    let dims = model.dimensions_in(&doc.active_path);
+    if dims.is_empty() {
+        return None;
+    }
+    let vp = DVec2::new(viewport.x as f64, viewport.y as f64);
+    let c = DVec2::new(pos.x as f64, pos.y as f64);
+    let mut best: Option<(f64, varstotas_kernel::DimId, DimPart)> = None;
+    for (id, g) in &dims {
+        let label = g.label(model.unit);
+        if let Some((centre, along, half_w)) = dim_text_box(cam, vp, g, &label) {
+            let d = c - centre;
+            let (x, y) = (d.dot(along).abs(), d.perp_dot(along).abs());
+            if x <= half_w && y <= 10.0 {
+                let dist = d.length() * 0.5;
+                if best.is_none_or(|b| dist < b.0) {
+                    best = Some((dist, *id, DimPart::Text));
+                }
+            }
+        }
+        let (p, q) = g.line();
+        for (a, b) in [(p, q), (g.a, p), (g.b, q)] {
+            let (Some(sa), Some(sb)) = (cam.world_to_screen(a, vp), cam.world_to_screen(b, vp)) else { continue };
+            let dist = inference::geo::dist_point_seg2(c, sa, sb).0;
+            if dist <= inference::EDGE_PICK_PX && best.is_none_or(|bb| dist < bb.0) {
+                best = Some((dist, *id, DimPart::Line));
+            }
+        }
+    }
+    best.map(|b| (b.1, b.2))
+}
+
+/// [`pick_dim_at`] for the tool pointer.
+pub fn pick_dim(ctx: &ToolContext) -> Option<(varstotas_kernel::DimId, DimPart)> {
+    pick_dim_at(ctx.doc, ctx.camera, ctx.viewport, ctx.pointer.pos)
+}
+
+/// Draw every dimension of the model (inside groups too); selected ones of the active
+/// context in blue. 3D overlay, so they also appear in PNG exports. Called by the app.
+pub fn draw_dims(view: &OverlayView, out3d: &mut Overlay3d) {
+    let model = &view.doc.model;
+    let path = &view.doc.active_path;
+    for (p, id, g) in model.all_dimensions_world() {
+        let selected = &p == path && view.doc.dim_sel.contains(&id);
+        out3d.add_linear_dimension(g.a, g.b, g.offset, g.label(model.unit), &dim_style(selected));
+    }
+}
+
+/// Draw dimension `id` of the active context with world transform `t` applied (Move preview).
+/// World geometry of dimension `id` (context `path`) after the world transform `t` when the
+/// entities `moved` are transformed with it: free anchors and anchors on moved vertices follow
+/// `t`; anchors on other vertices stay, and then the dimension line goes through where `t`
+/// takes the old one (moving a dimension alone drags its offset).
+pub fn dim_after_transform(
+    model: &varstotas_kernel::Model,
+    path: &[varstotas_kernel::InstanceId],
+    id: varstotas_kernel::DimId,
+    moved: &[EntityRef],
+    t: &DMat4,
+) -> Option<varstotas_kernel::DimGeom> {
+    let g = model.dimension_in(path, id)?;
+    let mesh = model.mesh_at(path)?;
+    let d = mesh.dims.get(id)?;
+    let verts = mesh.vertices_of(moved);
+    let follows = |a: &varstotas_kernel::DimAnchor| match a.vertex {
+        Some(v) if mesh.vertices.contains_key(v) => verts.contains(&v),
+        _ => true,
+    };
+    let a = if follows(&d.a) { t.transform_point3(g.a) } else { g.a };
+    let b = if follows(&d.b) { t.transform_point3(g.b) } else { g.b };
+    let offset = if follows(&d.a) && follows(&d.b) {
+        t.transform_vector3(g.offset)
+    } else {
+        let target = t.transform_point3((g.a + g.b) * 0.5 + g.offset);
+        let dir = (b - a).normalize_or_zero();
+        let v = target - (a + b) * 0.5;
+        v - dir * v.dot(dir)
+    };
+    Some(varstotas_kernel::DimGeom { a, b, offset, text: g.text })
+}
+
+pub fn draw_dim_moved(
+    view: &OverlayView,
+    id: varstotas_kernel::DimId,
+    moved: &[EntityRef],
+    t: &DMat4,
+    out3d: &mut Overlay3d,
+) {
+    let model = &view.doc.model;
+    if let Some(g) = dim_after_transform(model, &view.doc.active_path, id, moved, t) {
+        let text = varstotas_kernel::dims::dim_label(g.a.distance(g.b), g.text.as_deref(), model.unit);
+        out3d.add_linear_dimension(g.a, g.b, g.offset, text, &dim_style(true));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moving_an_anchored_dimension_drags_its_offset() {
+        let mut m = varstotas_kernel::Model::new();
+        let (a, b) = (DVec3::ZERO, DVec3::new(1000.0, 0.0, 0.0));
+        let es = m.root_mesh_mut().add_line(a, b);
+        let id = m.add_dimension_in(&[], a, b, DVec3::new(0.0, -100.0, 0.0)).unwrap();
+        let t = DMat4::from_translation(DVec3::new(50.0, -300.0, 0.0));
+        // Dimension alone: anchored ends stay, the line follows the move across it.
+        let g = dim_after_transform(&m, &[], id, &[], &t).unwrap();
+        assert!(g.a.distance(a) < 1e-9 && g.b.distance(b) < 1e-9);
+        assert!((g.offset - DVec3::new(0.0, -400.0, 0.0)).length() < 1e-9);
+        // With the edge: everything moves rigidly.
+        let ents: Vec<EntityRef> = es.into_iter().map(EntityRef::Edge).collect();
+        let g = dim_after_transform(&m, &[], id, &ents, &t).unwrap();
+        assert!(g.a.distance(t.transform_point3(a)) < 1e-9);
+        assert!((g.offset - DVec3::new(0.0, -100.0, 0.0)).length() < 1e-9);
+    }
 
     #[test]
     fn angle_format() {

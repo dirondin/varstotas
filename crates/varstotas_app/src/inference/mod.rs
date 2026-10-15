@@ -56,6 +56,8 @@ pub enum InferenceKind {
     Square,
     GoldenSection,
     HalfCircle,
+    /// Arc leaves the start vertex tangent to the edge / arc ending there (cyan).
+    Tangent,
     /// No snap: point on the ground plane / at a default depth.
     Free,
 }
@@ -82,6 +84,7 @@ impl InferenceKind {
             Self::Square => "Square",
             Self::GoldenSection => "Golden Section",
             Self::HalfCircle => "Half Circle",
+            Self::Tangent => "Tangent at Vertex",
             Self::Free => "",
         }
     }
@@ -98,6 +101,7 @@ impl InferenceKind {
             Self::ParallelToEdge | Self::PerpendicularToEdge => Color32::from_rgb(0xFF, 0x00, 0xFF),
             Self::FromPoint | Self::GuidePoint | Self::OnGuide => Color32::from_rgb(0x30, 0x30, 0x30),
             Self::Square | Self::GoldenSection | Self::HalfCircle => Color32::from_rgb(0xFF, 0x00, 0xFF),
+            Self::Tangent => Color32::from_rgb(0x00, 0xC8, 0xD8),
             Self::Free => Color32::BLACK,
         }
     }
@@ -142,7 +146,7 @@ impl InferenceKind {
 
 /// Axis kind for a world direction (if aligned with X/Y/Z within ~0.5°).
 pub fn axis_kind_of(d: DVec3) -> Option<InferenceKind> {
-    let d = d.normalize_or_zero();
+    let d = crate::axes::current().local_vec(d.normalize_or_zero());
     if d.x.abs() > 0.99996 {
         Some(InferenceKind::OnRedAxis)
     } else if d.y.abs() > 0.99996 {
@@ -322,9 +326,9 @@ impl InferenceEngine {
     /// The locked arrow direction (unit) and its colour kind.
     pub fn arrow_dir(&self) -> Option<(DVec3, InferenceKind)> {
         match self.arrow_lock? {
-            ArrowLock::Red => Some((DVec3::X, InferenceKind::OnRedAxis)),
-            ArrowLock::Green => Some((DVec3::Y, InferenceKind::OnGreenAxis)),
-            ArrowLock::Blue => Some((DVec3::Z, InferenceKind::OnBlueAxis)),
+            ArrowLock::Red => Some((crate::axes::current().x, InferenceKind::OnRedAxis)),
+            ArrowLock::Green => Some((crate::axes::current().y, InferenceKind::OnGreenAxis)),
+            ArrowLock::Blue => Some((crate::axes::current().z, InferenceKind::OnBlueAxis)),
             ArrowLock::Edge => {
                 let (a, b) = *self.recent_edges.last()?;
                 let d = (b - a).normalize_or_zero();
@@ -612,10 +616,11 @@ impl InferenceEngine {
 
         // Directions from the anchor.
         if let Some(anchor) = q.anchor {
+            let ax = crate::axes::current();
             let mut dirs: Vec<DirCand> = vec![
-                (DVec3::X, InferenceKind::OnRedAxis, None),
-                (DVec3::Y, InferenceKind::OnGreenAxis, None),
-                (DVec3::Z, InferenceKind::OnBlueAxis, None),
+                (ax.x, InferenceKind::OnRedAxis, None),
+                (ax.y, InferenceKind::OnGreenAxis, None),
+                (ax.z, InferenceKind::OnBlueAxis, None),
             ];
             for seg in self.recent_edges.iter().rev() {
                 let d = (seg.1 - seg.0).normalize_or_zero();
@@ -630,7 +635,7 @@ impl InferenceEngine {
                     continue;
                 }
                 // Perpendicular within the plane through the edge whose normal is the face/up.
-                let n = face.as_ref().map(|f| f.plane.normal).filter(|n| n.dot(d).abs() < 1e-6).unwrap_or(DVec3::Z);
+                let n = face.as_ref().map(|f| f.plane.normal).filter(|n| n.dot(d).abs() < 1e-6).unwrap_or(ax.z);
                 let p = d.cross(n).normalize_or_zero();
                 if p != DVec3::ZERO && axis_kind_of(p).is_none() {
                     dirs.push((p, InferenceKind::PerpendicularToEdge, Some(*seg)));
@@ -688,11 +693,8 @@ impl InferenceEngine {
             if q.anchor.is_some_and(|a| a.distance_squared(*fp) < 1e-6) {
                 continue;
             }
-            for (d, kind) in [
-                (DVec3::X, InferenceKind::OnRedAxis),
-                (DVec3::Y, InferenceKind::OnGreenAxis),
-                (DVec3::Z, InferenceKind::OnBlueAxis),
-            ] {
+            let ax = crate::axes::current();
+            for (d, kind) in [(ax.x, InferenceKind::OnRedAxis), (ax.y, InferenceKind::OnGreenAxis), (ax.z, InferenceKind::OnBlueAxis)] {
                 if end_on(cam, vp, *fp, d) {
                     continue;
                 }
@@ -719,7 +721,8 @@ impl InferenceEngine {
         }
 
         // Free point on the fallback plane.
-        let plane = q.fallback_plane.unwrap_or_else(|| Plane::new(DVec3::new(0.0, 0.0, q.anchor.map_or(0.0, |a| a.z)), DVec3::Z));
+        let ax = crate::axes::current();
+        let plane = q.fallback_plane.unwrap_or_else(|| Plane::new(q.anchor.unwrap_or(ax.origin), ax.z));
         finish(InferenceResult::free(free_point(q, &ray, plane)))
     }
 }
