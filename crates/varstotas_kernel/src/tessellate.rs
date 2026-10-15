@@ -4,7 +4,7 @@ use crate::geom::Projector;
 use crate::mesh::Mesh;
 use crate::model::{ContextPath, Model};
 use crate::triangulate::triangulate;
-use crate::{DefId, EdgeId, EntityRef, FaceId, MaterialId};
+use crate::{DefId, EdgeId, EntityRef, FaceId, MaterialId, VertexId};
 use glam::{DMat3, DMat4, DVec2, DVec3};
 
 /// Which entity a tessellated primitive came from.
@@ -28,6 +28,9 @@ pub struct TessFace {
     /// Planar texture coordinates in mm, one per position (from the face's local coordinates,
     /// so textures move with their group). Divide by the material's tile size for UVs.
     pub uv: Vec<DVec2>,
+    /// Smoothed world normals, one per position, when the face borders smooth edges (empty =
+    /// flat, use `normal`).
+    pub normals: Vec<DVec3>,
 }
 
 #[derive(Clone, Debug)]
@@ -64,15 +67,66 @@ pub fn triangulate_face(mesh: &Mesh, f: FaceId) -> Vec<[DVec3; 3]> {
     triangulate(&o2, &hr).into_iter().map(|t| [all[t[0]], all[t[1]], all[t[2]]]).collect()
 }
 
-/// World triangles of face `f` under transform `m` (winding fixed for mirroring transforms)
-/// and, with `with_uv`, their planar texture coordinates in mm (see [`TessFace::uv`]).
-pub fn face_world_triangles(mesh: &Mesh, f: FaceId, m: &DMat4, with_uv: bool) -> (Vec<DVec3>, Vec<DVec2>) {
+/// Smoothed corner normals (local) of face `f`, keyed by vertex position: at each vertex, the
+/// average normal of the faces reached around it by crossing smooth edges (the classic
+/// "Smooth normals"). `None` when no edge of the face is smooth (flat shading).
+pub fn face_smooth_normals(mesh: &Mesh, f: FaceId) -> Option<Vec<(DVec3, DVec3)>> {
+    let face = mesh.faces.get(f)?;
+    if !mesh.face_edges(f).iter().any(|e| mesh.edges.get(*e).is_some_and(|ed| ed.smooth)) {
+        return None;
+    }
+    // Neighbours of `v` in the loops of face `g` (the two face edges at `v`).
+    let around = |g: FaceId, v: VertexId| -> Vec<VertexId> {
+        let Some(gf) = mesh.faces.get(g) else { return Vec::new() };
+        let mut out = Vec::new();
+        for lp in std::iter::once(&gf.outer).chain(gf.holes.iter()) {
+            if let Some(i) = lp.iter().position(|x| *x == v) {
+                out.push(lp[(i + 1) % lp.len()]);
+                out.push(lp[(i + lp.len() - 1) % lp.len()]);
+            }
+        }
+        out
+    };
+    let mut out = Vec::new();
+    for &v in face.outer.iter().chain(face.holes.iter().flatten()) {
+        let mut seen = vec![f];
+        let mut queue = vec![f];
+        let mut sum = DVec3::ZERO;
+        while let Some(g) = queue.pop() {
+            let Some(gf) = mesh.faces.get(g) else { continue };
+            // Faces wound the other way still smooth together.
+            sum += if gf.normal.dot(face.normal) < 0.0 { -gf.normal } else { gf.normal };
+            for w in around(g, v) {
+                let Some(e) = mesh.edge_between(v, w) else { continue };
+                if !mesh.edges[e].smooth {
+                    continue;
+                }
+                for h in mesh.edge_faces(e) {
+                    if !seen.contains(&h) && seen.len() < 64 {
+                        seen.push(h);
+                        queue.push(h);
+                    }
+                }
+            }
+        }
+        out.push((mesh.vertices[v].pos, sum.normalize_or(face.normal)));
+    }
+    Some(out)
+}
+
+/// World triangles of face `f` under transform `m` (winding fixed for mirroring transforms),
+/// with `with_uv` their planar texture coordinates in mm (see [`TessFace::uv`]), and smoothed
+/// world normals per position when the face borders smooth edges (else empty).
+pub fn face_world_triangles(mesh: &Mesh, f: FaceId, m: &DMat4, with_uv: bool) -> (Vec<DVec3>, Vec<DVec2>, Vec<DVec3>) {
     let Some(face) = mesh.faces.get(f) else { return Default::default() };
     let mirror = m.determinant() < 0.0;
     let tris = triangulate_face(mesh, f);
     let mut positions = Vec::with_capacity(tris.len() * 3);
     let mut uv = Vec::with_capacity(if with_uv { tris.len() * 3 } else { 0 });
     let tex = |p: DVec3| crate::texture::face_uv_mm(p, face.normal, face.uv.as_ref());
+    let smooth = face_smooth_normals(mesh, f);
+    let nm = DMat3::from_mat4(*m).inverse().transpose();
+    let mut normals = Vec::with_capacity(if smooth.is_some() { tris.len() * 3 } else { 0 });
     for t in tris {
         let (a, b, c) = (m.transform_point3(t[0]), m.transform_point3(t[1]), m.transform_point3(t[2]));
         let order = if mirror { [0, 2, 1] } else { [0, 1, 2] };
@@ -80,8 +134,14 @@ pub fn face_world_triangles(mesh: &Mesh, f: FaceId, m: &DMat4, with_uv: bool) ->
         if with_uv {
             uv.extend(order.map(|k| tex(t[k])));
         }
+        if let Some(sm) = &smooth {
+            normals.extend(order.map(|k| {
+                let n = sm.iter().find(|(p, _)| *p == t[k]).map_or(face.normal, |(_, n)| *n);
+                (nm * n).normalize_or_zero()
+            }));
+        }
     }
-    (positions, uv)
+    (positions, uv, normals)
 }
 
 /// Flatten the whole model (respecting hidden flags and tag visibility) to world-space data.
@@ -110,7 +170,7 @@ fn rec(
         if face.hidden || !model.tag_visible(face.tag) {
             continue;
         }
-        let (positions, uv) = face_world_triangles(mesh, fid, &m, true);
+        let (positions, uv, normals) = face_world_triangles(mesh, fid, &m, true);
         out.faces.push(TessFace {
             owner_path: path.clone(),
             face: Some(fid),
@@ -120,6 +180,7 @@ fn rec(
             back: face.back,
             inherited,
             uv,
+            normals,
         });
     }
     for (eid, ed) in &mesh.edges {

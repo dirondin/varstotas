@@ -31,6 +31,22 @@ pub struct TrayState {
     tex_free_aspect: bool,
     /// Material thumbnails by texture bytes pointer.
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
+    pub soften: SoftenSettings,
+}
+
+/// Soften/Smooth Edges panel settings.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SoftenSettings {
+    /// Edges folding by at most this many degrees are softened.
+    pub angle: f64,
+    pub smooth: bool,
+    pub coplanar: bool,
+}
+
+impl Default for SoftenSettings {
+    fn default() -> Self {
+        Self { angle: 20.0, smooth: true, coplanar: false }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -174,8 +190,45 @@ impl VarstotasApp {
             card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));
             card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui));
             card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui));
+            card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui));
             card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui));
         });
+    }
+
+    /// Edges the Soften Edges panel acts on: selected edges plus the edges of selected faces.
+    pub(crate) fn soften_targets(&self) -> Vec<varstotas_kernel::EdgeId> {
+        let Some(mesh) = self.doc.active_mesh() else { return Vec::new() };
+        let mut out = Vec::new();
+        for e in &self.doc.selection {
+            match *e {
+                EntityRef::Edge(id) if mesh.edges.contains_key(id) => out.push(id),
+                EntityRef::Face(f) => out.extend(mesh.face_edges(f)),
+                _ => {}
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    fn soften_panel(&mut self, ui: &mut Ui) {
+        let n = self.soften_targets().len();
+        let st = &mut self.tray.soften;
+        ui.label("Allow normals between");
+        let resp = ui.add_enabled(n > 0, egui::Slider::new(&mut st.angle, 0.0..=180.0).suffix("°").fixed_decimals(0));
+        let smooth = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.smooth, "Smooth normals"));
+        let coplanar = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.coplanar, "Soften coplanar"));
+        if n == 0 {
+            ui.label(RichText::new("Select edges or faces").color(theme::TEXT_DIM));
+        } else {
+            ui.label(RichText::new(format!("{n} edges")).color(theme::TEXT_DIM));
+        }
+        // One undo step per slider drag (applied on release), clicks apply at once.
+        let slider_done = resp.drag_stopped() || (resp.changed() && !resp.dragged());
+        if n > 0 && (slider_done || smooth.changed() || coplanar.changed()) {
+            let s = *st;
+            self.actions.push(Action::SoftenEdges(s));
+        }
     }
 
     // ---- Entity Info -------------------------------------------------------
@@ -253,7 +306,7 @@ impl VarstotasApp {
         let mut set_tag: Option<Option<TagId>> = None;
         let mut rename: Option<(InstanceId, String)> = None;
         let mut set_unit: Option<LengthUnit> = None;
-        let mut toggle_edge_soft: Option<bool> = None;
+        let mut toggle_edge_soft: Option<(bool, bool)> = None;
 
         let r = guarded(|| {
             let model = &self.doc.model;
@@ -330,7 +383,13 @@ impl VarstotasApp {
                         ui.label("Soft");
                         let mut soft = e.soft;
                         if ui.checkbox(&mut soft, "").changed() {
-                            toggle_edge_soft = Some(soft);
+                            toggle_edge_soft = Some((soft, soft));
+                        }
+                        ui.end_row();
+                        ui.label("Smooth");
+                        let mut smooth = e.smooth;
+                        if ui.checkbox(&mut smooth, "").changed() {
+                            toggle_edge_soft = Some((e.soft, smooth));
                         }
                         ui.end_row();
                         ui.label("Tag");
@@ -432,7 +491,7 @@ impl VarstotasApp {
                 }
             });
         }
-        if let Some(soft) = toggle_edge_soft {
+        if let Some((soft, smooth)) = toggle_edge_soft {
             let p = path.clone();
             let sel2 = sel.clone();
             self.doc.commit(if soft { "Soften Edge" } else { "Unsoften Edge" }, |m| {
@@ -441,7 +500,7 @@ impl VarstotasApp {
                         if let EntityRef::Edge(id) = e
                             && let Some(e) = mesh.edges.get_mut(*id) {
                                 e.soft = soft;
-                                e.smooth = soft;
+                                e.smooth = smooth;
                             }
                     }
                 }

@@ -608,3 +608,55 @@ fn custom_axes_round_trip() {
     assert!(model.axes.is_none());
     assert!(!io::to_json(&model).unwrap().contains("\"axes\""));
 }
+
+#[test]
+fn pulled_circle_is_smooth_pulled_polygon_is_not() {
+    for (info, smooth) in [
+        (CurveInfo::circle(v(0., 0., 0.), DVec3::Z, DVec3::X, 500.0, 24).unwrap(), true),
+        (CurveInfo::polygon(v(0., 0., 0.), DVec3::Z, DVec3::X, 500.0, 6).unwrap(), false),
+    ] {
+        let mut m = Model::new();
+        m.root_mesh_mut().add_curve(&info);
+        let f = *m.root_mesh().faces.keys().collect::<Vec<_>>().first().unwrap();
+        m.root_mesh_mut().push_pull(f, 300.0, false).unwrap();
+        let mesh = m.root_mesh();
+        let side = mesh.faces.iter().find(|(_, fc)| fc.normal.z.abs() < 0.5).map(|(id, _)| id).unwrap();
+        let (_, _, normals) = tessellate::face_world_triangles(mesh, side, &DMat4::IDENTITY, false);
+        let n = mesh.faces[side].normal;
+        assert_eq!(!normals.is_empty(), smooth, "{info:?}");
+        if smooth {
+            // Corner normals lean toward the neighbours; the face normal is their mean direction.
+            assert!(normals.iter().all(|c| c.dot(n) > 0.95 && c.dot(n) < 0.9999));
+            let top = mesh.faces.iter().find(|(_, fc)| fc.normal.z > 0.5).map(|(id, _)| id).unwrap();
+            assert!(tessellate::face_world_triangles(mesh, top, &DMat4::IDENTITY, false).2.is_empty(), "cap stays flat");
+        }
+    }
+}
+
+#[test]
+fn soften_by_angle_follows_fold_angle() {
+    let mut m = Mesh::new();
+    box_at(&mut m, v(0., 0., 0.), v(1000., 1000., 1000.));
+    let all: Vec<EdgeId> = m.edges.keys().collect();
+    assert!(all.iter().all(|e| (m.edge_fold_angle(*e).unwrap() - 90.0).abs() < 1e-9));
+    assert_eq!(m.soften_by_angle(&all, 20.0, true, false), 0);
+    assert_eq!(m.soften_by_angle(&all, 95.0, true, false), 12);
+    assert!(m.edges.values().all(|e| e.soft && e.smooth));
+    assert_eq!(m.soften_by_angle(&all, 95.0, false, false), 12);
+    assert!(m.edges.values().all(|e| e.soft && !e.smooth));
+    assert_eq!(m.soften_by_angle(&all, 45.0, true, true), 12);
+    assert!(m.edges.values().all(|e| !e.soft && !e.smooth));
+
+    // 6-gon prism sides fold by 60°; a cut across the top face is coplanar.
+    let mut m = Model::new();
+    let info = CurveInfo::polygon(v(0., 0., 0.), DVec3::Z, DVec3::X, 500.0, 6).unwrap();
+    m.root_mesh_mut().add_curve(&info);
+    let f = *m.root_mesh().faces.keys().collect::<Vec<_>>().first().unwrap();
+    m.root_mesh_mut().push_pull(f, 300.0, false).unwrap();
+    let mesh = m.root_mesh_mut();
+    let side: Vec<EdgeId> = mesh.edges.iter().filter(|(_, e)| (mesh.vertices[e.v[0]].pos.z - mesh.vertices[e.v[1]].pos.z).abs() > 1.0).map(|(id, _)| id).collect();
+    assert_eq!(side.len(), 6);
+    assert!(side.iter().all(|e| (mesh.edge_fold_angle(*e).unwrap() - 60.0).abs() < 1e-6));
+    assert_eq!(mesh.soften_by_angle(&side, 59.0, true, false), 0);
+    assert_eq!(mesh.soften_by_angle(&side, 61.0, true, false), 6);
+}

@@ -363,8 +363,11 @@ impl Mesh {
                 }
                 let curve = |x: VertexId, y: VertexId| self.edge_between(x, y).and_then(|e| self.edges[e].curve);
                 let (c1, c2) = (curve(p, c), curve(c, nx));
+                // Regular polygons keep hard sides; arcs and circles are smoothed.
+                let polygon = c1.and_then(|id| self.curves.get(&id)).is_some_and(|ci| ci.kind == crate::CurveKind::Polygon);
                 if c1.is_some()
                     && c1 == c2
+                    && !polygon
                     && let Some(ev) = self.edge_between(c, map[&c])
                 {
                     let ed = &mut self.edges[ev];

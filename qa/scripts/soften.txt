@@ -1,0 +1,37 @@
+# M5 batch 1: Soften/Smooth Edges — pulled circle is smooth, box edges by angle, undo.
+wait 10
+view iso
+tool circle
+rawp click 0 0 0
+rawp click 500 0 0
+wait 3
+tool pushpull
+rawp click 0 0 0
+rawp click 0 0 300
+vcb 600
+wait 3
+expect active_mesh F=26 E=72
+# circle sides: 24 vertical edges soft+smooth
+expect soft=24 smooth=24
+zoom_extents
+wait 5
+screenshot shots/soften_cylinder.bmp
+select_all
+action soften_edges 10
+wait 3
+# folds are 15°: nothing left soft
+expect soft=0 smooth=0
+action soften_edges 20 nosmooth
+wait 3
+expect soft=24 smooth=0
+action undo
+wait 3
+expect soft=0 smooth=0
+action soften_edges 95
+wait 3
+# rim edges fold by 90° too
+expect soft=72 smooth=72
+action undo
+action undo
+wait 3
+expect soft=24 smooth=24

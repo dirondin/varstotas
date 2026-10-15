@@ -239,6 +239,37 @@ impl Mesh {
         }
         flipped
     }
+
+    /// Angle (degrees, 0..180) between the two faces of edge `e`, or `None` unless exactly two
+    /// faces use it. Opposite-oriented neighbours are compared as if they were consistent.
+    pub fn edge_fold_angle(&self, e: EdgeId) -> Option<f64> {
+        let [f, g] = self.edge_faces(e)[..] else { return None };
+        let [a, b] = self.edges.get(e)?.v;
+        let (nf, mut ng) = (self.faces[f].normal, self.faces[g].normal);
+        if self.face_traverses(f, a, b) == self.face_traverses(g, a, b) {
+            ng = -ng;
+        }
+        Some(nf.dot(ng).clamp(-1.0, 1.0).acos().to_degrees())
+    }
+
+    /// Soften/Smooth Edges: edges of `edges` folding by at most `max_deg` become soft (and
+    /// smooth when `smooth`), the others hard. Coplanar edges (fold ~0) are softened only with
+    /// `coplanar`. Edges without exactly two faces stay as they are. Returns the edges changed.
+    pub fn soften_by_angle(&mut self, edges: &[EdgeId], max_deg: f64, smooth: bool, coplanar: bool) -> usize {
+        let mut changed = 0;
+        for &e in edges {
+            let Some(angle) = self.edge_fold_angle(e) else { continue };
+            let soft = angle <= max_deg && (coplanar || angle > 1e-3);
+            let ed = &mut self.edges[e];
+            let (s, m) = (soft, soft && smooth);
+            if ed.soft != s || ed.smooth != m {
+                ed.soft = s;
+                ed.smooth = m;
+                changed += 1;
+            }
+        }
+        changed
+    }
 }
 
 /// A face's projector, 2D outer loop, 2D holes and bounds.

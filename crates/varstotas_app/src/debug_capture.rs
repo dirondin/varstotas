@@ -798,6 +798,18 @@ impl VarstotasApp {
     fn script_action(&mut self, name: &str) {
         use crate::app::Action;
         use varstotas_kernel::IntersectScope;
+        // `soften_edges <deg> [nosmooth] [coplanar]`
+        if let Some(args) = name.strip_prefix("soften_edges") {
+            let mut it = args.split_whitespace();
+            let Some(angle) = it.next().and_then(|a| a.parse::<f64>().ok()) else {
+                log::warn!("script: soften_edges needs an angle");
+                return;
+            };
+            let rest: Vec<&str> = it.collect();
+            let s = crate::ui::tray::SoftenSettings { angle, smooth: !rest.contains(&"nosmooth"), coplanar: rest.contains(&"coplanar") };
+            self.actions.push(Action::SoftenEdges(s));
+            return;
+        }
         let a = match name {
             "copy" => Action::Copy,
             "cut" => Action::Cut,
@@ -1046,6 +1058,10 @@ impl VarstotasApp {
             cut.0,
             cut.1,
         );
+        let (soft, smooth) = self.doc.active_mesh().map_or((0, 0), |mesh| {
+            (mesh.edges.values().filter(|e| e.soft).count(), mesh.edges.values().filter(|e| e.smooth).count())
+        });
+        let extra = format!("{extra} soft={soft} smooth={smooth}");
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
             self.tool_id(),

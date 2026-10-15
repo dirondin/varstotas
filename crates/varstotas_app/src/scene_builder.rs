@@ -118,7 +118,7 @@ fn tess_rec(
     let owner: &ContextPath = path;
     let tess_face = |fid: FaceId| -> TessFace {
         let face = &mesh.faces[fid];
-        let (positions, uv) = face_world_triangles(mesh, fid, &m, with_uv);
+        let (positions, uv, normals) = face_world_triangles(mesh, fid, &m, with_uv);
         TessFace {
             owner_path: owner.clone(),
             face: Some(fid),
@@ -128,6 +128,7 @@ fn tess_rec(
             back: face.back,
             inherited,
             uv,
+            normals,
         }
     };
     let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(16);
@@ -263,9 +264,10 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
         }
         geo.face_ids.extend(std::iter::repeat_n(fi as u32, f.positions.len() / 3));
         let n = f.normal.as_vec3().to_array();
-        for pos in &f.positions {
+        for (k, pos) in f.positions.iter().enumerate() {
             max_r2 = max_r2.max((*pos - origin).length_squared());
-            geo.tris.push(TriVertex { pos: rel(*pos), normal: n, color: front });
+            let normal = f.normals.get(k).map_or(n, |s| s.as_vec3().to_array());
+            geo.tris.push(TriVertex { pos: rel(*pos), normal, color: front });
             geo.back_colors.push(back);
         }
     }

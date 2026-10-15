@@ -167,6 +167,8 @@ pub enum Action {
     ActiveCut,
     ReverseSection,
     AlignSectionView,
+    /// Soften/Smooth Edges panel: apply to the selected edges (and edges of selected faces).
+    SoftenEdges(crate::ui::tray::SoftenSettings),
 }
 
 /// What a [`TextPrompt`] edits.
@@ -1110,6 +1112,15 @@ impl VarstotasApp {
                         if let Some(s) = m.sections.get_mut(i) {
                             *s = s.reversed();
                         }
+                    });
+                }
+            }
+            Action::SoftenEdges(st) => {
+                let edges = self.soften_targets();
+                if !edges.is_empty() {
+                    let p = self.doc.active_path.clone();
+                    self.doc.commit("Soften Edges", |m| {
+                        m.mesh_at_mut(&p).map(|mesh| mesh.soften_by_angle(&edges, st.angle, st.smooth, st.coplanar))
                     });
                 }
             }
