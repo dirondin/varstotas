@@ -29,6 +29,7 @@ pub enum Icon {
     Protractor,
     Axes,
     Dimension,
+    Section,
     Orbit,
     Pan,
     Zoom,
@@ -431,6 +432,14 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dashed((12.0, 3.0), (12.0, 12.0), st);
         }
         Icon::StyleShaded => cube(&pen, Color32::from_rgb(0xF6, 0xE0, 0xA8), Color32::from_rgb(0xE4, 0xB8, 0x6A), Color32::from_rgb(0xC8, 0x92, 0x48)),
+        Icon::Section => {
+            // A cube cut by an orange plane with an arrow.
+            cube(&pen, FILL, SHADE, SHADE_DARK);
+            let orange = Color32::from_rgb(0xE8, 0x7A, 0x1E);
+            pen.poly_c(&[(2.5, 9.0), (13.0, 3.5), (21.5, 9.5), (11.0, 15.0)], Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70), Stroke::new(1.4 * pen.s, orange));
+            pen.line_c(&[(12.0, 9.25), (12.0, 20.5)], Stroke::new(1.4 * pen.s, orange));
+            pen.head((12.0, 22.0), (0.0, 1.0), 3.5, orange);
+        }
         Icon::StyleTextured => {
             // Brick cube: mortar rows on the sides, staggered joints.
             cube(&pen, Color32::from_rgb(0xD8, 0x7A, 0x5C), Color32::from_rgb(0xB8, 0x55, 0x3A), Color32::from_rgb(0x96, 0x40, 0x2C));

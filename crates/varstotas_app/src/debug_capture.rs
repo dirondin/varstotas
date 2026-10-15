@@ -806,6 +806,12 @@ impl VarstotasApp {
             "delete" => Action::Delete,
             "delete_guides" => Action::DeleteGuides,
             "toggle_guides" => Action::ToggleGuides,
+            "section_planes" => Action::ToggleSectionDisplay(0),
+            "section_cuts" => Action::ToggleSectionDisplay(1),
+            "section_fill" => Action::ToggleSectionDisplay(2),
+            "active_cut" => Action::ActiveCut,
+            "reverse_section" => Action::ReverseSection,
+            "align_section_view" => Action::AlignSectionView,
             "make_group" => Action::MakeGroup,
             "explode" => Action::Explode,
             "exit_context" => Action::ExitContext,
@@ -1014,6 +1020,31 @@ impl VarstotasApp {
             m.tags.values().filter(|t| !t.visible).count(),
             sc.transition_secs,
             sc.transitions,
+        );
+        let sd = m.section_display;
+        let cut = self.section_cut.borrow().as_ref().filter(|_| m.active_section().is_some()).map_or((0, 0), |c| (c.1.len(), c.2.len()));
+        let extra = format!(
+            "{extra} sections={:?} secsel={:?} secdisp={}{}{} cut={}/{}",
+            m.sections
+                .iter()
+                .map(|s| format!(
+                    "{}{} o({:.0},{:.0},{:.0}) n({:.2},{:.2},{:.2})",
+                    s.name,
+                    if s.active { "*" } else { "" },
+                    s.origin.x,
+                    s.origin.y,
+                    s.origin.z,
+                    s.normal.x,
+                    s.normal.y,
+                    s.normal.z
+                ))
+                .collect::<Vec<_>>(),
+            self.doc.section_sel,
+            if sd.planes { "P" } else { "-" },
+            if sd.cuts { "C" } else { "-" },
+            if sd.fill { "F" } else { "-" },
+            cut.0,
+            cut.1,
         );
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",

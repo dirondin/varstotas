@@ -32,6 +32,7 @@ pub mod history;
 pub mod io;
 pub mod mesh;
 pub mod model;
+pub mod section;
 mod ops;
 pub mod tessellate;
 pub mod texture;
@@ -48,6 +49,7 @@ pub use ops::IntersectScope;
 pub use model::{
     ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
+pub use section::{SectionDisplay, SectionPlane};
 pub use texture::{TexPlacement, TextureImage};
 pub use tessellate::{Owner, TessEdge, TessFace, Tessellation, tessellate};
 

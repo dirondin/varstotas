@@ -16,6 +16,7 @@ mod dims;
 mod draw;
 mod edit;
 mod nav_tools;
+pub(crate) mod section;
 mod texture;
 pub(crate) mod select;
 pub(crate) mod transform;
@@ -56,13 +57,14 @@ pub enum ToolId {
     Protractor,
     Axes,
     Dimension,
+    Section,
     Orbit,
     Pan,
     Zoom,
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 26] = [
+    pub const ALL: [ToolId; 27] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -86,6 +88,7 @@ impl ToolId {
         ToolId::Protractor,
         ToolId::Axes,
         ToolId::Dimension,
+        ToolId::Section,
         ToolId::Orbit,
         ToolId::Pan,
         ToolId::Zoom,
@@ -116,6 +119,7 @@ impl ToolId {
             ToolId::Protractor => "Protractor",
             ToolId::Axes => "Axes",
             ToolId::Dimension => "Dimensions",
+            ToolId::Section => "Section Plane",
             ToolId::Orbit => "Orbit",
             ToolId::Pan => "Pan",
             ToolId::Zoom => "Zoom",
@@ -149,6 +153,7 @@ impl ToolId {
             | ToolId::Pie
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
+            | ToolId::Section
             | ToolId::Axes
             | ToolId::Dimension => return None,
         })
@@ -184,6 +189,7 @@ impl ToolId {
             ToolId::Protractor => Icon::Protractor,
             ToolId::Axes => Icon::Axes,
             ToolId::Dimension => Icon::Dimension,
+            ToolId::Section => Icon::Section,
             ToolId::Orbit => Icon::Orbit,
             ToolId::Pan => Icon::Pan,
             ToolId::Zoom => Icon::Zoom,
@@ -216,6 +222,7 @@ impl ToolId {
             ToolId::Protractor => "Measure angles and create angled guides.",
             ToolId::Axes => "Move or reorient the drawing axes.",
             ToolId::Dimension => "Place linear dimensions between points or on edges.",
+            ToolId::Section => "Cut the model with a section plane to see inside.",
             ToolId::Orbit => "Rotate the camera around the model.",
             ToolId::Pan => "Move the camera sideways.",
             ToolId::Zoom => "Zoom the camera in or out.",
@@ -318,6 +325,13 @@ impl ToolId {
                 "Click a start point and an end point (or click an edge), then move to offset the dimension and click.\n\
                  Double-click a dimension's text with Select to edit it; empty text restores the measured length."
             }
+            ToolId::Section => {
+                "Click a face to place a section plane on it; it becomes the active cut.\n\
+                 • The arrows point to the part that stays visible.\n\
+                 • Select a plane by its border; move it with Move, delete it with Delete.\n\
+                 • Right-click a plane: Active Cut, Reverse, Align View.\n\
+                 • View → Section Planes / Section Cuts / Section Fill."
+            }
             ToolId::Orbit => {
                 "Drag to orbit around the point under the cursor.\n\
                  Middle mouse button orbits in any tool; Shift+middle pans.\n\
@@ -355,6 +369,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::RotatedRectangle => Box::new(arcs::RotatedRectTool::default()),
         ToolId::Axes => Box::new(construct::AxesTool::default()),
         ToolId::Dimension => Box::new(dims::DimensionTool::default()),
+        ToolId::Section => Box::new(section::SectionTool::default()),
         ToolId::Eraser => Box::new(edit::EraserTool::default()),
         ToolId::Paint => Box::new(edit::PaintTool::default()),
         ToolId::TexturePosition => Box::new(texture::TexturePositionTool::default()),

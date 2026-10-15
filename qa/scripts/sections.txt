@@ -1,0 +1,76 @@
+# M5 batch 1: Section Plane tool, select by border, Move, active cut, fill, reverse, delete, undo.
+box 0 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+tool section_plane
+expect tool=Section
+# right face (x = 2000, normal +X): the plane faces into the model
+rawp click 2000 500 500
+wait 3
+expect sections=["Section 1* o(2000,500,500) n(-1.00,0.00,0.00)"]
+expect secsel=Some(0)
+expect secdisp=PCF
+# move the plane 800 mm into the box
+tool move
+rawp click 2000 0 0
+rawp click 1200 0 0
+wait 3
+expect sections=["Section 1* o(1200,500,500) n(-1.00,0.00,0.00)"]
+expect cut=4/2
+screenshot shots/sections_cut.bmp
+# select: click empty space, then the plane's border (rect padded 10%: y = -100)
+tool select
+raw click 40 40
+wait 2
+expect secsel=None
+rawp click 1200 -100 500
+wait 2
+expect secsel=Some(0)
+dump section
+action section_fill
+wait 2
+expect cut=4/0
+action section_fill
+action reverse_section
+wait 2
+expect n(1.00,0.00,0.00)
+expect cut=4/2
+screenshot shots/sections_reversed.bmp
+action active_cut
+wait 2
+expect sections=["Section 1 o(1200
+action active_cut
+wait 2
+expect sections=["Section 1* o(1200
+raw key Delete
+wait 2
+expect sections=[]
+undo
+wait 2
+expect sections=["Section 1*
+# scenes remember the active cut
+action add_scene
+rawp click 1200 -100 500
+wait 2
+expect secsel=Some(0)
+action active_cut
+wait 2
+action add_scene
+wait 2
+expect sections=["Section 1 o(1200
+action scene_0
+wait 3
+expect sections=["Section 1* o(1200
+action scene_1
+wait 3
+expect sections=["Section 1 o(1200
+action scene_0
+wait 3
+save qa_sections.vrst
+action new
+wait 2
+open qa_sections.vrst
+wait 5
+expect sections=["Section 1* o(1200,500,500) n(1.00,0.00,0.00)"]
+quit

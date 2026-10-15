@@ -25,6 +25,7 @@ struct Globals {
     hl_dim_face: vec4<f32>,   // rgb: dimmed-face target (sRGB); w: face mix
     hl_dim_edge: vec4<f32>,   // dimmed edge color (linear)
     tile: vec4<f32>,          // tile NDC = full NDC * xy + zw (export tiling; (1,1,0,0) = whole image)
+    section: vec4<f32>,       // active section cut, local frame: keep dot(xyz, p) >= w; off = (0,0,0,-1)
 };
 
 // Highlight states (Rust `Highlight`): 0 none, 1 selected, 2 dimmed (outside the editing context).
@@ -92,6 +93,11 @@ fn out_color(c: vec4<f32>) -> vec4<f32> {
 
 fn project(p_world: vec3<f32>) -> vec4<f32> {
     return g.view_proj * vec4<f32>(p_world - g.origin.xyz, 1.0);
+}
+
+/// Signed distance of a local-frame point to the section plane (< 0 = cut away).
+fn sec_dist(p: vec3<f32>) -> f32 {
+    return dot(g.section.xyz, p) - g.section.w;
 }
 
 /// Pull toward the camera (reverse-Z: larger depth = nearer).
@@ -233,6 +239,7 @@ struct FaceOut {
     @location(3) @interpolate(flat) state: u32,
     @location(4) uv: vec2<f32>,
     @location(5) @interpolate(flat) layers: vec2<u32>,
+    @location(6) clip: f32,
 };
 
 // Material textures (see textures.rs): layer i + 1 in `layers`; `tex_info[i].xy` = 1 / tile size (mm).
@@ -250,6 +257,7 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.state = hl_state(v.state);
     o.uv = v.uv;
     o.layers = v.layers;
+    o.clip = sec_dist(v.pos);
     if g.params.x > 2.5 && o.state != HL_SELECTED {
         o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // wireframe tint pass: drop unselected triangles
     }
@@ -258,6 +266,9 @@ fn vs_face(v: FaceIn) -> FaceOut {
 
 @fragment
 fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
+    if in.clip < 0.0 {
+        discard;
+    }
     let mode = g.params.x;
     let alpha_mul = g.params.y;
     if mode > 2.5 {
@@ -316,6 +327,7 @@ struct LineIn {
 struct LineOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) clip: f32,
 };
 
 fn edge_col(c: vec4<f32>) -> vec4<f32> {
@@ -337,11 +349,15 @@ fn vs_edge(v: EdgeIn) -> LineOut {
     var o: LineOut;
     o.pos = bias_clip(project(v.pos));
     o.color = highlight_edge(edge_col(v.color), hl_state(v.state));
+    o.clip = sec_dist(v.pos);
     return o;
 }
 
 @fragment
 fn fs_flat(in: LineOut) -> @location(0) vec4<f32> {
+    if in.clip < 0.0 {
+        discard;
+    }
     return out_color(in.color);
 }
 
@@ -351,6 +367,7 @@ fn vs_poly(v: LineIn) -> LineOut {
     var o: LineOut;
     o.pos = bias_clip(project(v.pos));
     o.color = lin(v.color);
+    o.clip = 1.0;
     return o;
 }
 
@@ -371,6 +388,7 @@ struct ThickOut {
     @location(0) color: vec4<f32>,
     @location(1) @interpolate(linear) along: f32,
     @location(2) @interpolate(flat) dash: f32,
+    @location(3) clip: f32,
 };
 
 fn thick_color(c: vec4<f32>, width: f32) -> vec4<f32> {
@@ -383,13 +401,13 @@ fn thick_color(c: vec4<f32>, width: f32) -> vec4<f32> {
 // Overlay lines / polylines / axes: `ThickIn` + dash phase at `a` (points, continuous polylines).
 @vertex
 fn vs_line(@builtin(vertex_index) vi: u32, v: ThickIn, @location(5) phase: f32) -> ThickOut {
-    return thick_vertex(vi, v, 0u, phase);
+    return thick_vertex(vi, v, 0u, phase, false);
 }
 
 // Static model edges / profiles, instanced fallback with a per-segment highlight stream.
 @vertex
 fn vs_thick_state(@builtin(vertex_index) vi: u32, v: ThickIn, @location(5) state: u32) -> ThickOut {
-    return thick_vertex(vi, v, state, 0.0);
+    return thick_vertex(vi, v, state, 0.0, true);
 }
 
 // Static edges / profiles read straight from the raw `LineVertex` buffer (storage, 7 floats per
@@ -407,7 +425,7 @@ fn seg_vertex(vi: u32, width: f32) -> ThickOut {
     v.b = vec3<f32>(seg_lines[o + 7u], seg_lines[o + 8u], seg_lines[o + 9u]);
     v.width = width;
     v.dash = 0.0;
-    return thick_vertex(vi % 6u, v, seg_states[i], 0.0);
+    return thick_vertex(vi % 6u, v, seg_states[i], 0.0, true);
 }
 
 @vertex
@@ -425,7 +443,7 @@ fn full_clip(c: vec4<f32>) -> vec4<f32> {
     return vec4<f32>((c.xy - g.tile.zw * c.w) / g.tile.xy, c.z, c.w);
 }
 
-fn thick_vertex(vi: u32, v: ThickIn, state: u32, phase0: f32) -> ThickOut {
+fn thick_vertex(vi: u32, v: ThickIn, state: u32, phase0: f32, clipped: bool) -> ThickOut {
     // corners: (end, side)
     var ends = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
     var sides = array<f32, 6>(-1.0, 1.0, 1.0, -1.0, 1.0, -1.0);
@@ -505,11 +523,18 @@ fn thick_vertex(vi: u32, v: ThickIn, state: u32, phase0: f32) -> ThickOut {
     o.color = highlight_edge(thick_color(v.color, v.width), hl_state(state));
     o.along = (phase + end * len + ext) / g.viewport.z + phase0; // in points
     o.dash = v.dash;
+    o.clip = 1.0;
+    if clipped {
+        o.clip = mix(sec_dist(v.a), sec_dist(v.b), mix(t0, t1, end));
+    }
     return o;
 }
 
 @fragment
 fn fs_thick(in: ThickOut) -> @location(0) vec4<f32> {
+    if in.clip < 0.0 {
+        discard;
+    }
     if in.dash > 0.0 {
         // dashed: 60% on
         if fract(in.along / in.dash) > 0.6 {

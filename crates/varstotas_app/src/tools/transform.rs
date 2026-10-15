@@ -48,11 +48,13 @@ pub struct Targets {
     pub ents: Vec<EntityRef>,
     pub guides: Vec<GuideRef>,
     pub dims: Vec<varstotas_kernel::DimId>,
+    /// A section plane (index into `model.sections`).
+    pub section: Option<usize>,
 }
 
 impl Targets {
     pub fn is_empty(&self) -> bool {
-        self.ents.is_empty() && self.guides.is_empty() && self.dims.is_empty()
+        self.ents.is_empty() && self.guides.is_empty() && self.dims.is_empty() && self.section.is_none()
     }
     fn ents(ents: Vec<EntityRef>) -> Self {
         Self { ents, ..Default::default() }
@@ -84,8 +86,21 @@ fn run_transform(
     let (ents, guides, dims) = (tg.ents.clone(), tg.guides.clone(), tg.dims.clone());
     let path = ctx.doc.active_path.clone();
     let uid = ctx.doc.uid;
+    let section = tg.section;
     let r = ctx.doc.commit(label, |model| {
         let mut out = Targets::default();
+        if let Some(s) = section.and_then(|i| model.sections.get(i)).cloned() {
+            if copy {
+                for w in &world {
+                    let n = model.sections.len() + 1;
+                    model.sections.push(varstotas_kernel::SectionPlane { name: format!("Section {n}"), active: false, ..s.transformed(w) });
+                }
+                out.section = Some(model.sections.len() - 1);
+            } else if let (Some(i), Some(w)) = (section, world.first()) {
+                model.sections[i] = s.transformed(w);
+                out.section = section;
+            }
+        }
         if copy {
             for w in &world {
                 out.guides.extend(model.copy_guides_in(&path, &guides, w));
@@ -154,6 +169,9 @@ fn run_transform(
     })?;
     if copy {
         ctx.doc.set_selection_full(r.ents.clone(), r.guides.clone(), r.dims.clone());
+        if let Some(i) = r.section {
+            ctx.doc.select_section(i);
+        }
     }
     Some(r)
 }
@@ -165,12 +183,14 @@ fn targets(ctx: &ToolContext, hover: &Option<Hover>, hover_guide: Option<GuideRe
             ents: ctx.doc.selection.clone(),
             guides: ctx.doc.guide_sel.clone(),
             dims: ctx.doc.dim_sel.clone(),
+            section: ctx.doc.section_sel,
         };
     }
     Targets {
         ents: hover.as_ref().map(|h| vec![h.entity()]).unwrap_or_default(),
         guides: hover_guide.into_iter().collect(),
         dims: Vec::new(),
+        section: None,
     }
 }
 
@@ -202,6 +222,9 @@ fn draw_preview(view: &OverlayView, tg: &Targets, t: &DMat4, out3d: &mut Overlay
     }
     for d in &tg.dims {
         draw_dim_moved(view, *d, &tg.ents, t, out3d);
+    }
+    if let Some(s) = tg.section.and_then(|i| view.doc.model.sections.get(i)) {
+        super::section::draw_plane(&s.transformed(t), view.doc.model.bounds(), SELECT_BLUE, 1.5, out3d);
     }
 }
 

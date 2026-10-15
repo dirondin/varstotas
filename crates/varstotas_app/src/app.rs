@@ -161,6 +161,12 @@ pub enum Action {
     PlaceAxes,
     MoveAxes,
     ResetAxes,
+    /// View → Section Planes (0) / Section Cuts (1) / Section Fill (2).
+    ToggleSectionDisplay(u8),
+    /// Selected section plane: Active Cut on/off, Reverse, Align View.
+    ActiveCut,
+    ReverseSection,
+    AlignSectionView,
 }
 
 /// What a [`TextPrompt`] edits.
@@ -234,6 +240,7 @@ pub enum Pending {
 type BoxCorners = [[f32; 3]; 8];
 /// ((model version, selection version), selected instances' boxes).
 type SelBoxes = ((u64, u64), Vec<BoxCorners>);
+type SectionCut = ((u64, [u64; 4], bool), Vec<[varstotas_kernel::glam::DVec3; 2]>, Vec<[varstotas_kernel::glam::DVec3; 3]>);
 
 /// View → Animation → Play: steps through the scenes in a loop.
 pub(crate) struct ScenePlayer {
@@ -275,6 +282,8 @@ pub struct VarstotasApp {
     text_edit_was_focused: bool,
     /// Selected instances' bounding boxes ((model, selection) version → world corners).
     sel_boxes: std::cell::RefCell<Option<SelBoxes>>,
+    /// Active section cut lines and fill, keyed by (model version, plane).
+    pub(crate) section_cut: std::cell::RefCell<Option<SectionCut>>,
     now: f64,
     pub(crate) show_prefs: bool,
     pub(crate) autosave: AutosaveState,
@@ -379,6 +388,7 @@ impl VarstotasApp {
             last_modifiers: Modifiers::NONE,
             text_edit_was_focused: false,
             sel_boxes: Default::default(),
+            section_cut: Default::default(),
             now: 0.0,
             show_prefs: false,
             clipboard: None,
@@ -1074,6 +1084,46 @@ impl VarstotasApp {
                 self.doc.mutate_untracked(|m| m.guides_hidden = hidden);
                 self.doc.prune_selection();
             }
+            Action::ToggleSectionDisplay(k) => {
+                self.doc.mutate_untracked(|m| {
+                    let d = &mut m.section_display;
+                    match k {
+                        0 => d.planes = !d.planes,
+                        1 => d.cuts = !d.cuts,
+                        _ => d.fill = !d.fill,
+                    }
+                });
+                self.doc.prune_selection();
+            }
+            Action::ActiveCut => {
+                if let Some(i) = self.doc.section_sel {
+                    let on = self.doc.model.sections.get(i).is_some_and(|s| s.active);
+                    self.doc.commit("Active Cut", |m| {
+                        m.set_active_section((!on).then_some(i));
+                        m.section_display.cuts = true;
+                    });
+                }
+            }
+            Action::ReverseSection => {
+                if let Some(i) = self.doc.section_sel {
+                    self.doc.commit("Reverse Section", |m| {
+                        if let Some(s) = m.sections.get_mut(i) {
+                            *s = s.reversed();
+                        }
+                    });
+                }
+            }
+            Action::AlignSectionView => {
+                if let Some(s) = self.doc.section_sel.and_then(|i| self.doc.model.sections.get(i)) {
+                    let n = s.normal;
+                    let mut cam = self.camera.clone();
+                    let d = cam.distance().max(1e-3);
+                    cam.up = if n.z.abs() > 0.999 { varstotas_kernel::glam::DVec3::Y * n.z.signum() } else { varstotas_kernel::glam::DVec3::Z };
+                    cam.eye = cam.target - n * d;
+                    let to = nav::zoom_extents_camera(&self.doc.model, &cam, self.aspect());
+                    self.animate_to(to);
+                }
+            }
             Action::ExportImage => {
                 // Physical pixels (what the viewport shows on a Retina screen).
                 let s = self.viewport.size() * ctx.pixels_per_point();
@@ -1263,6 +1313,14 @@ impl VarstotasApp {
             }
             self.doc.dim_sel = dsel;
         }
+        // Section planes (never selected) and the active cut's lines and fill.
+        let ssel = self.doc.section_sel.take();
+        {
+            let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
+            tools::section::draw_sections(&view, &mut overlay);
+        }
+        self.doc.section_sel = ssel;
+        self.section_cut_overlay(&mut overlay);
         let camera = self.camera.clone();
         let (transparent, axes) = (content.transparent, content.axes);
         self.viewport.export = Some(ExportJob { path, overlay, camera, size, transparent, axes, line_scale });
@@ -1339,6 +1397,7 @@ impl VarstotasApp {
             profiles: self.prefs.profiles,
         });
         s.hidden_tags = Some(self.doc.model.tags.iter().filter(|(_, t)| !t.visible).map(|(id, _)| id).collect());
+        s.sections = Some(self.doc.model.scene_sections());
         s
     }
 
@@ -1379,6 +1438,12 @@ impl VarstotasApp {
                     }
                 });
             }
+        }
+        if let Some(sec) = s.sections
+            && sec != self.doc.model.scene_sections()
+        {
+            self.doc.mutate_untracked(|m| m.apply_scene_sections(&sec));
+            self.doc.prune_selection();
         }
         let to = self.scene_camera(&s);
         let set = self.doc.model.scene_settings;
@@ -1825,6 +1890,26 @@ impl VarstotasApp {
         }
     }
 
+    /// Cut lines (and fill) of the active section plane, cached by (model version, plane).
+    pub(crate) fn section_cut_overlay(&self, out: &mut Overlay3d) {
+        let model = &self.doc.model;
+        let Some(s) = model.active_section() else { return };
+        let key = (self.doc.model_version, s.plane().map(f64::to_bits), model.section_display.fill);
+        let mut cache = self.section_cut.borrow_mut();
+        if cache.as_ref().is_none_or(|c| c.0 != key) {
+            let (lines, fill) = guarded(|| {
+                let lines = model.section_cut(s);
+                let fill = if key.2 { varstotas_kernel::section::section_fill(s, &lines) } else { Vec::new() };
+                (lines, fill)
+            })
+            .unwrap_or_default();
+            *cache = Some((key, lines, fill));
+        }
+        if let Some((_, lines, fill)) = cache.as_ref() {
+            tools::section::draw_cut(lines, fill, out);
+        }
+    }
+
     /// Oriented bounding boxes of the selected groups / component instances (their contents
     /// are not tinted). Cached by (model, selection) version.
     fn selection_boxes(&self, out: &mut Overlay3d) {
@@ -1865,6 +1950,8 @@ impl VarstotasApp {
         tools::common::draw_dims(&view, &mut o3);
         self.context_box_lines(&mut o3);
         self.selection_boxes(&mut o3);
+        tools::section::draw_sections(&view, &mut o3);
+        self.section_cut_overlay(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
         o2.extend(self.tool.cursor_glyph());
         (o3, o2)

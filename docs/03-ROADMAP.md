@@ -21,7 +21,7 @@
 - QA-проход по UX, исправление багов топологии, производительность (10k+ граней @ 60 FPS).
 - Сборка релизов: macOS `.app` (universal), Windows `.exe`.
 
-## M4 — Вторая волна 🟨
+## M4 — Вторая волна ✅
 - **Партия 1:** направляющие как полноценные объекты (выделение, Delete, Move/Rotate/копия, Entity Info, Edit → Delete Guides, скрытие/показ), Tape Measure: resize модели через VCB; Intersect Faces (с моделью / с выделением / с контекстом), Reverse / Orient Faces, Flip Along; Copy / Paste / Paste in Place; экспорт PNG; шаблоны (архитектурный мм/м, дюймы).
 - **Партия 2:** Arc (центр + 2 точки), 3 Point Arc, Pie, привязка «касательная в вершине»; Rotated Rectangle; Axes; Dimensions.
   - Доработка (вместе с исправлениями QA партии 2): в диалоге экспорта PNG — выбор, что попадает в картинку: фон/прозрачность (уже есть), оси, направляющие, размеры (dimensions).
@@ -29,8 +29,10 @@
 - **Партия 3 ✅:** текстуры (изображения, UV, сохранение в `.vrst`); анимация переходов между сценами.
 - Уже сделано раньше: Components + Outliner, Tags, Scenes, Follow Me, Scale, Protractor, импорт OBJ/STL.
 
-## M5 — Дальше
-- Solid tools, Section planes, тени, Text/3D Text, DXF, Soften edges, Walk.
+## M5 — Дальше 🟨
+- **Партия 1:** Section Planes ✅ (инструмент, активный разрез, линии и заливка разреза, выбор/Move/Reverse/Align View, видимость в View, состояние в сценах); Soften/Smooth edges; камера: Field of View, Position Camera, Look Around, Walk.
+- **Партия 2:** тени (солнце по дате/времени/широте, shadow map), Text (выноски) и 3D Text.
+- **Партия 3:** Solid tools (Union/Subtract/Intersect/Trim/Split), DXF импорт/экспорт.
 
 > **Цель после M5 (решение от 2026-10-14):** действительно рабочий инструмент для хобби-проектов, «без фанатизма». Порядок: M4 → M5 → M6 → M7, поток «Качество» — параллельно. M8 и «Платформы» — только после того, как необходимый функционал на macOS будет полностью готов, и по отдельному решению владельца проекта.
 

@@ -88,6 +88,17 @@ impl VarstotasApp {
         let has_inst = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Instance(_)));
         self.item(ui, "Explode", None, has_inst, Action::Explode);
         ui.separator();
+        if let Some(i) = self.doc.section_sel {
+            let on = self.doc.model.sections.get(i).is_some_and(|s| s.active);
+            let b = Button::new("Active Cut").selected(on);
+            if ui.add(b).clicked() {
+                self.actions.push(Action::ActiveCut);
+                ui.close();
+            }
+            self.item(ui, "Reverse", None, true, Action::ReverseSection);
+            self.item(ui, "Align View", None, true, Action::AlignSectionView);
+            ui.separator();
+        }
         self.face_ops_items(ui);
         if self.selected_textured_face() {
             ui.menu_button("Texture", |ui| {
@@ -202,6 +213,13 @@ impl VarstotasApp {
                 ui.checkbox(&mut self.prefs.show_axes, "Axes");
                 ui.checkbox(&mut self.prefs.show_ground, "Ground");
                 ui.separator();
+                let d = self.doc.model.section_display;
+                for (k, mut on, label) in [(0u8, d.planes, "Section Planes"), (1, d.cuts, "Section Cuts"), (2, d.fill, "Section Fill")] {
+                    if ui.checkbox(&mut on, label).clicked() {
+                        self.actions.push(Action::ToggleSectionDisplay(k));
+                    }
+                }
+                ui.separator();
                 ui.menu_button("Animation", |ui| {
                     let has = !self.doc.model.scenes.is_empty();
                     let play = if self.scene_player.is_some() { "Pause" } else { "Play" };
@@ -256,7 +274,7 @@ impl VarstotasApp {
             });
 
             ui.menu_button("Tools", |ui| {
-                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition] {
+                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section] {
                     self.tool_item(ui, id);
                 }
                 ui.separator();

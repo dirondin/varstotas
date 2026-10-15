@@ -83,7 +83,8 @@ impl VarstotasApp {
                 self.tool_button(ui, id);
             }
             group_sep(ui);
-            for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes] {
+            // Protractor lives in the Tools menu (keeps the toolbar on one row).
+            for id in [ToolId::Tape, ToolId::Dimension, ToolId::Axes, ToolId::Section] {
                 self.tool_button(ui, id);
             }
             group_sep(ui);

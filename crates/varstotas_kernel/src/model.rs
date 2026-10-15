@@ -65,6 +65,9 @@ pub struct Scene {
     /// Tags hidden in this scene (`None` in old files: tag visibility is left as is).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hidden_tags: Option<Vec<TagId>>,
+    /// Active section plane and section display saved with the scene (`None` in old files).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sections: Option<crate::section::SceneSections>,
     /// Played by View → Animation (the classic "Include in animation").
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub in_animation: bool,
@@ -109,7 +112,7 @@ impl Default for SceneSettings {
 impl Scene {
     /// A camera-only scene (no saved style or tags), included in the animation.
     pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
-        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, in_animation: true }
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, sections: None, in_animation: true }
     }
 }
 
@@ -142,6 +145,11 @@ pub struct Model {
     /// Omitted from files when unset. See [`Model::set_axes`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub axes: Option<DAffine3>,
+    /// Section planes (world space), see [`crate::section`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<crate::SectionPlane>,
+    #[serde(default)]
+    pub section_display: crate::SectionDisplay,
 }
 
 /// Result of a model-wide ray pick.
@@ -177,6 +185,8 @@ impl Model {
             guides_hidden: false,
             unit: LengthUnit::Millimeter,
             axes: None,
+            sections: Vec::new(),
+            section_display: Default::default(),
         }
     }
     pub fn root_mesh(&self) -> &Mesh {
@@ -244,9 +254,31 @@ impl Model {
 
     /// Closest visible face hit, descending into visible instances.
     pub fn raycast(&self, ray: &Ray) -> Option<ModelHit> {
+        // The active section plane cuts the ray to its visible part [t0, t1].
+        let (mut t0, mut t1) = (0.0, f64::INFINITY);
+        if let Some(s) = self.active_section() {
+            let (d0, dd) = (s.dist(ray.origin), s.normal.dot(ray.dir));
+            if dd.abs() < 1e-15 {
+                if d0 < 0.0 {
+                    return None;
+                }
+            } else if dd > 0.0 {
+                t0 = (-d0 / dd).max(0.0);
+            } else {
+                t1 = -d0 / dd;
+                if t1 < 0.0 {
+                    return None;
+                }
+            }
+        }
+        let shifted = Ray { origin: ray.at(t0), dir: ray.dir };
         let mut best: Option<ModelHit> = None;
-        self.raycast_rec(self.root, DMat4::IDENTITY, &mut Vec::new(), ray, &mut best, 0);
-        best
+        self.raycast_rec(self.root, DMat4::IDENTITY, &mut Vec::new(), &shifted, &mut best, 0);
+        best.map(|mut h| {
+            h.t += t0;
+            h
+        })
+        .filter(|h| h.t <= t1 + crate::TOL)
     }
 
     fn raycast_rec(

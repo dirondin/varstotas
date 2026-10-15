@@ -639,3 +639,40 @@ fn obj_export_writes_texture_and_uvs_import_embeds_it() {
         assert!((a - b).length() < 1e-3, "{got:?}");
     }
 }
+
+#[test]
+fn section_cut_lines_and_clipped_raycast() {
+    let mut m = Model::new();
+    box_at(m.root_mesh_mut(), DVec3::ZERO, DVec3::new(1000.0, 500.0, 300.0));
+    let s = SectionPlane::new("Section 1", DVec3::new(400.0, 0.0, 0.0), -DVec3::X);
+    let cut = m.section_cut(&s);
+    assert_eq!(cut.len(), 4, "{cut:?}");
+    let len: f64 = cut.iter().map(|[a, b]| (*b - *a).length()).sum();
+    assert!((len - 1600.0).abs() < 1e-6, "{len}");
+    assert!(cut.iter().all(|[a, b]| (a.x - 400.0).abs() < 1e-9 && (b.x - 400.0).abs() < 1e-9));
+    let tri_area = |t: &[DVec3; 3]| (t[1] - t[0]).cross(t[2] - t[0]).length() * 0.5;
+    let fill = varstotas_kernel::section::section_fill(&s, &cut);
+    assert!((fill.iter().map(tri_area).sum::<f64>() - 500.0 * 300.0).abs() < 1e-6);
+    // Two separate boxes: two filled rectangles.
+    let mut tube = Model::new();
+    box_at(tube.root_mesh_mut(), DVec3::ZERO, DVec3::new(1000.0, 500.0, 300.0));
+    box_at(tube.root_mesh_mut(), DVec3::new(0.0, 2000.0, 0.0), DVec3::new(1000.0, 2500.0, 300.0));
+    let both = tube.section_cut(&s);
+    assert_eq!(both.len(), 8);
+    let fill2 = varstotas_kernel::section::section_fill(&s, &both);
+    assert!((fill2.iter().map(tri_area).sum::<f64>() - 2.0 * 500.0 * 300.0).abs() < 1e-6);
+    // Ray from +x into the box: hits the face x=1000 without a section, the far face x=0 with it
+    // (the box beyond x=400 is cut away, and the inside of the back face is hit).
+    let ray = Ray { origin: DVec3::new(2000.0, 250.0, 150.0), dir: -DVec3::X };
+    assert!((m.raycast(&ray).unwrap().point.x - 1000.0).abs() < 1e-9);
+    m.sections.push(s);
+    let h = m.raycast(&ray).unwrap();
+    assert!(h.point.x.abs() < 1e-9, "{:?}", h.point);
+    m.section_display.cuts = false;
+    assert!((m.raycast(&ray).unwrap().point.x - 1000.0).abs() < 1e-9);
+    // Round trip.
+    m.section_display.cuts = true;
+    let back: Model = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+    assert_eq!(back.sections, m.sections);
+    assert!(back.active_section().is_some());
+}

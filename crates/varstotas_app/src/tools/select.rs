@@ -156,9 +156,25 @@ impl SelectTool {
         Some(d)
     }
 
+    /// A section plane whose border is under the cursor (edges of the context win).
+    fn pick_section(&self, ctx: &ToolContext, picked: &Option<Picked>) -> Option<usize> {
+        if matches!(picked, Some(Picked { entity: EntityRef::Edge(_), .. })) {
+            return None;
+        }
+        super::section::pick_section_at(ctx.doc, ctx.camera, ctx.viewport, ctx.pointer.pos)
+    }
+
     fn click(&mut self, ctx: &mut ToolContext) {
         let op = sel_op(&ctx.pointer.modifiers);
         let picked = self.pick(ctx);
+        if let Some(i) = self.pick_section(ctx, &picked) {
+            match op {
+                SelOp::Remove => ctx.doc.clear_selection(),
+                SelOp::Toggle if ctx.doc.section_sel == Some(i) => ctx.doc.clear_selection(),
+                _ => ctx.doc.select_section(i),
+            }
+            return;
+        }
         if let Some((d, _)) = self.pick_dim(ctx, &picked) {
             match op {
                 SelOp::Remove => ctx.doc.remove_dims_from_selection(&[d]),
@@ -501,6 +517,15 @@ impl Tool for SelectTool {
 
     fn on_double_click(&mut self, ctx: &mut ToolContext) {
         let picked = self.pick(ctx);
+        if let Some(i) = self.pick_section(ctx, &picked) {
+            // Double-click a section plane: toggle its cut.
+            if ctx.pointer.click_count == 2 {
+                let on = ctx.doc.model.sections.get(i).is_some_and(|s| s.active);
+                ctx.commit("Active Cut", |m| m.set_active_section((!on).then_some(i)));
+                ctx.doc.select_section(i);
+            }
+            return;
+        }
         if let Some((d, _)) = self.pick_dim(ctx, &picked) {
             // Double-click a dimension (its text or lines): edit the text.
             if ctx.pointer.click_count == 2 {

@@ -23,6 +23,8 @@ pub struct TrayState {
     dim_text: Option<(varstotas_kernel::DimId, String)>,
     /// Texture position edit buffers of a face: offset x, offset y, angle, scale x, scale y.
     tex_pos: Option<(varstotas_kernel::FaceId, [String; 5])>,
+    /// Section plane name being edited in Entity Info.
+    section_name: Option<(usize, String)>,
     /// Texture size edit buffers of the current material: (material name, width, height).
     tex_size: Option<(String, String, String)>,
     /// Texture size: keep the image's aspect ratio (default on; stored inverted).
@@ -223,6 +225,10 @@ impl VarstotasApp {
         // details come from the cached summary (selections can hold 100k+ entities).
         let sel: Vec<EntityRef> = self.doc.selection.iter().take(2).cloned().collect();
         let guides: Vec<GuideRef> = self.doc.guide_sel.iter().take(2).cloned().collect();
+        if let Some(i) = self.doc.section_sel {
+            self.section_info(ui, i);
+            return;
+        }
         if sel.is_empty() && guides.len() == 1 && self.doc.dim_sel.is_empty() {
             self.guide_info(ui, guides[0]);
             return;
@@ -749,6 +755,59 @@ impl VarstotasApp {
     }
 
     /// Entity Info for a single selected guide line / guide point (world coordinates).
+    fn section_info(&mut self, ui: &mut Ui, i: usize) {
+        let Some(s) = self.doc.model.sections.get(i).cloned() else { return };
+        let unit = self.doc.model.unit;
+        if self.tray.section_name.as_ref().is_none_or(|n| n.0 != i) {
+            self.tray.section_name = Some((i, s.name.clone()));
+        }
+        let mut rename = None;
+        let mut active = s.active;
+        egui::Grid::new("entity_info_section").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new("Section Plane").strong());
+            ui.end_row();
+            ui.label("Name");
+            if let Some((_, buf)) = self.tray.section_name.as_mut() {
+                let resp = ui.add(egui::TextEdit::singleline(buf).desired_width(150.0));
+                if committed(ui, &resp) && buf.trim() != s.name && !buf.trim().is_empty() {
+                    rename = Some(buf.trim().to_string());
+                } else if !resp.has_focus() && *buf != s.name {
+                    *buf = s.name.clone();
+                }
+            }
+            ui.end_row();
+            ui.label("Active Cut");
+            ui.checkbox(&mut active, "");
+            ui.end_row();
+            let p = s.origin;
+            ui.label("Through");
+            ui.add(egui::Label::new(format!("{}, {}, {}", fmt_len(p.x, unit), fmt_len(p.y, unit), fmt_len(p.z, unit))).wrap());
+            ui.end_row();
+            ui.label("Normal");
+            ui.label(format!("{:.3}, {:.3}, {:.3}", s.normal.x, s.normal.y, s.normal.z));
+            ui.end_row();
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Reverse").clicked() {
+                self.actions.push(Action::ReverseSection);
+            }
+            if ui.button("Align View").clicked() {
+                self.actions.push(Action::AlignSectionView);
+            }
+        });
+        if active != s.active {
+            self.actions.push(Action::ActiveCut);
+        }
+        if let Some(name) = rename {
+            self.tray.section_name = None;
+            self.doc.commit("Rename Section", |m| {
+                if let Some(s) = m.sections.get_mut(i) {
+                    s.name = name;
+                }
+            });
+        }
+    }
+
     fn guide_info(&mut self, ui: &mut Ui, g: GuideRef) {
         let model = &self.doc.model;
         let unit = model.unit;

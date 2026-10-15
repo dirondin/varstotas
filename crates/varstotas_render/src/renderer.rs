@@ -66,6 +66,8 @@ struct Globals {
     hl_dim_edge: [f32; 4],
     /// Export tiling: tile NDC = full-image NDC * xy + zw. `TILE_FULL` = the whole image.
     tile: [f32; 4],
+    /// Active section cut in the local frame: keep `dot(xyz, p) >= w`; off = `(0, 0, 0, -1)`.
+    section: [f32; 4],
 }
 
 const TILE_FULL: [f32; 4] = [1.0, 1.0, 0.0, 0.0];
@@ -296,6 +298,8 @@ pub struct Renderer {
     face_textures: crate::textures::FaceTextures,
     /// Frame of the main axes (`None` = world axes).
     axes_frame: Option<AxesFrame>,
+    /// Active section cut (world): keep points with `n · p >= d`, as `[n.x, n.y, n.z, d]`.
+    section: Option<[f64; 4]>,
     blend: BlendSort,
     /// Reused per-frame scratch (no per-frame allocations).
     scratch_lines: Vec<LineInst>,
@@ -511,6 +515,7 @@ impl Renderer {
             text,
             face_textures,
             axes_frame: None,
+            section: None,
             blend: BlendSort {
                 key: None,
                 keys: Vec::new(),
@@ -1035,6 +1040,13 @@ impl Renderer {
             hl_dim_face: with_w(DIM_FACE_TARGET, DIM_FACE_MIX),
             hl_dim_edge: conv(DIM_EDGE_COLOR),
             tile,
+            section: match self.section {
+                Some([x, y, z, d]) => {
+                    let n = DVec3::new(x, y, z);
+                    v4(n, d - n.dot(geo_origin))
+                }
+                None => [0.0, 0.0, 0.0, -1.0],
+            },
         };
         globals.hidden_face[3] = 1.0;
         globals
@@ -1366,6 +1378,12 @@ impl Renderer {
     /// are resampled to a common power-of-two square (at most 1024 px) with mipmaps.
     pub fn set_textures(&mut self, rs: &egui_wgpu::RenderState, images: &[TextureData]) {
         self.face_textures.set(&rs.device, &rs.queue, images);
+    }
+
+    /// Section cut (world plane `[n.x, n.y, n.z, d]`, unit `n`): model faces and edges with
+    /// `n · p < d` are not drawn. Overlays are never cut.
+    pub fn set_section(&mut self, plane: Option<[f64; 4]>) {
+        self.section = plane;
     }
 
     pub fn set_axes_frame(&mut self, frame: Option<AxesFrame>) {
@@ -1828,7 +1846,7 @@ mod tests {
 
     #[test]
     fn layouts_match_shader() {
-        assert_eq!(std::mem::size_of::<Globals>(), 64 + 20 * 16);
+        assert_eq!(std::mem::size_of::<Globals>(), 64 + 21 * 16);
         assert_eq!(std::mem::size_of::<ThickLine>(), 48);
         assert_eq!(std::mem::size_of::<LineInst>(), 64);
         assert_eq!(std::mem::size_of::<SpriteVertex>(), 48);
