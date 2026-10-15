@@ -42,6 +42,7 @@ impl Mesh {
 
     /// Remove a vertex that has no edges.
     pub(crate) fn v_remove(&mut self, v: VertexId) {
+        self.detach_dims_from(v);
         self.cache.vgrid.remove(v);
         self.cache.vert_edges.remove(v);
         self.vertices.remove(v);
@@ -254,6 +255,7 @@ impl Mesh {
             }
             self.f_register(f);
         }
+        self.repoint_dims(gone, keep);
         self.v_remove(gone);
     }
 
@@ -366,7 +368,8 @@ impl Mesh {
 
     /// Next unused curve id.
     pub(crate) fn next_curve_id(&self) -> u32 {
-        self.edges.values().filter_map(|e| e.curve).max().map_or(1, |m| m + 1)
+        let e = self.edges.values().filter_map(|e| e.curve).max();
+        e.max(self.curves.keys().next_back().copied()).map_or(1, |m| m + 1)
     }
 }
 

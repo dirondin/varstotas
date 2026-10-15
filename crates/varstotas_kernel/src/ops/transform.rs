@@ -30,6 +30,7 @@ impl Mesh {
             self.v_set_pos(v, p);
         }
         let vset: HashSet<VertexId> = vs.iter().copied().collect();
+        self.transform_curve_infos(&vset, m);
         let mirror = m.determinant() < 0.0;
         let mut new_edges: Vec<EdgeId> = Vec::new();
         for f in affected {

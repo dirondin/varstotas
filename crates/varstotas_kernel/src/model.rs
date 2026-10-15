@@ -1,10 +1,12 @@
 //! The document: definitions (root, groups, components), instances, materials, tags.
 
+use crate::dims::{DimAnchor, DimId};
+use crate::guides::GuideRef;
 use crate::mesh::Mesh;
 use crate::{
     Aabb, DefId, EdgeId, EntityRef, FaceId, Instance, InstanceId, MaterialId, OpError, OpResult, Ray, TagId, VertexId,
 };
-use glam::{DMat4, DVec3};
+use glam::{DAffine3, DMat3, DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
 use std::collections::HashMap;
@@ -78,6 +80,11 @@ pub struct Model {
     #[serde(default)]
     pub guides_hidden: bool,
     pub unit: LengthUnit,
+    /// Custom drawing axes (Tools > Axes): origin = translation, columns of the matrix = unit
+    /// red / green / blue directions (orthonormal, right-handed). `None` = world axes.
+    /// Omitted from files when unset. See [`Model::set_axes`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axes: Option<DAffine3>,
 }
 
 /// Result of a model-wide ray pick.
@@ -111,6 +118,7 @@ impl Model {
             guide_points: SlotMap::with_key(),
             guides_hidden: false,
             unit: LengthUnit::Millimeter,
+            axes: None,
         }
     }
     pub fn root_mesh(&self) -> &Mesh {
@@ -229,9 +237,19 @@ impl Model {
         self.def_bounds(self.root)
     }
 
-    fn new_def_from(&mut self, path: &[InstanceId], ents: &[EntityRef], name: &str, is_group: bool) -> OpResult<InstanceId> {
+    fn new_def_from(
+        &mut self,
+        path: &[InstanceId],
+        ents: &[EntityRef],
+        guides: &[GuideRef],
+        dims: &[DimId],
+        name: &str,
+        is_group: bool,
+    ) -> OpResult<InstanceId> {
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
-        if ents.is_empty() {
+        let guides: Vec<GuideRef> = guides.iter().copied().filter(|g| self.has_guide_in(path, *g)).collect();
+        let dims: Vec<DimId> = dims.iter().copied().filter(|d| self.defs[pd].mesh.dims.contains_key(*d)).collect();
+        if ents.is_empty() && guides.is_empty() && dims.is_empty() {
             return Err(OpError::Invalid("nothing selected".into()));
         }
         let parent = &mut self.defs[pd].mesh;
@@ -281,6 +299,26 @@ impl Model {
         for v in &verts {
             vmap.entry(*v).or_insert_with(|| mesh.v_new(parent.vertices[*v].pos));
         }
+        // Curve metadata of the moved curves (same ids: the new mesh is fresh).
+        for ed in mesh.edges.values() {
+            if let Some(c) = ed.curve
+                && let Some(info) = parent.curves.get(&c)
+            {
+                mesh.curves.insert(c, *info);
+            }
+        }
+        // Selected dimensions move along; anchors on moved vertices stay attached.
+        for id in &dims {
+            let Some(mut d) = parent.dims.remove(*id) else { continue };
+            for a in [&mut d.a, &mut d.b] {
+                let p = parent.anchor_pos(a);
+                *a = match a.vertex.and_then(|v| vmap.get(&v)) {
+                    Some(nv) => DimAnchor { vertex: Some(*nv), point: p },
+                    None => DimAnchor::free(p),
+                };
+            }
+            mesh.dims.insert(d);
+        }
         for f in &faces {
             let face = parent.faces[*f].clone();
             let outer = face.outer.iter().map(|v| vmap[v]).collect();
@@ -303,7 +341,26 @@ impl Model {
         for v in touched {
             parent.remove_if_orphan(v);
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: Default::default() });
+        parent.prune_curves();
+        // Selected guides move into the new definition (identity transform: same coordinates).
+        let mut def_guides = crate::guides::DefGuides::default();
+        if let Some((lines, points)) = self.guide_store_mut(path) {
+            for g in &guides {
+                match *g {
+                    GuideRef::Line(id) => {
+                        if let Some(l) = lines.remove(id) {
+                            def_guides.lines.insert(l);
+                        }
+                    }
+                    GuideRef::Point(id) => {
+                        if let Some(p) = points.remove(id) {
+                            def_guides.points.insert(p);
+                        }
+                    }
+                }
+            }
+        }
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -319,12 +376,36 @@ impl Model {
     /// Move `ents` from the mesh at `path` into a new group; returns the new instance.
     /// Edges still used by faces that stay in the parent are copied (they remain in both).
     pub fn make_group(&mut self, path: &[InstanceId], ents: &[EntityRef]) -> OpResult<InstanceId> {
-        self.new_def_from(path, ents, "Group", true)
+        self.new_def_from(path, ents, &[], &[], "Group", true)
     }
 
     /// Like make_group but the definition is a reusable component.
     pub fn make_component(&mut self, path: &[InstanceId], ents: &[EntityRef], name: &str) -> OpResult<InstanceId> {
-        self.new_def_from(path, ents, name, false)
+        self.new_def_from(path, ents, &[], &[], name, false)
+    }
+
+    /// [`Model::make_group`] that also moves the selected guides and dimensions of the context
+    /// `path` into the new group. Works with only guides / dimensions selected too.
+    pub fn make_group_with(
+        &mut self,
+        path: &[InstanceId],
+        ents: &[EntityRef],
+        guides: &[GuideRef],
+        dims: &[DimId],
+    ) -> OpResult<InstanceId> {
+        self.new_def_from(path, ents, guides, dims, "Group", true)
+    }
+
+    /// [`Model::make_component`] that also moves the selected guides and dimensions.
+    pub fn make_component_with(
+        &mut self,
+        path: &[InstanceId],
+        ents: &[EntityRef],
+        guides: &[GuideRef],
+        dims: &[DimId],
+        name: &str,
+    ) -> OpResult<InstanceId> {
+        self.new_def_from(path, ents, guides, dims, name, false)
     }
 
     /// Number of instances (anywhere in the model) that use definition `d`.
@@ -366,6 +447,21 @@ impl Model {
             let nv = parent.v_get_or_new(t.transform_point3(vd.pos));
             vmap.insert(v, nv);
         }
+        // Dimensions are lifted to the parent; anchors stay on the (exploded) vertices.
+        for d in child.dims.values() {
+            let mut d = d.clone();
+            for a in [&mut d.a, &mut d.b] {
+                let p = t.transform_point3(child.anchor_pos(a));
+                *a = match a.vertex.and_then(|v| vmap.get(&v)) {
+                    Some(nv) => DimAnchor { vertex: Some(*nv), point: p },
+                    None => DimAnchor::free(p),
+                };
+            }
+            d.offset = t.transform_vector3(d.offset);
+            parent.dims.insert(d);
+        }
+        // Curves get fresh ids in the parent (metadata transformed with the instance).
+        let cmap = parent.remap_curves(&child.curves, child.edges.values().filter_map(|e| e.curve), &t);
         for (_, ed) in &child.edges {
             let (a, b) = (vmap[&ed.v[0]], vmap[&ed.v[1]]);
             if a == b {
@@ -373,7 +469,11 @@ impl Model {
             }
             let e = match parent.edge_between(a, b) {
                 Some(e) => e,
-                None => parent.e_new(a, b, Some(ed)),
+                None => {
+                    let mut tmpl = ed.clone();
+                    tmpl.curve = tmpl.curve.and_then(|c| cmap.get(&c).copied());
+                    parent.e_new(a, b, Some(&tmpl))
+                }
             };
             out.push(EntityRef::Edge(e));
         }
@@ -436,6 +536,60 @@ impl Model {
 
     pub fn add_tag(&mut self, name: &str) -> TagId {
         self.tags.insert(Tag { name: name.to_string(), visible: true, color: [0.5, 0.5, 0.5, 1.0] })
+    }
+
+    /// Set custom drawing axes: origin plus red (`x`) and green (`y`) directions. `y` is made
+    /// perpendicular to `x`; blue = `x × y`. `Err(Degenerate)` for zero / parallel directions.
+    pub fn set_axes(&mut self, origin: DVec3, x: DVec3, y: DVec3) -> OpResult<()> {
+        let xa = x.try_normalize().ok_or(OpError::Degenerate)?;
+        let ya = (y - xa * y.dot(xa)).try_normalize().ok_or(OpError::Degenerate)?;
+        if (y - xa * y.dot(xa)).length() < 1e-9 * y.length().max(1.0) {
+            return Err(OpError::Degenerate);
+        }
+        let za = xa.cross(ya);
+        let frame = DAffine3::from_mat3_translation(DMat3::from_cols(xa, ya, za), origin);
+        self.axes = if frame == DAffine3::IDENTITY { None } else { Some(frame) };
+        Ok(())
+    }
+
+    /// Back to the world axes (Reset in the Axes context menu).
+    pub fn reset_axes(&mut self) {
+        self.axes = None;
+    }
+
+    /// The drawing-axes frame (identity when unset): maps axes coordinates to world.
+    pub fn axes_frame(&self) -> DAffine3 {
+        self.axes.unwrap_or(DAffine3::IDENTITY)
+    }
+
+    pub fn axes_origin(&self) -> DVec3 {
+        self.axes_frame().translation
+    }
+
+    /// Unit red / green / blue directions of the drawing axes (world space).
+    pub fn axes_dirs(&self) -> [DVec3; 3] {
+        let m = self.axes_frame().matrix3;
+        [m.x_axis, m.y_axis, m.z_axis]
+    }
+
+    /// World point → drawing-axes coordinates.
+    pub fn world_to_axes(&self, p: DVec3) -> DVec3 {
+        self.axes_frame().inverse().transform_point3(p)
+    }
+
+    /// Drawing-axes coordinates → world point.
+    pub fn axes_to_world(&self, p: DVec3) -> DVec3 {
+        self.axes_frame().transform_point3(p)
+    }
+
+    /// World direction → drawing-axes components.
+    pub fn world_dir_to_axes(&self, d: DVec3) -> DVec3 {
+        self.axes_frame().matrix3.transpose() * d
+    }
+
+    /// Drawing-axes direction → world direction.
+    pub fn axes_dir_to_world(&self, d: DVec3) -> DVec3 {
+        self.axes_frame().matrix3 * d
     }
 
     /// Rebuild caches of every mesh (call after deserializing a model by hand).

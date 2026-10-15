@@ -179,8 +179,10 @@ impl Model {
             .unwrap_or_default()
     }
 
-    /// Scale / transform every guide stored in definition `d` (local transform `m`).
+    /// Scale / transform every guide stored in definition `d` (local transform `m`), and its
+    /// dimensions (free anchors and offsets; attached anchors follow their vertices).
     pub fn transform_def_guides(&mut self, d: crate::DefId, m: &DMat4) {
+        self.transform_def_dims(d, m);
         if d == self.root {
             let all = self.all_guides();
             self.transform_guides(&all, m);

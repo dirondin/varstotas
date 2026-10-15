@@ -11,6 +11,8 @@
 //! - `topology` — low-level sticky primitives (vertex merge, edge split, planar face finding, erase).
 //! - `ops` — push/pull, offset, follow-me, transform, duplicate, orientation.
 //! - [`model`] — `Model` document (definitions, instances, groups, components, materials, tags).
+//! - [`curves`] — arc / circle / polygon metadata, construction helpers, regeneration.
+//! - [`dims`] — linear dimensions (per context, anchored to vertices).
 //! - [`history`] — snapshot undo/redo.
 //! - [`tessellate()`] — world-space triangles/edges for rendering and picking.
 //! - [`triangulate`] — ear-clipping polygon-with-holes triangulation.
@@ -21,6 +23,8 @@ pub use glam;
 use glam::{DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 
+pub mod curves;
+pub mod dims;
 pub mod geom;
 mod grid;
 pub mod guides;
@@ -34,6 +38,8 @@ mod topology;
 pub mod triangulate;
 pub mod units;
 
+pub use curves::{CurveInfo, CurveKind};
+pub use dims::{DimAnchor, DimGeom, DimId, Dimension};
 pub use guides::{DefGuides, GuideGeom, GuideId, GuidePointId, GuideRef};
 pub use history::History;
 pub use mesh::Mesh;

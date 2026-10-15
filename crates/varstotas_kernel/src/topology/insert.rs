@@ -230,11 +230,17 @@ impl Mesh {
     /// one curve (shared `Edge::curve` id). Faces are detected once all segments are inserted.
     pub fn add_polyline(&mut self, pts: &[DVec3], closed: bool, as_curve: bool) -> Vec<EdgeId> {
         self.ensure();
+        let curve = if as_curve { Some(self.next_curve_id()) } else { None };
+        self.add_polyline_curve(pts, closed, curve)
+    }
+
+    /// `add_polyline` with an explicit curve id for the new edges.
+    pub(crate) fn add_polyline_curve(&mut self, pts: &[DVec3], closed: bool, curve: Option<u32>) -> Vec<EdgeId> {
+        self.ensure();
         let pts = clean_points(pts, closed);
         if pts.len() < 2 {
             return Vec::new();
         }
-        let curve = if as_curve { Some(self.next_curve_id()) } else { None };
         let mut pieces = Vec::new();
         let mut created = Vec::new();
         let n = pts.len();

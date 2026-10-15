@@ -16,7 +16,9 @@ use crate::{Aabb, Edge, EdgeId, EntityRef, Face, FaceId, Instance, InstanceId, P
 use glam::{DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 use slotmap::{SecondaryMap, SlotMap};
-use std::collections::{HashSet, VecDeque};
+use crate::curves::CurveInfo;
+use crate::dims::{DimId, Dimension};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 /// Private adjacency caches and spatial indices (rebuilt on load / when invalid).
 #[derive(Clone, Default)]
@@ -44,6 +46,13 @@ pub struct Mesh {
     pub edges: SlotMap<EdgeId, Edge>,
     pub faces: SlotMap<FaceId, Face>,
     pub instances: SlotMap<InstanceId, Instance>,
+    /// Metadata of arcs / circles / polygons by `Edge::curve` id (see [`crate::curves`]).
+    /// Omitted from files when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub curves: BTreeMap<u32, CurveInfo>,
+    /// Linear dimensions of this context (see [`crate::dims`]). Omitted from files when empty.
+    #[serde(default, skip_serializing_if = "SlotMap::is_empty")]
+    pub dims: SlotMap<DimId, Dimension>,
     #[serde(skip)]
     pub(crate) cache: Caches,
 }
@@ -450,6 +459,13 @@ impl Mesh {
             for v in face.loops().flatten() {
                 if pl.distance(self.pos(*v)).abs() > 10.0 * PTOL {
                     return Err(format!("face {f:?} not planar"));
+                }
+            }
+        }
+        for (_, d) in &self.dims {
+            for a in [d.a, d.b] {
+                if a.vertex.is_some_and(|v| !self.vertices.contains_key(v)) {
+                    return Err("dimension anchored to a missing vertex".into());
                 }
             }
         }
