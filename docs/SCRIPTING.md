@@ -89,3 +89,62 @@ let hole = cylinder(vec3(600, 400, 700), 30, 60);
 subtract(top, hole);
 print(bounds(groups()).size);
 ```
+
+## Python
+Пока Varstotas открыт, им можно управлять из Python 3. Нужен только стандартный модуль: клиент `varstotas.py` лежит в `python/` репозитория, а приложение при запуске копирует его в `~/.varstotas/python/`.
+
+- **File → Run Script…** запускает файл `.py` через `python3` (другой интерпретатор задаётся переменной `VARSTOTAS_PYTHON`). Вывод скрипта появляется в Script Console, кнопка «Stop Python» прерывает его.
+- **Из терминала:** `PYTHONPATH=~/.varstotas/python python3 my_script.py`. Адрес и токен клиент берёт из `~/.varstotas/bridge.json`.
+
+```python
+import varstotas
+from varstotas import vec3, ORIGIN, X, Y, Z
+
+m = varstotas.connect()
+with m.operation("Table"):            # всё внутри — один шаг Undo; исключение откатывает
+    m.material("Oak", "#C8A064")
+    top = m.box(vec3(0, 0, 720), 1200, 800, 30)
+    top.name = "Table top"
+    m.paint(top, "Oak")
+print(m.bounds(m.groups())["size"])   # vec3(1200, 800, 30)
+```
+
+- Каждая функция API Rhai — метод `m` с теми же именем и аргументами: `m.pushpull(f, 300)`, `m.rect(ORIGIN, 1000, 500)`. Свойства сущностей тоже те же: `e.area`, `e.normal`, `e.name = "…"`.
+- Вместо векторов можно передавать кортежи и списки `(x, y, z)`. `vec3` поддерживает арифметику, `.length()`, `.dot()`, `.cross()`.
+- Map из Rhai приходит как `dict`, `()` — как `None`. Ошибка Varstotas поднимает `varstotas.VarstotasError`.
+- Вызов вне `operation()` — отдельный шаг Undo «Python».
+- `m.rhai(code, **vars)` выполняет код Rhai одним вызовом; именованные аргументы становятся переменными. Так быстрее для больших циклов.
+- Приложение: `m.info()` (сводка документа), `m.undo()` / `m.redo()`, `m.view("iso" | "top" | … | "zoom_extents")`, `m.camera(eye=…, target=…, parallel=True)`, `m.screenshot(path=None, width=…, height=…)` (путь к PNG), `m.save(path=None)`, `m.export(path)` (формат по расширению: stl, obj, dxf, glb, 3mf, csv, svg, pdf, png), `m.open(path)`, `m.new()`.
+- Перед разрушительными действиями приложение показывает диалог «External script», и отказ поднимает ошибку. Такими считаются: сохранение поверх другого существующего файла, экспорт поверх файла, а также открытие файла или новый документ, когда есть несохранённые изменения.
+
+Пример — `examples/scripts/bookshelf.py`.
+
+## Мост (протокол)
+Приложение слушает только `127.0.0.1`, на случайном порту. Порт и случайный токен записываются в `~/.varstotas/bridge.json` (права 0600). Отключить мост можно переменной `VARSTOTAS_NO_BRIDGE=1`.
+
+Запрос — JSON-строка `{"id": 1, "token": "…", "method": "…", "params": {…}}`. Токен нужен в первом запросе соединения. Ответ: `{"id": 1, "result": …}` или `{"id": 1, "error": {"message": "…"}}`. Тот же JSON принимается как HTTP `POST /rpc`, токен — в теле или в заголовке `Authorization: Bearer …`. Запросы из браузера (с заголовком `Origin`) отклоняются.
+
+| Метод | Параметры → результат |
+|---|---|
+| `hello` | → `{app, version, api}` |
+| `eval` | `code`, `vars` (JSON), `label` → `{value, output, changed}`; сущности — `{"$entity": id, "kind"}`, векторы — `{"$vec": [x, y, z]}` (так же передаются в `vars`) |
+| `begin` / `commit` / `abort` | операция (один шаг Undo); если соединение закрылось с открытой операцией, она откатывается |
+| `info`, `docs` | сводка документа; этот справочник |
+| `undo`, `redo`, `view`, `camera`, `screenshot` (`path`, `width`, `height`, `base64`) | |
+| `save`, `export`, `open`, `new` | с подтверждением пользователя (см. выше) |
+
+## MCP-сервер для ИИ-агентов
+`~/.varstotas/python/varstotas_mcp.py` — MCP-сервер (stdio), который работает с запущенным Varstotas через мост. Подключение в Claude Code:
+
+```
+claude mcp add varstotas -- python3 ~/.varstotas/python/varstotas_mcp.py
+```
+
+Инструменты:
+- `api_reference` — этот справочник;
+- `model_info`;
+- `run_script` — код Rhai; один шаг Undo «Agent», ошибка ничего не меняет;
+- `screenshot` — PNG текущего вида;
+- `set_view`;
+- `undo`, `redo`;
+- `save`, `export`, `open`, `new_document` — помечены как разрушительные, приложение спрашивает пользователя.

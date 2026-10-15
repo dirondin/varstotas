@@ -294,6 +294,8 @@ pub struct VarstotasApp {
     pub(crate) confirm: Option<Pending>,
     pub(crate) show_about: bool,
     pub(crate) console: crate::ui::console::ConsoleState,
+    /// Local server for Python scripts and AI agents.
+    pub(crate) bridge: crate::bridge_ops::BridgeState,
     /// Transient status message (text, expiry time).
     /// Transient message (text, expiry time, is_error), shown next to the tool hint.
     pub(crate) flash: Option<(String, f64, bool)>,
@@ -418,6 +420,7 @@ impl VarstotasApp {
             confirm: None,
             show_about: false,
             console: Default::default(),
+            bridge: Default::default(),
             flash: None,
             tray: TrayState::default(),
             debug,
@@ -455,6 +458,7 @@ impl VarstotasApp {
             },
         };
         app.show_templates = show_templates;
+        app.start_bridge(&cc.egui_ctx);
         app
     }
 
@@ -489,7 +493,7 @@ impl VarstotasApp {
         self.flash = Some((msg.into(), self.now + FLASH_SECS, true));
     }
 
-    fn aspect(&self) -> f64 {
+    pub(crate) fn aspect(&self) -> f64 {
         let s = self.viewport.size();
         (s.x / s.y.max(1.0)) as f64
     }
@@ -1153,7 +1157,7 @@ impl VarstotasApp {
             Action::SolidTool(op) => self.solid_tool(op),
             Action::ToggleConsole => self.console.open = !self.console.open,
             Action::RunScript => {
-                if let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).pick_file() {
+                if let Some(p) = rfd::FileDialog::new().add_filter("Script", &["rhai", "py"]).pick_file() {
                     self.run_script_file(&p);
                 }
             }
@@ -1674,7 +1678,7 @@ impl VarstotasApp {
         }
     }
 
-    fn new_from_template(&mut self, t: Template) {
+    pub(crate) fn new_from_template(&mut self, t: Template) {
         self.replace_document(Document::from_model(t.new_model(), None));
         self.camera = t.camera(nav::startup_camera());
     }
@@ -1708,7 +1712,7 @@ impl VarstotasApp {
         self.tray.selected_scene = None;
     }
 
-    fn open_path(&mut self, path: &Path) {
+    pub(crate) fn open_path(&mut self, path: &Path) {
         match guarded(|| io::load(path)) {
             Ok(Ok(model)) => {
                 self.replace_document(Document::from_model(model, Some(path.to_path_buf())));
@@ -2212,6 +2216,7 @@ impl eframe::App for VarstotasApp {
             self.viewport.paint(ui, frame, &self.doc, &self.camera, &style, &o3, &o2, cursor);
         });
         match self.viewport.export_result.take() {
+            Some(r) if self.bridge_shot_done(&r) => {}
             Some(Ok(p)) => {
                 log::info!("exported {}", p.display());
                 self.flash(format!("Exported {}", p.display()));
@@ -2225,6 +2230,7 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.console_window(&ctx);
+        self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);
         self.update_title(&ctx);
@@ -2262,6 +2268,7 @@ impl eframe::App for VarstotasApp {
     }
 
     fn on_exit(&mut self) {
+        self.stop_bridge();
         // A normal close of a saved/discarded document removes its autosave; a dirty document
         // (forced close) keeps it for recovery.
         if !self.doc.dirty

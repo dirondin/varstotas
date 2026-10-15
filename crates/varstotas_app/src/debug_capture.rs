@@ -600,6 +600,11 @@ impl VarstotasApp {
             script.wait -= 1;
             return;
         }
+        // A Python script started by `run_script x.py` runs to its end first; so do
+        // bridge calls waiting for a confirmation that the script itself may answer.
+        if self.bridge.python.is_some() && self.bridge.confirm.is_empty() {
+            return;
+        }
         let Some(cmd) = script.cmds.get(script.pc).cloned() else {
             self.debug.force_close = true;
             ctx.send_viewport_cmd(ViewportCommand::Close);
@@ -892,6 +897,11 @@ impl VarstotasApp {
             self.run_script_file(std::path::Path::new(path.trim()));
             return;
         }
+        // `bridge_confirm allow|deny`: answer the confirmation an external script asked for.
+        if let Some(a) = name.strip_prefix("bridge_confirm ") {
+            self.bridge.answer = Some(a.trim() == "allow");
+            return;
+        }
         if let Some(code) = name.strip_prefix("script ") {
             self.run_script_source(&code.replace("\\n", "\n"), "Script");
             return;
@@ -1161,7 +1171,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?}", uvs.len(), self.last_vector, self.console.last);
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

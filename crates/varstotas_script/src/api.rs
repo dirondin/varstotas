@@ -156,8 +156,13 @@ fn show_vec(p: DVec3) -> String {
     format!("vec3({}, {}, {})", trim(p.x), trim(p.y), trim(p.z))
 }
 
+/// The entity's kind (`"?"` outside a run).
+pub(crate) fn kind_of(e: &Entity) -> String {
+    with(|st| Ok(kind(st, e))).unwrap_or_else(|_| "?".into())
+}
+
 fn show_ent(e: &Entity) -> String {
-    let kind = with(|st| Ok(kind(st, e))).unwrap_or_else(|_| "?".into());
+    let kind = kind_of(e);
     let id = match e.r {
         EntityRef::Vertex(v) => key_str(v),
         EntityRef::Edge(x) => key_str(x),

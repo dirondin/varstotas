@@ -6,6 +6,8 @@
 mod app;
 mod autosave;
 mod axes;
+mod bridge;
+mod bridge_ops;
 mod clipboard;
 mod debug_capture;
 mod document;

@@ -1928,6 +1928,8 @@ version = "0.1.0"
 dependencies = [
  "varstotas_kernel",
  "rhai",
+ "serde_json",
+ "slotmap",
 ]
 
 [[package]]

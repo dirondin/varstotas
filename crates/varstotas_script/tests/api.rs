@@ -183,3 +183,24 @@ fn docs_example_and_polyline_offset() {
     );
     assert_eq!(r.output, "vec3(1200, 800, 750)\n200000.0\n120000.0\n");
 }
+
+#[test]
+fn json_vars_values_and_entity_ids_round_trip() {
+    use serde_json::json;
+    let mut m = Model::new();
+    let vars = |v: serde_json::Value| v.as_object().unwrap().clone();
+    let ctx = ScriptCtx::default();
+    let r = varstotas_script::eval_json(&mut m, &ctx, "box(a0, a1, a2, a3)", &vars(json!({"a0": [0, 0, 0], "a1": 600, "a2": "40cm", "a3": 18.5})));
+    assert!(r.run.error.is_none() && r.run.changed, "{:?}", r.run.error);
+    assert_eq!(r.value["kind"], "group");
+    let g = r.value.clone();
+    // The id from the first call names the same group in the next one.
+    let r = varstotas_script::eval_json(&mut m, &ctx, "g.name = \"Shelf\"; [g.name, bounds(g).size, #{ n: 1, ok: true }]", &vars(json!({"g": g})));
+    assert!(r.run.error.is_none(), "{:?}", r.run.error);
+    assert_eq!(r.value, json!(["Shelf", {"$vec": [600.0, 400.0, 18.5]}, {"n": 1, "ok": true}]));
+    let (path, e) = varstotas_script::parse_entity_id(g["$entity"].as_str().unwrap()).unwrap();
+    assert!(path.is_empty() && matches!(e, EntityRef::Instance(_)));
+    assert_eq!(varstotas_script::entity_id(&path, e), g["$entity"].as_str().unwrap());
+    let r = varstotas_script::eval_json(&mut m, &ctx, "x", &vars(json!({"x": {"$entity": "nonsense"}})));
+    assert!(r.run.error.unwrap().contains("bad entity id"));
+}

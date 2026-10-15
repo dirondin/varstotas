@@ -6,6 +6,9 @@
 //! goes into the current context (the open group, or `enter(group)` inside the script).
 
 mod api;
+mod json;
+
+pub use json::{EvalJson, entity_id, eval_json, parse_entity_id};
 
 use varstotas_kernel::{ContextPath, EntityRef, Model};
 use std::cell::RefCell;
@@ -56,6 +59,23 @@ thread_local! {
 
 /// Run `src` against `model`.
 pub fn run(model: &mut Model, ctx: &ScriptCtx, src: &str) -> ScriptRun {
+    let (mut run, last) = run_with(model, ctx, src, Vec::new(), |v| (!v.is_unit()).then(|| api::show(v)));
+    if let Some(Some(s)) = last {
+        run.output.push_str(&s);
+        run.output.push('\n');
+    }
+    run
+}
+
+/// [`run`] with extra variables in scope; `finish` sees the last value while the script
+/// state (the changed model) is still available. The value is not added to the output.
+pub(crate) fn run_with<T>(
+    model: &mut Model,
+    ctx: &ScriptCtx,
+    src: &str,
+    vars: Vec<(String, rhai::Dynamic)>,
+    finish: impl FnOnce(&rhai::Dynamic) -> T,
+) -> (ScriptRun, Option<T>) {
     let state = State {
         model: model.clone(),
         path: ctx.path.clone(),
@@ -68,15 +88,15 @@ pub fn run(model: &mut Model, ctx: &ScriptCtx, src: &str) -> ScriptRun {
     STATE.with(|s| *s.borrow_mut() = Some(state));
     let engine = api::engine(ctx.time_limit.unwrap_or(Duration::from_secs(30)));
     let mut scope = api::scope();
+    for (k, v) in vars {
+        scope.push_dynamic(k, v);
+    }
     let result = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, src);
+    let value = result.as_ref().ok().map(finish);
     let state = STATE.with(|s| s.borrow_mut().take()).expect("script state");
     let mut out = ScriptRun { output: state.out, ..Default::default() };
     match result {
-        Ok(v) => {
-            if !v.is_unit() {
-                out.output.push_str(&api::show(&v));
-                out.output.push('\n');
-            }
+        Ok(_) => {
             if state.selection_set {
                 out.selection = Some(state.selection.iter().filter(|e| e.path == state.start_path).map(|e| e.r).collect());
             }
@@ -92,7 +112,7 @@ pub fn run(model: &mut Model, ctx: &ScriptCtx, src: &str) -> ScriptRun {
             })
         }
     }
-    out
+    (out, value)
 }
 
 /// Names of the API functions (for completion and the console's help line).

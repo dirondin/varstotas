@@ -1,5 +1,6 @@
 //! Window → Script Console: a Rhai editor over the model (see `docs/SCRIPTING.md`), and
-//! File → Run Script…. A run is one undo step ("Script"); an error changes nothing.
+//! File → Run Script… (`.rhai`, or `.py` through the bridge). A run is one undo step
+//! ("Script"); an error changes nothing.
 
 use super::theme;
 use crate::app::VarstotasApp;
@@ -68,6 +69,10 @@ impl VarstotasApp {
 
     /// File → Run Script…: pick a `.rhai` file and run it.
     pub(crate) fn run_script_file(&mut self, path: &std::path::Path) {
+        if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("py")) {
+            self.run_python_file(path);
+            return;
+        }
         match std::fs::read_to_string(path) {
             Ok(src) => {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -166,10 +171,17 @@ impl VarstotasApp {
                 {
                     self.console.log.push(LogLine::Error(format!("{}: {e}", p.display())));
                 }
+                if self.bridge.python.is_some() && ui.button("Stop Python").clicked() {
+                    self.stop_python();
+                }
                 if ui.button("Clear Output").clicked() {
                     self.console.log.clear();
                 }
                 ui.label(RichText::new("API: docs/SCRIPTING.md").color(theme::TEXT_DIM));
+                if let Some(b) = &self.bridge.server {
+                    ui.label(RichText::new(format!("Python / MCP bridge: 127.0.0.1:{}", b.port)).color(theme::TEXT_DIM))
+                        .on_hover_text("import varstotas; m = varstotas.connect()  — see ~/.varstotas/python");
+                }
             });
         });
         if let Some(src) = run
