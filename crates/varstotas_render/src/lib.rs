@@ -26,6 +26,27 @@ pub struct TriVertex {
     pub color: [f32; 4],
 }
 
+/// Texture coordinates of a face vertex (parallel to `SceneGeometry::tris`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct TexVertex {
+    /// Planar coordinates in mm; the shader divides by the layer's tile size.
+    pub uv: [f32; 2],
+    /// Texture layer + 1 for the front and back side (0 = untextured), see `Renderer::set_textures`.
+    pub layers: [u16; 2],
+}
+
+/// A material texture for `Renderer::set_textures`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextureData {
+    pub width: u32,
+    pub height: u32,
+    /// sRGB RGBA8, rows top to bottom.
+    pub rgba: Vec<u8>,
+    /// Tile size in mm (`[width, height]`).
+    pub size_mm: [f32; 2],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LineVertex {
@@ -40,6 +61,9 @@ pub struct SceneGeometry {
     /// supplied in `back_colors` per-vertex parallel array (same length as `tris`).
     pub tris: Vec<TriVertex>,
     pub back_colors: Vec<[f32; 4]>,
+    /// Texture coordinates per triangle vertex (same length as `tris`); empty = untextured.
+    /// A textured side shows the texture (alpha < 0.5 is cut out) with the color's alpha.
+    pub tex: Vec<TexVertex>,
     /// Line list (pairs) for model edges.
     pub edges: Vec<LineVertex>,
     /// Edges drawn as thick "profiles" (silhouette-ish outlines), line list pairs.
@@ -274,6 +298,8 @@ pub struct RenderStyle {
 // ---------------------------------------------------------------------------
 
 mod renderer;
+mod textures;
+pub use textures::MAX_LAYERS as MAX_TEXTURE_LAYERS;
 pub use renderer::{
     DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
     DIM_FACE_TARGET, ExportError, ExportOptions, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, MAX_EXPORT_DIM,

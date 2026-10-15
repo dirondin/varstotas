@@ -28,8 +28,11 @@ pub struct Material {
     pub name: String,
     /// Linear-ish sRGB 0..1 + alpha (opacity).
     pub color: [f32; 4],
-    /// Optional texture (path or embedded later).
+    /// Texture file path from an imported MTL (`map_Kd`); informational.
     pub texture: Option<String>,
+    /// Embedded texture image (see [`crate::texture`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<crate::texture::TextureImage>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -586,7 +589,7 @@ impl Model {
     }
 
     pub fn add_material(&mut self, name: &str, color: [f32; 4]) -> MaterialId {
-        self.materials.insert(Material { name: name.to_string(), color, texture: None })
+        self.materials.insert(Material { name: name.to_string(), color, texture: None, image: None })
     }
 
     pub fn add_tag(&mut self, name: &str) -> TagId {

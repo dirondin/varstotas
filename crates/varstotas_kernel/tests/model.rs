@@ -539,3 +539,89 @@ fn scenes_style_tags_and_settings_round_trip() {
     assert_eq!(old.scene_settings, SceneSettings::default());
     assert!(old.scenes.iter().all(|s| s.in_animation && s.style.is_none()));
 }
+
+/// A 2×1 PNG header is enough for the kernel (it never decodes pixels).
+fn fake_png(w: u32, h: u32) -> Vec<u8> {
+    let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    b.extend(w.to_be_bytes());
+    b.extend(h.to_be_bytes());
+    b.extend([8, 6, 0, 0, 0]);
+    b
+}
+
+fn top_face(mesh: &Mesh) -> FaceId {
+    mesh.faces.iter().find(|(_, f)| f.normal.z > 0.9).map(|(id, _)| id).unwrap()
+}
+
+#[test]
+fn texture_coordinates_follow_groups_and_placement() {
+    let mut m = box_model();
+    let tex = m.add_material("Brick", [1.0; 4]);
+    m.materials[tex].image = Some(TextureImage::new(fake_png(200, 100), "brick.png", 400.0));
+    assert_eq!(m.materials[tex].image.as_ref().unwrap().size, [400.0, 200.0]);
+    let top = top_face(m.root_mesh());
+    m.root_mesh_mut().faces[top].front = Some(tex);
+    let uv_of = |m: &Model| {
+        let t = tessellate(m);
+        let f = t.faces.iter().find(|f| f.front == Some(tex)).unwrap();
+        assert_eq!(f.uv.len(), f.positions.len());
+        f.positions.iter().zip(&f.uv).map(|(p, u)| (*p, *u)).collect::<Vec<_>>()
+    };
+    // Top face: u = x, v = y (mm).
+    for (p, u) in uv_of(&m) {
+        assert!((u.x - p.x).abs() < 1e-9 && (u.y - p.y).abs() < 1e-9);
+    }
+    // Inside a moved group the coordinates stay those of the local geometry.
+    let ents: Vec<EntityRef> = m.root_mesh().faces.keys().map(EntityRef::Face).collect();
+    let g = m.make_group(&[], &ents).unwrap();
+    m.root_mesh_mut().instances[g].transform = DMat4::from_translation(DVec3::new(5000.0, 0.0, 0.0));
+    for (p, u) in uv_of(&m) {
+        assert!((u.x - (p.x - 5000.0)).abs() < 1e-6, "{p} {u}");
+    }
+    // Placement: rotate 90° → u follows -y... and survives splitting the face.
+    let def = m.root_mesh().instances[g].def;
+    let mesh = &mut m.defs[def].mesh;
+    let top = top_face(mesh);
+    mesh.faces[top].uv = Some(TexPlacement { angle_deg: 90.0, ..Default::default() });
+    mesh.add_line(DVec3::new(50.0, 0.0, 30.0), DVec3::new(50.0, 50.0, 30.0));
+    let tops: Vec<&Face> = mesh.faces.values().filter(|f| f.normal.z > 0.9).collect();
+    assert_eq!(tops.len(), 2);
+    assert!(tops.iter().all(|f| f.uv.is_some_and(|p| p.angle_deg == 90.0) && f.front == Some(tex)));
+    for (p, u) in uv_of(&m) {
+        assert!((u.x - (p.y)).abs() < 1e-6 && (u.y + (p.x - 5000.0)).abs() < 1e-6, "{p} {u}");
+    }
+
+    // .vrst keeps the image bytes, size and the face placement.
+    let back = io::from_json(&io::to_json(&m).unwrap()).unwrap();
+    let img = back.materials.values().find_map(|mm| mm.image.as_ref()).unwrap();
+    assert_eq!((&img.bytes[..], img.size, img.pixels), (&fake_png(200, 100)[..], [400.0, 200.0], [200, 100]));
+    assert_eq!(back.defs[def].mesh.faces.values().filter(|f| f.uv.is_some()).count(), 2);
+}
+
+#[test]
+fn obj_export_writes_texture_and_uvs_import_embeds_it() {
+    let mut m = box_model();
+    let tex = m.add_material("Brick Wall", [0.6, 0.3, 0.2, 1.0]);
+    m.materials[tex].image = Some(TextureImage::new(fake_png(64, 64), "bricks.png", 1000.0));
+    let top = top_face(m.root_mesh());
+    m.root_mesh_mut().faces[top].front = Some(tex);
+    let (obj, mtl, files) = io::write_obj_with_textures(&m, "t.mtl");
+    assert!(mtl.contains("map_Kd Brick_Wall.png"), "{mtl}");
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].0, "Brick_Wall.png");
+    // Top face 100×50 → two triangles with texture coordinates in tiles of 1000 mm.
+    assert_eq!(obj.lines().filter(|l| l.starts_with("vt ")).count(), 6);
+    assert!(obj.lines().any(|l| l.starts_with("vt 0.1 0.05")));
+    assert_eq!(obj.lines().filter(|l| l.starts_with("f ") && l.split(' ').nth(1).unwrap().split('/').nth(1) != Some("")).count(), 2);
+
+    let dir = tmpdir("objtex");
+    let path = dir.join("t.obj");
+    io::export_obj(&m, &path).unwrap();
+    assert_eq!(std::fs::read(dir.join("Brick_Wall.png")).unwrap(), fake_png(64, 64));
+    let mut back = Model::new();
+    io::import_obj(&mut back, &path).unwrap();
+    let mm = back.materials.values().find(|mm| mm.name == "Brick_Wall").unwrap();
+    let img = mm.image.as_ref().expect("embedded texture");
+    assert_eq!((img.pixels, img.file_name.as_str()), ([64, 64], "Brick_Wall.png"));
+    assert_eq!(back.root_mesh().faces.len(), 6);
+}

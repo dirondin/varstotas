@@ -49,6 +49,8 @@ pub fn cached_raycast(model: &Model, version: u64, ray: &Ray) -> Option<ModelHit
 pub struct PaletteMaterial {
     pub name: String,
     pub color: [f32; 4],
+    /// Texture of a textured material (bytes shared, cheap to clone).
+    pub image: Option<varstotas_kernel::TextureImage>,
 }
 
 #[allow(dead_code)] // used by the Paint tool (Tools agent)
@@ -58,7 +60,19 @@ impl PaletteMaterial {
         if let Some((id, _)) = model.materials.iter().find(|(_, m)| m.name == self.name) {
             return id;
         }
-        model.add_material(&self.name, self.color)
+        let id = model.add_material(&self.name, self.color);
+        model.materials[id].image = self.image.clone();
+        id
+    }
+
+    /// A plain colour.
+    pub fn color(name: impl Into<String>, color: [f32; 4]) -> Self {
+        Self { name: name.into(), color, image: None }
+    }
+
+    /// The palette entry for a model material.
+    pub fn of(m: &varstotas_kernel::Material) -> Self {
+        Self { name: m.name.clone(), color: m.color, image: m.image.clone() }
     }
 }
 

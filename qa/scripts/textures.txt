@@ -1,0 +1,31 @@
+# M4 batch 3: a textured material from an image; paint faces; tile size; texture position; save/open keeps the image.
+box 0 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+texture ../../qa/models/bricks.png 800
+wait 2
+expect textures=["bricks:800x400"]
+expect tool=Paint
+# paint the front (-Y) face and the top face
+rawp click 1000 0 500
+rawp click 1000 500 1000
+wait 3
+expect mats={"-": 4, "bricks": 2}
+screenshot shots/textures_painted.bmp
+tool select
+rawp click 1000 0 500
+wait 3
+expect sel F=1
+dump face
+save qa_textures.vrst
+action new
+wait 3
+expect textures=[]
+open qa_textures.vrst
+wait 5
+expect textures=["bricks:800x400"]
+expect model_faces=6
+screenshot shots/textures_reopened.bmp
+undo
+quit

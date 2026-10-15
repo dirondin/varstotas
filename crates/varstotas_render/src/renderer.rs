@@ -3,7 +3,7 @@
 use crate::wgpu;
 use crate::{
     AxesFrame, Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, RenderStyle, SceneGeometry,
-    TriVertex,
+    TexVertex, TextureData, TriVertex,
 };
 use glam::{DMat4, DVec2, DVec3};
 
@@ -196,6 +196,10 @@ struct StaticGeo {
     /// Highlight state streams (`Highlight as u32`): per face vertex, per edge vertex (line list),
     /// per edge segment, per profile segment. Zero-initialised by `set_geometry`.
     face_states: Option<wgpu::Buffer>,
+    /// `TexVertex` per face vertex (zeros when the scene has no textures).
+    face_tex: Option<wgpu::Buffer>,
+    /// Leading `TexVertex`es of `face_tex` known to be zero (skip re-uploading zeros).
+    face_tex_zeros: usize,
     edge_states_vtx: Option<wgpu::Buffer>,
     edge_states_seg: Option<wgpu::Buffer>,
     profile_states: Option<wgpu::Buffer>,
@@ -207,6 +211,7 @@ struct StaticGeo {
 #[derive(Default)]
 struct GeoScratch {
     backs: Vec<[f32; 4]>,
+    tex: Vec<TexVertex>,
     opaque_idx: Vec<u32>,
     thick: Vec<ThickLine>,
     zeros: Vec<u32>,
@@ -288,6 +293,7 @@ pub struct Renderer {
     axes: DynBuffer,
     sprites: DynBuffer,
     text: TextAtlas,
+    face_textures: crate::textures::FaceTextures,
     /// Frame of the main axes (`None` = world axes).
     axes_frame: Option<AxesFrame>,
     blend: BlendSort,
@@ -451,7 +457,14 @@ impl Renderer {
             bind_group_layouts: &[Some(&bgl), Some(&text.bgl)],
             immediate_size: 0,
         });
-        let pipelines = build_pipelines(device, &shader, &layout, seg_layout.as_ref(), &text_layout, color_format);
+        let face_textures = crate::textures::FaceTextures::new(device);
+        let face_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("varstotas faces"),
+            bind_group_layouts: &[Some(&bgl), Some(&face_textures.bgl)],
+            immediate_size: 0,
+        });
+        let pipelines =
+            build_pipelines(device, &shader, &layout, &face_layout, seg_layout.as_ref(), &text_layout, color_format);
         let vb = wgpu::BufferUsages::VERTEX;
         Renderer {
             color_format,
@@ -483,6 +496,8 @@ impl Renderer {
                 edge_groups: Vec::new(),
                 profile_groups: Vec::new(),
                 face_states: None,
+                face_tex: None,
+                face_tex_zeros: 0,
                 edge_states_vtx: None,
                 edge_states_seg: None,
                 profile_states: None,
@@ -494,6 +509,7 @@ impl Renderer {
             axes: DynBuffer::new(device, "varstotas axes", vb),
             sprites: DynBuffer::new(device, "varstotas overlay sprites", vb),
             text,
+            face_textures,
             axes_frame: None,
             blend: BlendSort {
                 key: None,
@@ -565,6 +581,18 @@ impl Renderer {
         let usage_v = wgpu::BufferUsages::VERTEX;
         upload(device, queue, &mut g.tris, "varstotas tris", usage_v, bytemuck::cast_slice(tris));
         upload(device, queue, &mut g.backs, "varstotas backs", usage_v, bytemuck::cast_slice(backs));
+        if geo.tex.len() >= n {
+            upload(device, queue, &mut g.face_tex, "varstotas face tex", usage_v, bytemuck::cast_slice(&geo.tex[..n]));
+            g.face_tex_zeros = 0;
+        } else if g.face_tex_zeros < n || g.face_tex.is_none() {
+            sc.tex.clear();
+            sc.tex.resize(n, TexVertex::default());
+            let old = g.face_tex.as_ref().map(|b| b.size());
+            upload(device, queue, &mut g.face_tex, "varstotas face tex", usage_v, bytemuck::cast_slice(&sc.tex));
+            // A fresh (grown) buffer is zero-initialised past `n` too.
+            let size = g.face_tex.as_ref().map_or(0, |b| b.size()) as usize / std::mem::size_of::<TexVertex>();
+            g.face_tex_zeros = if old != g.face_tex.as_ref().map(|b| b.size()) { size } else { n };
+        }
         g.face_verts = n as u32;
         g.opaque_index_count = 0;
         if translucent_tris > 0 {
@@ -1192,11 +1220,14 @@ impl Renderer {
             pass.draw(0..3, 0..1);
         }
 
+        let face_tex_bg = &self.face_textures.bind_group;
         let set_face_buffers = |pass: &mut wgpu::RenderPass<'_>| {
-            if let (Some(tb), Some(bb), Some(sb)) = (&g.tris, &g.backs, &g.face_states) {
+            if let (Some(tb), Some(bb), Some(sb), Some(xb)) = (&g.tris, &g.backs, &g.face_states, &g.face_tex) {
                 pass.set_vertex_buffer(0, tb.slice(..));
                 pass.set_vertex_buffer(1, bb.slice(..));
                 pass.set_vertex_buffer(2, sb.slice(..));
+                pass.set_vertex_buffer(3, xb.slice(..));
+                pass.set_bind_group(1, face_tex_bg, &[]);
                 true
             } else {
                 false
@@ -1331,6 +1362,12 @@ impl Renderer {
     /// Frame of the main axes drawn when `RenderStyle::show_axes` is on (custom axes /
     /// axes of the open group or component). `None` = world axes. Kept until changed; also used
     /// by `render_to_image`.
+    /// Replace the face textures: `TexVertex::layers` value `i + 1` samples `images[i]`. Images
+    /// are resampled to a common power-of-two square (at most 1024 px) with mipmaps.
+    pub fn set_textures(&mut self, rs: &egui_wgpu::RenderState, images: &[TextureData]) {
+        self.face_textures.set(&rs.device, &rs.queue, images);
+    }
+
     pub fn set_axes_frame(&mut self, frame: Option<AxesFrame>) {
         self.axes_frame = frame;
     }
@@ -1451,6 +1488,7 @@ fn build_pipelines(
     device: &wgpu::Device,
     shader: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
+    face_layout: &wgpu::PipelineLayout,
     seg_layout: Option<&wgpu::PipelineLayout>,
     text_layout: &wgpu::PipelineLayout,
     color_format: wgpu::TextureFormat,
@@ -1458,6 +1496,7 @@ fn build_pipelines(
     let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4];
     let back_attrs = wgpu::vertex_attr_array![3 => Float32x4];
     let face_state_attrs = wgpu::vertex_attr_array![4 => Uint32];
+    let face_tex_attrs = wgpu::vertex_attr_array![5 => Float32x2, 6 => Uint16x2];
     let edge_state_attrs = wgpu::vertex_attr_array![2 => Uint32];
     let seg_state_attrs = wgpu::vertex_attr_array![5 => Uint32];
     let line_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x4];
@@ -1479,6 +1518,11 @@ fn build_pipelines(
             array_stride: 4,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &face_state_attrs,
+        }),
+        Some(wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<TexVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &face_tex_attrs,
         }),
     ];
     let edge_layouts = [
@@ -1637,7 +1681,7 @@ fn build_pipelines(
             bias: no_bias,
             cull: None,
         }),
-        face_opaque: make(Desc {
+        face_opaque: make_with(Desc {
             label: "varstotas faces",
             vs: "vs_face",
             fs: "fs_face",
@@ -1648,8 +1692,8 @@ fn build_pipelines(
             depth_compare: GreaterEqual,
             bias: face_bias,
             cull: None,
-        }),
-        face_blend: make(Desc {
+        }, face_layout),
+        face_blend: make_with(Desc {
             label: "varstotas faces blend",
             vs: "vs_face",
             fs: "fs_face",
@@ -1660,7 +1704,7 @@ fn build_pipelines(
             depth_compare: GreaterEqual,
             bias: face_bias,
             cull: None,
-        }),
+        }, face_layout),
         edge_thick: make(Desc {
             label: "varstotas edges thick",
             vs: "vs_thick_state",

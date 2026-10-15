@@ -22,7 +22,8 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `guides.rs` | guide lines and points, stored per definition |
 | `history.rs` | undo; each snapshot is a full model clone |
 | `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL |
-| `tessellate.rs` | model → world triangles and edges |
+| `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates) |
+| `texture.rs` | `TextureImage` (embedded PNG/JPEG, tile size), `TexPlacement` (per-face texture position), texture axes, base64 |
 | `units.rs` | parsing and formatting for the Measurements box (VCB) |
 | `grid.rs` | spatial hash |
 | `geom.rs` | geometry helpers |
@@ -38,6 +39,7 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | `camera.rs` | f64 camera, orbit, pan, zoom, projections, zoom extents |
 | `overlay.rs` | `Overlay3d` (lines, polygons, texts, marks, arcs, dimensions, leaders), plus `annot.rs` for the CPU glyph expansion |
 | `export.rs` | `render_to_image` (PNG export) |
+| `textures.rs` | face textures: `texture_2d_array`, CPU resample and mips (`Renderer::set_textures`) |
 | `shader.wgsl` | shaders |
 
 Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in `06-STATUS.md`).
@@ -48,7 +50,8 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `app.rs` | `VarstotasApp`: layout, actions, input routing, files |
 | `document.rs` | open document: model, history, selection, editing context |
 | `viewport.rs` | 3D view widget: input, renderer, overlays |
-| `scene_builder.rs` | model → `SceneGeometry`, highlight ids |
+| `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
+| `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
 | `axes.rs` | custom drawing axes, published once per frame |
@@ -67,7 +70,7 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `tools/dims.rs` | Dimension tool |
 | `tools/nav_tools.rs` | Orbit, Pan, Zoom tools |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
-| `ui/tray.rs` | Entity Info, Materials, Tags, Outliner, Scenes, Instructor |
+| `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags, Outliner, Scenes (play, settings), Instructor |
 | `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text) |
 | `ui/theme.rs` | look and feel |
 

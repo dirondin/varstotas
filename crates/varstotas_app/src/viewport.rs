@@ -46,6 +46,8 @@ pub struct Viewport {
     pub highlight_count: u64,
     /// CPU time of the last highlight update, milliseconds.
     pub last_highlight_ms: f64,
+    /// Material textures uploaded to the renderer.
+    textures: crate::textures::TextureSync,
     /// Render origin of the uploaded geometry (kept stable between rebuilds).
     origin: Option<varstotas_kernel::glam::DVec3>,
     /// PNG export to run at the next paint (needs the GPU renderer).
@@ -70,6 +72,7 @@ impl Default for Viewport {
             last_rebuild_parts: [0.0; 3],
             highlight_count: 0,
             last_highlight_ms: 0.0,
+            textures: Default::default(),
             origin: None,
             export: None,
             export_result: None,
@@ -144,6 +147,11 @@ impl Viewport {
                     self.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
                     let t2 = std::time::Instant::now();
+                    if let Some(images) = self.textures.changed(&doc.model)
+                        && let Err(e) = guarded(|| renderer.set_textures(rs, &images))
+                    {
+                        log::warn!("set_textures failed: {e}");
+                    }
                     if let Err(e) = guarded(|| renderer.set_geometry(rs, &geo)) {
                         log::warn!("set_geometry failed: {e}");
                     }

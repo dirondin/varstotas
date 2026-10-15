@@ -21,6 +21,14 @@ pub struct TrayState {
     /// Entity Info edit buffers: curve (id, radius, segments) and dimension (id, text).
     curve_edit: Option<(u32, String, String)>,
     dim_text: Option<(varstotas_kernel::DimId, String)>,
+    /// Texture position edit buffers of a face: offset x, offset y, angle, scale x, scale y.
+    tex_pos: Option<(varstotas_kernel::FaceId, [String; 5])>,
+    /// Texture size edit buffers of the current material: (material name, width, height).
+    tex_size: Option<(String, String, String)>,
+    /// Texture size: keep the image's aspect ratio (default on; stored inverted).
+    tex_free_aspect: bool,
+    /// Material thumbnails by texture bytes pointer.
+    thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -461,6 +469,157 @@ impl VarstotasApp {
                 }
             });
         }
+        if let [EntityRef::Face(fid)] = sel.as_slice() {
+            self.face_texture_info(ui, *fid);
+        }
+    }
+
+    /// Texture position of a textured face (the numeric form of the classic Texture Position):
+    /// offset of the texture origin, rotation and scale.
+    fn face_texture_info(&mut self, ui: &mut Ui, fid: varstotas_kernel::FaceId) {
+        let path = self.doc.active_path.clone();
+        let unit = self.doc.model.unit;
+        let model = &self.doc.model;
+        let Some(face) = model.mesh_at(&path).and_then(|m| m.faces.get(fid)) else { return };
+        let textured = [face.front, face.back]
+            .into_iter()
+            .flatten()
+            .any(|id| model.materials.get(id).is_some_and(|m| m.image.is_some()));
+        if !textured {
+            return;
+        }
+        let pl = face.uv.unwrap_or_default();
+        let texts = [
+            fmt_len(pl.offset[0], unit),
+            fmt_len(pl.offset[1], unit),
+            format!("{:.1}°", pl.angle_deg),
+            format!("{}", pl.scale[0]),
+            format!("{}", pl.scale[1]),
+        ];
+        if self.tray.tex_pos.as_ref().map(|t| t.0) != Some(fid) {
+            self.tray.tex_pos = Some((fid, texts.clone()));
+        }
+        let mut new = None;
+        let mut bad = false;
+        ui.add_space(6.0);
+        egui::Grid::new("entity_info_texture").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new("Texture").strong());
+            ui.end_row();
+            let Some((_, bufs)) = self.tray.tex_pos.as_mut() else { return };
+            for (i, label) in ["Offset X", "Offset Y", "Rotation", "Scale X", "Scale Y"].into_iter().enumerate() {
+                ui.label(label);
+                let resp = ui.add(egui::TextEdit::singleline(&mut bufs[i]).desired_width(120.0));
+                if committed(ui, &resp) && bufs[i] != texts[i] {
+                    let t = bufs[i].trim();
+                    let mut p = pl;
+                    let ok = match i {
+                        0 | 1 => varstotas_kernel::units::parse_length(t, unit).map(|v| p.offset[i] = v).is_some(),
+                        2 => t.trim_end_matches('°').trim().parse::<f64>().map(|v| p.angle_deg = v).is_ok(),
+                        _ => t.parse::<f64>().ok().filter(|v| v.abs() > 1e-6).map(|v| p.scale[i - 3] = v).is_some(),
+                    };
+                    if ok {
+                        new = Some(p);
+                    } else {
+                        bad = true;
+                    }
+                } else if !resp.has_focus() && bufs[i] != texts[i] {
+                    bufs[i] = texts[i].clone();
+                }
+                ui.end_row();
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Rotate 90°").clicked() {
+                new = Some(varstotas_kernel::TexPlacement { angle_deg: (pl.angle_deg + 90.0) % 360.0, ..pl });
+            }
+            if ui.add_enabled(!pl.is_identity(), egui::Button::new("Reset")).clicked() {
+                new = Some(Default::default());
+            }
+        });
+        if bad {
+            self.tray.tex_pos = None;
+            self.flash_error("Invalid value");
+        }
+        if let Some(p) = new {
+            self.tray.tex_pos = None;
+            self.doc.commit("Texture Position", |m| {
+                if let Some(f) = m.mesh_at_mut(&path).and_then(|mesh| mesh.faces.get_mut(fid)) {
+                    f.uv = (!p.is_identity()).then_some(p);
+                }
+            });
+        }
+    }
+
+    /// Thumbnail of a texture for the material swatches (decoded once).
+    fn thumbnail(&mut self, ctx: &egui::Context, img: &varstotas_kernel::TextureImage) -> Option<egui::TextureId> {
+        let key = std::sync::Arc::as_ptr(&img.bytes) as *const u8 as usize;
+        if let Some(t) = self.tray.thumbs.get(&key) {
+            return Some(t.id());
+        }
+        let ci = crate::textures::thumbnail(&img.bytes, 64)?;
+        let handle = ctx.load_texture(format!("thumb{key}"), ci, egui::TextureOptions::LINEAR);
+        let id = handle.id();
+        self.tray.thumbs.insert(key, handle);
+        Some(id)
+    }
+
+    /// Size of the current textured material's tile (width / height, aspect lock).
+    fn texture_size_editor(&mut self, ui: &mut Ui) {
+        let unit = self.doc.model.unit;
+        let Some(cur) = self.doc.current_material.clone() else { return };
+        let Some((mid, mat)) = self.doc.model.materials.iter().find(|(_, m)| m.name == cur.name) else { return };
+        let Some(img) = mat.image.clone() else { return };
+        let (wt, ht) = (fmt_len(img.size[0], unit), fmt_len(img.size[1], unit));
+        if self.tray.tex_size.as_ref().map(|t| &t.0) != Some(&cur.name) {
+            self.tray.tex_size = Some((cur.name.clone(), wt.clone(), ht.clone()));
+        }
+        let mut new: Option<[f64; 2]> = None;
+        let mut bad = false;
+        let lock = !self.tray.tex_free_aspect;
+        ui.add_space(4.0);
+        egui::Grid::new("texture_size").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            let Some((_, wb, hb)) = self.tray.tex_size.as_mut() else { return };
+            for (i, (label, buf, text)) in [("Texture width", wb, &wt), ("Texture height", hb, &ht)].into_iter().enumerate() {
+                ui.label(label);
+                let resp = ui.add(egui::TextEdit::singleline(buf).desired_width(100.0));
+                if committed(ui, &resp) && buf != text {
+                    match varstotas_kernel::units::parse_length(buf, unit).filter(|v| *v > 0.0) {
+                        Some(v) => {
+                            let mut sz = img.size;
+                            let k = v / sz[i];
+                            sz[i] = v;
+                            if lock {
+                                sz[1 - i] *= k;
+                            }
+                            new = Some(sz);
+                        }
+                        None => bad = true,
+                    }
+                } else if !resp.has_focus() && buf != text {
+                    *buf = text.clone();
+                }
+                ui.end_row();
+            }
+        });
+        let mut keep = lock;
+        if ui.checkbox(&mut keep, "Keep aspect ratio").changed() {
+            self.tray.tex_free_aspect = !keep;
+        }
+        if bad {
+            self.tray.tex_size = None;
+            self.flash_error("Invalid value");
+        }
+        if let Some(sz) = new {
+            self.tray.tex_size = None;
+            self.doc.commit("Edit Material", |m| {
+                if let Some(i) = m.materials.get_mut(mid).and_then(|m| m.image.as_mut()) {
+                    i.size = sz;
+                }
+            });
+            if let Some(m) = self.doc.model.materials.get(mid) {
+                self.doc.current_material = Some(PaletteMaterial::of(m));
+            }
+        }
     }
 
     /// The curve (arc / circle / polygon with metadata) when the selection is exactly its edges.
@@ -663,7 +822,7 @@ impl VarstotasApp {
             for (name, c) in PALETTE.iter() {
                 let sel = cur.as_ref().is_some_and(|m| m.name == *name);
                 if swatch(ui, Color32::from_rgb(c[0], c[1], c[2]), size, sel).on_hover_text(*name).clicked() {
-                    picked = Some(Some(PaletteMaterial { name: name.to_string(), color: rgb(*c) }));
+                    picked = Some(Some(PaletteMaterial::color(*name, rgb(*c))));
                 }
             }
         });
@@ -676,12 +835,12 @@ impl VarstotasApp {
             if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::OnlyBlend).changed() {
                 self.tray.custom_color = Some(c);
             }
+            if ui.button("Texture…").on_hover_text("New material from an image file (PNG, JPEG)").clicked() {
+                self.actions.push(Action::ImportTexture);
+            }
             if ui.button("Use").clicked() {
                 let [r, g, b, _] = c.to_srgba_unmultiplied();
-                picked = Some(Some(PaletteMaterial {
-                    name: format!("Color #{r:02X}{g:02X}{b:02X}"),
-                    color: color_f32(c),
-                }));
+                picked = Some(Some(PaletteMaterial::color(format!("Color #{r:02X}{g:02X}{b:02X}"), color_f32(c))));
             }
         });
 
@@ -689,15 +848,25 @@ impl VarstotasApp {
         if !self.doc.model.materials.is_empty() {
             ui.add_space(4.0);
             ui.label(RichText::new("In Model").small().color(theme::TEXT_DIM));
+            let mats: Vec<varstotas_kernel::Material> = self.doc.model.materials.values().cloned().collect();
+            let ctx = ui.ctx().clone();
             ui.horizontal_wrapped(|ui| {
-                for (_, m) in self.doc.model.materials.iter() {
+                for m in &mats {
                     let sel = cur.as_ref().is_some_and(|c| c.name == m.name);
-                    if swatch(ui, color32(m.color), 22.0, sel).on_hover_text(&m.name).clicked() {
-                        picked = Some(Some(PaletteMaterial { name: m.name.clone(), color: m.color }));
+                    let r = swatch(ui, color32(m.color), 22.0, sel).on_hover_text(&m.name);
+                    if let Some(img) = &m.image
+                        && let Some(t) = self.thumbnail(&ctx, img)
+                    {
+                        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                        ui.painter().image(t, r.rect.shrink(3.0), uv, Color32::WHITE);
+                    }
+                    if r.clicked() {
+                        picked = Some(Some(PaletteMaterial::of(m)));
                     }
                 }
             });
         }
+        self.texture_size_editor(ui);
         if let Some(p) = picked {
             self.doc.current_material = p;
             if self.tool_id() != crate::tools::ToolId::Paint {

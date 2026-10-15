@@ -326,6 +326,7 @@ impl Mesh {
             back: tmpl.back,
             hidden: tmpl.hidden,
             tag: tmpl.tag,
+            uv: tmpl.uv,
         };
         let f = self.faces.insert(face);
         self.f_register(f);

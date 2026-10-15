@@ -37,11 +37,7 @@ fn grid_mesh(n: usize, s: f64) -> Mesh {
             m.faces.insert(Face {
                 outer: vec![at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)],
                 holes: Vec::new(),
-                normal: DVec3::Z,
-                front: None,
-                back: None,
-                hidden: false,
-                tag: None,
+                ..Face::template()
             });
         }
     }

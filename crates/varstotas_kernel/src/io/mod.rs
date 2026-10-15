@@ -5,7 +5,7 @@ mod obj;
 mod stl;
 
 pub use native::{from_json, load, save, to_json};
-pub use obj::{export_obj, import_obj, import_obj_with, write_obj};
+pub use obj::{export_obj, import_obj, import_obj_with, write_obj, write_obj_with_textures};
 pub use stl::{export_stl, import_stl, import_stl_with, write_stl_binary};
 
 /// Options of the OBJ / STL importers.

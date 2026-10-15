@@ -6,11 +6,11 @@
 
 use crate::document::guarded;
 use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
-use varstotas_kernel::tessellate::triangulate_face;
+use varstotas_kernel::tessellate::face_world_triangles;
 use varstotas_kernel::{
     ContextPath, EntityRef, FaceId, InstanceId, MaterialId, Model, TessEdge, TessFace, Tessellation, tessellate,
 };
-use varstotas_render::{FaceStyle, Highlight, LineVertex, SceneGeometry, TriVertex};
+use varstotas_render::{FaceStyle, Highlight, LineVertex, SceneGeometry, TexVertex, TriVertex};
 use std::collections::HashSet;
 
 pub const FRONT_DEFAULT: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -106,7 +106,7 @@ fn tess_rec(
     let Some(def) = model.defs.get(d) else { return };
     let mesh = &def.mesh;
     let nm = DMat3::from_mat4(m).inverse().transpose();
-    let mirror = m.determinant() < 0.0;
+    let with_uv = model.materials.values().any(|m| m.image.is_some());
     let faces: Vec<FaceId> = mesh
         .faces
         .iter()
@@ -116,16 +116,7 @@ fn tess_rec(
     let owner: &ContextPath = path;
     let tess_face = |fid: FaceId| -> TessFace {
         let face = &mesh.faces[fid];
-        let tris = triangulate_face(mesh, fid);
-        let mut positions = Vec::with_capacity(tris.len() * 3);
-        for t in tris {
-            let (a, b, c) = (m.transform_point3(t[0]), m.transform_point3(t[1]), m.transform_point3(t[2]));
-            if mirror {
-                positions.extend([a, c, b]);
-            } else {
-                positions.extend([a, b, c]);
-            }
-        }
+        let (positions, uv) = face_world_triangles(mesh, fid, &m, with_uv);
         TessFace {
             owner_path: owner.clone(),
             face: Some(fid),
@@ -134,6 +125,7 @@ fn tess_rec(
             front: face.front,
             back: face.back,
             inherited,
+            uv,
         }
     };
     let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(16);
@@ -212,6 +204,13 @@ pub fn highlight(tess: &Tessellation, p: &HighlightParams) -> (Vec<Highlight>, V
     (faces, edges)
 }
 
+/// Textured materials in texture-layer order (layer `i + 1` in `TexVertex::layers`).
+pub fn texture_layers(model: &Model) -> Vec<MaterialId> {
+    let mut v: Vec<MaterialId> = model.materials.iter().filter(|(_, m)| m.image.is_some()).map(|(id, _)| id).collect();
+    v.truncate(varstotas_render::MAX_TEXTURE_LAYERS);
+    v
+}
+
 /// Geometry with base (material) colours and highlight ids; selection is applied separately.
 pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneGeometry {
     let mut geo = SceneGeometry::default();
@@ -243,9 +242,23 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
     geo.tris.reserve(n_verts);
     geo.back_colors.reserve(n_verts);
     geo.face_ids.reserve(n_verts / 3);
+    let layers = if mono { Vec::new() } else { texture_layers(model) };
+    let layer_of = |id: Option<MaterialId>| -> u16 {
+        id.and_then(|id| layers.iter().position(|l| *l == id)).map_or(0, |i| i as u16 + 1)
+    };
+    if !layers.is_empty() {
+        geo.tex.reserve(n_verts);
+    }
     for (fi, f) in tess.faces.iter().enumerate() {
         let front = mat_color(f.front.or(f.inherited)).unwrap_or(FRONT_DEFAULT);
         let back = mat_color(f.back.or(f.inherited)).unwrap_or(BACK_DEFAULT);
+        if !layers.is_empty() {
+            let lay = [layer_of(f.front.or(f.inherited)), layer_of(f.back.or(f.inherited))];
+            for k in 0..f.positions.len() {
+                let uv = if lay == [0, 0] { [0.0; 2] } else { f.uv.get(k).map_or([0.0; 2], |u| u.as_vec2().to_array()) };
+                geo.tex.push(TexVertex { uv, layers: lay });
+            }
+        }
         geo.face_ids.extend(std::iter::repeat_n(fi as u32, f.positions.len() / 3));
         let n = f.normal.as_vec3().to_array();
         for pos in &f.positions {

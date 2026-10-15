@@ -34,6 +34,7 @@ pub mod mesh;
 pub mod model;
 mod ops;
 pub mod tessellate;
+pub mod texture;
 mod topology;
 pub mod triangulate;
 pub mod units;
@@ -47,6 +48,7 @@ pub use ops::IntersectScope;
 pub use model::{
     ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
+pub use texture::{TexPlacement, TextureImage};
 pub use tessellate::{Owner, TessEdge, TessFace, Tessellation, tessellate};
 
 /// Point merge tolerance in millimetres.
@@ -248,6 +250,9 @@ pub struct Face {
     pub back: Option<MaterialId>,
     pub hidden: bool,
     pub tag: Option<TagId>,
+    /// Texture position on this face (`None` = default projection). See [`texture`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uv: Option<texture::TexPlacement>,
 }
 
 impl Face {
@@ -261,6 +266,7 @@ impl Face {
             back: None,
             hidden: false,
             tag: None,
+            uv: None,
         }
     }
     /// Iterate over all loops (outer first, then holes).

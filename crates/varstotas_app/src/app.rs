@@ -130,6 +130,8 @@ pub enum Action {
     MoveScene(usize, bool),
     /// View → Animation → Play / Pause.
     ToggleAnimation,
+    /// Materials → Texture…: new material from an image file.
+    ImportTexture,
     NextScene,
     PrevScene,
     About,
@@ -861,6 +863,11 @@ impl VarstotasApp {
             Action::SaveAs => {
                 self.save_as();
             }
+            Action::ImportTexture => {
+                if let Some(path) = rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg"]).pick_file() {
+                    self.add_texture_material(&path, 1000.0);
+                }
+            }
             Action::ImportObj => self.import(&["obj"], "OBJ"),
             Action::ImportStl => self.import(&["stl"], "STL"),
             Action::ExportObj => self.export("obj"),
@@ -1285,6 +1292,36 @@ impl VarstotasApp {
                 });
             }
         });
+    }
+
+    /// Add a material textured with the image at `path` (one tile `width_mm` wide) and make it
+    /// the paint material.
+    pub(crate) fn add_texture_material(&mut self, path: &Path, width_mm: f64) {
+        let (tex, decoded) = match crate::textures::load_file(path, width_mm) {
+            Ok(t) => t,
+            Err(e) => {
+                self.flash_error(format!("Can't use {}: {e}", path.display()));
+                return;
+            }
+        };
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Texture").to_string();
+        let mut name = stem.clone();
+        let mut k = 2;
+        while self.doc.model.materials.values().any(|m| m.name == name) {
+            name = format!("{stem} {k}");
+            k += 1;
+        }
+        let pm = crate::document::PaletteMaterial {
+            name,
+            color: crate::textures::average_color(&decoded),
+            image: Some(tex),
+        };
+        let p2 = pm.clone();
+        self.doc.commit("Add Material", |m| {
+            p2.ensure_in(m);
+        });
+        self.doc.current_material = Some(pm);
+        self.set_tool(ToolId::Paint);
     }
 
     /// A scene of the current view: camera, display style and hidden tags.

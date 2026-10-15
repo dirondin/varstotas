@@ -221,6 +221,8 @@ struct FaceIn {
     @location(2) color: vec4<f32>,
     @location(3) back: vec4<f32>,
     @location(4) state: u32,
+    @location(5) uv: vec2<f32>,
+    @location(6) layers: vec2<u32>,
 };
 
 struct FaceOut {
@@ -229,7 +231,14 @@ struct FaceOut {
     @location(1) color: vec4<f32>,
     @location(2) back: vec4<f32>,
     @location(3) @interpolate(flat) state: u32,
+    @location(4) uv: vec2<f32>,
+    @location(5) @interpolate(flat) layers: vec2<u32>,
 };
+
+// Material textures (see textures.rs): layer i + 1 in `layers`; `tex_info[i].xy` = 1 / tile size (mm).
+@group(1) @binding(0) var face_tex: texture_2d_array<f32>;
+@group(1) @binding(1) var face_tex_sampler: sampler;
+@group(1) @binding(2) var<uniform> tex_info: array<vec4<f32>, 256>;
 
 @vertex
 fn vs_face(v: FaceIn) -> FaceOut {
@@ -239,6 +248,8 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.color = lin(v.color);
     o.back = lin(v.back);
     o.state = hl_state(v.state);
+    o.uv = v.uv;
+    o.layers = v.layers;
     if g.params.x > 2.5 && o.state != HL_SELECTED {
         o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // wireframe tint pass: drop unselected triangles
     }
@@ -263,9 +274,20 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
         n = normalize(n);
     }
     var c = in.color;
+    var layer = in.layers.x;
     if !ff {
         n = -n;
         c = in.back;
+        layer = in.layers.y;
+    }
+    // Sampled for every fragment (implicit derivatives need uniform control flow).
+    let li = max(i32(layer) - 1, 0);
+    let texel = textureSample(face_tex, face_tex_sampler, in.uv * tex_info[li].xy, li);
+    if layer > 0u && mode < 0.5 {
+        if texel.a < 0.5 {
+            discard;
+        }
+        c = vec4<f32>(texel.rgb, c.a);
     }
     if mode > 0.5 {
         c = select(g.mono_back, g.mono_front, ff);

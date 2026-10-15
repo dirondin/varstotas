@@ -20,6 +20,7 @@ log.workspace = true
 env_logger.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+image.workspace = true
 
 # Windows-only: embeds icon + version info into varstotas.exe (see build.rs).
 [build-dependencies]

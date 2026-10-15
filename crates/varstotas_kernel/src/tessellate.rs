@@ -25,6 +25,9 @@ pub struct TessFace {
     pub back: Option<MaterialId>,
     /// Inherited material from enclosing instances (applies to faces with no material).
     pub inherited: Option<MaterialId>,
+    /// Planar texture coordinates in mm, one per position (from the face's local coordinates,
+    /// so textures move with their group). Divide by the material's tile size for UVs.
+    pub uv: Vec<DVec2>,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +64,26 @@ pub fn triangulate_face(mesh: &Mesh, f: FaceId) -> Vec<[DVec3; 3]> {
     triangulate(&o2, &hr).into_iter().map(|t| [all[t[0]], all[t[1]], all[t[2]]]).collect()
 }
 
+/// World triangles of face `f` under transform `m` (winding fixed for mirroring transforms)
+/// and, with `with_uv`, their planar texture coordinates in mm (see [`TessFace::uv`]).
+pub fn face_world_triangles(mesh: &Mesh, f: FaceId, m: &DMat4, with_uv: bool) -> (Vec<DVec3>, Vec<DVec2>) {
+    let Some(face) = mesh.faces.get(f) else { return Default::default() };
+    let mirror = m.determinant() < 0.0;
+    let tris = triangulate_face(mesh, f);
+    let mut positions = Vec::with_capacity(tris.len() * 3);
+    let mut uv = Vec::with_capacity(if with_uv { tris.len() * 3 } else { 0 });
+    let tex = |p: DVec3| crate::texture::face_uv_mm(p, face.normal, face.uv.as_ref());
+    for t in tris {
+        let (a, b, c) = (m.transform_point3(t[0]), m.transform_point3(t[1]), m.transform_point3(t[2]));
+        let order = if mirror { [0, 2, 1] } else { [0, 1, 2] };
+        positions.extend(order.map(|k| [a, b, c][k]));
+        if with_uv {
+            uv.extend(order.map(|k| tex(t[k])));
+        }
+    }
+    (positions, uv)
+}
+
 /// Flatten the whole model (respecting hidden flags and tag visibility) to world-space data.
 pub fn tessellate(model: &Model) -> Tessellation {
     let mut out = Tessellation::default();
@@ -83,21 +106,11 @@ fn rec(
     let Some(def) = model.defs.get(d) else { return };
     let mesh = &def.mesh;
     let nm = DMat3::from_mat4(m).inverse().transpose();
-    let mirror = m.determinant() < 0.0;
     for (fid, face) in &mesh.faces {
         if face.hidden || !model.tag_visible(face.tag) {
             continue;
         }
-        let tris = triangulate_face(mesh, fid);
-        let mut positions = Vec::with_capacity(tris.len() * 3);
-        for t in tris {
-            let (a, b, c) = (m.transform_point3(t[0]), m.transform_point3(t[1]), m.transform_point3(t[2]));
-            if mirror {
-                positions.extend([a, c, b]);
-            } else {
-                positions.extend([a, b, c]);
-            }
-        }
+        let (positions, uv) = face_world_triangles(mesh, fid, &m, true);
         out.faces.push(TessFace {
             owner_path: path.clone(),
             face: Some(fid),
@@ -106,6 +119,7 @@ fn rec(
             front: face.front,
             back: face.back,
             inherited,
+            uv,
         });
     }
     for (eid, ed) in &mesh.edges {

@@ -14,6 +14,7 @@ mod nav;
 mod overlay;
 mod scene_builder;
 mod templates;
+mod textures;
 mod tools;
 mod ui;
 mod viewport;

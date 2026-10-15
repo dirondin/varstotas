@@ -1015,6 +1015,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -1847,6 +1849,7 @@ dependencies = [
  "egui-wgpu",
  "env_logger",
  "glam",
+ "image",
  "log",
  "varstotas_kernel",
  "varstotas_render",

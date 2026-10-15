@@ -261,7 +261,7 @@ impl Tool for PaintTool {
                     _ => None,
                 }?;
                 let mm = ctx.doc.model.materials.get(id)?;
-                Some(PaletteMaterial { name: mm.name.clone(), color: mm.color })
+                Some(PaletteMaterial::of(mm))
             })
             .ok()
             .flatten();

@@ -20,6 +20,17 @@ fn sanitize(s: &str) -> String {
 /// Faces are grouped per effective front material (face material, else inherited, else
 /// `default`). Coordinates are millimetres.
 pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
+    let (obj, mtl, _) = write_obj_with_textures(model, mtl_file);
+    (obj, mtl)
+}
+
+/// A texture file referenced by an exported MTL: (file name, bytes).
+pub type TextureFile = (String, std::sync::Arc<[u8]>);
+
+/// [`write_obj`] plus the texture files the MTL references (`map_Kd <name>`): (file name, bytes).
+/// Textured faces get `vt` coordinates (planar mm divided by the tile size).
+pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String, Vec<TextureFile>) {
+    let mut textures = Vec::new();
     let tess = tessellate(model);
     let mut names: HashMap<Option<MaterialId>, String> = HashMap::new();
     let mut groups: Vec<(Option<MaterialId>, Vec<usize>)> = Vec::new();
@@ -50,7 +61,11 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
         used.insert(name.clone());
         let c = m.map(|id| model.materials[id].color).unwrap_or([1.0, 1.0, 1.0, 1.0]);
         let _ = writeln!(mtl, "\nnewmtl {name}\nKa 0 0 0\nKd {} {} {}\nKs 0 0 0\nd {}\nillum 1", c[0], c[1], c[2], c[3]);
-        if let Some(tex) = m.and_then(|id| model.materials[id].texture.as_ref()) {
+        if let Some(img) = m.and_then(|id| model.materials[id].image.as_ref()) {
+            let file = format!("{name}.{}", img.extension());
+            let _ = writeln!(mtl, "map_Kd {file}");
+            textures.push((file, img.bytes.clone()));
+        } else if let Some(tex) = m.and_then(|id| model.materials[id].texture.as_ref()) {
             let _ = writeln!(mtl, "map_Kd {tex}");
         }
         names.insert(*m, name);
@@ -60,8 +75,11 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
     let mut nidx: HashMap<[u64; 3], usize> = HashMap::new();
     let mut vlines = String::new();
     let mut nlines = String::new();
+    let mut tlines = String::new();
+    let mut tcount = 0usize;
     let mut flines = String::new();
     for (m, faces) in &groups {
+        let tile = m.and_then(|id| model.materials[id].image.as_ref()).map(|img| img.size);
         let _ = writeln!(flines, "g {}\nusemtl {}", names[m], names[m]);
         for &fi in faces {
             let f = &tess.faces[fi];
@@ -71,7 +89,7 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
                 let _ = writeln!(nlines, "vn {} {} {}", num(f.normal.x), num(f.normal.y), num(f.normal.z));
                 nlen + 1
             });
-            for t in f.positions.as_chunks::<3>().0 {
+            for (ti, t) in f.positions.as_chunks::<3>().0.iter().enumerate() {
                 let mut ids = [0usize; 3];
                 for (k, p) in t.iter().enumerate() {
                     let len = vidx.len();
@@ -80,22 +98,49 @@ pub fn write_obj(model: &Model, mtl_file: &str) -> (String, String) {
                         len + 1
                     });
                 }
-                let _ = writeln!(flines, "f {}//{ni} {}//{ni} {}//{ni}", ids[0], ids[1], ids[2]);
+                match tile {
+                    Some([w, h]) if f.uv.len() == f.positions.len() && w > 0.0 && h > 0.0 => {
+                        for k in 0..3 {
+                            let uv = f.uv[ti * 3 + k];
+                            let _ = writeln!(tlines, "vt {} {}", num(uv.x / w), num(uv.y / h));
+                        }
+                        let t0 = tcount;
+                        tcount += 3;
+                        let _ = writeln!(
+                            flines,
+                            "f {}/{}/{ni} {}/{}/{ni} {}/{}/{ni}",
+                            ids[0],
+                            t0 + 1,
+                            ids[1],
+                            t0 + 2,
+                            ids[2],
+                            t0 + 3
+                        );
+                    }
+                    _ => {
+                        let _ = writeln!(flines, "f {}//{ni} {}//{ni} {}//{ni}", ids[0], ids[1], ids[2]);
+                    }
+                }
             }
         }
     }
     obj.push_str(&vlines);
+    obj.push_str(&tlines);
     obj.push_str(&nlines);
     obj.push_str(&flines);
-    (obj, mtl)
+    (obj, mtl, textures)
 }
 
 pub fn export_obj(model: &Model, path: &Path) -> Result<(), IoError> {
     let mtl_path = path.with_extension("mtl");
     let mtl_name = mtl_path.file_name().and_then(|s| s.to_str()).unwrap_or("model.mtl").to_string();
-    let (obj, mtl) = write_obj(model, &mtl_name);
+    let (obj, mtl, textures) = write_obj_with_textures(model, &mtl_name);
     std::fs::write(path, obj)?;
-    std::fs::write(mtl_path, mtl)?;
+    std::fs::write(&mtl_path, mtl)?;
+    let dir = path.parent().unwrap_or(Path::new("."));
+    for (name, bytes) in textures {
+        std::fs::write(dir.join(name), &bytes[..])?;
+    }
     Ok(())
 }
 
@@ -225,6 +270,14 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
             mat_of[i] = Some(existing.unwrap_or_else(|| {
                 let id = model.add_material(&def.name, def.color);
                 model.materials[id].texture = def.texture.clone();
+                // Embed the image when the file is there (coordinates use the default projection).
+                if let Some(t) = &def.texture
+                    && let Ok(bytes) = std::fs::read(dir.join(t))
+                    && crate::texture::image_dimensions(&bytes).is_some()
+                {
+                    let name = Path::new(t).file_name().and_then(|n| n.to_str()).unwrap_or(t).to_string();
+                    model.materials[id].image = Some(crate::texture::TextureImage::new(bytes, name, 1000.0));
+                }
                 id
             }));
         }

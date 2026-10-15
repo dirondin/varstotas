@@ -223,6 +223,8 @@ pub enum ScriptCmd {
     Recover(Option<bool>),
     /// `open <path>` — open a model file (no file dialog, no "save changes?" prompt).
     Open(String),
+    /// `texture <path> [width_mm]` — new material from an image (Materials → Texture…).
+    Texture(String, f64),
     /// `export_png <path> [w h] [transparent] [noaxes] [noguides] [nodims]` — File → Export → 2D Graphic without dialogs
     /// (default size: the viewport's).
     ExportPng(String, Option<[u32; 2]>, crate::app::ExportContent),
@@ -439,6 +441,13 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "autosave" => ScriptCmd::Autosave,
         "save" if !rest.is_empty() => ScriptCmd::SaveTo(rest.to_string()),
         "open" if !rest.is_empty() => ScriptCmd::Open(rest.to_string()),
+        "texture" if !rest.is_empty() => {
+            let (path, w) = match rest.rsplit_once(char::is_whitespace) {
+                Some((p, w)) if w.parse::<f64>().is_ok() => (p.trim(), w.parse().unwrap_or(1000.0)),
+                _ => (rest, 1000.0),
+            };
+            ScriptCmd::Texture(path.to_string(), w)
+        }
         "export_png" if !rest.is_empty() => {
             let mut it = rest.split_whitespace();
             let path = it.next()?.to_string();
@@ -662,7 +671,11 @@ impl VarstotasApp {
                 self.doc.current_material = crate::ui::tray::PALETTE
                     .iter()
                     .find(|(n, _)| n.eq_ignore_ascii_case(&name))
-                    .map(|(n, c)| crate::document::PaletteMaterial { name: n.to_string(), color: crate::ui::tray::rgb(*c) });
+                    .map(|(n, c)| crate::document::PaletteMaterial::color(*n, crate::ui::tray::rgb(*c)))
+                    .or_else(|| {
+                        let m = self.doc.model.materials.values().find(|m| m.name.eq_ignore_ascii_case(&name))?;
+                        Some(crate::document::PaletteMaterial::of(m))
+                    });
             }
             ScriptCmd::Screenshot(path) => {
                 if let Some(s) = self.debug.script.as_mut() {
@@ -751,6 +764,7 @@ impl VarstotasApp {
                 }
                 self.resolve_recovery(c)
             }
+            ScriptCmd::Texture(p, w) => self.add_texture_material(std::path::Path::new(&p), w),
             ScriptCmd::Open(p) => {
                 self.doc.dirty = false;
                 self.actions.push(crate::app::Action::OpenPath(p.into()));
@@ -971,9 +985,16 @@ impl VarstotasApp {
             self.doc.dim_sel.len(),
             if m.axes.is_some() { format!("o({:.0},{:.0},{:.0}) x({:.2},{:.2},{:.2})", ax.origin.x, ax.origin.y, ax.origin.z, ax.x.x, ax.x.y, ax.x.z) } else { "world".into() }
         );
+        let textures: Vec<String> = m
+            .materials
+            .values()
+            .filter_map(|mm| mm.image.as_ref().map(|i| format!("{}:{:.0}x{:.0}", mm.name, i.size[0], i.size[1])))
+            .collect();
+        let placed = self.doc.active_mesh().map_or(0, |me| me.faces.values().filter(|f| f.uv.is_some()).count());
+        let extra = format!("textures={textures:?} uv_placed={placed}");
         let sc = &m.scene_settings;
-        let guides = format!(
-            "{guides} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
+        let extra = format!(
+            "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
             m.scenes.iter().map(|s| format!("{}{}", s.name, if s.in_animation { "" } else { "(-)" })).collect::<Vec<_>>(),
             self.tray.selected_scene,
             self.scene_player.is_some(),
@@ -1001,7 +1022,7 @@ impl VarstotasApp {
             self.viewport.last_rebuild_parts[2],
             self.viewport.highlight_count,
             self.viewport.last_highlight_ms,
-        )
+        ) + " " + &extra
     }
 
     /// Stress model: `n`×`n` separate boxes (6 faces each), one undo step.
