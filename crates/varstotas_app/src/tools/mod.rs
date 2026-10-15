@@ -18,6 +18,8 @@ mod draw;
 mod edit;
 mod nav_tools;
 pub(crate) mod section;
+mod text;
+pub(crate) mod text3d;
 mod texture;
 pub(crate) mod select;
 pub(crate) mod transform;
@@ -58,6 +60,7 @@ pub enum ToolId {
     Protractor,
     Axes,
     Dimension,
+    Text,
     Section,
     Orbit,
     Pan,
@@ -68,7 +71,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 30] = [
+    pub const ALL: [ToolId; 31] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -92,6 +95,7 @@ impl ToolId {
         ToolId::Protractor,
         ToolId::Axes,
         ToolId::Dimension,
+        ToolId::Text,
         ToolId::Section,
         ToolId::Orbit,
         ToolId::Pan,
@@ -126,6 +130,7 @@ impl ToolId {
             ToolId::Protractor => "Protractor",
             ToolId::Axes => "Axes",
             ToolId::Dimension => "Dimensions",
+            ToolId::Text => "Text",
             ToolId::Section => "Section Plane",
             ToolId::Orbit => "Orbit",
             ToolId::Pan => "Pan",
@@ -164,6 +169,7 @@ impl ToolId {
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
             | ToolId::Section
+            | ToolId::Text
             | ToolId::PositionCamera
             | ToolId::LookAround
             | ToolId::Walk
@@ -202,6 +208,7 @@ impl ToolId {
             ToolId::Protractor => Icon::Protractor,
             ToolId::Axes => Icon::Axes,
             ToolId::Dimension => Icon::Dimension,
+            ToolId::Text => Icon::Text,
             ToolId::Section => Icon::Section,
             ToolId::Orbit => Icon::Orbit,
             ToolId::Pan => Icon::Pan,
@@ -238,6 +245,7 @@ impl ToolId {
             ToolId::Protractor => "Measure angles and create angled guides.",
             ToolId::Axes => "Move or reorient the drawing axes.",
             ToolId::Dimension => "Place linear dimensions between points or on edges.",
+            ToolId::Text => "Add a text with a leader pointing at the model.",
             ToolId::Section => "Cut the model with a section plane to see inside.",
             ToolId::Orbit => "Rotate the camera around the model.",
             ToolId::Pan => "Move the camera sideways.",
@@ -344,6 +352,12 @@ impl ToolId {
                 "Click a start point and an end point (or click an edge), then move to offset the dimension and click.\n\
                  Double-click a dimension's text with Select to edit it; empty text restores the measured length."
             }
+            ToolId::Text => {
+                "Click a point, edge or face, move the text away and click again.\n\
+                 • Default text: a point's coordinates, an edge's length, a face's area.\n\
+                 • Click empty space for a text without a leader.\n\
+                 • Edit the text in Entity Info; move it with Move or by moving the geometry."
+            }
             ToolId::Section => {
                 "Click a face to place a section plane on it; it becomes the active cut.\n\
                  • The arrows point to the part that stays visible.\n\
@@ -404,6 +418,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Axes => Box::new(construct::AxesTool::default()),
         ToolId::Dimension => Box::new(dims::DimensionTool::default()),
         ToolId::Section => Box::new(section::SectionTool::default()),
+        ToolId::Text => Box::new(text::TextTool::default()),
         ToolId::Eraser => Box::new(edit::EraserTool::default()),
         ToolId::Paint => Box::new(edit::PaintTool::default()),
         ToolId::TexturePosition => Box::new(texture::TexturePositionTool::default()),

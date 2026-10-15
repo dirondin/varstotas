@@ -190,6 +190,7 @@ impl VarstotasApp {
             card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));
             card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui));
             card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui));
+            card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui));
             card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui));
             card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui));
         });
@@ -209,6 +210,61 @@ impl VarstotasApp {
         out.sort();
         out.dedup();
         out
+    }
+
+    fn shadows_panel(&mut self, ui: &mut Ui) {
+        let mut sh = self.doc.model.shadows;
+        ui.checkbox(&mut sh.enabled, "Show shadows");
+        egui::Grid::new("shadows").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
+            ui.label("Time");
+            ui.add(egui::Slider::new(&mut sh.minutes, 0..=24 * 60 - 1).step_by(5.0).custom_formatter(|v, _| {
+                let m = v as u32;
+                format!("{:02}:{:02}", m / 60, m % 60)
+            }).custom_parser(|t| {
+                let (h, m) = t.trim().split_once(':')?;
+                Some((h.trim().parse::<u32>().ok()? * 60 + m.trim().parse::<u32>().ok()?) as f64)
+            }));
+            ui.end_row();
+            ui.label("Date");
+            ui.add(egui::Slider::new(&mut sh.day, 1..=365).custom_formatter(|v, _| {
+                let (m, d) = varstotas_kernel::shadows::month_day(v as u32);
+                format!("{d} {}", varstotas_kernel::shadows::MONTH_NAMES[m as usize - 1])
+            }));
+            ui.end_row();
+            ui.label("Light");
+            ui.add(egui::Slider::new(&mut sh.light, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}", v * 100.0)));
+            ui.end_row();
+            ui.label("Dark");
+            ui.add(egui::Slider::new(&mut sh.dark, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}", v * 100.0)));
+            ui.end_row();
+            ui.label("Display");
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut sh.on_faces, "On faces");
+                ui.checkbox(&mut sh.on_ground, "On ground");
+            });
+            ui.end_row();
+        });
+        egui::CollapsingHeader::new("Location").id_salt("shadow_location").show(ui, |ui| {
+            egui::Grid::new("shadow_loc").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
+                ui.label("Latitude");
+                ui.add(egui::DragValue::new(&mut sh.latitude).range(-90.0..=90.0).speed(0.1).suffix("°"));
+                ui.end_row();
+                ui.label("Longitude");
+                ui.add(egui::DragValue::new(&mut sh.longitude).range(-180.0..=180.0).speed(0.1).suffix("°"));
+                ui.end_row();
+                ui.label("UTC offset");
+                ui.add(egui::DragValue::new(&mut sh.utc_offset).range(-12.0..=14.0).speed(0.05).fixed_decimals(1).suffix(" h"));
+                ui.end_row();
+                ui.label("North angle");
+                ui.add(egui::DragValue::new(&mut sh.north_deg).range(0.0..=360.0).speed(0.5).suffix("°"));
+                ui.end_row();
+            });
+        });
+        let alt = sh.sun_altitude_deg();
+        ui.label(RichText::new(if alt > 0.0 { format!("Sun {alt:.0}° above the horizon") } else { "Sun below the horizon".into() }).color(theme::TEXT_DIM));
+        if sh != self.doc.model.shadows {
+            self.actions.push(Action::SetShadows(sh));
+        }
     }
 
     fn soften_panel(&mut self, ui: &mut Ui) {
@@ -791,14 +847,17 @@ impl VarstotasApp {
         }
         let mut apply: Option<String> = None;
         egui::Grid::new("entity_info_dim").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new("Linear Dimension").strong());
+            ui.label(RichText::new(if g.leader { "Text" } else { "Linear Dimension" }).strong());
             ui.end_row();
-            ui.label("Length");
-            ui.label(fmt_len(g.length(), unit));
-            ui.end_row();
+            if !g.leader {
+                ui.label("Length");
+                ui.label(fmt_len(g.length(), unit));
+                ui.end_row();
+            }
             let Some((_, buf)) = self.tray.dim_text.as_mut() else { return };
             ui.label("Text");
-            let resp = ui.add(egui::TextEdit::singleline(buf).hint_text("<>").desired_width(150.0));
+            let hint = if g.leader { "" } else { "<>" };
+            let resp = ui.add(egui::TextEdit::singleline(buf).hint_text(hint).desired_width(150.0));
             if committed(ui, &resp) && *buf != text {
                 apply = Some(buf.clone());
             } else if !resp.has_focus() && *buf != text {
@@ -808,7 +867,8 @@ impl VarstotasApp {
         });
         if let Some(t) = apply {
             let t = Some(t.trim().to_string()).filter(|t| !t.is_empty());
-            self.doc.commit("Edit Dimension Text", |m| m.set_dimension_text_in(&path, id, t));
+            let label = if g.leader { "Edit Text" } else { "Edit Dimension Text" };
+            self.doc.commit(label, |m| m.set_dimension_text_in(&path, id, t));
             self.tray.dim_text = None;
         }
     }

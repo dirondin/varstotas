@@ -68,6 +68,48 @@ struct Globals {
     tile: [f32; 4],
     /// Active section cut in the local frame: keep `dot(xyz, p) >= w`; off = `(0, 0, 0, -1)`.
     section: [f32; 4],
+    /// Local frame -> shadow map clip space (x, y in -1..1, z in 0..1).
+    shadow_vp: [[f32; 4]; 4],
+    /// x: faces receive shadows; y: ground receives shadows; z: light shade; w: dark shade.
+    shadow: [f32; 4],
+    /// x: normal offset of receivers (local units); y: 1 / map size; z: 1 = sun above the horizon.
+    shadow2: [f32; 4],
+}
+
+/// Shadow map side in texels (clamped to the device limit).
+const SHADOW_MAP_SIZE: u32 = 4096;
+const SHADOW_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// Uniform of the shadow pass, mirrors `ShadowU` in shader.wgsl.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct ShadowUniform {
+    vp: [[f32; 4]; 4],
+    section: [f32; 4],
+}
+
+/// What the shadow map was rendered for.
+#[derive(Clone, Copy, PartialEq)]
+struct ShadowKey {
+    revision: u64,
+    sun: [f64; 3],
+    section: Option<[f64; 4]>,
+}
+
+/// Sun shadow map: depth from an orthographic view along the sun, fitted to the scene bounds.
+/// Re-rendered only when the geometry, the sun or the section cut changes.
+struct ShadowMap {
+    size: u32,
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+    pipeline: wgpu::RenderPipeline,
+    uniform: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    key: Option<ShadowKey>,
+    /// Local frame -> light clip of the current map.
+    vp: glam::Mat4,
+    /// World size of one texel.
+    texel: f32,
 }
 
 const TILE_FULL: [f32; 4] = [1.0, 1.0, 0.0, 0.0];
@@ -169,6 +211,8 @@ struct StaticGeo {
     origin: DVec3,
     /// Triangle centroids (local frame), same order as the vertex buffer (opaque, then translucent).
     centroids: Vec<[f32; 3]>,
+    /// Bounds of the triangles (local frame); `None` = no faces.
+    bounds: Option<(glam::Vec3, glam::Vec3)>,
     tris: Option<wgpu::Buffer>,
     backs: Option<wgpu::Buffer>,
     /// Vertex counts: opaque range first, then translucent.
@@ -287,6 +331,9 @@ pub struct Renderer {
     pipelines: Pipelines,
     globals: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+    /// Layout of group 0 (globals + shadow map), kept to rebuild `bind_group` when the map grows.
+    bgl: wgpu::BindGroupLayout,
+    shadow: ShadowMap,
     targets: Option<Targets>,
     texture_id: Option<egui::TextureId>,
     geo: StaticGeo,
@@ -353,6 +400,7 @@ impl Default for RenderStyle {
             edge_color: hex(0x000000, 1.0),
             light_dir: DEFAULT_LIGHT_DIR,
             ambient: DEFAULT_AMBIENT,
+            shadows: None,
         }
     }
 }
@@ -399,16 +447,34 @@ impl Renderer {
         });
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("varstotas globals"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
         });
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("varstotas globals"),
@@ -416,14 +482,8 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("varstotas globals"),
-            layout: &bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals.as_entire_binding(),
-            }],
-        });
+        let shadow = ShadowMap::new(device, &shader);
+        let bind_group = globals_bind_group(device, &bgl, &globals, &shadow);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("varstotas"),
             bind_group_layouts: &[Some(&bgl)],
@@ -477,12 +537,15 @@ impl Renderer {
             pipelines,
             globals,
             bind_group,
+            bgl,
+            shadow,
             targets: None,
             texture_id: None,
             geo: StaticGeo {
                 revision: 0,
                 origin: DVec3::ZERO,
                 centroids: Vec::new(),
+                bounds: None,
                 tris: None,
                 backs: None,
                 face_verts: 0,
@@ -625,6 +688,9 @@ impl Renderer {
             let c = (glam::Vec3::from(t[0].pos) + glam::Vec3::from(t[1].pos) + glam::Vec3::from(t[2].pos)) / 3.0;
             c.to_array()
         }));
+        g.bounds = tris.iter().map(|v| glam::Vec3::from(v.pos)).filter(|p| p.is_finite()).fold(None, |b, p| {
+            Some(b.map_or((p, p), |(lo, hi): (glam::Vec3, glam::Vec3)| (lo.min(p), hi.max(p))))
+        });
         g.revision += 1;
         self.blend.key = None;
 
@@ -911,6 +977,7 @@ impl Renderer {
         let device = &rs.device;
         let queue = &rs.queue;
 
+        self.update_shadow_map(rs, style);
         let globals = self.globals(camera, style, size, size, ppp, TILE_FULL, HL_SHOW_ALL);
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         let counts = self.prepare_frame(rs, camera, overlay, style, size, ppp);
@@ -989,7 +1056,11 @@ impl Renderer {
             style.light_dir[1] as f64,
             style.light_dir[2] as f64,
         );
-        let light = if ld.length_squared() > 1e-12 { ld.normalize() } else { DVec3::Z };
+        let mut light = if ld.length_squared() > 1e-12 { ld.normalize() } else { DVec3::Z };
+        let sh = style.shadows.filter(|s| DVec3::from_array(s.sun_dir).is_finite());
+        if let Some(s) = sh {
+            light = DVec3::from_array(s.sun_dir).normalize_or(DVec3::Z);
+        }
         let (bias_rel, bias_abs) = if camera.ortho {
             let (n, f) = camera.ortho_depth_range(scene_radius);
             let px = camera.pixel_size_at(camera.target, viewport_pts);
@@ -1047,6 +1118,23 @@ impl Renderer {
                 }
                 None => [0.0, 0.0, 0.0, -1.0],
             },
+            shadow_vp: self.shadow.vp.to_cols_array_2d(),
+            shadow: match sh {
+                Some(s) if self.shadow.key.is_some() => [
+                    if s.on_faces { 1.0 } else { 0.0 },
+                    if s.on_ground { 1.0 } else { 0.0 },
+                    s.light.clamp(0.0, 1.0),
+                    s.dark.clamp(0.0, 1.0),
+                ],
+                Some(s) => [0.0, 0.0, s.light.clamp(0.0, 1.0), s.dark.clamp(0.0, 1.0)],
+                None => [0.0; 4],
+            },
+            shadow2: [
+                self.shadow.texel * 1.5,
+                1.0 / self.shadow.size as f32,
+                if sh.is_some_and(|s| s.sun_dir[2] > 0.0) { 1.0 } else { 0.0 },
+                if sh.is_some() { 1.0 } else { 0.0 },
+            ],
         };
         globals.hidden_face[3] = 1.0;
         globals
@@ -1382,6 +1470,94 @@ impl Renderer {
 
     /// Section cut (world plane `[n.x, n.y, n.z, d]`, unit `n`): model faces and edges with
     /// `n · p < d` are not drawn. Overlays are never cut.
+    /// Re-render the shadow map if shadows are on and the geometry, the sun or the section cut
+    /// changed since the last one (separate submission, before the frame).
+    fn update_shadow_map(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle) {
+        let Some(sh) = style.shadows else { return };
+        let sun = DVec3::from_array(sh.sun_dir);
+        let key = ShadowKey { revision: self.geo.revision, sun: sh.sun_dir, section: self.section };
+        if self.shadow.key == Some(key) {
+            return;
+        }
+        let device = &rs.device;
+        let size = SHADOW_MAP_SIZE.min(self.max_texture_dim);
+        if self.shadow.size != size {
+            self.shadow.resize(device, size);
+            self.bind_group = globals_bind_group(device, &self.bgl, &self.globals, &self.shadow);
+        }
+        self.shadow.key = Some(key);
+        let Some((lo, hi)) = self.geo.bounds else {
+            // No faces: nothing casts; an empty (cleared) map keeps everything lit.
+            self.shadow.vp = glam::Mat4::IDENTITY;
+            self.encode_shadow_pass(rs, false);
+            return;
+        };
+        let dir = if sun.is_finite() && sun.length_squared() > 1e-12 { sun.normalize() } else { DVec3::Z };
+        let (lo, hi) = (lo.as_dvec3(), hi.as_dvec3());
+        let c = (lo + hi) * 0.5;
+        let r = ((hi - lo).length() * 0.5).max(1.0);
+        let up = if dir.z.abs() > 0.99 { DVec3::Y } else { DVec3::Z };
+        // Right-handed look-at from the sun side, then an ortho box (depth 0 = near .. 1 = far).
+        let eye = c + dir * 2.0 * r;
+        let f = -dir;
+        let rt = f.cross(up).normalize();
+        let u = rt.cross(f);
+        let view = DMat4::from_cols(
+            glam::DVec4::new(rt.x, u.x, -f.x, 0.0),
+            glam::DVec4::new(rt.y, u.y, -f.y, 0.0),
+            glam::DVec4::new(rt.z, u.z, -f.z, 0.0),
+            glam::DVec4::new(-rt.dot(eye), -u.dot(eye), f.dot(eye), 1.0),
+        );
+        let (n, fa) = (0.5 * r, 3.5 * r);
+        let proj = DMat4::from_cols(
+            glam::DVec4::new(1.0 / r, 0.0, 0.0, 0.0),
+            glam::DVec4::new(0.0, 1.0 / r, 0.0, 0.0),
+            glam::DVec4::new(0.0, 0.0, -1.0 / (fa - n), 0.0),
+            glam::DVec4::new(0.0, 0.0, -n / (fa - n), 1.0),
+        );
+        self.shadow.vp = (proj * view).as_mat4();
+        self.shadow.texel = (2.0 * r / size as f64) as f32;
+        self.encode_shadow_pass(rs, true);
+    }
+
+    fn encode_shadow_pass(&self, rs: &egui_wgpu::RenderState, draw: bool) {
+        let geo_origin = self.geo.origin;
+        let section = match self.section {
+            Some([x, y, z, d]) => {
+                let n = DVec3::new(x, y, z);
+                [n.x as f32, n.y as f32, n.z as f32, (d - n.dot(geo_origin)) as f32]
+            }
+            None => [0.0, 0.0, 0.0, -1.0],
+        };
+        let u = ShadowUniform { vp: self.shadow.vp.to_cols_array_2d(), section };
+        rs.queue.write_buffer(&self.shadow.uniform, 0, bytemuck::bytes_of(&u));
+        let mut enc = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("varstotas shadow") });
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("varstotas shadow map"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.shadow.view,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if draw
+                && let Some(tb) = &self.geo.tris
+                && self.geo.face_verts > 0
+            {
+                pass.set_pipeline(&self.shadow.pipeline);
+                pass.set_bind_group(1, &self.shadow.bind_group, &[]);
+                pass.set_vertex_buffer(0, tb.slice(..));
+                pass.draw(0..self.geo.face_verts, 0..1);
+            }
+        }
+        rs.queue.submit(Some(enc.finish()));
+    }
+
     pub fn set_section(&mut self, plane: Option<[f64; 4]>) {
         self.section = plane;
     }
@@ -1402,6 +1578,133 @@ impl Renderer {
 
 /// Write `data` into `slot`, reusing the buffer when it is large enough (grow-only, 25 % slack).
 /// Empty data keeps the old buffer (draws are gated by counts).
+fn globals_bind_group(
+    device: &wgpu::Device,
+    bgl: &wgpu::BindGroupLayout,
+    globals: &wgpu::Buffer,
+    shadow: &ShadowMap,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("varstotas globals"),
+        layout: bgl,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: globals.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&shadow.view) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&shadow.sampler) },
+        ],
+    })
+}
+
+impl ShadowMap {
+    /// A 1×1 placeholder map (shadows off) plus the shadow pass pipeline.
+    fn new(device: &wgpu::Device, shader: &wgpu::ShaderModule) -> Self {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("varstotas shadow sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        let uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("varstotas shadow uniform"),
+            size: std::mem::size_of::<ShadowUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("varstotas shadow pass"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("varstotas shadow pass"),
+            layout: &bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }],
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("varstotas shadow pass"),
+            bind_group_layouts: &[None, Some(&bgl)],
+            immediate_size: 0,
+        });
+        let pos_attr = wgpu::vertex_attr_array![0 => Float32x3];
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("varstotas shadow pass"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: shader,
+                entry_point: Some("vs_shadow"),
+                compilation_options: Default::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<TriVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &pos_attr,
+                })],
+            },
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: SHADOW_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 },
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: shader,
+                entry_point: Some("fs_shadow"),
+                compilation_options: Default::default(),
+                targets: &[],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let mut m = ShadowMap {
+            size: 0,
+            view: Self::texture(device, 1),
+            sampler,
+            pipeline,
+            uniform,
+            bind_group,
+            key: None,
+            vp: glam::Mat4::IDENTITY,
+            texel: 0.0,
+        };
+        m.size = 1;
+        m
+    }
+
+    fn texture(device: &wgpu::Device, size: u32) -> wgpu::TextureView {
+        device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("varstotas shadow map"),
+                size: wgpu::Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: SHADOW_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default())
+    }
+
+    fn resize(&mut self, device: &wgpu::Device, size: u32) {
+        self.view = Self::texture(device, size);
+        self.size = size;
+        self.key = None;
+    }
+}
+
 fn upload(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -1846,7 +2149,8 @@ mod tests {
 
     #[test]
     fn layouts_match_shader() {
-        assert_eq!(std::mem::size_of::<Globals>(), 64 + 21 * 16);
+        assert_eq!(std::mem::size_of::<Globals>(), 64 + 21 * 16 + 64 + 2 * 16);
+        assert_eq!(std::mem::size_of::<ShadowUniform>(), 80);
         assert_eq!(std::mem::size_of::<ThickLine>(), 48);
         assert_eq!(std::mem::size_of::<LineInst>(), 64);
         assert_eq!(std::mem::size_of::<SpriteVertex>(), 48);

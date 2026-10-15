@@ -1,0 +1,40 @@
+# M5 batch 2: Text tool — leader texts with default values (point, edge, face), free text, move, undo.
+box 0 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+tool text
+expect tool=Text
+# a corner: coordinates
+rawp click 2000 0 1000
+rawp click 2200 -300 1300
+wait 3
+expect dims=1 ["0:T:(2000 mm, 0 mm, 1000 mm)"]
+expect dimsel=1
+# an edge (midpoint of the top front edge): its length
+rawp click 1000 0 1000
+rawp click 1000 -400 1400
+wait 3
+expect "0:T:2000 mm"
+# the top face: its area
+rawp click 600 600 1000
+rawp click 300 900 1400
+wait 3
+expect "0:T:2.00 m²"
+screenshot shots/text_notes.bmp
+# empty sky: a text without a leader
+raw click 1050 160
+wait 3
+expect dims=4
+expect "0:T:Text"
+action undo
+wait 2
+expect dims=3
+# select the edge-length text by its box and erase it
+tool select
+rawp click 1000 -400 1400
+wait 2
+expect dimsel=1
+raw key Delete
+wait 2
+expect dims=2

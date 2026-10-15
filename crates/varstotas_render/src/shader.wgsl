@@ -26,6 +26,9 @@ struct Globals {
     hl_dim_edge: vec4<f32>,   // dimmed edge color (linear)
     tile: vec4<f32>,          // tile NDC = full NDC * xy + zw (export tiling; (1,1,0,0) = whole image)
     section: vec4<f32>,       // active section cut, local frame: keep dot(xyz, p) >= w; off = (0,0,0,-1)
+    shadow_vp: mat4x4<f32>,   // local frame -> shadow map clip (xy -1..1, z 0..1)
+    shadow: vec4<f32>,        // x: faces receive; y: ground receives; z: light shade; w: dark shade
+    shadow2: vec4<f32>,       // x: receiver normal offset; y: 1 / map size; z: 1 = sun up; w: 1 = sun shading
 };
 
 // Highlight states (Rust `Highlight`): 0 none, 1 selected, 2 dimmed (outside the editing context).
@@ -67,6 +70,54 @@ fn highlight_edge(c: vec4<f32>, state: u32) -> vec4<f32> {
 }
 
 @group(0) @binding(0) var<uniform> g: Globals;
+@group(0) @binding(1) var shadow_map: texture_depth_2d;
+@group(0) @binding(2) var shadow_sampler: sampler_comparison;
+
+/// Fraction of sunlight reaching local-frame point `p` with normal `n` (1 = lit), 3×3 PCF.
+/// Points outside the map are lit; points beyond its far plane compare as far.
+fn shadow_vis(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    let c = g.shadow_vp * vec4<f32>(p + n * g.shadow2.x, 1.0);
+    let uv = vec2<f32>(c.x * 0.5 + 0.5, 0.5 - c.y * 0.5);
+    if c.z < 0.0 || any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) {
+        return 1.0;
+    }
+    let z = min(c.z, 1.0);
+    var sum = 0.0;
+    for (var i = -1; i <= 1; i++) {
+        for (var j = -1; j <= 1; j++) {
+            let o = vec2<f32>(f32(i), f32(j)) * g.shadow2.y;
+            sum += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + o, z);
+        }
+    }
+    return sum / 9.0;
+}
+
+// Shadow pass (group 0 unused, so the map can be bound elsewhere in the frame).
+struct ShadowU {
+    vp: mat4x4<f32>,
+    section: vec4<f32>,
+};
+@group(1) @binding(0) var<uniform> shadow_u: ShadowU;
+
+struct ShadowOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) clip: f32,
+};
+
+@vertex
+fn vs_shadow(@location(0) pos: vec3<f32>) -> ShadowOut {
+    var o: ShadowOut;
+    o.pos = shadow_u.vp * vec4<f32>(pos, 1.0);
+    o.clip = dot(shadow_u.section.xyz, pos) - shadow_u.section.w;
+    return o;
+}
+
+@fragment
+fn fs_shadow(in: ShadowOut) {
+    if in.clip < 0.0 {
+        discard;
+    }
+}
 
 fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
     let lo = c / 12.92;
@@ -211,8 +262,16 @@ fn fs_ground(in: FsOut) -> GroundOut {
         // fade toward the horizon
         alpha *= smoothstep(0.0, 0.035, -r.d.z);
     }
+    var col = g.ground.rgb;
+    if g.shadow.y > 0.5 && g.shadow2.z > 0.5 {
+        // Ground shadows: darker and more opaque where the sun is blocked.
+        let shade = 1.0 - shadow_vis(hit + g.origin.xyz, vec3<f32>(0.0, 0.0, 1.0));
+        let k = mix(1.0, pow(max(g.shadow.w / max(g.shadow.z, 0.01), 0.2), 2.2), shade);
+        col *= k;
+        alpha = mix(alpha, max(alpha, 0.95 * smoothstep(0.0, 0.035, -r.d.z)), shade);
+    }
     var o: GroundOut;
-    o.color = out_color(vec4<f32>(g.ground.rgb, alpha));
+    o.color = out_color(vec4<f32>(col, alpha));
     o.depth = depth;
     return o;
 }
@@ -240,6 +299,7 @@ struct FaceOut {
     @location(4) uv: vec2<f32>,
     @location(5) @interpolate(flat) layers: vec2<u32>,
     @location(6) clip: f32,
+    @location(7) lpos: vec3<f32>,
 };
 
 // Material textures (see textures.rs): layer i + 1 in `layers`; `tex_info[i].xy` = 1 / tile size (mm).
@@ -258,6 +318,7 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.uv = v.uv;
     o.layers = v.layers;
     o.clip = sec_dist(v.pos);
+    o.lpos = v.pos;
     if g.params.x > 2.5 && o.state != HL_SELECTED {
         o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // wireframe tint pass: drop unselected triangles
     }
@@ -307,10 +368,20 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
     // Fixed world-space sun (Lambert) + ambient, plus a small camera fill so faces
     // turned away from the sun stay readable. Shade is defined perceptually (sRGB-ish)
     // and converted to linear so differences between planes stay visible.
-    let ambient = g.light.w;
-    let sun = min(max(dot(n, g.light.xyz), 0.0) * 1.25, 1.0);
+    var ambient = g.light.w;
+    var top = 1.0;
+    var sun = min(max(dot(n, g.light.xyz), 0.0) * 1.25, 1.0);
+    if g.shadow2.w > 0.5 {
+        // Sun shading (Shadows panel): light / dark shades, shadow map, nothing below the horizon.
+        ambient = g.shadow.w;
+        top = max(min(g.shadow.z * 1.25, 1.0), ambient);
+        sun *= g.shadow2.z;
+        if g.shadow.x > 0.5 && sun > 0.0 {
+            sun *= shadow_vis(in.lpos, n);
+        }
+    }
     let fill = 0.1 * max(dot(n, -g.fwd.xyz), 0.0);
-    let shade = clamp(ambient + (1.0 - ambient) * sun + fill * (1.0 - sun), 0.0, 1.0);
+    let shade = clamp(ambient + (top - ambient) * sun + fill * (1.0 - sun), 0.0, 1.0);
     let shade_lin = pow(shade, 2.2);
     return out_color(vec4<f32>(c.rgb * shade_lin, c.a * alpha_mul));
 }

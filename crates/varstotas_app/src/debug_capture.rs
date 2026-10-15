@@ -464,6 +464,8 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             };
             ScriptCmd::ExportPng(path, size, content)
         }
+        // 3D text keeps its case.
+        "action" if rest.starts_with("text3d ") => ScriptCmd::Action(rest.to_string()),
         "action" if !rest.is_empty() => ScriptCmd::Action(rest.to_ascii_lowercase()),
         "recover" => ScriptCmd::Recover(match rest.to_ascii_lowercase().as_str() {
             "yes" | "y" | "recover" => Some(true),
@@ -798,6 +800,52 @@ impl VarstotasApp {
     fn script_action(&mut self, name: &str) {
         use crate::app::Action;
         use varstotas_kernel::IntersectScope;
+        // `shadow_time HH:MM`, `shadow_date <month> <day>`
+        if let Some(t) = name.strip_prefix("shadow_time") {
+            let mut sh = self.doc.model.shadows;
+            if let Some((h, m)) = t.trim().split_once(':')
+                && let (Ok(h), Ok(m)) = (h.parse::<u32>(), m.parse::<u32>())
+            {
+                sh.minutes = h * 60 + m;
+                self.actions.push(Action::SetShadows(sh));
+            } else {
+                log::warn!("script: shadow_time needs HH:MM");
+            }
+            return;
+        }
+        if let Some(t) = name.strip_prefix("shadow_date") {
+            let mut sh = self.doc.model.shadows;
+            let v: Vec<u32> = t.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            if let [m, d] = v[..] {
+                sh.day = varstotas_kernel::shadows::day_of_year(m, d);
+                self.actions.push(Action::SetShadows(sh));
+            } else {
+                log::warn!("script: shadow_date needs <month> <day>");
+            }
+            return;
+        }
+        // `text3d <height> <depth|flat|outline> [mono] <text…>` (`\n` = new line): starts placing.
+        if let Some(args) = name.strip_prefix("text3d ") {
+            let mut it = args.trim().splitn(3, ' ');
+            let (Some(h), Some(mode), Some(mut rest)) = (it.next(), it.next(), it.next()) else {
+                log::warn!("script: text3d needs <height> <depth|flat|outline> <text>");
+                return;
+            };
+            let mut p = crate::text3d::Text3dParams::default();
+            if let Some(r) = rest.strip_prefix("mono ") {
+                p.font = crate::text3d::Text3dFont::Mono;
+                rest = r;
+            }
+            p.text = rest.replace("\\n", "\n");
+            p.height = h.parse().unwrap_or(p.height);
+            match mode {
+                "flat" => p.extruded = false,
+                "outline" => p.filled = false,
+                d => p.depth = d.parse().unwrap_or(p.depth),
+            }
+            self.actions.push(Action::PlaceText3d(p));
+            return;
+        }
         // `soften_edges <deg> [nosmooth] [coplanar]`
         if let Some(args) = name.strip_prefix("soften_edges") {
             let mut it = args.split_whitespace();
@@ -818,6 +866,8 @@ impl VarstotasApp {
             "delete" => Action::Delete,
             "delete_guides" => Action::DeleteGuides,
             "toggle_guides" => Action::ToggleGuides,
+            "toggle_shadows" | "shadows" => Action::ToggleShadows,
+            "text3d_dialog" => Action::Text3d,
             "section_planes" => Action::ToggleSectionDisplay(0),
             "section_cuts" => Action::ToggleSectionDisplay(1),
             "section_fill" => Action::ToggleSectionDisplay(2),
@@ -985,7 +1035,10 @@ impl VarstotasApp {
         let dims = m.all_dimensions_world();
         let dim_txt: Vec<String> = dims
             .iter()
-            .map(|(p, id, g)| format!("{}:{}", p.len(), m.dimension_label_in(p, *id).unwrap_or_else(|| format!("{:.0}", g.a.distance(g.b)))))
+            .map(|(p, id, g)| {
+                let label = m.dimension_label_in(p, *id).unwrap_or_else(|| format!("{:.0}", g.a.distance(g.b)));
+                format!("{}:{}{label}", p.len(), if g.leader { "T:" } else { "" })
+            })
             .collect();
         let curves: Vec<String> = self
             .doc
@@ -1068,6 +1121,17 @@ impl VarstotasApp {
             f.x + 0.0,
             f.y + 0.0,
             f.z + 0.0
+        );
+        let sh = &m.shadows;
+        let sun = sh.sun_direction();
+        let extra = format!(
+            "{extra} shadows={} shadow_time={} shadow_date=\"{}\" sun=({:.2},{:.2},{:.2})",
+            if sh.enabled { "on" } else { "off" },
+            sh.time_label(),
+            sh.date_label(),
+            sun.x + 0.0,
+            sun.y + 0.0,
+            sun.z + 0.0
         );
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",

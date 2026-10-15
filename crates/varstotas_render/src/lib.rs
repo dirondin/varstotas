@@ -289,6 +289,23 @@ pub struct RenderStyle {
     pub light_dir: [f32; 3],
     /// Ambient shade 0..1 for faces turned away from the sun (never black).
     pub ambient: f32,
+    /// Sun shadows (shadow map); `None` = off (fixed `light_dir` shading).
+    pub shadows: Option<ShadowStyle>,
+}
+
+/// Shadow settings for a frame (the classic Shadows panel).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShadowStyle {
+    /// Direction toward the sun (world, unit). Below the horizon (z <= 0) everything is in shade.
+    pub sun_dir: [f64; 3],
+    /// Shade of sunlit faces facing the sun, 0..1.
+    pub light: f32,
+    /// Shade of faces in shadow / turned away, 0..1.
+    pub dark: f32,
+    /// Faces receive shadows.
+    pub on_faces: bool,
+    /// The ground plane (z = 0) receives shadows.
+    pub on_ground: bool,
 }
 
 // `impl Default for RenderStyle` lives in renderer.rs (classic light theme).

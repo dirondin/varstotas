@@ -68,6 +68,9 @@ pub struct Scene {
     /// Active section plane and section display saved with the scene (`None` in old files).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sections: Option<crate::section::SceneSections>,
+    /// Shadow settings saved with the scene (`None` in old files).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadows: Option<crate::ShadowSettings>,
     /// Played by View → Animation (the classic "Include in animation").
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub in_animation: bool,
@@ -112,7 +115,7 @@ impl Default for SceneSettings {
 impl Scene {
     /// A camera-only scene (no saved style or tags), included in the animation.
     pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
-        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, sections: None, in_animation: true }
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, sections: None, shadows: None, in_animation: true }
     }
 }
 
@@ -150,6 +153,8 @@ pub struct Model {
     pub sections: Vec<crate::SectionPlane>,
     #[serde(default)]
     pub section_display: crate::SectionDisplay,
+    #[serde(default)]
+    pub shadows: crate::ShadowSettings,
 }
 
 /// Result of a model-wide ray pick.
@@ -187,6 +192,7 @@ impl Model {
             axes: None,
             sections: Vec::new(),
             section_display: Default::default(),
+            shadows: Default::default(),
         }
     }
     pub fn root_mesh(&self) -> &Mesh {

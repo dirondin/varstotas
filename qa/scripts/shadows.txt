@@ -1,0 +1,33 @@
+# M5 batch 2: shadows — View → Shadows, time/date, shadows on faces and on the ground, scenes.
+box 0 0 0 4000 3000 200
+box 1000 1000 200 1600 1600 2200
+box 5000 0 0 5600 600 3000
+view iso
+zoom_extents
+wait 10
+expect shadows=off
+action toggle_shadows
+wait 5
+expect shadows=on
+expect shadow_time=13:30
+expect shadow_date="8 Nov"
+screenshot shots/shadows_1330.bmp
+action shadow_time 09:00
+wait 5
+expect shadow_time=09:00
+screenshot shots/shadows_0900.bmp
+action shadow_date 6 21
+action shadow_time 12:00
+wait 5
+expect shadow_date="21 Jun"
+screenshot shots/shadows_jun_noon.bmp
+action add_scene
+wait 2
+action shadow_time 18:00
+action toggle_shadows
+wait 3
+expect shadows=off
+action next_scene
+wait 10
+expect shadows=on
+expect shadow_time=12:00

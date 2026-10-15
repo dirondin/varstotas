@@ -84,7 +84,11 @@ impl VarstotasApp {
             }
             group_sep(ui);
             // Protractor lives in the Tools menu (keeps the toolbar on one row).
-            for id in [ToolId::Tape, ToolId::Dimension, ToolId::Axes, ToolId::Section] {
+            for id in [ToolId::Tape, ToolId::Dimension, ToolId::Text] {
+                self.tool_button(ui, id);
+            }
+            self.action_button(ui, Icon::Text3d, false, "3D Text", None, "Add text as 3D geometry (a group).", Action::Text3d);
+            for id in [ToolId::Axes, ToolId::Section] {
                 self.tool_button(ui, id);
             }
             group_sep(ui);

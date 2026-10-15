@@ -24,6 +24,8 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL |
 | `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
+| `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |
+| `text3d.rs` | 3D Text: outlines → faces (even-odd nesting), extrusion, group (`Model::add_text3d_in`) |
 | `texture.rs` | `TextureImage` (embedded PNG/JPEG, tile size), `TexPlacement` (per-face texture position), texture axes, base64 |
 | `units.rs` | parsing and formatting for the Measurements box (VCB) |
 | `grid.rs` | spatial hash |
@@ -71,6 +73,9 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `tools/dims.rs` | Dimension tool |
 | `tools/nav_tools.rs` | Orbit, Pan, Zoom tools (Zoom VCB = field of view) |
 | `tools/camera_tools.rs` | Position Camera, Look Around, Walk |
+| `tools/text.rs` | Text tool (leader notes: dimensions with `leader`) |
+| `tools/text3d.rs` | placing 3D Text (follows the cursor, lies on the face) |
+| `text3d.rs` | glyph outlines of egui's bundled fonts (`skrifa`), `Text3dParams` |
 | `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `tools/section.rs` | Section Plane tool; drawing and picking of section planes, cut lines and fill |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |

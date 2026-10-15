@@ -1848,6 +1848,7 @@ dependencies = [
  "egui",
  "egui-wgpu",
  "env_logger",
+ "epaint_default_fonts",
  "glam",
  "image",
  "log",
@@ -1856,6 +1857,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "skrifa",
  "winresource",
 ]
 

@@ -213,6 +213,11 @@ impl VarstotasApp {
                 ui.checkbox(&mut self.prefs.show_axes, "Axes");
                 ui.checkbox(&mut self.prefs.show_ground, "Ground");
                 ui.separator();
+                let mut shadows = self.doc.model.shadows.enabled;
+                if ui.checkbox(&mut shadows, "Shadows").clicked() {
+                    self.actions.push(Action::ToggleShadows);
+                }
+                ui.separator();
                 let d = self.doc.model.section_display;
                 for (k, mut on, label) in [(0u8, d.planes, "Section Planes"), (1, d.cuts, "Section Cuts"), (2, d.fill, "Section Fill")] {
                     if ui.checkbox(&mut on, label).clicked() {
@@ -293,9 +298,10 @@ impl VarstotasApp {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
-                for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes] {
+                for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);
                 }
+                self.item(ui, "3D Text…", None, true, Action::Text3d);
             });
 
             ui.menu_button("Window", |ui| {

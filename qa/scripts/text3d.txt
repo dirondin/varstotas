@@ -1,0 +1,32 @@
+# M5 batch 2: 3D Text — dialog, extruded text on a wall, flat text on the ground, undo.
+box 0 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+action text3d_dialog
+wait 3
+screenshot shots/text3d_dialog.bmp
+raw key Escape
+wait 2
+# extruded "Hi" on the front wall (y = 0, facing -Y)
+action text3d 250 50 Hi
+wait 3
+expect tool=Move
+rawp click 300 0 400
+wait 3
+dump
+expect defs=2
+expect undo=Some("3D Text")
+expect sel F=0 E=0 I=1
+expect tool=Select
+# flat "O" on the ground
+action text3d 400 flat O
+wait 2
+rawp click -500 -200 0
+wait 3
+dump
+expect defs=3
+screenshot shots/text3d.bmp
+action undo
+wait 2
+expect defs=2

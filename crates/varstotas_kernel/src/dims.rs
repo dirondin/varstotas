@@ -49,6 +49,14 @@ pub struct Dimension {
     /// Text override. `<>` inside it is replaced by the measured value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// A text note (Text tool) instead of a linear dimension: `a` is the point the leader
+    /// points to (`b == a`), the text sits at `a + offset` (no leader when the offset is zero).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub leader: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// World-space geometry of a dimension.
@@ -58,6 +66,8 @@ pub struct DimGeom {
     pub b: DVec3,
     pub offset: DVec3,
     pub text: Option<String>,
+    /// Text note (see [`Dimension::leader`]).
+    pub leader: bool,
 }
 
 impl DimGeom {
@@ -70,7 +80,15 @@ impl DimGeom {
     }
     /// Displayed text: the override (with `<>` replaced by the value) or the formatted length.
     pub fn label(&self, unit: LengthUnit) -> String {
+        if self.leader {
+            return self.text.clone().unwrap_or_default();
+        }
         dim_label(self.length(), self.text.as_deref(), unit)
+    }
+
+    /// Where a text note's text sits.
+    pub fn text_pos(&self) -> DVec3 {
+        self.a + self.offset
     }
     pub fn transformed(&self, m: &DMat4) -> DimGeom {
         DimGeom {
@@ -78,6 +96,7 @@ impl DimGeom {
             b: m.transform_point3(self.b),
             offset: m.transform_vector3(self.offset),
             text: self.text.clone(),
+            leader: self.leader,
         }
     }
 }
@@ -109,7 +128,13 @@ impl Mesh {
     /// Add a dimension between `a` and `b` (anchors attach to vertices at those points).
     pub fn add_dimension(&mut self, a: DVec3, b: DVec3, offset: DVec3) -> DimId {
         let (a, b) = (self.anchor_at(a), self.anchor_at(b));
-        self.dims.insert(Dimension { a, b, offset, text: None })
+        self.dims.insert(Dimension { a, b, offset, text: None, leader: false })
+    }
+
+    /// Add a text note pointing at `at` (attached to a vertex there) with its text at `at + offset`.
+    pub fn add_text_note(&mut self, at: DVec3, offset: DVec3, text: String) -> DimId {
+        let a = self.anchor_at(at);
+        self.dims.insert(Dimension { a, b: a, offset, text: Some(text), leader: true })
     }
 
     /// Current anchor positions of dimension `id`.
@@ -121,7 +146,13 @@ impl Mesh {
     /// Local geometry of dimension `id` with current anchor positions.
     pub fn dim_geom(&self, id: DimId) -> Option<DimGeom> {
         let d = self.dims.get(id)?;
-        Some(DimGeom { a: self.anchor_pos(&d.a), b: self.anchor_pos(&d.b), offset: d.offset, text: d.text.clone() })
+        Some(DimGeom {
+            a: self.anchor_pos(&d.a),
+            b: self.anchor_pos(&d.b),
+            offset: d.offset,
+            text: d.text.clone(),
+            leader: d.leader,
+        })
     }
 
     /// Vertex `v` is about to be removed: anchors on it become free at its position.
@@ -215,6 +246,13 @@ impl Model {
         Some(mesh.add_dimension(inv.transform_point3(a), inv.transform_point3(b), inv.transform_vector3(offset)))
     }
 
+    /// Add a text note given in world space to the context `path` (see [`Mesh::add_text_note`]).
+    pub fn add_text_note_in(&mut self, path: &[InstanceId], at: DVec3, offset: DVec3, text: String) -> Option<DimId> {
+        let inv = self.transform_at(path).inverse();
+        let mesh = self.mesh_at_mut(path)?;
+        Some(mesh.add_text_note(inv.transform_point3(at), inv.transform_vector3(offset), text))
+    }
+
     /// Remove dimensions of the context `path`. Returns how many were removed.
     pub fn remove_dimensions_in(&mut self, path: &[InstanceId], ids: &[DimId]) -> usize {
         let Some(mesh) = self.mesh_at_mut(path) else { return 0 };
@@ -244,15 +282,21 @@ impl Model {
             let Some(g) = mesh.dim_geom(*id) else { continue };
             let (a, b) = (mesh.anchor_at(local.transform_point3(g.a)), mesh.anchor_at(local.transform_point3(g.b)));
             let offset = local.transform_vector3(g.offset);
-            out.push(mesh.dims.insert(Dimension { a, b, offset, text: g.text }));
+            let b = if g.leader { a } else { b };
+            out.push(mesh.dims.insert(Dimension { a, b, offset, text: g.text, leader: g.leader }));
         }
         out
     }
 
     /// Set (or clear with `None` / empty) the text override. Returns false if not found.
+    /// A text note keeps its old text when given an empty one.
     pub fn set_dimension_text_in(&mut self, path: &[InstanceId], id: DimId, text: Option<String>) -> bool {
         let Some(d) = self.mesh_at_mut(path).and_then(|m| m.dims.get_mut(id)) else { return false };
-        d.text = text.filter(|t| !t.is_empty());
+        let text = text.filter(|t| !t.is_empty());
+        if d.leader && text.is_none() {
+            return false;
+        }
+        d.text = text;
         true
     }
 

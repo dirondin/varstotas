@@ -169,6 +169,14 @@ pub enum Action {
     AlignSectionView,
     /// Soften/Smooth Edges panel: apply to the selected edges (and edges of selected faces).
     SoftenEdges(crate::ui::tray::SoftenSettings),
+    /// View → Shadows.
+    ToggleShadows,
+    /// Shadows panel: new settings (no undo step, like the classic panel).
+    SetShadows(varstotas_kernel::ShadowSettings),
+    /// Tools → 3D Text…: open the dialog.
+    Text3d,
+    /// Place 3D text with these values (the text follows the cursor).
+    PlaceText3d(crate::text3d::Text3dParams),
 }
 
 /// What a [`TextPrompt`] edits.
@@ -294,6 +302,9 @@ pub struct VarstotasApp {
     /// Tape Measure resize waiting for confirmation (uniform factor).
     pub(crate) resize_confirm: Option<f64>,
     pub(crate) export_dialog: Option<ExportDialog>,
+    /// Tools → 3D Text… dialog (its values); the last placed values are kept for the next one.
+    pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
+    pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
     pub(crate) text_prompt: Option<TextPrompt>,
     /// The last right-click hit the drawing axes (context menu shows the axes items).
@@ -334,6 +345,7 @@ fn fallback_style() -> RenderStyle {
         edge_color: [0.0, 0.0, 0.0, 1.0],
         light_dir: varstotas_render::DEFAULT_LIGHT_DIR,
         ambient: varstotas_render::DEFAULT_AMBIENT,
+        shadows: None,
     }
 }
 
@@ -398,6 +410,8 @@ impl VarstotasApp {
             text_prompt: None,
             ctx_on_axes: false,
             export_dialog: None,
+            text3d_dialog: None,
+            text3d_last: Default::default(),
             show_templates: false,
             autosave: AutosaveState {
                 worker: crate::autosave::Autosaver::new(),
@@ -421,6 +435,14 @@ impl VarstotasApp {
         s.profiles = self.prefs.profiles;
         s.show_axes = self.prefs.show_axes;
         s.show_ground = self.prefs.show_ground;
+        let sh = &self.doc.model.shadows;
+        s.shadows = sh.enabled.then(|| varstotas_render::ShadowStyle {
+            sun_dir: sh.sun_direction().to_array(),
+            light: sh.light,
+            dark: sh.dark,
+            on_faces: sh.on_faces,
+            on_ground: sh.on_ground,
+        });
         s
     }
 
@@ -662,6 +684,7 @@ impl VarstotasApp {
             || self.resize_confirm.is_some()
             || self.text_prompt.is_some()
             || self.export_dialog.is_some()
+            || self.text3d_dialog.is_some()
             || self.show_templates
             || self.show_prefs
             || self.show_about
@@ -1086,6 +1109,14 @@ impl VarstotasApp {
                 self.doc.mutate_untracked(|m| m.guides_hidden = hidden);
                 self.doc.prune_selection();
             }
+            Action::Text3d => self.text3d_dialog = Some(self.text3d_last.clone()),
+            Action::PlaceText3d(p) => self.place_text3d(p),
+            Action::ToggleShadows => self.doc.mutate_untracked(|m| m.shadows.enabled = !m.shadows.enabled),
+            Action::SetShadows(sh) => {
+                if self.doc.model.shadows != sh {
+                    self.doc.mutate_untracked(|m| m.shadows = sh);
+                }
+            }
             Action::ToggleSectionDisplay(k) => {
                 self.doc.mutate_untracked(|m| {
                     let d = &mut m.section_display;
@@ -1270,6 +1301,22 @@ impl VarstotasApp {
         }
     }
 
+    /// Start placing 3D text: it follows the cursor until a click (shown as the Move tool).
+    pub(crate) fn place_text3d(&mut self, p: crate::text3d::Text3dParams) {
+        if crate::text3d::outlines(&p).is_empty() {
+            self.flash_error("The text has no visible characters");
+            return;
+        }
+        self.text3d_last = p.clone();
+        let ptr = self.current_pointer();
+        self.with_tool(ptr.clone(), |t, ctx| t.deactivate(ctx));
+        self.tool = Box::new(crate::tools::text3d::Text3dPlaceTool::new(p));
+        self.with_tool(ptr, |t, ctx| t.activate(ctx));
+        self.vcb.clear();
+        self.vcb_error = false;
+        self.tool_pressed = false;
+    }
+
     fn paste(&mut self, in_place: bool) {
         let Some(clip) = self.clipboard.clone() else {
             self.flash("The clipboard is empty");
@@ -1409,6 +1456,7 @@ impl VarstotasApp {
         });
         s.hidden_tags = Some(self.doc.model.tags.iter().filter(|(_, t)| !t.visible).map(|(id, _)| id).collect());
         s.sections = Some(self.doc.model.scene_sections());
+        s.shadows = Some(self.doc.model.shadows);
         s
     }
 
@@ -1455,6 +1503,11 @@ impl VarstotasApp {
         {
             self.doc.mutate_untracked(|m| m.apply_scene_sections(&sec));
             self.doc.prune_selection();
+        }
+        if let Some(sh) = s.shadows
+            && sh != self.doc.model.shadows
+        {
+            self.doc.mutate_untracked(|m| m.shadows = sh);
         }
         let to = self.scene_camera(&s);
         let set = self.doc.model.scene_settings;

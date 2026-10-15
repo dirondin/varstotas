@@ -939,6 +939,27 @@ pub fn dim_style(selected: bool) -> varstotas_render::DimensionStyle {
     s
 }
 
+/// Look of a text note (selected ones blue).
+pub fn note_style(selected: bool) -> varstotas_render::LeaderStyle {
+    let mut s = varstotas_render::LeaderStyle::default();
+    if selected {
+        s.color = DIM_SELECTED;
+        s.text_color = DIM_SELECTED;
+        s.border = Some(DIM_SELECTED);
+        s.width_px = 2.0;
+    }
+    s
+}
+
+/// Draw a dimension or a text note.
+pub fn add_dim_geom(out3d: &mut Overlay3d, g: &varstotas_kernel::DimGeom, unit: varstotas_kernel::LengthUnit, selected: bool) {
+    if g.leader {
+        out3d.add_leader_text(g.a, g.text_pos(), g.label(unit), &note_style(selected));
+    } else {
+        out3d.add_linear_dimension(g.a, g.b, g.offset, g.label(unit), &dim_style(selected));
+    }
+}
+
 /// Which part of a dimension is under the cursor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DimPart {
@@ -983,6 +1004,27 @@ pub fn pick_dim_at(
     let mut best: Option<(f64, varstotas_kernel::DimId, DimPart)> = None;
     for (id, g) in &dims {
         let label = g.label(model.unit);
+        if g.leader {
+            // Text box centred on the text position; the leader as a line.
+            if let Some(sc) = cam.world_to_screen(g.text_pos(), vp) {
+                let d = c - sc;
+                let half_w = 3.6 * label.lines().map(|l| l.chars().count()).max().unwrap_or(0) as f64 + 6.0;
+                let half_h = 9.0 * label.lines().count().max(1) as f64;
+                if d.x.abs() <= half_w && d.y.abs() <= half_h {
+                    let dist = d.length() * 0.5;
+                    if best.is_none_or(|b| dist < b.0) {
+                        best = Some((dist, *id, DimPart::Text));
+                    }
+                }
+            }
+            if let (Some(sa), Some(sb)) = (cam.world_to_screen(g.a, vp), cam.world_to_screen(g.text_pos(), vp)) {
+                let dist = inference::geo::dist_point_seg2(c, sa, sb).0;
+                if g.offset != DVec3::ZERO && dist <= inference::EDGE_PICK_PX && best.is_none_or(|bb| dist < bb.0) {
+                    best = Some((dist, *id, DimPart::Line));
+                }
+            }
+            continue;
+        }
         if let Some((centre, along, half_w)) = dim_text_box(cam, vp, g, &label) {
             let d = c - centre;
             let (x, y) = (d.dot(along).abs(), d.perp_dot(along).abs());
@@ -1017,7 +1059,7 @@ pub fn draw_dims(view: &OverlayView, out3d: &mut Overlay3d) {
     let path = &view.doc.active_path;
     for (p, id, g) in model.all_dimensions_world() {
         let selected = &p == path && view.doc.dim_sel.contains(&id);
-        out3d.add_linear_dimension(g.a, g.b, g.offset, g.label(model.unit), &dim_style(selected));
+        add_dim_geom(out3d, &g, model.unit, selected);
     }
 }
 
@@ -1051,7 +1093,7 @@ pub fn dim_after_transform(
         let v = target - (a + b) * 0.5;
         v - dir * v.dot(dir)
     };
-    Some(varstotas_kernel::DimGeom { a, b, offset, text: g.text })
+    Some(varstotas_kernel::DimGeom { a, b, offset, text: g.text, leader: g.leader })
 }
 
 pub fn draw_dim_moved(
@@ -1063,8 +1105,7 @@ pub fn draw_dim_moved(
 ) {
     let model = &view.doc.model;
     if let Some(g) = dim_after_transform(model, &view.doc.active_path, id, moved, t) {
-        let text = varstotas_kernel::dims::dim_label(g.a.distance(g.b), g.text.as_deref(), model.unit);
-        out3d.add_linear_dimension(g.a, g.b, g.offset, text, &dim_style(true));
+        add_dim_geom(out3d, &g, model.unit, true);
     }
 }
 

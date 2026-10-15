@@ -270,6 +270,68 @@ impl VarstotasApp {
             }
         }
 
+        if let Some(mut p) = self.text3d_dialog.clone() {
+            let unit = self.doc.model.unit;
+            fn len_drag(v: &mut f64, unit: varstotas_kernel::LengthUnit) -> egui::DragValue<'_> {
+                egui::DragValue::new(v)
+                    .range(0.1..=1.0e6)
+                    .speed(1.0)
+                    .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
+                    .custom_parser(move |s| varstotas_kernel::units::parse_length(s, unit))
+            }
+            let mut choice: Option<bool> = None;
+            let resp = Modal::new(Id::new("text3d")).show(ctx, |ui| {
+                ui.set_width(360.0);
+                ui.heading("Place 3D Text");
+                ui.add_space(6.0);
+                let te = ui.add(egui::TextEdit::multiline(&mut p.text).desired_rows(3).desired_width(f32::INFINITY));
+                if !te.has_focus() && ui.memory(|m| m.focused().is_none()) {
+                    te.request_focus();
+                }
+                ui.add_space(4.0);
+                egui::Grid::new("text3d_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                    ui.label("Font");
+                    egui::ComboBox::from_id_salt("text3d_font").selected_text(p.font.name()).show_ui(ui, |ui| {
+                        for f in crate::text3d::Text3dFont::ALL {
+                            ui.selectable_value(&mut p.font, f, f.name());
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Height");
+                    ui.add(len_drag(&mut p.height, unit));
+                    ui.end_row();
+                    ui.checkbox(&mut p.filled, "Filled");
+                    ui.label("");
+                    ui.end_row();
+                    ui.add_enabled_ui(p.filled, |ui| ui.checkbox(&mut p.extruded, "Extruded"));
+                    ui.add_enabled_ui(p.filled && p.extruded, |ui| ui.add(len_drag(&mut p.depth, unit)));
+                    ui.end_row();
+                });
+                ui.label(RichText::new("Enter starts a new line, Cmd+Enter places the text.").small().color(theme::TEXT_DIM));
+                ui.add_space(10.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
+                    if ui.add(egui::Button::new(RichText::new("Place").strong())).clicked() || enter {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+            if resp.should_close() && choice.is_none() {
+                choice = Some(false);
+            }
+            match choice {
+                Some(true) => {
+                    self.text3d_dialog = None;
+                    self.actions.push(crate::app::Action::PlaceText3d(p));
+                }
+                Some(false) => self.text3d_dialog = None,
+                None => self.text3d_dialog = Some(p),
+            }
+        }
+
         if self.show_templates && self.confirm.is_none() && self.autosave.recoveries.is_empty() {
             let mut picked: Option<Template> = None;
             let resp = Modal::new(Id::new("choose_template")).show(ctx, |ui| {

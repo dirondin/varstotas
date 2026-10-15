@@ -37,6 +37,9 @@ pub enum Icon {
     PositionCamera,
     LookAround,
     Walk,
+    Shadows,
+    Text,
+    Text3d,
     ViewIso,
     ViewTop,
     ViewFront,
@@ -435,6 +438,33 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dashed((12.0, 3.0), (12.0, 12.0), st);
         }
         Icon::StyleShaded => cube(&pen, Color32::from_rgb(0xF6, 0xE0, 0xA8), Color32::from_rgb(0xE4, 0xB8, 0x6A), Color32::from_rgb(0xC8, 0x92, 0x48)),
+        Icon::Text => {
+            // A boxed "A" with a leader to a dot.
+            pen.poly(&[(9.0, 3.0), (21.0, 3.0), (21.0, 13.0), (9.0, 13.0)], FILL);
+            pen.line_c(&[(12.0, 11.0), (15.0, 5.0), (18.0, 11.0)], Stroke::new(1.4 * pen.s, BLUE));
+            pen.line_c(&[(13.2, 8.8), (16.8, 8.8)], Stroke::new(1.2 * pen.s, BLUE));
+            pen.line(&[(9.0, 13.0), (4.5, 19.5)]);
+            pen.dot((4.0, 20.0), 2.0, RED);
+        }
+        Icon::Text3d => {
+            // An extruded "A".
+            let side = Stroke::new(3.2 * pen.s, SHADE_DARK);
+            pen.line_c(&[(6.0, 21.0), (12.0, 5.0), (18.0, 21.0)], side);
+            let front = Stroke::new(2.0 * pen.s, BLUE);
+            pen.line_c(&[(4.5, 19.5), (10.5, 3.5), (16.5, 19.5)], front);
+            pen.line_c(&[(7.0, 13.5), (14.0, 13.5)], front);
+        }
+        Icon::Shadows => {
+            // A sun over a cube with its shadow on the ground.
+            pen.poly_c(&[(10.0, 20.0), (22.0, 20.0), (17.0, 15.0), (10.0, 15.0)], SHADE_DARK, Stroke::NONE);
+            pen.poly(&[(4.0, 12.0), (10.0, 12.0), (10.0, 20.0), (4.0, 20.0)], FILL);
+            let sun = Color32::from_rgb(0xF2, 0xB1, 0x2E);
+            pen.dot((17.0, 6.0), 3.0, sun);
+            for k in 0..8 {
+                let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                pen.line_c(&[(17.0 + 4.3 * a.cos(), 6.0 + 4.3 * a.sin()), (17.0 + 5.8 * a.cos(), 6.0 + 5.8 * a.sin())], Stroke::new(1.2 * pen.s, sun));
+            }
+        }
         Icon::PositionCamera => {
             // A standing figure over a red ground mark.
             pen.circle((12.0, 4.5), 2.5, SKIN);
