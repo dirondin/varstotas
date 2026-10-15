@@ -22,7 +22,10 @@ const FLASH_SECS: f64 = 3.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FaceStylePref {
+    /// Shaded with Textures.
     Shaded,
+    /// Shaded: material colours, textures off.
+    ShadedColor,
     Monochrome,
     HiddenLine,
     Wireframe,
@@ -33,6 +36,7 @@ impl FaceStylePref {
     pub fn key(self) -> &'static str {
         match self {
             Self::Shaded => "shaded",
+            Self::ShadedColor => "shadedcolor",
             Self::Monochrome => "monochrome",
             Self::HiddenLine => "hiddenline",
             Self::Wireframe => "wireframe",
@@ -40,12 +44,12 @@ impl FaceStylePref {
     }
 
     pub fn from_key(k: &str) -> Option<Self> {
-        [Self::Shaded, Self::Monochrome, Self::HiddenLine, Self::Wireframe].into_iter().find(|s| s.key() == k)
+        [Self::Shaded, Self::ShadedColor, Self::Monochrome, Self::HiddenLine, Self::Wireframe].into_iter().find(|s| s.key() == k)
     }
 
     pub fn to_render(self) -> FaceStyle {
         match self {
-            Self::Shaded => FaceStyle::Shaded,
+            Self::Shaded | Self::ShadedColor => FaceStyle::Shaded,
             Self::Monochrome => FaceStyle::Monochrome,
             Self::HiddenLine => FaceStyle::HiddenLine,
             Self::Wireframe => FaceStyle::Wireframe,
@@ -1937,6 +1941,7 @@ impl eframe::App for VarstotasApp {
             }
             let (o3, o2) = self.tool_overlays();
             let style = self.render_style();
+            self.viewport.show_textures = self.prefs.face_style == FaceStylePref::Shaded;
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())

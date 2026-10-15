@@ -435,6 +435,7 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             "mono" | "monochrome" => crate::app::FaceStylePref::Monochrome,
             "hidden" | "hiddenline" => crate::app::FaceStylePref::HiddenLine,
             "wire" | "wireframe" => crate::app::FaceStylePref::Wireframe,
+            "color" | "shadedcolor" => crate::app::FaceStylePref::ShadedColor,
             _ => crate::app::FaceStylePref::Shaded,
         }),
         "perf" => ScriptCmd::Perf(nums.first().copied().unwrap_or(60.0) as u32),
@@ -990,8 +991,14 @@ impl VarstotasApp {
             .values()
             .filter_map(|mm| mm.image.as_ref().map(|i| format!("{}:{:.0}x{:.0}", mm.name, i.size[0], i.size[1])))
             .collect();
-        let placed = self.doc.active_mesh().map_or(0, |me| me.faces.values().filter(|f| f.uv.is_some()).count());
-        let extra = format!("textures={textures:?} uv_placed={placed}");
+        let uvs: Vec<String> = self.doc.active_mesh().map_or(vec![], |me| {
+            me.faces
+                .values()
+                .filter_map(|f| f.uv)
+                .map(|p| format!("o({:.0},{:.0}) a{:.0} s({:.2},{:.2})", p.offset[0], p.offset[1], p.angle_deg, p.scale[0], p.scale[1]))
+                .collect()
+        });
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?}", uvs.len());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

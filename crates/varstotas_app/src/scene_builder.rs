@@ -24,6 +24,8 @@ fn starts_with(path: &[InstanceId], prefix: &[InstanceId]) -> bool {
 /// Inputs of the geometry build (model-version dependent only).
 pub struct BuildParams {
     pub face_style: FaceStyle,
+    /// Show material textures (Shaded with Textures).
+    pub textures: bool,
     /// Origin used by the previous build; kept while it stays close to the model centre so
     /// the GPU-side origin is stable (see [`choose_origin`]).
     pub prev_origin: Option<DVec3>,
@@ -242,7 +244,7 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
     geo.tris.reserve(n_verts);
     geo.back_colors.reserve(n_verts);
     geo.face_ids.reserve(n_verts / 3);
-    let layers = if mono { Vec::new() } else { texture_layers(model) };
+    let layers = if mono || !p.textures { Vec::new() } else { texture_layers(model) };
     let layer_of = |id: Option<MaterialId>| -> u16 {
         id.and_then(|id| layers.iter().position(|l| *l == id)).map_or(0, |i| i as u16 + 1)
     };
@@ -376,7 +378,7 @@ mod tests {
         ]);
         let f = f.expect("face");
         let _ = m.root_mesh_mut().push_pull(f, 1000.0, false);
-        let geo = build(&m, &BuildParams { face_style: FaceStyle::Shaded, prev_origin: None });
+        let geo = build(&m, &BuildParams { face_style: FaceStyle::Shaded, textures: true, prev_origin: None });
         let o = DVec3::from_array(geo.origin);
         let bb = m.bounds().expect("bounds");
         assert!((o - (bb.min + bb.max) * 0.5).length() < 1e-6, "{o}");
@@ -427,7 +429,7 @@ mod tests {
         let g = m.make_group(&[], &grouped).expect("group");
 
         let tess = tessellate_model(&m);
-        let geo = build_from(&m, &tess, &BuildParams { face_style: FaceStyle::Shaded, prev_origin: None });
+        let geo = build_from(&m, &tess, &BuildParams { face_style: FaceStyle::Shaded, textures: true, prev_origin: None });
         assert_eq!(geo.face_ids.len(), geo.tris.len() / 3);
         assert_eq!(geo.edge_ids.len(), geo.edges.len() / 2);
         assert!(geo.face_ids.iter().all(|&i| (i as usize) < tess.faces.len()));

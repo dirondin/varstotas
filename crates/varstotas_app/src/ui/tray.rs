@@ -529,6 +529,9 @@ impl VarstotasApp {
             }
         });
         ui.horizontal(|ui| {
+            if ui.button("Position…").on_hover_text("Texture Position tool (pins)").clicked() {
+                self.actions.push(Action::SetTool(crate::tools::ToolId::TexturePosition));
+            }
             if ui.button("Rotate 90°").clicked() {
                 new = Some(varstotas_kernel::TexPlacement { angle_deg: (pl.angle_deg + 90.0) % 360.0, ..pl });
             }

@@ -60,6 +60,62 @@ impl TexPlacement {
         *self == Self::default()
     }
 
+    /// Close enough to be the same mapping (merging coplanar faces).
+    pub fn approx_eq(&self, o: &Self) -> bool {
+        let close = |a: f64, b: f64, tol: f64| (a - b).abs() <= tol * (1.0 + a.abs().max(b.abs()));
+        (0..2).all(|i| close(self.offset[i], o.offset[i], 1e-6) && close(self.scale[i], o.scale[i], 1e-6))
+            && close(self.angle_deg, o.angle_deg, 1e-6)
+    }
+
+    /// Fit the placement that maps the planar coordinates of `pts` (on a face with normal `n`)
+    /// to the texture coordinates `uvs` (in tiles of `tile` mm), e.g. `vt` from an OBJ file.
+    /// Least squares over all points; shear is dropped. `None` for degenerate input.
+    pub fn fit(pts: &[DVec3], uvs: &[DVec2], n: DVec3, tile: [f64; 2]) -> Option<Self> {
+        if pts.len() < 3 || pts.len() != uvs.len() {
+            return None;
+        }
+        let q: Vec<DVec2> = pts.iter().map(|p| face_uv_mm(*p, n, None)).collect();
+        let t: Vec<DVec2> = uvs.iter().map(|u| DVec2::new(u.x * tile[0], u.y * tile[1])).collect();
+        let k = q.len() as f64;
+        let (qm, tm) = (q.iter().sum::<DVec2>() / k, t.iter().sum::<DVec2>() / k);
+        // A = T Q⁻¹ with Q = Σ dq dqᵀ, T = Σ dt dqᵀ (columns of glam matrices).
+        let (mut qq, mut tq) = (glam::DMat2::ZERO, glam::DMat2::ZERO);
+        for (a, b) in q.iter().zip(&t) {
+            let (dq, dt) = (*a - qm, *b - tm);
+            qq += glam::DMat2::from_cols(dq * dq.x, dq * dq.y);
+            tq += glam::DMat2::from_cols(dt * dq.x, dt * dq.y);
+        }
+        let tr = qq.col(0).x + qq.col(1).y;
+        if tr <= 0.0 || qq.determinant() < 1e-10 * tr * tr {
+            return None;
+        }
+        let a = tq * qq.inverse();
+        let c = tm - a * qm;
+        // a = diag(1/sx, 1/sy) · R(-θ); rows: (cos, sin)/sx and (-sin, cos)/sy.
+        let row0 = DVec2::new(a.col(0).x, a.col(1).x);
+        let row1 = DVec2::new(a.col(0).y, a.col(1).y);
+        let theta = row0.y.atan2(row0.x);
+        let (s, co) = theta.sin_cos();
+        let inv_sy = row1.dot(DVec2::new(-s, co));
+        if row0.length() < 1e-12 || inv_sy.abs() < 1e-12 || a.determinant().abs() < 1e-18 {
+            return None;
+        }
+        let offset = -(a.inverse() * c);
+        let p = Self { offset: offset.to_array(), angle_deg: theta.to_degrees(), scale: [1.0 / row0.length(), 1.0 / inv_sy] };
+        p.is_finite().then_some(p)
+    }
+
+    fn is_finite(&self) -> bool {
+        self.offset.iter().chain(&self.scale).all(|v| v.is_finite()) && self.angle_deg.is_finite()
+    }
+
+    /// Inverse of [`Self::apply`]: planar coordinates (mm) of texture-space point `t` (mm).
+    pub fn to_planar(&self, t: DVec2) -> DVec2 {
+        let st = DVec2::new(t.x * self.scale[0], t.y * self.scale[1]);
+        let (s, c) = self.angle_deg.to_radians().sin_cos();
+        DVec2::from(self.offset) + DVec2::new(st.x * c - st.y * s, st.x * s + st.y * c)
+    }
+
     /// Apply to planar coordinates (mm).
     pub fn apply(&self, q: DVec2) -> DVec2 {
         let d = q - DVec2::from(self.offset);
@@ -195,9 +251,34 @@ mod tests {
     }
 
     #[test]
+    fn fit_recovers_placement_incl_mirror() {
+        let n = DVec3::new(0.3, -1.0, 0.2).normalize();
+        let (u, v) = texture_axes(n);
+        let pts: Vec<DVec3> = [(0.0, 0.0), (900.0, 50.0), (300.0, 700.0), (-200.0, 400.0)]
+            .iter()
+            .map(|(a, b)| DVec3::new(10.0, 20.0, 30.0) + u * *a + v * *b)
+            .collect();
+        for want in [
+            TexPlacement { offset: [120.0, -40.0], angle_deg: 30.0, scale: [1.5, 0.75] },
+            TexPlacement { offset: [5.0, 6.0], angle_deg: -100.0, scale: [2.0, -1.0] },
+        ] {
+            let tile = [400.0, 200.0];
+            let uvs: Vec<DVec2> =
+                pts.iter().map(|p| face_uv_mm(*p, n, Some(&want)) / DVec2::from(tile)).collect();
+            let got = TexPlacement::fit(&pts, &uvs, n, tile).unwrap();
+            for p in &pts {
+                let (a, b) = (face_uv_mm(*p, n, Some(&got)), face_uv_mm(*p, n, Some(&want)));
+                assert!((a - b).length() < 1e-6, "{got:?} vs {want:?}");
+            }
+        }
+        assert!(TexPlacement::fit(&pts[..2], &[DVec2::ZERO; 2], n, [1.0; 2]).is_none());
+    }
+
+    #[test]
     fn placement_moves_rotates_scales() {
         let p = TexPlacement { offset: [100.0, 0.0], angle_deg: 90.0, scale: [2.0, 1.0] };
         let q = p.apply(DVec2::new(100.0, 50.0));
         assert!((q - DVec2::new(25.0, 0.0)).length() < 1e-9, "{q}");
+        assert!((p.to_planar(q) - DVec2::new(100.0, 50.0)).length() < 1e-9);
     }
 }

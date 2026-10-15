@@ -149,6 +149,8 @@ pub fn export_obj(model: &Model, path: &Path) -> Result<(), IoError> {
 #[derive(Default)]
 pub(crate) struct ObjData {
     pub polys: Vec<(Vec<DVec3>, Option<usize>)>,
+    /// Texture coordinates of each polygon's corners (`vt`), when every corner has one.
+    pub poly_uvs: Vec<Option<Vec<glam::DVec2>>>,
     pub lines: Vec<Vec<DVec3>>,
     pub mtllibs: Vec<String>,
     pub mtl_names: Vec<String>,
@@ -156,6 +158,7 @@ pub(crate) struct ObjData {
 
 pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
     let mut verts: Vec<DVec3> = Vec::new();
+    let mut tverts: Vec<glam::DVec2> = Vec::new();
     let mut d = ObjData::default();
     let mut cur: Option<usize> = None;
     for (ln, line) in text.lines().enumerate() {
@@ -171,15 +174,34 @@ pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
                 }
                 verts.push(DVec3::new(c[0], c[1], c[2]));
             }
+            "vt" => {
+                let c: Vec<f64> = it.take(2).filter_map(|s| s.parse::<f64>().ok()).collect();
+                tverts.push(glam::DVec2::new(c.first().copied().unwrap_or(0.0), c.get(1).copied().unwrap_or(0.0)));
+            }
             "f" | "l" => {
                 let mut pts = Vec::new();
+                let mut uvs = Some(Vec::new());
                 for tok in it {
-                    let i: i64 = tok.split('/').next().unwrap_or("").parse().map_err(|_| bad())?;
+                    let mut parts = tok.split('/');
+                    let i: i64 = parts.next().unwrap_or("").parse().map_err(|_| bad())?;
                     let idx = if i < 0 { verts.len() as i64 + i } else { i - 1 };
                     let p = *verts.get(usize::try_from(idx).map_err(|_| bad())?).ok_or_else(bad)?;
                     pts.push(p);
+                    let t = parts.next().and_then(|s| s.parse::<i64>().ok()).and_then(|t| {
+                        let k = if t < 0 { tverts.len() as i64 + t } else { t - 1 };
+                        tverts.get(usize::try_from(k).ok()?).copied()
+                    });
+                    match (t, uvs.as_mut()) {
+                        (Some(t), Some(v)) => v.push(t),
+                        _ => uvs = None,
+                    }
                 }
-                if tag == "f" { d.polys.push((pts, cur)) } else { d.lines.push(pts) }
+                if tag == "f" {
+                    d.polys.push((pts, cur));
+                    d.poly_uvs.push(uvs);
+                } else {
+                    d.lines.push(pts)
+                }
             }
             "usemtl" => {
                 let name = line["usemtl".len()..].trim().to_string();
@@ -270,7 +292,7 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
             mat_of[i] = Some(existing.unwrap_or_else(|| {
                 let id = model.add_material(&def.name, def.color);
                 model.materials[id].texture = def.texture.clone();
-                // Embed the image when the file is there (coordinates use the default projection).
+                // Embed the image when the file is there (faces get placements fitted to `vt`).
                 if let Some(t) = &def.texture
                     && let Ok(bytes) = std::fs::read(dir.join(t))
                     && crate::texture::image_dimensions(&bytes).is_some()
@@ -282,14 +304,20 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
             }));
         }
     }
+    let before: HashSet<FaceId> = model.root_mesh().faces.keys().collect();
+    let tiles: HashMap<MaterialId, [f64; 2]> =
+        model.materials.iter().filter_map(|(id, m)| Some((id, m.image.as_ref()?.size))).collect();
     let mesh = model.root_mesh_mut();
-    let before: HashSet<FaceId> = mesh.faces.keys().collect();
-    for (p, mi) in &data.polys {
+    for (k, (p, mi)) in data.polys.iter().enumerate() {
         let made = super::stl::add_polygon(mesh, p);
         if let Some(m) = mi.and_then(|i| mat_of[i]) {
+            let uvs = data.poly_uvs.get(k).and_then(|u| u.as_ref());
             for f in made {
                 if let Some(face) = mesh.faces.get_mut(f) {
                     face.front = Some(m);
+                    if let (Some(tile), Some(uvs)) = (tiles.get(&m), uvs) {
+                        face.uv = crate::texture::TexPlacement::fit(p, uvs, face.normal, *tile).filter(|pl| !pl.is_identity());
+                    }
                 }
             }
         }

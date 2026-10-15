@@ -69,6 +69,7 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `tools/construct.rs` | Tape Measure, Protractor, Axes |
 | `tools/dims.rs` | Dimension tool |
 | `tools/nav_tools.rs` | Orbit, Pan, Zoom tools |
+| `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
 | `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags, Outliner, Scenes (play, settings), Instructor |
 | `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text) |

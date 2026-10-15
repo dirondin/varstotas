@@ -89,10 +89,24 @@ impl VarstotasApp {
         self.item(ui, "Explode", None, has_inst, Action::Explode);
         ui.separator();
         self.face_ops_items(ui);
+        if self.selected_textured_face() {
+            ui.menu_button("Texture", |ui| {
+                self.item(ui, "Position", None, true, Action::SetTool(ToolId::TexturePosition));
+            });
+        }
         if !self.doc.active_path.is_empty() {
             ui.separator();
             self.item(ui, "Close Group", Some("Esc"), true, Action::ExitContext);
         }
+    }
+
+    /// Exactly one face of the active context is selected and it has a textured material.
+    fn selected_textured_face(&self) -> bool {
+        let [EntityRef::Face(fid)] = self.doc.selection.as_slice() else { return false };
+        let model = &self.doc.model;
+        model.mesh_at(&self.doc.active_path).and_then(|m| m.faces.get(*fid)).is_some_and(|f| {
+            [f.front, f.back].into_iter().flatten().any(|id| model.materials.get(id).is_some_and(|m| m.image.is_some()))
+        })
     }
 
     pub(crate) fn menu_bar(&mut self, ui: &mut Ui) {
@@ -170,6 +184,7 @@ impl VarstotasApp {
             ui.menu_button("View", |ui| {
                 ui.label(egui::RichText::new("Face Style").small().weak());
                 let fs = &mut self.prefs.face_style;
+                ui.radio_value(fs, FaceStylePref::ShadedColor, "Shaded");
                 ui.radio_value(fs, FaceStylePref::Shaded, "Shaded with Textures");
                 ui.radio_value(fs, FaceStylePref::Monochrome, "Monochrome");
                 ui.radio_value(fs, FaceStylePref::HiddenLine, "Hidden Line");
@@ -241,7 +256,7 @@ impl VarstotasApp {
             });
 
             ui.menu_button("Tools", |ui| {
-                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint] {
+                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition] {
                     self.tool_item(ui, id);
                 }
                 ui.separator();

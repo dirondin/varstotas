@@ -16,6 +16,7 @@ mod dims;
 mod draw;
 mod edit;
 mod nav_tools;
+mod texture;
 pub(crate) mod select;
 pub(crate) mod transform;
 
@@ -35,6 +36,7 @@ pub enum ToolId {
     Select,
     Eraser,
     Paint,
+    TexturePosition,
     Line,
     Arc,
     ArcCenter,
@@ -60,10 +62,11 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 25] = [
+    pub const ALL: [ToolId; 26] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
+        ToolId::TexturePosition,
         ToolId::Line,
         ToolId::Arc,
         ToolId::ArcCenter,
@@ -93,6 +96,7 @@ impl ToolId {
             ToolId::Select => "Select",
             ToolId::Eraser => "Eraser",
             ToolId::Paint => "Paint Bucket",
+            ToolId::TexturePosition => "Texture Position",
             ToolId::Line => "Line",
             ToolId::Arc => "2 Point Arc",
             ToolId::ArcCenter => "Arc",
@@ -144,6 +148,7 @@ impl ToolId {
             | ToolId::Arc3
             | ToolId::Pie
             | ToolId::RotatedRectangle
+            | ToolId::TexturePosition
             | ToolId::Axes
             | ToolId::Dimension => return None,
         })
@@ -159,6 +164,7 @@ impl ToolId {
             ToolId::Select => Icon::Select,
             ToolId::Eraser => Icon::Eraser,
             ToolId::Paint => Icon::Paint,
+            ToolId::TexturePosition => Icon::Paint,
             ToolId::Line => Icon::Line,
             ToolId::Arc => Icon::Arc,
             ToolId::ArcCenter => Icon::ArcCenter,
@@ -190,6 +196,7 @@ impl ToolId {
             ToolId::Select => "Select entities to modify with other tools.",
             ToolId::Eraser => "Erase edges, guides and other entities.",
             ToolId::Paint => "Apply a material to faces and groups.",
+            ToolId::TexturePosition => "Move, rotate and scale a face's texture with pins.",
             ToolId::Line => "Draw edges. Closed planar loops become faces.",
             ToolId::Arc => "Draw an arc from two end points and a bulge.",
             ToolId::ArcCenter => "Draw an arc from its center and two points.",
@@ -254,6 +261,13 @@ impl ToolId {
                  • Ctrl: fill connected faces with the same material.\n\
                  • Shift: replace the material on all matching faces.\n\
                  • Ctrl+Shift: replace it on matching connected faces."
+            }
+            ToolId::TexturePosition => {
+                "Position the texture of a textured face (select it, or click it).\n\
+                 • Drag the face or the red pin: move the texture.\n\
+                 • Green pin: rotate and scale about the red pin.\n\
+                 • Blue pin: stretch the texture height.\n\
+                 • Esc cancels a drag; Enter or a click outside finishes."
             }
             ToolId::Line => {
                 "Click to start, click to end. Each end starts a new segment.\n\
@@ -343,6 +357,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Dimension => Box::new(dims::DimensionTool::default()),
         ToolId::Eraser => Box::new(edit::EraserTool::default()),
         ToolId::Paint => Box::new(edit::PaintTool::default()),
+        ToolId::TexturePosition => Box::new(texture::TexturePositionTool::default()),
         ToolId::PushPull => Box::new(edit::PushPullTool::default()),
         ToolId::Offset => Box::new(edit::OffsetTool::default()),
         ToolId::FollowMe => Box::new(edit::FollowMeTool::default()),

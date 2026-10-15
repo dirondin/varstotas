@@ -624,4 +624,18 @@ fn obj_export_writes_texture_and_uvs_import_embeds_it() {
     let img = mm.image.as_ref().expect("embedded texture");
     assert_eq!((img.pixels, img.file_name.as_str()), ([64, 64], "Brick_Wall.png"));
     assert_eq!(back.root_mesh().faces.len(), 6);
+    // `vt` come back as the same texture position (top face, merged from two triangles).
+    let pl = TexPlacement { offset: [30.0, -20.0], angle_deg: 30.0, scale: [0.5, 2.0] };
+    m.root_mesh_mut().faces[top].uv = Some(pl);
+    io::export_obj(&m, &path).unwrap();
+    let mut back = Model::new();
+    io::import_obj(&mut back, &path).unwrap();
+    assert_eq!(back.root_mesh().faces.len(), 6);
+    let f = back.root_mesh().faces.values().find(|f| f.front.is_some()).unwrap();
+    let got = f.uv.expect("fitted placement");
+    for v in &f.outer {
+        let p = back.root_mesh().vertices[*v].pos;
+        let (a, b) = (texture::face_uv_mm(p, f.normal, Some(&got)), texture::face_uv_mm(p, f.normal, Some(&pl)));
+        assert!((a - b).length() < 1e-3, "{got:?}");
+    }
 }

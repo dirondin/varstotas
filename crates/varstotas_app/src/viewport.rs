@@ -16,6 +16,7 @@ use varstotas_render::{Camera, ExportOptions, FaceStyle, HighlightUpdate, Overla
 struct GeometryKey {
     model: u64,
     face_style: FaceStyle,
+    textures: bool,
 }
 
 /// Inputs the uploaded highlight states depend on.
@@ -46,6 +47,8 @@ pub struct Viewport {
     pub highlight_count: u64,
     /// CPU time of the last highlight update, milliseconds.
     pub last_highlight_ms: f64,
+    /// Draw material textures (set by the app from the face style before `paint`).
+    pub show_textures: bool,
     /// Material textures uploaded to the renderer.
     textures: crate::textures::TextureSync,
     /// Render origin of the uploaded geometry (kept stable between rebuilds).
@@ -73,6 +76,7 @@ impl Default for Viewport {
             highlight_count: 0,
             last_highlight_ms: 0.0,
             textures: Default::default(),
+            show_textures: true,
             origin: None,
             export: None,
             export_result: None,
@@ -127,7 +131,7 @@ impl Viewport {
                 }
             }
             if let Some(renderer) = self.renderer.as_mut() {
-                let key = GeometryKey { model: doc.model_version, face_style: style.face_style };
+                let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures };
                 if self.built != Some(key) {
                     let t0 = std::time::Instant::now();
                     let old = std::mem::replace(&mut self.tess, scene_builder::tessellate_model(&doc.model));
@@ -136,7 +140,7 @@ impl Viewport {
                         std::thread::spawn(move || drop(old));
                     }
                     let t1 = std::time::Instant::now();
-                    let params = BuildParams { face_style: style.face_style, prev_origin: self.origin };
+                    let params = BuildParams { face_style: style.face_style, textures: self.show_textures, prev_origin: self.origin };
                     let geo = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params))
                         .unwrap_or_else(|e| {
                             log::warn!("scene build failed: {e}");

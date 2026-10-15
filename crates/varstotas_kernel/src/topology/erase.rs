@@ -125,6 +125,10 @@ impl Mesh {
         let set: HashSet<FaceId> = faces.iter().copied().filter(|f| self.faces.contains_key(*f)).collect();
         let same_attrs = |a: &crate::Face, b: &crate::Face| {
             a.normal.dot(b.normal) >= 1.0 - 1e-6 && a.front == b.front && a.back == b.back && a.tag == b.tag && a.hidden == b.hidden
+                && match (&a.uv, &b.uv) {
+                    (Some(x), Some(y)) => x.approx_eq(y),
+                    (x, y) => x.is_none() && y.is_none(),
+                }
         };
         let mut done: HashSet<FaceId> = HashSet::new();
         let mut groups: Vec<(Vec<FaceId>, Vec<EdgeId>)> = Vec::new();
