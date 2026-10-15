@@ -70,6 +70,10 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
 | `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`) |
 | `bridge.rs` | local server (127.0.0.1 + token, JSON lines / HTTP `POST /rpc`), `~/.varstotas/bridge.json`, installs `python/*.py` |
+| `plugins.rs` | plugin header parsing (`@name/@menu/@param/@pick/@import/@export`), scan of `~/.varstotas/plugins`, bundled examples |
+| `ui/extensions.rs` | Extensions menu, File → Import / Export plugin entries, parameter dialog, running plugins |
+| `ui/library.rs` | Components tray card: library scan, thumbnails, place (`PasteTool::named`), Save Selection to Library |
+| `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |
 | `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF |
 | `nav.rs` | mouse and trackpad camera navigation |

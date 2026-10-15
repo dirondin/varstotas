@@ -23,7 +23,7 @@ import os
 import socket
 from contextlib import contextmanager
 
-__all__ = ["connect", "Model", "Entity", "Vec3", "vec3", "ORIGIN", "X", "Y", "Z", "VarstotasError"]
+__all__ = ["connect", "params", "Model", "Entity", "Vec3", "vec3", "ORIGIN", "X", "Y", "Z", "VarstotasError"]
 
 
 class VarstotasError(Exception):
@@ -293,6 +293,17 @@ def _enc(o):
     if isinstance(o, (set, frozenset)):
         return list(o)
     raise TypeError("cannot send %r to Varstotas" % (o,))
+
+
+def params():
+    """Parameters of a plugin run (its @param values, `points`, `path`) as a dict."""
+
+    def dec(d):
+        if "$vec" in d:
+            return Vec3(*d["$vec"])
+        return d
+
+    return json.loads(os.environ.get("VARSTOTAS_PARAMS") or "{}", object_hook=dec)
 
 
 def connect(host=None, port=None, token=None, timeout=None):

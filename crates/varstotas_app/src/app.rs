@@ -76,6 +76,8 @@ pub struct Prefs {
     pub template: Option<Template>,
     /// Script Console editor text.
     pub console_code: String,
+    /// Components library folder (None = ~/.varstotas/components).
+    pub library_dir: Option<PathBuf>,
 }
 
 impl Default for Prefs {
@@ -93,6 +95,7 @@ impl Default for Prefs {
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
             template: None,
             console_code: String::new(),
+            library_dir: None,
         }
     }
 }
@@ -198,6 +201,15 @@ pub enum Action {
     ToggleConsole,
     /// File → Run Script…
     RunScript,
+    /// Extensions menu: run a plugin (with a file for importers / exporters).
+    Plugin(usize, Option<PathBuf>),
+    PluginImport(usize),
+    PluginExport(usize),
+    ReloadPlugins,
+    /// Components library: place item i / save the selection under a name / show the card.
+    PlaceComponent(usize),
+    SaveToLibrary(String),
+    ShowComponents,
 }
 
 /// What a [`TextPrompt`] edits.
@@ -296,6 +308,8 @@ pub struct VarstotasApp {
     pub(crate) console: crate::ui::console::ConsoleState,
     /// Local server for Python scripts and AI agents.
     pub(crate) bridge: crate::bridge_ops::BridgeState,
+    pub(crate) plugins: crate::ui::extensions::PluginState,
+    pub(crate) library: crate::ui::library::LibraryState,
     /// Transient status message (text, expiry time).
     /// Transient message (text, expiry time, is_error), shown next to the tool hint.
     pub(crate) flash: Option<(String, f64, bool)>,
@@ -421,6 +435,8 @@ impl VarstotasApp {
             show_about: false,
             console: Default::default(),
             bridge: Default::default(),
+            plugins: Default::default(),
+            library: Default::default(),
             flash: None,
             tray: TrayState::default(),
             debug,
@@ -459,6 +475,7 @@ impl VarstotasApp {
         };
         app.show_templates = show_templates;
         app.start_bridge(&cc.egui_ctx);
+        app.load_plugins();
         app
     }
 
@@ -538,6 +555,7 @@ impl VarstotasApp {
                 ToolRequest::SwitchTool(id) => self.actions.push(Action::SetTool(id)),
                 ToolRequest::ZoomExtents => self.actions.push(Action::ZoomExtents),
                 ToolRequest::ConfirmResize(f) => self.resize_confirm = Some(f),
+                ToolRequest::PluginPoints(pts) => self.plugin_points(pts),
                 ToolRequest::EditDimensionText(id) => {
                     let path = self.doc.active_path.clone();
                     if let Some(g) = self.doc.model.dimension_in(&path, id) {
@@ -1156,6 +1174,19 @@ impl VarstotasApp {
             Action::PlaceText3d(p) => self.place_text3d(p),
             Action::SolidTool(op) => self.solid_tool(op),
             Action::ToggleConsole => self.console.open = !self.console.open,
+            Action::Plugin(i, path) => self.start_plugin(i, path),
+            Action::PlaceComponent(i) => self.place_component(i),
+            Action::SaveToLibrary(name) => self.save_to_library(&name),
+            Action::ShowComponents => {
+                self.prefs.tray_open = true;
+                self.library.open_card = true;
+            }
+            Action::PluginImport(i) => self.plugin_file(i, false),
+            Action::PluginExport(i) => self.plugin_file(i, true),
+            Action::ReloadPlugins => {
+                self.load_plugins();
+                self.flash(format!("{} plugins loaded", self.plugins.list.len()));
+            }
             Action::RunScript => {
                 if let Some(p) = rfd::FileDialog::new().add_filter("Script", &["rhai", "py"]).pick_file() {
                     self.run_script_file(&p);
@@ -1407,9 +1438,14 @@ impl VarstotasApp {
             crate::tools::transform::paste_clipboard(&mut self.doc, &clip, &varstotas_kernel::glam::DMat4::IDENTITY);
             return;
         }
+        self.install_tool(Box::new(crate::tools::transform::PasteTool::new(clip)));
+    }
+
+    /// Switch to a tool that is not in the toolbar (paste, plugin point picking, …).
+    pub(crate) fn install_tool(&mut self, tool: Box<dyn Tool>) {
         let p = self.current_pointer();
         self.with_tool(p.clone(), |t, ctx| t.deactivate(ctx));
-        self.tool = Box::new(crate::tools::transform::PasteTool::new(clip));
+        self.tool = tool;
         self.with_tool(p, |t, ctx| t.activate(ctx));
         self.vcb.clear();
         self.vcb_error = false;
@@ -2151,6 +2187,11 @@ fn all_refs(mesh: &varstotas_kernel::Mesh) -> std::collections::HashSet<EntityRe
 }
 
 impl eframe::App for VarstotasApp {
+    /// Scripted (test) runs start from the same UI state every time (tray scroll, open cards).
+    fn persist_egui_memory(&self) -> bool {
+        !self.debug.script_active()
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let frame_start = std::time::Instant::now();
         let ctx = ui.ctx().clone();
@@ -2230,6 +2271,7 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.console_window(&ctx);
+        self.plugin_dialog(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

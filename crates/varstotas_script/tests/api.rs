@@ -204,3 +204,67 @@ fn json_vars_values_and_entity_ids_round_trip() {
     let r = varstotas_script::eval_json(&mut m, &ctx, "x", &vars(json!({"x": {"$entity": "nonsense"}})));
     assert!(r.run.error.unwrap().contains("bad entity id"));
 }
+
+#[test]
+fn all_faces_and_text_files() {
+    let mut m = Model::new();
+    let dir = std::env::temp_dir().join(format!("varstotas_api_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("pts.csv");
+    std::fs::write(&f, "0,0\n100,0\n100,50\n").unwrap();
+    let code = format!(
+        r##"
+        let pts = [];
+        for l in read_text("{p}").split("\n") {{
+            l.trim();
+            if l == "" {{ continue; }}
+            let c = l.split(",");
+            pts.push(vec3(parse_float(c[0]), parse_float(c[1]), 0));
+        }}
+        let f = face(pts);
+        box(vec3(500, 0, 0), 10, 10, 10);
+        write_text("{p}.out", "" + all_faces().len());
+        all_faces().len()
+    "##,
+        p = f.display()
+    );
+    let r = go(&mut m, &code);
+    assert_eq!(r.output, "7\n");
+    assert_eq!(std::fs::read_to_string(dir.join("pts.csv.out")).unwrap(), "7");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn example_plugins_run() {
+    use serde_json::json;
+    let ctx = ScriptCtx::default();
+    let run = |src: &str, vars: serde_json::Value| {
+        let mut m = Model::new();
+        let r = varstotas_script::eval_json(&mut m, &ctx, src, vars.as_object().unwrap());
+        assert!(r.run.error.is_none(), "{:?}", r.run.error);
+        (m, r.run.output)
+    };
+    let p = |x: f64, y: f64, z: f64| json!({"$vec": [x, y, z]});
+    let (m, out) = run(
+        include_str!("../../../examples/plugins/stairs.rhai"),
+        json!({"width": 900.0, "rise": 2700.0, "going": 250.0, "steps": 15, "tread": 40.0, "points": [p(100.0, 0.0, 0.0)]}),
+    );
+    assert_eq!(out, "Stairs: 15 steps of 180.0 mm\n");
+    let s = size(&m);
+    assert!((s - DVec3::new(900.0, 14.0 * 250.0 + 270.0, 2700.0 - 180.0 + 40.0)).length() < 1e-6, "{s}");
+    // A beam rising 45° towards -X: its bounding box spans both points.
+    let (m, _) = run(
+        include_str!("../../../examples/plugins/beam.rhai"),
+        json!({"w": 100.0, "h": 100.0, "points": [p(1000.0, 0.0, 0.0), p(0.0, 0.0, 1000.0)]}),
+    );
+    let b = m.bounds().unwrap();
+    let r = 50.0 / 2f64.sqrt();
+    assert!((b.min - DVec3::new(-r, -50.0, -r)).length() < 1e-5 && (b.max - DVec3::new(1000.0 + r, 50.0, 1000.0 + r)).length() < 1e-5, "{b:?}");
+    let f = std::env::temp_dir().join(format!("varstotas_pts_{}.csv", std::process::id()));
+    std::fs::write(&f, "x,y\n0,0\n1000, 0\n1000,500\n0,500\n0,0\n").unwrap();
+    let (m, out) = run(include_str!("../../../examples/plugins/import_points_csv.rhai"), json!({"path": f.to_string_lossy()}));
+    assert_eq!(out, "Imported 4 points\n");
+    assert_eq!(m.root_mesh().faces.len(), 1);
+    assert!(m.root_mesh().faces.values().all(|f| f.normal.z > 0.99), "the outline faces up");
+    let _ = std::fs::remove_file(f);
+}

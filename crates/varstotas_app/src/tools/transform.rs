@@ -1060,6 +1060,8 @@ impl Tool for ScaleTool {
 /// cursor with inference; a click pastes it there, Esc cancels. Shown as the Move tool.
 pub struct PasteTool {
     clip: std::rc::Rc<crate::clipboard::Clipboard>,
+    /// A library component's name (status text).
+    name: Option<String>,
     engine: InferenceEngine,
     cur: Option<InferenceResult>,
     clicker: Clicker,
@@ -1067,7 +1069,12 @@ pub struct PasteTool {
 
 impl PasteTool {
     pub fn new(clip: std::rc::Rc<crate::clipboard::Clipboard>) -> Self {
-        Self { clip, engine: InferenceEngine::default(), cur: None, clicker: Clicker::default() }
+        Self { clip, name: None, engine: InferenceEngine::default(), cur: None, clicker: Clicker::default() }
+    }
+
+    /// Placing a library component.
+    pub fn named(clip: std::rc::Rc<crate::clipboard::Clipboard>, name: String) -> Self {
+        Self { name: Some(name), ..Self::new(clip) }
     }
 
     fn offset(&self) -> Option<DMat4> {
@@ -1132,7 +1139,10 @@ impl Tool for PasteTool {
         r
     }
     fn status_text(&self) -> String {
-        format!("Click to place the pasted {} (Esc cancels).", plural(self.clip.count, "entity", "entities"))
+        match &self.name {
+            Some(n) => format!("Click to place {n} (Esc cancels)."),
+            None => format!("Click to place the pasted {} (Esc cancels).", plural(self.clip.count, "entity", "entities")),
+        }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         let Some(t) = self.offset() else { return };

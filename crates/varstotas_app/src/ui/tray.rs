@@ -96,7 +96,12 @@ pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
 }
 
 fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl FnOnce(&mut Ui) -> R) {
-    Frame::new()
+    card_ex(ui, title, icon, default_open, false, body)
+}
+
+/// [`card`] that can be forced open.
+fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_open: bool, body: impl FnOnce(&mut Ui) -> R) {
+    let r = Frame::new()
         .fill(Color32::WHITE)
         .stroke(Stroke::new(1.0, theme::BORDER))
         .corner_radius(8.0)
@@ -104,7 +109,11 @@ fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl 
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             let id = ui.make_persistent_id(("tray", title));
-            egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, default_open)
+            let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, default_open);
+            if force_open {
+                state.set_open(true);
+            }
+            state
                 .show_header(ui, |ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     paint_icon(ui.painter(), rect, icon, false);
@@ -115,6 +124,9 @@ fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl 
                     body(ui);
                 });
         });
+    if force_open {
+        r.response.scroll_to_me(Some(egui::Align::Min));
+    }
     ui.add_space(6.0);
 }
 
@@ -189,6 +201,8 @@ impl VarstotasApp {
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             card(ui, "Entity Info", Icon::Info, true, |ui| self.entity_info(ui));
             card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui));
+            let open = self.library_open_requested();
+            card_ex(ui, "Components", Icon::Group, false, open, |ui| self.library_panel(ui));
             card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));
             card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui));
             card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui));

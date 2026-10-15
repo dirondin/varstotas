@@ -39,7 +39,13 @@ pub struct Clipboard {
     pub preview: Vec<(DVec3, DVec3)>,
     /// Number of copied entities + guides (for messages).
     pub count: usize,
+    /// Library component: the name of its definition; a definition with that name already
+    /// in the target model is placed again instead of copied.
+    library: Option<String>,
 }
+
+/// Source "document" id of library components (never a real document).
+const LIBRARY_UID: u64 = u64::MAX;
 
 /// Definitions reachable from `d` (including `d`).
 fn reachable_defs(model: &Model, d: DefId, out: &mut HashSet<DefId>) {
@@ -110,6 +116,7 @@ impl Clipboard {
                 bounds,
                 preview,
                 count,
+                library: None,
             });
         }
         let mut c = Self::from_parts(&doc.model, doc.uid, &doc.active_path, &doc.selection, &doc.guide_sel)?;
@@ -181,7 +188,48 @@ impl Clipboard {
         if let Some(d) = def {
             collect_edges(&model, d, src_xf, &mut preview, 0);
         }
-        Ok(Clipboard { model, def, src_xf, src_doc, guides, guide_points, dims: Vec::new(), bounds, preview, count })
+        Ok(Clipboard { model, def, src_xf, src_doc, guides, guide_points, dims: Vec::new(), bounds, preview, count, library: None })
+    }
+
+    /// A library file's content as one component named `name`, ready to place.
+    pub fn from_library(mut model: Model, name: &str) -> OpResult<Clipboard> {
+        let root = model.root_mesh();
+        let ents: Vec<EntityRef> = root
+            .faces
+            .keys()
+            .map(EntityRef::Face)
+            .chain(root.edges.keys().map(EntityRef::Edge))
+            .chain(root.instances.keys().map(EntityRef::Instance))
+            .collect();
+        if ents.is_empty() {
+            return Err(OpError::Invalid("the component file is empty".into()));
+        }
+        // A file holding just one component: place that one.
+        let inst = match (ents.as_slice(), root.faces.is_empty() && root.edges.is_empty()) {
+            ([EntityRef::Instance(i)], true) if model.defs.get(root.instances[*i].def).is_some_and(|d| !d.is_group && d.name == name) => *i,
+            _ => model.make_component(&[], &ents, name)?,
+        };
+        model.guides.clear();
+        model.guide_points.clear();
+        let mut c = Self::from_parts(&model, LIBRARY_UID, &[], &[EntityRef::Instance(inst)], &[])?;
+        c.library = Some(name.to_string());
+        Ok(c)
+    }
+
+    /// The copied content as a model of its own, moved so that its bounding box starts at the
+    /// origin (Save to Library). A single copied group or component is exploded into the file.
+    pub fn to_model(&self, unit: varstotas_kernel::LengthUnit) -> OpResult<Model> {
+        let mut m = Model::new();
+        m.unit = unit;
+        let t = DMat4::from_translation(-self.bounds.min);
+        self.paste_into(&mut m, LIBRARY_UID - 1, &[], &t)?;
+        let root = m.root_mesh();
+        if root.faces.is_empty() && root.edges.is_empty() && root.instances.len() == 1 {
+            let i = root.instances.keys().next().expect("one instance");
+            m.explode(&[], i)?;
+        }
+        m.purge_unused_defs();
+        Ok(m)
     }
 
     /// Point of the content that follows the cursor while pasting (bounding-box min corner).
@@ -270,6 +318,15 @@ impl Clipboard {
         {
             maps.defs.insert(d, d);
             return Ok(d);
+        }
+        // A library component placed again: reuse its definition.
+        if !top
+            && !src.is_group
+            && self.library.as_deref() == Some(src.name.as_str())
+            && let Some((id, _)) = model.defs.iter().find(|(_, t)| !t.is_group && t.name == src.name)
+        {
+            maps.defs.insert(d, id);
+            return Ok(id);
         }
         let mut def = src.clone();
         let children: Vec<(InstanceId, DefId)> = def.mesh.instances.iter().map(|(i, x)| (i, x.def)).collect();
@@ -364,6 +421,38 @@ mod tests {
             }
         });
         doc
+    }
+
+    #[test]
+    fn library_round_trip_places_one_definition() {
+        let mut doc = boxed_doc();
+        // A group moved away from the origin: the library file starts at the origin.
+        doc.select_all();
+        let path = doc.active_path.clone();
+        let sel = doc.selection.clone();
+        let g = doc.commit("group", |m| m.make_group(&path, &sel).unwrap()).unwrap();
+        doc.commit("move", |m| m.root_mesh_mut().instances[g].transform = DMat4::from_translation(DVec3::new(500.0, 0.0, 0.0)));
+        doc.set_selection(vec![EntityRef::Instance(g)]);
+        let file = Clipboard::from_selection(&doc).unwrap().to_model(varstotas_kernel::LengthUnit::Millimeter).unwrap();
+        let root = file.root_mesh();
+        assert_eq!((root.faces.len(), root.instances.len()), (6, 0), "the group was exploded into the file");
+        let b = file.bounds().unwrap();
+        assert!(b.min.length() < 1e-9 && (b.max - DVec3::new(1000.0, 1000.0, 500.0)).length() < 1e-9, "{b:?}");
+        assert!(file.materials.values().any(|m| m.name == "Red"));
+
+        // Placed twice into another document: one "Crate" definition, two instances.
+        let mut target = Document::new();
+        let clip = Clipboard::from_library(file, "Crate").unwrap();
+        assert_eq!(clip.reference_point(), DVec3::ZERO);
+        for x in [0.0, 2000.0] {
+            assert!(crate::tools::transform::paste_clipboard(&mut target, &clip, &DMat4::from_translation(DVec3::new(x, 0.0, 0.0))));
+        }
+        let m = &target.model;
+        let crates: Vec<_> = m.defs.iter().filter(|(_, d)| d.name == "Crate" && !d.is_group).map(|(k, _)| k).collect();
+        assert_eq!(crates.len(), 1);
+        assert_eq!(m.root_mesh().instances.len(), 2);
+        assert!(m.root_mesh().instances.values().all(|i| i.def == crates[0]));
+        assert!((m.bounds().unwrap().max.x - 3000.0).abs() < 1e-9);
     }
 
     #[test]

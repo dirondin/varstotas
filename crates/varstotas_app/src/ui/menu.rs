@@ -156,6 +156,7 @@ impl VarstotasApp {
                     self.item(ui, "STL…", None, true, Action::ImportStl);
                     self.item(ui, "DXF…", None, true, Action::ImportDxf);
                     self.item(ui, "glTF / GLB…", None, true, Action::ImportGltf);
+                    self.plugin_file_items(ui, false);
                 });
                 ui.menu_button("Export", |ui| {
                     self.item(ui, "2D Graphic (PNG)…", None, true, Action::ExportImage);
@@ -168,6 +169,7 @@ impl VarstotasApp {
                     self.item(ui, "2D Drawing (SVG / PDF)…", None, true, Action::ExportDrawing);
                     ui.separator();
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
+                    self.plugin_file_items(ui, true);
                 });
                 ui.separator();
                 self.item(ui, "Run Script…", None, true, Action::RunScript);
@@ -326,10 +328,16 @@ impl VarstotasApp {
                 self.item(ui, "3D Text…", None, true, Action::Text3d);
             });
 
+            ui.menu_button("Extensions", |ui| self.extensions_menu(ui));
+
             ui.menu_button("Window", |ui| {
                 let mut open = self.prefs.tray_open;
                 if ui.checkbox(&mut open, "Default Tray").clicked() {
                     self.actions.push(Action::ToggleTray);
+                }
+                if ui.button("Components").clicked() {
+                    self.actions.push(Action::ShowComponents);
+                    ui.close();
                 }
                 let b = egui::Button::new("Script Console").selected(self.console.open);
                 if ui.add(b).clicked() {

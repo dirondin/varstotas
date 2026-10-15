@@ -14,6 +14,7 @@ mod document;
 mod inference;
 mod nav;
 mod overlay;
+mod plugins;
 mod scene_builder;
 mod templates;
 mod text3d;

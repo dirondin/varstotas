@@ -18,7 +18,8 @@ pub const NAMES: &[&str] = &[
     "follow_me", "erase", "move", "copy", "rotate", "scale", "group", "component", "explode", "make_unique", "union",
     "subtract", "intersect", "trim", "split", "outer_shell", "reverse", "soften", "material", "paint", "tag",
     "make_parametric", "set_params", "params", "dimension", "note", "enter", "exit", "faces", "edges", "groups", "all",
-    "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials",
+    "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
+    "write_text",
 ];
 
 fn err<T>(msg: impl Into<String>) -> R<T> {
@@ -658,7 +659,12 @@ fn register_geometry(e: &mut Engine) {
             let path = st.path.clone();
             let inv = world(st, &path).inverse();
             let p: Vec<DVec3> = p.iter().map(|p| inv.transform_point3(*p)).collect();
-            let es = mesh_mut(st, &path)?.add_polyline(&p, closed, false);
+            let up = inv.transform_vector3(DVec3::Z);
+            let m = mesh_mut(st, &path)?;
+            let es = m.add_polyline(&p, closed, false);
+            if closed && let Some(f) = loop_face(m, &es) {
+                face_up(m, f, up);
+            }
             Ok(dyn_ents(&path, es.into_iter().map(EntityRef::Edge)))
         })
     }
@@ -1103,6 +1109,33 @@ fn register_context(e: &mut Engine) {
     e.register_fn("model_bounds", || -> R<Dynamic> { with(|st| Ok(bounds_map(st.model.bounds()))) });
     e.register_fn("length", |s: ImmutableString| -> R<f64> { num(&Dynamic::from(s)) });
     e.register_fn("units", || -> R<String> { with(|st| Ok(format!("{:?}", st.model.unit).to_lowercase())) });
+    e.register_fn("all_faces", || -> R<Array> {
+        fn walk(st: &State, path: &ContextPath, out: &mut Array, depth: usize) -> R<()> {
+            let m = mesh(st, path)?;
+            out.extend(m.faces.keys().map(|f| dyn_ent(path, EntityRef::Face(f))));
+            if depth < 64 {
+                for (k, i) in m.instances.iter() {
+                    if !i.hidden {
+                        let mut p = path.clone();
+                        p.push(k);
+                        walk(st, &p, out, depth + 1)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+        with(|st| {
+            let mut out = Array::new();
+            walk(st, &Vec::new(), &mut out, 0)?;
+            Ok(out)
+        })
+    });
+    e.register_fn("read_text", |path: ImmutableString| -> R<String> {
+        std::fs::read_to_string(path.as_str()).or_else(|e| err(format!("{path}: {e}")))
+    });
+    e.register_fn("write_text", |path: ImmutableString, text: ImmutableString| -> R<()> {
+        std::fs::write(path.as_str(), text.as_str()).or_else(|e| err(format!("{path}: {e}")))
+    });
     e.register_fn("materials", || -> R<Array> {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))
     });

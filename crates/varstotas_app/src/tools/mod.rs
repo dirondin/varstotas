@@ -17,6 +17,7 @@ mod dims;
 mod draw;
 mod edit;
 mod nav_tools;
+pub mod plugin_pick;
 pub(crate) mod section;
 mod chamfer;
 pub(crate) mod solid;
@@ -504,6 +505,8 @@ pub enum ToolRequest {
     ConfirmResize(f64),
     /// Select: edit the text of a dimension of the active context.
     EditDimensionText(varstotas_kernel::DimId),
+    /// A plugin's `@pick` points were clicked: run it.
+    PluginPoints(Vec<varstotas_kernel::glam::DVec3>),
 }
 
 /// Everything a tool can touch while handling an event.

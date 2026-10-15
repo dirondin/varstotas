@@ -897,6 +897,44 @@ impl VarstotasApp {
             self.run_script_file(std::path::Path::new(path.trim()));
             return;
         }
+        // `plugin <name>` / `plugin <name> @ <file>`: start a plugin like its menu entry (the
+        // parameter dialog opens when it has parameters); `reload_plugins`.
+        if let Some(arg) = name.strip_prefix("plugin ") {
+            let (n, file) = match arg.split_once(" @ ") {
+                Some((n, f)) => (n, Some(std::path::PathBuf::from(f.trim()))),
+                None => (arg, None),
+            };
+            match self.plugin_by_name(n) {
+                Some(i) => self.actions.push(crate::app::Action::Plugin(i, file)),
+                None => log::warn!("script: no plugin named {n}"),
+            }
+            return;
+        }
+        // `library_save <name>` (the selection), `library_insert <name>` (then click),
+        // `library_refresh`, `components` (open the tray card).
+        if let Some(n) = name.strip_prefix("library_save ") {
+            self.actions.push(crate::app::Action::SaveToLibrary(n.trim().to_string()));
+            return;
+        }
+        if let Some(n) = name.strip_prefix("library_insert ") {
+            match self.library_index(n) {
+                Some(i) => self.actions.push(crate::app::Action::PlaceComponent(i)),
+                None => log::warn!("script: no library item {n}"),
+            }
+            return;
+        }
+        if name == "library_refresh" {
+            self.refresh_library();
+            return;
+        }
+        if name == "components" {
+            self.actions.push(crate::app::Action::ShowComponents);
+            return;
+        }
+        if name == "reload_plugins" {
+            self.actions.push(crate::app::Action::ReloadPlugins);
+            return;
+        }
         // `bridge_confirm allow|deny`: answer the confirmation an external script asked for.
         if let Some(a) = name.strip_prefix("bridge_confirm ") {
             self.bridge.answer = Some(a.trim() == "allow");
@@ -1171,7 +1209,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

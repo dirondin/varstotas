@@ -1,0 +1,343 @@
+//! Plugins in the app (see `plugins.rs`): the Extensions menu, File → Import / Export entries,
+//! the parameter dialog, point picking and running. A Rhai plugin run is one undo step named
+//! after the plugin; a Python plugin runs like File → Run Script… with its values in
+//! `VARSTOTAS_PARAMS`.
+
+use crate::app::{Action, VarstotasApp};
+use crate::plugins::{Lang, ParamKind, Plugin};
+use crate::ui::console::LogLine;
+use egui::{Context, Key, RichText, Ui};
+use varstotas_kernel::glam::DVec3;
+use serde_json::{Map, Value, json};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+/// The values being edited for a plugin run.
+pub struct ParamDialog {
+    pub idx: usize,
+    pub values: Vec<String>,
+    /// File for an importer / exporter.
+    pub path: Option<PathBuf>,
+    pub error: Option<String>,
+    focus: bool,
+}
+
+#[derive(Default)]
+pub struct PluginState {
+    pub list: Vec<Plugin>,
+    pub errors: Vec<String>,
+    pub dialog: Option<ParamDialog>,
+    /// Values waiting for the `@pick` points.
+    pending: Option<(usize, Map<String, Value>)>,
+    /// Last values per plugin file (the dialog starts from them).
+    last: HashMap<PathBuf, Vec<String>>,
+}
+
+fn vec_json(p: DVec3) -> Value {
+    json!({ "$vec": [p.x, p.y, p.z] })
+}
+
+impl VarstotasApp {
+    /// Install the examples and scan `~/.varstotas/plugins`.
+    pub(crate) fn load_plugins(&mut self) {
+        let Some(dir) = crate::plugins::plugins_dir() else { return };
+        if let Err(e) = crate::plugins::install_examples(&dir) {
+            log::warn!("plugins: cannot install the examples: {e}");
+        }
+        let (list, errors) = crate::plugins::scan(&dir);
+        for e in &errors {
+            log::warn!("plugin: {e}");
+        }
+        log::info!("plugins: {} loaded from {}", list.len(), dir.display());
+        self.plugins.list = list;
+        self.plugins.errors = errors;
+    }
+
+    pub(crate) fn plugin_by_name(&self, name: &str) -> Option<usize> {
+        self.plugins.list.iter().position(|p| p.name.eq_ignore_ascii_case(name.trim()))
+    }
+
+    /// Extensions menu: plugins by their menu paths, then the folder commands.
+    pub(crate) fn extensions_menu(&mut self, ui: &mut Ui) {
+        let entries: Vec<(usize, Vec<String>)> = self
+            .plugins
+            .list
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.import.is_empty() && p.export.is_empty())
+            .map(|(i, p)| (i, p.menu.clone()))
+            .collect();
+        if entries.is_empty() {
+            ui.label(RichText::new("No plugins").weak());
+        }
+        self.menu_level(ui, &entries, 0);
+        ui.separator();
+        if !self.plugins.errors.is_empty() {
+            let n = self.plugins.errors.len();
+            if ui.button(format!("{n} plugin(s) failed to load…")).on_hover_text(self.plugins.errors.join("\n")).clicked() {
+                for e in self.plugins.errors.clone() {
+                    self.console.log.push(LogLine::Error(e));
+                }
+                self.console.open = true;
+                ui.close();
+            }
+        }
+        if ui.button("Reload Plugins").clicked() {
+            self.actions.push(Action::ReloadPlugins);
+            ui.close();
+        }
+        if ui.button("Open Plugins Folder").clicked() {
+            if let Some(d) = crate::plugins::plugins_dir() {
+                reveal(&d);
+            }
+            ui.close();
+        }
+    }
+
+    fn menu_level(&mut self, ui: &mut Ui, entries: &[(usize, Vec<String>)], depth: usize) {
+        let mut i = 0;
+        while i < entries.len() {
+            let (idx, path) = &entries[i];
+            if path.len() == depth + 1 {
+                let p = &self.plugins.list[*idx];
+                let label = path[depth].clone();
+                let r = ui.button(label);
+                let r = if p.description.is_empty() { r } else { r.on_hover_text(p.description.clone()) };
+                if r.clicked() {
+                    self.actions.push(Action::Plugin(*idx, None));
+                    ui.close();
+                }
+                i += 1;
+                continue;
+            }
+            // A submenu: all following entries with the same prefix.
+            let head = path[depth].clone();
+            let n = entries[i..].iter().take_while(|(_, p)| p.len() > depth + 1 && p[depth] == head).count().max(1);
+            let group = entries[i..i + n].to_vec();
+            ui.menu_button(head, |ui| self.menu_level(ui, &group, depth + 1));
+            i += n;
+        }
+    }
+
+    /// File → Import / Export entries of plugins.
+    pub(crate) fn plugin_file_items(&mut self, ui: &mut Ui, export: bool) {
+        let items: Vec<(usize, String)> = self
+            .plugins
+            .list
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                let exts = if export { &p.export } else { &p.import };
+                (!exts.is_empty()).then(|| (i, format!("{} ({})…", p.name, exts.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", "))))
+            })
+            .collect();
+        if items.is_empty() {
+            return;
+        }
+        ui.separator();
+        for (i, label) in items {
+            if ui.button(label).clicked() {
+                self.actions.push(if export { Action::PluginExport(i) } else { Action::PluginImport(i) });
+                ui.close();
+            }
+        }
+    }
+
+    /// File dialog for an importer / exporter plugin, then [`Self::start_plugin`].
+    pub(crate) fn plugin_file(&mut self, idx: usize, export: bool) {
+        let Some(p) = self.plugins.list.get(idx) else { return };
+        let exts: Vec<&str> = if export { p.export.iter().map(String::as_str).collect() } else { p.import.iter().map(String::as_str).collect() };
+        let d = rfd::FileDialog::new().add_filter(p.name.clone(), &exts);
+        let path = if export {
+            d.set_file_name(format!("{}.{}", self.doc.display_name(), exts.first().copied().unwrap_or("txt"))).save_file()
+        } else {
+            d.pick_file()
+        };
+        if let Some(path) = path {
+            self.start_plugin(idx, Some(path));
+        }
+    }
+
+    /// Menu click: the parameter dialog when the plugin has parameters, else run (or pick).
+    pub(crate) fn start_plugin(&mut self, idx: usize, path: Option<PathBuf>) {
+        // Plugins run with their own working directory: pass an absolute path.
+        let path = path.map(|p| std::path::absolute(&p).unwrap_or(p));
+        let Some(p) = self.plugins.list.get(idx) else { return };
+        if p.params.is_empty() {
+            let mut vars = Map::new();
+            if let Some(f) = path {
+                vars.insert("path".into(), json!(f.to_string_lossy()));
+            }
+            self.plugin_go(idx, vars);
+            return;
+        }
+        let values = match self.plugins.last.get(&p.path) {
+            Some(v) if v.len() == p.params.len() => v.clone(),
+            _ => p.params.iter().map(|q| q.default.clone()).collect(),
+        };
+        self.plugins.dialog = Some(ParamDialog { idx, values, path, error: None, focus: true });
+    }
+
+    /// Values of the dialog as script variables.
+    fn plugin_vars(&self, d: &ParamDialog) -> Result<Map<String, Value>, String> {
+        let p = &self.plugins.list[d.idx];
+        let mut vars = Map::new();
+        for (q, v) in p.params.iter().zip(&d.values) {
+            let t = v.trim();
+            let bad = || format!("{}: not a valid value: {t}", q.label);
+            let val = match q.kind {
+                ParamKind::Length => json!(varstotas_kernel::units::parse_length(t, self.doc.model.unit).ok_or_else(bad)?),
+                ParamKind::Int => json!(t.parse::<i64>().map_err(|_| bad())?),
+                ParamKind::Number => json!(t.replace(',', ".").parse::<f64>().map_err(|_| bad())?),
+                ParamKind::Bool => json!(t == "true"),
+                ParamKind::Text => json!(v),
+            };
+            vars.insert(q.key.clone(), val);
+        }
+        if let Some(f) = &d.path {
+            vars.insert("path".into(), json!(f.to_string_lossy()));
+        }
+        Ok(vars)
+    }
+
+    /// Run, or pick points first.
+    fn plugin_go(&mut self, idx: usize, vars: Map<String, Value>) {
+        let Some(p) = self.plugins.list.get(idx) else { return };
+        if let Some((n, prompt)) = p.pick.clone() {
+            self.plugins.pending = Some((idx, vars));
+            self.install_tool(Box::new(crate::tools::plugin_pick::PluginPickTool::new(n, prompt)));
+            return;
+        }
+        self.run_plugin(idx, vars);
+    }
+
+    /// The `@pick` points were clicked.
+    pub(crate) fn plugin_points(&mut self, pts: Vec<DVec3>) {
+        if let Some((idx, mut vars)) = self.plugins.pending.take() {
+            vars.insert("points".into(), Value::Array(pts.into_iter().map(vec_json).collect()));
+            self.run_plugin(idx, vars);
+        }
+    }
+
+    pub(crate) fn run_plugin(&mut self, idx: usize, vars: Map<String, Value>) {
+        let Some(p) = self.plugins.list.get(idx).cloned() else { return };
+        if p.lang == Lang::Python {
+            self.run_python_with(&p.path, Some(Value::Object(vars).to_string()));
+            return;
+        }
+        let src = match std::fs::read_to_string(&p.path) {
+            Ok(s) => s,
+            Err(e) => return self.flash_error(format!("Cannot read {}: {e}", p.path.display())),
+        };
+        let ctx = varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None };
+        self.console.log.push(LogLine::Input(format!("plugin {}", p.name)));
+        let r = self.doc.try_commit_if(&p.name, |m| Ok::<_, String>(varstotas_script::eval_json(m, &ctx, &src, &vars)), |r| r.run.changed);
+        let Some(r) = r else {
+            let e = self.doc.last_error.take().unwrap_or_else(|| "plugin failed".into());
+            self.console.log.push(LogLine::Error(e.clone()));
+            self.console.last = Some((false, e.clone()));
+            return self.flash_error(e);
+        };
+        for l in r.run.output.lines() {
+            self.console.log.push(LogLine::Output(l.to_string()));
+        }
+        if let Some(sel) = r.run.selection {
+            self.doc.set_selection(sel);
+        }
+        match r.run.error {
+            Some(e) => {
+                self.console.log.push(LogLine::Error(e.clone()));
+                self.console.last = Some((false, e.clone()));
+                self.flash_error(format!("{}: {e}", p.name));
+            }
+            None => {
+                let out = r.run.output.trim_end().to_string();
+                self.flash(out.lines().last().map_or_else(|| format!("{} done", p.name), str::to_string));
+                self.console.last = Some((true, out));
+                if !p.import.is_empty() {
+                    self.actions.push(Action::ZoomExtents);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn plugin_dialog(&mut self, ctx: &Context) {
+        let Some(mut d) = self.plugins.dialog.take() else { return };
+        let p = self.plugins.list[d.idx].clone();
+        let pos = self.viewport.rect.min + egui::vec2(40.0, 40.0);
+        let mut open = true;
+        let (mut run, mut cancel) = (false, false);
+        let mut win = egui::Window::new(&p.name).id(egui::Id::new("plugin_dialog")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        if self.debug.script_active() {
+            win = win.fixed_pos(pos);
+        }
+        win.show(ctx, |ui| {
+            ui.set_min_width(300.0);
+            if !p.description.is_empty() {
+                ui.label(RichText::new(&p.description).weak());
+                ui.add_space(4.0);
+            }
+            if let Some(f) = &d.path {
+                ui.label(RichText::new(f.display().to_string()).small());
+            }
+            egui::Grid::new("plugin_params").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                for (k, q) in p.params.iter().enumerate() {
+                    ui.label(&q.label);
+                    let v = &mut d.values[k];
+                    if q.kind == ParamKind::Bool {
+                        let mut b = v == "true";
+                        if ui.checkbox(&mut b, "").changed() {
+                            *v = b.to_string();
+                        }
+                    } else {
+                        let r = ui.add(egui::TextEdit::singleline(v).desired_width(140.0));
+                        if d.focus && k == 0 {
+                            r.request_focus();
+                        }
+                        if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                            run = true;
+                        }
+                    }
+                    ui.end_row();
+                }
+            });
+            d.focus = false;
+            if let Some(e) = &d.error {
+                ui.colored_label(egui::Color32::from_rgb(200, 50, 40), e);
+            }
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                let label = if p.pick.is_some() { "Pick Points" } else { "Run" };
+                run |= ui.button(label).clicked();
+                cancel = ui.button("Cancel").clicked();
+            });
+        });
+        if cancel || !open {
+            return;
+        }
+        if run {
+            match self.plugin_vars(&d) {
+                Ok(vars) => {
+                    self.plugins.last.insert(p.path.clone(), d.values.clone());
+                    self.plugin_go(d.idx, vars);
+                    return;
+                }
+                Err(e) => d.error = Some(e),
+            }
+        }
+        self.plugins.dialog = Some(d);
+    }
+}
+
+/// Show a folder in Finder / Explorer.
+pub(crate) fn reveal(dir: &std::path::Path) {
+    let _ = std::fs::create_dir_all(dir);
+    let cmd = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(windows) {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(cmd).arg(dir).spawn();
+}

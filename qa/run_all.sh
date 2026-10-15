@@ -10,6 +10,7 @@ names=($@)
 fail=0
 for n in $names; do
   cd $out
+  rm -rf $out/home/.varstotas/components   # the library starts empty in every script
   HOME=$out/home RUST_LOG=info VARSTOTAS_SCRIPT=$root/qa/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
   code=$?
   bad=$(grep -cE 'expect FAIL|panicked' $out/$n.log)

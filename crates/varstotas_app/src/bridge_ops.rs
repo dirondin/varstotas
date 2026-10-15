@@ -434,6 +434,11 @@ impl VarstotasApp {
 
     /// Run a `.py` file with `python3`; it connects back through the bridge.
     pub(crate) fn run_python_file(&mut self, path: &Path) {
+        self.run_python_with(path, None);
+    }
+
+    /// [`Self::run_python_file`] with plugin values (JSON) in `VARSTOTAS_PARAMS`.
+    pub(crate) fn run_python_with(&mut self, path: &Path, params: Option<String>) {
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let Some(b) = &self.bridge.server else {
             self.flash_error("Python scripts need the bridge (disabled by VARSTOTAS_NO_BRIDGE)");
@@ -455,6 +460,7 @@ impl VarstotasApp {
             .env("VARSTOTAS_BRIDGE", format!("127.0.0.1:{}", b.port))
             .env("VARSTOTAS_TOKEN", &b.token)
             .env("PYTHONPATH", pypath)
+            .env("VARSTOTAS_PARAMS", params.unwrap_or_default())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
