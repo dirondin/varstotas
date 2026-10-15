@@ -24,6 +24,7 @@
 ## M4 — Вторая волна 🟨
 - **Партия 1:** направляющие как полноценные объекты (выделение, Delete, Move/Rotate/копия, Entity Info, Edit → Delete Guides, скрытие/показ), Tape Measure: resize модели через VCB; Intersect Faces (с моделью / с выделением / с контекстом), Reverse / Orient Faces, Flip Along; Copy / Paste / Paste in Place; экспорт PNG; шаблоны (архитектурный мм/м, дюймы).
 - **Партия 2:** Arc (центр + 2 точки), 3 Point Arc, Pie, привязка «касательная в вершине»; Rotated Rectangle; Axes; Dimensions.
+  - Доработка (вместе с исправлениями QA партии 2): в диалоге экспорта PNG — выбор, что попадает в картинку: фон/прозрачность (уже есть), оси, направляющие, размеры (dimensions).
 - **Партия 3:** текстуры (изображения, UV, сохранение в `.vrst`); анимация переходов между сценами.
 - Уже сделано раньше: Components + Outliner, Tags, Scenes, Follow Me, Scale, Protractor, импорт OBJ/STL.
 
