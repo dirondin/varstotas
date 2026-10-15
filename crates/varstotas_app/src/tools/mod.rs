@@ -526,6 +526,13 @@ pub trait Tool {
     fn on_pointer_up(&mut self, _ctx: &mut ToolContext) {}
     /// Called for double (click_count = 2) and triple (3) clicks, after the up event.
     fn on_double_click(&mut self, _ctx: &mut ToolContext) {}
+    /// Called every frame while [`Tool::animating`]; `dt` in seconds.
+    fn on_frame(&mut self, _ctx: &mut ToolContext, _dt: f64) {}
+    /// The tool moves something on its own (e.g. Walk while the button is held): the app
+    /// calls [`Tool::on_frame`] and keeps repainting.
+    fn animating(&self) -> bool {
+        false
+    }
     /// Key press/release not consumed by the VCB or global hotkeys (Esc, arrows, modifiers…).
     /// Return true if handled.
     fn on_key(&mut self, _ctx: &mut ToolContext, _key: Key, _pressed: bool) -> bool {

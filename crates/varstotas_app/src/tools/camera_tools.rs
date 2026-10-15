@@ -5,7 +5,8 @@
 
 use super::{Tool, ToolContext, ToolId, ToolRequest};
 use crate::nav::dvec2;
-use egui::{CursorIcon, Key, PointerButton, Pos2};
+use crate::overlay::Marker2d;
+use egui::{Color32, CursorIcon, Key, PointerButton, Pos2, vec2};
 use varstotas_kernel::LengthUnit;
 use varstotas_kernel::glam::{DQuat, DVec2, DVec3};
 use varstotas_render::Camera;
@@ -13,9 +14,11 @@ use varstotas_render::Camera;
 /// Default eye height above the clicked point (5'6").
 pub const EYE_HEIGHT: f64 = 1676.4;
 const LOOK_DIST: f64 = 1000.0;
-/// Walk: millimetres per dragged point, and turn per point.
-const WALK_MM_PER_PT: f64 = 10.0;
-const TURN_RAD_PER_PT: f64 = 0.004;
+/// Walk: speed (mm/s) per point the cursor is away from where the button went down, and turn
+/// rate (rad/s) per point; offsets inside the dead zone do nothing.
+const WALK_MM_S_PER_PT: f64 = 15.0;
+const TURN_RAD_S_PER_PT: f64 = 0.006;
+const WALK_DEAD_ZONE_PT: f64 = 4.0;
 /// Walk: arrow key step and turn.
 const STEP_MM: f64 = 300.0;
 const STEP_TURN_DEG: f64 = 5.0;
@@ -196,32 +199,39 @@ impl Tool for LookAroundTool {
     fn cursor(&self) -> CursorIcon {
         if self.dragging { CursorIcon::Grabbing } else { CursorIcon::Grab }
     }
-    fn cursor_glyph(&self) -> Option<crate::overlay::Marker2d> {
+    fn cursor_glyph(&self) -> Option<Marker2d> {
         None
     }
 }
 
 // ---------------------------------------------------------------------------
 
-/// Drag up/down to walk forward/back, left/right to turn; Shift: move up/down and sideways
-/// instead; Ctrl: run. Arrow keys step. The eye height stays unless Shift is held.
+/// Hold the button and move the cursor away from where it went down: up/down sets the walking
+/// speed forward/back, left/right the turning speed (farther = faster; the camera keeps moving
+/// while the button is held). Shift: move up/down and sideways instead; Ctrl: run. Arrow keys
+/// step. The eye height stays unless Shift is held.
 #[derive(Default)]
 pub struct WalkTool {
-    dragging: bool,
+    /// Where the button went down, and the current cursor position (viewport points).
+    anchor: Option<Pos2>,
+    cursor: Pos2,
     eye_z: f64,
     unit: Option<LengthUnit>,
 }
 
 impl WalkTool {
-    fn walk(cam: &mut Camera, delta: DVec2, shift: bool, run: bool) {
-        let k = if run { 4.0 } else { 1.0 } * WALK_MM_PER_PT;
+    /// One frame of walking: `off` is the cursor offset from the anchor (points, y down).
+    fn walk(cam: &mut Camera, off: DVec2, dt: f64, shift: bool, run: bool) {
+        let dead = |v: f64| v.signum() * (v.abs() - WALK_DEAD_ZONE_PT).max(0.0);
+        let off = DVec2::new(dead(off.x), dead(off.y));
+        let k = if run { 4.0 } else { 1.0 } * WALK_MM_S_PER_PT * dt;
         let fwd = level_dir(cam);
         if shift {
             let right = fwd.cross(DVec3::Z);
-            translate(cam, right * delta.x * k - DVec3::Z * delta.y * k);
+            translate(cam, right * off.x * k - DVec3::Z * off.y * k);
         } else {
-            translate(cam, -fwd * delta.y * k);
-            turn(cam, -delta.x * TURN_RAD_PER_PT);
+            translate(cam, -fwd * off.y * k);
+            turn(cam, -off.x * TURN_RAD_S_PER_PT * dt);
         }
     }
 }
@@ -238,21 +248,35 @@ impl Tool for WalkTool {
         }
     }
     fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
-        self.dragging = ctx.pointer.button == Some(PointerButton::Primary);
+        if ctx.pointer.button == Some(PointerButton::Primary) {
+            self.anchor = Some(ctx.pointer.pos);
+            self.cursor = ctx.pointer.pos;
+        }
     }
     fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
-        if self.dragging && ctx.pointer.primary_down {
-            let m = ctx.pointer.modifiers;
-            Self::walk(ctx.camera, dvec2(ctx.pointer.delta), m.shift, m.ctrl || m.command);
+        self.cursor = ctx.pointer.pos;
+        if !ctx.pointer.primary_down {
+            self.anchor = None;
         }
-        self.eye_z = ctx.camera.eye.z;
     }
     fn on_pointer_up(&mut self, _ctx: &mut ToolContext) {
-        self.dragging = false;
+        self.anchor = None;
+    }
+    fn animating(&self) -> bool {
+        self.anchor.is_some()
+    }
+    fn on_frame(&mut self, ctx: &mut ToolContext, dt: f64) {
+        let Some(a) = self.anchor else { return };
+        let m = ctx.pointer.modifiers;
+        Self::walk(ctx.camera, dvec2(self.cursor - a), dt, m.shift, m.ctrl || m.command);
+        self.eye_z = ctx.camera.eye.z;
     }
     fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
         if !pressed {
             return false;
+        }
+        if key == Key::Escape {
+            self.anchor = None;
         }
         let fwd = level_dir(ctx.camera);
         match key {
@@ -283,12 +307,23 @@ impl Tool for WalkTool {
         fmt_len(self.unit.unwrap_or(LengthUnit::Millimeter), self.eye_z)
     }
     fn status_text(&self) -> String {
-        "Drag up/down to walk, left/right to turn. Shift = up/down and sideways, Ctrl = run. Arrow keys step.".into()
+        "Hold the button and move up/down to walk, left/right to turn (farther = faster). Shift = up/down and sideways, Ctrl = run. Arrow keys step.".into()
+    }
+    fn overlay(&self, _view: &super::OverlayView, _out3d: &mut varstotas_render::Overlay3d, out2d: &mut Vec<Marker2d>) {
+        // Where the button went down (speed zero) and a line to the cursor.
+        let Some(a) = self.anchor else { return };
+        let color = Color32::from_gray(40);
+        for (d0, d1) in [(vec2(-6.0, 0.0), vec2(6.0, 0.0)), (vec2(0.0, -6.0), vec2(0.0, 6.0))] {
+            out2d.push(Marker2d::ScreenLine { a: a + d0, b: a + d1, color, width: 1.5, dashed: false });
+        }
+        if a.distance(self.cursor) > WALK_DEAD_ZONE_PT as f32 {
+            out2d.push(Marker2d::ScreenLine { a, b: self.cursor, color, width: 1.0, dashed: true });
+        }
     }
     fn cursor(&self) -> CursorIcon {
         CursorIcon::Move
     }
-    fn cursor_glyph(&self) -> Option<crate::overlay::Marker2d> {
+    fn cursor_glyph(&self) -> Option<Marker2d> {
         None
     }
 }

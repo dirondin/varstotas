@@ -2079,6 +2079,13 @@ impl eframe::App for VarstotasApp {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let response = self.viewport.allocate(ui);
             self.handle_viewport_input(&ctx, &response);
+            if self.tool.animating() {
+                // Scripts get a fixed step so runs are repeatable.
+                let step = if self.debug.script_active() { 1.0 / 60.0 } else { dt as f64 };
+                let p = self.current_pointer();
+                self.with_tool(p, |t, c| t.on_frame(c, step));
+                ctx.request_repaint();
+            }
             response.context_menu(|ui| self.viewport_context_menu(ui));
             if let Some(anim) = self.cam_anim.as_mut() {
                 if !anim.step(dt, &mut self.camera) {

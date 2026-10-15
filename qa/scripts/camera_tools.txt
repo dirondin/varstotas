@@ -40,8 +40,21 @@ expect cam=(2041,1217,2000)
 key ArrowLeft
 wait 2
 expect look=(-0.96,0.28,0.00)
-# drag down = walk back
-raw drag 600 400 600 450 5
+# hold and move down = keep walking back (speed grows with the distance), release stops
+raw down 600 400
+raw move 600 450
+wait 30
+raw up 600 450
 wait 2
-expect cam=(2521,1078,2000)
+expect cam=(2427,1105,2000)
+wait 10
+expect cam=(2427,1105,2000)
+# hold and move right = keep turning right
+raw down 600 400
+raw move 700 400
+wait 30
+raw up 700 400
+wait 2
+expect cam=(2427,1105,2000)
+expect look=(-0.81,0.58,0.00)
 screenshot shots/camera_walked.bmp
