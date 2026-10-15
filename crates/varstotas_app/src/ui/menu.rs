@@ -259,6 +259,10 @@ impl VarstotasApp {
                 self.tool_item(ui, ToolId::Pan);
                 self.tool_item(ui, ToolId::Zoom);
                 self.item(ui, "Zoom Extents", Some("Shift+Z"), true, Action::ZoomExtents);
+                ui.separator();
+                self.tool_item(ui, ToolId::PositionCamera);
+                self.tool_item(ui, ToolId::LookAround);
+                self.tool_item(ui, ToolId::Walk);
             });
 
             ui.menu_button("Draw", |ui| {

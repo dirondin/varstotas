@@ -1,0 +1,47 @@
+# M5 batch 1: Field of View (Zoom VCB), Position Camera, Look Around, Walk.
+box 0 0 0 2000 2000 2500
+view top
+zoom_extents
+wait 10
+tool zoom
+vcb 60
+wait 2
+expect fov=60
+vcb 35
+wait 2
+expect fov=35
+parallel on
+wait 2
+tool position_camera
+expect tool=PositionCamera
+# stand on the ground right of the box; from the top view the level direction is the screen up (+Y)
+rawp click 2600 1000 0
+wait 3
+expect tool=LookAround
+expect cam=(2600,1000,1676)
+expect look=(0.00,1.00,0.00)
+dump positioned
+screenshot shots/camera_positioned.bmp
+# look left (toward the box): drag right-to-left
+raw drag 800 400 600 400 10
+wait 3
+expect cam=(2600,1000,1676)
+expect look=(-0.93,0.36,0.00)
+vcb 2000
+wait 2
+expect cam=(2600,1000,2000)
+tool walk
+expect tool=Walk
+# two 300 mm steps forward, then 5° left
+key ArrowUp
+key ArrowUp
+wait 2
+expect cam=(2041,1217,2000)
+key ArrowLeft
+wait 2
+expect look=(-0.96,0.28,0.00)
+# drag down = walk back
+raw drag 600 400 600 450 5
+wait 2
+expect cam=(2521,1078,2000)
+screenshot shots/camera_walked.bmp

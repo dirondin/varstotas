@@ -1061,7 +1061,14 @@ impl VarstotasApp {
         let (soft, smooth) = self.doc.active_mesh().map_or((0, 0), |mesh| {
             (mesh.edges.values().filter(|e| e.soft).count(), mesh.edges.values().filter(|e| e.smooth).count())
         });
-        let extra = format!("{extra} soft={soft} smooth={smooth}");
+        let f = self.camera.basis().forward;
+        let extra = format!(
+            "{extra} soft={soft} smooth={smooth} fov={:.0} look=({:.2},{:.2},{:.2})",
+            self.camera.fov_y_deg,
+            f.x + 0.0,
+            f.y + 0.0,
+            f.z + 0.0
+        );
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",
             self.tool_id(),

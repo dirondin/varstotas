@@ -13,7 +13,7 @@
 | Zoom Window | зум в рамку | P2 | ⬜ |
 | Стандартные виды (Top/Front/Right/Back/Left/Bottom/Iso) | | P0 | ✅ |
 | Perspective / Parallel projection | переключение | P0 | ✅ |
-| Field of view, Walk/Look Around/Position Camera | | P2 | ⬜ |
+| Field of view, Walk/Look Around/Position Camera | | P2 | ✅ |
 | Previous/Next view | | P2 | ⬜ |
 
 ## 2. Рисование
@@ -41,7 +41,7 @@
 | Follow Me | выдавливание профиля по пути | P1 | ✅ |
 | Intersect Faces | пересечение с моделью/выделением | P1 | ✅ |
 | Flip Along / Reverse Faces / Orient Faces | | P1 | ✅ |
-| Soften/Smooth edges | | P2 | ⬜ |
+| Soften/Smooth edges | | P2 | ✅ |
 | Solid tools (Union/Subtract/Intersect/Trim/Split) | | P2 | ⬜ |
 
 ## 4. Структура модели

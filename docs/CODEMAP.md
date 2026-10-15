@@ -22,7 +22,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `guides.rs` | guide lines and points, stored per definition |
 | `history.rs` | undo; each snapshot is a full model clone |
 | `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL |
-| `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates) |
+| `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `texture.rs` | `TextureImage` (embedded PNG/JPEG, tile size), `TexPlacement` (per-face texture position), texture axes, base64 |
 | `units.rs` | parsing and formatting for the Measurements box (VCB) |
@@ -69,11 +69,12 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `tools/transform.rs` | Move, Rotate, Scale (copies, arrays) |
 | `tools/construct.rs` | Tape Measure, Protractor, Axes |
 | `tools/dims.rs` | Dimension tool |
-| `tools/nav_tools.rs` | Orbit, Pan, Zoom tools |
+| `tools/nav_tools.rs` | Orbit, Pan, Zoom tools (Zoom VCB = field of view) |
+| `tools/camera_tools.rs` | Position Camera, Look Around, Walk |
 | `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `tools/section.rs` | Section Plane tool; drawing and picking of section planes, cut lines and fill |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
-| `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags, Outliner, Scenes (play, settings), Instructor |
+| `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags, Outliner, Scenes (play, settings), Soften Edges, Instructor |
 | `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text) |
 | `ui/theme.rs` | look and feel |
 

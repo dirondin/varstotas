@@ -11,6 +11,7 @@
 
 pub mod common;
 mod arcs;
+mod camera_tools;
 pub(crate) mod construct;
 mod dims;
 mod draw;
@@ -61,10 +62,13 @@ pub enum ToolId {
     Orbit,
     Pan,
     Zoom,
+    PositionCamera,
+    LookAround,
+    Walk,
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 27] = [
+    pub const ALL: [ToolId; 30] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -92,6 +96,9 @@ impl ToolId {
         ToolId::Orbit,
         ToolId::Pan,
         ToolId::Zoom,
+        ToolId::PositionCamera,
+        ToolId::LookAround,
+        ToolId::Walk,
     ];
 
     pub fn name(self) -> &'static str {
@@ -123,6 +130,9 @@ impl ToolId {
             ToolId::Orbit => "Orbit",
             ToolId::Pan => "Pan",
             ToolId::Zoom => "Zoom",
+            ToolId::PositionCamera => "Position Camera",
+            ToolId::LookAround => "Look Around",
+            ToolId::Walk => "Walk",
         }
     }
 
@@ -154,6 +164,9 @@ impl ToolId {
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
             | ToolId::Section
+            | ToolId::PositionCamera
+            | ToolId::LookAround
+            | ToolId::Walk
             | ToolId::Axes
             | ToolId::Dimension => return None,
         })
@@ -193,6 +206,9 @@ impl ToolId {
             ToolId::Orbit => Icon::Orbit,
             ToolId::Pan => Icon::Pan,
             ToolId::Zoom => Icon::Zoom,
+            ToolId::PositionCamera => Icon::PositionCamera,
+            ToolId::LookAround => Icon::LookAround,
+            ToolId::Walk => Icon::Walk,
         }
     }
 
@@ -226,6 +242,9 @@ impl ToolId {
             ToolId::Orbit => "Rotate the camera around the model.",
             ToolId::Pan => "Move the camera sideways.",
             ToolId::Zoom => "Zoom the camera in or out.",
+            ToolId::PositionCamera => "Stand at a point at eye height to look at the model.",
+            ToolId::LookAround => "Turn your head: pivot the view around the eye.",
+            ToolId::Walk => "Walk through the model at eye height.",
         }
     }
 
@@ -342,6 +361,18 @@ impl ToolId {
                 "Drag up to zoom in, down to zoom out. The mouse wheel zooms toward the cursor in any tool.\n\
                  Type a field of view (e.g. 35) and press Enter. Shift+Z zooms to the whole model."
             }
+            ToolId::PositionCamera => {
+                "Click to stand at a point, looking the way the camera looks now.\n\
+                 • Drag from where to stand toward where to look.\n\
+                 • Type the eye height (default 1676 mm) before clicking.\n\
+                 • Switches to Look Around afterwards."
+            }
+            ToolId::LookAround => "Drag to turn the view around the eye. Type an eye height and press Enter.",
+            ToolId::Walk => {
+                "Drag up/down to walk forward/back, left/right to turn.\n\
+                 • Shift: move up/down and sideways. Ctrl: run.\n\
+                 • Arrow keys: step and turn. Type an eye height and press Enter."
+            }
         }
     }
 
@@ -358,6 +389,9 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Orbit => Box::new(OrbitTool::default()),
         ToolId::Pan => Box::new(PanTool::default()),
         ToolId::Zoom => Box::new(ZoomTool::default()),
+        ToolId::PositionCamera => Box::new(camera_tools::PositionCameraTool::default()),
+        ToolId::LookAround => Box::new(camera_tools::LookAroundTool::default()),
+        ToolId::Walk => Box::new(camera_tools::WalkTool::default()),
         ToolId::Line => Box::new(draw::LineTool::default()),
         ToolId::Rectangle => Box::new(draw::RectangleTool::default()),
         ToolId::Circle => Box::new(draw::CircleTool::new(false)),

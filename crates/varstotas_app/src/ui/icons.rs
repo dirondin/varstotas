@@ -34,6 +34,9 @@ pub enum Icon {
     Pan,
     Zoom,
     ZoomExtents,
+    PositionCamera,
+    LookAround,
+    Walk,
     ViewIso,
     ViewTop,
     ViewFront,
@@ -432,6 +435,36 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dashed((12.0, 3.0), (12.0, 12.0), st);
         }
         Icon::StyleShaded => cube(&pen, Color32::from_rgb(0xF6, 0xE0, 0xA8), Color32::from_rgb(0xE4, 0xB8, 0x6A), Color32::from_rgb(0xC8, 0x92, 0x48)),
+        Icon::PositionCamera => {
+            // A standing figure over a red ground mark.
+            pen.circle((12.0, 4.5), 2.5, SKIN);
+            pen.line(&[(12.0, 7.0), (12.0, 14.0)]);
+            pen.line(&[(7.5, 10.0), (12.0, 8.5), (16.5, 10.0)]);
+            pen.line(&[(9.0, 19.0), (12.0, 14.0), (15.0, 19.0)]);
+            let st = Stroke::new(1.6 * pen.s, RED);
+            pen.line_c(&[(5.0, 20.0), (19.0, 23.0)], st);
+            pen.line_c(&[(5.0, 23.0), (19.0, 20.0)], st);
+        }
+        Icon::LookAround => {
+            // An eye under a curved double arrow.
+            let mut pts = pen.arc_pts((12.0, 23.0), 9.0, 220.0, 320.0);
+            pts.extend(pen.arc_pts((12.0, 11.0), 9.0, 40.0, 140.0));
+            pen.painter.add(Shape::closed_line(pts, pen.stroke()));
+            pen.dot((12.0, 17.0), 2.5, pen.ink);
+            let st = Stroke::new(1.5 * pen.s, BLUE);
+            pen.arc((12.0, 14.0), 10.0, 205.0, 335.0, st);
+            pen.head((2.6, 10.5), (-0.5, 0.9), 3.5, BLUE);
+            pen.head((21.4, 10.5), (0.5, 0.9), 3.5, BLUE);
+        }
+        Icon::Walk => {
+            // Two footprints.
+            for (x, y) in [(8.0, 13.0), (16.0, 7.0)] {
+                let mut pts = pen.arc_pts((x, y), 3.0, 180.0, 360.0);
+                pts.extend(pen.arc_pts((x, y + 4.0), 2.6, 0.0, 180.0));
+                pen.painter.add(Shape::convex_polygon(pts, SHADE, pen.thin()));
+                pen.dot((x, y + 8.6), 2.0, pen.ink);
+            }
+        }
         Icon::Section => {
             // A cube cut by an orange plane with an arrow.
             cube(&pen, FILL, SHADE, SHADE_DARK);
