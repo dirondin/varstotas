@@ -32,6 +32,7 @@ pub mod history;
 pub mod io;
 pub mod mesh;
 pub mod model;
+pub mod params;
 pub mod report;
 pub mod section;
 pub mod shadows;
@@ -52,6 +53,7 @@ pub use ops::{ChamferKind, ChamferResult, IntersectScope, SolidOp};
 pub use model::{
     ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
+pub use params::Parametric;
 pub use section::{SectionDisplay, SectionPlane};
 pub use shadows::ShadowSettings;
 pub use text3d::Text3dOptions;

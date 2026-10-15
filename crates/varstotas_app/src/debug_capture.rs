@@ -883,6 +883,32 @@ impl VarstotasApp {
             }
             return;
         }
+        // `params [x=<len|->] [y=…] [z=…] [n=<copies>] [axis=x|y|z] [gap=<len>] [stretch|scale]`:
+        // attributes of the selected parametric group ("-" = as modelled).
+        if let Some(args) = name.strip_prefix("params ") {
+            let unit = self.doc.model.unit;
+            let cur = match self.doc.selection.as_slice() {
+                [varstotas_kernel::EntityRef::Instance(i)] => self.doc.model.instance_params(&self.doc.active_path, *i).cloned(),
+                _ => None,
+            };
+            let Some(mut p) = cur else {
+                log::warn!("script: params needs one selected parametric group");
+                return;
+            };
+            for a in args.split_whitespace() {
+                let len = |v: &str| varstotas_kernel::units::parse_length(v, unit);
+                match a.split_once('=') {
+                    Some((k @ ("x" | "y" | "z"), v)) => p.size[(k.as_bytes()[0] - b'x') as usize] = len(v),
+                    Some(("n", v)) => p.count = v.parse().unwrap_or(p.count),
+                    Some(("axis", v)) => p.axis = ["x", "y", "z"].iter().position(|x| *x == v).unwrap_or(0) as u8,
+                    Some(("gap", v)) => p.gap = len(v).unwrap_or(p.gap),
+                    None if a == "stretch" || a == "scale" => p.stretch = a == "stretch",
+                    _ => log::warn!("script: unknown params argument {a}"),
+                }
+            }
+            self.actions.push(Action::SetParams(p));
+            return;
+        }
         // `soften_edges <deg> [nosmooth] [coplanar]`
         if let Some(args) = name.strip_prefix("soften_edges") {
             let mut it = args.split_whitespace();
@@ -896,6 +922,7 @@ impl VarstotasApp {
             return;
         }
         let a = match name {
+            "make_parametric" => Action::MakeParametric,
             "copy" => Action::Copy,
             "cut" => Action::Cut,
             "paste" => Action::Paste,
@@ -1106,7 +1133,21 @@ impl VarstotasApp {
                 .map(|p| format!("o({:.0},{:.0}) a{:.0} s({:.2},{:.2})", p.offset[0], p.offset[1], p.angle_deg, p.scale[0], p.scale[1]))
                 .collect()
         });
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?}", uvs.len(), self.last_vector);
+        // Selected parametric group: world size, copies, resize mode.
+        let param = match sel.as_slice() {
+            [EntityRef::Instance(i)] => {
+                let inst = self.doc.active_mesh().and_then(|me| me.instances.get(*i));
+                match (inst, self.doc.model.instance_params(&self.doc.active_path, *i)) {
+                    (Some(inst), Some(p)) => {
+                        let b = m.def_bounds(inst.def).map(|b| b.transformed(&inst.transform)).map_or(Default::default(), |b| b.max - b.min);
+                        format!("{:.0}x{:.0}x{:.0}/n{}/{}", b.x, b.y, b.z, p.count, if p.stretch { "stretch" } else { "scale" })
+                    }
+                    _ => "none".into(),
+                }
+            }
+            _ => "none".into(),
+        };
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param}", uvs.len(), self.last_vector);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

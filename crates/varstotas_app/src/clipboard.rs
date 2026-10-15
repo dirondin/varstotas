@@ -50,6 +50,10 @@ fn reachable_defs(model: &Model, d: DefId, out: &mut HashSet<DefId>) {
         for inst in def.mesh.instances.values() {
             reachable_defs(model, inst.def, out);
         }
+        // A parametric group's base is kept even when only its stretched variant is placed.
+        if let Some(p) = &def.params {
+            reachable_defs(model, p.base, out);
+        }
     }
 }
 
@@ -277,6 +281,15 @@ impl Clipboard {
                 inst.tag = inst.tag.map(|t| maps.tag(&self.model, model, t));
             }
         }
+        // A parametric group brings its base (and stretched variant) along.
+        if let Some(mut p) = def.params.take() {
+            p.base = self.copy_def(model, doc_uid, p.base, maps, false)?;
+            p.variant = match p.variant {
+                Some(v) => Some(self.copy_def(model, doc_uid, v, maps, false)?),
+                None => None,
+            };
+            def.params = Some(p);
+        }
         for f in def.mesh.faces.values_mut() {
             f.front = f.front.map(|m| maps.material(&self.model, model, m));
             f.back = f.back.map(|m| maps.material(&self.model, model, m));
@@ -411,6 +424,32 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(doc.model.mesh_at(&[g]).unwrap().faces.len(), before * 2);
+    }
+
+    #[test]
+    fn parametric_group_pastes_with_its_base_into_another_document() {
+        let mut doc = boxed_doc();
+        doc.select_all();
+        let sel = doc.selection.clone();
+        let g = doc.try_commit("Make Group", |m| m.make_group(&[], &sel)).unwrap();
+        doc.try_commit("Make Parametric", |m| m.make_parametric(&[], g)).unwrap();
+        let mut p = doc.model.instance_params(&[], g).unwrap().clone();
+        p.size[0] = Some(1500.0);
+        p.count = 2;
+        doc.try_commit("Params", |m| m.set_instance_params(&[], g, p)).unwrap();
+        doc.set_selection(vec![EntityRef::Instance(g)]);
+        let clip = Clipboard::from_selection(&doc).unwrap();
+        let mut other = Document::new();
+        let ouid = other.uid;
+        let (ents, _) = other.commit("Paste", |m| clip.paste_into(m, ouid, &[], &DMat4::IDENTITY)).unwrap().unwrap();
+        let [EntityRef::Instance(c)] = ents.as_slice() else { panic!("{ents:?}") };
+        let mut p = other.model.instance_params(&[], *c).expect("still parametric").clone();
+        assert!(other.model.defs.contains_key(p.base) && other.model.defs.contains_key(p.variant.unwrap()));
+        // Editing the pasted copy works on its own base and variant.
+        p.count = 1;
+        other.try_commit("Params", |m| m.set_instance_params(&[], *c, p)).unwrap();
+        let b = other.model.bounds().unwrap();
+        assert!((b.max.x - b.min.x - 1500.0).abs() < 1e-6, "{b:?}");
     }
 
     #[test]

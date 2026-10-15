@@ -21,6 +21,9 @@ pub struct Definition {
     /// [`crate::guides`]). Omitted from files when empty.
     #[serde(default, skip_serializing_if = "crate::guides::DefGuides::is_empty")]
     pub guides: crate::guides::DefGuides,
+    /// Parametric group attributes (see [`crate::params`]). Omitted from files when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<crate::params::Parametric>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -177,7 +180,7 @@ impl Model {
     /// Empty model: a root definition, no materials/tags, millimetres.
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default() });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None });
         Self {
             defs,
             root,
@@ -456,7 +459,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -512,8 +515,12 @@ impl Model {
     /// Remove definitions (other than the root) that are no longer instanced.
     pub fn purge_unused_defs(&mut self) {
         loop {
-            let unused: Vec<DefId> =
-                self.defs.keys().filter(|d| *d != self.root && self.instance_count(*d) == 0).collect();
+            let bases = self.param_bases();
+            let unused: Vec<DefId> = self
+                .defs
+                .keys()
+                .filter(|d| *d != self.root && self.instance_count(*d) == 0 && !bases.contains(d))
+                .collect();
             if unused.is_empty() {
                 break;
             }
@@ -607,7 +614,7 @@ impl Model {
         verts.sort(); // deterministic welding order
         verts.dedup();
         let out = parent.absorb_refs(&verts, out);
-        if self.instance_count(instance.def) == 0 && instance.def != self.root {
+        if self.instance_count(instance.def) == 0 && instance.def != self.root && !self.param_bases().contains(&instance.def) {
             self.defs.remove(instance.def);
         }
         Ok(out)

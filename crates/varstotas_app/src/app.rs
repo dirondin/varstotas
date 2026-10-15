@@ -187,6 +187,10 @@ pub enum Action {
     PlaceText3d(crate::text3d::Text3dParams),
     /// Tools → Solid Tools → an operation: on the selected solids, or pick them with the tool.
     SolidTool(varstotas_kernel::SolidOp),
+    /// Edit → Make Parametric: the selected group / component becomes a parametric group.
+    MakeParametric,
+    /// Set the attributes of the selected parametric group (Entity Info).
+    SetParams(varstotas_kernel::Parametric),
 }
 
 /// What a [`TextPrompt`] edits.
@@ -1138,6 +1142,23 @@ impl VarstotasApp {
             Action::Text3d => self.text3d_dialog = Some(self.text3d_last.clone()),
             Action::PlaceText3d(p) => self.place_text3d(p),
             Action::SolidTool(op) => self.solid_tool(op),
+            Action::MakeParametric | Action::SetParams(_) => {
+                let path = self.doc.active_path.clone();
+                let [EntityRef::Instance(id)] = self.doc.selection.as_slice() else {
+                    self.flash("Select one group or component");
+                    return;
+                };
+                let id = *id;
+                let r = match action {
+                    Action::SetParams(p) => self.doc.try_commit("Component Parameters", |m| m.set_instance_params(&path, id, p)),
+                    _ => self.doc.try_commit("Make Parametric", |m| m.make_parametric(&path, id).map(|_| ())),
+                };
+                if r.is_none()
+                    && let Some(e) = self.doc.last_error.clone()
+                {
+                    self.flash_error(e);
+                }
+            }
             Action::ToggleShadows => self.doc.mutate_untracked(|m| m.shadows.enabled = !m.shadows.enabled),
             Action::SetShadows(sh) => {
                 if self.doc.model.shadows != sh {

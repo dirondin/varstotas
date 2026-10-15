@@ -86,6 +86,9 @@ impl VarstotasApp {
         self.item(ui, "Make Group", Some("G"), has_sel, Action::MakeGroup);
         self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
         let has_inst = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Instance(_)));
+        let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
+            if self.doc.model.instance_params(&self.doc.active_path, *i).is_none());
+        self.item(ui, "Make Parametric", None, one_plain, Action::MakeParametric);
         self.item(ui, "Explode", None, has_inst, Action::Explode);
         ui.separator();
         if let Some(i) = self.doc.section_sel {
@@ -194,6 +197,9 @@ impl VarstotasApp {
                 self.item(ui, "Make Group", Some("G"), has_sel, Action::MakeGroup);
                 self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
                 let has_inst = self.doc.selection.iter().any(|e| matches!(e, varstotas_kernel::EntityRef::Instance(_)));
+                let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
+                    if self.doc.model.instance_params(&self.doc.active_path, *i).is_none());
+                self.item(ui, "Make Parametric", None, one_plain, Action::MakeParametric);
                 self.item(ui, "Explode", None, has_inst, Action::Explode);
                 self.item(ui, "Close Group", Some("Esc"), !self.doc.active_path.is_empty(), Action::ExitContext);
                 ui.separator();

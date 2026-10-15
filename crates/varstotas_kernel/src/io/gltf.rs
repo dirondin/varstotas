@@ -551,7 +551,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             let made = new_faces(&mesh, &HashSet::<FaceId>::new());
             mesh.merge_coplanar_faces(&made);
         }
-        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default() });
+        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None });
         let inst = Instance { def, transform: DMat4::IDENTITY, name, material: None, tag: None, hidden: false, locked: false };
         model.defs[pd].mesh.instances.insert(inst);
     }

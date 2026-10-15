@@ -23,6 +23,8 @@ pub struct TrayState {
     dim_text: Option<(varstotas_kernel::DimId, String)>,
     /// Texture position edit buffers of a face: offset x, offset y, angle, scale x, scale y.
     tex_pos: Option<(varstotas_kernel::FaceId, [String; 5])>,
+    /// Parametric group edit buffers: (instance, size X, Y, Z, gap, copies).
+    params_edit: Option<(InstanceId, [String; 5])>,
     /// Section plane name being edited in Entity Info.
     section_name: Option<(usize, String)>,
     /// Texture size edit buffers of the current material: (material name, width, height).
@@ -456,7 +458,8 @@ impl VarstotasApp {
                         let Some(inst) = mesh.instances.get(*id) else { return };
                         let (_, is_group) = instance_label(model, mesh, *id);
                         let solid = model.defs.get(inst.def).filter(|d| d.mesh.is_solid());
-                        let kind = if is_group { "Group" } else { "Component" };
+                        let parametric = model.defs.get(inst.def).is_some_and(|d| d.params.is_some());
+                        let kind = if parametric { "Parametric Group" } else if is_group { "Group" } else { "Component" };
                         ui.label(RichText::new(if solid.is_some() { format!("Solid {kind}") } else { kind.into() }).strong());
                         ui.end_row();
                         if let Some(d) = solid {
@@ -601,6 +604,87 @@ impl VarstotasApp {
         }
         if let [EntityRef::Face(fid)] = sel.as_slice() {
             self.face_texture_info(ui, *fid);
+        }
+        if let [EntityRef::Instance(id)] = sel.as_slice() {
+            self.params_info(ui, *id);
+        }
+    }
+
+    /// Entity Info for a group / component: "Make Parametric", or the attributes of a
+    /// parametric group (size along the base's axes, copies in a row, gap, stretch / scale).
+    fn params_info(&mut self, ui: &mut Ui, id: InstanceId) {
+        let path = self.doc.active_path.clone();
+        let unit = self.doc.model.unit;
+        let model = &self.doc.model;
+        let Some(p) = model.instance_params(&path, id).cloned() else {
+            if model.mesh_at(&path).is_some_and(|m| m.instances.contains_key(id)) {
+                ui.add_space(6.0);
+                if ui.button("Make Parametric").on_hover_text("Size and copies set in Entity Info").clicked() {
+                    self.actions.push(Action::MakeParametric);
+                }
+            }
+            return;
+        };
+        let Some(bb) = model.def_bounds(p.base) else { return };
+        let ext = bb.max - bb.min;
+        let texts: [String; 5] = [
+            fmt_len(p.size[0].unwrap_or(ext.x), unit),
+            fmt_len(p.size[1].unwrap_or(ext.y), unit),
+            fmt_len(p.size[2].unwrap_or(ext.z), unit),
+            fmt_len(p.gap, unit),
+            p.count.to_string(),
+        ];
+        if self.tray.params_edit.as_ref().map(|e| e.0) != Some(id) {
+            self.tray.params_edit = Some((id, texts.clone()));
+        }
+        let mut next = p.clone();
+        let mut bad = false;
+        ui.add_space(6.0);
+        egui::Grid::new("entity_info_params").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new("Parameters").strong());
+            ui.end_row();
+            let Some((_, bufs)) = self.tray.params_edit.as_mut() else { return };
+            for k in [0, 1, 2, 4, 3] {
+                ui.label(["Length (X)", "Width (Y)", "Height (Z)", "Gap", "Copies"][k]);
+                let resp = ui.add(egui::TextEdit::singleline(&mut bufs[k]).desired_width(120.0));
+                if committed(ui, &resp) && bufs[k] != texts[k] {
+                    let v = varstotas_kernel::units::parse_length(&bufs[k], unit);
+                    match (k, v) {
+                        (4, _) => match bufs[k].trim().parse::<u32>() {
+                            Ok(n) if (1..=1000).contains(&n) => next.count = n,
+                            _ => bad = true,
+                        },
+                        (3, Some(g)) => next.gap = g,
+                        (_, Some(s)) if s > 0.0 => next.size[k] = Some(s),
+                        _ => bad = true,
+                    }
+                } else if !resp.has_focus() && bufs[k] != texts[k] {
+                    bufs[k] = texts[k].clone();
+                }
+                ui.end_row();
+                if k == 4 {
+                    ui.label("Along");
+                    ui.horizontal(|ui| {
+                        for (a, n) in ["X", "Y", "Z"].into_iter().enumerate() {
+                            ui.selectable_value(&mut next.axis, a as u8, n);
+                        }
+                    });
+                    ui.end_row();
+                }
+            }
+            ui.label("Resize");
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut next.stretch, true, "Stretch").on_hover_text("Move the far half: ends keep their size");
+                ui.selectable_value(&mut next.stretch, false, "Scale");
+            });
+            ui.end_row();
+        });
+        if bad {
+            self.tray.params_edit = None;
+            self.flash_error("Invalid value");
+        } else if next != p {
+            self.tray.params_edit = None;
+            self.actions.push(Action::SetParams(next));
         }
     }
 

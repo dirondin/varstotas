@@ -1,0 +1,40 @@
+# Parametric components: a board group made parametric, stretched, copied in a row, scaled; undo.
+box 0 0 0 800 300 18
+select_all
+action make_group
+wait 2
+view iso
+zoom_extents
+wait 5
+select_none
+tool select
+# click the board's top face with the real mouse: selects the group
+rawp click 400 150 18
+wait 2
+expect param=none
+action make_parametric
+wait 2
+expect undo=Some("Make Parametric")
+expect param=800x300x18/n1/stretch
+action params x=1200
+wait 2
+expect param=1200x300x18/n1/stretch
+expect undo=Some("Component Parameters")
+action params n=3 axis=y gap=100
+wait 2
+expect param=1200x1100x18/n3/stretch
+zoom_extents
+wait 3
+screenshot shots/params_row.bmp
+action params scale z=36 x=400
+wait 2
+expect param=400x1100x36/n3/scale
+action undo
+wait 2
+expect param=1200x1100x18/n3/stretch
+# the group is still picked as one object with the real mouse
+select_none
+rawp click 600 150 18
+wait 2
+expect param=1200x1100x18/n3/stretch
+dump done
