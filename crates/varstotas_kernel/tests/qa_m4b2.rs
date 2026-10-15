@@ -180,7 +180,6 @@ fn set_curve_enclosing_other_circle_no_overlap() {
 
 /// Push/pull of a disc: keep both the top and the bottom circle as circles.
 #[test]
-#[ignore = "QA4B-K2: push/pull leaves only one circle with metadata"]
 fn push_pull_disc_keeps_both_circles() {
     let mut m = Mesh::new();
     m.add_curve(&CurveInfo::circle(v(0., 0., 0.), DVec3::Z, DVec3::X, 500.0, 24).unwrap());

@@ -199,6 +199,7 @@ impl Mesh {
             }
         }
         self.soften_sides(&loops, &map);
+        self.copy_loop_curves(&loops, &map);
         let new_verts: Vec<VertexId> = loops.iter().flatten().filter(|v| !slid[*v]).map(|v| map[v]).collect();
         // Slid vertices in loop order (not hash order) so the result is deterministic.
         let mut seen = HashSet::new();
@@ -346,6 +347,7 @@ impl Mesh {
         }
         self.split_faces_by_inner_edges(&check);
         self.soften_sides(loops, &map);
+        self.copy_loop_curves(loops, &map);
         self.merge_coplanar_at(&merge_candidates);
         Ok(keep.map(|(_, f)| f).filter(|f| self.faces.contains_key(*f)).unwrap_or(h))
     }

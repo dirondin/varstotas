@@ -584,6 +584,52 @@ impl Mesh {
         }
     }
 
+    /// After push/pull: the loop that did not keep a curve's edges (original or offset copy,
+    /// `map`: loop vertex → its copy) gets a fresh curve id with the metadata translated, so
+    /// both the base and the cap circle stay editable.
+    pub(crate) fn copy_loop_curves(&mut self, loops: &[Vec<VertexId>], map: &HashMap<VertexId, VertexId>) {
+        let mut groups: std::collections::BTreeMap<u32, Vec<(EdgeId, EdgeId, DVec3, DVec3)>> = Default::default();
+        for l in loops {
+            let k = l.len();
+            for i in 0..k {
+                let (a, b) = (l[i], l[(i + 1) % k]);
+                let (Some(&a2), Some(&b2)) = (map.get(&a), map.get(&b)) else { continue };
+                if a2 == a || b2 == b {
+                    continue;
+                }
+                let (Some(e), Some(e2)) = (self.edge_between(a, b), self.edge_between(a2, b2)) else { continue };
+                if let Some(cid) = self.edges[e].curve.or(self.edges[e2].curve) {
+                    groups.entry(cid).or_default().push((e, e2, self.pos(a), self.pos(a2)));
+                }
+            }
+        }
+        for (cid, list) in groups {
+            let Some(info) = self.curves.get(&cid).copied() else { continue };
+            let (_, _, p, p2) = list[0];
+            // Which loop holds the stored metadata: the one in the curve's plane.
+            let on_orig = (p - info.center).dot(info.normal).abs() <= TOL;
+            let (delta, targets): (DVec3, Vec<EdgeId>) = if on_orig {
+                (p2 - p, list.iter().map(|x| x.1).collect())
+            } else {
+                (p - p2, list.iter().map(|x| x.0).collect())
+            };
+            let Some(moved) = info.transformed(&DMat4::from_translation(delta)) else { continue };
+            let next = self.next_curve_id();
+            for e in &targets {
+                self.edges[*e].curve = Some(next);
+            }
+            self.curves.insert(next, moved);
+            if self.curve_info(next).is_none() {
+                self.curves.remove(&next);
+            }
+            // The kept side must still be one valid curve under its old id.
+            let kept: Vec<EdgeId> = list.iter().map(|x| if on_orig { x.0 } else { x.1 }).collect();
+            for e in kept {
+                self.edges[e].curve = Some(cid);
+            }
+        }
+    }
+
     /// Curve ids used by `edges` mapped to fresh ids of this mesh, with metadata from `src`
     /// transformed by `m` (for copies: duplicate / explode).
     pub(crate) fn remap_curves(

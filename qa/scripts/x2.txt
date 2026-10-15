@@ -1,5 +1,6 @@
+# Axes: reopen keeps custom axes; context menu Move… (dx,dy,dz,angle), Reset, undo
 wait 10
-open models/x1.vrst
+open ../../qa/models/x1.vrst
 wait 10
 view top
 parallel on
@@ -9,6 +10,7 @@ zoompx 0.4 555 372
 wait 3
 wait 5
 dump reopened
+expect axes=o(1000,1000,0) x(0.71,0.71,0.00)
 tool select
 rawp rclick 2500 2500 0
 wait 3
@@ -20,6 +22,7 @@ raw text 500,0,0,45
 raw key Enter
 wait 3
 dump moved_axes
+expect axes=o(1354,1354,0) x(0.00,1.00,0.00)
 rawp rclick 2500 2500 0
 wait 3
 screenshot shots/x2_03_ctx2.bmp
@@ -31,6 +34,8 @@ screenshot shots/x2_04_ctx3.bmp
 raw click 535 211
 wait 3
 dump reset_axes
+expect axes=world
 undo
 dump undo_reset
+expect axes=o(1354,1354,0)
 quit

@@ -3,7 +3,7 @@
 # usage: qa/run_all.sh [name ...]   — debug build; output in target/qa/<name>.log, screenshots in target/qa/shots
 root=${0:A:h:h}
 out=$root/target/qa
-mkdir -p $out/shots $out/home
+mkdir -p $out/shots $out/home $out/models
 cargo build -q -p varstotas_app --manifest-path $root/Cargo.toml || exit 1
 names=($@)
 (( $#names )) || names=($root/qa/scripts/*.txt(:t:r))
