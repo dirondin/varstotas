@@ -43,6 +43,7 @@ pub enum Icon {
     StyleWireframe,
     StyleHiddenLine,
     StyleShaded,
+    StyleTextured,
     StyleMonochrome,
     Perspective,
     Undo,
@@ -430,6 +431,23 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dashed((12.0, 3.0), (12.0, 12.0), st);
         }
         Icon::StyleShaded => cube(&pen, Color32::from_rgb(0xF6, 0xE0, 0xA8), Color32::from_rgb(0xE4, 0xB8, 0x6A), Color32::from_rgb(0xC8, 0x92, 0x48)),
+        Icon::StyleTextured => {
+            // Brick cube: mortar rows on the sides, staggered joints.
+            cube(&pen, Color32::from_rgb(0xD8, 0x7A, 0x5C), Color32::from_rgb(0xB8, 0x55, 0x3A), Color32::from_rgb(0x96, 0x40, 0x2C));
+            let st = Stroke::new(0.9 * pen.s, Color32::from_rgb(0xF2, 0xE6, 0xD8));
+            for k in [3.0, 6.0] {
+                pen.line_c(&[(4.0, 7.5 + k), (12.0, 12.0 + k)], st);
+                pen.line_c(&[(12.0, 12.0 + k), (20.0, 7.5 + k)], st);
+            }
+            for (x, k) in [(8.0, 0.0), (6.0, 3.0), (10.0, 3.0), (8.0, 6.0)] {
+                let y = 7.5 + (x - 4.0) * 4.5 / 8.0 + k;
+                pen.line_c(&[(x, y), (x, y + 3.0)], st);
+                let xr = 24.0 - x;
+                pen.line_c(&[(xr, y), (xr, y + 3.0)], st);
+            }
+            pen.line_c(&[(8.0, 5.25), (16.0, 9.75)], st);
+            cube(&pen, Color32::TRANSPARENT, Color32::TRANSPARENT, Color32::TRANSPARENT);
+        }
         Icon::StyleMonochrome => cube(&pen, FILL, SHADE, SHADE_DARK),
         Icon::StyleHiddenLine => cube(&pen, Color32::WHITE, Color32::WHITE, Color32::WHITE),
         Icon::StyleWireframe | Icon::StyleXRay => {

@@ -126,7 +126,8 @@ impl VarstotasApp {
             }
             self.style_button(ui, Icon::StyleWireframe, FaceStylePref::Wireframe, "Wireframe");
             self.style_button(ui, Icon::StyleHiddenLine, FaceStylePref::HiddenLine, "Hidden Line");
-            self.style_button(ui, Icon::StyleShaded, FaceStylePref::Shaded, "Shaded with Textures");
+            self.style_button(ui, Icon::StyleShaded, FaceStylePref::ShadedColor, "Shaded");
+            self.style_button(ui, Icon::StyleTextured, FaceStylePref::Shaded, "Shaded with Textures");
             self.style_button(ui, Icon::StyleMonochrome, FaceStylePref::Monochrome, "Monochrome");
         });
     }
