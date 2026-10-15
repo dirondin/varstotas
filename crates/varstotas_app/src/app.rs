@@ -104,8 +104,10 @@ pub enum Action {
     SaveAs,
     ImportObj,
     ImportStl,
+    ImportDxf,
     ExportObj,
     ExportStl,
+    ExportDxf,
     InsertDemo,
     Quit,
     Undo,
@@ -177,6 +179,8 @@ pub enum Action {
     Text3d,
     /// Place 3D text with these values (the text follows the cursor).
     PlaceText3d(crate::text3d::Text3dParams),
+    /// Tools → Solid Tools → an operation: on the selected solids, or pick them with the tool.
+    SolidTool(varstotas_kernel::SolidOp),
 }
 
 /// What a [`TextPrompt`] edits.
@@ -910,7 +914,9 @@ impl VarstotasApp {
             Action::ImportObj => self.import(&["obj"], "OBJ"),
             Action::ImportStl => self.import(&["stl"], "STL"),
             Action::ExportObj => self.export("obj"),
+            Action::ImportDxf => self.import(&["dxf"], "DXF"),
             Action::ExportStl => self.export("stl"),
+            Action::ExportDxf => self.export("dxf"),
             Action::InsertDemo => self.insert_demo(),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
@@ -1111,6 +1117,7 @@ impl VarstotasApp {
             }
             Action::Text3d => self.text3d_dialog = Some(self.text3d_last.clone()),
             Action::PlaceText3d(p) => self.place_text3d(p),
+            Action::SolidTool(op) => self.solid_tool(op),
             Action::ToggleShadows => self.doc.mutate_untracked(|m| m.shadows.enabled = !m.shadows.enabled),
             Action::SetShadows(sh) => {
                 if self.doc.model.shadows != sh {
@@ -1311,6 +1318,20 @@ impl VarstotasApp {
         let ptr = self.current_pointer();
         self.with_tool(ptr.clone(), |t, ctx| t.deactivate(ctx));
         self.tool = Box::new(crate::tools::text3d::Text3dPlaceTool::new(p));
+        self.with_tool(ptr, |t, ctx| t.activate(ctx));
+        self.vcb.clear();
+        self.vcb_error = false;
+        self.tool_pressed = false;
+    }
+
+    /// Solid Tools: run on the selection, or start the tool to click the solids.
+    pub(crate) fn solid_tool(&mut self, op: varstotas_kernel::SolidOp) {
+        if crate::tools::solid::apply_to_selection(&mut self.doc, op).is_some() {
+            return;
+        }
+        let ptr = self.current_pointer();
+        self.with_tool(ptr.clone(), |t, ctx| t.deactivate(ctx));
+        self.tool = Box::new(crate::tools::solid::SolidTool::new(op));
         self.with_tool(ptr, |t, ctx| t.activate(ctx));
         self.vcb.clear();
         self.vcb_error = false;
@@ -1720,7 +1741,11 @@ impl VarstotasApp {
             path.set_extension(ext);
         }
         let model = &self.doc.model;
-        let r = guarded(|| if ext == "obj" { io::export_obj(model, &path) } else { io::export_stl(model, &path) });
+        let r = guarded(|| match ext {
+            "obj" => io::export_obj(model, &path),
+            "dxf" => io::export_dxf(model, &path),
+            _ => io::export_stl(model, &path),
+        });
         match r {
             Ok(Ok(())) => self.flash(format!("Exported {}", path.display())),
             Ok(Err(e)) => self.flash(format!("Export failed: {e}")),
@@ -1732,9 +1757,11 @@ impl VarstotasApp {
         let Some(path) = rfd::FileDialog::new().add_filter(label, exts).pick_file() else {
             return;
         };
-        let is_obj = exts.contains(&"obj");
-        let r = self.doc.try_commit(&format!("Import {label}"), |m| {
-            if is_obj { io::import_obj(m, &path) } else { io::import_stl(m, &path) }
+        let ext = exts.first().copied().unwrap_or_default();
+        let r = self.doc.try_commit(&format!("Import {label}"), |m| match ext {
+            "obj" => io::import_obj(m, &path),
+            "dxf" => io::import_dxf(m, &path),
+            _ => io::import_stl(m, &path),
         });
         if r.is_some() {
             self.flash(format!("Imported {}", path.display()));

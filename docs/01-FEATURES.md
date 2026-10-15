@@ -43,7 +43,7 @@
 | Intersect Faces | пересечение с моделью/выделением | P1 | ✅ |
 | Flip Along / Reverse Faces / Orient Faces | | P1 | ✅ |
 | Soften/Smooth edges | | P2 | ✅ |
-| Solid tools (Union/Subtract/Intersect/Trim/Split) | | P2 | ⬜ |
+| Solid tools (Union/Subtract/Intersect/Trim/Split) | Outer Shell, Intersect, Union, Subtract, Trim, Split солид-групп; Entity Info: объём | P2 | ✅ |
 
 ## 4. Структура модели
 | Функция | Поведение | Приор. | Статус |
@@ -109,7 +109,7 @@
 | Export OBJ, STL | P0 | ✅ |
 | Import OBJ / STL | P1 | ✅ |
 | Export PNG (скриншот вида) | P1 | ✅ |
-| Import DXF / Export DXF | P2 | ⬜ |
+| Import DXF / Export DXF | P2 | ✅ |
 | Undo/Redo (Ctrl+Z / Ctrl+Y / Cmd+Shift+Z) | P0 | ✅ |
 | Copy/Paste/Paste in place | P1 | ✅ |
 | Единицы модели, Model Info | P0 | ✅ |

@@ -1,7 +1,7 @@
 //! The "Default Tray": Entity Info, Materials, Tags, Outliner, Scenes, Instructor.
 
 use super::icons::{Icon, paint_icon};
-use super::{color_f32, color32, fmt_area, fmt_len, small_icon_button, swatch, theme};
+use super::{color_f32, color32, fmt_area, fmt_len, fmt_volume, small_icon_button, swatch, theme};
 use crate::app::{Action, VarstotasApp};
 use crate::document::{PaletteMaterial, guarded};
 use egui::{Color32, Frame, Margin, RichText, ScrollArea, Sense, Stroke, Ui, vec2};
@@ -455,8 +455,17 @@ impl VarstotasApp {
                     [EntityRef::Instance(id)] => {
                         let Some(inst) = mesh.instances.get(*id) else { return };
                         let (_, is_group) = instance_label(model, mesh, *id);
-                        ui.label(RichText::new(if is_group { "Group" } else { "Component" }).strong());
+                        let solid = model.defs.get(inst.def).filter(|d| d.mesh.is_solid());
+                        let kind = if is_group { "Group" } else { "Component" };
+                        ui.label(RichText::new(if solid.is_some() { format!("Solid {kind}") } else { kind.into() }).strong());
                         ui.end_row();
+                        if let Some(d) = solid {
+                            // Signed volume of the definition, scaled by the instance transform.
+                            let v = d.mesh.volume() * inst.transform.determinant().abs();
+                            ui.label("Volume");
+                            ui.label(fmt_volume(v.abs(), unit));
+                            ui.end_row();
+                        }
                         ui.label("Instance");
                         if self.tray.inst_name.as_ref().map(|(i, _)| *i) != Some(*id) {
                             self.tray.inst_name = Some((*id, inst.name.clone()));

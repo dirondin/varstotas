@@ -74,6 +74,19 @@ pub fn fmt_area(mm2: f64, unit: LengthUnit) -> String {
     format!("{v:.digits$} {}²", unit_suffix(unit))
 }
 
+pub fn fmt_volume(mm3: f64, unit: LengthUnit) -> String {
+    // Like `fmt_area`: large mm/cm volumes in m³.
+    let unit = if matches!(unit, LengthUnit::Millimeter | LengthUnit::Centimeter) && mm3 >= 1.0e7 {
+        LengthUnit::Meter
+    } else {
+        unit
+    };
+    let f = unit_mm(unit);
+    let v = mm3 / (f * f * f);
+    let digits = if v.abs() >= 100.0 { 0 } else { 2 };
+    format!("{v:.digits$} {}³", unit_suffix(unit))
+}
+
 pub fn color32(c: [f32; 4]) -> Color32 {
     Color32::from_rgba_unmultiplied(
         (c[0].clamp(0.0, 1.0) * 255.0).round() as u8,

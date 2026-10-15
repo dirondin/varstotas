@@ -5,10 +5,12 @@ mod follow_me;
 mod intersect;
 mod offset;
 mod push_pull;
+mod solid;
 mod transform;
 
 pub use chamfer::{ChamferKind, ChamferResult};
 pub use intersect::IntersectScope;
+pub use solid::SolidOp;
 
 use crate::mesh::Mesh;
 use crate::geom::{self, PointLoc, Projector};

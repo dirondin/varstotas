@@ -1,14 +1,16 @@
 //! Chamfer / Fillet tools: click an edge between two faces to bevel it flat or round it.
 //!
-//! Clicking one of the selected edges does all selected edges. The preview shows the result
-//! for the edge under the cursor (or the selection). Typing a size right after an operation
-//! redoes it with the new size, like other classic tools.
+//! Like Push/Pull: click an edge (one of the selected edges: all of them), move the cursor away
+//! from it to set the size (live preview), click again (or press-drag-release). A double click
+//! uses the last size. Typing a size while sizing applies it; typing right after an operation
+//! redoes it with the new size.
 
 use super::common::*;
+use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId};
 use crate::inference;
 use crate::overlay::Marker2d;
-use egui::{Color32, CursorIcon};
+use egui::{Color32, CursorIcon, Key, Pos2};
 use varstotas_kernel::glam::DVec3;
 use varstotas_kernel::{ChamferKind, EdgeId, EntityRef, LengthUnit, Mesh};
 use varstotas_render::Overlay3d;
@@ -35,8 +37,24 @@ pub struct ChamferTool {
     targets: Vec<EdgeId>,
     /// Edges of the last operation (for redoing it with a typed size).
     last: Option<Vec<EdgeId>>,
+    /// Sizing after the first click: the edges, the clicked edge (world) and the size under
+    /// the cursor (`None` until the cursor moves).
+    sizing: Option<Sizing>,
+    clicker: Clicker,
     preview: RefCell<Preview>,
 }
+
+#[derive(Clone, Debug)]
+struct Sizing {
+    edges: Vec<EdgeId>,
+    a: DVec3,
+    b: DVec3,
+    start: Pos2,
+    size: Option<f64>,
+}
+
+/// Cursor moves under this many points after the first click count as "not moved".
+const STILL_PX: f32 = 3.0;
 
 impl ChamferTool {
     pub fn new(round: bool) -> Self {
@@ -49,16 +67,53 @@ impl ChamferTool {
             hover: None,
             targets: Vec::new(),
             last: None,
+            sizing: None,
+            clicker: Clicker::default(),
             preview: RefCell::default(),
+        }
+    }
+
+    /// The size in use: the dragged one while sizing, else the last one.
+    fn size(&self) -> f64 {
+        match self.sizing.as_ref().and_then(|s| s.size) {
+            Some(v) => v,
+            None if self.round => self.radius,
+            None => self.distance,
         }
     }
 
     fn kind(&self) -> ChamferKind {
         if self.round {
-            ChamferKind::Round { radius: self.radius, segments: self.segments }
+            ChamferKind::Round { radius: self.size(), segments: self.segments }
         } else {
-            ChamferKind::Flat { distance: self.distance }
+            ChamferKind::Flat { distance: self.size() }
         }
+    }
+
+    fn set_size(&mut self, v: f64) {
+        if self.round {
+            self.radius = v;
+        } else {
+            self.distance = v;
+        }
+    }
+
+    /// Size under the cursor: distance (in the context's units) from the edge line to the
+    /// point of the cursor ray closest to it.
+    fn drag_size(ctx: &ToolContext, a: DVec3, b: DVec3) -> Option<f64> {
+        let ray = ctx.pointer.ray;
+        let d = (b - a).normalize_or_zero();
+        let w = ray.origin - a;
+        let (dd, rd) = (d.dot(ray.dir), d.dot(w));
+        let den = 1.0 - dd * dd;
+        if den < 1e-9 {
+            return None;
+        }
+        let t = (dd * rd - ray.dir.dot(w)) / den;
+        let q = ray.origin + ray.dir * t.max(0.0);
+        let on_edge = a + d * (q - a).dot(d);
+        let v = to_local(ctx.doc, q).distance(to_local(ctx.doc, on_edge));
+        (v.is_finite() && v > 1e-6).then_some(v)
     }
 
     fn label(&self) -> &'static str {
@@ -66,6 +121,14 @@ impl ChamferTool {
     }
 
     fn update(&mut self, ctx: &ToolContext) {
+        if let Some(sz) = &mut self.sizing {
+            if ctx.pointer.pos.distance(sz.start) > STILL_PX {
+                sz.size = Self::drag_size(ctx, sz.a, sz.b);
+            }
+            self.targets = sz.edges.clone();
+            self.refresh_preview(ctx);
+            return;
+        }
         self.hover = match pick_edge_at(ctx, ctx.pointer.pos, inference::EDGE_PICK_PX as f32) {
             Some(Hover::Edge { edge, a, b }) => Some((edge, a, b)),
             _ => None,
@@ -125,6 +188,32 @@ impl ChamferTool {
         }
     }
 
+    fn click(&mut self, ctx: &mut ToolContext) {
+        self.update(ctx);
+        match self.sizing.take() {
+            None => {
+                let Some((_, a, b)) = self.hover else { return };
+                if self.targets.is_empty() {
+                    return;
+                }
+                self.last = None;
+                self.sizing = Some(Sizing { edges: self.targets.clone(), a, b, start: ctx.pointer.pos, size: None });
+                self.update(ctx);
+            }
+            Some(sz) => {
+                // Not moved (a double click): the last size.
+                if let Some(v) = sz.size.filter(|_| ctx.pointer.pos.distance(sz.start) > STILL_PX) {
+                    self.set_size(v);
+                }
+                if !self.apply(ctx, sz.edges.clone()) {
+                    // Does not fit: keep sizing.
+                    self.sizing = Some(sz);
+                }
+                self.update(ctx);
+            }
+        }
+    }
+
     fn apply(&mut self, ctx: &mut ToolContext, edges: Vec<EdgeId>) -> bool {
         if edges.is_empty() {
             return false;
@@ -152,14 +241,23 @@ impl Tool for ChamferTool {
         self.update(ctx);
     }
     fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
-        if ctx.pointer.button != Some(egui::PointerButton::Primary) {
-            return;
+        if self.clicker.down(ctx) {
+            self.click(ctx);
         }
-        self.update(ctx);
-        let edges = self.targets.clone();
-        self.last = None;
-        self.apply(ctx, edges);
-        self.update(ctx);
+    }
+    fn on_pointer_up(&mut self, ctx: &mut ToolContext) {
+        // Press-drag-release sizes in one go.
+        if self.clicker.up_is_drag(ctx) && self.sizing.is_some() {
+            self.click(ctx);
+        }
+    }
+    fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
+        if pressed && key == Key::Escape && self.sizing.is_some() {
+            self.sizing = None;
+            self.update(ctx);
+            return true;
+        }
+        false
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
         let unit = ctx.doc.model.unit;
@@ -178,15 +276,22 @@ impl Tool for ChamferTool {
         if size.is_none() && segs.is_none() {
             return false;
         }
-        if let Some(v) = size {
-            if self.round {
-                self.radius = v;
-            } else {
-                self.distance = v;
-            }
-        }
         if let Some(n) = segs {
             self.segments = n.clamp(1, 64);
+        }
+        if let Some(sz) = self.sizing.take() {
+            // Typed while sizing: that size, applied now.
+            if let Some(v) = size {
+                self.set_size(v);
+            }
+            if !self.apply(ctx, sz.edges.clone()) {
+                self.sizing = Some(sz);
+            }
+            self.update(ctx);
+            return true;
+        }
+        if let Some(v) = size {
+            self.set_size(v);
         }
         // Redo the last operation with the new size.
         if let Some(edges) = self.last.take()
@@ -204,11 +309,8 @@ impl Tool for ChamferTool {
         if self.round { "Radius" } else { "Distance" }
     }
     fn vcb_value(&self) -> String {
-        if self.round {
-            format!("{}, {}s", varstotas_kernel::units::format_length(self.radius, self.unit), self.segments)
-        } else {
-            varstotas_kernel::units::format_length(self.distance, self.unit)
-        }
+        let v = varstotas_kernel::units::format_length(self.size(), self.unit);
+        if self.round { format!("{v}, {}s", self.segments) } else { v }
     }
     fn status_text(&self) -> String {
         if let Some(e) = &self.preview.borrow().error
@@ -216,15 +318,24 @@ impl Tool for ChamferTool {
         {
             return format!("Can't {} this edge: {e}", self.label().to_lowercase());
         }
-        if self.round {
-            "Click an edge between two faces to round it (selected edges: all of them). Type a radius, `12s` for segments.".into()
-        } else {
-            "Click an edge between two faces to bevel it (selected edges: all of them). Type a distance.".into()
+        match (self.sizing.is_some(), self.round) {
+            (true, true) => "Move away from the edge to set the radius, click to finish. Type a radius or `12s`; Esc cancels.".into(),
+            (true, false) => "Move away from the edge to set the size, click to finish. Type a distance; Esc cancels.".into(),
+            (false, true) => {
+                "Click an edge between two faces to round it (selected edges: all of them); double-click = last radius.".into()
+            }
+            (false, false) => {
+                "Click an edge between two faces to bevel it (selected edges: all of them); double-click = last size.".into()
+            }
         }
     }
     fn overlay(&self, _view: &OverlayView, out3d: &mut Overlay3d, _out2d: &mut Vec<Marker2d>) {
         let pv = self.preview.borrow();
-        if let Some((_, a, b)) = self.hover {
+        let hover = match &self.sizing {
+            Some(sz) => Some((sz.a, sz.b)),
+            None => self.hover.map(|(_, a, b)| (a, b)),
+        };
+        if let Some((a, b)) = hover {
             let color = if pv.error.is_some() && pv.lines.is_empty() { PREVIEW_ERR } else { SELECT_BLUE };
             line(out3d, a, b, color, 3.0);
         }
@@ -234,5 +345,8 @@ impl Tool for ChamferTool {
     }
     fn cursor(&self) -> CursorIcon {
         CursorIcon::None
+    }
+    fn is_busy(&self) -> bool {
+        self.sizing.is_some()
     }
 }

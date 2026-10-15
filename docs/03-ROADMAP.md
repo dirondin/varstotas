@@ -29,10 +29,10 @@
 - **Партия 3 ✅:** текстуры (изображения, UV, сохранение в `.vrst`); анимация переходов между сценами.
 - Уже сделано раньше: Components + Outliner, Tags, Scenes, Follow Me, Scale, Protractor, импорт OBJ/STL.
 
-## M5 — Дальше 🟨
+## M5 — Дальше ✅
 - **Партия 1:** Section Planes ✅ (инструмент, активный разрез, линии и заливка разреза, выбор/Move/Reverse/Align View, видимость в View, состояние в сценах); Soften/Smooth edges ✅; камера: Field of View, Position Camera, Look Around, Walk ✅.
 - **Партия 2:** тени (солнце по дате/времени/широте, shadow map), Text (выноски) и 3D Text ✅.
-- **Партия 3:** Solid tools (Union/Subtract/Intersect/Trim/Split), DXF импорт/экспорт.
+- **Партия 3:** Solid tools (Union/Subtract/Intersect/Trim/Split, Outer Shell), DXF импорт/экспорт ✅.
 
 > **Цель после M5 (решение от 2026-10-14):** действительно рабочий инструмент для хобби-проектов, «без фанатизма». Порядок: M4 → M5 → M6 → M7, поток «Качество» — параллельно. M8 и «Платформы» — только после того, как необходимый функционал на macOS будет полностью готов, и по отдельному решению владельца проекта.
 

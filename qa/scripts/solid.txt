@@ -1,0 +1,54 @@
+# Solid Tools: two overlapping cube groups (A at the origin, B shifted by 500 on every axis).
+box 0 0 0 1000 1000 1000
+select_all
+action make_group
+wait 2
+box 500 500 500 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+tool select
+# triple click on B's front face: B's geometry, grouped
+rawp click 1200 500 1200
+rawp click 1200 500 1200
+rawp click 1200 500 1200
+wait 2
+action make_group
+wait 2
+expect defs=3 model_faces=12
+select_none
+# Subtract with the tool: click A, then B (B minus A)
+action solid subtract
+wait 2
+expect tool=SolidTools
+rawp click 200 0 200
+wait 2
+rawp click 1200 500 1200
+wait 3
+expect defs=2 model_faces=9
+expect undo=Some("Subtract")
+screenshot shots/solid_subtract.bmp
+action undo
+wait 2
+expect defs=3 model_faces=12
+# pre-selected: runs at once
+tool select
+select_all
+action solid union
+wait 3
+expect defs=2 model_faces=12
+expect undo=Some("Union")
+action undo
+wait 2
+select_all
+action solid intersect
+wait 3
+expect defs=2 model_faces=6
+action undo
+wait 2
+select_all
+action solid split
+wait 3
+expect defs=4 model_faces=24
+expect undo=Some("Split")
+screenshot shots/solid_split.bmp

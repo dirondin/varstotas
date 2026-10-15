@@ -47,7 +47,7 @@ pub use dims::{DimAnchor, DimGeom, DimId, Dimension};
 pub use guides::{DefGuides, GuideGeom, GuideId, GuidePointId, GuideRef};
 pub use history::History;
 pub use mesh::Mesh;
-pub use ops::{ChamferKind, ChamferResult, IntersectScope};
+pub use ops::{ChamferKind, ChamferResult, IntersectScope, SolidOp};
 pub use model::{
     ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };

@@ -151,12 +151,14 @@ impl VarstotasApp {
                 ui.menu_button("Import", |ui| {
                     self.item(ui, "OBJ…", None, true, Action::ImportObj);
                     self.item(ui, "STL…", None, true, Action::ImportStl);
+                    self.item(ui, "DXF…", None, true, Action::ImportDxf);
                 });
                 ui.menu_button("Export", |ui| {
                     self.item(ui, "2D Graphic (PNG)…", None, true, Action::ExportImage);
                     ui.separator();
                     self.item(ui, "OBJ…", None, true, Action::ExportObj);
                     self.item(ui, "STL…", None, true, Action::ExportStl);
+                    self.item(ui, "DXF…", None, true, Action::ExportDxf);
                 });
                 ui.separator();
                 self.item(ui, "Insert Demo Geometry", None, true, Action::InsertDemo);
@@ -299,6 +301,11 @@ impl VarstotasApp {
                 ] {
                     self.tool_item(ui, id);
                 }
+                ui.menu_button("Solid Tools", |ui| {
+                    for op in varstotas_kernel::SolidOp::ALL {
+                        self.item(ui, op.name(), None, true, Action::SolidTool(op));
+                    }
+                });
                 ui.separator();
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);

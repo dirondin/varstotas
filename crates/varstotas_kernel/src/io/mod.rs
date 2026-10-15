@@ -1,14 +1,16 @@
-//! File IO: native `.vrst` JSON, OBJ/STL export and import.
+//! File IO: native `.vrst` JSON, OBJ/STL/DXF export and import.
 
+mod dxf;
 mod native;
 mod obj;
 mod stl;
 
+pub use dxf::{DxfData, add_dxf, export_dxf, import_dxf, import_dxf_with, parse_dxf, write_dxf};
 pub use native::{from_json, load, save, to_json};
 pub use obj::{export_obj, import_obj, import_obj_with, write_obj, write_obj_with_textures};
 pub use stl::{export_stl, import_stl, import_stl_with, write_stl_binary};
 
-/// Options of the OBJ / STL importers.
+/// Options of the OBJ / STL / DXF importers.
 #[derive(Clone, Debug)]
 pub struct ImportOptions {
     /// Merge edge-adjacent coplanar triangles/polygons with the same material back into

@@ -42,6 +42,7 @@ pub enum Icon {
     Text3d,
     Chamfer,
     Fillet,
+    Solid,
     ViewIso,
     ViewTop,
     ViewFront,
@@ -462,6 +463,12 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.line_c(&[(13.0, 4.0), (20.0, 11.0)], Stroke::new(2.2 * pen.s, RED));
             pen.dashed((13.0, 4.0), (20.0, 4.0), pen.thin());
             pen.dashed((20.0, 4.0), (20.0, 11.0), pen.thin());
+        }
+        Icon::Solid => {
+            // Two overlapping blocks, the overlap highlighted.
+            pen.poly(&[(3.0, 9.0), (15.0, 9.0), (15.0, 21.0), (3.0, 21.0)], FILL);
+            pen.poly(&[(9.0, 3.0), (21.0, 3.0), (21.0, 15.0), (9.0, 15.0)], FILL);
+            pen.poly(&[(9.0, 9.0), (15.0, 9.0), (15.0, 15.0), (9.0, 15.0)], Color32::from_rgba_unmultiplied(0xD0, 0x30, 0x30, 0x90));
         }
         Icon::Fillet => {
             // A block profile with the top-right corner rounded.

@@ -846,6 +846,15 @@ impl VarstotasApp {
             self.actions.push(Action::PlaceText3d(p));
             return;
         }
+        // `solid <outer_shell|intersect|union|subtract|trim|split>`: Solid Tools (selection or tool).
+        if let Some(arg) = name.strip_prefix("solid ") {
+            let arg = arg.trim().replace('_', " ");
+            match varstotas_kernel::SolidOp::ALL.into_iter().find(|o| o.name().eq_ignore_ascii_case(&arg)) {
+                Some(op) => self.actions.push(Action::SolidTool(op)),
+                None => log::warn!("script: unknown solid op {arg}"),
+            }
+            return;
+        }
         // `soften_edges <deg> [nosmooth] [coplanar]`
         if let Some(args) = name.strip_prefix("soften_edges") {
             let mut it = args.split_whitespace();

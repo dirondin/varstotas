@@ -19,6 +19,7 @@ mod edit;
 mod nav_tools;
 pub(crate) mod section;
 mod chamfer;
+pub(crate) mod solid;
 mod text;
 pub(crate) mod text3d;
 mod texture;
@@ -58,6 +59,7 @@ pub enum ToolId {
     Offset,
     Chamfer,
     Fillet,
+    SolidTools,
     FollowMe,
     Tape,
     Protractor,
@@ -74,7 +76,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 33] = [
+    pub const ALL: [ToolId; 34] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -95,6 +97,7 @@ impl ToolId {
         ToolId::Offset,
         ToolId::Chamfer,
         ToolId::Fillet,
+        ToolId::SolidTools,
         ToolId::FollowMe,
         ToolId::Tape,
         ToolId::Protractor,
@@ -132,6 +135,7 @@ impl ToolId {
             ToolId::Offset => "Offset",
             ToolId::Chamfer => "Chamfer",
             ToolId::Fillet => "Fillet",
+            ToolId::SolidTools => "Solid Tools",
             ToolId::FollowMe => "Follow Me",
             ToolId::Tape => "Tape Measure",
             ToolId::Protractor => "Protractor",
@@ -171,6 +175,7 @@ impl ToolId {
             | ToolId::FollowMe
             | ToolId::Chamfer
             | ToolId::Fillet
+            | ToolId::SolidTools
             | ToolId::Protractor
             | ToolId::ArcCenter
             | ToolId::Arc3
@@ -214,6 +219,7 @@ impl ToolId {
             ToolId::Offset => Icon::Offset,
             ToolId::Chamfer => Icon::Chamfer,
             ToolId::Fillet => Icon::Fillet,
+            ToolId::SolidTools => Icon::Solid,
             ToolId::FollowMe => Icon::FollowMe,
             ToolId::Tape => Icon::Tape,
             ToolId::Protractor => Icon::Protractor,
@@ -253,6 +259,7 @@ impl ToolId {
             ToolId::Offset => "Offset a face's edges inward or outward.",
             ToolId::Chamfer => "Cut an edge between two faces with a flat bevel.",
             ToolId::Fillet => "Round an edge between two faces.",
+            ToolId::SolidTools => "Combine solid groups: outer shell, intersect, union, subtract, trim, split.",
             ToolId::FollowMe => "Sweep a face along a path.",
             ToolId::Tape => "Measure distances and create guides.",
             ToolId::Protractor => "Measure angles and create angled guides.",
@@ -354,11 +361,25 @@ impl ToolId {
             ToolId::Rotate => "Click the center, click the zero direction, click the angle. Type an angle in degrees.",
             ToolId::Scale => "Select entities, then drag a grip. Type a scale factor.",
             ToolId::Offset => "Click a face, move inward or outward, click. Type a distance.",
-            ToolId::Chamfer => "Click an edge between two faces (or one of the selected edges: all of them). \
-                 Type the distance; typing right after a chamfer redoes it with the new size.",
-            ToolId::Fillet => "Click an edge between two faces (or one of the selected edges: all of them). \
-                 Type the radius, `12s` for the number of segments, or both: `20,12s`; typing right \
-                 after a fillet redoes it.",
+            ToolId::Chamfer => {
+                "Click an edge between two faces (or one of the selected edges: all of them), move away \
+                 from it to set the size, click again.\n\
+                 • Type the distance while sizing; double-click uses the last size.\n\
+                 • Typing right after a chamfer redoes it with the new size. Esc cancels."
+            }
+            ToolId::Fillet => {
+                "Click an edge between two faces (or one of the selected edges: all of them), move away \
+                 from it to set the radius, click again.\n\
+                 • Type the radius, `12s` for the number of segments, or both: `20,12s`.\n\
+                 • Double-click uses the last radius; typing right after a fillet redoes it. Esc cancels."
+            }
+            ToolId::SolidTools => {
+                "Tools → Solid Tools: pick an operation, then click the first solid group, then the second.\n\
+                 • With solids selected the operation runs at once.\n\
+                 • Subtract / Trim cut the second solid with the first (Trim keeps the first).\n\
+                 • Split makes three pieces; Outer Shell / Union keep adding clicked solids.\n\
+                 • A solid: every edge bounds exactly two faces, no nested groups."
+            }
             ToolId::FollowMe => "Select a path, then click the profile face to sweep it.",
             ToolId::Tape => "Click two points to measure. Starting on an edge creates a parallel guide.",
             ToolId::Protractor => "Click the center, click the base direction, click the angle to create a guide.",
@@ -444,6 +465,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Offset => Box::new(edit::OffsetTool::default()),
         ToolId::Chamfer => Box::new(chamfer::ChamferTool::new(false)),
         ToolId::Fillet => Box::new(chamfer::ChamferTool::new(true)),
+        ToolId::SolidTools => Box::new(solid::SolidTool::new(varstotas_kernel::SolidOp::OuterShell)),
         ToolId::FollowMe => Box::new(edit::FollowMeTool::default()),
         ToolId::Move => Box::new(transform::MoveTool::default()),
         ToolId::Rotate => Box::new(transform::RotateTool::default()),

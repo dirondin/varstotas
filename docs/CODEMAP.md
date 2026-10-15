@@ -15,13 +15,13 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `topology/insert.rs` | sticky line insertion: vertex merge, edge split, automatic faces |
 | `topology/region.rs` | planar region recompute (the core of sticky faces; largest file) |
 | `topology/erase.rs` | eraser semantics |
-| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet) | modelling operations |
+| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
 | `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags, axes, raycast |
 | `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve`, tangents |
 | `dims.rs` | linear dimensions, stored per definition, anchored to vertices |
 | `guides.rs` | guide lines and points, stored per definition |
 | `history.rs` | undo; each snapshot is a full model clone |
-| `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL |
+| `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL, DXF (`dxf.rs`: R12 export, LINE/POLYLINE/3DFACE/CIRCLE/ARC import) |
 | `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |
@@ -73,7 +73,8 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `tools/dims.rs` | Dimension tool |
 | `tools/nav_tools.rs` | Orbit, Pan, Zoom tools (Zoom VCB = field of view) |
 | `tools/camera_tools.rs` | Position Camera, Look Around, Walk |
-| `tools/chamfer.rs` | Chamfer / Fillet tools (preview on a mesh copy, VCB redo) |
+| `tools/chamfer.rs` | Chamfer / Fillet tools (size by moving away from the edge, preview on a mesh copy, VCB redo) |
+| `tools/solid.rs` | Solid Tools (on the selection or click two solids; `Action::SolidTool(op)`) |
 | `tools/text.rs` | Text tool (leader notes: dimensions with `leader`) |
 | `tools/text3d.rs` | placing 3D Text (follows the cursor, lies on the face) |
 | `text3d.rs` | glyph outlines of egui's bundled fonts (`skrifa`), `Text3dParams` |
