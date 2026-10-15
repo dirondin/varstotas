@@ -176,6 +176,9 @@ pub enum ScriptCmd {
     /// `rawp <sub> x y z [x y z] [steps]` — like `raw <sub>` but with world points, projected
     /// with the camera when the command runs (pointer subcommands only).
     RawWorld(String, Vec<DVec3>, Option<u32>),
+    /// `sheetp <sub> x y [x y] [steps]` — like `raw <sub>` with points in paper mm on the
+    /// Sheets window's preview (pointer subcommands only).
+    RawSheet(String, Vec<f64>),
     /// `wait N` frames.
     Wait(u32),
     /// `view iso|top|front|right|left|back|bottom`
@@ -398,6 +401,11 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             let steps = (v.len() % 3 == 1).then(|| v[v.len() - 1] as u32);
             ScriptCmd::RawWorld(sub.to_string(), pts, steps)
         }
+        "sheetp" => {
+            let (sub, args) = rest.split_once(char::is_whitespace)?;
+            let v: Vec<f64> = args.split(|c: char| c.is_whitespace() || c == ',').filter_map(|t| t.parse().ok()).collect();
+            ScriptCmd::RawSheet(sub.to_string(), v)
+        }
         "wait" => ScriptCmd::Wait(nums.first().copied().unwrap_or(1.0) as u32),
         "view" => ScriptCmd::View(match rest.to_ascii_lowercase().as_str() {
             "top" => StandardView::Top,
@@ -501,7 +509,7 @@ pub struct Script {
 impl Script {
     pub fn parse(text: &str) -> Self {
         let cmds: Vec<ScriptCmd> = text.lines().filter_map(parse_cmd).collect();
-        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..))).then(RawInjector::default);
+        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..) | ScriptCmd::RawSheet(..))).then(RawInjector::default);
         Self {
             cmds,
             raw,
@@ -802,6 +810,25 @@ impl VarstotasApp {
                     None => log::warn!("script: bad rawp `{txt}`"),
                 }
             }
+            ScriptCmd::RawSheet(sub, v) => {
+                let Some((o, k)) = self.sheets.preview else {
+                    log::warn!("script: sheetp without the Sheets window");
+                    return;
+                };
+                let origin = self.viewport.rect.min;
+                let mut txt = sub.clone();
+                for c in v.as_chunks::<2>().0 {
+                    let s = o + egui::vec2(c[0] as f32, c[1] as f32) * k - origin.to_vec2();
+                    txt.push_str(&format!(" {} {}", s.x, s.y));
+                }
+                if v.len() % 2 == 1 {
+                    txt.push_str(&format!(" {}", v[v.len() - 1]));
+                }
+                match parse_raw(&txt) {
+                    Some(r) => self.queue_raw(r),
+                    None => log::warn!("script: bad sheetp `{txt}`"),
+                }
+            }
         }
     }
 
@@ -897,6 +924,71 @@ impl VarstotasApp {
         // `export_unfold <path>`: write the unfolding of the selection (svg / pdf / dxf).
         if let Some(path) = name.strip_prefix("export_unfold ") {
             self.export_unfold(std::path::Path::new(path.trim()));
+            return;
+        }
+        // Sheets: `sheet_add [a4|a3|a2|a1] [portrait]`, `sheet_viewport [scene=Name] [scale=N]
+        // [frame] [x y w h]` (the current view unless a scene is named), `sheet_text x y size text`,
+        // `sheet_title title|author|date text`, `sheet_select N`, `export_sheets <path>`.
+        if let Some(args) = name.strip_prefix("sheet_add") {
+            let a: Vec<&str> = args.split_whitespace().collect();
+            let paper = a.iter().find(|s| s.len() == 2 && s.to_ascii_lowercase().starts_with('a')).copied().unwrap_or("A3");
+            self.add_sheet(paper, a.contains(&"portrait"));
+            self.sheets.open = true;
+            return;
+        }
+        if let Some(args) = name.strip_prefix("sheet_viewport") {
+            let Some(sheet) = self.doc.model.sheets.get(self.sheets.current) else {
+                log::warn!("script: sheet_viewport without a sheet");
+                return;
+            };
+            let mut vp = self.new_viewport(sheet);
+            let mut nums = Vec::new();
+            for a in args.split_whitespace() {
+                match a.split_once('=') {
+                    Some(("scene", v)) => vp.scene = Some(v.replace('_', " ")),
+                    Some(("scale", v)) => vp.scale = v.parse().ok(),
+                    _ if a == "frame" => vp.frame = true,
+                    _ if a == "hidden" => vp.hidden = true,
+                    _ => nums.extend(a.parse::<f64>().ok()),
+                }
+            }
+            if let [x, y, w, h] = nums[..] {
+                vp.min = DVec2::new(x, y);
+                vp.size = DVec2::new(w, h);
+            }
+            self.edit_sheet("Add Viewport", |s| s.viewports.push(vp));
+            return;
+        }
+        if let Some(args) = name.strip_prefix("sheet_text ") {
+            let mut it = args.splitn(4, ' ');
+            let n: Vec<f64> = it.by_ref().take(3).filter_map(|t| t.parse().ok()).collect();
+            let text = it.next().unwrap_or("Text").replace("\\n", "\n");
+            if let [x, y, size] = n[..] {
+                let t = varstotas_kernel::layout::SheetText { at: DVec2::new(x, y), size, text };
+                self.edit_sheet("Add Text", |s| s.texts.push(t));
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("sheet_title ") {
+            let (field, v) = args.split_once(' ').unwrap_or((args, ""));
+            let (field, v) = (field.to_string(), v.to_string());
+            self.edit_sheet("Edit Sheet", |s| {
+                let tb = s.title.get_or_insert_with(Default::default);
+                match field.as_str() {
+                    "author" => tb.author = v,
+                    "date" => tb.date = v,
+                    _ => tb.title = v,
+                }
+            });
+            return;
+        }
+        if let Some(i) = name.strip_prefix("sheet_select ") {
+            self.sheets.current = i.trim().parse::<usize>().unwrap_or(1).saturating_sub(1);
+            self.sheets.selected = None;
+            return;
+        }
+        if let Some(path) = name.strip_prefix("export_sheets ") {
+            self.export_sheets(std::path::Path::new(path.trim()));
             return;
         }
         // `vector_opts <fit|N> [hidden] [noprofiles] [nodims] [nosections]`: 2D Drawing options.
@@ -1051,6 +1143,7 @@ impl VarstotasApp {
             "flip_blue" => Action::FlipAlong(2),
             "export_dialog" => Action::ExportImage,
             "unfold" => Action::Unfold,
+            "sheets" => Action::Sheets,
             "new" => Action::New,
             "preferences" => Action::Preferences,
             "about" => Action::About,
@@ -1242,7 +1335,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open);
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

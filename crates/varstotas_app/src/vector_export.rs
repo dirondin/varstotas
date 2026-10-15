@@ -46,7 +46,7 @@ pub enum Pen {
 
 impl Pen {
     /// Line width in mm.
-    fn width(self) -> f64 {
+    pub(crate) fn width(self) -> f64 {
         match self {
             Pen::Edge => 0.25,
             Pen::Profile => 0.5,
@@ -57,7 +57,7 @@ impl Pen {
         }
     }
     /// Stroke colour (RGB, 0..1).
-    fn rgb(self) -> [f64; 3] {
+    pub(crate) fn rgb(self) -> [f64; 3] {
         match self {
             Pen::Hidden => [0.45; 3],
             Pen::Mountain => [0.8, 0.0, 0.0],
@@ -66,7 +66,7 @@ impl Pen {
         }
     }
     /// Dash pattern, mm.
-    fn dash(self) -> &'static [f64] {
+    pub(crate) fn dash(self) -> &'static [f64] {
         match self {
             Pen::Hidden => &[1.5, 1.0],
             Pen::Valley => &[2.0, 1.0],
@@ -152,8 +152,45 @@ fn is_profile(model: &Model, cam: &Camera, path: &[varstotas_kernel::InstanceId]
     side(faces[0]) != side(faces[1])
 }
 
-/// Build the drawing of the current view.
-pub fn build(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) -> Drawing {
+/// A view's lines in screen points (y down), before they go on paper.
+#[derive(Clone, Debug, Default)]
+pub struct ViewLines {
+    pub strokes: Vec<(DVec2, DVec2, Pen)>,
+    pub fills: Vec<Vec<DVec2>>,
+    /// Dimensions: (a, b, line a, line b) and their labels.
+    pub dims: Vec<[DVec2; 4]>,
+    pub dim_labels: Vec<String>,
+    /// Leader notes: (anchor, text position, label).
+    pub notes: Vec<(DVec2, DVec2, String)>,
+}
+
+impl ViewLines {
+    /// Bounding box of everything (`None` when empty).
+    pub fn bounds(&self) -> Option<(DVec2, DVec2)> {
+        let mut lo = DVec2::splat(f64::INFINITY);
+        let mut hi = DVec2::splat(f64::NEG_INFINITY);
+        let pts = self
+            .strokes
+            .iter()
+            .flat_map(|(a, b, _)| [*a, *b])
+            .chain(self.fills.iter().flatten().copied())
+            .chain(self.dims.iter().flatten().copied())
+            .chain(self.notes.iter().flat_map(|(a, t, _)| [*a, *t]));
+        for p in pts {
+            lo = lo.min(p);
+            hi = hi.max(p);
+        }
+        lo.is_finite().then_some((lo, hi))
+    }
+
+    /// Put the lines on paper (`to_paper`: screen point → paper mm) into `d`.
+    pub fn on_paper(&self, d: Drawing, to_paper: impl Fn(DVec2) -> DVec2) -> Drawing {
+        finish(d, &self.strokes, &self.fills, &self.dims, &self.dim_labels, &self.notes, to_paper, None)
+    }
+}
+
+/// Lines of the view: visible (and hidden) edges, profiles, the section cut, dimensions.
+pub fn view_lines(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) -> ViewLines {
     // 1. Screen-space strokes (logical points, y down).
     let mut strokes: Vec<(DVec2, DVec2, Pen)> = Vec::new();
     let project = |p: DVec3| cam.world_to_screen(p, vp);
@@ -225,6 +262,13 @@ pub fn build(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) -> Dr
             }
         }
     }
+    ViewLines { strokes, fills: fills_scr, dims, dim_labels, notes }
+}
+
+/// Build the drawing of the current view.
+pub fn build(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) -> Drawing {
+    let v = view_lines(model, cam, vp, opts);
+    let ViewLines { strokes, fills: fills_scr, dims, dim_labels, notes } = &v;
     // 2. Paper: millimetres per screen point and the content box.
     let mut lo = DVec2::splat(f64::INFINITY);
     let mut hi = DVec2::splat(f64::NEG_INFINITY);
@@ -265,11 +309,11 @@ pub fn build(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) -> Dr
         let shift = ((page - d.size) * 0.5).max(DVec2::ZERO);
         d.size = d.size.max(page);
         let tp = to_paper;
-        return finish(d, &strokes, &fills_scr, &dims, &dim_labels, &notes, move |p| tp(p) + shift, None);
+        return finish(d, strokes, fills_scr, dims, dim_labels, notes, move |p| tp(p) + shift, None);
     }
     let label = scale.map(|n| format!("Scale 1:{}", trim(n)));
     d.size.y += if label.is_some() { 6.0 } else { 0.0 };
-    finish(d, &strokes, &fills_scr, &dims, &dim_labels, &notes, to_paper, label)
+    finish(d, strokes, fills_scr, dims, dim_labels, notes, to_paper, label)
 }
 
 fn trim(n: f64) -> String {

@@ -122,6 +122,8 @@ pub enum Action {
     ExportDrawing,
     /// Tools → Unfold…: the flat pattern window.
     Unfold,
+    /// Window → Sheets…: layout sheets.
+    Sheets,
     InsertDemo,
     Quit,
     Undo,
@@ -351,6 +353,8 @@ pub struct VarstotasApp {
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
     /// Tools → Unfold… window.
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
+    /// Window → Sheets… window.
+    pub(crate) sheets: crate::ui::sheets::SheetsState,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
     pub(crate) text_prompt: Option<TextPrompt>,
@@ -466,6 +470,7 @@ impl VarstotasApp {
             last_vector: None,
             text3d_dialog: None,
             unfold: Default::default(),
+            sheets: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
             autosave: AutosaveState {
@@ -978,6 +983,7 @@ impl VarstotasApp {
             Action::ExportReport => self.export("csv"),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
+            Action::Sheets => self.sheets.open = true,
             Action::InsertDemo => self.insert_demo(),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
@@ -1568,7 +1574,7 @@ impl VarstotasApp {
     }
 
     /// A scene of the current view: camera, display style and hidden tags.
-    fn scene_from_camera(&self, name: String) -> Scene {
+    pub(crate) fn scene_from_camera(&self, name: String) -> Scene {
         let c = &self.camera;
         let mut s = Scene::camera(name, c.eye, c.target, c.up, c.fov_y_deg, c.ortho);
         s.style = Some(SceneStyle {
@@ -2279,6 +2285,7 @@ impl eframe::App for VarstotasApp {
         self.console_window(&ctx);
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
+        self.sheets_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

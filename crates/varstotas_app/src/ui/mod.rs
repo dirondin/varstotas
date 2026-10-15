@@ -6,6 +6,7 @@ pub mod extensions;
 pub mod icons;
 pub mod library;
 pub mod menu;
+pub mod sheets;
 pub mod statusbar;
 pub mod theme;
 pub mod toolbar;

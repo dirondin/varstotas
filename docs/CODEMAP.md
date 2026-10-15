@@ -25,6 +25,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `history.rs` | undo; each snapshot is a full model clone |
 | `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL, DXF (`dxf.rs`: R12 export, LINE/POLYLINE/3DFACE/CIRCLE/ARC import), glTF (`gltf.rs`: GLB export, .gltf/.glb import), 3MF export (`threemf.rs`, own stored ZIP) |
 | `params.rs` | parametric groups: `Parametric` on a definition (size X/Y/Z by stretch or scale, copies in a row), `make_parametric`, `set_instance_params`, regeneration |
+| `layout.rs` | Layout sheets (data): `LayoutSheet`, `SheetViewport` (rect on paper, captured view or scene name, scale, line flags), `SheetText`, `TitleBlock`, `PAPERS`; `Model::viewport_scene`, `with_scene_state` |
 | `unfold.rs` | Unfold: `UnfoldInput::from_model` (selection → world faces, soft edges), `unfold` (pieces without overlaps, mountain/valley folds, tabs, edge numbers, sheet packing), `to_dxf` |
 | `report.rs` | parts list (cut-list sizes, counts, area, volume) and material areas → CSV |
 | `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
@@ -77,6 +78,8 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |
 | `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF (`to_pdf_pages`: one page per drawing) |
+| `layout.rs` | Sheets on paper: `viewport_drawing` (scene camera → `view_lines`, fit or 1:N, clipped), `sheet_drawing` (border, title block, texts), `sheets_pdf`, `scene_camera` / `camera_scene` |
+| `ui/sheets.rs` | Window → Sheets…: sheet list, paper, title block, item properties, preview with pick / move / resize (working copy → one undo step), `export_sheets`, harness dumps |
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |

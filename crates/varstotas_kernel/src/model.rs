@@ -54,7 +54,7 @@ pub enum LengthUnit {
     Foot,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Scene {
     pub name: String,
     pub eye: DVec3,
@@ -158,6 +158,9 @@ pub struct Model {
     pub section_display: crate::SectionDisplay,
     #[serde(default)]
     pub shadows: crate::ShadowSettings,
+    /// Layout sheets (paper with viewports, texts, title block).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sheets: Vec<crate::layout::LayoutSheet>,
 }
 
 /// Result of a model-wide ray pick.
@@ -196,6 +199,7 @@ impl Model {
             sections: Vec::new(),
             section_display: Default::default(),
             shadows: Default::default(),
+            sheets: Vec::new(),
         }
     }
     pub fn root_mesh(&self) -> &Mesh {

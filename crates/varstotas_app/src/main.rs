@@ -12,6 +12,7 @@ mod clipboard;
 mod debug_capture;
 mod document;
 mod inference;
+mod layout;
 mod nav;
 mod overlay;
 mod plugins;

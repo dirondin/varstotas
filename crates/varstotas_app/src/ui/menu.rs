@@ -170,6 +170,7 @@ impl VarstotasApp {
                     self.item(ui, "3MF (3D printing)…", None, true, Action::Export3mf);
                     self.item(ui, "2D Drawing (SVG / PDF)…", None, true, Action::ExportDrawing);
                     self.item(ui, "Unfold (SVG / PDF / DXF)…", None, true, Action::Unfold);
+                    self.item(ui, "Sheets (PDF / SVG)…", None, true, Action::Sheets);
                     ui.separator();
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
                     self.plugin_file_items(ui, true);
@@ -341,6 +342,10 @@ impl VarstotasApp {
                 }
                 if ui.button("Components").clicked() {
                     self.actions.push(Action::ShowComponents);
+                    ui.close();
+                }
+                if ui.add(egui::Button::new("Sheets…").selected(self.sheets.open)).clicked() {
+                    self.actions.push(Action::Sheets);
                     ui.close();
                 }
                 let b = egui::Button::new("Script Console").selected(self.console.open);

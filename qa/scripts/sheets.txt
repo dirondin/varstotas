@@ -1,0 +1,48 @@
+# Sheets: a plan scene at 1:20 and the current iso view on an A3 sheet with a text and a
+# title block; a viewport picked, moved and resized with the real mouse in the preview
+# (one undo step each); export to PDF / SVG.
+box 0 0 0 1000 500 400
+view top
+parallel on
+zoom_extents
+wait 5
+action add_scene
+wait 3
+view iso
+parallel off
+zoom_extents
+wait 5
+action sheet_add a3
+wait 5
+expect sheets=Some((1, 1, 0, 0,
+action sheet_viewport frame
+wait 3
+action sheet_viewport scene=Scene_1 scale=20 frame 250 40 120 100
+wait 3
+action sheet_text 30 250 6 Varstotas box
+action sheet_title title Box drawing
+action sheet_title author QA
+wait 5
+expect sheets=Some((1, 1, 2, 1, 32))
+screenshot shots/sheets.bmp
+# the plan viewport (on top of the iso one) picked with a real click
+sheetp click 310 90
+wait 3
+expect sheet_sel=Some(Viewport(1))
+expect sheet_vp=Some((250, 40, 120, 100))
+sheetp drag 310 90 330 110
+wait 5
+expect sheet_vp=Some((270, 60, 120, 100))
+# the corner handle resizes it
+sheetp drag 390 160 370 150
+wait 5
+expect sheet_vp=Some((270, 60, 100, 90))
+screenshot shots/sheets_moved.bmp
+action undo
+wait 3
+expect sheet_vp=Some((270, 60, 120, 100))
+action export_sheets sheets.pdf
+action export_sheets sheets.svg
+action sheet_add a4 portrait
+wait 3
+expect sheets=Some((2, 2, 0, 0,
