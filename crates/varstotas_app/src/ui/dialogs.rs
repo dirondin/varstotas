@@ -270,6 +270,76 @@ impl VarstotasApp {
             }
         }
 
+        if let Some(mut o) = self.vector_dialog {
+            let ortho = self.camera.ortho;
+            let mut choice: Option<&str> = None;
+            let resp = Modal::new(Id::new("export_drawing")).show(ctx, |ui| {
+                ui.set_width(340.0);
+                ui.heading("Export 2D Drawing");
+                ui.add_space(6.0);
+                ui.label(RichText::new("The current view as lines: SVG or PDF.").color(theme::TEXT_DIM));
+                ui.add_space(4.0);
+                ui.add_enabled_ui(ortho, |ui| {
+                    ui.horizontal(|ui| {
+                        let mut to_scale = o.scale.is_some() && ortho;
+                        if ui.checkbox(&mut to_scale, "To scale 1:").changed() {
+                            o.scale = to_scale.then_some(o.scale.unwrap_or(50.0));
+                        }
+                        let mut n = o.scale.unwrap_or(50.0);
+                        if ui.add_enabled(to_scale, egui::DragValue::new(&mut n).range(1.0..=10000.0).speed(1.0)).changed() {
+                            o.scale = Some(n);
+                        }
+                    });
+                });
+                if !ortho {
+                    ui.label(
+                        RichText::new("Perspective view: fitted to an A4 page. Camera → Parallel Projection for a scale.")
+                            .small()
+                            .color(theme::TEXT_DIM),
+                    );
+                } else if o.scale.is_none() {
+                    ui.label(RichText::new("Fitted to an A4 page.").small().color(theme::TEXT_DIM));
+                }
+                ui.checkbox(&mut o.profiles, "Profiles (thick outlines)");
+                ui.checkbox(&mut o.hidden, "Hidden lines (dashed)");
+                ui.checkbox(&mut o.dims, "Dimensions and text");
+                ui.checkbox(&mut o.sections, "Section cut");
+                ui.add_space(10.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Button::new(RichText::new("PDF…").strong())).clicked() {
+                        choice = Some("pdf");
+                    }
+                    if ui.add(egui::Button::new(RichText::new("SVG…").strong())).clicked() {
+                        choice = Some("svg");
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some("");
+                    }
+                });
+            });
+            if resp.should_close() && choice.is_none() {
+                choice = Some("");
+            }
+            match choice {
+                Some("") => self.vector_dialog = None,
+                Some(ext) => {
+                    self.vector_dialog = None;
+                    self.vector_opts = o;
+                    if let Some(mut path) = rfd::FileDialog::new()
+                        .add_filter(ext.to_uppercase(), &[ext])
+                        .set_file_name(format!("{}.{ext}", self.doc.display_name()))
+                        .save_file()
+                    {
+                        if path.extension().is_none() {
+                            path.set_extension(ext);
+                        }
+                        self.export_to(&path);
+                    }
+                }
+                None => self.vector_dialog = Some(o),
+            }
+        }
+
         if let Some(mut p) = self.text3d_dialog.clone() {
             let unit = self.doc.model.unit;
             fn len_drag(v: &mut f64, unit: varstotas_kernel::LengthUnit) -> egui::DragValue<'_> {

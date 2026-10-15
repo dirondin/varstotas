@@ -112,6 +112,7 @@
 | Import DXF / Export DXF | P2 | ✅ |
 | glTF / GLB: импорт и экспорт | P2 | ✅ |
 | Export 3MF для 3D-печати | P2 | ✅ |
+| 2D-чертёж текущего вида → SVG / PDF (профили, невидимые линии, разрезы, размеры, масштаб 1:N; лёгкий аналог page layout) | P2 | ✅ |
 | Отчёт: детали групп/компонентов с размерами для раскроя, площади по материалам (CSV) | P2 | ✅ |
 | Undo/Redo (Ctrl+Z / Ctrl+Y / Cmd+Shift+Z) | P0 | ✅ |
 | Copy/Paste/Paste in place | P1 | ✅ |

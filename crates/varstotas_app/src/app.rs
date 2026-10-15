@@ -112,6 +112,8 @@ pub enum Action {
     ExportGlb,
     Export3mf,
     ExportReport,
+    /// File → Export → 2D Drawing (SVG / PDF)…: the options dialog.
+    ExportDrawing,
     InsertDemo,
     Quit,
     Undo,
@@ -310,6 +312,11 @@ pub struct VarstotasApp {
     /// Tape Measure resize waiting for confirmation (uniform factor).
     pub(crate) resize_confirm: Option<f64>,
     pub(crate) export_dialog: Option<ExportDialog>,
+    /// File → Export → 2D Drawing: options of the dialog (`Some` while open) and the last used.
+    pub(crate) vector_dialog: Option<crate::vector_export::VectorOptions>,
+    pub(crate) vector_opts: crate::vector_export::VectorOptions,
+    /// Lines and texts of the last 2D drawing export (`dump`).
+    pub(crate) last_vector: Option<(usize, usize)>,
     /// Tools → 3D Text… dialog (its values); the last placed values are kept for the next one.
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
@@ -418,6 +425,9 @@ impl VarstotasApp {
             text_prompt: None,
             ctx_on_axes: false,
             export_dialog: None,
+            vector_dialog: None,
+            vector_opts: Default::default(),
+            last_vector: None,
             text3d_dialog: None,
             text3d_last: Default::default(),
             show_templates: false,
@@ -692,6 +702,7 @@ impl VarstotasApp {
             || self.resize_confirm.is_some()
             || self.text_prompt.is_some()
             || self.export_dialog.is_some()
+            || self.vector_dialog.is_some()
             || self.text3d_dialog.is_some()
             || self.show_templates
             || self.show_prefs
@@ -925,6 +936,7 @@ impl VarstotasApp {
             Action::ExportGlb => self.export("glb"),
             Action::Export3mf => self.export("3mf"),
             Action::ExportReport => self.export("csv"),
+            Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::InsertDemo => self.insert_demo(),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
@@ -1761,6 +1773,13 @@ impl VarstotasApp {
             "glb" => io::export_glb(model, path),
             "3mf" => io::export_3mf(model, path),
             "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
+            "svg" | "pdf" => {
+                let vp = self.viewport.size();
+                let d = crate::vector_export::build(model, &self.camera, varstotas_kernel::glam::DVec2::new(vp.x as f64, vp.y as f64), &self.vector_opts);
+                self.last_vector = Some((d.lines.len(), d.texts.len()));
+                let bytes = if ext == "svg" { crate::vector_export::to_svg(&d).into_bytes() } else { crate::vector_export::to_pdf(&d) };
+                std::fs::write(path, bytes).map_err(Into::into)
+            }
             _ => io::export_stl(model, path),
         });
         match r {

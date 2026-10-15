@@ -858,6 +858,22 @@ impl VarstotasApp {
             self.import_from(&path, &label);
             return;
         }
+        // `vector_opts <fit|N> [hidden] [noprofiles] [nodims] [nosections]`: 2D Drawing options.
+        if let Some(args) = name.strip_prefix("vector_opts ") {
+            let mut it = args.split_whitespace();
+            let mut o = crate::vector_export::VectorOptions { scale: it.next().and_then(|s| s.parse().ok()), ..Default::default() };
+            for a in it {
+                match a {
+                    "hidden" => o.hidden = true,
+                    "noprofiles" => o.profiles = false,
+                    "nodims" => o.dims = false,
+                    "nosections" => o.sections = false,
+                    _ => log::warn!("script: unknown vector_opts flag {a}"),
+                }
+            }
+            self.vector_opts = o;
+            return;
+        }
         // `solid <outer_shell|intersect|union|subtract|trim|split>`: Solid Tools (selection or tool).
         if let Some(arg) = name.strip_prefix("solid ") {
             let arg = arg.trim().replace('_', " ");
@@ -1090,7 +1106,7 @@ impl VarstotasApp {
                 .map(|p| format!("o({:.0},{:.0}) a{:.0} s({:.2},{:.2})", p.offset[0], p.offset[1], p.angle_deg, p.scale[0], p.scale[1]))
                 .collect()
         });
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?}", uvs.len());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?}", uvs.len(), self.last_vector);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

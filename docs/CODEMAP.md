@@ -56,6 +56,7 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `viewport.rs` | 3D view widget: input, renderer, overlays |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
+| `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
 | `axes.rs` | custom drawing axes, published once per frame |

@@ -162,6 +162,7 @@ impl VarstotasApp {
                     self.item(ui, "DXF…", None, true, Action::ExportDxf);
                     self.item(ui, "glTF (GLB)…", None, true, Action::ExportGlb);
                     self.item(ui, "3MF (3D printing)…", None, true, Action::Export3mf);
+                    self.item(ui, "2D Drawing (SVG / PDF)…", None, true, Action::ExportDrawing);
                     ui.separator();
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
                 });

@@ -16,6 +16,7 @@ mod scene_builder;
 mod templates;
 mod text3d;
 mod textures;
+mod vector_export;
 mod tools;
 mod ui;
 mod viewport;

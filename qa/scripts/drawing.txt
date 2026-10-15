@@ -1,0 +1,29 @@
+# 2D Drawing export (SVG / PDF): a box with a dimension, front view to scale and iso fitted.
+box 0 0 0 2000 1000 500
+view front
+parallel on
+zoom_extents
+wait 10
+tool dimension
+rawp click 0 0 500
+rawp click 2000 0 500
+rawp move 1000 0 800
+rawp click 1000 0 800
+wait 2
+expect dims=1
+tool select
+action vector_opts 50
+action export_file models/drawing_front.svg
+wait 2
+# front view: 4 visible edges (the back ones coincide) + dimension (2 extension lines, line, 2 ticks); 1 text + scale
+expect vector=Some((9, 2))
+action export_file models/drawing_front.pdf
+view iso
+parallel off
+zoom_extents
+wait 5
+action vector_opts fit hidden
+action export_file models/drawing_iso.svg
+wait 2
+dump iso
+screenshot shots/drawing_iso.bmp
