@@ -1,0 +1,35 @@
+wait 10
+view top
+parallel on
+wait 5
+tool 2pointarc
+rawp click 0 0 0
+rawp move 1000 0 0
+rawp move 2000 0 0
+rawp click 2000 0 0
+rawp move 1000 -300 0
+rawp move 1000 -700 0
+wait 3
+screenshot shots/a1_01_bulge.bmp
+rawp click 1000 -700 0
+dump arc2pt
+expect curves=["Arcr1064.3s12a140"]
+tool line
+rawp click 3000 0 0
+rawp click 4000 0 0
+key Escape
+tool 2pointarc
+rawp click 4000 0 0
+wait 30
+rawp move 4800 600 0
+rawp move 5000 1000 0
+wait 3
+screenshot shots/a1_02_tangent_preview.bmp
+wait 30
+rawp dblclick 5000 1000 0
+wait 3
+dump tangent
+expect "Arcr1000.0s12a90"]
+rawp move 6000 2000 0
+screenshot shots/a1_03_after.bmp
+quit

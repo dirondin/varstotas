@@ -1,0 +1,37 @@
+wait 10
+view top
+parallel on
+wait 5
+tool axes
+rawp click 1000 1000 0
+rawp move 1500 1500 0
+rawp click 2000 2000 0
+rawp move 500 1500 0
+wait 3
+screenshot shots/x1_01_green.bmp
+rawp click 0 2000 0
+wait 3
+dump axes_placed
+expect axes=o(1000,1000,0) x(0.71,0.71,0.00)
+tool rectangle
+rawp click 1000 1000 0
+rawp move 1800 1300 0
+raw text 1000,500
+raw key Enter
+wait 3
+dump rect
+expect model_faces=1
+tool line
+rawp click 1000 3000 0
+rawp move 1600 3600 0
+rawp move 1700 3700 0
+wait 3
+screenshot shots/x1_02_line_axis.bmp
+dump line_inference
+raw key Escape
+tool select
+save models/x1.vrst
+rawp rclick 1500 1500 0
+wait 3
+screenshot shots/x1_03_ctxmenu.bmp
+quit

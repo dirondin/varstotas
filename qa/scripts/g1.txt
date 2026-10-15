@@ -1,0 +1,45 @@
+box 0 0 0 2000 1000 500
+wait 10
+view top
+parallel on
+zoom_extents
+wait 3
+zoompx 0.4 555 372
+wait 5
+tool tapemeasure
+rawp click 500 0 500
+rawp move 500 -500 500
+rawp move 500 -900 500
+rawp click 500 -900 500
+dump guide
+tool dimension
+rawp click 1000 0 500
+rawp move 1000 -400 500
+rawp click 1000 -400 500
+dump dim
+tool select
+select_all
+dump all
+action make_group
+wait 3
+dump grouped
+expect inner=1 sel=0 hidden=false defs=2
+screenshot shots/g1_01_grouped.bmp
+rawp click 2500 1500 0
+wait 3
+rawp click 1000 500 500
+wait 3
+dump sel_group
+tool move
+rawp click 1000 500 500
+rawp move 1500 800 500
+rawp move 2000 1000 500
+rawp click 2000 1000 500
+wait 3
+dump moved_group
+expect dims=1 ["1:2000 mm"]
+view iso
+zoom_extents
+wait 5
+screenshot shots/g1_02_zoomext.bmp
+quit

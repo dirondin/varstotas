@@ -1,0 +1,34 @@
+wait 10
+view top
+parallel on
+wait 5
+tool 2pointarc
+rawp dragfast 0 0 0 2000 0 0 4
+rawp move 1000 -300 0
+rawp move 1000 -500 0
+rawp click 1000 -500 0
+dump arc_drag
+expect curves=["Arcr1250.0s12a106"]
+tool arccenter
+rawp dragfast 3000 1000 0 4000 1000 0 3
+rawp move 3500 1800 0
+rawp move 3000 2000 0
+rawp click 3000 2000 0
+dump arccenter_drag
+expect "Arcr1000.0s12a90"]
+tool dimension
+rawp dragfast 0 2000 0 2000 2000 0 3
+rawp move 1000 2300 0
+rawp move 1000 2500 0
+rawp click 1000 2500 0
+dump dim_drag
+expect dims=1 ["0:2000 mm"]
+tool rotatedrectangle
+rawp dragfast 0 3000 0 1000 3000 0 3
+rawp move 500 3400 0
+rawp move 500 3500 0
+rawp click 500 3500 0
+dump rr_drag
+expect model_faces=1
+screenshot shots/f1_01.bmp
+quit

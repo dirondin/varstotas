@@ -1,0 +1,78 @@
+box 0 0 0 2000 1000 500
+wait 10
+view top
+parallel on
+zoom_extents
+wait 5
+zoompx 0.4 555 372
+wait 5
+tool dimension
+rawp move 900 0 500
+rawp move 1000 0 500
+wait 3
+screenshot shots/d1_01_hover_edge.bmp
+rawp click 1000 0 500
+rawp move 1000 -200 500
+rawp move 1000 -400 500
+wait 3
+screenshot shots/d1_02_offset.bmp
+rawp click 1000 -400 500
+dump edge_dim
+expect dims=1 ["0:2000 mm"]
+rawp click 0 0 500
+rawp move 0 500 500
+rawp click 0 1000 500
+rawp move -300 500 500
+rawp move -400 500 500
+rawp click -400 500 500
+dump p2p_dim
+expect dims=2 ["0:2000 mm", "0:1000 mm"]
+tool select
+rawp click 1000 -400 500
+wait 3
+dump sel_dim
+expect dimsel=1
+screenshot shots/d1_03_selected.bmp
+tool move
+rawp click 1000 -400 500
+rawp move 1000 -600 500
+rawp move 1000 -700 500
+rawp click 1000 -700 500
+dump moved
+tool select
+rawp click 1000 -700 500
+raw copy
+raw paste
+rawp move 1000 1500 500
+rawp move 1000 1700 500
+rawp click 1000 1700 500
+dump pasted
+expect dims=3
+undo
+dump undo_paste
+expect dims=2
+rawp click -400 500 500
+raw key Delete
+dump deleted
+expect dims=1 ["0:2000 mm"]
+undo
+dump undo_delete
+expect dims=2
+wait 30
+rawp dblclick 1000 -700 500
+wait 3
+screenshot shots/d1_04_prompt.bmp
+raw mods cmd
+raw key A
+raw mods none
+raw text Width <>
+raw key Enter
+wait 3
+dump edited
+expect "0:Width 2000 mm"
+rawp click 2500 1500 0
+wait 3
+screenshot shots/d1_05_final.bmp
+export_png shots/d1_export.png
+wait 5
+quit

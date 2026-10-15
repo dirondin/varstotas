@@ -1,0 +1,42 @@
+wait 10
+view top
+parallel on
+wait 5
+tool arccenter
+rawp click 1000 1000 0
+rawp click 2000 1000 0
+rawp click 1000 2000 0
+tool select
+rawp click 1707 1707 0
+wait 3
+dump selarc
+screenshot shots/a3_01_entityinfo.bmp
+raw click 1251 114
+wait 3
+screenshot shots/a3_015_clicked.bmp
+raw mods cmd
+raw key A
+raw mods none
+raw text 500
+wait 3
+screenshot shots/a3_02_typing.bmp
+raw key Enter
+wait 5
+dump radius500
+expect curves=["Arcr500.0s12a90"]
+raw click 1240 142
+raw mods cmd
+raw key A
+raw mods none
+raw text 6
+raw key Enter
+wait 5
+dump seg6
+expect curves=["Arcr500.0s6a90"]
+screenshot shots/a3_03_edited.bmp
+undo
+dump undo1
+undo
+dump undo2
+expect curves=["Arcr1000.0s12a90"]
+quit

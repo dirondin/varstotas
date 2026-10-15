@@ -1,0 +1,36 @@
+wait 10
+open models/x1.vrst
+wait 10
+view top
+parallel on
+zoom_extents
+wait 3
+zoompx 0.4 555 372
+wait 3
+wait 5
+dump reopened
+tool select
+rawp rclick 2500 2500 0
+wait 3
+screenshot shots/x2_01_ctxmenu.bmp
+raw click 831 79
+wait 5
+screenshot shots/x2_02_movedlg.bmp
+raw text 500,0,0,45
+raw key Enter
+wait 3
+dump moved_axes
+rawp rclick 2500 2500 0
+wait 3
+screenshot shots/x2_03_ctx2.bmp
+raw key Escape
+wait 3
+raw rclick 510 141
+wait 3
+screenshot shots/x2_04_ctx3.bmp
+raw click 535 211
+wait 3
+dump reset_axes
+undo
+dump undo_reset
+quit

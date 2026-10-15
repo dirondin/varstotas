@@ -204,6 +204,8 @@ pub enum ScriptCmd {
     UpPx(Pos2),
     /// `dump [label]` — log selection / model statistics.
     Dump(String),
+    /// `expect <text>` — check that the `dump` summary contains `text`; logs `expect FAIL` otherwise.
+    Expect(String),
     /// `stress N` — insert an N×N grid of boxes (6 faces each) as one undo step.
     Stress(u32),
     /// `box x y z w d h` — insert a push-pulled box (one undo step), e.g. far from the origin.
@@ -422,6 +424,7 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "orbitpx" if nums.len() >= 2 => ScriptCmd::OrbitPx(egui::vec2(nums[0] as f32, nums[1] as f32)),
         "panpx" if nums.len() >= 2 => ScriptCmd::PanPx(egui::vec2(nums[0] as f32, nums[1] as f32)),
         "dump" => ScriptCmd::Dump(rest.to_string()),
+        "expect" => ScriptCmd::Expect(rest.to_string()),
         "downpx" if nums.len() >= 2 => ScriptCmd::DownPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
         "uppx" if nums.len() >= 2 => ScriptCmd::UpPx(Pos2::new(nums[0] as f32, nums[1] as f32)),
         "stress" => ScriptCmd::Stress(nums.first().copied().unwrap_or(41.0) as u32),
@@ -699,6 +702,14 @@ impl VarstotasApp {
                 self.script_button(p, false);
             }
             ScriptCmd::Dump(label) => log::info!("dump {label}: {}", self.debug_summary()),
+            ScriptCmd::Expect(text) => {
+                let summary = self.debug_summary();
+                if summary.contains(&text) {
+                    log::info!("expect ok: {text}");
+                } else {
+                    log::error!("expect FAIL: {text:?} not in: {summary}");
+                }
+            }
             ScriptCmd::Stress(n) => self.insert_stress_grid(n),
             ScriptCmd::Box(at, size) => {
                 self.doc.commit("Insert Box", |m| {
