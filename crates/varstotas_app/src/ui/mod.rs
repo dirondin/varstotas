@@ -10,6 +10,7 @@ pub mod statusbar;
 pub mod theme;
 pub mod toolbar;
 pub mod tray;
+pub mod unfold;
 
 use crate::document::guarded;
 use egui::{Color32, Response, Sense, Ui, vec2};

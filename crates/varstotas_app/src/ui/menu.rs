@@ -103,6 +103,8 @@ impl VarstotasApp {
             ui.separator();
         }
         self.face_ops_items(ui);
+        let can_unfold = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Face(_) | EntityRef::Instance(_)));
+        self.item(ui, "Unfold…", None, can_unfold, Action::Unfold);
         if self.selected_textured_face() {
             ui.menu_button("Texture", |ui| {
                 self.item(ui, "Position", None, true, Action::SetTool(ToolId::TexturePosition));
@@ -167,6 +169,7 @@ impl VarstotasApp {
                     self.item(ui, "glTF (GLB)…", None, true, Action::ExportGlb);
                     self.item(ui, "3MF (3D printing)…", None, true, Action::Export3mf);
                     self.item(ui, "2D Drawing (SVG / PDF)…", None, true, Action::ExportDrawing);
+                    self.item(ui, "Unfold (SVG / PDF / DXF)…", None, true, Action::Unfold);
                     ui.separator();
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
                     self.plugin_file_items(ui, true);
@@ -321,6 +324,7 @@ impl VarstotasApp {
                         self.item(ui, op.name(), None, true, Action::SolidTool(op));
                     }
                 });
+                self.item(ui, "Unfold…", None, true, Action::Unfold);
                 ui.separator();
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);

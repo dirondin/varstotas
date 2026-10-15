@@ -120,6 +120,8 @@ pub enum Action {
     ExportReport,
     /// File → Export → 2D Drawing (SVG / PDF)…: the options dialog.
     ExportDrawing,
+    /// Tools → Unfold…: the flat pattern window.
+    Unfold,
     InsertDemo,
     Quit,
     Undo,
@@ -347,6 +349,8 @@ pub struct VarstotasApp {
     pub(crate) last_vector: Option<(usize, usize)>,
     /// Tools → 3D Text… dialog (its values); the last placed values are kept for the next one.
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
+    /// Tools → Unfold… window.
+    pub(crate) unfold: crate::ui::unfold::UnfoldState,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
     pub(crate) text_prompt: Option<TextPrompt>,
@@ -461,6 +465,7 @@ impl VarstotasApp {
             vector_opts: Default::default(),
             last_vector: None,
             text3d_dialog: None,
+            unfold: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
             autosave: AutosaveState {
@@ -972,6 +977,7 @@ impl VarstotasApp {
             Action::Export3mf => self.export("3mf"),
             Action::ExportReport => self.export("csv"),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
+            Action::Unfold => self.unfold.open = true,
             Action::InsertDemo => self.insert_demo(),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
@@ -2272,6 +2278,7 @@ impl eframe::App for VarstotasApp {
         self.dialogs(&ctx);
         self.console_window(&ctx);
         self.plugin_dialog(&ctx);
+        self.unfold_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

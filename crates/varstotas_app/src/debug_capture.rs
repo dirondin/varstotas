@@ -867,6 +867,38 @@ impl VarstotasApp {
             self.import_from(&path, &label);
             return;
         }
+        // `unfold_opts [scale=N] [paper=fit|a4|a3|a2] [landscape] [notabs] [nonumbers] [softfolds]
+        // [tab=W]`: Unfold options (unlisted flags reset to the defaults).
+        if let Some(args) = name.strip_prefix("unfold_opts") {
+            let mut u = crate::ui::unfold::UnfoldState::default();
+            u.open = self.unfold.open;
+            for a in args.split_whitespace() {
+                match a.split_once('=') {
+                    Some(("scale", v)) => u.scale_n = v.parse().unwrap_or(1.0),
+                    Some(("tab", v)) => u.opts.tab_width = v.parse().unwrap_or(u.opts.tab_width),
+                    Some(("paper", v)) => {
+                        u.paper = crate::ui::unfold::Paper::ALL
+                            .into_iter()
+                            .find(|p| p.name().to_ascii_lowercase().starts_with(&v.to_ascii_lowercase()))
+                            .unwrap_or(u.paper)
+                    }
+                    _ => match a {
+                        "landscape" => u.landscape = true,
+                        "notabs" => u.opts.tabs = false,
+                        "nonumbers" => u.opts.numbers = false,
+                        "softfolds" => u.opts.soft_folds = true,
+                        _ => log::warn!("script: unknown unfold_opts flag {a}"),
+                    },
+                }
+            }
+            self.unfold = u;
+            return;
+        }
+        // `export_unfold <path>`: write the unfolding of the selection (svg / pdf / dxf).
+        if let Some(path) = name.strip_prefix("export_unfold ") {
+            self.export_unfold(std::path::Path::new(path.trim()));
+            return;
+        }
         // `vector_opts <fit|N> [hidden] [noprofiles] [nodims] [nosections]`: 2D Drawing options.
         if let Some(args) = name.strip_prefix("vector_opts ") {
             let mut it = args.split_whitespace();
@@ -1018,6 +1050,7 @@ impl VarstotasApp {
             "flip_green" => Action::FlipAlong(1),
             "flip_blue" => Action::FlipAlong(2),
             "export_dialog" => Action::ExportImage,
+            "unfold" => Action::Unfold,
             "new" => Action::New,
             "preferences" => Action::Preferences,
             "about" => Action::About,
@@ -1209,7 +1242,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

@@ -1,0 +1,69 @@
+# Unfold: the window follows the selection (one face picked with a real click, then
+# Select All with the real keyboard), options, sheets, export to SVG / PDF / DXF.
+box 0 0 0 400 300 200
+view iso
+zoom_extents
+wait 10
+tool select
+rawp move 200 150 200
+wait 2
+rawp click 200 150 200
+wait 3
+action unfold
+wait 5
+expect unfold_open=true
+# the top face alone: one piece, four cut lines
+expect unfold=Some((1, 1, 1, 4))
+raw mods cmd
+raw key A
+raw mods none
+wait 5
+# the box: 5 folds + 7 cut edges with tabs (the tab edge folds, 3 tab sides cut, the other side cut)
+expect unfold=Some((6, 1, 1, 40))
+screenshot shots/unfold_window.bmp
+action unfold_opts notabs
+wait 3
+expect unfold=Some((6, 1, 1, 19))
+# 1:1 on A4 does not fit (oversize, still one sheet); 1:5 fits
+action unfold_opts paper=a4
+wait 3
+expect unfold=Some((6, 1, 1, 40))
+action unfold_opts scale=5 paper=a4 landscape
+wait 3
+expect unfold=Some((6, 1, 1, 40))
+action export_unfold unfold_box.svg
+action export_unfold unfold_box.pdf
+action export_unfold unfold_box.dxf
+wait 3
+screenshot shots/unfold_a4.bmp
+# nothing selected: everything in the context (the same box)
+select_none
+wait 3
+expect unfold=Some((6, 1, 1, 40))
+action undo
+wait 3
+expect unfold=Some((0, 0, 0, 0))
+# a cylinder group (soft sides bend without lines) and 12 boxes over several A4 sheets
+action script let c = cylinder(vec3(0, 0, 0), 100, 300, 24); select(c);
+wait 5
+action unfold_opts notabs
+wait 3
+# 2 cap folds, the seam and the caps' 23 other edges cut on both sides
+expect unfold=Some((26, 1, 1, 96))
+action unfold_opts notabs softfolds
+wait 3
+# plus 23 folds along the side strip
+expect unfold=Some((26, 1, 1, 119))
+action undo
+wait 3
+action script for i in 0..12 { box(vec3(i * 200.0, 1000, 0), 30, 30, 30); }
+wait 5
+action unfold_opts paper=a4
+wait 3
+select_none
+wait 3
+# two nets per A4 sheet
+expect unfold=Some((72, 12, 6, 480))
+action export_unfold unfold_boxes.pdf
+wait 3
+screenshot shots/unfold_sheets.bmp

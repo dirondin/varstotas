@@ -39,6 +39,9 @@ pub enum Pen {
     Hidden,
     Section,
     Dim,
+    /// Unfold folds: mountain (dash-dot) and valley (dashed).
+    Mountain,
+    Valley,
 }
 
 impl Pen {
@@ -50,11 +53,29 @@ impl Pen {
             Pen::Hidden => 0.18,
             Pen::Section => 0.7,
             Pen::Dim => 0.18,
+            Pen::Mountain | Pen::Valley => 0.25,
         }
     }
-    fn gray(self) -> f64 {
-        if self == Pen::Hidden { 0.45 } else { 0.0 }
+    /// Stroke colour (RGB, 0..1).
+    fn rgb(self) -> [f64; 3] {
+        match self {
+            Pen::Hidden => [0.45; 3],
+            Pen::Mountain => [0.8, 0.0, 0.0],
+            Pen::Valley => [0.0, 0.3, 0.75],
+            _ => [0.0; 3],
+        }
     }
+    /// Dash pattern, mm.
+    fn dash(self) -> &'static [f64] {
+        match self {
+            Pen::Hidden => &[1.5, 1.0],
+            Pen::Valley => &[2.0, 1.0],
+            Pen::Mountain => &[3.0, 1.0, 0.6, 1.0],
+            _ => &[],
+        }
+    }
+    /// Drawing order.
+    const ORDER: [Pen; 7] = [Pen::Hidden, Pen::Edge, Pen::Mountain, Pen::Valley, Pen::Section, Pen::Profile, Pen::Dim];
 }
 
 #[derive(Clone, Debug)]
@@ -350,16 +371,20 @@ pub fn to_svg(d: &Drawing) -> String {
         }
         s.push_str("</g>\n");
     }
-    for pen in [Pen::Hidden, Pen::Edge, Pen::Section, Pen::Profile, Pen::Dim] {
+    for pen in Pen::ORDER {
         let lines: Vec<_> = d.lines.iter().filter(|l| l.2 == pen).collect();
         if lines.is_empty() {
             continue;
         }
-        let g = (pen.gray() * 255.0) as u8;
-        let dash = if pen == Pen::Hidden { " stroke-dasharray=\"1.5 1\"" } else { "" };
+        let [r, g, b] = pen.rgb().map(|c| (c * 255.0) as u8);
+        let dash = if pen.dash().is_empty() {
+            String::new()
+        } else {
+            format!(" stroke-dasharray=\"{}\"", pen.dash().iter().map(|v| n(*v)).collect::<Vec<_>>().join(" "))
+        };
         let _ = writeln!(
             s,
-            "<g fill=\"none\" stroke=\"#{g:02x}{g:02x}{g:02x}\" stroke-width=\"{}\" stroke-linecap=\"round\"{dash}>",
+            "<g fill=\"none\" stroke=\"#{r:02x}{g:02x}{b:02x}\" stroke-width=\"{}\" stroke-linecap=\"round\"{dash}>",
             n(pen.width())
         );
         let mut path = String::new();
@@ -414,6 +439,11 @@ fn pdf_string(s: &str) -> Vec<u8> {
 
 /// PDF bytes (one page, vector lines, Helvetica text).
 pub fn to_pdf(d: &Drawing) -> Vec<u8> {
+    to_pdf_pages(std::slice::from_ref(d))
+}
+
+/// Content stream of one page.
+fn pdf_content(d: &Drawing) -> Vec<u8> {
     let pt = 72.0 / 25.4;
     let h = d.size.y;
     // Paper mm (y down) → PDF points (y up).
@@ -433,13 +463,14 @@ pub fn to_pdf(d: &Drawing) -> Vec<u8> {
             w(&mut c, "b\n".into());
         }
     }
-    for pen in [Pen::Hidden, Pen::Edge, Pen::Section, Pen::Profile, Pen::Dim] {
+    for pen in Pen::ORDER {
         let lines: Vec<_> = d.lines.iter().filter(|l| l.2 == pen).collect();
         if lines.is_empty() {
             continue;
         }
-        let dash = if pen == Pen::Hidden { format!("[{} {}] 0 d", n(1.5 * pt), n(pt)) } else { "[] 0 d".into() };
-        w(&mut c, format!("{} G {} w {dash}\n", n(pen.gray()), n(pen.width() * pt)));
+        let dash = format!("[{}] 0 d", pen.dash().iter().map(|v| n(v * pt)).collect::<Vec<_>>().join(" "));
+        let [r, g, b] = pen.rgb();
+        w(&mut c, format!("{} {} {} RG {} w {dash}\n", n(r), n(g), n(b), n(pen.width() * pt)));
         for (a, b, _) in lines {
             let ((x0, y0), (x1, y1)) = (p(*a), p(*b));
             w(&mut c, format!("{} {} m {} {} l\n", n(x0), n(y0), n(x1), n(y1)));
@@ -461,7 +492,12 @@ pub fn to_pdf(d: &Drawing) -> Vec<u8> {
             c.extend_from_slice(b" Tj ET\n");
         }
     }
-    let content = c;
+    c
+}
+
+/// PDF bytes, one page per drawing (each with its own size).
+pub fn to_pdf_pages(pages: &[Drawing]) -> Vec<u8> {
+    let pt = 72.0 / 25.4;
     let mut out: Vec<u8> = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets = Vec::new();
     let mut obj = |out: &mut Vec<u8>, body: &[u8]| {
@@ -470,19 +506,25 @@ pub fn to_pdf(d: &Drawing) -> Vec<u8> {
         out.extend_from_slice(body);
         out.extend_from_slice(b"\nendobj\n");
     };
+    // 1 catalog, 2 page tree, 3 font, then a page and its content per drawing.
     obj(&mut out, b"<< /Type /Catalog /Pages 2 0 R >>");
-    obj(&mut out, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-    let page = format!(
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-        n(d.size.x * pt),
-        n(d.size.y * pt)
-    );
-    obj(&mut out, page.as_bytes());
-    let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
-    stream.extend_from_slice(&content);
-    stream.extend_from_slice(b"\nendstream");
-    obj(&mut out, &stream);
+    let kids: Vec<String> = (0..pages.len()).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
+    obj(&mut out, format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), pages.len()).as_bytes());
     obj(&mut out, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    for (i, d) in pages.iter().enumerate() {
+        let page = format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Contents {} 0 R /Resources << /Font << /F1 3 0 R >> >> >>",
+            n(d.size.x * pt),
+            n(d.size.y * pt),
+            5 + 2 * i
+        );
+        obj(&mut out, page.as_bytes());
+        let content = pdf_content(d);
+        let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
+        stream.extend_from_slice(&content);
+        stream.extend_from_slice(b"\nendstream");
+        obj(&mut out, &stream);
+    }
     let xref = out.len();
     out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", offsets.len() + 1).as_bytes());
     for o in &offsets {

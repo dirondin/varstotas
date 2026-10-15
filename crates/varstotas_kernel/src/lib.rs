@@ -42,6 +42,7 @@ pub mod text3d;
 pub mod texture;
 mod topology;
 pub mod triangulate;
+pub mod unfold;
 pub mod units;
 
 pub use curves::{CurveInfo, CurveKind};

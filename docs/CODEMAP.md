@@ -25,6 +25,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `history.rs` | undo; each snapshot is a full model clone |
 | `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL, DXF (`dxf.rs`: R12 export, LINE/POLYLINE/3DFACE/CIRCLE/ARC import), glTF (`gltf.rs`: GLB export, .gltf/.glb import), 3MF export (`threemf.rs`, own stored ZIP) |
 | `params.rs` | parametric groups: `Parametric` on a definition (size X/Y/Z by stretch or scale, copies in a row), `make_parametric`, `set_instance_params`, regeneration |
+| `unfold.rs` | Unfold: `UnfoldInput::from_model` (selection → world faces, soft edges), `unfold` (pieces without overlaps, mountain/valley folds, tabs, edge numbers, sheet packing), `to_dxf` |
 | `report.rs` | parts list (cut-list sizes, counts, area, volume) and material areas → CSV |
 | `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
@@ -75,7 +76,8 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `ui/library.rs` | Components tray card: library scan, thumbnails, place (`PasteTool::named`), Save Selection to Library |
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |
-| `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF |
+| `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF (`to_pdf_pages`: one page per drawing) |
+| `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
 | `axes.rs` | custom drawing axes, published once per frame |
