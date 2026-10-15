@@ -337,7 +337,7 @@ impl VarstotasApp {
                             if !resp.has_focus() && !resp.lost_focus() && *buf != inst.name {
                                 // Model changed underneath (undo): resync.
                                 *buf = inst.name.clone();
-                            } else if resp.lost_focus() && *buf != inst.name {
+                            } else if committed(ui, &resp) && *buf != inst.name {
                                 rename = Some((*id, buf.clone()));
                             }
                         }
@@ -504,7 +504,7 @@ impl VarstotasApp {
             let Some((_, rb, sb)) = self.tray.curve_edit.as_mut() else { return };
             ui.label("Radius");
             let resp = ui.add(egui::TextEdit::singleline(rb).desired_width(120.0));
-            if resp.lost_focus() && *rb != r_text {
+            if committed(ui, &resp) && *rb != r_text {
                 match varstotas_kernel::units::parse_length(rb, unit).filter(|r| *r > 0.0) {
                     Some(r) => apply = Some((Some(r), None)),
                     None => bad = true,
@@ -515,7 +515,7 @@ impl VarstotasApp {
             ui.end_row();
             ui.label(if info.kind == varstotas_kernel::CurveKind::Polygon { "Sides" } else { "Segments" });
             let resp = ui.add(egui::TextEdit::singleline(sb).desired_width(120.0));
-            if resp.lost_focus() && *sb != s_text {
+            if committed(ui, &resp) && *sb != s_text {
                 match sb.trim().trim_end_matches(['s', 'S']).trim().parse::<u32>() {
                     Ok(n) => apply = Some((None, Some(n))),
                     Err(_) => bad = true,
@@ -572,7 +572,7 @@ impl VarstotasApp {
             let Some((_, buf)) = self.tray.dim_text.as_mut() else { return };
             ui.label("Text");
             let resp = ui.add(egui::TextEdit::singleline(buf).hint_text("<>").desired_width(150.0));
-            if resp.lost_focus() && *buf != text {
+            if committed(ui, &resp) && *buf != text {
                 apply = Some(buf.clone());
             } else if !resp.has_focus() && *buf != text {
                 *buf = text.clone();
@@ -932,4 +932,10 @@ fn outliner_level(
             });
         }
     }
+}
+
+/// A text field was left with its value accepted (Enter, Tab or a click elsewhere); Escape
+/// leaves it too but means "revert".
+fn committed(ui: &egui::Ui, resp: &egui::Response) -> bool {
+    resp.lost_focus() && !ui.input(|i| i.key_pressed(egui::Key::Escape))
 }

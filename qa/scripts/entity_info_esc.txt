@@ -1,0 +1,25 @@
+# QA4B-006: Esc in an Entity Info field reverts the edit and keeps the selection
+wait 10
+view top
+parallel on
+wait 5
+tool circle
+rawp click 1000 1500 0
+rawp click 1500 1500 0
+tool select
+wait 30
+rawp click 1500 1500 0
+wait 5
+dump sel
+# Esc must revert, not apply
+raw click 1260 114
+raw mods cmd
+raw key A
+raw mods none
+raw text 300
+wait 2
+raw key Escape
+wait 5
+dump after_esc
+expect curves=["Circler500.0s24a360"] axes=world tool=Select sel F=0 E=24
+quit

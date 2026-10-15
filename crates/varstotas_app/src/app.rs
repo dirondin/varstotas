@@ -237,6 +237,9 @@ pub struct VarstotasApp {
     /// Where the primary button went down in the viewport (click vs drag detection).
     press_local: Option<Pos2>,
     pub(crate) last_modifiers: Modifiers,
+    /// A text field had keyboard focus last frame: Escape / Enter that just released it must
+    /// not also reach the tools (e.g. clear the selection).
+    text_edit_was_focused: bool,
     /// Selected instances' bounding boxes ((model, selection) version → world corners).
     sel_boxes: std::cell::RefCell<Option<SelBoxes>>,
     now: f64,
@@ -340,6 +343,7 @@ impl VarstotasApp {
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
+            text_edit_was_focused: false,
             sel_boxes: Default::default(),
             now: 0.0,
             show_prefs: false,
@@ -438,7 +442,7 @@ impl VarstotasApp {
                             kind: PromptKind::DimText(path, id),
                             title: "Edit Dimension Text".into(),
                             hint: "Empty restores the measured length; `<>` stands for it.".into(),
-                            value: g.text.unwrap_or_default(),
+                            value: g.text.unwrap_or_else(|| "<>".into()),
                             focused: false,
                         });
                     }
@@ -487,7 +491,9 @@ impl VarstotasApp {
         if self.debug.synthetic_input() {
             return;
         }
-        if ctx.text_edit_focused() || self.modal_open() {
+        let focused = ctx.text_edit_focused();
+        let was_focused = std::mem::replace(&mut self.text_edit_was_focused, focused);
+        if focused || was_focused || self.modal_open() {
             return;
         }
         let cmd = Modifiers::COMMAND;
@@ -752,7 +758,7 @@ impl VarstotasApp {
         match &p.kind {
             PromptKind::DimText(path, id) => {
                 let (path, id) = (path.clone(), *id);
-                let text = Some(p.value.trim().to_string()).filter(|t| !t.is_empty());
+                let text = Some(p.value.trim().to_string()).filter(|t| !t.is_empty() && t != "<>");
                 self.doc.commit("Edit Dimension Text", |m| m.set_dimension_text_in(&path, id, text));
                 true
             }
