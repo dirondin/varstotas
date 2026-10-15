@@ -106,7 +106,22 @@ pub struct OverlayPolygon {
 pub struct Overlay3d {
     pub lines: Vec<OverlayLine>,
     pub polygons: Vec<OverlayPolygon>,
+    /// Screen-aligned text labels (`add_text`, `add_linear_dimension`, `add_leader_text`).
+    pub texts: Vec<OverlayText>,
+    /// Arrowheads / end marks / point markers (`add_end_mark`, `add_marker`).
+    pub marks: Vec<OverlayMark>,
+    /// Strokes with a continuous dash pattern (`add_polyline`, `add_arc`, `add_circle`).
+    pub polylines: Vec<OverlayPolyline>,
+    /// Extra axes for custom frames (`add_axes`).
+    pub axes: Vec<OverlayAxes>,
 }
+
+// Text, marks, polylines, arcs, dimensions, custom axes — see overlay.rs
+mod overlay;
+pub use overlay::{
+    AxesFrame, DEFAULT_MARK_SIZE, DEFAULT_TEXT_SIZE, DIMENSION_TEXT_GAP, DimensionStyle, HAlign, LeaderStyle,
+    MarkShape, OverlayAxes, OverlayMark, OverlayPolyline, OverlayText, TEXT_PADDING, VAlign, arc_points, arc_segments,
+};
 
 impl Overlay3d {
     /// Add the 12 edges of a (possibly transformed) box as depth-tested solid lines, e.g. the

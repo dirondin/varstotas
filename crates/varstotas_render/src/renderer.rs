@@ -2,7 +2,8 @@
 
 use crate::wgpu;
 use crate::{
-    Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, RenderStyle, SceneGeometry, TriVertex,
+    AxesFrame, Camera, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, RenderStyle, SceneGeometry,
+    TriVertex,
 };
 use glam::{DMat4, DVec2, DVec3};
 
@@ -30,6 +31,9 @@ pub const OVERLAY_DASH_PERIOD: f32 = 9.0;
 
 #[path = "export.rs"]
 mod export;
+#[path = "annot.rs"]
+mod annot;
+use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
 pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage};
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -78,6 +82,8 @@ struct FrameCounts {
     lines_top: u32,
     polys_depth: u32,
     polys_top: u32,
+    sprites_depth: u32,
+    sprites_top: u32,
     axes: u32,
     blend: u32,
 }
@@ -261,6 +267,9 @@ struct Pipelines {
     thick_top: wgpu::RenderPipeline,
     poly_depth: wgpu::RenderPipeline,
     poly_top: wgpu::RenderPipeline,
+    /// Text / marks: screen-aligned sprites anchored at 3D points (glyph atlas in group 1).
+    sprite_depth: wgpu::RenderPipeline,
+    sprite_top: wgpu::RenderPipeline,
 }
 
 pub struct Renderer {
@@ -277,11 +286,16 @@ pub struct Renderer {
     overlay_lines: DynBuffer,
     overlay_polys: DynBuffer,
     axes: DynBuffer,
+    sprites: DynBuffer,
+    text: TextAtlas,
+    /// Frame of the main axes (`None` = world axes).
+    axes_frame: Option<AxesFrame>,
     blend: BlendSort,
     /// Reused per-frame scratch (no per-frame allocations).
-    scratch_lines: Vec<ThickLine>,
+    scratch_lines: Vec<LineInst>,
     scratch_polys: Vec<LineVertex>,
-    scratch_axes: Vec<ThickLine>,
+    scratch_axes: Vec<LineInst>,
+    scratch_sprites: Vec<SpriteVertex>,
     scratch_states: Vec<u32>,
     scratch_geo: GeoScratch,
     max_buffer: u64,
@@ -431,7 +445,13 @@ impl Renderer {
                 immediate_size: 0,
             })
         });
-        let pipelines = build_pipelines(device, &shader, &layout, seg_layout.as_ref(), color_format);
+        let text = TextAtlas::new(device, limits.max_texture_dimension_2d);
+        let text_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("varstotas sprites"),
+            bind_group_layouts: &[Some(&bgl), Some(&text.bgl)],
+            immediate_size: 0,
+        });
+        let pipelines = build_pipelines(device, &shader, &layout, seg_layout.as_ref(), &text_layout, color_format);
         let vb = wgpu::BufferUsages::VERTEX;
         Renderer {
             color_format,
@@ -472,6 +492,9 @@ impl Renderer {
             overlay_lines: DynBuffer::new(device, "varstotas overlay lines", vb),
             overlay_polys: DynBuffer::new(device, "varstotas overlay polys", vb),
             axes: DynBuffer::new(device, "varstotas axes", vb),
+            sprites: DynBuffer::new(device, "varstotas overlay sprites", vb),
+            text,
+            axes_frame: None,
             blend: BlendSort {
                 key: None,
                 keys: Vec::new(),
@@ -485,6 +508,7 @@ impl Renderer {
             scratch_lines: Vec::new(),
             scratch_polys: Vec::new(),
             scratch_axes: Vec::new(),
+            scratch_sprites: Vec::new(),
             scratch_states: Vec::new(),
             scratch_geo: GeoScratch::default(),
             max_buffer: device.limits().max_buffer_size,
@@ -856,7 +880,7 @@ impl Renderer {
 
         let globals = self.globals(camera, style, size, size, ppp, TILE_FULL, HL_SHOW_ALL);
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
-        let counts = self.prepare_frame(rs, camera, overlay, style);
+        let counts = self.prepare_frame(rs, camera, overlay, style, size, ppp);
 
         let t = self.targets.as_ref().expect("targets");
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -988,13 +1012,17 @@ impl Renderer {
         globals
     }
 
-    /// Upload the per-frame overlay / axes buffers and refresh the transparency sort.
+    /// Upload the per-frame overlay / axes / sprite buffers and refresh the transparency sort.
+    /// `image` = size in pixels of the whole image, `ppp` = pixels per logical point (text
+    /// rasterisation, sprite sizes, polyline dash phases).
     fn prepare_frame(
         &mut self,
         rs: &egui_wgpu::RenderState,
         camera: &Camera,
         overlay: &Overlay3d,
         style: &RenderStyle,
+        image: [u32; 2],
+        ppp: f32,
     ) -> FrameCounts {
         let device = &rs.device;
         let queue = &rs.queue;
@@ -1010,19 +1038,38 @@ impl Renderer {
                     .to_array()
             }
         };
-        // Overlay lines: depth-tested first, then on-top.
+        let to_local_d = |p: DVec3| -> [f32; 3] { (p - geo_origin).as_vec3().to_array() };
+        let proj = ScreenProj {
+            camera,
+            viewport: DVec2::new(image[0].max(1) as f64 / ppp as f64, image[1].max(1) as f64 / ppp as f64),
+        };
+        // Overlay lines (+ polylines, overlay axes): depth-tested first, then on-top.
         let lines = &mut self.scratch_lines;
         lines.clear();
+        let mut lines_depth = 0u32;
         for pass_top in [false, true] {
-            lines.extend(overlay.lines.iter().filter(|l| l.on_top == pass_top).map(|l| ThickLine {
+            lines.extend(overlay.lines.iter().filter(|l| l.on_top == pass_top).map(|l| LineInst {
                 a: to_local(l.a),
                 width: l.width_px.max(0.5),
                 b: to_local(l.b),
                 dash: if l.dashed { OVERLAY_DASH_PERIOD } else { 0.0 },
                 color: l.color,
+                phase: 0.0,
+                _pad: [0.0; 3],
             }));
+            for pl in overlay.polylines.iter().filter(|p| p.on_top == pass_top) {
+                annot::push_polyline(lines, pl, &proj, OVERLAY_DASH_PERIOD, to_local_d);
+            }
+            for ax in overlay.axes.iter().filter(|a| a.on_top == pass_top) {
+                let len = ax
+                    .length
+                    .unwrap_or_else(|| annot::infinite_axis_length(camera, scene_radius, ax.frame.origin));
+                annot::push_axes(lines, &ax.frame, len, ax.width_px.max(0.5), to_local_d);
+            }
+            if !pass_top {
+                lines_depth = lines.len() as u32;
+            }
         }
-        let lines_depth = overlay.lines.iter().filter(|l| !l.on_top).count() as u32;
         let lines_top = lines.len() as u32 - lines_depth;
         self.overlay_lines.write(device, queue, bytemuck::cast_slice(lines));
 
@@ -1041,10 +1088,37 @@ impl Renderer {
         let polys_top = polys.len() as u32 - polys_depth;
         self.overlay_polys.write(device, queue, bytemuck::cast_slice(polys));
 
+        // Text and marks: screen-aligned sprites (depth-tested, then on top).
+        let sprites = &mut self.scratch_sprites;
+        sprites.clear();
+        let mut sprites_depth = 0u32;
+        if !overlay.texts.is_empty() {
+            self.text.begin();
+        }
+        for pass_top in [false, true] {
+            for m in overlay.marks.iter().filter(|m| m.on_top == pass_top) {
+                annot::push_mark(sprites, m, &proj, ppp, to_local(m.pos));
+            }
+            for t in overlay.texts.iter().filter(|t| t.on_top == pass_top) {
+                let galley = self.text.layout(&t.text, t.size_pt, ppp);
+                annot::push_text(sprites, t, &galley, &proj, ppp, to_local(t.pos));
+            }
+            if !pass_top {
+                sprites_depth = sprites.len() as u32;
+            }
+        }
+        let sprites_top = sprites.len() as u32 - sprites_depth;
+        if !overlay.texts.is_empty() {
+            self.text.upload(device, queue);
+        }
+        self.sprites.write(device, queue, bytemuck::cast_slice(sprites));
+
         let axes = &mut self.scratch_axes;
         axes.clear();
         if style.show_axes {
-            axes_lines(axes, camera, scene_radius, to_local([0.0; 3]));
+            let frame = self.axes_frame.unwrap_or(AxesFrame::WORLD);
+            let len = annot::infinite_axis_length(camera, scene_radius, frame.origin);
+            annot::push_axes(axes, &frame, len, 1.0, to_local_d);
         }
         let axes_count = axes.len() as u32;
         self.axes.write(device, queue, bytemuck::cast_slice(axes));
@@ -1057,7 +1131,16 @@ impl Renderer {
         } else {
             0
         };
-        FrameCounts { lines_depth, lines_top, polys_depth, polys_top, axes: axes_count, blend }
+        FrameCounts {
+            lines_depth,
+            lines_top,
+            polys_depth,
+            polys_top,
+            sprites_depth,
+            sprites_top,
+            axes: axes_count,
+            blend,
+        }
     }
 
     /// Record the scene render pass (globals and per-frame buffers must be up to date).
@@ -1176,17 +1259,18 @@ impl Renderer {
             }
         }
 
-        // 5. axes
+        // 5. ground (translucent, tints geometry below z = 0)
+        if style.show_ground && opts.background {
+            pass.set_pipeline(&p.ground);
+            pass.draw(0..3, 0..1);
+        }
+
+        // 6. axes — after the ground: they lie in z = 0 and write no depth, so the ground
+        //    would otherwise wash them out.
         if c.axes > 0 {
             pass.set_pipeline(&p.thick_depth);
             pass.set_vertex_buffer(0, self.axes.buf.slice(..));
             pass.draw(0..6, 0..c.axes);
-        }
-
-        // 6. ground (translucent, tints geometry below z = 0)
-        if style.show_ground && opts.background {
-            pass.set_pipeline(&p.ground);
-            pass.draw(0..3, 0..1);
         }
 
         // 7. translucent faces / x-ray: sorted back-to-front, no depth write, both sides
@@ -1219,6 +1303,14 @@ impl Renderer {
             pass.set_vertex_buffer(0, self.overlay_lines.buf.slice(..));
             pass.draw(0..6, 0..c.lines_depth);
         }
+        if c.sprites_depth + c.sprites_top > 0 {
+            pass.set_bind_group(1, &self.text.bind_group, &[]);
+        }
+        if c.sprites_depth > 0 {
+            pass.set_pipeline(&p.sprite_depth);
+            pass.set_vertex_buffer(0, self.sprites.buf.slice(..));
+            pass.draw(0..c.sprites_depth, 0..1);
+        }
         if c.polys_top > 0 {
             pass.set_pipeline(&p.poly_top);
             pass.set_vertex_buffer(0, self.overlay_polys.buf.slice(..));
@@ -1229,6 +1321,22 @@ impl Renderer {
             pass.set_vertex_buffer(0, self.overlay_lines.buf.slice(..));
             pass.draw(0..6, c.lines_depth..c.lines_depth + c.lines_top);
         }
+        if c.sprites_top > 0 {
+            pass.set_pipeline(&p.sprite_top);
+            pass.set_vertex_buffer(0, self.sprites.buf.slice(..));
+            pass.draw(c.sprites_depth..c.sprites_depth + c.sprites_top, 0..1);
+        }
+    }
+
+    /// Frame of the main axes drawn when `RenderStyle::show_axes` is on (custom axes /
+    /// axes of the open group or component). `None` = world axes. Kept until changed; also used
+    /// by `render_to_image`.
+    pub fn set_axes_frame(&mut self, frame: Option<AxesFrame>) {
+        self.axes_frame = frame;
+    }
+
+    pub fn axes_frame(&self) -> Option<AxesFrame> {
+        self.axes_frame
     }
 
     /// The egui texture id of the resolved image (after the first `render`).
@@ -1305,29 +1413,6 @@ fn seg_bind_group(
     }))
 }
 
-/// classic axes: solid in the positive direction, dotted in the negative.
-fn axes_lines(v: &mut Vec<ThickLine>, camera: &Camera, scene_radius: f64, o: [f32; 3]) {
-    // Long enough to look infinite at the current zoom level.
-    let len = (camera.distance() * 50.0)
-        .max(scene_radius * 4.0)
-        .max(camera.ortho_height * 50.0)
-        .max(camera.eye.length() * 4.0)
-        .min(1e9) as f32;
-    let cols = [
-        [0.85, 0.0, 0.0, 1.0],
-        [0.0, 0.62, 0.0, 1.0],
-        [0.0, 0.0, 0.9, 1.0],
-    ];
-    for (i, c) in cols.iter().enumerate() {
-        let mut e = o;
-        e[i] += len;
-        let mut ne = o;
-        ne[i] -= len;
-        v.push(ThickLine { a: o, width: 1.0, b: e, dash: 0.0, color: *c });
-        v.push(ThickLine { a: o, width: 1.0, b: ne, dash: -4.0, color: *c });
-    }
-}
-
 /// Order-preserving map of an f32 to u32 (ascending floats -> ascending keys).
 fn depth_key(d: f32) -> u32 {
     let b = d.to_bits();
@@ -1367,6 +1452,7 @@ fn build_pipelines(
     shader: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     seg_layout: Option<&wgpu::PipelineLayout>,
+    text_layout: &wgpu::PipelineLayout,
     color_format: wgpu::TextureFormat,
 ) -> Pipelines {
     let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4];
@@ -1416,6 +1502,22 @@ fn build_pipelines(
         array_stride: std::mem::size_of::<ThickLine>() as u64,
         step_mode: wgpu::VertexStepMode::Instance,
         attributes: &thick_attrs,
+    })];
+    let line_inst_attrs = wgpu::vertex_attr_array![
+        0 => Float32x3, 1 => Float32, 2 => Float32x3, 3 => Float32, 4 => Float32x4, 5 => Float32
+    ];
+    let line_inst_layouts = [Some(wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<LineInst>() as u64,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &line_inst_attrs,
+    })];
+    let sprite_attrs = wgpu::vertex_attr_array![
+        0 => Float32x3, 1 => Float32, 2 => Float32x2, 3 => Float32x2, 4 => Float32x4
+    ];
+    let sprite_layouts = [Some(wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<SpriteVertex>() as u64,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &sprite_attrs,
     })];
     let thick_state_layouts = [
         thick_layouts[0].clone(),
@@ -1585,9 +1687,9 @@ fn build_pipelines(
         }),
         thick_depth: make(Desc {
             label: "varstotas thick lines",
-            vs: "vs_thick",
+            vs: "vs_line",
             fs: "fs_thick",
-            buffers: &thick_layouts,
+            buffers: &line_inst_layouts,
             topology: TriangleList,
             blend: true,
             depth_write: false,
@@ -1609,9 +1711,9 @@ fn build_pipelines(
         }),
         thick_top: make(Desc {
             label: "varstotas thick lines on top",
-            vs: "vs_thick",
+            vs: "vs_line",
             fs: "fs_thick",
-            buffers: &thick_layouts,
+            buffers: &line_inst_layouts,
             topology: TriangleList,
             blend: true,
             depth_write: false,
@@ -1643,6 +1745,36 @@ fn build_pipelines(
             bias: no_bias,
             cull: None,
         }),
+        sprite_depth: make_with(
+            Desc {
+                label: "varstotas sprites",
+                vs: "vs_sprite",
+                fs: "fs_sprite",
+                buffers: &sprite_layouts,
+                topology: TriangleList,
+                blend: true,
+                depth_write: false,
+                depth_compare: GreaterEqual,
+                bias: no_bias,
+                cull: None,
+            },
+            text_layout,
+        ),
+        sprite_top: make_with(
+            Desc {
+                label: "varstotas sprites on top",
+                vs: "vs_sprite",
+                fs: "fs_sprite",
+                buffers: &sprite_layouts,
+                topology: TriangleList,
+                blend: true,
+                depth_write: false,
+                depth_compare: Always,
+                bias: no_bias,
+                cull: None,
+            },
+            text_layout,
+        ),
     }
 }
 
@@ -1654,6 +1786,8 @@ mod tests {
     fn layouts_match_shader() {
         assert_eq!(std::mem::size_of::<Globals>(), 64 + 20 * 16);
         assert_eq!(std::mem::size_of::<ThickLine>(), 48);
+        assert_eq!(std::mem::size_of::<LineInst>(), 64);
+        assert_eq!(std::mem::size_of::<SpriteVertex>(), 48);
         assert_eq!(std::mem::size_of::<TriVertex>(), 40);
         assert_eq!(std::mem::size_of::<LineVertex>(), 28);
     }

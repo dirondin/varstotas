@@ -13,12 +13,16 @@
 //! 1x and 4x the viewport pixel size, opaque and transparent (guides only, no selection, no tool
 //! overlays), write `<dir>/export_{1x,4x}_{opaque,transparent}.png` and quit.
 //! `VARSTOTAS_GUIDES=<n>` adds n extra guide lines (stress); a few demo guides are always shown.
+//! `VARSTOTAS_ANNOT=1`: annotation demo (M4 batch 2) — dimensions, labels, leader text, arrows,
+//! markers, arc / circle previews, angle indicator, custom main axes and overlay axes; also in
+//! `VARSTOTAS_EXPORT` images.
 
 use eframe::egui;
 use glam::{DVec2, DVec3, Vec3};
 use varstotas_render::{
-    Camera, ExportOptions, FaceStyle, Highlight, HighlightUpdate, LineVertex, Overlay3d, OverlayLine, OverlayPolygon,
-    RenderStyle, Renderer, RgbaImage, SceneGeometry, StandardView, TriVertex,
+    AxesFrame, Camera, DimensionStyle, ExportOptions, FaceStyle, HAlign, Highlight, HighlightUpdate, LeaderStyle,
+    LineVertex, MarkShape, Overlay3d, OverlayLine, OverlayPolygon, OverlayText, RenderStyle, Renderer, RgbaImage,
+    SceneGeometry, StandardView, TriVertex, VAlign,
 };
 
 fn main() -> eframe::Result {
@@ -332,6 +336,63 @@ fn guides(overlay: &mut Overlay3d, camera: &Camera, viewport: DVec2, offset: DVe
     }
 }
 
+fn annot_enabled() -> bool {
+    std::env::var("VARSTOTAS_ANNOT").is_ok_and(|v| v == "1")
+}
+
+/// Custom main-axes frame of the annotation demo: rotated 30° about Z, origin moved.
+fn demo_axes_frame(offset: DVec3) -> AxesFrame {
+    let m = glam::DMat4::from_translation(DVec3::new(-2500.0, -2500.0, 0.0) + offset)
+        * glam::DMat4::from_rotation_z(30f64.to_radians());
+    AxesFrame::from_transform(&m)
+}
+
+/// `VARSTOTAS_ANNOT=1`: dimensions, labels, arrows, markers, arc previews, custom axes.
+fn annotations(o: &mut Overlay3d, camera: &Camera, vp: DVec2, offset: DVec3) {
+    let p = |x: f64, y: f64, z: f64| DVec3::new(x, y, z) + offset;
+    let dim = DimensionStyle::default();
+    // white box: width (front), height (vertical text, reads bottom-to-top), depth on top
+    o.add_linear_dimension(p(0.0, 0.0, 0.0), p(2000.0, 0.0, 0.0), DVec3::new(0.0, -400.0, 0.0), "2000 mm", &dim);
+    o.add_linear_dimension(p(2000.0, 0.0, 0.0), p(2000.0, 0.0, 1200.0), DVec3::new(400.0, 0.0, 0.0), "1200 mm", &dim);
+    let ticks = DimensionStyle {
+        end_mark: MarkShape::Slash,
+        text_above: false,
+        text_background: Some([1.0, 1.0, 1.0, 1.0]),
+        color: [0.1, 0.1, 0.5, 1.0],
+        ..dim.clone()
+    };
+    o.add_linear_dimension(p(2000.0, 0.0, 1200.0), p(2000.0, 1500.0, 1200.0), DVec3::new(0.0, 0.0, 400.0), "1500", &ticks);
+    // dimension whose line runs right-to-left on screen: the text must still read left-to-right
+    let dots = DimensionStyle { end_mark: MarkShape::Dot, align_to_line: true, ..dim.clone() };
+    o.add_linear_dimension(p(3300.0, 1300.0, 2400.0), p(2500.0, 1300.0, 2400.0), DVec3::new(0.0, 0.0, 300.0), "800", &dots);
+    // leader text (boxed) on the brown pillar
+    o.add_leader_text(p(3300.0, 900.0, 1800.0), p(4300.0, 300.0, 3000.0), "Brown pillar\n800 × 800", &LeaderStyle::default());
+    // plain labels: centred on top / depth-tested (hidden behind the white box) / left-aligned
+    o.add_text(OverlayText::new(p(1000.0, 750.0, 1200.0), "on top").color([0.8, 0.0, 0.0, 1.0]).size(16.0));
+    o.add_text(OverlayText::new(p(1000.0, 1600.0, 300.0), "hidden behind box").depth_tested().color([0.8, 0.0, 0.0, 1.0]));
+    o.add_text(
+        OverlayText::new(p(-1500.0, 1500.0, 800.0), "Green cube")
+            .align(HAlign::Left, VAlign::Bottom)
+            .offset(4.0, -4.0)
+            .background([1.0, 1.0, 0.85, 0.9])
+            .border([0.4, 0.4, 0.0, 1.0]),
+    );
+    // arrows and markers
+    o.add_arrow(p(-1000.0, -300.0, 2200.0), p(-500.0, 0.0, 1300.0), [0.85, 0.1, 0.1, 1.0], 2.0, true);
+    o.add_end_mark(p(0.0, 0.0, 1800.0), p(0.0, 0.0, 1300.0), MarkShape::OpenArrow, 12.0, [0.0, 0.0, 0.0, 1.0], true);
+    // arc tool preview: dashed arc + centre cross + angle indicator; circle preview; polyline
+    let c = p(-3000.0, 0.0, 0.0);
+    let magenta = [0.8, 0.0, 0.8, 1.0];
+    o.add_arc(c, DVec3::Z, DVec3::X, 900.0, 4.0, magenta, 2.0, true);
+    o.add_marker(c, MarkShape::Cross, 10.0, magenta, true);
+    o.add_angle_indicator(camera, vp, c, DVec3::Z, DVec3::X, 4.0, 45.0, magenta);
+    o.add_text(OverlayText::new(c, "229°").color(magenta).align(HAlign::Left, VAlign::Top).offset(6.0, 4.0));
+    o.add_circle(p(-3000.0, -2400.0, 0.0), DVec3::Z, 600.0, 24, [0.0, 0.4, 0.9, 1.0], 1.5, false);
+    o.add_marker(p(-3000.0, -2400.0, 0.0), MarkShape::XCross, 8.0, [0.0, 0.4, 0.9, 1.0], false);
+    // overlay axes of the green cube (a "component" frame), finite
+    o.add_axes(AxesFrame { origin: p(-1500.0, 1500.0, -600.0), ..AxesFrame::WORLD }, Some(700.0), false);
+}
+
 impl Viewer {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let rs = cc.wgpu_render_state.as_ref().expect("wgpu backend required");
@@ -345,6 +406,9 @@ impl Viewer {
         min += off;
         max += off;
         renderer.set_geometry(rs, &geo);
+        if annot_enabled() {
+            renderer.set_axes_frame(Some(demo_axes_frame(off)));
+        }
         let highlight_faces = geo.face_ids.last().map_or(0, |&f| f as usize + 1);
         let highlight_edges = geo.edges.len() / 2;
         if std::env::var("VARSTOTAS_HIGHLIGHT").is_ok() {
@@ -426,6 +490,15 @@ impl Viewer {
         let vp = DVec2::new(size_px[0] as f64 / ppp as f64, size_px[1] as f64 / ppp as f64);
         let mut overlay = Overlay3d::default(); // guides only: no tool previews / selection boxes
         guides(&mut overlay, &self.camera, vp, self.offset);
+        if annot_enabled() {
+            annotations(&mut overlay, &self.camera, vp, self.offset);
+            // Label centred on the corner of four 2048² tiles of the 4x image (seam check).
+            let corner = DVec2::new(6144.0, 2048.0) / (4.0 * ppp as f64);
+            let (o, d) = self.camera.screen_ray(corner, vp);
+            let at = o + d * self.camera.distance();
+            overlay.add_text(OverlayText::new(at, "tile seam 4x").size(14.0).background([1.0, 1.0, 1.0, 1.0]).border([0.8, 0.0, 0.0, 1.0]));
+            overlay.add_marker(at + d * 10.0, MarkShape::Dot, 30.0, [0.0, 0.6, 0.0, 0.5], false);
+        }
         for k in [1u32, 4] {
             for transparent in [false, true] {
                 let opts = ExportOptions {
@@ -625,6 +698,7 @@ impl eframe::App for Viewer {
                         color: [1.0, 0.85, 0.1, 0.35],
                         on_top: false,
                     }],
+                    ..Default::default()
                 };
 
                 let mut overlay = overlay;
@@ -652,6 +726,9 @@ impl eframe::App for Viewer {
                 }
 
                 guides(&mut overlay, &self.camera, vp, self.offset);
+                if annot_enabled() {
+                    annotations(&mut overlay, &self.camera, vp, self.offset);
+                }
 
                 // --- render ---
                 let ppp = ui.ctx().pixels_per_point();

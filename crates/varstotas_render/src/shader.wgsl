@@ -358,15 +358,16 @@ fn thick_color(c: vec4<f32>, width: f32) -> vec4<f32> {
     return lin(c);
 }
 
+// Overlay lines / polylines / axes: `ThickIn` + dash phase at `a` (points, continuous polylines).
 @vertex
-fn vs_thick(@builtin(vertex_index) vi: u32, v: ThickIn) -> ThickOut {
-    return thick_vertex(vi, v, 0u);
+fn vs_line(@builtin(vertex_index) vi: u32, v: ThickIn, @location(5) phase: f32) -> ThickOut {
+    return thick_vertex(vi, v, 0u, phase);
 }
 
 // Static model edges / profiles, instanced fallback with a per-segment highlight stream.
 @vertex
 fn vs_thick_state(@builtin(vertex_index) vi: u32, v: ThickIn, @location(5) state: u32) -> ThickOut {
-    return thick_vertex(vi, v, state);
+    return thick_vertex(vi, v, state, 0.0);
 }
 
 // Static edges / profiles read straight from the raw `LineVertex` buffer (storage, 7 floats per
@@ -384,7 +385,7 @@ fn seg_vertex(vi: u32, width: f32) -> ThickOut {
     v.b = vec3<f32>(seg_lines[o + 7u], seg_lines[o + 8u], seg_lines[o + 9u]);
     v.width = width;
     v.dash = 0.0;
-    return thick_vertex(vi % 6u, v, seg_states[i]);
+    return thick_vertex(vi % 6u, v, seg_states[i], 0.0);
 }
 
 @vertex
@@ -402,7 +403,7 @@ fn full_clip(c: vec4<f32>) -> vec4<f32> {
     return vec4<f32>((c.xy - g.tile.zw * c.w) / g.tile.xy, c.z, c.w);
 }
 
-fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {
+fn thick_vertex(vi: u32, v: ThickIn, state: u32, phase0: f32) -> ThickOut {
     // corners: (end, side)
     var ends = array<f32, 6>(0.0, 0.0, 1.0, 0.0, 1.0, 1.0);
     var sides = array<f32, 6>(-1.0, 1.0, 1.0, -1.0, 1.0, -1.0);
@@ -480,7 +481,7 @@ fn thick_vertex(vi: u32, v: ThickIn, state: u32) -> ThickOut {
     let off = (n * side * hw + d * ext) / half_vp * base.w;
     o.pos = bias_clip(vec4<f32>(base.xy + off, base.z, base.w));
     o.color = highlight_edge(thick_color(v.color, v.width), hl_state(state));
-    o.along = (phase + end * len + ext) / g.viewport.z; // in points
+    o.along = (phase + end * len + ext) / g.viewport.z + phase0; // in points
     o.dash = v.dash;
     return o;
 }
@@ -499,4 +500,69 @@ fn fs_thick(in: ThickOut) -> @location(0) vec4<f32> {
         }
     }
     return out_color(in.color);
+}
+
+// ---------------------------------------------------------------------------
+// Sprites: text glyphs, text boxes, arrowheads and markers. Each vertex is an offset in
+// physical pixels from a 3D anchor; unrotated text snaps the anchor to the pixel grid so
+// glyphs map 1:1 to atlas texels. Offsets are in whole-image pixels (tile-independent).
+// ---------------------------------------------------------------------------
+
+@group(1) @binding(0) var glyph_atlas: texture_2d<f32>;
+@group(1) @binding(1) var glyph_sampler: sampler;
+
+struct SpriteIn {
+    @location(0) anchor: vec3<f32>,
+    @location(1) mode: f32,        // bit 0: glyph (atlas coverage); bit 1: no pixel snapping
+    @location(2) offset: vec2<f32>, // physical pixels, x right, y down
+    @location(3) uv: vec2<f32>,     // atlas texels
+    @location(4) color: vec4<f32>,  // sRGB
+};
+
+struct SpriteOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) color: vec4<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) @interpolate(flat) glyph: u32,
+};
+
+@vertex
+fn vs_sprite(v: SpriteIn) -> SpriteOut {
+    var o: SpriteOut;
+    let c = project(v.anchor);
+    if c.w <= 1e-5 {
+        o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // anchor behind the eye
+        return o;
+    }
+    let mode = u32(v.mode + 0.5);
+    let half_vp = g.viewport.xy * 0.5;
+    // Pixels from the target's bottom-left corner (tile offsets are whole pixels, so snapping
+    // agrees between export tiles).
+    var px = (c.xy / c.w) * half_vp + half_vp;
+    if (mode & 2u) == 0u {
+        px = floor(px + 0.5);
+    }
+    let q = px + vec2<f32>(v.offset.x, -v.offset.y) - half_vp;
+    o.pos = bias_clip(vec4<f32>(q / half_vp * c.w, c.z, c.w));
+    o.color = lin(v.color);
+    o.uv = v.uv;
+    o.glyph = mode & 1u;
+    return o;
+}
+
+@fragment
+fn fs_sprite(in: SpriteOut) -> @location(0) vec4<f32> {
+    var c = in.color;
+    // Sample unconditionally (uniform control flow); solid sprites ignore it.
+    let dims = vec2<f32>(textureDimensions(glyph_atlas));
+    let cov = textureSampleLevel(glyph_atlas, glyph_sampler, in.uv / dims, 0.0).a;
+    if in.glyph == 1u {
+        // The rasteriser's coverage is tuned for gamma-space blending; blending happens in
+        // linear space here, which makes dark text on light backgrounds look thin. Boost the
+        // coverage of dark text to match egui's look (light text keeps raw coverage).
+        let lum = dot(c.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let k = mix(0.55, 1.0, clamp(lum * 2.0, 0.0, 1.0));
+        c.a *= pow(cov, k);
+    }
+    return out_color(c);
 }
