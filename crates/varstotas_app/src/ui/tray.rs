@@ -821,6 +821,24 @@ impl VarstotasApp {
                     && let Some(i) = sel {
                         self.actions.push(Action::DeleteScene(i));
                     }
+                if ui.small_button("↑").on_hover_text("Move scene up").clicked()
+                    && let Some(i) = sel {
+                        self.actions.push(Action::MoveScene(i, false));
+                    }
+                if ui.small_button("↓").on_hover_text("Move scene down").clicked()
+                    && let Some(i) = sel {
+                        self.actions.push(Action::MoveScene(i, true));
+                    }
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = if self.scene_player.is_some() { "Pause" } else { "Play" };
+                if ui
+                    .add_enabled(!self.doc.model.scenes.is_empty(), egui::Button::new(label).small())
+                    .on_hover_text("Play the scene animation (View → Animation)")
+                    .clicked()
+                {
+                    self.actions.push(Action::ToggleAnimation);
+                }
             });
         });
         if self.doc.model.scenes.is_empty() {
@@ -850,6 +868,31 @@ impl VarstotasApp {
                 }
             }
         }
+        if let Some(i) = sel.filter(|i| *i < self.doc.model.scenes.len()) {
+            let mut inc = self.doc.model.scenes[i].in_animation;
+            if ui.checkbox(&mut inc, "Include in animation").changed() {
+                self.doc.commit("Scene Properties", |m| m.scenes[i].in_animation = inc);
+            }
+        }
+        egui::CollapsingHeader::new("Animation").id_salt("scene_anim_settings").show(ui, |ui| {
+            let mut set = self.doc.model.scene_settings;
+            ui.checkbox(&mut set.transitions, "Scene transitions");
+            ui.add_enabled_ui(set.transitions, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Transition");
+                    ui.add(egui::DragValue::new(&mut set.transition_secs).range(0.0..=60.0).speed(0.05).suffix(" s"));
+                });
+            });
+            ui.horizontal(|ui| {
+                ui.label("Scene delay");
+                ui.add(egui::DragValue::new(&mut set.delay_secs).range(0.0..=60.0).speed(0.05).suffix(" s"));
+            });
+            if set != self.doc.model.scene_settings {
+                // Not geometry: no undo step or scene rebuild, just an unsaved change.
+                self.doc.model.scene_settings = set;
+                self.doc.dirty = true;
+            }
+        });
         if let Some((i, name)) = rename_commit {
             self.tray.scene_rename = None;
             if !name.trim().is_empty() {

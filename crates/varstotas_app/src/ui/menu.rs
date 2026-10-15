@@ -186,6 +186,17 @@ impl VarstotasApp {
                 }
                 ui.checkbox(&mut self.prefs.show_axes, "Axes");
                 ui.checkbox(&mut self.prefs.show_ground, "Ground");
+                ui.separator();
+                ui.menu_button("Animation", |ui| {
+                    let has = !self.doc.model.scenes.is_empty();
+                    let play = if self.scene_player.is_some() { "Pause" } else { "Play" };
+                    self.item(ui, play, None, has, Action::ToggleAnimation);
+                    ui.separator();
+                    self.item(ui, "Next Scene", Some("PgDn"), has, Action::NextScene);
+                    self.item(ui, "Previous Scene", Some("PgUp"), has, Action::PrevScene);
+                    ui.separator();
+                    self.item(ui, "Add Scene", None, true, Action::AddScene);
+                });
             });
 
             ui.menu_button("Camera", |ui| {

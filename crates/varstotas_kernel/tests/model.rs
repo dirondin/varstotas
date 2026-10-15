@@ -505,3 +505,37 @@ fn obj_import_merges_flat_triangle_grids() {
         assert_eq!(r.edges.len(), if hole { 8 } else { 4 }, "collinear boundary pieces healed");
     }
 }
+
+#[test]
+fn scenes_style_tags_and_settings_round_trip() {
+    let mut m = box_model();
+    let tag = m.tags.insert(Tag { name: "Roof".into(), visible: false, color: [1.0; 4] });
+    let mut s = Scene::camera("A", DVec3::new(1.0, 2.0, 3.0), DVec3::ZERO, DVec3::Z, 35.0, false);
+    s.style = Some(SceneStyle { face_style: "wireframe".into(), xray: true, edges: false, profiles: true });
+    s.hidden_tags = Some(vec![tag]);
+    s.in_animation = false;
+    m.scenes.push(s);
+    m.scenes.push(Scene::camera("B", DVec3::X, DVec3::ZERO, DVec3::Z, 35.0, true));
+    m.scene_settings = SceneSettings { transitions: false, transition_secs: 0.5, delay_secs: 3.0 };
+    let back = io::from_json(&io::to_json(&m).unwrap()).unwrap();
+    assert_eq!(back.scene_settings, m.scene_settings);
+    let (a, b) = (&back.scenes[0], &back.scenes[1]);
+    assert_eq!(a.style, m.scenes[0].style);
+    assert_eq!(a.hidden_tags, Some(vec![tag]));
+    assert!(!a.in_animation && b.in_animation && b.style.is_none() && b.hidden_tags.is_none());
+
+    // Files from before scene styles: camera-only scenes, default settings.
+    let mut v: serde_json::Value = serde_json::from_str(&io::to_json(&m).unwrap()).unwrap();
+    let obj = v.as_object_mut().unwrap();
+    let model = obj.get_mut("model").and_then(|x| x.as_object_mut()).unwrap();
+    model.remove("scene_settings");
+    for sc in model["scenes"].as_array_mut().unwrap() {
+        let sc = sc.as_object_mut().unwrap();
+        sc.remove("style");
+        sc.remove("hidden_tags");
+        sc.remove("in_animation");
+    }
+    let old = io::from_json(&v.to_string()).unwrap();
+    assert_eq!(old.scene_settings, SceneSettings::default());
+    assert!(old.scenes.iter().all(|s| s.in_animation && s.style.is_none()));
+}

@@ -1,0 +1,51 @@
+# M4 batch 3: scenes keep style and tags; next/prev, Play loops, a click stops it; settings survive save/open.
+box 0 0 0 2000 1000 500
+view iso
+zoom_extents
+wait 40
+action scene_timing_0.3_0.2
+action add_scene
+view top
+wait 40
+style wire
+action tag_toggle
+action add_scene
+dump two
+expect scenes=["Scene 1", "Scene 2"] scene=Some(1)
+expect style=wireframe
+expect tags_hidden=1
+action scene_0
+wait 2
+expect scene=Some(0) playing=false anim=true
+expect style=shaded
+expect tags_hidden=0
+wait 60
+expect anim=false
+dump s0
+raw key PageDown
+wait 60
+expect scene=Some(1)
+expect style=wireframe
+raw key PageUp
+wait 60
+expect scene=Some(0)
+action play_animation
+wait 2
+expect scene=Some(1) playing=true
+wait 200
+dump looping
+expect playing=true
+raw click 300 300
+wait 2
+expect playing=false
+action scene_0
+wait 3
+action scene_right
+wait 2
+expect scenes=["Scene 2", "Scene 1"] scene=Some(1)
+save qa_scenes.vrst
+open qa_scenes.vrst
+wait 5
+expect scenes=["Scene 2", "Scene 1"] scene=None
+expect transition=0.3s/true
+quit

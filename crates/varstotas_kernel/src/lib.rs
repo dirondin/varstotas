@@ -45,7 +45,7 @@ pub use history::History;
 pub use mesh::Mesh;
 pub use ops::IntersectScope;
 pub use model::{
-    ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, Tag,
+    ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
 pub use tessellate::{Owner, TessEdge, TessFace, Tessellation, tessellate};
 

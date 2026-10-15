@@ -56,6 +56,58 @@ pub struct Scene {
     pub up: DVec3,
     pub fov_y_deg: f64,
     pub ortho: bool,
+    /// Display style saved with the scene (`None` in old files: the style is left as is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<SceneStyle>,
+    /// Tags hidden in this scene (`None` in old files: tag visibility is left as is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_tags: Option<Vec<TagId>>,
+    /// Played by View → Animation (the classic "Include in animation").
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub in_animation: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+/// Display style remembered by a scene. `face_style` is one of `shaded`, `monochrome`,
+/// `hiddenline`, `wireframe` (unknown values leave the style unchanged).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SceneStyle {
+    pub face_style: String,
+    pub xray: bool,
+    pub edges: bool,
+    pub profiles: bool,
+}
+
+/// Model Info → Animation: scene transitions and playback.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneSettings {
+    /// Smooth camera transitions between scenes (off = cut).
+    pub transitions: bool,
+    /// Transition length, seconds.
+    pub transition_secs: f64,
+    /// Pause on each scene while playing, seconds.
+    pub delay_secs: f64,
+}
+
+impl Default for SceneSettings {
+    fn default() -> Self {
+        Self { transitions: true, transition_secs: 2.0, delay_secs: 1.0 }
+    }
+}
+
+impl Scene {
+    /// A camera-only scene (no saved style or tags), included in the animation.
+    pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, in_animation: true }
+    }
 }
 
 pub use crate::guides::GuideLine;
@@ -70,6 +122,8 @@ pub struct Model {
     pub materials: SlotMap<MaterialId, Material>,
     pub tags: SlotMap<TagId, Tag>,
     pub scenes: Vec<Scene>,
+    #[serde(default)]
+    pub scene_settings: SceneSettings,
     /// Guide lines (world space). Serialized as a plain array; see [`crate::guides`].
     #[serde(with = "crate::guides::slotmap_vec", default)]
     pub guides: crate::guides::GuideLines,
@@ -114,6 +168,7 @@ impl Model {
             materials: SlotMap::with_key(),
             tags: SlotMap::with_key(),
             scenes: Vec::new(),
+            scene_settings: SceneSettings::default(),
             guides: SlotMap::with_key(),
             guide_points: SlotMap::with_key(),
             guides_hidden: false,

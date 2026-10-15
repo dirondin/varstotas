@@ -797,6 +797,12 @@ impl VarstotasApp {
             "intersect_model" => Action::IntersectFaces(IntersectScope::Model),
             "intersect_selection" => Action::IntersectFaces(IntersectScope::Selection),
             "intersect_context" => Action::IntersectFaces(IntersectScope::Context),
+            "add_scene" => Action::AddScene,
+            "update_scene" => Action::UpdateScene(self.tray.selected_scene.unwrap_or(0)),
+            "next_scene" => Action::NextScene,
+            "prev_scene" => Action::PrevScene,
+            "play_animation" | "toggle_animation" => Action::ToggleAnimation,
+            "scene_right" => Action::MoveScene(self.tray.selected_scene.unwrap_or(0), true),
             "reverse_faces" => Action::ReverseFaces,
             "orient_faces" => Action::OrientFaces,
             "flip_red" => Action::FlipAlong(0),
@@ -812,6 +818,30 @@ impl VarstotasApp {
                 self.show_templates = true;
                 return;
             }
+            "tag_toggle" => {
+                // Toggle the first tag's visibility (creating a tag "QA" if there is none).
+                self.doc.mutate_untracked(|m| {
+                    if m.tags.is_empty() {
+                        m.tags.insert(varstotas_kernel::Tag { name: "QA".into(), visible: true, color: [0.5; 4] });
+                    }
+                    if let Some(t) = m.tags.values_mut().next() {
+                        t.visible = !t.visible;
+                    }
+                });
+                return;
+            }
+            // `scene_timing_<transition>_<delay>` (seconds; transition 0 = cuts).
+            n if n.starts_with("scene_timing_") => {
+                let v: Vec<f64> = n[13..].split('_').filter_map(|t| t.parse().ok()).collect();
+                if let [t, d] = v[..] {
+                    let s = &mut self.doc.model.scene_settings;
+                    s.transitions = t > 0.0;
+                    s.transition_secs = t;
+                    s.delay_secs = d;
+                }
+                return;
+            }
+            n if n.starts_with("scene_") && n[6..].parse::<usize>().is_ok() => Action::ActivateScene(n[6..].parse().unwrap()),
             n => match crate::templates::Template::ALL
                 .iter()
                 .find(|t| format!("template_{t:?}").eq_ignore_ascii_case(n))
@@ -940,6 +970,22 @@ impl VarstotasApp {
             dims.len(),
             self.doc.dim_sel.len(),
             if m.axes.is_some() { format!("o({:.0},{:.0},{:.0}) x({:.2},{:.2},{:.2})", ax.origin.x, ax.origin.y, ax.origin.z, ax.x.x, ax.x.y, ax.x.z) } else { "world".into() }
+        );
+        let sc = &m.scene_settings;
+        let guides = format!(
+            "{guides} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
+            m.scenes.iter().map(|s| format!("{}{}", s.name, if s.in_animation { "" } else { "(-)" })).collect::<Vec<_>>(),
+            self.tray.selected_scene,
+            self.scene_player.is_some(),
+            self.cam_anim.is_some(),
+            self.camera.eye.x,
+            self.camera.eye.y,
+            self.camera.eye.z,
+            self.prefs.face_style.key(),
+            self.prefs.show_edges,
+            m.tags.values().filter(|t| !t.visible).count(),
+            sc.transition_secs,
+            sc.transitions,
         );
         format!(
             "{guides} tool={:?} sel F={faces} E={edges} I={insts} context_depth={} active_mesh F={mf} E={me} ortho={} dirty={} tris={} rebuilds={} last_rebuild={:.1}ms (tess {:.1} build {:.1} upload {:.1}) highlights={} last_highlight={:.1}ms",

@@ -9,7 +9,7 @@ use crate::viewport::Viewport;
 use egui::{Key, KeyboardShortcut, Modifiers, PointerButton, Pos2, Response, ViewportCommand};
 use varstotas_kernel::glam::DVec3;
 use crate::templates::Template;
-use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, IntersectScope, Model, Scene, io};
+use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, IntersectScope, Model, Scene, SceneStyle, io};
 use std::rc::Rc;
 use varstotas_render::{Camera, FaceStyle, Overlay3d, RenderStyle, StandardView};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,20 @@ pub enum FaceStylePref {
 }
 
 impl FaceStylePref {
+    /// Name stored in [`varstotas_kernel::SceneStyle::face_style`].
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Shaded => "shaded",
+            Self::Monochrome => "monochrome",
+            Self::HiddenLine => "hiddenline",
+            Self::Wireframe => "wireframe",
+        }
+    }
+
+    pub fn from_key(k: &str) -> Option<Self> {
+        [Self::Shaded, Self::Monochrome, Self::HiddenLine, Self::Wireframe].into_iter().find(|s| s.key() == k)
+    }
+
     pub fn to_render(self) -> FaceStyle {
         match self {
             Self::Shaded => FaceStyle::Shaded,
@@ -112,6 +126,12 @@ pub enum Action {
     UpdateScene(usize),
     DeleteScene(usize),
     ActivateScene(usize),
+    /// Move scene `i` one place left (`false`) or right (`true`).
+    MoveScene(usize, bool),
+    /// View → Animation → Play / Pause.
+    ToggleAnimation,
+    NextScene,
+    PrevScene,
     About,
     Preferences,
     Cut,
@@ -209,10 +229,17 @@ type BoxCorners = [[f32; 3]; 8];
 /// ((model version, selection version), selected instances' boxes).
 type SelBoxes = ((u64, u64), Vec<BoxCorners>);
 
+/// View → Animation → Play: steps through the scenes in a loop.
+pub(crate) struct ScenePlayer {
+    /// Seconds left on the current scene before moving on (counted after the transition).
+    pub wait: f64,
+}
+
 pub struct VarstotasApp {
     pub(crate) doc: Document,
     pub(crate) camera: Camera,
     pub(crate) cam_anim: Option<CameraAnimation>,
+    pub(crate) scene_player: Option<ScenePlayer>,
     pub(crate) viewport: Viewport,
     pub(crate) tool: Box<dyn Tool>,
     pub(crate) vcb: String,
@@ -324,6 +351,7 @@ impl VarstotasApp {
             doc: Document::from_model(template.new_model(), None),
             camera: template.camera(nav::startup_camera()),
             cam_anim: None,
+            scene_player: None,
             viewport: Viewport::default(),
             tool: tools::make_tool(ToolId::Select),
             vcb: String::new(),
@@ -546,6 +574,9 @@ impl VarstotasApp {
                         }
                         Key::Z if modifiers.shift && !typing => self.actions.push(Action::ZoomExtents),
                         Key::G if !typing && !modifiers.shift => self.actions.push(Action::MakeGroup),
+                        Key::PageDown if !typing => self.actions.push(Action::NextScene),
+                        Key::PageUp if !typing => self.actions.push(Action::PrevScene),
+                        Key::Escape if self.scene_player.is_some() => self.scene_player = None,
                         _ => {
                             // Letters while typing in the VCB go to the VCB (via Text events).
                             let is_letter = key.name().len() == 1 && key.name().chars().all(|c| c.is_ascii_alphabetic());
@@ -632,6 +663,10 @@ impl VarstotasApp {
         let user_nav = self.viewport.nav.handle(response, rect, &self.doc.model, &mut self.camera);
         if user_nav {
             self.cam_anim = None;
+            self.scene_player = None;
+        }
+        if self.scene_player.is_some() && response.contains_pointer() && ctx.input(|i| i.pointer.any_pressed()) {
+            self.scene_player = None;
         }
         let over = response.contains_pointer();
         let (events, modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
@@ -986,19 +1021,25 @@ impl VarstotasApp {
                 self.tray.selected_scene = None;
             }
             Action::ActivateScene(i) => {
-                if let Some(s) = self.doc.model.scenes.get(i).cloned() {
-                    let mut to = self.camera.clone();
-                    to.eye = s.eye;
-                    to.target = s.target;
-                    to.up = s.up;
-                    to.fov_y_deg = s.fov_y_deg;
-                    to.ortho = s.ortho;
-                    if s.ortho {
-                        let d = (s.eye - s.target).length();
-                        to.ortho_height = 2.0 * d * (s.fov_y_deg.to_radians() * 0.5).tan();
-                    }
-                    self.tray.selected_scene = Some(i);
-                    self.animate_to(to);
+                self.scene_player = None;
+                self.go_to_scene(i);
+            }
+            Action::MoveScene(i, right) => {
+                let j = if right { i + 1 } else { i.wrapping_sub(1) };
+                if i < self.doc.model.scenes.len() && j < self.doc.model.scenes.len() {
+                    self.doc.commit("Move Scene", |m| m.scenes.swap(i, j));
+                    self.tray.selected_scene = Some(j);
+                }
+            }
+            Action::ToggleAnimation => {
+                if self.scene_player.take().is_none() {
+                    self.play_animation();
+                }
+            }
+            Action::NextScene | Action::PrevScene => {
+                self.scene_player = None;
+                if let Some(i) = self.step_scene(action == Action::NextScene, false) {
+                    self.go_to_scene(i);
                 }
             }
             Action::About => self.show_about = true,
@@ -1216,14 +1257,135 @@ impl VarstotasApp {
         self.viewport.export = Some(ExportJob { path, overlay, camera, size, transparent, axes, line_scale });
     }
 
+    /// Scene tabs above the viewport: click goes to the scene, right-click for the menu.
+    fn scene_tabs(&mut self, ui: &mut egui::Ui) {
+        let names: Vec<String> = self.doc.model.scenes.iter().map(|s| s.name.clone()).collect();
+        let n = names.len();
+        ui.horizontal_wrapped(|ui| {
+            for (i, name) in names.into_iter().enumerate() {
+                let r = ui.add(egui::Button::selectable(self.tray.selected_scene == Some(i), name));
+                if r.clicked() {
+                    self.actions.push(Action::ActivateScene(i));
+                }
+                r.context_menu(|ui| {
+                    let mut item = |ui: &mut egui::Ui, label: &str, enabled: bool, a: Action| {
+                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                            self.actions.push(a);
+                        }
+                    };
+                    item(ui, "Update", true, Action::UpdateScene(i));
+                    item(ui, "Add", true, Action::AddScene);
+                    item(ui, "Delete", true, Action::DeleteScene(i));
+                    ui.separator();
+                    item(ui, "Move Left", i > 0, Action::MoveScene(i, false));
+                    item(ui, "Move Right", i + 1 < n, Action::MoveScene(i, true));
+                    ui.separator();
+                    let play = if self.scene_player.is_some() { "Pause Animation" } else { "Play Animation" };
+                    item(ui, play, true, Action::ToggleAnimation);
+                });
+            }
+        });
+    }
+
+    /// A scene of the current view: camera, display style and hidden tags.
     fn scene_from_camera(&self, name: String) -> Scene {
-        Scene {
-            name,
-            eye: self.camera.eye,
-            target: self.camera.target,
-            up: self.camera.up,
-            fov_y_deg: self.camera.fov_y_deg,
-            ortho: self.camera.ortho,
+        let c = &self.camera;
+        let mut s = Scene::camera(name, c.eye, c.target, c.up, c.fov_y_deg, c.ortho);
+        s.style = Some(SceneStyle {
+            face_style: self.prefs.face_style.key().into(),
+            xray: self.prefs.xray,
+            edges: self.prefs.show_edges,
+            profiles: self.prefs.profiles,
+        });
+        s.hidden_tags = Some(self.doc.model.tags.iter().filter(|(_, t)| !t.visible).map(|(id, _)| id).collect());
+        s
+    }
+
+    /// Camera stored in scene `s` (projection size taken from the eye distance).
+    fn scene_camera(&self, s: &Scene) -> Camera {
+        let mut to = self.camera.clone();
+        to.eye = s.eye;
+        to.target = s.target;
+        to.up = s.up;
+        to.fov_y_deg = s.fov_y_deg;
+        to.ortho = s.ortho;
+        if s.ortho {
+            let d = (s.eye - s.target).length();
+            to.ortho_height = 2.0 * d * (s.fov_y_deg.to_radians() * 0.5).tan();
+        }
+        to
+    }
+
+    /// Make scene `i` current: style and tags switch at once, the camera moves with the
+    /// model's transition settings (a cut when transitions are off).
+    pub(crate) fn go_to_scene(&mut self, i: usize) {
+        let Some(s) = self.doc.model.scenes.get(i).cloned() else { return };
+        self.tray.selected_scene = Some(i);
+        if let Some(st) = &s.style {
+            if let Some(fs) = FaceStylePref::from_key(&st.face_style) {
+                self.prefs.face_style = fs;
+            }
+            self.prefs.xray = st.xray;
+            self.prefs.show_edges = st.edges;
+            self.prefs.profiles = st.profiles;
+        }
+        if let Some(hidden) = &s.hidden_tags {
+            let changes = self.doc.model.tags.iter().any(|(id, t)| t.visible == hidden.contains(&id));
+            if changes {
+                self.doc.mutate_untracked(|m| {
+                    for (id, t) in m.tags.iter_mut() {
+                        t.visible = !hidden.contains(&id);
+                    }
+                });
+            }
+        }
+        let to = self.scene_camera(&s);
+        let set = self.doc.model.scene_settings;
+        if set.transitions && set.transition_secs > 0.0 {
+            self.cam_anim = Some(CameraAnimation::new(self.camera.clone(), to, set.transition_secs as f32));
+        } else {
+            self.cam_anim = None;
+            self.camera = to;
+        }
+    }
+
+    /// Next (or previous) scene after the current one, wrapping around; with `animated`
+    /// only scenes included in the animation count.
+    fn step_scene(&self, forward: bool, animated: bool) -> Option<usize> {
+        let scenes = &self.doc.model.scenes;
+        let n = scenes.len();
+        let cur = self.tray.selected_scene.filter(|i| *i < n);
+        (1..=n)
+            .map(|k| match cur {
+                Some(c) if forward => (c + k) % n,
+                Some(c) => (c + n * 2 - k) % n,
+                None if forward => k - 1,
+                None => n - k,
+            })
+            .find(|i| !animated || scenes[*i].in_animation)
+    }
+
+    /// View → Animation → Play: start at the next scene and loop until stopped.
+    fn play_animation(&mut self) {
+        match self.step_scene(true, true) {
+            Some(i) => {
+                self.go_to_scene(i);
+                self.scene_player = Some(ScenePlayer { wait: self.doc.model.scene_settings.delay_secs });
+            }
+            None => self.flash("No scenes to play. Add scenes in the Scenes panel."),
+        }
+    }
+
+    /// Advance the scene animation by `dt` seconds (after the camera transition finishes).
+    fn step_player(&mut self, dt: f64) {
+        let Some(p) = self.scene_player.as_mut() else { return };
+        if self.cam_anim.is_some() {
+            return;
+        }
+        p.wait -= dt;
+        if p.wait <= 0.0 {
+            self.scene_player = None;
+            self.play_animation();
         }
     }
 
@@ -1295,6 +1457,8 @@ impl VarstotasApp {
             self.camera = nav::zoom_extents_camera(&self.doc.model, &cam, self.aspect());
         }
         self.cam_anim = None;
+        self.scene_player = None;
+        self.tray.selected_scene = None;
     }
 
     fn open_path(&mut self, path: &Path) {
@@ -1714,6 +1878,11 @@ impl eframe::App for VarstotasApp {
             .frame(crate::ui::theme::tray_frame(&ctx))
             .show_collapsible(ui, &mut tray_open, |ui| self.tray_ui(ui));
         self.prefs.tray_open = tray_open;
+        if !self.doc.model.scenes.is_empty() {
+            egui::Panel::top("scene_tabs")
+                .frame(crate::ui::theme::bar_frame(&ctx))
+                .show(ui, |ui| self.scene_tabs(ui));
+        }
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let response = self.viewport.allocate(ui);
@@ -1723,6 +1892,10 @@ impl eframe::App for VarstotasApp {
                 if !anim.step(dt, &mut self.camera) {
                     self.cam_anim = None;
                 }
+                ctx.request_repaint();
+            }
+            if self.scene_player.is_some() {
+                self.step_player(dt as f64);
                 ctx.request_repaint();
             }
             let (o3, o2) = self.tool_overlays();
