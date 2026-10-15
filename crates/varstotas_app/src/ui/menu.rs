@@ -294,6 +294,8 @@ impl VarstotasApp {
                     ToolId::PushPull,
                     ToolId::FollowMe,
                     ToolId::Offset,
+                    ToolId::Chamfer,
+                    ToolId::Fillet,
                 ] {
                     self.tool_item(ui, id);
                 }

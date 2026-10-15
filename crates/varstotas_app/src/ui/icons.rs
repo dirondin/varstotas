@@ -40,6 +40,8 @@ pub enum Icon {
     Shadows,
     Text,
     Text3d,
+    Chamfer,
+    Fillet,
     ViewIso,
     ViewTop,
     ViewFront,
@@ -453,6 +455,23 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             let front = Stroke::new(2.0 * pen.s, BLUE);
             pen.line_c(&[(4.5, 19.5), (10.5, 3.5), (16.5, 19.5)], front);
             pen.line_c(&[(7.0, 13.5), (14.0, 13.5)], front);
+        }
+        Icon::Chamfer => {
+            // A block profile with the top-right corner cut flat.
+            pen.poly(&[(3.0, 21.0), (3.0, 4.0), (13.0, 4.0), (20.0, 11.0), (20.0, 21.0)], FILL);
+            pen.line_c(&[(13.0, 4.0), (20.0, 11.0)], Stroke::new(2.2 * pen.s, RED));
+            pen.dashed((13.0, 4.0), (20.0, 4.0), pen.thin());
+            pen.dashed((20.0, 4.0), (20.0, 11.0), pen.thin());
+        }
+        Icon::Fillet => {
+            // A block profile with the top-right corner rounded.
+            let mut pts = pen.pts(&[(3.0, 21.0), (3.0, 4.0)]);
+            pts.extend(pen.arc_pts((13.0, 11.0), 7.0, 270.0, 360.0));
+            pts.push(pen.p(20.0, 21.0));
+            pen.painter.add(Shape::convex_polygon(pts, FILL, pen.stroke()));
+            pen.arc((13.0, 11.0), 7.0, 270.0, 360.0, Stroke::new(2.2 * pen.s, RED));
+            pen.dashed((13.0, 4.0), (20.0, 4.0), pen.thin());
+            pen.dashed((20.0, 4.0), (20.0, 11.0), pen.thin());
         }
         Icon::Shadows => {
             // A sun over a cube with its shadow on the ground.

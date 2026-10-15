@@ -18,6 +18,7 @@ mod draw;
 mod edit;
 mod nav_tools;
 pub(crate) mod section;
+mod chamfer;
 mod text;
 pub(crate) mod text3d;
 mod texture;
@@ -55,6 +56,8 @@ pub enum ToolId {
     Rotate,
     Scale,
     Offset,
+    Chamfer,
+    Fillet,
     FollowMe,
     Tape,
     Protractor,
@@ -71,7 +74,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 31] = [
+    pub const ALL: [ToolId; 33] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -90,6 +93,8 @@ impl ToolId {
         ToolId::Rotate,
         ToolId::Scale,
         ToolId::Offset,
+        ToolId::Chamfer,
+        ToolId::Fillet,
         ToolId::FollowMe,
         ToolId::Tape,
         ToolId::Protractor,
@@ -125,6 +130,8 @@ impl ToolId {
             ToolId::Rotate => "Rotate",
             ToolId::Scale => "Scale",
             ToolId::Offset => "Offset",
+            ToolId::Chamfer => "Chamfer",
+            ToolId::Fillet => "Fillet",
             ToolId::FollowMe => "Follow Me",
             ToolId::Tape => "Tape Measure",
             ToolId::Protractor => "Protractor",
@@ -162,6 +169,8 @@ impl ToolId {
             ToolId::Zoom => Key::Z,
             ToolId::Polygon
             | ToolId::FollowMe
+            | ToolId::Chamfer
+            | ToolId::Fillet
             | ToolId::Protractor
             | ToolId::ArcCenter
             | ToolId::Arc3
@@ -203,6 +212,8 @@ impl ToolId {
             ToolId::Rotate => Icon::Rotate,
             ToolId::Scale => Icon::Scale,
             ToolId::Offset => Icon::Offset,
+            ToolId::Chamfer => Icon::Chamfer,
+            ToolId::Fillet => Icon::Fillet,
             ToolId::FollowMe => Icon::FollowMe,
             ToolId::Tape => Icon::Tape,
             ToolId::Protractor => Icon::Protractor,
@@ -240,6 +251,8 @@ impl ToolId {
             ToolId::Rotate => "Rotate, stretch or copy entities about an axis.",
             ToolId::Scale => "Resize and stretch entities.",
             ToolId::Offset => "Offset a face's edges inward or outward.",
+            ToolId::Chamfer => "Cut an edge between two faces with a flat bevel.",
+            ToolId::Fillet => "Round an edge between two faces.",
             ToolId::FollowMe => "Sweep a face along a path.",
             ToolId::Tape => "Measure distances and create guides.",
             ToolId::Protractor => "Measure angles and create angled guides.",
@@ -341,6 +354,11 @@ impl ToolId {
             ToolId::Rotate => "Click the center, click the zero direction, click the angle. Type an angle in degrees.",
             ToolId::Scale => "Select entities, then drag a grip. Type a scale factor.",
             ToolId::Offset => "Click a face, move inward or outward, click. Type a distance.",
+            ToolId::Chamfer => "Click an edge between two faces (or one of the selected edges: all of them). \
+                 Type the distance; typing right after a chamfer redoes it with the new size.",
+            ToolId::Fillet => "Click an edge between two faces (or one of the selected edges: all of them). \
+                 Type the radius, `12s` for the number of segments, or both: `20,12s`; typing right \
+                 after a fillet redoes it.",
             ToolId::FollowMe => "Select a path, then click the profile face to sweep it.",
             ToolId::Tape => "Click two points to measure. Starting on an edge creates a parallel guide.",
             ToolId::Protractor => "Click the center, click the base direction, click the angle to create a guide.",
@@ -424,6 +442,8 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::TexturePosition => Box::new(texture::TexturePositionTool::default()),
         ToolId::PushPull => Box::new(edit::PushPullTool::default()),
         ToolId::Offset => Box::new(edit::OffsetTool::default()),
+        ToolId::Chamfer => Box::new(chamfer::ChamferTool::new(false)),
+        ToolId::Fillet => Box::new(chamfer::ChamferTool::new(true)),
         ToolId::FollowMe => Box::new(edit::FollowMeTool::default()),
         ToolId::Move => Box::new(transform::MoveTool::default()),
         ToolId::Rotate => Box::new(transform::RotateTool::default()),

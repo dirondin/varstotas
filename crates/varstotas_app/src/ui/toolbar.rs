@@ -79,6 +79,8 @@ impl VarstotasApp {
                 ToolId::Scale,
                 ToolId::Offset,
                 ToolId::FollowMe,
+                ToolId::Chamfer,
+                ToolId::Fillet,
             ] {
                 self.tool_button(ui, id);
             }

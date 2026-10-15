@@ -15,7 +15,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `topology/insert.rs` | sticky line insertion: vertex merge, edge split, automatic faces |
 | `topology/region.rs` | planar region recompute (the core of sticky faces; largest file) |
 | `topology/erase.rs` | eraser semantics |
-| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs` | modelling operations |
+| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet) | modelling operations |
 | `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags, axes, raycast |
 | `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve`, tangents |
 | `dims.rs` | linear dimensions, stored per definition, anchored to vertices |
@@ -73,6 +73,7 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `tools/dims.rs` | Dimension tool |
 | `tools/nav_tools.rs` | Orbit, Pan, Zoom tools (Zoom VCB = field of view) |
 | `tools/camera_tools.rs` | Position Camera, Look Around, Walk |
+| `tools/chamfer.rs` | Chamfer / Fillet tools (preview on a mesh copy, VCB redo) |
 | `tools/text.rs` | Text tool (leader notes: dimensions with `leader`) |
 | `tools/text3d.rs` | placing 3D Text (follows the cursor, lies on the face) |
 | `text3d.rs` | glyph outlines of egui's bundled fonts (`skrifa`), `Text3dParams` |

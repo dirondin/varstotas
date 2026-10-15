@@ -1,11 +1,13 @@
 //! Modelling operations on a `Mesh`.
 
+mod chamfer;
 mod follow_me;
 mod intersect;
 mod offset;
 mod push_pull;
 mod transform;
 
+pub use chamfer::{ChamferKind, ChamferResult};
 pub use intersect::IntersectScope;
 
 use crate::mesh::Mesh;

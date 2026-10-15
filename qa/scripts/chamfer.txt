@@ -1,0 +1,41 @@
+# Chamfer / Fillet: click an edge, type the size (redoes the last one), too big keeps the old result.
+box 0 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+tool chamfer
+expect tool=Chamfer
+vcb 100
+wait 2
+# the top front edge (y = 0, z = 1000)
+rawp move 1000 0 1000
+wait 2
+screenshot shots/chamfer_preview.bmp
+rawp click 1000 0 1000
+wait 3
+expect model_faces=7
+expect undo=Some("Chamfer")
+# typed right after: the chamfer is redone at 200 mm
+vcb 200
+wait 3
+expect model_faces=7
+expect undo=Some("Chamfer")
+dump chamfer200
+screenshot shots/chamfer.bmp
+action undo
+wait 2
+expect model_faces=6
+tool fillet
+expect tool=Fillet
+vcb 300,8s
+wait 2
+rawp click 1000 0 1000
+wait 3
+expect model_faces=14
+expect undo=Some("Fillet")
+# too big for the 1000 mm faces: the 300 mm fillet stays
+vcb 1200
+wait 3
+expect model_faces=14
+expect undo=Some("Fillet")
+screenshot shots/fillet.bmp
