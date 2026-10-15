@@ -6,6 +6,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 ## Crates
 - `varstotas_kernel`: geometry and document. It has no UI or GPU code.
 - `varstotas_render`: camera and wgpu renderer.
+- `varstotas_script`: Rhai scripting API over the kernel (no UI); used by the Script Console.
 - `varstotas_app`: the `varstotas` binary (UI, tools, inference).
 
 ### varstotas_kernel/src
@@ -49,6 +50,14 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 
 Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in `06-STATUS.md`).
 
+### varstotas_script/src
+| File | Contents |
+|---|---|
+| `lib.rs` | `run(model, ctx, src) -> ScriptRun` (works on a copy; output, error, selection), `ScriptCtx`, `Entity` |
+| `api.rs` | the Rhai API: `Vec3` type, `Entity` properties, geometry / operations / context functions (reference: `docs/SCRIPTING.md`) |
+
+Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
+
 ### varstotas_app/src
 | File | Contents |
 |---|---|
@@ -57,6 +66,7 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `viewport.rs` | 3D view widget: input, renderer, overlays |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
+| `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step) |
 | `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |

@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 varstotas_kernel.workspace = true
 varstotas_render.workspace = true
+varstotas_script.workspace = true
 glam.workspace = true
 egui.workspace = true
 egui-wgpu.workspace = true

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/varstotas_kernel", "crates/varstotas_render", "crates/varstotas_app"]
+members = ["crates/varstotas_kernel", "crates/varstotas_render", "crates/varstotas_script", "crates/varstotas_app"]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,6 +24,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 
 varstotas_kernel = { path = "crates/varstotas_kernel" }
 varstotas_render = { path = "crates/varstotas_render" }
+varstotas_script = { path = "crates/varstotas_script" }
 
 [profile.dev]
 opt-level = 1

@@ -1,5 +1,6 @@
 //! UI pieces: menu bar, toolbar, Default Tray, status bar with the Measurements box, dialogs.
 
+pub mod console;
 pub mod dialogs;
 pub mod icons;
 pub mod menu;

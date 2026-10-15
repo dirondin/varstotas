@@ -1,0 +1,186 @@
+//! Window → Script Console: a Rhai editor over the model (see `docs/SCRIPTING.md`), and
+//! File → Run Script…. A run is one undo step ("Script"); an error changes nothing.
+
+use super::theme;
+use crate::app::VarstotasApp;
+use egui::{Color32, Context, Key, Modifiers, RichText, ScrollArea};
+
+/// One line of the console log.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LogLine {
+    /// The code that was run (first line).
+    Input(String),
+    Output(String),
+    Error(String),
+}
+
+#[derive(Default)]
+pub struct ConsoleState {
+    pub open: bool,
+    pub log: Vec<LogLine>,
+    /// Earlier runs, for Cmd+↑ / Cmd+↓.
+    history: Vec<String>,
+    hist_pos: Option<usize>,
+    /// Last run for the script harness dump: (ok, output or error).
+    pub last: Option<(bool, String)>,
+}
+
+impl VarstotasApp {
+    /// Run Rhai source against the document (one undo step when it changed the model).
+    pub(crate) fn run_script_source(&mut self, src: &str, label: &str) {
+        let ctx = varstotas_script::ScriptCtx {
+            path: self.doc.active_path.clone(),
+            selection: self.doc.selection.clone(),
+            time_limit: None,
+        };
+        let first = src.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().trim().to_string();
+        let more = src.lines().filter(|l| !l.trim().is_empty()).count() > 1;
+        self.console.log.push(LogLine::Input(if more { format!("{first} …") } else { first }));
+        let run = self.doc.try_commit_if(
+            label,
+            |m| Ok::<_, String>(varstotas_script::run(m, &ctx, src)),
+            |r: &varstotas_script::ScriptRun| r.changed,
+        );
+        let Some(run) = run else {
+            let e = self.doc.last_error.take().unwrap_or_else(|| "script failed".into());
+            self.console.log.push(LogLine::Error(e.clone()));
+            self.console.last = Some((false, e));
+            return;
+        };
+        for l in run.output.lines() {
+            self.console.log.push(LogLine::Output(l.to_string()));
+        }
+        if let Some(sel) = run.selection {
+            self.doc.set_selection(sel);
+        }
+        match run.error {
+            Some(e) => {
+                self.console.log.push(LogLine::Error(e.clone()));
+                self.flash_error(format!("Script error: {e}"));
+                self.console.last = Some((false, e));
+            }
+            None => self.console.last = Some((true, run.output.trim_end().to_string())),
+        }
+        if self.console.log.len() > 2000 {
+            self.console.log.drain(..self.console.log.len() - 2000);
+        }
+    }
+
+    /// File → Run Script…: pick a `.rhai` file and run it.
+    pub(crate) fn run_script_file(&mut self, path: &std::path::Path) {
+        match std::fs::read_to_string(path) {
+            Ok(src) => {
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                self.run_script_source(&src, &format!("Script {name}"));
+            }
+            Err(e) => self.flash_error(format!("Cannot read {}: {e}", path.display())),
+        }
+    }
+
+    pub(crate) fn console_window(&mut self, ctx: &Context) {
+        if !self.console.open {
+            return;
+        }
+        let mut open = true;
+        let mut run: Option<String> = None;
+        let pos = self.viewport.rect.min + egui::vec2(16.0, 16.0);
+        let frame = egui::Frame::window(&ctx.global_style()).fill(Color32::WHITE);
+        let mut win = egui::Window::new("Script Console").open(&mut open).default_pos(pos);
+        if self.debug.script_active() {
+            // Scripted runs: a fixed place (egui remembers window positions between runs).
+            win = win.fixed_pos(pos);
+        }
+        win
+            .default_size([560.0, 460.0])
+            .frame(frame)
+            .resizable(true)
+            .show(ctx, |ui| {
+            let mono = egui::TextStyle::Monospace;
+            let out_h = (ui.available_height() - 190.0).max(80.0);
+            egui::Frame::new().fill(theme::TRAY_BG).inner_margin(6.0).show(ui, |ui| {
+                ScrollArea::vertical().max_height(out_h).min_scrolled_height(out_h).stick_to_bottom(true).auto_shrink([false, false]).show(
+                    ui,
+                    |ui| {
+                        if self.console.log.is_empty() {
+                            ui.label(
+                                RichText::new("Rhai scripts over the model. Try: box(ORIGIN, 1000, 600, 18)  — Cmd+Enter runs")
+                                    .color(theme::TEXT_DIM),
+                            );
+                        }
+                        for l in &self.console.log {
+                            let (t, c) = match l {
+                                LogLine::Input(s) => (format!("› {s}"), theme::TEXT_DIM),
+                                LogLine::Output(s) => (s.clone(), ui.visuals().text_color()),
+                                LogLine::Error(s) => (s.clone(), Color32::from_rgb(200, 50, 40)),
+                            };
+                            ui.label(RichText::new(t).text_style(mono.clone()).color(c));
+                        }
+                    },
+                );
+            });
+            let id = egui::Id::new("script_console_code");
+            let focused = ui.memory(|m| m.has_focus(id));
+            if focused && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter)) {
+                run = Some(self.prefs.console_code.clone());
+            }
+            if focused && !self.console.history.is_empty() {
+                let up = ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::ArrowUp));
+                let down = ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::ArrowDown));
+                if up || down {
+                    let n = self.console.history.len();
+                    let pos = match (self.console.hist_pos, up) {
+                        (None, true) => n - 1,
+                        (Some(p), true) => p.saturating_sub(1),
+                        (Some(p), false) => (p + 1).min(n - 1),
+                        (None, false) => n - 1,
+                    };
+                    self.console.hist_pos = Some(pos);
+                    self.prefs.console_code = self.console.history[pos].clone();
+                }
+            }
+            ScrollArea::vertical().id_salt("console_code_scroll").max_height(130.0).show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.prefs.console_code)
+                        .id(id)
+                        .code_editor()
+                        .desired_rows(7)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("let f = rect(ORIGIN, 1000, 500);\npushpull(f, 300);"),
+                );
+            });
+            ui.horizontal(|ui| {
+                if ui.button("Run").on_hover_text("Cmd+Enter").clicked() {
+                    run = Some(self.prefs.console_code.clone());
+                }
+                if ui.button("Open…").clicked()
+                    && let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).pick_file()
+                {
+                    match std::fs::read_to_string(&p) {
+                        Ok(s) => self.prefs.console_code = s,
+                        Err(e) => self.console.log.push(LogLine::Error(format!("{}: {e}", p.display()))),
+                    }
+                }
+                if ui.button("Save…").clicked()
+                    && let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).set_file_name("script.rhai").save_file()
+                    && let Err(e) = std::fs::write(&p, &self.prefs.console_code)
+                {
+                    self.console.log.push(LogLine::Error(format!("{}: {e}", p.display())));
+                }
+                if ui.button("Clear Output").clicked() {
+                    self.console.log.clear();
+                }
+                ui.label(RichText::new("API: docs/SCRIPTING.md").color(theme::TEXT_DIM));
+            });
+        });
+        if let Some(src) = run
+            && !src.trim().is_empty()
+        {
+            if self.console.history.last() != Some(&src) {
+                self.console.history.push(src.clone());
+            }
+            self.console.hist_pos = None;
+            self.run_script_source(&src, "Script");
+        }
+        self.console.open = open;
+    }
+}

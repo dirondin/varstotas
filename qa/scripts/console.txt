@@ -1,0 +1,40 @@
+# Script Console: open it, type code into the editor with the real keyboard, Cmd+Enter runs;
+# undo, an error (nothing changes), File → Run Script… with an example file.
+action console
+wait 30
+# the code editor (viewport points; the console sits at the viewport's top-left in scripts)
+raw click 300 350
+wait 2
+raw text let b = box(ORIGIN, 1000, 600, 18); b.name = "Top"; select(b); print(b.kind);
+wait 2
+raw mods cmd
+raw key Enter
+raw mods none
+wait 5
+expect script=Some((true, "group"))
+expect I=1
+expect undo=Some("Script")
+screenshot shots/console_run.bmp
+action undo
+wait 3
+expect undo=None
+expect model_faces=0
+# an error stops the script and leaves the model untouched
+action script box(ORIGIN, 100, 100, 100); pushpull(42, 1)
+wait 3
+expect script=Some((false, "Runtime error: expected an entity or an array of entities, got i64
+expect undo=None
+expect model_faces=0
+# a script file: the example bookshelf (one undo step, selected)
+action run_script ../../examples/scripts/bookshelf.rhai
+wait 5
+expect script=Some((true, "Bookshelf 800 x 300 x 1800, 9 parts"))
+expect undo=Some("Script bookshelf.rhai")
+expect I=1
+expect defs=11 model_faces=54
+action console
+view iso
+zoom_extents
+wait 10
+screenshot shots/console_bookshelf.bmp
+dump done

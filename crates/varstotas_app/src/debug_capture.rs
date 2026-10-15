@@ -466,7 +466,11 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         }
         // 3D text keeps its case.
         "action" if rest.starts_with("text3d ") => ScriptCmd::Action(rest.to_string()),
-        "action" if !rest.is_empty() => ScriptCmd::Action(rest.to_ascii_lowercase()),
+        // The action name is case-insensitive; its arguments (paths, script code) keep their case.
+        "action" if !rest.is_empty() => ScriptCmd::Action(match rest.split_once(' ') {
+            Some((name, args)) => format!("{} {args}", name.to_ascii_lowercase()),
+            None => rest.to_ascii_lowercase(),
+        }),
         "recover" => ScriptCmd::Recover(match rest.to_ascii_lowercase().as_str() {
             "yes" | "y" | "recover" => Some(true),
             "no" | "n" | "discard" => Some(false),
@@ -883,6 +887,15 @@ impl VarstotasApp {
             }
             return;
         }
+        // `run_script <path>` / `script <code>` (`\n` = new line): Rhai scripts (Script Console).
+        if let Some(path) = name.strip_prefix("run_script ") {
+            self.run_script_file(std::path::Path::new(path.trim()));
+            return;
+        }
+        if let Some(code) = name.strip_prefix("script ") {
+            self.run_script_source(&code.replace("\\n", "\n"), "Script");
+            return;
+        }
         // `params [x=<len|->] [y=…] [z=…] [n=<copies>] [axis=x|y|z] [gap=<len>] [stretch|scale]`:
         // attributes of the selected parametric group ("-" = as modelled).
         if let Some(args) = name.strip_prefix("params ") {
@@ -923,6 +936,7 @@ impl VarstotasApp {
         }
         let a = match name {
             "make_parametric" => Action::MakeParametric,
+            "console" => Action::ToggleConsole,
             "copy" => Action::Copy,
             "cut" => Action::Cut,
             "paste" => Action::Paste,
@@ -1147,7 +1161,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param}", uvs.len(), self.last_vector);
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?}", uvs.len(), self.last_vector, self.console.last);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
@@ -1225,7 +1239,7 @@ impl VarstotasApp {
             self.viewport.last_rebuild_parts[2],
             self.viewport.highlight_count,
             self.viewport.last_highlight_ms,
-        ) + " " + &extra
+        ) + " " + extra.as_str()
     }
 
     /// Stress model: `n`×`n` separate boxes (6 faces each), one undo step.

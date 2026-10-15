@@ -170,6 +170,7 @@ impl VarstotasApp {
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
                 });
                 ui.separator();
+                self.item(ui, "Run Script…", None, true, Action::RunScript);
                 self.item(ui, "Insert Demo Geometry", None, true, Action::InsertDemo);
                 ui.separator();
                 self.item(ui, "Quit", Some(&cmd("Q")), true, Action::Quit);
@@ -329,6 +330,11 @@ impl VarstotasApp {
                 let mut open = self.prefs.tray_open;
                 if ui.checkbox(&mut open, "Default Tray").clicked() {
                     self.actions.push(Action::ToggleTray);
+                }
+                let b = egui::Button::new("Script Console").selected(self.console.open);
+                if ui.add(b).clicked() {
+                    self.actions.push(Action::ToggleConsole);
+                    ui.close();
                 }
                 ui.separator();
                 self.item(ui, "Preferences…", None, true, Action::Preferences);

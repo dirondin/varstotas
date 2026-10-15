@@ -74,6 +74,8 @@ pub struct Prefs {
     pub autosave_minutes: u32,
     /// Template for File → New (None until chosen on first start).
     pub template: Option<Template>,
+    /// Script Console editor text.
+    pub console_code: String,
 }
 
 impl Default for Prefs {
@@ -90,6 +92,7 @@ impl Default for Prefs {
             autosave: true,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
             template: None,
+            console_code: String::new(),
         }
     }
 }
@@ -191,6 +194,10 @@ pub enum Action {
     MakeParametric,
     /// Set the attributes of the selected parametric group (Entity Info).
     SetParams(varstotas_kernel::Parametric),
+    /// Window → Script Console.
+    ToggleConsole,
+    /// File → Run Script…
+    RunScript,
 }
 
 /// What a [`TextPrompt`] edits.
@@ -286,6 +293,7 @@ pub struct VarstotasApp {
     pub(crate) actions: Vec<Action>,
     pub(crate) confirm: Option<Pending>,
     pub(crate) show_about: bool,
+    pub(crate) console: crate::ui::console::ConsoleState,
     /// Transient status message (text, expiry time).
     /// Transient message (text, expiry time, is_error), shown next to the tool hint.
     pub(crate) flash: Option<(String, f64, bool)>,
@@ -409,6 +417,7 @@ impl VarstotasApp {
             actions,
             confirm: None,
             show_about: false,
+            console: Default::default(),
             flash: None,
             tray: TrayState::default(),
             debug,
@@ -1142,6 +1151,12 @@ impl VarstotasApp {
             Action::Text3d => self.text3d_dialog = Some(self.text3d_last.clone()),
             Action::PlaceText3d(p) => self.place_text3d(p),
             Action::SolidTool(op) => self.solid_tool(op),
+            Action::ToggleConsole => self.console.open = !self.console.open,
+            Action::RunScript => {
+                if let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).pick_file() {
+                    self.run_script_file(&p);
+                }
+            }
             Action::MakeParametric | Action::SetParams(_) => {
                 let path = self.doc.active_path.clone();
                 let [EntityRef::Instance(id)] = self.doc.selection.as_slice() else {
@@ -2209,6 +2224,7 @@ impl eframe::App for VarstotasApp {
         }
 
         self.dialogs(&ctx);
+        self.console_window(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);
         self.update_title(&ctx);

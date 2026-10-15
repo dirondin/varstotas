@@ -1,0 +1,185 @@
+//! The scripting API end to end.
+
+use varstotas_kernel::glam::DVec3;
+use varstotas_kernel::{EntityRef, Model};
+use varstotas_script::{ScriptCtx, ScriptRun, run};
+use std::time::Duration;
+
+fn go(m: &mut Model, src: &str) -> ScriptRun {
+    let r = run(m, &ScriptCtx::default(), src);
+    assert!(r.error.is_none(), "script failed: {:?}\noutput: {}", r.error, r.output);
+    r
+}
+
+fn size(m: &Model) -> DVec3 {
+    let b = m.bounds().unwrap();
+    b.max - b.min
+}
+
+#[test]
+fn vectors_print_and_last_value() {
+    let mut m = Model::new();
+    let r = go(&mut m, "let a = vec3(1, 2, 3) + X * 2; print(a); a.x * 10 + length(\"1.5m\")");
+    assert_eq!(r.output, "vec3(3, 2, 3)\n1530.0\n");
+    assert!(!r.changed);
+}
+
+#[test]
+fn face_pushpull_and_queries() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"
+        let f = rect(ORIGIN, 1000, 500);
+        let top = pushpull(f, 300);
+        print(top.kind + " " + top.area + " " + top.normal);
+        print(faces().len() + " " + edges().len());
+        bounds(all()).size
+    "##,
+    );
+    assert!(r.changed);
+    assert_eq!(r.output.lines().collect::<Vec<_>>(), ["face 500000.0 vec3(0, 0, 1)", "6 12", "vec3(1000, 500, 300)"]);
+    assert_eq!(m.root_mesh().faces.len(), 6);
+}
+
+#[test]
+fn groups_cylinders_transforms_and_context() {
+    let mut m = Model::new();
+    go(
+        &mut m,
+        r##"
+        let b = box(vec3(0, 0, 0), 600, 400, 18);
+        b.name = "Shelf";
+        let c = copy(b, vec3(0, 0, 300));
+        rotate(c, vec3(0, 0, 309), Z, 90);
+        let leg = cylinder(vec3(1000, 0, 0), 20, 700, 16);
+        enter(leg);
+        let tip = box(vec3(990, -10, 700), 20, 20, 20);
+        exit();
+        print(groups().len());
+    "##,
+    );
+    let root = m.root_mesh();
+    assert_eq!(root.instances.len(), 3);
+    assert!(root.instances.values().any(|i| i.name == "Shelf"));
+    let s = size(&m);
+    assert!((s.z - 720.0).abs() < 1e-6, "{s}");
+    // The copy turned 90° about the Z axis through x = y = 0 covers x = -400..0.
+    let b = m.bounds().unwrap();
+    assert!((b.min.x - -400.0).abs() < 1e-6, "{b:?}");
+}
+
+#[test]
+fn errors_roll_back_and_report_the_line() {
+    let mut m = Model::new();
+    let r = run(&mut m, &ScriptCtx::default(), "box(ORIGIN, 1, 1, 1);\nprint(\"before\");\npushpull(42, 10);");
+    assert!(r.error.as_deref().unwrap().contains("line 3"), "{:?}", r.error);
+    assert_eq!(r.output, "before\n");
+    assert!(!r.changed);
+    assert!(m.root_mesh().instances.is_empty(), "nothing applied");
+    // A face merged away is reported, not a crash.
+    let r = run(&mut m, &ScriptCtx::default(), "let f = rect(ORIGIN, 10, 10); erase(f); f.area");
+    assert!(r.error.unwrap().contains("no longer exists"));
+}
+
+#[test]
+fn time_limit_stops_endless_loops() {
+    let mut m = Model::new();
+    let ctx = ScriptCtx { time_limit: Some(Duration::from_millis(200)), ..Default::default() };
+    let r = run(&mut m, &ctx, "loop { }");
+    assert!(r.error.unwrap().contains("time limit"));
+}
+
+#[test]
+fn materials_tags_selection_and_params() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"
+        material("Oak", "#C8A064");
+        let b = box(ORIGIN, 800, 300, 18);
+        paint(b, "Oak");
+        tag(b, "Shelves");
+        make_parametric(b);
+        set_params(b, #{ x: 1200, count: 3, axis: "y", gap: 100 });
+        select(b);
+        print(b.kind + " " + b.material + " " + b.tag);
+        params(b).count
+    "##,
+    );
+    assert_eq!(r.output, "parametric Oak Shelves\n3\n");
+    let sel = r.selection.unwrap();
+    assert!(matches!(sel.as_slice(), [EntityRef::Instance(_)]));
+    let s = size(&m);
+    assert!((s - DVec3::new(1200.0, 1100.0, 18.0)).length() < 1e-6, "{s}");
+}
+
+#[test]
+fn solid_subtract_is_a_minus_b() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"
+        let a = box(ORIGIN, 1000, 1000, 1000);
+        let b = box(vec3(500, 500, 500), 1000, 1000, 1000);
+        let out = subtract(a, b);
+        bounds(out).size
+    "##,
+    );
+    assert_eq!(r.output, "vec3(1000, 1000, 1000)\n");
+    assert_eq!(m.root_mesh().instances.len(), 1);
+}
+
+#[test]
+fn circle_face_and_follow_me() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"
+        let path = line(vec3(0, 0, 0), vec3(0, 0, 1000));
+        let prof = circle(ORIGIN, 50, 12);
+        print(prof.kind);
+        let top = pushpull(prof, 200);
+        top.normal
+    "##,
+    );
+    assert_eq!(r.output, "face\nvec3(0, 0, 1)\n");
+}
+
+#[test]
+fn example_bookshelf_runs() {
+    let mut m = Model::new();
+    let r = go(&mut m, include_str!("../../../examples/scripts/bookshelf.rhai"));
+    assert_eq!(r.output, "Bookshelf 800 x 300 x 1800, 9 parts\n");
+    assert_eq!(m.root_mesh().instances.len(), 1);
+    let s = size(&m);
+    assert!((s - DVec3::new(800.0, 304.0, 1800.0)).length() < 1e-6, "{s}");
+}
+
+#[test]
+fn docs_example_and_polyline_offset() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"
+        material("Oak", "#C8A064");
+        let top = box(vec3(0, 0, 720), 1200, 800, 30);
+        top.name = "Table top";
+        for p in [[50, 50], [1110, 50], [50, 710], [1110, 710]] {
+            let leg = box(vec3(p[0], p[1], 0), 40, 40, 720);
+            leg.name = "Leg";
+            paint(leg, "Oak");
+        }
+        paint(top, "Oak");
+        let hole = cylinder(vec3(600, 400, 700), 30, 60);
+        subtract(top, hole);
+        print(bounds(groups()).size);
+        let pl = polyline([[2000, 0], [2500, 0], [2500, 400], [2000, 400]], true);
+        let f = faces()[0];
+        print(f.area);
+        let inner = offset(f, -50);
+        inner.area
+    "##,
+    );
+    assert_eq!(r.output, "vec3(1200, 800, 750)\n200000.0\n120000.0\n");
+}
