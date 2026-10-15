@@ -1,0 +1,43 @@
+# QA4B-004: a group of only guides/dimensions is selectable by click, double-click (enter) and window
+wait 10
+view top
+parallel on
+wait 5
+tool dimension
+rawp click 0 0 0
+rawp click 2000 0 0
+rawp move 1000 -400 0
+rawp click 1000 -400 0
+tool tapemeasure
+rawp click 3000 0 0
+rawp click 3000 1000 0
+tool select
+wait 10
+raw mods cmd
+raw key A
+raw mods none
+wait 3
+dump selall
+raw key G
+wait 3
+dump grouped
+raw key Escape
+wait 30
+rawp click 1000 -400 0
+wait 3
+dump click_dim_group
+expect I=1 context_depth=0
+wait 30
+rawp dblclick 1000 -400 0
+wait 3
+dump dbl_dim_group
+expect context_depth=1
+raw key Escape
+wait 3
+raw key Escape
+wait 3
+rawp dragfast -500 -1000 0 3500 1500 0 6
+wait 3
+dump window
+expect I=1 context_depth=0
+quit

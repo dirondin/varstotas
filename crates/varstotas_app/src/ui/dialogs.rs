@@ -227,9 +227,14 @@ impl VarstotasApp {
                         d.height = (d.height * 2).min(max);
                     }
                 });
-                ui.checkbox(&mut d.transparent, "Transparent background");
+                ui.checkbox(&mut d.content.transparent, "Transparent background");
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut d.content.axes, "Axes");
+                    ui.checkbox(&mut d.content.guides, "Guides");
+                    ui.checkbox(&mut d.content.dims, "Dimensions");
+                });
                 ui.label(
-                    RichText::new("Guides are included; the selection and tool previews are not.")
+                    RichText::new("The selection and tool previews are never exported.")
                         .small()
                         .color(theme::TEXT_DIM),
                 );
@@ -257,7 +262,7 @@ impl VarstotasApp {
                         if path.extension().is_none() {
                             path.set_extension("png");
                         }
-                        self.export_png_to(path, [d.width, d.height], d.transparent);
+                        self.export_png_to(path, [d.width, d.height], d.content);
                     }
                 }
                 Some(false) => self.export_dialog = None,

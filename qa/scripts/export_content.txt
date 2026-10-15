@@ -1,0 +1,20 @@
+# PNG export content options: axes / guides / dimensions can be left out
+box 0 0 0 2000 1000 500
+wait 10
+view iso
+zoom_extents
+wait 5
+tool dimension
+rawp click 1000 0 0
+rawp move 1000 -300 0
+rawp click 1000 -600 0
+tool tapemeasure
+rawp click 2000 1000 0
+rawp click 2000 1000 1000
+tool select
+wait 5
+export_png shots/export_all.png 800 500
+wait 10
+export_png shots/export_none.png 800 500 noaxes noguides nodims
+wait 10
+quit

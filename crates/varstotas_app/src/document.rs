@@ -69,6 +69,9 @@ pub struct Document {
     pub dirty: bool,
     /// Bumped on every model change; the viewport rebuilds GPU geometry when it changes.
     pub model_version: u64,
+    /// `model_version` right after the last recorded undo step; "edit last operation" (VCB)
+    /// may undo only while nothing (undo / redo / other change) happened since.
+    pub last_commit_version: u64,
     /// Bumped on selection / context change (also triggers a geometry rebuild).
     pub selection_version: u64,
     /// Selected entities, all living in the mesh at `active_path`.
@@ -119,6 +122,7 @@ impl Document {
             path,
             dirty: false,
             model_version: next_model_version(),
+            last_commit_version: 0,
             selection_version: 1,
             selection: Vec::new(),
             guide_sel: Vec::new(),
@@ -160,6 +164,7 @@ impl Document {
             Ok(r) => {
                 self.history.push(label, before);
                 self.after_change();
+                self.last_commit_version = self.model_version;
                 self.last_error = None;
                 Some(r)
             }
@@ -201,6 +206,7 @@ impl Document {
             Ok(Ok(r)) => {
                 self.history.push(label, before);
                 self.after_change();
+                self.last_commit_version = self.model_version;
                 self.last_error = None;
                 Some(r)
             }
@@ -231,6 +237,15 @@ impl Document {
         self.dirty = true;
         self.model_version = next_model_version();
         self.prune_selection();
+    }
+
+    /// Undo the step just committed, for re-typing a value in the Measurements box. Refused
+    /// when the top undo step is not the latest commit (e.g. the user pressed Undo since).
+    pub fn undo_last_commit(&mut self) -> Option<String> {
+        if self.model_version != self.last_commit_version {
+            return None;
+        }
+        self.undo()
     }
 
     pub fn undo(&mut self) -> Option<String> {

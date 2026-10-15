@@ -107,7 +107,17 @@ pub fn commit_mesh<R>(ctx: &mut ToolContext, label: &str, f: impl FnOnce(&mut Me
 /// Add a curve given in world coordinates to the active context (one undo step).
 /// `pie` also adds the two radii closing it into a face.
 pub fn commit_curve(ctx: &mut ToolContext, label: &str, info: &CurveInfo, pie: bool) -> bool {
-    let Some(local) = info.transformed(&context_xf(ctx.doc).inverse()) else { return false };
+    let inv = context_xf(ctx.doc).inverse();
+    let Some(local) = info.transformed(&inv) else {
+        // Non-uniformly scaled context: the curve is no longer circular locally, so add it
+        // as a plain edge chain (no curve metadata).
+        let mut pts: Vec<DVec3> = info.points().iter().map(|p| inv.transform_point3(*p)).collect();
+        let closed = info.is_closed() || pie;
+        if pie {
+            pts.push(inv.transform_point3(info.center));
+        }
+        return commit_mesh(ctx, label, |m| m.add_polyline(&pts, closed, true)).is_some_and(|es| !es.is_empty());
+    };
     commit_mesh(ctx, label, |m| if pie { m.add_pie(&local) } else { m.add_curve(&local) })
         .is_some_and(|es| !es.is_empty())
 }
@@ -143,7 +153,7 @@ pub fn try_commit_mesh<R>(
 
 /// Undo the last operation (for "edit last operation" via the VCB).
 pub fn undo_last(ctx: &mut ToolContext) -> bool {
-    ctx.doc.undo().is_some()
+    ctx.doc.undo_last_commit().is_some()
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +349,55 @@ fn edge_point_occluded(ctx: &ToolContext, active: &ContextPath, edge: EdgeId, p:
 
 /// Edge first, then face/instance.
 pub fn pick_entity(ctx: &ToolContext) -> Option<Hover> {
-    pick_edge_at(ctx, ctx.pointer.pos, inference::EDGE_PICK_PX as f32).or_else(|| pick_face(ctx))
+    pick_edge_at(ctx, ctx.pointer.pos, inference::EDGE_PICK_PX as f32)
+        .or_else(|| pick_face(ctx))
+        .or_else(|| pick_instance_wire(ctx, inference::EDGE_PICK_PX))
+}
+
+/// Screen projections of the child instances' wire (see `Model::nested_wire_world`), cached
+/// like [`EdgeProjections`].
+struct WireProjections {
+    key: (u64, inference::geo::CamKey, ContextPath),
+    segs: Vec<(InstanceId, DVec3, DVec3, DVec2, DVec2)>,
+}
+
+thread_local! {
+    static WIRE_PROJ: std::cell::RefCell<Option<WireProjections>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Child instance of the active context whose edges, dimensions or guide points are within
+/// `radius` px of the pointer: groups without faces (edges only, guides / dimensions only)
+/// are not hit by the face raycast.
+pub fn pick_instance_wire(ctx: &ToolContext, radius: f64) -> Option<Hover> {
+    let vp = ctx.viewport_d();
+    let c = DVec2::new(ctx.pointer.pos.x as f64, ctx.pointer.pos.y as f64);
+    let key = (ctx.doc.model_version, inference::geo::CamKey::of(ctx.camera, vp), ctx.doc.active_path.clone());
+    let best = WIRE_PROJ.with_borrow_mut(|cache| {
+        if cache.as_ref().is_none_or(|p| p.key != key) {
+            let segs = ctx
+                .doc
+                .model
+                .nested_wire_world(&key.2)
+                .into_iter()
+                .filter_map(|(id, a, b)| {
+                    let (sa, sb) = inference::geo::project_segment(ctx.camera, vp, a, b)?;
+                    Some((id, a, b, sa, sb))
+                })
+                .collect();
+            *cache = Some(WireProjections { key, segs });
+        }
+        let segs = cache.as_ref().map(|p| p.segs.as_slice()).unwrap_or_default();
+        segs.iter()
+            .filter_map(|(id, a, b, sa, sb)| {
+                let (d, _) = inference::geo::dist_point_seg2(c, *sa, *sb);
+                (d <= radius).then_some((d, *id, *a, *b))
+            })
+            .min_by(|x, y| x.0.total_cmp(&y.0))
+    })?;
+    let (_, id, a, b) = best;
+    let ray = ctx.pointer.ray;
+    let point = inference::geo::closest_on_seg_to_ray(a, b, ray.origin, ray.dir);
+    Some(Hover::Instance { id, point })
 }
 
 // ---------------------------------------------------------------------------

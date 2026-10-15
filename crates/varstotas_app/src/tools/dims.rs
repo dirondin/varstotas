@@ -42,6 +42,14 @@ impl Default for DimensionTool {
     }
 }
 
+/// The plane through the measured line `a`–`b` that faces the camera most.
+fn offset_plane(ctx: &ToolContext, a: DVec3, b: DVec3) -> varstotas_kernel::Plane {
+    let d = (b - a).normalize_or_zero();
+    let view = ctx.pointer.ray.dir;
+    let n = d.cross(view.cross(d)).normalize_or_zero();
+    varstotas_kernel::Plane::new((a + b) * 0.5, if n == DVec3::ZERO { view } else { n })
+}
+
 /// Offset of the dimension line for the cursor ray: in the plane containing the measured line
 /// that faces the camera most, perpendicular to the line; snapped to an axis direction when
 /// within ~10°.
@@ -51,10 +59,8 @@ pub fn dim_offset(ctx: &ToolContext, a: DVec3, b: DVec3) -> (DVec3, Option<Infer
         return (DVec3::ZERO, None);
     }
     let ray = ctx.pointer.ray;
-    let view = ray.dir;
-    let n = d.cross(view.cross(d)).normalize_or_zero();
     let m = (a + b) * 0.5;
-    let plane = varstotas_kernel::Plane::new(m, if n == DVec3::ZERO { view } else { n });
+    let plane = offset_plane(ctx, a, b);
     let q = match plane.intersect_ray(&ray) {
         Some(t) if t > 0.0 => ray.at(t),
         _ => return (DVec3::ZERO, None),
@@ -102,10 +108,24 @@ impl DimensionTool {
                 self.cur = Some(r);
             }
             Stage::Offset { a, b } => {
-                let (o, k) = dim_offset(ctx, a, b);
-                self.offset = o;
-                self.offset_axis = k;
-                self.cur = None;
+                // Full inference from the line's midpoint (points, edges, faces, guides, axes,
+                // Shift / arrow locks); free space falls back to the camera-facing plane.
+                let m = (a + b) * 0.5;
+                let r = infer(&mut self.engine, ctx, Some(m), None, Some(offset_plane(ctx, a, b)));
+                let d = (b - a).normalize_or_zero();
+                let v = r.point - m;
+                let off = v - d * v.dot(d);
+                // A snap along the measured line itself (e.g. its own axis) gives no offset.
+                if r.kind == InferenceKind::Free || off.length() < 1e-6 * (1.0 + a.distance(b)) {
+                    let (o, k) = dim_offset(ctx, a, b);
+                    self.offset = o;
+                    self.offset_axis = k;
+                    self.cur = None;
+                } else {
+                    self.offset = off;
+                    self.offset_axis = None;
+                    self.cur = Some(r);
+                }
             }
         }
     }

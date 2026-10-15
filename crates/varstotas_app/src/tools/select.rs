@@ -108,6 +108,16 @@ impl SelectTool {
         {
             return Some(Picked { context: active, entity: EntityRef::Edge(edge) });
         }
+        // Child groups without faces (edges, guides or dimensions only) are picked by their
+        // wire when it is in front of the face under the cursor.
+        if let Some(super::common::Hover::Instance { id, point }) =
+            super::common::pick_instance_wire(ctx, EDGE_PICK_PX as f64)
+        {
+            let eye = ctx.pointer.ray.origin;
+            if hit.as_ref().is_none_or(|h| point.distance(eye) <= h.point.distance(eye) + varstotas_kernel::TOL) {
+                return Some(Picked { context: active, entity: EntityRef::Instance(id) });
+            }
+        }
         let hit = hit?;
         if starts_with(&hit.path, &active) {
             let entity = if hit.path.len() > active.len() {
@@ -418,6 +428,15 @@ fn collect_instance_geo(
         if !f.hidden {
             out.faces.push(f.outer.iter().map(|v| m.transform_point3(mesh.vertices[*v].pos)).collect());
         }
+    }
+    for id in mesh.dims.keys() {
+        if let Some(g) = mesh.dim_geom(id) {
+            let (p, q) = g.transformed(&m).line();
+            out.segments.push((p, q));
+        }
+    }
+    if !model.guides_hidden {
+        out.segments.extend(d.guides.points.values().map(|p| (m.transform_point3(*p), m.transform_point3(*p))));
     }
     for inst in mesh.instances.values() {
         if !inst.hidden {

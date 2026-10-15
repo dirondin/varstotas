@@ -162,7 +162,22 @@ pub struct ExportDialog {
     pub height: u32,
     /// Keep width / height at the viewport's aspect ratio.
     pub lock_aspect: bool,
+    pub content: ExportContent,
+}
+
+/// What goes into an exported image besides the model.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExportContent {
     pub transparent: bool,
+    pub axes: bool,
+    pub guides: bool,
+    pub dims: bool,
+}
+
+impl Default for ExportContent {
+    fn default() -> Self {
+        Self { transparent: false, axes: true, guides: true, dims: true }
+    }
 }
 
 /// A PNG export waiting for the next paint (the renderer lives in the paint callback).
@@ -174,6 +189,7 @@ pub struct ExportJob {
     pub camera: Camera,
     pub size: [u32; 2],
     pub transparent: bool,
+    pub axes: bool,
     /// Line widths scale with the image (image pixels per viewport point).
     pub line_scale: f32,
 }
@@ -1007,7 +1023,12 @@ impl VarstotasApp {
                     width: s.x.round().max(1.0) as u32,
                     height: s.y.round().max(1.0) as u32,
                     lock_aspect: true,
-                    transparent: false,
+                    content: ExportContent {
+                        transparent: false,
+                        axes: self.prefs.show_axes,
+                        guides: !self.doc.model.guides_hidden,
+                        dims: true,
+                    },
                 });
             }
             Action::NewFromTemplate(t) => {
@@ -1158,7 +1179,7 @@ impl VarstotasApp {
     }
 
     /// Run a pending PNG export with the viewport's renderer.
-    pub(crate) fn export_png_to(&mut self, path: PathBuf, size: [u32; 2], transparent: bool) {
+    pub(crate) fn export_png_to(&mut self, path: PathBuf, size: [u32; 2], content: ExportContent) {
         let vp = self.viewport.size();
         let k = (size[0] as f32 / vp.x.max(1.0)).max(size[1] as f32 / vp.y.max(1.0));
         // Pixels per logical point of the image (lines keep their on-screen look).
@@ -1167,21 +1188,26 @@ impl VarstotasApp {
         let pts = egui::vec2(size[0] as f32, size[1] as f32) / line_scale;
         let mut overlay = Overlay3d::default();
         // Exported guides are never drawn as selected.
-        let sel = std::mem::take(&mut self.doc.guide_sel);
-        {
-            let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
-            tools::common::draw_guides(&view, &mut overlay);
+        if content.guides {
+            let sel = std::mem::take(&mut self.doc.guide_sel);
+            {
+                let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
+                tools::common::draw_guides(&view, &mut overlay);
+            }
+            self.doc.guide_sel = sel;
         }
-        self.doc.guide_sel = sel;
         // Dimensions too (never selected in the image).
-        let dsel = std::mem::take(&mut self.doc.dim_sel);
-        {
-            let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
-            tools::common::draw_dims(&view, &mut overlay);
+        if content.dims {
+            let dsel = std::mem::take(&mut self.doc.dim_sel);
+            {
+                let view = OverlayView { doc: &self.doc, camera: &self.camera, viewport: pts, pointer: None };
+                tools::common::draw_dims(&view, &mut overlay);
+            }
+            self.doc.dim_sel = dsel;
         }
-        self.doc.dim_sel = dsel;
         let camera = self.camera.clone();
-        self.viewport.export = Some(ExportJob { path, overlay, camera, size, transparent, line_scale });
+        let (transparent, axes) = (content.transparent, content.axes);
+        self.viewport.export = Some(ExportJob { path, overlay, camera, size, transparent, axes, line_scale });
     }
 
     fn scene_from_camera(&self, name: String) -> Scene {

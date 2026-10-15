@@ -72,7 +72,7 @@ impl DimGeom {
     pub fn label(&self, unit: LengthUnit) -> String {
         dim_label(self.length(), self.text.as_deref(), unit)
     }
-    fn transformed(&self, m: &DMat4) -> DimGeom {
+    pub fn transformed(&self, m: &DMat4) -> DimGeom {
         DimGeom {
             a: m.transform_point3(self.a),
             b: m.transform_point3(self.b),
@@ -291,6 +291,39 @@ impl Model {
         self.walk_visible(self.root, DMat4::IDENTITY, &mut Vec::new(), 0, &mut |def, xf, path| {
             if !path.is_empty() {
                 out.extend(self.defs[def].guides.points.values().map(|p| xf.transform_point3(*p)));
+            }
+        });
+        out
+    }
+
+    /// World "wire" of the visible child instances of context `path` (for picking a group by
+    /// its edges, dimensions or guide points): (child instance of `path`, segment a, b).
+    /// Guide points are zero-length segments; infinite guide lines are skipped.
+    pub fn nested_wire_world(&self, path: &[InstanceId]) -> Vec<(InstanceId, DVec3, DVec3)> {
+        let mut out = Vec::new();
+        let Some(d) = self.def_at(path) else { return out };
+        self.walk_visible(d, self.transform_at(path), &mut Vec::new(), 0, &mut |def, xf, sub| {
+            let Some(&child) = sub.first() else { return };
+            let def = &self.defs[def];
+            let mesh = &def.mesh;
+            for (e, edge) in mesh.edges.iter() {
+                if !edge.hidden {
+                    let (a, b) = mesh.edge_segment(e);
+                    out.push((child, xf.transform_point3(a), xf.transform_point3(b)));
+                }
+            }
+            for id in mesh.dims.keys() {
+                if let Some(g) = mesh.dim_geom(id) {
+                    let g = g.transformed(xf);
+                    let (p, q) = g.line();
+                    out.extend([(child, p, q), (child, g.a, p), (child, g.b, q)]);
+                }
+            }
+            if !self.guides_hidden {
+                out.extend(def.guides.points.values().map(|p| {
+                    let p = xf.transform_point3(*p);
+                    (child, p, p)
+                }));
             }
         });
         out

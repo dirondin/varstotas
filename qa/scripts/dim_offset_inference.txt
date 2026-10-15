@@ -1,0 +1,36 @@
+box 0 0 0 2000 1000 500
+wait 10
+view iso
+zoom_extents
+wait 5
+zoompx 0.7 555 372
+wait 5
+tool dimension
+rawp click 1000 0 0
+rawp move 1000 -300 0
+rawp move 1000 -600 0
+wait 3
+screenshot shots/dim3_01_ground.bmp
+# hover the box's top-front-left corner: should snap offset to that point / its plane
+rawp move 0 0 500
+rawp move 0 0 500
+wait 3
+screenshot shots/dim3_02_hover_corner.bmp
+# arrow up = blue lock
+raw key ArrowUp
+rawp move 1500 -500 300
+rawp move 1500 -600 300
+wait 3
+screenshot shots/dim3_03_arrow_up.bmp
+raw key ArrowUp
+# shift lock
+rawp move 1000 -600 0
+raw mods shift
+rawp move 1200 -900 400
+rawp move 1300 -1000 600
+wait 3
+screenshot shots/dim3_04_shift.bmp
+raw mods none
+rawp click 1300 -1000 600
+dump placed
+quit

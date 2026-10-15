@@ -223,9 +223,9 @@ pub enum ScriptCmd {
     Recover(Option<bool>),
     /// `open <path>` — open a model file (no file dialog, no "save changes?" prompt).
     Open(String),
-    /// `export_png <path> [w h] [transparent]` — File → Export → 2D Graphic without dialogs
+    /// `export_png <path> [w h] [transparent] [noaxes] [noguides] [nodims]` — File → Export → 2D Graphic without dialogs
     /// (default size: the viewport's).
-    ExportPng(String, Option<[u32; 2]>, bool),
+    ExportPng(String, Option<[u32; 2]>, crate::app::ExportContent),
     /// `action <name>` — run a menu action (see `script_action`).
     Action(String),
 }
@@ -445,7 +445,14 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             let tail: Vec<&str> = it.collect();
             let n: Vec<u32> = tail.iter().filter_map(|t| t.parse().ok()).collect();
             let size = (n.len() >= 2).then(|| [n[0], n[1]]);
-            ScriptCmd::ExportPng(path, size, tail.iter().any(|t| t.eq_ignore_ascii_case("transparent")))
+            let has = |w: &str| tail.iter().any(|t| t.eq_ignore_ascii_case(w));
+            let content = crate::app::ExportContent {
+                transparent: has("transparent"),
+                axes: !has("noaxes"),
+                guides: !has("noguides"),
+                dims: !has("nodims"),
+            };
+            ScriptCmd::ExportPng(path, size, content)
         }
         "action" if !rest.is_empty() => ScriptCmd::Action(rest.to_ascii_lowercase()),
         "recover" => ScriptCmd::Recover(match rest.to_ascii_lowercase().as_str() {
@@ -748,10 +755,10 @@ impl VarstotasApp {
                 self.doc.dirty = false;
                 self.actions.push(crate::app::Action::OpenPath(p.into()));
             }
-            ScriptCmd::ExportPng(p, size, transparent) => {
+            ScriptCmd::ExportPng(p, size, content) => {
                 let vp = self.viewport.size();
                 let size = size.unwrap_or([vp.x.round() as u32, vp.y.round() as u32]);
-                self.export_png_to(p.into(), size, transparent);
+                self.export_png_to(p.into(), size, content);
             }
             ScriptCmd::Action(name) => self.script_action(&name),
             ScriptCmd::Raw(r) => self.queue_raw(r),
@@ -1030,9 +1037,20 @@ mod tests {
         assert_eq!(parse_cmd("raw rclick 3 4"), Some(ScriptCmd::Raw(RawCmd::RightClick(Pos2::new(3.0, 4.0)))));
         assert_eq!(
             parse_cmd("export_png a.png 640 480 transparent"),
-            Some(ScriptCmd::ExportPng("a.png".into(), Some([640, 480]), true))
+            Some(ScriptCmd::ExportPng(
+                "a.png".into(),
+                Some([640, 480]),
+                crate::app::ExportContent { transparent: true, ..Default::default() }
+            ))
         );
-        assert_eq!(parse_cmd("export_png a.png"), Some(ScriptCmd::ExportPng("a.png".into(), None, false)));
+        assert_eq!(
+            parse_cmd("export_png a.png noaxes nodims"),
+            Some(ScriptCmd::ExportPng(
+                "a.png".into(),
+                None,
+                crate::app::ExportContent { axes: false, dims: false, ..Default::default() }
+            ))
+        );
         assert_eq!(parse_cmd("open x.vrst"), Some(ScriptCmd::Open("x.vrst".into())));
         assert_eq!(parse_cmd("action Flip_Red"), Some(ScriptCmd::Action("flip_red".into())));
     }

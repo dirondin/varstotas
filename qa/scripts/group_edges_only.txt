@@ -1,0 +1,24 @@
+# QA4B-005: a group made only of edges is selectable by clicking an edge
+wait 10
+view top
+parallel on
+wait 5
+tool line
+rawp click 0 0 0
+rawp click 2000 0 0
+rawp click 2000 1000 0
+raw key Escape
+tool select
+wait 10
+raw mods cmd
+raw key A
+raw mods none
+raw key G
+wait 3
+raw key Escape
+wait 30
+rawp click 1000 0 0
+wait 3
+dump click_edge_group
+expect I=1 context_depth=0
+quit

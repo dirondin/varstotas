@@ -1,0 +1,44 @@
+# QA4B-001: typing in the VCB after Cmd+Z must not undo an unrelated step
+wait 10
+view top
+parallel on
+wait 5
+tool line
+rawp click 0 0 0
+rawp click 1000 0 0
+raw key Escape
+tool arc
+rawp click 1000 0 0
+rawp click 2000 1000 0
+rawp move 1650 350 0
+rawp move 1700 300 0
+wait 3
+rawp click 1700 300 0
+dump tangent_snap_commit
+# continue tangent from arc end with double click
+wait 30
+rawp click 2000 1000 0
+rawp move 1500 1800 0
+rawp move 1000 2000 0
+wait 3
+wait 30
+rawp dblclick 1000 2000 0
+wait 3
+dump tangent_from_arc
+# undo then edit-last via VCB: must not touch other history
+raw mods cmd
+raw key Z
+raw mods none
+wait 3
+dump after_cmdz
+raw text 300
+raw key Enter
+wait 3
+dump after_typing_300
+expect curves=["Arcr1000.0s12a90"] axes
+raw text 8s
+raw key Enter
+wait 3
+dump after_typing_8s
+expect curves=["Arcr1000.0s12a90"] axes
+quit
