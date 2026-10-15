@@ -89,38 +89,32 @@ pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String
                 let _ = writeln!(nlines, "vn {} {} {}", num(f.normal.x), num(f.normal.y), num(f.normal.z));
                 nlen + 1
             });
-            for (ti, t) in f.positions.as_chunks::<3>().0.iter().enumerate() {
-                let mut ids = [0usize; 3];
-                for (k, p) in t.iter().enumerate() {
+            let textured = matches!(tile, Some([w, h]) if f.uv.len() == f.positions.len() && w > 0.0 && h > 0.0);
+            let [w, h] = tile.unwrap_or([1.0, 1.0]);
+            // Convex faces without holes as one polygon, the rest as triangles.
+            let polys: Vec<Vec<usize>> = match convex_polygon(&f.positions, f.normal) {
+                Some(p) => vec![p],
+                None => (0..f.positions.len()).collect::<Vec<_>>().chunks(3).map(<[usize]>::to_vec).collect(),
+            };
+            for poly in polys {
+                let mut line = String::from("f");
+                for i in poly {
+                    let p = f.positions[i];
                     let len = vidx.len();
-                    ids[k] = *vidx.entry(key(*p)).or_insert_with(|| {
+                    let vi = *vidx.entry(key(p)).or_insert_with(|| {
                         let _ = writeln!(vlines, "v {} {} {}", num(p.x), num(p.y), num(p.z));
                         len + 1
                     });
-                }
-                match tile {
-                    Some([w, h]) if f.uv.len() == f.positions.len() && w > 0.0 && h > 0.0 => {
-                        for k in 0..3 {
-                            let uv = f.uv[ti * 3 + k];
-                            let _ = writeln!(tlines, "vt {} {}", num(uv.x / w), num(uv.y / h));
-                        }
-                        let t0 = tcount;
-                        tcount += 3;
-                        let _ = writeln!(
-                            flines,
-                            "f {}/{}/{ni} {}/{}/{ni} {}/{}/{ni}",
-                            ids[0],
-                            t0 + 1,
-                            ids[1],
-                            t0 + 2,
-                            ids[2],
-                            t0 + 3
-                        );
-                    }
-                    _ => {
-                        let _ = writeln!(flines, "f {}//{ni} {}//{ni} {}//{ni}", ids[0], ids[1], ids[2]);
+                    if textured {
+                        let uv = f.uv[i];
+                        let _ = writeln!(tlines, "vt {} {}", num(uv.x / w), num(uv.y / h));
+                        tcount += 1;
+                        let _ = write!(line, " {vi}/{tcount}/{ni}");
+                    } else {
+                        let _ = write!(line, " {vi}//{ni}");
                     }
                 }
+                let _ = writeln!(flines, "{line}");
             }
         }
     }
@@ -129,6 +123,57 @@ pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String
     obj.push_str(&nlines);
     obj.push_str(&flines);
     (obj, mtl, textures)
+}
+
+/// The boundary of a triangulated face (`positions`: triangle list, CCW about `normal`) as
+/// indices into `positions`, in order, when it is one convex loop with no inner vertices
+/// (a face without holes); `None` otherwise.
+fn convex_polygon(positions: &[DVec3], normal: DVec3) -> Option<Vec<usize>> {
+    let tris = positions.len() / 3;
+    if tris < 2 {
+        return None;
+    }
+    // One index per distinct point.
+    let mut first: HashMap<[u64; 3], usize> = HashMap::new();
+    let ids: Vec<usize> = positions.iter().enumerate().map(|(i, p)| *first.entry(key(*p)).or_insert(i)).collect();
+    let mut directed: HashSet<(usize, usize)> = HashSet::new();
+    for t in ids.chunks(3) {
+        for k in 0..3 {
+            directed.insert((t[k], t[(k + 1) % 3]));
+        }
+    }
+    let mut next: HashMap<usize, usize> = HashMap::new();
+    for &(a, b) in &directed {
+        if !directed.contains(&(b, a)) && next.insert(a, b).is_some() {
+            return None;
+        }
+    }
+    // A simple polygon of n vertices triangulated without inner points has n - 2 triangles.
+    if next.len() != first.len() || next.len() != tris + 2 {
+        return None;
+    }
+    let start = *next.keys().min()?;
+    let mut lp = vec![start];
+    let mut cur = next[&start];
+    while cur != start {
+        if lp.len() > next.len() {
+            return None;
+        }
+        lp.push(cur);
+        cur = *next.get(&cur)?;
+    }
+    if lp.len() != next.len() {
+        return None;
+    }
+    let n = lp.len();
+    let scale = positions.iter().map(|p| p.length()).fold(1.0, f64::max);
+    for i in 0..n {
+        let (a, b, c) = (positions[lp[i]], positions[lp[(i + 1) % n]], positions[lp[(i + 2) % n]]);
+        if (b - a).cross(c - b).dot(normal) < -1e-9 * scale * scale {
+            return None;
+        }
+    }
+    Some(lp)
 }
 
 pub fn export_obj(model: &Model, path: &Path) -> Result<(), IoError> {

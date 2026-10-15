@@ -245,7 +245,9 @@ fn obj_export_sanity() {
     let (obj, mtl) = io::write_obj(&model, "x.mtl");
     assert!(obj.contains("mtllib x.mtl"));
     assert_eq!(obj.lines().filter(|l| l.starts_with("v ")).count(), 8);
-    assert_eq!(obj.lines().filter(|l| l.starts_with("f ")).count(), 12);
+    // Quads, not triangle pairs.
+    assert_eq!(obj.lines().filter(|l| l.starts_with("f ")).count(), 6);
+    assert!(obj.lines().filter(|l| l.starts_with("f ")).all(|l| l.split(' ').count() == 5));
     assert_eq!(obj.lines().filter(|l| l.starts_with("usemtl")).count(), 2);
     assert!(mtl.contains("newmtl default"));
     assert!(mtl.contains("Red_Brick"));
@@ -337,6 +339,36 @@ fn group_inside_group_context_editing() {
     assert_eq!(model.mesh_at(&[g]).unwrap().faces.len(), 6);
 }
 
+/// Convex faces go out as polygons; concave faces and faces with holes stay triangulated.
+#[test]
+fn obj_export_polygons_only_for_convex_faces_without_holes() {
+    let face_sizes = |model: &Model| {
+        let (obj, _) = io::write_obj(model, "x.mtl");
+        let mut n: Vec<usize> = obj.lines().filter(|l| l.starts_with("f ")).map(|l| l.split(' ').count() - 1).collect();
+        n.sort();
+        n
+    };
+    let mut m = Model::new();
+    m.root_mesh_mut()
+        .add_face(&[v(0., 0., 0.), v(300., 0., 0.), v(300., 100., 0.), v(200., 200., 0.), v(0., 100., 0.)])
+        .unwrap();
+    assert_eq!(face_sizes(&m), [5]);
+    // L shape: concave.
+    let mut m = Model::new();
+    m.root_mesh_mut()
+        .add_face(&[v(0., 0., 0.), v(200., 0., 0.), v(200., 100., 0.), v(100., 100., 0.), v(100., 200., 0.), v(0., 200., 0.)])
+        .unwrap();
+    assert_eq!(face_sizes(&m), [3, 3, 3, 3]);
+    // Square with a square hole: the hole's face is a quad, the ring stays triangles.
+    let mut m = Model::new();
+    let r = m.root_mesh_mut();
+    r.add_face(&[v(0., 0., 0.), v(300., 0., 0.), v(300., 300., 0.), v(0., 300., 0.)]).unwrap();
+    r.add_face(&[v(100., 100., 0.), v(200., 100., 0.), v(200., 200., 0.), v(100., 200., 0.)]).unwrap();
+    let n = face_sizes(&m);
+    assert_eq!(n.iter().filter(|k| **k == 4).count(), 1, "{n:?}");
+    assert!(n.iter().filter(|k| **k != 4).all(|k| *k == 3), "{n:?}");
+}
+
 #[test]
 fn obj_numbers_are_clean_for_rotated_groups() {
     let mut model = box_model();
@@ -385,10 +417,10 @@ fn obj_round_trip_merges_triangles_and_keeps_materials() {
     assert_eq!(r.faces.values().filter(|f| f.front == Some(red2)).count(), 1);
     assert_eq!(r.faces.values().filter(|f| f.front == Some(glass2)).count(), 1);
     assert_eq!(r.faces.values().filter(|f| f.front.is_none()).count(), 4);
-    // Without merging: the exported triangles.
+    // Without merging: the exported polygons (convex quads, not triangles).
     let opts = io::ImportOptions { merge_coplanar: false, materials: false };
     let m3 = obj_round_trip(&model, "objrt_raw", &opts);
-    assert_eq!(m3.root_mesh().faces.len(), 12);
+    assert_eq!(m3.root_mesh().faces.len(), 6);
     assert!(m3.materials.is_empty());
 }
 
@@ -609,10 +641,10 @@ fn obj_export_writes_texture_and_uvs_import_embeds_it() {
     assert!(mtl.contains("map_Kd Brick_Wall.png"), "{mtl}");
     assert_eq!(files.len(), 1);
     assert_eq!(files[0].0, "Brick_Wall.png");
-    // Top face 100×50 → two triangles with texture coordinates in tiles of 1000 mm.
-    assert_eq!(obj.lines().filter(|l| l.starts_with("vt ")).count(), 6);
+    // Top face 100×50 → one quad with texture coordinates in tiles of 1000 mm.
+    assert_eq!(obj.lines().filter(|l| l.starts_with("vt ")).count(), 4);
     assert!(obj.lines().any(|l| l.starts_with("vt 0.1 0.05")));
-    assert_eq!(obj.lines().filter(|l| l.starts_with("f ") && l.split(' ').nth(1).unwrap().split('/').nth(1) != Some("")).count(), 2);
+    assert_eq!(obj.lines().filter(|l| l.starts_with("f ") && l.split(' ').nth(1).unwrap().split('/').nth(1) != Some("")).count(), 1);
 
     let dir = tmpdir("objtex");
     let path = dir.join("t.obj");

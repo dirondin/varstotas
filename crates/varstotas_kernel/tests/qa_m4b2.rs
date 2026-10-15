@@ -1,4 +1,4 @@
-//! QA regression tests for M4 batch 2 (curves, dimensions). Tests marked `#[ignore]` reproduce
+//! QA regression tests for M4 batch 2 (curves, dimensions). Tests marked `#[ignore]` (if any) reproduce
 //! open QA findings (see docs/qa/M4-batch2-report.md) and fail on the current code.
 
 mod common;
@@ -43,7 +43,6 @@ fn set_curve_hole_cannot_cross_other_hole() {
 /// Random: circles/arcs in a face, random regeneration; every successful regeneration must
 /// leave sane topology (valid, no crossing edges, no overlapping faces).
 #[test]
-#[ignore = "QA4B-K1: random regeneration produces overlapping coplanar faces"]
 fn random_set_curve_is_sane() {
     let mut s: u64 = 0x9E3779B97F4A7C15;
     let mut rnd = || {
@@ -163,9 +162,8 @@ fn non_uniform_scale_drops_curve_metadata() {
 }
 
 /// Circle A grows until it encloses circle B (no edge crossing): B's disc must become a hole
-/// of A's disc (or the call is refused). Currently the discs overlap.
+/// of A's disc (QA4B-K1).
 #[test]
-#[ignore = "QA4B-K1: grown circle enclosing another circle gives overlapping coplanar faces"]
 fn set_curve_enclosing_other_circle_no_overlap() {
     let mut m = Mesh::new();
     m.add_face(&[v(-2000., -2000., 0.), v(2000., -2000., 0.), v(2000., 2000., 0.), v(-2000., 2000., 0.)]).unwrap();
@@ -173,9 +171,24 @@ fn set_curve_enclosing_other_circle_no_overlap() {
     m.add_curve(&CurveInfo::circle(v(0., 0., 0.), DVec3::Z, DVec3::X, 100.0, 24).unwrap());
     let cid = curve_id(&m, &a);
     sane(&m);
-    if m.set_curve(cid, Some(1500.0), None).is_ok() {
-        sane(&m);
-    }
+    // r1100 stays inside the square and encloses B.
+    m.set_curve(cid, Some(1100.0), None).unwrap();
+    sane(&m);
+    // Square with A's hole, A's disc with B's hole, B's disc.
+    assert_eq!(m.faces.len(), 3);
+    let mut holes: Vec<usize> = m.faces.values().map(|f| f.holes.len()).collect();
+    holes.sort();
+    assert_eq!(holes, [0, 1, 1]);
+    let total: f64 = m.faces.keys().map(|f| m.face_area(f)).sum();
+    assert!((total / 16e6 - 1.0).abs() < 1e-9, "{total}");
+    // Shrinking A again hands B's hole back to the square.
+    m.set_curve(cid, Some(200.0), None).unwrap();
+    sane(&m);
+    let mut holes: Vec<usize> = m.faces.values().map(|f| f.holes.len()).collect();
+    holes.sort();
+    assert_eq!(holes, [0, 0, 2]);
+    let total: f64 = m.faces.keys().map(|f| m.face_area(f)).sum();
+    assert!((total / 16e6 - 1.0).abs() < 1e-9, "{total}");
 }
 
 /// Push/pull of a disc: keep both the top and the bottom circle as circles.

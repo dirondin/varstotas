@@ -541,7 +541,8 @@ impl Mesh {
         self.curves.insert(cid, new);
         let mut weld: Vec<VertexId> = new_chain.into_iter().filter(|v| self.vertices.contains_key(*v)).collect();
         weld.sort();
-        self.absorb(&weld, &[]);
+        // The curve's faces too: a grown curve may now enclose (or overlap) other coplanar faces.
+        self.absorb(&weld, &faces);
         Ok(self.curve_edges(cid))
     }
 
