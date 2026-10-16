@@ -199,6 +199,7 @@ pub enum Action {
     ToggleGrid,
     /// File → Export → 2D Graphic… (opens the export dialog).
     ExportImage,
+    ExportAnimation,
     NewFromTemplate(Template),
     IntersectFaces(IntersectScope),
     ReverseFaces,
@@ -406,6 +407,7 @@ pub struct VarstotasApp {
     /// Window → Work Planes… window.
     pub(crate) planes_window: crate::ui::workplanes::WorkPlanesWindow,
     pub(crate) render_window: crate::ui::render::RenderWindow,
+    pub(crate) anim_window: crate::ui::animation::AnimWindow,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -527,6 +529,7 @@ impl VarstotasApp {
             sheets: Default::default(),
             planes_window: Default::default(),
             render_window: Default::default(),
+            anim_window: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -1410,6 +1413,7 @@ impl VarstotasApp {
                     self.animate_to(to);
                 }
             }
+            Action::ExportAnimation => self.anim_window.open = true,
             Action::ExportImage => {
                 // Physical pixels (what the viewport shows on a Retina screen).
                 let s = self.viewport.size() * ctx.pixels_per_point();
@@ -2368,6 +2372,7 @@ impl eframe::App for VarstotasApp {
         self.handle_keyboard(&ctx);
         crate::axes::sync(&self.doc.model);
 
+        self.anim_tick(&ctx);
         egui::Panel::top("menu_bar")
             .frame(crate::ui::theme::bar_frame(&ctx))
             .show(ui, |ui| self.menu_bar(ui));
@@ -2427,7 +2432,9 @@ impl eframe::App for VarstotasApp {
             });
             self.viewport.paint(ui, frame, &self.doc, &self.camera, &style, &o3, &o2, cursor);
         });
-        match self.viewport.export_result.take() {
+        // Animation frames collect their own results (anim_tick).
+        let export_result = if self.anim_window.run.is_some() { None } else { self.viewport.export_result.take() };
+        match export_result {
             Some(r) if self.bridge_shot_done(&r) => {}
             Some(Ok(p)) => {
                 log::info!("exported {}", p.display());
@@ -2449,6 +2456,7 @@ impl eframe::App for VarstotasApp {
         self.sheets_window(&ctx);
         self.work_planes_window(&ctx);
         self.render_window(&ctx);
+        self.animation_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

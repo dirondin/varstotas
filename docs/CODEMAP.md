@@ -100,6 +100,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `ui/sheets.rs` | Window → Sheets…: sheet list, paper, title block, item properties, preview with pick / move / resize (working copy → one undo step), `export_sheets`, harness dumps |
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation |
+| `animation.rs` | animation export frames: `scene_frames` (scene tour: holds + `CameraAnimation` transitions), `orbit_frames`, `frame_path`, `ffmpeg()` lookup, `encode` (H.264 MP4) |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
 | `inference/settings.rs` | which snaps are on: `SnapPrefs` (in `Prefs::snapping`), `GROUPS` for the menus, `publish` once per frame, `allowed(kind)` checked by the engine and the tools; `GridPrefs` (in `Prefs::grid`) → `GridStyle` on the axes plane, `publish_grid` / `grid()` for grid snapping (`grid_snap`, `grid_crossing` in `inference/mod.rs`); `Increments` (in `SnapPrefs`): `move_step` / `angle_step` / `scale_step`, `round_move` (Move tool) |
 | `axes.rs` | drawing frame (active work plane, else custom axes), published once per frame |
@@ -126,6 +127,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `tools/section.rs` | Section Plane tool; drawing and picking of section planes, cut lines and fill |
 | `tools/workplane.rs` | Guide Plane tool (3 points, face, normal by arrows; gizmo drags of the active plane), `draw_work_planes` |
+| `ui/animation.rs` | File → Export → Animation… (`AnimWindow`, `AnimRun`): `start_animation`, `anim_tick` (one frame per app frame via `export_png_to` or the path tracer job, ffmpeg in a thread), the window |
 | `ui/render.rs` | Window → Render… (`RenderWindow`: settings, Render / Stop / Continue / More Samples, preview, Save PNG / EXR, Render All Scenes batch, lights list + editor, light markers; edits → one undo step) |
 | `ui/workplanes.rs` | Window → Work Planes… (list, active, visibility, names, origin and angles; edits → one undo step) |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |

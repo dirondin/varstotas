@@ -622,7 +622,7 @@ impl VarstotasApp {
             return;
         }
         if script.pt_wait {
-            let busy = self.viewport.pt.as_ref().is_some_and(|j| j.running || j.restart || j.save.is_some()) || self.render_window.batch.is_some();
+            let busy = self.viewport.pt.as_ref().is_some_and(|j| j.running || j.restart || j.save.is_some()) || self.render_window.batch.is_some() || self.anim_window.busy();
             if busy {
                 return;
             }
@@ -954,6 +954,41 @@ impl VarstotasApp {
                     *last = l.sanitized();
                 }
             });
+            return;
+        }
+        // `anim key=value… out=<path>`: export an animation (source=scenes|orbit seconds= turns=
+        // fps= w= h= traced=on|off spp= video=on|off) and wait for it; `anim_window` opens the window.
+        if name == "anim_window" {
+            self.anim_window.open = true;
+            return;
+        }
+        if let Some(args) = name.strip_prefix("anim ") {
+            let mut out = None;
+            let w = &mut self.anim_window;
+            for kv in args.split_whitespace() {
+                let Some((k, v)) = kv.split_once('=') else { continue };
+                let n = v.parse::<f64>().ok();
+                let on = matches!(v, "on" | "1" | "true");
+                match k {
+                    "source" => w.source = if v == "orbit" { crate::ui::animation::AnimSource::Orbit } else { crate::ui::animation::AnimSource::Scenes },
+                    "seconds" => w.seconds = n.unwrap_or(w.seconds),
+                    "turns" => w.turns = n.unwrap_or(w.turns),
+                    "fps" => w.fps = n.map_or(w.fps, |x| x as u32),
+                    "w" => w.width = n.map_or(w.width, |x| x as u32),
+                    "h" => w.height = n.map_or(w.height, |x| x as u32),
+                    "traced" => w.traced = on,
+                    "spp" => w.spp = n.map_or(w.spp, |x| x as u32),
+                    "video" => w.video = on,
+                    "out" => out = Some(std::path::PathBuf::from(v)),
+                    _ => log::warn!("script: anim: unknown key {k}"),
+                }
+            }
+            if let Some(out) = out {
+                self.start_animation(out);
+                if let Some(s) = self.debug.script.as_mut() {
+                    s.pt_wait = true;
+                }
+            }
             return;
         }
         if name == "render_wait" {
@@ -1820,7 +1855,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",

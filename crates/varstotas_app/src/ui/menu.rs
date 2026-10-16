@@ -162,6 +162,7 @@ impl VarstotasApp {
                 });
                 ui.menu_button("Export", |ui| {
                     self.item(ui, "2D Graphic (PNG)…", None, true, Action::ExportImage);
+                    self.item(ui, "Animation (Video / PNG)…", None, true, Action::ExportAnimation);
                     ui.separator();
                     self.item(ui, "OBJ…", None, true, Action::ExportObj);
                     self.item(ui, "STL…", None, true, Action::ExportStl);

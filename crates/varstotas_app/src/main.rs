@@ -3,6 +3,7 @@
 // Release builds on Windows: GUI subsystem, no console window.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod animation;
 mod app;
 mod autosave;
 mod axes;
