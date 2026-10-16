@@ -78,6 +78,10 @@ pub struct Prefs {
     pub console_code: String,
     /// Components library folder (None = ~/.varstotas/components).
     pub library_dir: Option<PathBuf>,
+    /// Components list: the bundled example generators hidden.
+    pub hide_examples: bool,
+    /// Components list: collapsed folders.
+    pub library_collapsed: Vec<String>,
     /// View → Snapping: master switch and the inferences turned off.
     pub snapping: crate::inference::settings::SnapPrefs,
     /// View → Grid.
@@ -100,6 +104,8 @@ impl Default for Prefs {
             template: None,
             console_code: String::new(),
             library_dir: None,
+            hide_examples: false,
+            library_collapsed: Vec::new(),
             snapping: Default::default(),
             grid: Default::default(),
         }

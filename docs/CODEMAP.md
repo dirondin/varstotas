@@ -81,7 +81,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `ui/extensions.rs` | Extensions menu, File → Import / Export plugin entries, parameter dialog, running plugins; console code with a header runs as the pseudo plugin `CONSOLE` (`run_console_code`, `plugin_at`); steps `plugin_go`: points → objects → run |
 | `ui/generators.rs` | generators in the Components list: `.rhai` scan of the components folder, bundled examples (folder Examples, not on disk), old `~/.varstotas/generators` moved in (`migrate_legacy`), `generator_items`, `generator_tile`, `place_generator` (temp model → `Clipboard::from_parts` → `PasteTool`), Entity Info (`generator_info`, `param_field` per type, `formula_rows`, Reset, Make Unique), `set_gen_values` |
 | `ui/gen_editor.rs` | Window → Generator Editor: source (`ScriptEditor::with_id`), preview rebuilt after edits (`build_preview`, drag to turn), preview values, New / Open / Save to Library (`save_path`) / Apply to Document / Place |
-| `ui/library.rs` | Components tray card: one list of components (`.vrst`) and generators (`.rhai`) by folder (`Tile`), thumbnails, place (`PasteTool::named`), Save Selection to Library |
+| `ui/library.rs` | Components tray card: one list of components (`.vrst`) and generators (`.rhai`) by folder (`Tile`) under `folder_header` (fold arrow, link revealing the folder, Hide for Examples), thumbnails, place (`PasteTool::named`), Save Selection to Library |
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `tools/plugin_select.rs` | object selection for `@select` (click toggles, Enter → `ToolRequest::PluginObjects`) |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |
@@ -128,4 +128,4 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 - To run a UI script: `VARSTOTAS_SCRIPT=file cargo run -p varstotas_app`.
   - Check state with `dump` rather than screenshots.
   - Take a screenshot only for visual checks: convert the BMP with `sips -s format png -Z 1200`, then crop.
-- Regression scripts for UI behaviour live in `qa/scripts/` and run with `qa/run_all.sh`.
+- Regression scripts for UI behaviour live in `qa/scripts/` and run with `qa/run_all.sh`; `qa/fixtures/<script>/components` is copied into the run's home first.

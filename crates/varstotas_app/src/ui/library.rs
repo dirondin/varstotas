@@ -39,6 +39,8 @@ pub struct LibraryState {
     pub scanned: Option<PathBuf>,
     /// Open the tray card on the next frame (Window → Components).
     pub open_card: bool,
+    /// Folders of the list drawn last: (folder, tiles, folded), for the harness.
+    pub shown_folders: Vec<(String, usize, bool)>,
     /// Generators of the same folder.
     pub gens: super::generators::GenLibrary,
 }
@@ -204,6 +206,37 @@ impl VarstotasApp {
         }
     }
 
+    /// A folder heading of the Components list: a fold arrow and the name, a link showing the
+    /// folder in the Finder (the bundled Examples: Hide instead). True when folded.
+    fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>) -> bool {
+        let folded = self.prefs.library_collapsed.iter().any(|f| f == folder);
+        let examples = folder == super::generators::EXAMPLES_FOLDER;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let arrow = ui
+                .add_sized([14.0, 18.0], egui::Button::new(if folded { "⏵" } else { "⏷" }).frame(false))
+                .on_hover_text(if folded { "Show the folder" } else { "Fold the folder" });
+            if arrow.clicked() {
+                if folded {
+                    self.prefs.library_collapsed.retain(|f| f != folder);
+                } else {
+                    self.prefs.library_collapsed.push(folder.to_string());
+                }
+            }
+            if examples {
+                ui.label(folder).on_hover_text("Generators bundled with Varstotas (not files)");
+                if ui.small_button("Hide").on_hover_text("Hide the bundled examples (… → Show Examples brings them back)").clicked() {
+                    self.prefs.hide_examples = true;
+                }
+            } else if let Some(dir) = root.map(|r| r.join(folder))
+                && ui.link(folder).on_hover_text(format!("{}\nClick to show in the Finder", dir.display())).clicked()
+            {
+                crate::ui::extensions::reveal(&dir);
+            }
+        });
+        folded
+    }
+
     pub(crate) fn library_open_requested(&mut self) -> bool {
         std::mem::take(&mut self.library.open_card)
     }
@@ -222,11 +255,20 @@ impl VarstotasApp {
             if ui.button("+").on_hover_text("New generator: a component built by a script with parameters (Window → Generator Editor)").clicked() {
                 self.gen_editor.new_generator();
             }
-            if ui.button("…").on_hover_text("Choose the library folder").clicked()
-                && let Some(d) = rfd::FileDialog::new().pick_folder()
-            {
-                self.prefs.library_dir = Some(d);
-            }
+            ui.menu_button("…", |ui| {
+                if ui.button("Choose Folder…").clicked() {
+                    ui.close();
+                    if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                        self.prefs.library_dir = Some(d);
+                    }
+                }
+                let mut show = !self.prefs.hide_examples;
+                if ui.checkbox(&mut show, "Show Examples").on_hover_text("The bundled example generators").changed() {
+                    self.prefs.hide_examples = !show;
+                }
+            })
+            .response
+            .on_hover_text("Library folder, examples");
         });
         if let Some(d) = self.library_dir() {
             let custom = self.prefs.library_dir.is_some();
@@ -251,7 +293,7 @@ impl VarstotasApp {
             .enumerate()
             .filter(|(_, it)| found(&it.name))
             .map(|(i, it)| (it.folder.clone(), it.name.to_lowercase(), Tile::Comp(i)))
-            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
+            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
             .collect();
         shown.sort_by(|a, b| (a.0 == super::generators::EXAMPLES_FOLDER).cmp(&(b.0 == super::generators::EXAMPLES_FOLDER)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
         if self.library.items.is_empty() && gens.is_empty() {
@@ -261,13 +303,18 @@ impl VarstotasApp {
         }
         let (mut place, mut place_gen, mut edit) = (None, None, None);
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
+        let lib_dir = self.library_dir();
+        self.library.shown_folders.clear();
         let mut k = 0;
         while k < shown.len() {
             let folder = shown[k].0.clone();
-            if !folder.is_empty() {
-                ui.label(RichText::new(&folder).strong().small());
-            }
             let end = shown[k..].iter().position(|t| t.0 != folder).map_or(shown.len(), |n| k + n);
+            let folded = !folder.is_empty() && self.folder_header(ui, &folder, lib_dir.as_deref());
+            self.library.shown_folders.push((folder.clone(), end - k, folded));
+            if folded {
+                k = end;
+                continue;
+            }
             for row in shown[k..end].chunks(cols) {
                 ui.horizontal(|ui| {
                     for (_, _, t) in row {
