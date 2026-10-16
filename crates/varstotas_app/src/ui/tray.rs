@@ -34,6 +34,10 @@ pub struct TrayState {
     /// Material thumbnails by texture bytes pointer.
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
     pub soften: SoftenSettings,
+    /// Generator parameters in Entity Info: length text buffers of the selected instances, and
+    /// a number being dragged (applied when the drag ends).
+    pub gen_text: Option<(Vec<InstanceId>, std::collections::BTreeMap<String, String>)>,
+    pub gen_drag: Option<(String, f64)>,
 }
 
 /// Soften/Smooth Edges panel settings.
@@ -619,7 +623,9 @@ impl VarstotasApp {
         if let [EntityRef::Face(fid)] = sel.as_slice() {
             self.face_texture_info(ui, *fid);
         }
-        if let [EntityRef::Instance(id)] = sel.as_slice() {
+        if !self.generator_info(ui)
+            && let [EntityRef::Instance(id)] = sel.as_slice()
+        {
             self.params_info(ui, *id);
         }
     }
@@ -1436,6 +1442,6 @@ fn outliner_level(
 
 /// A text field was left with its value accepted (Enter, Tab or a click elsewhere); Escape
 /// leaves it too but means "revert".
-fn committed(ui: &egui::Ui, resp: &egui::Response) -> bool {
+pub(crate) fn committed(ui: &egui::Ui, resp: &egui::Response) -> bool {
     resp.lost_focus() && !ui.input(|i| i.key_pressed(egui::Key::Escape))
 }

@@ -1,0 +1,66 @@
+# Generators (track К): place from the Components card, equal values share a definition,
+# parameters in Entity Info, Scale changes the size parameters, copy / paste, undo.
+wait 10
+view iso
+action components
+wait 40
+screenshot shots/gen_tray.bmp
+# the Shelf button of the Components card (scrolled into view), real mouse
+raw click 1280 343
+wait 3
+rawp click 0 0 0
+wait 3
+expect gens=["Shelf"] gen_defs=1
+action generator Shelf
+wait 3
+rawp click 1500 0 0
+wait 3
+expect gen_defs=1
+zoom_extents
+wait 3
+tool select
+select_none
+# the second shelf's left side, real mouse
+rawp click 1500 150 1200
+wait 3
+expect gen=Shelf{width=800,depth=300,height=1200,shelves=3,board=18,back=true,finish=Oak,paint_with=}@800x300x1200
+action gen width=1m finish=Walnut
+wait 3
+expect gen=Shelf{width=1000,depth=300,height=1200,shelves=3,board=18,back=true,finish=Walnut,paint_with=}@1000x300x1200
+expect gen_defs=2
+expect undo=Some("Component Parameters")
+screenshot shots/gen_info.bmp
+action gen width=800 finish=Oak
+wait 3
+expect gen_defs=1
+action undo
+wait 3
+expect gen_defs=2
+# Scale: drag the right face grip to 0.8×; the width changes, nothing is stretched
+tool scale
+rawp move 2500 150 600
+wait 2
+rawp click 2500 150 600
+wait 2
+screenshot shots/gen_scale.bmp
+dump mid_scale
+rawp click 2300 150 600
+wait 3
+expect undo=Some("Scale")
+expect gen=Shelf{width=800,depth=300,height=1200,shelves=3,board=18,back=true,finish=Walnut,paint_with=}@800x300x1200
+screenshot shots/gen_scaled.bmp
+# Entity Info: the Back panel off, then Reset with the real mouse
+action gen back=false
+wait 3
+expect back=false,finish=Walnut
+raw click 1171 77
+wait 3
+expect undo=Some("Reset Parameters")
+expect gen_defs=1
+tool select
+select_all
+wait 2
+action gen_reset
+wait 3
+expect gen_defs=1
+dump done

@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 /// Edges kept for a thumbnail.
-const THUMB_EDGES: usize = 4000;
+pub(crate) const THUMB_EDGES: usize = 4000;
 const TILE: f32 = 78.0;
 
 pub struct LibItem {
@@ -37,6 +37,8 @@ pub struct LibraryState {
     pub scanned: Option<PathBuf>,
     /// Open the tray card on the next frame (Window → Components).
     pub open_card: bool,
+    /// Generators (`~/.varstotas/generators`).
+    pub gens: super::generators::GenLibrary,
 }
 
 /// `~/.varstotas/components`.
@@ -45,7 +47,7 @@ pub fn default_dir() -> Option<PathBuf> {
 }
 
 /// Iso projection of the edges into the unit square (y down).
-fn thumbnail(edges: &[(DVec3, DVec3)]) -> Vec<(egui::Pos2, egui::Pos2)> {
+pub(crate) fn thumbnail(edges: &[(DVec3, DVec3)]) -> Vec<(egui::Pos2, egui::Pos2)> {
     let s2 = std::f64::consts::FRAC_1_SQRT_2;
     let s6 = 1.0 / 6f64.sqrt();
     let proj = |p: DVec3| ((p.x + p.y) * s2, -(-p.x + p.y + 2.0 * p.z) * s6);
@@ -206,6 +208,7 @@ impl VarstotasApp {
             ui.add(egui::TextEdit::singleline(&mut self.library.filter).hint_text("Search").desired_width(ui.available_width() - 70.0));
             if ui.button("⟳").on_hover_text("Refresh").clicked() {
                 self.refresh_library();
+                self.refresh_generators();
             }
             if ui.button("…").on_hover_text("Choose the library folder").clicked()
                 && let Some(d) = rfd::FileDialog::new().pick_folder()
@@ -270,6 +273,7 @@ impl VarstotasApp {
             ui.label(RichText::new(format!("{} file(s) could not be read", self.library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.library.errors.join("\n"));
         }
+        self.generators_panel(ui);
         ui.add_space(4.0);
         match self.library.save_name.as_mut() {
             None => {
@@ -308,6 +312,20 @@ impl VarstotasApp {
 
 /// One library item; true when clicked.
 fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> bool {
+    tile_ex(ui, &it.name, &it.thumb, it.size, unit, false, "")
+}
+
+/// A library tile: thumbnail edges in the unit square, the name below; `gear` marks a
+/// generator (a gear in the top right corner). True when clicked.
+pub(crate) fn tile_ex(
+    ui: &mut Ui,
+    name: &str,
+    thumb: &[(egui::Pos2, egui::Pos2)],
+    size: DVec3,
+    unit: varstotas_kernel::LengthUnit,
+    gear: bool,
+    note: &str,
+) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(TILE, TILE + 16.0), Sense::click());
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
@@ -318,10 +336,15 @@ fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> bool {
         let inner = pic.shrink(8.0);
         let to = |q: egui::Pos2| inner.min + vec2(q.x * inner.width(), q.y * inner.height());
         let stroke = Stroke::new(0.8, Color32::from_gray(60));
-        for (a, b) in &it.thumb {
+        for (a, b) in thumb {
             p.line_segment([to(*a), to(*b)], stroke);
         }
-        let label = if it.name.chars().count() > 12 { format!("{}…", it.name.chars().take(11).collect::<String>()) } else { it.name.clone() };
+        if gear {
+            let c = pos2(pic.max.x - 10.0, pic.min.y + 10.0);
+            p.circle_filled(c, 8.0, Color32::from_rgb(0x3B, 0x6E, 0xC4));
+            p.text(c, egui::Align2::CENTER_CENTER, "⚙", egui::FontId::proportional(12.0), Color32::WHITE);
+        }
+        let label = if name.chars().count() > 12 { format!("{}…", name.chars().take(11).collect::<String>()) } else { name.to_string() };
         p.text(
             pos2(rect.center().x, rect.max.y - 7.0),
             egui::Align2::CENTER_CENTER,
@@ -331,5 +354,6 @@ fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> bool {
         );
     }
     let f = |v: f64| varstotas_kernel::units::format_length(v, unit);
-    resp.on_hover_text(format!("{}\n{} × {} × {}\nClick to place", it.name, f(it.size.x), f(it.size.y), f(it.size.z))).clicked()
+    let note = if note.is_empty() { String::new() } else { format!("{note}\n") };
+    resp.on_hover_text(format!("{name}\n{note}{} × {} × {}\nClick to place", f(size.x), f(size.y), f(size.z))).clicked()
 }

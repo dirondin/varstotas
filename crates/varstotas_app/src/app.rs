@@ -225,6 +225,13 @@ pub enum Action {
     PlaceComponent(usize),
     SaveToLibrary(String),
     ShowComponents,
+    /// Components card → Generators: place a component of this generator source.
+    PlaceGenerator(String),
+    /// Entity Info: generator values for the selected generated components (true = reset to
+    /// the defaults first).
+    SetGenValues(varstotas_kernel::GenValues, bool),
+    /// Give the selected component its own definition.
+    MakeUnique,
 }
 
 /// What a [`TextPrompt`] edits.
@@ -1239,6 +1246,20 @@ impl VarstotasApp {
             Action::ToggleConsole => self.console.open = !self.console.open,
             Action::Plugin(i, path) => self.start_plugin(i, path),
             Action::PlaceComponent(i) => self.place_component(i),
+            Action::PlaceGenerator(src) => self.place_generator(&src),
+            Action::SetGenValues(v, reset) => self.set_gen_values(v, reset),
+            Action::MakeUnique => {
+                let path = self.doc.active_path.clone();
+                let [EntityRef::Instance(id)] = self.doc.selection.as_slice() else {
+                    return self.flash("Select one component");
+                };
+                let id = *id;
+                if self.doc.try_commit("Make Unique", |m| m.make_unique(&path, id)).is_none()
+                    && let Some(e) = self.doc.last_error.clone()
+                {
+                    self.flash_error(e);
+                }
+            }
             Action::SaveToLibrary(name) => self.save_to_library(&name),
             Action::ShowComponents => {
                 self.prefs.tray_open = true;

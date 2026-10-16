@@ -19,7 +19,7 @@ pub const NAMES: &[&str] = &[
     "subtract", "intersect", "trim", "split", "outer_shell", "reverse", "soften", "material", "paint", "tag",
     "make_parametric", "set_params", "params", "dimension", "note", "enter", "exit", "faces", "edges", "groups", "all",
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
-    "write_text",
+    "write_text", "generators", "add_generator", "generate", "reset_params",
 ];
 
 fn err<T>(msg: impl Into<String>) -> R<T> {
@@ -362,6 +362,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         is_group: true,
         guides: Default::default(),
         params: None,
+        generated: None,
     });
     let m = mesh_mut(st, &path)?;
     let id = m.instances.insert(Instance {
@@ -491,6 +492,7 @@ pub fn engine(limit: Duration) -> Engine {
     register_geometry(&mut e);
     register_ops(&mut e);
     register_context(&mut e);
+    register_generators(&mut e);
     e
 }
 
@@ -1012,11 +1014,25 @@ fn register_ops(e: &mut Engine) {
         let g = one(&x)?;
         with(|st| {
             let i = inst_id(st, &g)?;
+            if let Some(gd) = st.model.instance_generated(&g.path, i) {
+                return Ok(match st.model.generators.get(&gd.generator) {
+                    Some(x) => Dynamic::from_map(crate::generator::values_map(x, &gd.values)),
+                    None => Dynamic::UNIT,
+                });
+            }
             Ok(st.model.instance_params(&g.path, i).map_or(Dynamic::UNIT, |p| Dynamic::from_map(params_map(p))))
         })
     });
     e.register_fn("set_params", |x: Dynamic, m: Map| -> R<()> {
         let g = one(&x)?;
+        let generated = with(|st| {
+            let i = inst_id(st, &g)?;
+            Ok(st.model.instance_generated(&g.path, i).is_some().then_some(i))
+        })?;
+        if let Some(i) = generated {
+            let values = gen_values(&m)?;
+            return with_model(|m| crate::generator::set_values(m, &g.path, i, &values, false));
+        }
         edit(|st| {
             let i = inst_id(st, &g)?;
             let Some(mut p) = st.model.instance_params(&g.path, i).cloned() else {
@@ -1044,6 +1060,62 @@ fn register_ops(e: &mut Engine) {
             }
             op(st.model.set_instance_params(&g.path, i, p))
         })
+    });
+}
+
+/// A script map as generator values.
+fn gen_values(m: &Map) -> R<varstotas_kernel::GenValues> {
+    use varstotas_kernel::GenValue;
+    m.iter()
+        .map(|(k, v)| {
+            let x = if let Ok(b) = v.as_bool() {
+                GenValue::Bool(b)
+            } else if let Ok(f) = v.as_float() {
+                GenValue::Num(f)
+            } else if let Ok(i) = v.as_int() {
+                GenValue::Num(i as f64)
+            } else if let Some(s) = v.clone().try_cast::<ImmutableString>() {
+                GenValue::Text(s.to_string())
+            } else {
+                return err(format!("{k}: expected a number, bool or string, got {}", v.type_name()));
+            };
+            Ok((k.to_string(), x))
+        })
+        .collect()
+}
+
+/// Run `f` on the model taken out of the script state (generators run scripts of their own).
+fn with_model<T>(f: impl FnOnce(&mut varstotas_kernel::Model) -> Result<T, String>) -> R<T> {
+    let mut m = edit(|st| Ok(std::mem::take(&mut st.model)))?;
+    let r = f(&mut m);
+    with(|st| {
+        st.model = m;
+        Ok(())
+    })?;
+    r.map_err(|e| e.into())
+}
+
+fn register_generators(e: &mut Engine) {
+    e.register_fn("generators", || -> R<Array> {
+        with(|st| Ok(st.model.generators.keys().map(|k| Dynamic::from(k.clone())).collect()))
+    });
+    e.register_fn("add_generator", |src: &str| -> R<String> { with_model(|m| crate::generator::add(m, src)) });
+    fn generate(name: &str, at: Dynamic, values: Map) -> R<Dynamic> {
+        let at = pt(&at)?;
+        let values = gen_values(&values)?;
+        let (path, local) = with(|st| {
+            let path = st.path.clone();
+            Ok((path.clone(), world(st, &path).inverse() * DMat4::from_translation(at)))
+        })?;
+        let id = with_model(|m| crate::generator::place(m, &path, name, &values, local))?;
+        Ok(dyn_ent(&path, EntityRef::Instance(id)))
+    }
+    e.register_fn("generate", |name: &str, at: Dynamic| generate(name, at, Map::new()));
+    e.register_fn("generate", generate);
+    e.register_fn("reset_params", |x: Dynamic| -> R<()> {
+        let g = one(&x)?;
+        let i = with(|st| inst_id(st, &g))?;
+        with_model(|m| crate::generator::set_values(m, &g.path, i, &Default::default(), true))
     });
 }
 

@@ -1155,6 +1155,41 @@ impl VarstotasApp {
             }
             return;
         }
+        // `generator <name>` (then click to place), `gen key=value …` (the selected generated
+        // components), `gen_reset`, `make_unique`.
+        if let Some(n) = name.strip_prefix("generator ") {
+            if !self.library.gens.scanned {
+                self.refresh_generators();
+            }
+            match self.generator_source(n) {
+                Some(src) => self.actions.push(Action::PlaceGenerator(src)),
+                None => log::warn!("script: no generator named {n}"),
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("gen ") {
+            let values = args
+                .split_whitespace()
+                .filter_map(|a| a.split_once('='))
+                .map(|(k, v)| {
+                    let v = match v {
+                        "true" | "false" => varstotas_kernel::GenValue::Bool(v == "true"),
+                        _ => varstotas_kernel::GenValue::Text(v.replace('_', " ")),
+                    };
+                    (k.to_string(), v)
+                })
+                .collect();
+            self.actions.push(Action::SetGenValues(values, false));
+            return;
+        }
+        if name == "gen_reset" {
+            self.actions.push(Action::SetGenValues(Default::default(), true));
+            return;
+        }
+        if name == "make_unique" {
+            self.actions.push(Action::MakeUnique);
+            return;
+        }
         if name == "library_refresh" {
             self.refresh_library();
             return;
@@ -1444,7 +1479,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
@@ -1633,6 +1668,36 @@ impl VarstotasApp {
             _ => eprintln!("[debug] workplane: bad command {args:?}"),
         }
         crate::axes::sync(&self.doc.model);
+    }
+}
+
+impl VarstotasApp {
+    /// Selected generated components for the dump: `Name{k=v,…}@WxDxH` per instance, or none.
+    fn gen_dump(&self) -> String {
+        let Some((ids, g, values)) = self.selected_generated() else { return "none".into() };
+        let mesh = self.doc.active_mesh();
+        let parts: Vec<String> = ids
+            .iter()
+            .zip(&values)
+            .map(|(i, v)| {
+                let kv: Vec<String> = g
+                    .params
+                    .iter()
+                    .filter_map(|p| v.get(&p.key).map(|x| (p, x)))
+                    .map(|(p, x)| match x {
+                        varstotas_kernel::GenValue::Num(n) => format!("{}={}", p.key, (n * 1000.0).round() / 1000.0),
+                        varstotas_kernel::GenValue::Bool(b) => format!("{}={b}", p.key),
+                        varstotas_kernel::GenValue::Text(t) => format!("{}={t}", p.key),
+                    })
+                    .collect();
+                let b = mesh
+                    .and_then(|me| me.instances.get(*i))
+                    .and_then(|inst| self.doc.model.def_bounds(inst.def).map(|b| b.transformed(&inst.transform)))
+                    .map_or(Default::default(), |b| b.max - b.min);
+                format!("{}{{{}}}@{:.0}x{:.0}x{:.0}", g.name, kv.join(","), b.x, b.y, b.z)
+            })
+            .collect();
+        parts.join(";")
     }
 }
 

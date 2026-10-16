@@ -69,6 +69,7 @@ impl Model {
             is_group: true,
             guides: Default::default(),
             params: Some(Parametric::new(base)),
+            generated: None,
         });
         self.defs[pd].mesh.instances[inst].def = p;
         self.regenerate_params(p)?;
@@ -116,13 +117,14 @@ impl Model {
                 Some(v) => v,
                 None => {
                     let b = &self.defs[params.base];
-                    self.defs.insert(Definition { name: format!("{} (stretched)", b.name), is_group: true, params: None, ..b.clone() })
+                    self.defs.insert(Definition { name: format!("{} (stretched)", b.name), is_group: true, params: None, generated: None, ..b.clone() })
                 }
             };
             let mut def = self.defs[params.base].clone();
             def.name = format!("{} (stretched)", def.name);
             def.is_group = true;
             def.params = None;
+            def.generated = None;
             self.defs[v] = def;
             for k in 0..3 {
                 if let Some(s) = params.size[k] {

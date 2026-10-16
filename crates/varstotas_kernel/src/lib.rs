@@ -33,6 +33,7 @@ pub mod io;
 pub mod layout;
 pub mod mesh;
 pub mod model;
+pub mod generator;
 pub mod params;
 pub mod report;
 pub mod section;
@@ -56,6 +57,7 @@ pub use ops::{ChamferKind, ChamferResult, IntersectScope, SolidOp};
 pub use model::{
     ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
+pub use generator::{GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;
 pub use section::{SectionDisplay, SectionPlane};
 pub use workplane::WorkPlane;

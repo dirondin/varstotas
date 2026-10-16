@@ -24,6 +24,9 @@ pub struct Definition {
     /// Parametric group attributes (see [`crate::params`]). Omitted from files when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<crate::params::Parametric>,
+    /// Built by a generator with these values (see [`crate::generator`]). Omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated: Option<crate::generator::Generated>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -167,6 +170,9 @@ pub struct Model {
     /// Index of the active work plane (drawing happens on it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_plane: Option<usize>,
+    /// Generator sources by name (see [`crate::generator`]).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub generators: std::collections::BTreeMap<String, crate::generator::Generator>,
 }
 
 /// Result of a model-wide ray pick.
@@ -189,7 +195,7 @@ impl Model {
     /// Empty model: a root definition, no materials/tags, millimetres.
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None });
         Self {
             defs,
             root,
@@ -208,6 +214,7 @@ impl Model {
             sheets: Vec::new(),
             work_planes: Vec::new(),
             active_plane: None,
+            generators: Default::default(),
         }
     }
     pub fn root_mesh(&self) -> &Mesh {
@@ -471,7 +478,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,

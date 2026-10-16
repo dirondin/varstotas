@@ -25,6 +25,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `history.rs` | undo; each snapshot is a full model clone |
 | `io/` | `.vrst` JSON (`native.rs`), OBJ+MTL, STL, DXF (`dxf.rs`: R12 export, LINE/POLYLINE/3DFACE/CIRCLE/ARC import), glTF (`gltf.rs`: GLB export, .gltf/.glb import), 3MF export (`threemf.rs`, own stored ZIP) |
 | `params.rs` | parametric groups: `Parametric` on a definition (size X/Y/Z by stretch or scale, copies in a row), `make_parametric`, `set_instance_params`, regeneration |
+| `generator.rs` | generators (track К): header parsing (`Generator::parse`, `@param key:type(min..max/step)`), `GenKind` / `GenParam` / `GenValue` / `normalize`, `Generated` on a definition, `Model::generators`, `generated_def` (shared definition by values), `graft_content` (built model → definition, ids remapped), `remove_unused`, `SIZE_KEYS` for Scale |
 | `layout.rs` | Layout sheets (data): `LayoutSheet`, `SheetViewport` (rect on paper, captured view or scene name, scale, line flags), `SheetText`, `TitleBlock`, `PAPERS`; `Model::viewport_scene`, `with_scene_state` |
 | `unfold.rs` | Unfold: `UnfoldInput::from_model` (selection → world faces, soft edges), `unfold` (pieces without overlaps, mountain/valley folds, tabs, edge numbers, sheet packing), `to_dxf` |
 | `report.rs` | parts list (cut-list sizes, counts, area, volume) and material areas → CSV |
@@ -61,8 +62,9 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | `lib.rs` | `run(model, ctx, src) -> ScriptRun` (works on a copy; output, error, selection), `ScriptCtx`, `Entity` |
 | `api.rs` | the Rhai API: `Vec3` type, `Entity` properties, geometry / operations / context functions (reference: `docs/SCRIPTING.md`) |
 | `json.rs` | `eval_json` (JSON variables in, last value out), `entity_id` / `parse_entity_id` (for the bridge) |
+| `generator.rs` | running generators: `build` (`build(p)` in an empty model with the document's materials; nested runs keep the outer script state), `def_for`, `place`, `set_values` (shared / in place / new definition), `scale` (Scale → size values), `add`, `rebuild_all`, `values_map` |
 
-Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
+Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/generator.rs` (runs `examples/generators/*.rhai`).
 
 ### varstotas_app/src
 | File | Contents |
@@ -77,6 +79,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `bridge.rs` | local server (127.0.0.1 + token, JSON lines / HTTP `POST /rpc`), `~/.varstotas/bridge.json`, installs `python/*.py` |
 | `plugins.rs` | plugin header parsing (`@name/@menu/@param/@pick/@select/@import/@export`), scan of `~/.varstotas/plugins`, bundled examples |
 | `ui/extensions.rs` | Extensions menu, File → Import / Export plugin entries, parameter dialog, running plugins; console code with a header runs as the pseudo plugin `CONSOLE` (`run_console_code`, `plugin_at`); steps `plugin_go`: points → objects → run |
+| `ui/generators.rs` | Components card → Generators (document + `~/.varstotas/generators`, bundled examples), `place_generator` (temp model → `Clipboard::from_parts` → `PasteTool`), Entity Info fields per parameter type (`generator_info`, several instances together, Reset, Make Unique), `set_gen_values` |
 | `ui/library.rs` | Components tray card: library scan, thumbnails, place (`PasteTool::named`), Save Selection to Library |
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `tools/plugin_select.rs` | object selection for `@select` (click toggles, Enter → `ToolRequest::PluginObjects`) |

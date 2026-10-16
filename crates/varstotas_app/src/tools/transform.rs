@@ -845,6 +845,27 @@ struct ScaleDrag {
     factor: DVec3,
 }
 
+/// Scale of one generated component whose generator has size parameters (width / depth /
+/// height): new values and a rebuild instead of a stretch. True when it was handled (an error
+/// is left in `last_error`).
+fn scale_generated(ctx: &mut ToolContext, tg: &Targets, kind: XfKind) -> bool {
+    let [EntityRef::Instance(i)] = tg.ents.as_slice() else { return false };
+    let path = ctx.doc.active_path.clone();
+    if ctx.doc.model.instance_generated(&path, *i).is_none() {
+        return false;
+    }
+    let xf = kind.at(1.0);
+    let r = ctx.doc.try_commit_if(
+        "Scale",
+        |m| match varstotas_script::generator::scale(m, &path, *i, &xf) {
+            None => Ok(false),
+            Some(r) => r.map(|()| true),
+        },
+        |done| *done,
+    );
+    r != Some(false)
+}
+
 #[derive(Default)]
 pub struct ScaleTool {
     engine: InferenceEngine,
@@ -927,7 +948,7 @@ impl ScaleTool {
         }
         let kind = XfKind::Scale { anchor, factor };
         let tg = Targets::ents(self.ents.clone());
-        if run_transform(ctx, "Scale", &tg, kind, false, None).is_some() {
+        if scale_generated(ctx, &tg, kind) || run_transform(ctx, "Scale", &tg, kind, false, None).is_some() {
             self.last = Some((LastXf { tg, kind, copy: false, arr: None }, axes));
         }
         self.bbox = None;
@@ -993,7 +1014,7 @@ impl Tool for ScaleTool {
                 return false;
             }
             let kind = XfKind::Scale { anchor, factor: factors_from(axes, &v) };
-            if run_transform(ctx, "Scale", &l.tg, kind, false, None).is_some() {
+            if scale_generated(ctx, &l.tg, kind) || run_transform(ctx, "Scale", &l.tg, kind, false, None).is_some() {
                 self.last = Some((LastXf { kind, ..l }, axes));
                 return true;
             }

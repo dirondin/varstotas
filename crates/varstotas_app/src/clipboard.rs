@@ -328,6 +328,22 @@ impl Clipboard {
             maps.defs.insert(d, id);
             return Ok(id);
         }
+        // A generated component: its generator comes along (unless the target has one of that
+        // name), and equal values share the target's definition when the sources match.
+        if let Some(g) = &src.generated
+            && let Some(gen_src) = self.model.generators.get(&g.generator)
+        {
+            match model.generators.get(&g.generator) {
+                None => model.add_generator(gen_src.clone()),
+                Some(t) if t.source == gen_src.source => {
+                    if !top && let Some(id) = model.generated_def(&g.generator, &g.values) {
+                        maps.defs.insert(d, id);
+                        return Ok(id);
+                    }
+                }
+                Some(_) => {}
+            }
+        }
         let mut def = src.clone();
         let children: Vec<(InstanceId, DefId)> = def.mesh.instances.iter().map(|(i, x)| (i, x.def)).collect();
         for (i, cd) in children {
@@ -539,6 +555,37 @@ mod tests {
         other.try_commit("Params", |m| m.set_instance_params(&[], *c, p)).unwrap();
         let b = other.model.bounds().unwrap();
         assert!((b.max.x - b.min.x - 1500.0).abs() < 1e-6, "{b:?}");
+    }
+
+    #[test]
+    fn generated_components_bring_their_generator_and_share_by_values() {
+        let src = include_str!("../../../examples/generators/shelf.rhai");
+        let mut doc = Document::new();
+        let g = doc
+            .try_commit("Place", |m| {
+                let n = varstotas_script::generator::add(m, src)?;
+                varstotas_script::generator::place(m, &[], &n, &Default::default(), DMat4::IDENTITY)
+            })
+            .unwrap();
+        doc.set_selection(vec![EntityRef::Instance(g)]);
+        let clip = Clipboard::from_selection(&doc).unwrap();
+        let mut other = Document::new();
+        let ouid = other.uid;
+        let mut pasted = Vec::new();
+        for k in 0..2 {
+            let t = DMat4::from_translation(DVec3::X * 2000.0 * k as f64);
+            let (ents, _) = other.commit("Paste", |m| clip.paste_into(m, ouid, &[], &t)).unwrap().unwrap();
+            let [EntityRef::Instance(c)] = ents.as_slice() else { panic!("{ents:?}") };
+            pasted.push(*c);
+        }
+        assert_eq!(other.model.generators["Shelf"].source, src);
+        let defs: Vec<_> = pasted.iter().map(|c| other.model.root_mesh().instances[*c].def).collect();
+        assert_eq!(defs[0], defs[1], "equal values: one definition");
+        // The pasted copies are live: a change rebuilds one of them.
+        let v = [("width".to_string(), varstotas_kernel::GenValue::Num(1000.0))].into_iter().collect();
+        other.try_commit("P", |m| varstotas_script::generator::set_values(m, &[], pasted[1], &v, false)).unwrap();
+        let b = other.model.def_bounds(other.model.root_mesh().instances[pasted[1]].def).unwrap();
+        assert!((b.max.x - b.min.x - 1000.0).abs() < 1e-6);
     }
 
     #[test]

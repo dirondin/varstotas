@@ -6,6 +6,7 @@
 //! goes into the current context (the open group, or `enter(group)` inside the script).
 
 mod api;
+pub mod generator;
 pub mod help;
 mod json;
 
@@ -86,7 +87,8 @@ pub(crate) fn run_with<T>(
         out: String::new(),
         dirty: false,
     };
-    STATE.with(|s| *s.borrow_mut() = Some(state));
+    // A generator built from inside a script nests: the outer state comes back afterwards.
+    let outer = STATE.with(|s| s.borrow_mut().replace(state));
     let engine = api::engine(ctx.time_limit.unwrap_or(Duration::from_secs(30)));
     let mut scope = api::scope();
     for (k, v) in vars {
@@ -94,7 +96,7 @@ pub(crate) fn run_with<T>(
     }
     let result = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, src);
     let value = result.as_ref().ok().map(finish);
-    let state = STATE.with(|s| s.borrow_mut().take()).expect("script state");
+    let state = STATE.with(|s| std::mem::replace(&mut *s.borrow_mut(), outer)).expect("script state");
     let mut out = ScriptRun { output: state.out, ..Default::default() };
     match result {
         Ok(_) => {
