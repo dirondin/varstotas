@@ -162,7 +162,7 @@ impl UnfoldInput {
             match *e {
                 EntityRef::Face(f) => input.add_face(model, def, f, &t, &mut seen),
                 EntityRef::Instance(i) => {
-                    if let Some(inst) = mesh.instances.get(i).filter(|i| !i.hidden && model.tag_visible(i.tag)) {
+                    if let Some(inst) = mesh.instances.get(i).filter(|i| !i.hidden && model.tag_visible(def, i.tag)) {
                         input.add_def(model, inst.def, &(t * inst.transform), 0);
                     }
                 }
@@ -181,7 +181,7 @@ impl UnfoldInput {
         for f in d.mesh.faces.keys() {
             self.add_face(model, def, f, t, &mut seen);
         }
-        for inst in d.mesh.instances.values().filter(|i| !i.hidden && model.tag_visible(i.tag)) {
+        for inst in d.mesh.instances.values().filter(|i| !i.hidden && model.tag_visible(def, i.tag)) {
             self.add_def(model, inst.def, &(*t * inst.transform), depth + 1);
         }
     }
@@ -189,7 +189,7 @@ impl UnfoldInput {
     fn add_face(&mut self, model: &Model, def: crate::DefId, f: crate::FaceId, t: &DMat4, seen: &mut HashSet<crate::FaceId>) {
         let mesh = &model.defs[def].mesh;
         let Some(face) = mesh.faces.get(f) else { return };
-        if face.hidden || !model.tag_visible(face.tag) || !seen.insert(f) {
+        if face.hidden || !model.tag_visible(def, face.tag) || !seen.insert(f) {
             return;
         }
         let w = |l: &[crate::VertexId]| -> Vec<DVec3> { l.iter().map(|v| t.transform_point3(mesh.pos(*v))).collect() };

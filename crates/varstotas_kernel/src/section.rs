@@ -156,7 +156,7 @@ impl Model {
         }
         let mesh = &def.mesh;
         for f in mesh.faces.values() {
-            if f.hidden || !self.tag_visible(f.tag) {
+            if f.hidden || !self.tag_visible(d, f.tag) {
                 continue;
             }
             // Crossing points of all loops, as parameters along the cut line.
@@ -187,7 +187,7 @@ impl Model {
             }
         }
         for inst in mesh.instances.values() {
-            if inst.hidden || !self.tag_visible(inst.tag) {
+            if inst.hidden || !self.tag_visible(d, inst.tag) {
                 continue;
             }
             self.cut_rec(inst.def, m * inst.transform, plane, out, depth + 1);

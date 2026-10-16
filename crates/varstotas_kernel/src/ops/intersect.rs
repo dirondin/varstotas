@@ -250,12 +250,12 @@ impl Polys {
         let m = if active { DMat4::IDENTITY } else { m };
         let body = self.body(path);
         for (f, face) in &def.mesh.faces {
-            if !face.hidden && model.tag_visible(face.tag) {
+            if !face.hidden && model.tag_visible(d, face.tag) {
                 self.add(&def.mesh, f, &m, body, active, a, b);
             }
         }
         for (iid, inst) in &def.mesh.instances {
-            if inst.hidden || !model.tag_visible(inst.tag) {
+            if inst.hidden || !model.tag_visible(d, inst.tag) {
                 continue;
             }
             path.push(iid);

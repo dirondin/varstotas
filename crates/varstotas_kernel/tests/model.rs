@@ -107,6 +107,57 @@ fn raycast_respects_hidden_and_tags() {
 }
 
 #[test]
+fn untagged_hidden_only_at_top_level() {
+    // A loose box at the top level and a tagged group with untagged faces inside.
+    let mut model = Model::new();
+    make_box(model.root_mesh_mut(), 10., 10., 10.);
+    let small: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();
+    let inst = model.make_group(&[], &small).unwrap();
+    make_box(model.root_mesh_mut(), 100., 50., 30.);
+    let tag = model.add_tag("Furniture");
+    model.root_mesh_mut().instances[inst].tag = Some(tag);
+    assert_eq!(tessellate(&model).faces.len(), 12);
+    model.untagged_hidden = true;
+    // The loose top-level faces hide; the group's untagged faces stay with their tagged group.
+    assert_eq!(tessellate(&model).faces.len(), 6);
+    let ray = Ray { origin: v(50., 25., 500.), dir: DVec3::NEG_Z };
+    assert!(model.raycast(&ray).is_none());
+    // Untagged groups at the top level hide too.
+    model.root_mesh_mut().instances[inst].tag = None;
+    assert!(tessellate(&model).faces.is_empty());
+    let json = serde_json::to_string(&model).unwrap();
+    assert!(serde_json::from_str::<Model>(&json).unwrap().untagged_hidden);
+}
+
+#[test]
+fn delete_tag_untags_entities_and_scenes() {
+    let mut model = box_model();
+    let ents: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();
+    let inst = model.make_group(&[], &ents).unwrap();
+    let (a, b) = (model.add_tag("A"), model.add_tag("B"));
+    model.root_mesh_mut().instances[inst].tag = Some(a);
+    let d = model.root_mesh().instances[inst].def;
+    let f = model.defs[d].mesh.faces.keys().next().unwrap();
+    model.defs[d].mesh.faces[f].tag = Some(a);
+    let e = model.defs[d].mesh.edges.keys().next().unwrap();
+    model.defs[d].mesh.edges[e].tag = Some(b);
+    let mut s = Scene::camera("S", DVec3::ONE, DVec3::ZERO, DVec3::Z, 35.0, false);
+    s.hidden_tags = Some(vec![a, b]);
+    model.scenes.push(s);
+    assert_eq!(model.tag_uses(a), 2);
+    model.tags[a].visible = false;
+    assert!(tessellate(&model).faces.is_empty());
+    assert!(model.delete_tag(a));
+    assert!(!model.delete_tag(a));
+    assert_eq!(model.tags.len(), 1);
+    assert_eq!(model.root_mesh().instances[inst].tag, None);
+    assert_eq!(model.defs[d].mesh.faces[f].tag, None);
+    assert_eq!(model.defs[d].mesh.edges[e].tag, Some(b));
+    assert_eq!(model.scenes[0].hidden_tags, Some(vec![b]));
+    assert_eq!(tessellate(&model).faces.len(), 6);
+}
+
+#[test]
 fn component_instances_and_make_unique() {
     let mut model = box_model();
     let ents: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();

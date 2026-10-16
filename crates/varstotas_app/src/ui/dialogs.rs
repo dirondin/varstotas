@@ -8,6 +8,7 @@ use egui::{Context, Id, Modal, RichText};
 
 impl VarstotasApp {
     pub(crate) fn dialogs(&mut self, ctx: &Context) {
+        self.library_delete_dialog(ctx);
         if let Some(pending) = self.confirm.clone() {
             let mut choice: Option<u8> = None;
             let resp = Modal::new(Id::new("confirm_save")).show(ctx, |ui| {

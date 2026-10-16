@@ -399,7 +399,7 @@ impl Model {
         let Some(def) = self.defs.get(d) else { return };
         f(d, &xf, path);
         for (iid, inst) in &def.mesh.instances {
-            if inst.hidden || !self.tag_visible(inst.tag) {
+            if inst.hidden || !self.tag_visible(d, inst.tag) {
                 continue;
             }
             path.push(iid);

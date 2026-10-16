@@ -71,6 +71,9 @@ pub struct Scene {
     /// Tags hidden in this scene (`None` in old files: tag visibility is left as is).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hidden_tags: Option<Vec<TagId>>,
+    /// Untagged entities hidden in this scene (`None` in old files: left as is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub untagged_hidden: Option<bool>,
     /// Active section plane and section display saved with the scene (`None` in old files).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sections: Option<crate::section::SceneSections>,
@@ -121,7 +124,7 @@ impl Default for SceneSettings {
 impl Scene {
     /// A camera-only scene (no saved style or tags), included in the animation.
     pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
-        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, sections: None, shadows: None, in_animation: true }
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true }
     }
 }
 
@@ -136,6 +139,9 @@ pub struct Model {
     pub root: DefId,
     pub materials: SlotMap<MaterialId, Material>,
     pub tags: SlotMap<TagId, Tag>,
+    /// Untagged top-level entities hidden (the eye of "Untagged" in the Tags card).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untagged_hidden: bool,
     pub scenes: Vec<Scene>,
     #[serde(default)]
     pub scene_settings: SceneSettings,
@@ -201,6 +207,7 @@ impl Model {
             root,
             materials: SlotMap::with_key(),
             tags: SlotMap::with_key(),
+            untagged_hidden: false,
             scenes: Vec::new(),
             scene_settings: SceneSettings::default(),
             guides: SlotMap::with_key(),
@@ -256,8 +263,14 @@ impl Model {
         m
     }
 
-    pub(crate) fn tag_visible(&self, t: Option<TagId>) -> bool {
-        t.and_then(|t| self.tags.get(t)).is_none_or(|t| t.visible)
+    /// Whether entities of definition `d` with tag `t` are shown. Untagged entities hide with
+    /// [`Model::untagged_hidden`] only at the top level: inside a group or component they
+    /// belong to it (its own tag decides).
+    pub fn tag_visible(&self, d: DefId, t: Option<TagId>) -> bool {
+        match t {
+            Some(t) => self.tags.get(t).is_none_or(|t| t.visible),
+            None => !(self.untagged_hidden && d == self.root),
+        }
     }
 
     /// Local bounds of a definition including nested instances.
@@ -325,12 +338,12 @@ impl Model {
         let inv = m.inverse();
         let lo = inv.transform_point3(ray.origin);
         let ld = inv.transform_vector3(ray.dir);
-        if let Some((f, t)) = def.mesh.raycast_faces_filtered(lo, ld, |face| !face.hidden && self.tag_visible(face.tag))
+        if let Some((f, t)) = def.mesh.raycast_faces_filtered(lo, ld, |face| !face.hidden && self.tag_visible(d, face.tag))
             && best.as_ref().is_none_or(|b| t < b.t) {
                 *best = Some(ModelHit { path: path.clone(), face: f, point: ray.at(t), t });
             }
         for (iid, inst) in &def.mesh.instances {
-            if inst.hidden || !self.tag_visible(inst.tag) {
+            if inst.hidden || !self.tag_visible(d, inst.tag) {
                 continue;
             }
             let cm = m * inst.transform;
@@ -658,6 +671,42 @@ impl Model {
 
     pub fn add_tag(&mut self, name: &str) -> TagId {
         self.tags.insert(Tag { name: name.to_string(), visible: true, color: [0.5, 0.5, 0.5, 1.0] })
+    }
+
+    /// Delete tag `t`: its faces, edges, groups and components become untagged (the classic
+    /// "Assign to Untagged"), scenes forget it. False when there is no such tag.
+    pub fn delete_tag(&mut self, t: TagId) -> bool {
+        if self.tags.remove(t).is_none() {
+            return false;
+        }
+        let un = |x: &mut Option<TagId>| {
+            if *x == Some(t) {
+                *x = None;
+            }
+        };
+        for d in self.defs.values_mut() {
+            d.mesh.faces.values_mut().for_each(|f| un(&mut f.tag));
+            d.mesh.edges.values_mut().for_each(|e| un(&mut e.tag));
+            d.mesh.instances.values_mut().for_each(|i| un(&mut i.tag));
+        }
+        for s in &mut self.scenes {
+            if let Some(h) = &mut s.hidden_tags {
+                h.retain(|x| *x != t);
+            }
+        }
+        true
+    }
+
+    /// Entities (faces, edges, instances) tagged `t`, in all definitions.
+    pub fn tag_uses(&self, t: TagId) -> usize {
+        self.defs
+            .values()
+            .map(|d| {
+                d.mesh.faces.values().filter(|f| f.tag == Some(t)).count()
+                    + d.mesh.edges.values().filter(|e| e.tag == Some(t)).count()
+                    + d.mesh.instances.values().filter(|i| i.tag == Some(t)).count()
+            })
+            .sum()
     }
 
     /// Set custom drawing axes: origin plus red (`x`) and green (`y`) directions. `y` is made

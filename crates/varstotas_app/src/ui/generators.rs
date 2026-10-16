@@ -343,8 +343,8 @@ impl VarstotasApp {
     }
 
     /// A generator tile: thumbnail with the defaults (built once per source), a gear; click
-    /// places, the context menu edits. Returns (place, edit).
-    pub(crate) fn generator_tile(&mut self, ui: &mut Ui, it: &GenItem) -> (bool, bool) {
+    /// places, the context menu edits or deletes a library file. Returns (place, edit, delete).
+    pub(crate) fn generator_tile(&mut self, ui: &mut Ui, it: &GenItem) -> (bool, bool, bool) {
         let unit = self.doc.model.unit;
         if !self.library.gens.thumbs.contains_key(&it.source) {
             let t = build_preview(&self.doc.model, &it.source, &GenValues::new()).map(|(_, c)| {
@@ -372,7 +372,7 @@ impl VarstotasApp {
             }
         };
         let resp = crate::ui::library::tile_ex(ui, &it.name, thumb, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
-        let (mut place, mut edit) = (resp.clicked(), false);
+        let (mut place, mut edit, mut delete) = (resp.clicked(), false, false);
         resp.context_menu(|ui| {
             if ui.button("Edit Generator…").clicked() {
                 edit = true;
@@ -382,8 +382,12 @@ impl VarstotasApp {
                 place = true;
                 ui.close();
             }
+            if it.file.is_some() && ui.button("Delete…").clicked() {
+                delete = true;
+                ui.close();
+            }
         });
-        (place, edit)
+        (place, edit, delete)
     }
 
     /// Start placing a component of generator `src` with its default values (the generator is

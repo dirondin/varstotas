@@ -167,7 +167,7 @@ fn rec(
     let mesh = &def.mesh;
     let nm = DMat3::from_mat4(m).inverse().transpose();
     for (fid, face) in &mesh.faces {
-        if face.hidden || !model.tag_visible(face.tag) {
+        if face.hidden || !model.tag_visible(d, face.tag) {
             continue;
         }
         let (positions, uv, normals) = face_world_triangles(mesh, fid, &m, true);
@@ -184,7 +184,7 @@ fn rec(
         });
     }
     for (eid, ed) in &mesh.edges {
-        if ed.hidden || !model.tag_visible(ed.tag) {
+        if ed.hidden || !model.tag_visible(d, ed.tag) {
             continue;
         }
         let (a, b) = mesh.edge_segment(eid);
@@ -197,7 +197,7 @@ fn rec(
         });
     }
     for (iid, inst) in &mesh.instances {
-        if inst.hidden || !model.tag_visible(inst.tag) {
+        if inst.hidden || !model.tag_visible(d, inst.tag) {
             continue;
         }
         path.push(iid);

@@ -18,7 +18,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `topology/region.rs` | planar region recompute (the core of sticky faces; largest file) |
 | `topology/erase.rs` | eraser semantics |
 | `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
-| `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags, axes, raycast |
+| `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags (`tag_visible(def, tag)`, `untagged_hidden`, `delete_tag`), axes, raycast |
 | `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve`, tangents |
 | `dims.rs` | linear dimensions, stored per definition, anchored to vertices |
 | `guides.rs` | guide lines and points, stored per definition |
@@ -118,8 +118,8 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `tools/workplane.rs` | Guide Plane tool (3 points, face, normal by arrows; gizmo drags of the active plane), `draw_work_planes` |
 | `ui/workplanes.rs` | Window → Work Planes… (list, active, visibility, names, origin and angles; edits → one undo step) |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
-| `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags, Outliner, Scenes (play, settings), Soften Edges, Instructor |
-| `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text) |
+| `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags (Untagged eye, delete),  Outliner, Scenes (play, settings), Soften Edges, Instructor |
+| `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text; library delete confirmation lives in `library.rs`) |
 | `ui/theme.rs` | look and feel |
 
 ## Checks (filter the output)

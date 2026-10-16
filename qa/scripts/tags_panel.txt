@@ -1,0 +1,34 @@
+# Tags card: the eye of Untagged hides untagged top-level geometry (and comes back), the trash
+# button deletes a tag (its entities become Untagged, one undo step). Real mouse.
+box 0 0 0 2000 1000 500
+view iso
+zoom_extents
+action tag_toggle
+action tag_toggle
+wait 20
+expect tags=["QA"] untagged_hidden=false
+screenshot shots/tags_start.bmp
+expect drawn_faces=6
+# open the Tags card
+raw click 1137 567
+wait 10
+screenshot shots/tags_open.bmp
+# the eye of Untagged hides the (untagged) box and shows it again
+raw click 1157 622
+wait 10
+expect untagged_hidden=true drawn_faces=0
+screenshot shots/tags_untagged_off.bmp
+raw click 1157 622
+wait 10
+expect untagged_hidden=false drawn_faces=6
+# hide QA, then delete it by its trash button (kernel tests cover the entities it tagged)
+action tag_toggle
+wait 5
+expect tags_hidden=1
+raw click 1370 649
+wait 10
+expect tags_hidden=0 tags=[] untagged_hidden=false drawn_faces=6
+screenshot shots/tags_deleted.bmp
+action undo
+wait 10
+expect tags=["QA"]

@@ -1,0 +1,42 @@
+# Components list: Delete… in a tile's context menu asks first, then deletes the library file
+# (a component .vrst or a generator .rhai); Cancel keeps it. Real mouse.
+# Fixture: qa/fixtures/library_delete/components (Box.vrst, Kitchen/counter.rhai).
+wait 10
+action components
+wait 40
+expect lib_folders=[("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
+screenshot shots/libd_start.bmp
+# right click on Box → context menu
+raw rclick 1185 174
+wait 5
+screenshot shots/libd_menu.bmp
+raw click 1220 218
+wait 5
+expect lib_delete=Some("Box")
+screenshot shots/libd_ask.bmp
+# Cancel keeps the file
+raw click 792 389
+wait 5
+expect lib_delete=None
+expect library=1
+# the Counter generator (Kitchen/counter.rhai): Edit Generator… / Place / Delete…
+raw rclick 1185 301
+wait 5
+screenshot shots/libd_genmenu.bmp
+raw click 1220 371
+wait 5
+expect lib_delete=Some("Counter")
+raw click 852 389
+wait 10
+expect lib_delete=None
+expect lib_folders=[("", 1, false), ("Examples", 6, false)]
+# and Box
+raw rclick 1185 174
+wait 5
+raw click 1220 218
+wait 5
+raw click 852 389
+wait 10
+expect library=0
+expect lib_folders=[("Examples", 6, false)]
+screenshot shots/libd_end.bmp

@@ -35,10 +35,6 @@ const MAX_DEPTH: usize = 32;
 /// Safety cap for huge models (inference stays interactive).
 const MAX_EDGES: usize = 200_000;
 
-fn tag_visible(model: &Model, t: Option<varstotas_kernel::TagId>) -> bool {
-    t.and_then(|t| model.tags.get(t)).is_none_or(|t| t.visible)
-}
-
 /// Circumcenter of three points (None if collinear).
 pub fn circumcenter(a: DVec3, b: DVec3, c: DVec3) -> Option<DVec3> {
     let ab = b - a;
@@ -88,7 +84,7 @@ impl GeoCache {
         let mut seen_v = HashSet::new();
         let mut curves: HashMap<u32, Vec<DVec3>> = HashMap::new();
         for (eid, e) in mesh.edges.iter() {
-            if e.hidden || !tag_visible(model, e.tag) {
+            if e.hidden || !model.tag_visible(d, e.tag) {
                 continue;
             }
             let (Some(va), Some(vb)) = (mesh.vertices.get(e.v[0]), mesh.vertices.get(e.v[1])) else { continue };
@@ -137,7 +133,7 @@ impl GeoCache {
             }
         }
         for (iid, inst) in mesh.instances.iter() {
-            if inst.hidden || !tag_visible(model, inst.tag) {
+            if inst.hidden || !model.tag_visible(d, inst.tag) {
                 continue;
             }
             path.push(iid);

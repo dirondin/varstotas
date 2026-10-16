@@ -1677,6 +1677,7 @@ impl VarstotasApp {
             profiles: self.prefs.profiles,
         });
         s.hidden_tags = Some(self.doc.model.tags.iter().filter(|(_, t)| !t.visible).map(|(id, _)| id).collect());
+        s.untagged_hidden = Some(self.doc.model.untagged_hidden);
         s.sections = Some(self.doc.model.scene_sections());
         s.shadows = Some(self.doc.model.shadows);
         s
@@ -1719,6 +1720,11 @@ impl VarstotasApp {
                     }
                 });
             }
+        }
+        if let Some(u) = s.untagged_hidden
+            && u != self.doc.model.untagged_hidden
+        {
+            self.doc.mutate_untracked(|m| m.untagged_hidden = u);
         }
         if let Some(sec) = s.sections
             && sec != self.doc.model.scene_sections()

@@ -124,6 +124,9 @@ impl Model {
                 t.visible = !hidden.contains(&id);
             }
         }
+        if let Some(u) = s.untagged_hidden {
+            m.untagged_hidden = u;
+        }
         if let Some(sec) = &s.sections {
             m.apply_scene_sections(sec);
         }

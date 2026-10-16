@@ -86,10 +86,6 @@ pub fn tessellate_model(model: &Model) -> Tessellation {
     })
 }
 
-fn tag_visible(model: &Model, t: Option<varstotas_kernel::TagId>) -> bool {
-    t.and_then(|t| model.tags.get(t)).is_none_or(|t| t.visible)
-}
-
 /// Faces per worker below which triangulation stays on the calling thread.
 const PAR_CHUNK: usize = 4096;
 
@@ -112,7 +108,7 @@ fn tess_rec(
     let faces: Vec<FaceId> = mesh
         .faces
         .iter()
-        .filter(|(_, f)| !f.hidden && tag_visible(model, f.tag))
+        .filter(|(_, f)| !f.hidden && model.tag_visible(d, f.tag))
         .map(|(id, _)| id)
         .collect();
     let owner: &ContextPath = path;
@@ -149,7 +145,7 @@ fn tess_rec(
         out.faces.extend(faces.iter().map(|f| tess_face(*f)));
     }
     for (eid, ed) in &mesh.edges {
-        if ed.hidden || !tag_visible(model, ed.tag) {
+        if ed.hidden || !model.tag_visible(d, ed.tag) {
             continue;
         }
         let (a, b) = mesh.edge_segment(eid);
@@ -162,7 +158,7 @@ fn tess_rec(
         });
     }
     for (iid, inst) in &mesh.instances {
-        if inst.hidden || !tag_visible(model, inst.tag) {
+        if inst.hidden || !model.tag_visible(d, inst.tag) {
             continue;
         }
         path.push(iid);

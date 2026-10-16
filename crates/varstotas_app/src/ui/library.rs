@@ -43,6 +43,8 @@ pub struct LibraryState {
     pub shown_folders: Vec<(String, usize, bool)>,
     /// Generators of the same folder.
     pub gens: super::generators::GenLibrary,
+    /// A library file to delete once confirmed: (path, shown name).
+    pub delete_ask: Option<(PathBuf, String)>,
 }
 
 /// `~/.varstotas/components`.
@@ -237,6 +239,48 @@ impl VarstotasApp {
         folded
     }
 
+    /// "Delete from the library?" for the file chosen in a tile's context menu.
+    pub(crate) fn library_delete_dialog(&mut self, ctx: &egui::Context) {
+        let Some((path, name)) = self.library.delete_ask.clone() else { return };
+        let mut choice = None;
+        let resp = egui::Modal::new(egui::Id::new("library_delete")).show(ctx, |ui| {
+            ui.set_width(360.0);
+            ui.heading("Delete from the library?");
+            ui.add_space(4.0);
+            ui.label(format!("“{name}” will be deleted from the library folder:"));
+            ui.label(RichText::new(path.display().to_string()).small().weak());
+            ui.label(RichText::new("This cannot be undone. Copies already placed in documents stay.").weak());
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Button::new(RichText::new("Delete").strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+        });
+        if resp.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        match choice {
+            Some(true) => {
+                self.library.delete_ask = None;
+                match std::fs::remove_file(&path) {
+                    Ok(()) => {
+                        self.flash(format!("Deleted from the library: {name}"));
+                        self.refresh_library();
+                    }
+                    Err(e) => self.flash_error(format!("Delete {}: {e}", path.display())),
+                }
+            }
+            Some(false) => self.library.delete_ask = None,
+            None => {}
+        }
+    }
+
     pub(crate) fn library_open_requested(&mut self) -> bool {
         std::mem::take(&mut self.library.open_card)
     }
@@ -301,7 +345,7 @@ impl VarstotasApp {
         } else if shown.is_empty() {
             ui.label(RichText::new("Nothing found").weak());
         }
-        let (mut place, mut place_gen, mut edit) = (None, None, None);
+        let (mut place, mut place_gen, mut edit, mut delete) = (None, None, None, None);
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         self.library.shown_folders.clear();
@@ -320,12 +364,27 @@ impl VarstotasApp {
                     for (_, _, t) in row {
                         match *t {
                             Tile::Comp(i) => {
-                                if tile(ui, &self.library.items[i], unit) {
+                                let it = &self.library.items[i];
+                                let resp = tile(ui, it, unit);
+                                if resp.clicked() {
                                     place = Some(i);
                                 }
+                                resp.context_menu(|ui| {
+                                    if ui.button("Place").clicked() {
+                                        place = Some(i);
+                                        ui.close();
+                                    }
+                                    if ui.button("Delete…").clicked() {
+                                        delete = Some((it.path.clone(), it.name.clone()));
+                                        ui.close();
+                                    }
+                                });
                             }
                             Tile::Gen(i) => {
-                                let (p, e) = self.generator_tile(ui, &gens[i]);
+                                let (p, e, d) = self.generator_tile(ui, &gens[i]);
+                                if d && let Some(f) = &gens[i].file {
+                                    delete = Some((f.clone(), gens[i].name.clone()));
+                                }
                                 if p {
                                     place_gen = Some(gens[i].source.clone());
                                 }
@@ -338,6 +397,9 @@ impl VarstotasApp {
                 });
             }
             k = end;
+        }
+        if delete.is_some() {
+            self.library.delete_ask = delete;
         }
         if let Some(src) = place_gen {
             self.actions.push(Action::PlaceGenerator(src, Default::default()));
@@ -389,9 +451,9 @@ impl VarstotasApp {
     }
 }
 
-/// One library item; true when clicked.
-fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> bool {
-    tile_ex(ui, &it.name, &it.thumb, it.size, unit, false, "").clicked()
+/// One library item.
+fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> egui::Response {
+    tile_ex(ui, &it.name, &it.thumb, it.size, unit, false, "")
 }
 
 /// A library tile: thumbnail edges in the unit square, the name below; `gear` marks a

@@ -1171,9 +1171,21 @@ impl VarstotasApp {
 
     // ---- Tags ----------------------------------------------------------------
 
+    /// Delete tag `id` (one undo step); what it tagged becomes Untagged.
+    pub(crate) fn delete_tag(&mut self, id: TagId) {
+        let Some(name) = self.doc.model.tags.get(id).map(|t| t.name.clone()) else { return };
+        let uses = self.doc.model.tag_uses(id);
+        if self.tray.tag_rename.as_ref().is_some_and(|(r, _)| *r == id) {
+            self.tray.tag_rename = None;
+        }
+        self.doc.commit("Delete Tag", |m| m.delete_tag(id));
+        self.flash(if uses > 0 { format!("Deleted tag “{name}”: {uses} item(s) are Untagged now") } else { format!("Deleted tag “{name}”") });
+    }
+
     fn tags_panel(&mut self, ui: &mut Ui) {
         let mut toggle: Option<TagId> = None;
         let mut rename_commit: Option<(TagId, String)> = None;
+        let mut delete: Option<TagId> = None;
         let mut add = false;
         ui.horizontal(|ui| {
             if small_icon_button(ui, Icon::Plus, "Add tag").clicked() {
@@ -1181,9 +1193,15 @@ impl VarstotasApp {
             }
             ui.label(RichText::new("Visible · Name").small().color(theme::TEXT_DIM));
         });
+        let un_shown = !self.doc.model.untagged_hidden;
         ui.horizontal(|ui| {
-            ui.add_space(26.0);
-            ui.label("Untagged");
+            if small_icon_button(ui, if un_shown { Icon::Eye } else { Icon::EyeOff }, "Toggle visibility of untagged top-level geometry, groups and components (their contents belong to them)")
+                .clicked()
+            {
+                self.doc.mutate_untracked(|m| m.untagged_hidden = !m.untagged_hidden);
+            }
+            ui.add_space(14.0);
+            ui.label(if un_shown { RichText::new("Untagged") } else { RichText::new("Untagged").color(theme::TEXT_DIM) });
         });
         let tags: Vec<(TagId, String, bool, [f32; 4])> = self
             .doc
@@ -1210,12 +1228,27 @@ impl VarstotasApp {
                     }
                     _ => {
                         let text = if visible { RichText::new(&name) } else { RichText::new(&name).color(theme::TEXT_DIM) };
-                        let r = ui.add(egui::Label::new(text).sense(Sense::click())).on_hover_text("Double-click to rename");
+                        let r = ui.add(egui::Label::new(text).sense(Sense::click())).on_hover_text("Double-click to rename; right-click for more");
                         if r.double_clicked() {
                             self.tray.tag_rename = Some((id, name.clone()));
                         }
+                        r.context_menu(|ui| {
+                            if ui.button("Rename").clicked() {
+                                self.tray.tag_rename = Some((id, name.clone()));
+                                ui.close();
+                            }
+                            if ui.button("Delete Tag").clicked() {
+                                delete = Some(id);
+                                ui.close();
+                            }
+                        });
                     }
                 }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if small_icon_button(ui, Icon::Trash, "Delete the tag (what it tags becomes Untagged)").clicked() {
+                        delete = Some(id);
+                    }
+                });
             });
         }
         if let Some(id) = toggle {
@@ -1234,6 +1267,9 @@ impl VarstotasApp {
                     }
                 });
             }
+        }
+        if let Some(id) = delete {
+            self.delete_tag(id);
         }
         if add {
             let n = self.doc.model.tags.len() + 1;
