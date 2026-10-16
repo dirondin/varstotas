@@ -38,6 +38,10 @@ pub struct TrayState {
     /// a number being dragged (applied when the drag ends).
     pub gen_text: Option<(Vec<InstanceId>, std::collections::BTreeMap<String, String>)>,
     pub gen_drag: Option<(String, f64)>,
+    /// Material editor: physical properties being dragged (material name), and the cached
+    /// sphere preview (key, texture).
+    pub(crate) pbr_draft: Option<(String, varstotas_kernel::Pbr)>,
+    pub(crate) pbr_preview: Option<(u64, egui::TextureHandle)>,
 }
 
 /// Soften/Smooth Edges panel settings.
@@ -100,7 +104,8 @@ pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
 }
 
 /// Default Tray cards in their order (Window menu checkboxes, `Prefs::tray_hidden`).
-pub(crate) const TRAY_CARDS: [&str; 9] = ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Soften Edges", "Instructor"];
+pub(crate) const TRAY_CARDS: [&str; 10] =
+    ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"];
 
 fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl FnOnce(&mut Ui) -> R) {
     card_ex(ui, title, icon, default_open, false, body)
@@ -229,6 +234,9 @@ impl VarstotasApp {
             }
             if on("Shadows") {
                 card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui));
+            }
+            if on("Environment") {
+                card(ui, "Environment", Icon::StyleRealistic, false, |ui| self.environment_panel(ui));
             }
             if on("Soften Edges") {
                 card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui));
@@ -1187,6 +1195,7 @@ impl VarstotasApp {
             });
         }
         self.texture_size_editor(ui);
+        self.pbr_editor(ui);
         if let Some(p) = picked {
             self.doc.current_material = p;
             if self.tool_id() != crate::tools::ToolId::Paint {

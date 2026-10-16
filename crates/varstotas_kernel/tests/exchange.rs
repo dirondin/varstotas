@@ -98,3 +98,51 @@ fn three_mf_package() {
     assert_eq!(&tail[..4], b"PK\x05\x06");
     assert_eq!(u16::from_le_bytes([tail[10], tail[11]]), 3, "three entries");
 }
+
+/// A minimal valid PNG header (the kernel only reads its size).
+fn png_bytes(tag: u8) -> Vec<u8> {
+    let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x02\x08\x06\0\0\0".to_vec();
+    b.extend([0, 0, 0, 0, tag]);
+    b
+}
+
+#[test]
+fn glb_keeps_physical_materials() {
+    use varstotas_kernel::{Pbr, TextureImage};
+    let mut src = box_model();
+    let red = src.materials.keys().next().unwrap();
+    src.materials[red].pbr = Some(Pbr {
+        metallic: 0.25,
+        roughness: 0.4,
+        emission: [1.0, 0.5, 0.0],
+        emission_strength: 3.0,
+        transmission: 0.5,
+        ior: 1.33,
+        normal_scale: 0.7,
+        normal_map: Some(TextureImage::new(png_bytes(1), "n.png", 500.0)),
+        roughness_map: Some(TextureImage::new(png_bytes(2), "r.png", 500.0)),
+        ao_map: Some(TextureImage::new(png_bytes(3), "ao.png", 500.0)),
+        ..Default::default()
+    });
+    let glb = write_glb(&src);
+    let js = String::from_utf8_lossy(&glb);
+    for ext in ["KHR_materials_emissive_strength", "KHR_materials_transmission", "KHR_materials_ior", "extensionsUsed"] {
+        assert!(js.contains(ext), "{ext}");
+    }
+    let mut m = Model::default();
+    add_gltf(&mut m, &glb, None, &ImportOptions::default()).unwrap();
+    let mat = m.materials.values().next().unwrap();
+    let p = mat.pbr.as_ref().expect("physical properties imported");
+    assert_eq!((p.metallic, p.roughness, p.transmission, p.emission_strength), (0.25, 0.4, 0.5, 3.0));
+    assert!((p.ior - 1.33).abs() < 1e-6 && (p.normal_scale - 0.7).abs() < 1e-6);
+    assert!((p.emission[1] - 0.5).abs() < 1e-3, "{:?}", p.emission);
+    assert_eq!(p.normal_map.as_ref().map(|t| t.bytes[..].to_vec()), Some(png_bytes(1)));
+    // glTF packs roughness (G) and metalness (B) in one image
+    assert_eq!(p.roughness_map.as_ref().map(|t| t.bytes[..].to_vec()), Some(png_bytes(2)));
+    assert_eq!(p.metallic_map.as_ref().map(|t| t.bytes[..].to_vec()), Some(png_bytes(2)));
+    assert_eq!(p.ao_map.as_ref().map(|t| t.bytes[..].to_vec()), Some(png_bytes(3)));
+    assert!(p.emission_map.is_none());
+    // faces got texture coordinates from the maps (no base colour texture)
+    let inst = m.root_mesh().instances.values().next().unwrap();
+    assert!(m.defs[inst.def].mesh.faces.values().any(|f| f.uv.is_some()));
+}

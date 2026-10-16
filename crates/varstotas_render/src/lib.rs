@@ -34,6 +34,101 @@ pub struct TexVertex {
     pub uv: [f32; 2],
     /// Texture layer + 1 for the front and back side (0 = untextured), see `Renderer::set_textures`.
     pub layers: [u16; 2],
+    /// PBR material + 1 for the front and back side (0 = the default material), see
+    /// `Renderer::set_materials`; used by `FaceStyle::Realistic`.
+    pub mats: [u16; 2],
+}
+
+/// A material of the Realistic style (`Renderer::set_materials`). The base colour and its map
+/// come with the vertices (`TriVertex::color`, `TexVertex::layers`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PbrMaterial {
+    pub metallic: f32,
+    pub roughness: f32,
+    /// 0 = opaque, 1 = clear glass. The vertices' alpha decides which faces are blended.
+    pub transmission: f32,
+    pub ior: f32,
+    /// Emitted light, linear RGB (strength applied).
+    pub emission: [f32; 3],
+    pub normal_scale: f32,
+    /// Colour-texture layer + 1 of the emission map (0 = none), see `Renderer::set_textures`.
+    pub emission_layer: u16,
+    /// Data-texture layer + 1 (`Renderer::set_data_textures`) of the packed occlusion (R),
+    /// roughness (G) and metalness (B) map, as in glTF; 0 = none.
+    pub orm_layer: u16,
+    /// Which channels of the packed map are present: bit 0 occlusion, 1 roughness, 2 metalness.
+    pub orm_mask: u8,
+    /// Data-texture layer + 1 of the tangent-space normal map (0 = none).
+    pub normal_layer: u16,
+}
+
+impl Default for PbrMaterial {
+    fn default() -> Self {
+        Self {
+            metallic: 0.0,
+            roughness: 0.6,
+            transmission: 0.0,
+            ior: 1.5,
+            emission: [0.0; 3],
+            normal_scale: 1.0,
+            emission_layer: 0,
+            orm_layer: 0,
+            orm_mask: 0,
+            normal_layer: 0,
+        }
+    }
+}
+
+/// An equirectangular HDR panorama for `Renderer::set_environment` (linear RGB, rows top to
+/// bottom; the top row looks straight up, u = 0 looks along −X and grows counter-clockwise).
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnvImage {
+    pub width: u32,
+    pub height: u32,
+    pub rgb: Vec<f32>,
+}
+
+/// What surrounds the model in `FaceStyle::Realistic`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EnvSource {
+    /// A sky built from `RenderStyle::sky_top`, `sky_horizon` and `ground`.
+    Sky,
+    /// One colour all around (sRGB).
+    Color([f32; 3]),
+    /// The panorama of `Renderer::set_environment` (the sky when there is none).
+    Image,
+}
+
+/// Tone mapping of `FaceStyle::Realistic`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToneMap {
+    Aces,
+    Agx,
+    Clamp,
+}
+
+/// Light and camera of `FaceStyle::Realistic`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EnvStyle {
+    pub source: EnvSource,
+    /// Turns the environment around the vertical axis, degrees.
+    pub rotation_deg: f32,
+    /// Environment light multiplier.
+    pub intensity: f32,
+    /// Draw the environment behind the model (else the style's sky gradient).
+    pub background: bool,
+    /// Sun strength (irradiance relative to the sky; 0 = no sun); direction = the shadows' sun
+    /// or `RenderStyle::light_dir`.
+    pub sun: f32,
+    /// Exposure in stops.
+    pub exposure: f32,
+    pub tonemap: ToneMap,
+}
+
+impl Default for EnvStyle {
+    fn default() -> Self {
+        Self { source: EnvSource::Sky, rotation_deg: 0.0, intensity: 1.0, background: true, sun: 3.0, exposure: 0.0, tonemap: ToneMap::Aces }
+    }
 }
 
 /// A material texture for `Renderer::set_textures`.
@@ -267,6 +362,8 @@ impl Overlay3d {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaceStyle {
     Shaded,
+    /// Physically based: PBR materials lit by the environment and the sun, tone mapped.
+    Realistic,
     Monochrome,
     HiddenLine,
     Wireframe,
@@ -293,6 +390,8 @@ pub struct RenderStyle {
     pub shadows: Option<ShadowStyle>,
     /// Drawing grid; `None` = hidden.
     pub grid: Option<GridStyle>,
+    /// Environment, exposure and tone mapping of `FaceStyle::Realistic`.
+    pub env: EnvStyle,
 }
 
 /// Shadow settings for a frame (the classic Shadows panel).
@@ -320,7 +419,7 @@ mod grid;
 pub use grid::{GRID_MIN_PX, GridStyle};
 mod renderer;
 mod textures;
-pub use textures::MAX_LAYERS as MAX_TEXTURE_LAYERS;
+pub use textures::{MAX_LAYERS as MAX_TEXTURE_LAYERS, MAX_MATERIALS as MAX_PBR_MATERIALS};
 pub use renderer::{
     DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
     DIM_FACE_TARGET, ExportError, ExportOptions, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, MAX_EXPORT_DIM,

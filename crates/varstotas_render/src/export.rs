@@ -211,6 +211,7 @@ impl Renderer {
         });
 
         self.update_shadow_map(rs, style);
+        self.update_env(rs, style);
         let counts: FrameCounts = self.prepare_frame(rs, camera, overlay, style, size, ppp);
         let pass = PassOpts { ppp, background: !opts.transparent_background, selection_tint: opts.show_selection };
         let mut pixels = vec![0u8; w as usize * h as usize * 4];

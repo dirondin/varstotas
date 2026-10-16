@@ -221,6 +221,7 @@ impl VarstotasApp {
                 ui.radio_value(fs, FaceStylePref::Monochrome, "Monochrome");
                 ui.radio_value(fs, FaceStylePref::HiddenLine, "Hidden Line");
                 ui.radio_value(fs, FaceStylePref::Wireframe, "Wireframe");
+                ui.radio_value(fs, FaceStylePref::Realistic, "Realistic");
                 ui.checkbox(&mut self.prefs.xray, "X-Ray");
                 ui.separator();
                 ui.label(egui::RichText::new("Edge Style").small().weak());

@@ -162,6 +162,7 @@ impl VarstotasApp {
             self.style_button(ui, Icon::StyleShaded, FaceStylePref::ShadedColor, "Shaded");
             self.style_button(ui, Icon::StyleTextured, FaceStylePref::Shaded, "Shaded with Textures");
             self.style_button(ui, Icon::StyleMonochrome, FaceStylePref::Monochrome, "Monochrome");
+            self.style_button(ui, Icon::StyleRealistic, FaceStylePref::Realistic, "Realistic");
         });
     }
 }

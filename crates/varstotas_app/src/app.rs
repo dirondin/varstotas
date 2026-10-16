@@ -29,6 +29,8 @@ pub enum FaceStylePref {
     Monochrome,
     HiddenLine,
     Wireframe,
+    /// Physically based materials lit by the environment (track Р).
+    Realistic,
 }
 
 impl FaceStylePref {
@@ -40,11 +42,14 @@ impl FaceStylePref {
             Self::Monochrome => "monochrome",
             Self::HiddenLine => "hiddenline",
             Self::Wireframe => "wireframe",
+            Self::Realistic => "realistic",
         }
     }
 
     pub fn from_key(k: &str) -> Option<Self> {
-        [Self::Shaded, Self::ShadedColor, Self::Monochrome, Self::HiddenLine, Self::Wireframe].into_iter().find(|s| s.key() == k)
+        [Self::Shaded, Self::ShadedColor, Self::Monochrome, Self::HiddenLine, Self::Wireframe, Self::Realistic]
+            .into_iter()
+            .find(|s| s.key() == k)
     }
 
     pub fn to_render(self) -> FaceStyle {
@@ -53,6 +58,7 @@ impl FaceStylePref {
             Self::Monochrome => FaceStyle::Monochrome,
             Self::HiddenLine => FaceStyle::HiddenLine,
             Self::Wireframe => FaceStyle::Wireframe,
+            Self::Realistic => FaceStyle::Realistic,
         }
     }
 }
@@ -215,6 +221,12 @@ pub enum Action {
     ToggleShadows,
     /// Shadows panel: new settings (no undo step, like the classic panel).
     SetShadows(varstotas_kernel::ShadowSettings),
+    /// Environment card: new settings of the Realistic style (no undo step, like Shadows).
+    SetEnvironment(varstotas_kernel::Environment),
+    /// Environment card: pick an HDRI file (`.hdr`) for the document.
+    PickHdri,
+    /// Material editor: pick an image for map `.1` (`normal`, `roughness`, …) of material `.0`.
+    PickPbrMap(varstotas_kernel::MaterialId, &'static str),
     /// Tools → 3D Text…: open the dialog.
     Text3d,
     /// Place 3D text with these values (the text follows the cursor).
@@ -437,6 +449,7 @@ fn fallback_style() -> RenderStyle {
         ambient: varstotas_render::DEFAULT_AMBIENT,
         shadows: None,
         grid: None,
+        env: Default::default(),
     }
 }
 
@@ -548,6 +561,7 @@ impl VarstotasApp {
             on_faces: sh.on_faces,
             on_ground: sh.on_ground,
         });
+        s.env = crate::pbr::env_style(&self.doc.model.environment);
         s
     }
 
@@ -1328,6 +1342,22 @@ impl VarstotasApp {
                     self.doc.mutate_untracked(|m| m.shadows = sh);
                 }
             }
+            Action::SetEnvironment(e) => {
+                let e = e.sanitized();
+                if self.doc.model.environment != e {
+                    self.doc.mutate_untracked(|m| m.environment = e);
+                }
+            }
+            Action::PickHdri => {
+                if let Some(path) = rfd::FileDialog::new().add_filter("HDRI", &["hdr", "png", "jpg", "jpeg"]).pick_file() {
+                    self.load_hdri(&path);
+                }
+            }
+            Action::PickPbrMap(mid, map) => {
+                if let Some(path) = rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg"]).pick_file() {
+                    self.load_pbr_map(mid, map, &path);
+                }
+            }
             Action::ToggleSectionDisplay(k) => {
                 self.doc.mutate_untracked(|m| {
                     let d = &mut m.section_display;
@@ -1688,6 +1718,7 @@ impl VarstotasApp {
         s.untagged_hidden = Some(self.doc.model.untagged_hidden);
         s.sections = Some(self.doc.model.scene_sections());
         s.shadows = Some(self.doc.model.shadows);
+        s.environment = Some(self.doc.model.environment);
         s
     }
 
@@ -1744,6 +1775,11 @@ impl VarstotasApp {
             && sh != self.doc.model.shadows
         {
             self.doc.mutate_untracked(|m| m.shadows = sh);
+        }
+        if let Some(e) = s.environment
+            && e != self.doc.model.environment
+        {
+            self.doc.mutate_untracked(|m| m.environment = e);
         }
         let to = self.scene_camera(&s);
         let set = self.doc.model.scene_settings;
@@ -2377,7 +2413,7 @@ impl eframe::App for VarstotasApp {
             }
             let (o3, o2) = self.tool_overlays();
             let style = self.render_style();
-            self.viewport.show_textures = self.prefs.face_style == FaceStylePref::Shaded;
+            self.viewport.show_textures = matches!(self.prefs.face_style, FaceStylePref::Shaded | FaceStylePref::Realistic);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())

@@ -33,6 +33,8 @@ pub const OVERLAY_DASH_PERIOD: f32 = 9.0;
 mod export;
 #[path = "annot.rs"]
 mod annot;
+#[path = "env.rs"]
+mod env;
 use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
 pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage};
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -343,6 +345,8 @@ pub struct Renderer {
     /// Layout of group 0 (globals + shadow map), kept to rebuild `bind_group` when the map grows.
     bgl: wgpu::BindGroupLayout,
     shadow: ShadowMap,
+    /// Environment of `FaceStyle::Realistic` (group 0, bindings 3..5).
+    env: env::Env,
     targets: Option<Targets>,
     texture_id: Option<egui::TextureId>,
     geo: StaticGeo,
@@ -411,6 +415,7 @@ impl Default for RenderStyle {
             ambient: DEFAULT_AMBIENT,
             shadows: None,
             grid: None,
+            env: crate::EnvStyle::default(),
         }
     }
 }
@@ -484,6 +489,32 @@ impl Renderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
@@ -493,7 +524,8 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let shadow = ShadowMap::new(device, &shader);
-        let bind_group = globals_bind_group(device, &bgl, &globals, &shadow);
+        let env = env::Env::new(device, &rs.queue);
+        let bind_group = globals_bind_group(device, &bgl, &globals, &shadow, &env);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("varstotas"),
             bind_group_layouts: &[Some(&bgl)],
@@ -549,6 +581,7 @@ impl Renderer {
             bind_group,
             bgl,
             shadow,
+            env,
             targets: None,
             texture_id: None,
             geo: StaticGeo {
@@ -988,6 +1021,7 @@ impl Renderer {
         let queue = &rs.queue;
 
         self.update_shadow_map(rs, style);
+        self.update_env(rs, style);
         let globals = self.globals(camera, style, size, size, ppp, TILE_FULL, HL_SHOW_ALL);
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         let counts = self.prepare_frame(rs, camera, overlay, style, size, ppp);
@@ -1086,6 +1120,7 @@ impl Renderer {
             FaceStyle::Wireframe => 3.0,
             FaceStyle::Monochrome => 1.0,
             FaceStyle::HiddenLine => 2.0,
+            FaceStyle::Realistic => 4.0,
         };
         let with_w = |c: [f32; 4], w: f32| [c[0], c[1], c[2], w];
         let v4 = |v: DVec3, w: f64| [v.x as f32, v.y as f32, v.z as f32, w as f32];
@@ -1500,6 +1535,34 @@ impl Renderer {
         self.face_textures.set(&rs.device, &rs.queue, images);
     }
 
+    /// Replace the data textures of `FaceStyle::Realistic` (linear RGBA8: packed occlusion /
+    /// roughness / metalness maps, tangent-space normal maps); `PbrMaterial::orm_layer` and
+    /// `normal_layer` value `i + 1` sample `images[i]`.
+    pub fn set_data_textures(&mut self, rs: &egui_wgpu::RenderState, images: &[TextureData]) {
+        self.face_textures.set_data(&rs.device, &rs.queue, images);
+    }
+
+    /// Replace the PBR materials of `FaceStyle::Realistic`: `TexVertex::mats` value `i + 1`
+    /// uses `materials[i]` (at most `MAX_PBR_MATERIALS`; 0 = `PbrMaterial::default()`).
+    pub fn set_materials(&mut self, rs: &egui_wgpu::RenderState, materials: &[crate::PbrMaterial]) {
+        self.face_textures.set_materials(&rs.queue, materials);
+    }
+
+    /// The HDR panorama of `EnvSource::Image` (`None` = that source shows the sky). Uploaded
+    /// on the next frame that uses it.
+    pub fn set_environment(&mut self, image: Option<crate::EnvImage>) {
+        self.env.set_image(image);
+    }
+
+    /// Rebuild the environment panorama when the Realistic style's source changed; write its
+    /// uniform for the frame.
+    fn update_env(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle) {
+        if style.face_style == FaceStyle::Realistic && self.env.update(&rs.device, &rs.queue, style) {
+            self.bind_group = globals_bind_group(&rs.device, &self.bgl, &self.globals, &self.shadow, &self.env);
+        }
+        self.env.write_uniform(&rs.queue, &style.env);
+    }
+
     /// Section cut (world plane `[n.x, n.y, n.z, d]`, unit `n`): model faces and edges with
     /// `n · p < d` are not drawn. Overlays are never cut.
     /// Re-render the shadow map if shadows are on and the geometry, the sun or the section cut
@@ -1515,7 +1578,7 @@ impl Renderer {
         let size = SHADOW_MAP_SIZE.min(self.max_texture_dim);
         if self.shadow.size != size {
             self.shadow.resize(device, size);
-            self.bind_group = globals_bind_group(device, &self.bgl, &self.globals, &self.shadow);
+            self.bind_group = globals_bind_group(device, &self.bgl, &self.globals, &self.shadow, &self.env);
         }
         self.shadow.key = Some(key);
         let Some((lo, hi)) = self.geo.bounds else {
@@ -1615,6 +1678,7 @@ fn globals_bind_group(
     bgl: &wgpu::BindGroupLayout,
     globals: &wgpu::Buffer,
     shadow: &ShadowMap,
+    env: &env::Env,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("varstotas globals"),
@@ -1623,6 +1687,9 @@ fn globals_bind_group(
             wgpu::BindGroupEntry { binding: 0, resource: globals.as_entire_binding() },
             wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&shadow.view) },
             wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&shadow.sampler) },
+            wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&env.view) },
+            wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(&env.sampler) },
+            wgpu::BindGroupEntry { binding: 5, resource: env.uniform.as_entire_binding() },
         ],
     })
 }
@@ -1849,7 +1916,7 @@ fn build_pipelines(
     let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4];
     let back_attrs = wgpu::vertex_attr_array![3 => Float32x4];
     let face_state_attrs = wgpu::vertex_attr_array![4 => Uint32];
-    let face_tex_attrs = wgpu::vertex_attr_array![5 => Float32x2, 6 => Uint16x2];
+    let face_tex_attrs = wgpu::vertex_attr_array![5 => Float32x2, 6 => Uint16x2, 7 => Uint16x2];
     let edge_state_attrs = wgpu::vertex_attr_array![2 => Uint32];
     let seg_state_attrs = wgpu::vertex_attr_array![5 => Uint32];
     let line_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x4];
@@ -2200,6 +2267,8 @@ mod tests {
         assert_eq!(std::mem::size_of::<SpriteVertex>(), 48);
         assert_eq!(std::mem::size_of::<TriVertex>(), 40);
         assert_eq!(std::mem::size_of::<LineVertex>(), 28);
+        assert_eq!(std::mem::size_of::<TexVertex>(), 16);
+        assert_eq!(std::mem::size_of::<env::EnvUniform>(), 11 * 16);
     }
 
     #[test]

@@ -39,6 +39,17 @@ pub struct Material {
     /// Embedded texture image (see [`crate::texture`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<crate::texture::TextureImage>,
+    /// Metallic-roughness parameters and maps (Realistic style, see [`crate::pbr`]); `None` =
+    /// the defaults (a matte dielectric).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pbr: Option<crate::pbr::Pbr>,
+}
+
+impl Material {
+    /// The material's PBR parameters (the defaults when unset).
+    pub fn pbr_or_default(&self) -> crate::pbr::Pbr {
+        self.pbr.clone().unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,6 +82,9 @@ pub struct Scene {
     /// Tags hidden in this scene (`None` in old files: tag visibility is left as is).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hidden_tags: Option<Vec<TagId>>,
+    /// Environment of the Realistic style in this scene (`None` in old files: left as is).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<crate::pbr::Environment>,
     /// Untagged entities hidden in this scene (`None` in old files: left as is).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub untagged_hidden: Option<bool>,
@@ -93,8 +107,9 @@ fn is_true(b: &bool) -> bool {
     *b
 }
 
-/// Display style remembered by a scene. `face_style` is one of `shaded`, `monochrome`,
-/// `hiddenline`, `wireframe` (unknown values leave the style unchanged).
+/// Display style remembered by a scene. `face_style` is one of `shaded`, `shadedcolor`,
+/// `realistic`, `monochrome`, `hiddenline`, `wireframe` (unknown values leave the style
+/// unchanged).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SceneStyle {
     pub face_style: String,
@@ -124,7 +139,7 @@ impl Default for SceneSettings {
 impl Scene {
     /// A camera-only scene (no saved style or tags), included in the animation.
     pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
-        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true }
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, environment: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true }
     }
 }
 
@@ -139,6 +154,13 @@ pub struct Model {
     pub root: DefId,
     pub materials: SlotMap<MaterialId, Material>,
     pub tags: SlotMap<TagId, Tag>,
+    /// Environment light, exposure and tone mapping of the Realistic style.
+    #[serde(default, skip_serializing_if = "crate::pbr::Environment::is_default")]
+    pub environment: crate::pbr::Environment,
+    /// HDRI panorama (`.hdr`, equirectangular) lighting the model when the environment's sky
+    /// is [`crate::pbr::SkyKind::Hdri`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hdri: Option<crate::texture::TextureImage>,
     /// Untagged top-level entities hidden (the eye of "Untagged" in the Tags card).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub untagged_hidden: bool,
@@ -208,6 +230,8 @@ impl Model {
             materials: SlotMap::with_key(),
             tags: SlotMap::with_key(),
             untagged_hidden: false,
+            environment: Default::default(),
+            hdri: None,
             scenes: Vec::new(),
             scene_settings: SceneSettings::default(),
             guides: SlotMap::with_key(),
@@ -666,7 +690,7 @@ impl Model {
     }
 
     pub fn add_material(&mut self, name: &str, color: [f32; 4]) -> MaterialId {
-        self.materials.insert(Material { name: name.to_string(), color, texture: None, image: None })
+        self.materials.insert(Material { name: name.to_string(), color, texture: None, image: None, pbr: None })
     }
 
     pub fn add_tag(&mut self, name: &str) -> TagId {

@@ -51,6 +51,9 @@ pub struct Viewport {
     pub show_textures: bool,
     /// Material textures uploaded to the renderer.
     textures: crate::textures::TextureSync,
+    /// Data textures and the HDRI of the Realistic style uploaded to the renderer.
+    data_textures: crate::pbr::DataSync,
+    hdri: crate::pbr::EnvSync,
     /// Render origin of the uploaded geometry (kept stable between rebuilds).
     origin: Option<varstotas_kernel::glam::DVec3>,
     /// PNG export to run at the next paint (needs the GPU renderer).
@@ -76,6 +79,8 @@ impl Default for Viewport {
             highlight_count: 0,
             last_highlight_ms: 0.0,
             textures: Default::default(),
+            data_textures: Default::default(),
+            hdri: Default::default(),
             show_textures: true,
             origin: None,
             export: None,
@@ -156,6 +161,17 @@ impl Viewport {
                     {
                         log::warn!("set_textures failed: {e}");
                     }
+                    if style.face_style == FaceStyle::Realistic {
+                        if let Some(images) = self.data_textures.changed(&doc.model)
+                            && let Err(e) = guarded(|| renderer.set_data_textures(rs, &images))
+                        {
+                            log::warn!("set_data_textures failed: {e}");
+                        }
+                        let table = crate::pbr::material_table(&doc.model);
+                        if let Err(e) = guarded(|| renderer.set_materials(rs, &table)) {
+                            log::warn!("set_materials failed: {e}");
+                        }
+                    }
                     if let Err(e) = guarded(|| renderer.set_geometry(rs, &geo)) {
                         log::warn!("set_geometry failed: {e}");
                     }
@@ -165,6 +181,11 @@ impl Viewport {
                     // set_geometry resets all highlight states.
                     self.highlighted = None;
                     self.last_rebuild_ms = t0.elapsed().as_secs_f64() * 1e3;
+                }
+                if style.face_style == FaceStyle::Realistic
+                    && let Some(img) = self.hdri.changed(&doc.model)
+                {
+                    renderer.set_environment(img);
                 }
                 let hkey = HighlightKey { selection: doc.selection_version, active_path: doc.active_path.clone() };
                 if self.highlighted.as_ref() != Some(&hkey) {

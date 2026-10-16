@@ -70,7 +70,14 @@ impl TextureSync {
     /// Texture data per layer (see `scene_builder::texture_layers`) if the set changed.
     pub fn changed(&mut self, model: &Model) -> Option<Vec<varstotas_render::TextureData>> {
         let layers = crate::scene_builder::texture_layers(model);
-        let imgs: Vec<&TextureImage> = layers.iter().filter_map(|id| model.materials[*id].image.as_ref()).collect();
+        let mut imgs: Vec<&TextureImage> = layers.iter().filter_map(|id| model.materials[*id].image.as_ref()).collect();
+        // Emission maps of the Realistic style follow the material textures.
+        imgs.extend(
+            crate::pbr::emission_layers(model)
+                .iter()
+                .filter_map(|id| model.materials[*id].pbr.as_ref().and_then(|p| p.emission_map.as_ref())),
+        );
+        imgs.truncate(varstotas_render::MAX_TEXTURE_LAYERS);
         let key: Vec<(usize, [f64; 2])> = imgs.iter().map(|t| (Arc::as_ptr(&t.bytes) as *const u8 as usize, t.size)).collect();
         if self.key.as_ref() == Some(&key) {
             return None;

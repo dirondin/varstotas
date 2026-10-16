@@ -33,6 +33,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `workplane.rs` | `WorkPlane` (guide planes: origin, red / green, angles tilt-azimuth-spin), `Model::work_planes` / `active_plane`, `drawing_frame` (active plane, else axes), `set_drawing_frame` |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |
+| `pbr.rs` | `Pbr` (physical material: metallic, roughness, emission, transmission, IOR, maps), `Environment` (`SkyKind`, `Tonemap`, rotation, exposure) |
 | `text3d.rs` | 3D Text: outlines → faces (even-odd nesting), extrusion, group (`Model::add_text3d_in`) |
 | `texture.rs` | `TextureImage` (embedded PNG/JPEG, tile size), `TexPlacement` (per-face texture position), texture axes, base64 |
 | `units.rs` | parsing and formatting for the Measurements box (VCB) |
@@ -51,7 +52,8 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | `camera.rs` | f64 camera, orbit, pan, zoom, projections, zoom extents |
 | `overlay.rs` | `Overlay3d` (lines, polygons, texts, marks, arcs, dimensions, leaders), plus `annot.rs` for the CPU glyph expansion |
 | `export.rs` | `render_to_image` (PNG export) |
-| `textures.rs` | face textures: `texture_2d_array`, CPU resample and mips (`Renderer::set_textures`) |
+| `textures.rs` | face textures (group 1): colour `texture_2d_array`, data array (ORM / normal), PBR material table; CPU resample and mips (`set_textures`, `set_data_textures`, `set_materials`) |
+| `env.rs` | environment for Realistic: Rgba16Float equirect with mips, SH9 irradiance, `EnvUniform` (group 0, bindings 3–5) |
 | `shader.wgsl` | shaders |
 
 Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in `06-STATUS.md`).
@@ -73,7 +75,9 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `document.rs` | open document: model, history, selection, editing context |
 | `viewport.rs` | 3D view widget: input, renderer, overlays |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
-| `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
+| `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures + emission maps), new textured material |
+| `pbr.rs` | Realistic style data: `material_table`, `emission_layers` / `data_layers`, `DataSync` (ORM packing), `EnvSync` (HDRI decode), `env_style` |
+| `ui/realistic.rs` | Materials → "Physical (Realistic)" editor (sphere preview, presets, maps), Environment card, HDRI / map loading |
 | `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`); splitter between log and code (`code_h`) |
 | `ui/code_editor.rs` | console editor: `egui_code_editor` (highlighting, line numbers, completion) + our completion list: members after a dot by the receiver's type (`member_context`, `members_for`), header tags / `@param` types (`tag_context`); header lines highlighted (`with_doc_tags`, vendored) + parameter hints from `varstotas_script::help` (`call_context`, `fn_doc`) |
 | `bridge.rs` | local server (127.0.0.1 + token, JSON lines / HTTP `POST /rpc`), `~/.varstotas/bridge.json`, installs `python/*.py` |

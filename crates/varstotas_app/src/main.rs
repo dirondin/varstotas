@@ -14,6 +14,7 @@ mod document;
 mod inference;
 mod layout;
 mod nav;
+mod pbr;
 mod overlay;
 mod plugins;
 mod scene_builder;

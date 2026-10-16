@@ -55,6 +55,7 @@ pub enum Icon {
     StyleShaded,
     StyleTextured,
     StyleMonochrome,
+    StyleRealistic,
     Perspective,
     Undo,
     Redo,
@@ -568,6 +569,17 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             cube(&pen, Color32::TRANSPARENT, Color32::TRANSPARENT, Color32::TRANSPARENT);
         }
         Icon::StyleMonochrome => cube(&pen, FILL, SHADE, SHADE_DARK),
+        Icon::StyleRealistic => {
+            // A glossy ball on the ground: soft shadow, shading rings, a sharp highlight.
+            pen.painter.add(Shape::ellipse_filled(pen.p(12.5, 20.5), vec2(8.0, 1.8) * pen.s, Color32::from_black_alpha(55)));
+            for (k, c) in [(0.0, 0x3A5F9E), (1.6, 0x4F78BA), (3.2, 0x6C93D2), (4.8, 0x93B4E6)] {
+                let r = 8.5 - k;
+                let c = Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8);
+                pen.dot((12.0 - k * 0.45, 11.0 - k * 0.45), r, c);
+            }
+            pen.dot((8.6, 7.6), 1.6, Color32::WHITE);
+            pen.arc((12.0, 11.0), 8.5, 0.0, 360.0, pen.thin());
+        }
         Icon::StyleHiddenLine => cube(&pen, Color32::WHITE, Color32::WHITE, Color32::WHITE),
         Icon::StyleWireframe | Icon::StyleXRay => {
             let tr = if icon == Icon::StyleXRay {

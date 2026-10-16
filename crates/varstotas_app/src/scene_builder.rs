@@ -104,7 +104,9 @@ fn tess_rec(
     let Some(def) = model.defs.get(d) else { return };
     let mesh = &def.mesh;
     let nm = DMat3::from_mat4(m).inverse().transpose();
-    let with_uv = model.materials.values().any(|m| m.image.is_some());
+    let with_uv = model.materials.values().any(|m| {
+        m.image.is_some() || m.pbr.as_ref().is_some_and(|p| varstotas_kernel::PBR_MAPS.iter().any(|n| p.map(n).is_some()))
+    });
     let faces: Vec<FaceId> = mesh
         .faces
         .iter()
@@ -213,12 +215,18 @@ pub fn texture_layers(model: &Model) -> Vec<MaterialId> {
 /// Geometry with base (material) colours and highlight ids; selection is applied separately.
 pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneGeometry {
     let mut geo = SceneGeometry::default();
-    let mono = p.face_style != FaceStyle::Shaded;
+    let realistic = p.face_style == FaceStyle::Realistic;
+    let mono = !matches!(p.face_style, FaceStyle::Shaded | FaceStyle::Realistic);
     let mat_color = |id: Option<MaterialId>| -> Option<[f32; 4]> {
         if mono {
             return None;
         }
-        id.and_then(|id| model.materials.get(id)).map(|m| m.color)
+        let m = model.materials.get(id?)?;
+        let mut c = m.color;
+        if realistic {
+            c[3] = crate::pbr::realistic_alpha(c[3], m.pbr.as_ref());
+        }
+        Some(c)
     };
 
     // Bounds (f64) → origin; positions are made relative to it in f64 before the f32 cast.
@@ -245,17 +253,28 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
     let layer_of = |id: Option<MaterialId>| -> u16 {
         id.and_then(|id| layers.iter().position(|l| *l == id)).map_or(0, |i| i as u16 + 1)
     };
-    if !layers.is_empty() {
+    let mats = if realistic { crate::pbr::pbr_materials(model) } else { Vec::new() };
+    let mat_of = |id: Option<MaterialId>| -> u16 {
+        id.and_then(|id| mats.iter().position(|l| *l == id)).map_or(0, |i| i as u16 + 1)
+    };
+    let with_tex = !layers.is_empty() || !mats.is_empty();
+    if with_tex {
         geo.tex.reserve(n_verts);
     }
     for (fi, f) in tess.faces.iter().enumerate() {
         let front = mat_color(f.front.or(f.inherited)).unwrap_or(FRONT_DEFAULT);
         let back = mat_color(f.back.or(f.inherited)).unwrap_or(BACK_DEFAULT);
-        if !layers.is_empty() {
-            let lay = [layer_of(f.front.or(f.inherited)), layer_of(f.back.or(f.inherited))];
+        if with_tex {
+            let (fm, bm) = (f.front.or(f.inherited), f.back.or(f.inherited));
+            let lay = [layer_of(fm), layer_of(bm)];
+            let mat = [mat_of(fm), mat_of(bm)];
             for k in 0..f.positions.len() {
-                let uv = if lay == [0, 0] { [0.0; 2] } else { f.uv.get(k).map_or([0.0; 2], |u| u.as_vec2().to_array()) };
-                geo.tex.push(TexVertex { uv, layers: lay });
+                let uv = if lay == [0, 0] && mat == [0, 0] {
+                    [0.0; 2]
+                } else {
+                    f.uv.get(k).map_or([0.0; 2], |u| u.as_vec2().to_array())
+                };
+                geo.tex.push(TexVertex { uv, layers: lay, mats: mat });
             }
         }
         geo.face_ids.extend(std::iter::repeat_n(fi as u32, f.positions.len() / 3));

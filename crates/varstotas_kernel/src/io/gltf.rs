@@ -3,9 +3,12 @@
 //! Varstotas is Z-up in millimetres, glTF is Y-up in metres: `(x, y, z)` mm ↔ `(x, z, -y)` m.
 //! Export: one node per top-level group / component (loose geometry: one "Model" node), one
 //! primitive per material, world-space triangles with normals (smooth where edges are smooth)
-//! and texture coordinates, materials as PBR base colours (+ embedded textures), double-sided.
+//! and texture coordinates, materials as PBR base colours (+ embedded textures), double-sided,
+//! with the physical properties ([`crate::Pbr`]: metalness, roughness, emission, transmission,
+//! IOR and the normal / roughness / occlusion / emission maps; a separate metalness map is not
+//! packed with the roughness map and is left out).
 //! Import: every mesh node becomes a group (world transform baked in); triangles are merged
-//! back into polygons; base colours and embedded / external textures become materials.
+//! back into polygons; base colours, textures and the physical properties become materials.
 
 use super::stl::{add_polygon, new_faces};
 use super::{ImportOptions, IoError};
@@ -120,6 +123,15 @@ impl Prim {
     }
 }
 
+/// The image whose tile size gives a material's texture coordinates: its base colour texture,
+/// else one of its physical maps.
+fn uv_image(m: &crate::Material) -> Option<&TextureImage> {
+    m.image.as_ref().or_else(|| {
+        let p = m.pbr.as_ref()?;
+        crate::PBR_MAPS.iter().find_map(|n| p.map(n))
+    })
+}
+
 /// GLB bytes of the visible model.
 pub fn write_glb(model: &Model) -> Vec<u8> {
     let tess = tessellate(model);
@@ -145,7 +157,7 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
                 prims.len() - 1
             }
         };
-        let tile = mat.and_then(|m| model.materials[m].image.as_ref()).map(|i| i.size).filter(|s| s[0] > 0.0 && s[1] > 0.0);
+        let tile = mat.and_then(|m| uv_image(&model.materials[m])).map(|i| i.size).filter(|s| s[0] > 0.0 && s[1] > 0.0);
         let prim = &mut prims[pi].1;
         for (k, p) in f.positions.iter().enumerate() {
             let n = f.normals.get(k).copied().unwrap_or(f.normal);
@@ -162,6 +174,7 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
     let mut textures: Vec<Value> = Vec::new();
     let mut images: Vec<Value> = Vec::new();
     let mut mat_index: HashMap<MaterialId, usize> = HashMap::new();
+    let mut used: std::collections::BTreeSet<String> = Default::default();
     let mut meshes = Vec::new();
     let mut node_list = Vec::new();
     for (owner, prims) in nodes {
@@ -173,7 +186,7 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
             let pos = bin.floats(&p.pos, 3, true);
             let nrm = bin.floats(&p.nrm, 3, false);
             let mut attrs = json!({"POSITION": pos, "NORMAL": nrm});
-            let textured = mat.is_some_and(|m| model.materials[m].image.is_some());
+            let textured = mat.is_some_and(|m| uv_image(&model.materials[m]).is_some());
             if textured {
                 attrs["TEXCOORD_0"] = json!(bin.floats(&p.uv, 2, false));
             }
@@ -188,16 +201,56 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
                         "metallicFactor": 0.0,
                         "roughnessFactor": 0.9,
                     });
-                    if let Some(img) = &mm.image {
+                    let mut texture = |img: &TextureImage| {
                         let view = bin.view(&img.bytes, None);
                         let mime = if img.extension() == "png" { "image/png" } else { "image/jpeg" };
                         images.push(json!({"bufferView": view, "mimeType": mime, "name": img.file_name}));
                         textures.push(json!({"source": images.len() - 1, "sampler": 0}));
-                        pbr["baseColorTexture"] = json!({"index": textures.len() - 1});
+                        textures.len() - 1
+                    };
+                    if let Some(img) = &mm.image {
+                        pbr["baseColorTexture"] = json!({"index": texture(img)});
                         // The texture carries the colour.
                         pbr["baseColorFactor"] = json!([1.0, 1.0, 1.0, c[3]]);
                     }
-                    let mut v = json!({"name": mm.name, "pbrMetallicRoughness": pbr, "doubleSided": true});
+                    let mut v = json!({"name": mm.name, "doubleSided": true});
+                    if let Some(p) = &mm.pbr {
+                        pbr["metallicFactor"] = json!(p.metallic);
+                        pbr["roughnessFactor"] = json!(p.roughness);
+                        // glTF reads roughness from G and metalness from B of one image.
+                        if let Some(img) = p.roughness_map.as_ref().or(p.metallic_map.as_ref()) {
+                            pbr["metallicRoughnessTexture"] = json!({"index": texture(img)});
+                        }
+                        if let Some(img) = &p.normal_map {
+                            v["normalTexture"] = json!({"index": texture(img), "scale": p.normal_scale});
+                        }
+                        if let Some(img) = &p.ao_map {
+                            v["occlusionTexture"] = json!({"index": texture(img)});
+                        }
+                        if let Some(img) = &p.emission_map {
+                            v["emissiveTexture"] = json!({"index": texture(img)});
+                        }
+                        let mut ext = serde_json::Map::new();
+                        if p.emissive() {
+                            v["emissiveFactor"] = json!(p.emission.map(srgb_to_linear));
+                            if p.emission_strength != 1.0 {
+                                ext.insert("KHR_materials_emissive_strength".into(), json!({"emissiveStrength": p.emission_strength}));
+                            }
+                        }
+                        if p.transmission > 0.0 {
+                            ext.insert("KHR_materials_transmission".into(), json!({"transmissionFactor": p.transmission}));
+                        }
+                        if (p.ior - 1.5).abs() > 1e-4 {
+                            ext.insert("KHR_materials_ior".into(), json!({"ior": p.ior}));
+                        }
+                        for k in ext.keys() {
+                            used.insert(k.clone());
+                        }
+                        if !ext.is_empty() {
+                            v["extensions"] = Value::Object(ext);
+                        }
+                    }
+                    v["pbrMetallicRoughness"] = pbr;
                     if c[3] < 0.999 {
                         v["alphaMode"] = json!("BLEND");
                     }
@@ -230,6 +283,9 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
     });
     if !materials.is_empty() {
         doc["materials"] = json!(materials);
+    }
+    if !used.is_empty() {
+        doc["extensionsUsed"] = json!(used);
     }
     if !images.is_empty() {
         doc["images"] = json!(images);
@@ -485,12 +541,37 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             let name = m["name"].as_str().filter(|s| !s.is_empty()).map(str::to_string).unwrap_or_else(|| format!("Material {i}"));
             let img = pbr["baseColorTexture"]["index"].as_u64().and_then(|t| g.image(t as usize, dir));
             let id = model.add_material(&name, c);
-            if let Some((bytes, file)) = img {
-                // 1 m tiles: glTF texture coordinates are per metre or per face, fitted below.
+            // 1 m tiles: glTF texture coordinates are per metre or per face, fitted below.
+            let tex = |t: &Value| {
+                let (bytes, file) = g.image(t["index"].as_u64()? as usize, dir)?;
                 let mut ti = TextureImage::new(bytes, file, 1000.0);
                 ti.size = [1000.0, 1000.0];
-                model.materials[id].image = Some(ti);
-            }
+                Some(ti)
+            };
+            model.materials[id].image = img.map(|(bytes, file)| {
+                let mut ti = TextureImage::new(bytes, file, 1000.0);
+                ti.size = [1000.0, 1000.0];
+                ti
+            });
+            let num = |v: &Value, d: f64| v.as_f64().unwrap_or(d) as f32;
+            let ext = &m["extensions"];
+            let mr = tex(&pbr["metallicRoughnessTexture"]);
+            let e: Vec<f32> = m["emissiveFactor"].as_array().map(|a| a.iter().map(|x| x.as_f64().unwrap_or(0.0) as f32).collect()).unwrap_or_default();
+            let p = crate::Pbr {
+                metallic: num(&pbr["metallicFactor"], 1.0),
+                roughness: num(&pbr["roughnessFactor"], 1.0),
+                emission: if e.len() >= 3 { [linear_to_srgb(e[0]), linear_to_srgb(e[1]), linear_to_srgb(e[2])] } else { [0.0; 3] },
+                emission_strength: num(&ext["KHR_materials_emissive_strength"]["emissiveStrength"], 1.0),
+                transmission: num(&ext["KHR_materials_transmission"]["transmissionFactor"], 0.0),
+                ior: num(&ext["KHR_materials_ior"]["ior"], 1.5),
+                normal_scale: num(&m["normalTexture"]["scale"], 1.0),
+                normal_map: tex(&m["normalTexture"]),
+                roughness_map: mr.clone(),
+                metallic_map: mr,
+                ao_map: tex(&m["occlusionTexture"]),
+                emission_map: tex(&m["emissiveTexture"]),
+            };
+            model.materials[id].pbr = Some(p.sanitized());
             Some(id)
         })
     };
@@ -525,7 +606,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             // A mirroring transform flips the winding.
             let flip = m.determinant() < 0.0;
             let mat = p["material"].as_u64().and_then(|i| get_mat(model, i as usize));
-            let tile = mat.and_then(|id| model.materials[id].image.as_ref()).map(|i| i.size);
+            let tile = mat.and_then(|id| uv_image(&model.materials[id])).map(|i| i.size);
             for t in tris {
                 if t.iter().any(|&k| k >= pos.len()) {
                     return Err(bad("index out of range"));

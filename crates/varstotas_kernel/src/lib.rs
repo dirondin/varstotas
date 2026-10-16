@@ -35,6 +35,7 @@ pub mod mesh;
 pub mod model;
 pub mod generator;
 pub mod params;
+pub mod pbr;
 pub mod report;
 pub mod section;
 pub mod shadows;
@@ -59,6 +60,7 @@ pub use model::{
 };
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;
+pub use pbr::{Environment, PBR_MAPS, Pbr, SkyKind, Tonemap};
 pub use section::{SectionDisplay, SectionPlane};
 pub use workplane::WorkPlane;
 pub use shadows::ShadowSettings;

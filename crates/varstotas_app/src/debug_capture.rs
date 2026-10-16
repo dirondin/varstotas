@@ -453,6 +453,7 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             "hidden" | "hiddenline" => crate::app::FaceStylePref::HiddenLine,
             "wire" | "wireframe" => crate::app::FaceStylePref::Wireframe,
             "color" | "shadedcolor" => crate::app::FaceStylePref::ShadedColor,
+            "realistic" => crate::app::FaceStylePref::Realistic,
             _ => crate::app::FaceStylePref::Shaded,
         }),
         "perf" => ScriptCmd::Perf(nums.first().copied().unwrap_or(60.0) as u32),
@@ -845,6 +846,91 @@ impl VarstotasApp {
     fn script_action(&mut self, name: &str) {
         use crate::app::Action;
         use varstotas_kernel::IntersectScope;
+        // Realistic style: `env key=value…`, `hdri <path|none>`, `mat_pbr <material> key=value…`,
+        // `mat_map <material> <map> <path|none>`.
+        if let Some(args) = name.strip_prefix("env ") {
+            let mut e = self.doc.model.environment;
+            for kv in args.split_whitespace() {
+                let Some((k, v)) = kv.split_once('=') else { continue };
+                let f = v.parse::<f32>().ok();
+                match k {
+                    "sky" => {
+                        e.sky = match v {
+                            "color" => varstotas_kernel::SkyKind::Color,
+                            "hdri" => varstotas_kernel::SkyKind::Hdri,
+                            _ => varstotas_kernel::SkyKind::Sky,
+                        }
+                    }
+                    "color" => {
+                        let c: Vec<f32> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+                        if let [r, g, b] = c[..] {
+                            e.color = [r, g, b];
+                        }
+                    }
+                    "rotation" => e.rotation_deg = f.unwrap_or(e.rotation_deg),
+                    "intensity" => e.intensity = f.unwrap_or(e.intensity),
+                    "sun" => e.sun = f.unwrap_or(e.sun),
+                    "exposure" => e.exposure = f.unwrap_or(e.exposure),
+                    "background" => e.background = matches!(v, "on" | "1" | "true"),
+                    "tonemap" => e.tonemap = varstotas_kernel::Tonemap::from_key(v).unwrap_or(e.tonemap),
+                    _ => log::warn!("script: env: unknown key {k}"),
+                }
+            }
+            self.actions.push(Action::SetEnvironment(e));
+            return;
+        }
+        if let Some(path) = name.strip_prefix("hdri ") {
+            if path.trim() == "none" {
+                self.doc.mutate_untracked(|m| m.hdri = None);
+            } else {
+                self.load_hdri(std::path::Path::new(path.trim()));
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("mat_pbr ") {
+            let mut it = args.split_whitespace();
+            let Some(mat) = it.next() else { return };
+            let mat = mat.replace('_', " ");
+            let kvs: Vec<(String, String)> =
+                it.filter_map(|kv| kv.split_once('=').map(|(k, v)| (k.to_string(), v.to_string()))).collect();
+            self.edit_pbr(&mat, |p| {
+                for (k, v) in &kvs {
+                    let f = v.parse::<f32>().unwrap_or(0.0);
+                    match k.as_str() {
+                        "metallic" => p.metallic = f,
+                        "roughness" => p.roughness = f,
+                        "transmission" | "glass" => p.transmission = f,
+                        "ior" => p.ior = f,
+                        "strength" => p.emission_strength = f,
+                        "normal_scale" => p.normal_scale = f,
+                        "emission" => {
+                            let c: Vec<f32> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+                            if let [r, g, b] = c[..] {
+                                p.emission = [r, g, b];
+                            }
+                        }
+                        _ => log::warn!("script: mat_pbr: unknown key {k}"),
+                    }
+                }
+            });
+            return;
+        }
+        if let Some(args) = name.strip_prefix("mat_map ") {
+            let v: Vec<&str> = args.splitn(3, ' ').collect();
+            if let [mat, map, path] = v[..]
+                && let Some(map) = varstotas_kernel::PBR_MAPS.iter().find(|m| **m == map)
+            {
+                let mat = mat.replace('_', " ");
+                if path == "none" {
+                    self.set_pbr_map(&mat, map, None);
+                } else if let Some((mid, _)) = self.doc.model.materials.iter().find(|(_, m)| m.name == mat) {
+                    self.load_pbr_map(mid, map, std::path::Path::new(path));
+                }
+            } else {
+                log::warn!("script: mat_map needs <material> <map> <path|none>");
+            }
+            return;
+        }
         // `shadow_time HH:MM`, `shadow_date <month> <day>`
         if let Some(t) = name.strip_prefix("shadow_time") {
             let mut sh = self.doc.model.shadows;
@@ -1528,7 +1614,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden);
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -1726,6 +1812,35 @@ impl VarstotasApp {
 impl VarstotasApp {
     /// Selected generated components for the dump: `Name{k=v,…}@WxDxH` per instance, or none.
     /// Generator Editor: `-` closed, else `Name{p=…,f=…}:preview(edges,WxDxH)|err(…):status:h<code height>`.
+    /// `(sky, rotation, intensity, sun, exposure, tonemap, background)`.
+    fn env_dump(&self) -> String {
+        let e = &self.doc.model.environment;
+        format!(
+            "({:?}, {}, {}, {}, {}, {}, {})",
+            e.sky,
+            e.rotation_deg,
+            e.intensity,
+            e.sun,
+            e.exposure,
+            e.tonemap.key(),
+            e.background
+        )
+    }
+
+    /// Materials with physical properties: (name, metallic, roughness, transmission, maps).
+    fn pbr_dump(&self) -> Vec<(String, f32, f32, f32, Vec<&'static str>)> {
+        self.doc
+            .model
+            .materials
+            .values()
+            .filter_map(|m| {
+                let p = m.pbr.as_ref()?;
+                let maps = varstotas_kernel::PBR_MAPS.iter().copied().filter(|n| p.map(n).is_some()).collect();
+                Some((m.name.clone(), p.metallic, p.roughness, p.transmission, maps))
+            })
+            .collect()
+    }
+
     fn ged_dump(&self) -> String {
         let ed = &self.gen_editor;
         if !ed.open {

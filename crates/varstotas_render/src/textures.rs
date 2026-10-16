@@ -1,6 +1,7 @@
-//! Material textures for faces: one `texture_2d_array` (every image resampled to a common
-//! square layer size, CPU mip chain), a repeating sampler and a per-layer info uniform
-//! (1 / tile size in mm). Bound as group 1 of the face pipelines.
+//! Material textures for faces: a colour (sRGB) and a data (linear) `texture_2d_array` (every
+//! image resampled to a common square layer size, CPU mip chain), a repeating sampler, a
+//! per-layer info uniform each (1 / tile size in mm) and the PBR material table. Bound as
+//! group 1 of the face pipelines.
 
 use crate::TextureData;
 use crate::wgpu;
@@ -14,33 +15,37 @@ pub(crate) struct FaceTextures {
     pub bgl: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     info: wgpu::Buffer,
+    data_info: wgpu::Buffer,
+    /// PBR material table: 4 × vec4 per material (see `set_materials`).
+    materials: wgpu::Buffer,
+    color_view: wgpu::TextureView,
+    data_view: wgpu::TextureView,
     pub bind_group: wgpu::BindGroup,
     max_layers: u32,
 }
 
+/// Most PBR materials in the table (4 × 16 bytes each: a 16 KB uniform).
+pub const MAX_MATERIALS: usize = 256;
+
 impl FaceTextures {
     pub fn new(device: &wgpu::Device) -> Self {
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty, count: None };
+        let array = wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2Array,
+            multisampled: false,
+        };
+        let uniform =
+            wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None };
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("varstotas face textures"),
             entries: &[
-                entry(
-                    0,
-                    wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2Array,
-                        multisampled: false,
-                    },
-                ),
+                entry(0, array),
                 entry(1, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
-                entry(
-                    2,
-                    wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                ),
+                entry(2, uniform),
+                entry(3, array),
+                entry(4, uniform),
+                entry(5, uniform),
             ],
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -53,62 +58,116 @@ impl FaceTextures {
             anisotropy_clamp: 8,
             ..Default::default()
         });
-        let info = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("varstotas texture info"),
-            size: (MAX_LAYERS * 16) as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let buffer = |label, size: usize| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: size as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let info = buffer("varstotas texture info", MAX_LAYERS * 16);
+        let data_info = buffer("varstotas data texture info", MAX_LAYERS * 16);
+        let materials = buffer("varstotas pbr materials", MAX_MATERIALS * 64);
         let max_layers = device.limits().max_texture_array_layers.min(MAX_LAYERS as u32);
-        let texture = Self::create_texture(device, 1, 1, 1);
-        let bind_group = Self::bind(device, &bgl, &texture, &sampler, &info);
-        Self { bgl, sampler, info, bind_group, max_layers }
+        let color_view = Self::array_view(&Self::create_texture(device, 1, 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb));
+        let data_view = Self::array_view(&Self::create_texture(device, 1, 1, 1, wgpu::TextureFormat::Rgba8Unorm));
+        let mut t = Self {
+            bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("varstotas face textures (empty)"),
+                layout: &bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&color_view) },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+                    wgpu::BindGroupEntry { binding: 2, resource: info.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&data_view) },
+                    wgpu::BindGroupEntry { binding: 4, resource: data_info.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 5, resource: materials.as_entire_binding() },
+                ],
+            }),
+            bgl,
+            sampler,
+            info,
+            data_info,
+            materials,
+            color_view,
+            data_view,
+            max_layers,
+        };
+        t.rebind(device);
+        t
     }
 
-    fn create_texture(device: &wgpu::Device, side: u32, layers: u32, mips: u32) -> wgpu::Texture {
+    fn create_texture(device: &wgpu::Device, side: u32, layers: u32, mips: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some("varstotas face textures"),
             size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: layers.max(1) },
             mip_level_count: mips,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         })
     }
 
-    fn bind(
-        device: &wgpu::Device,
-        bgl: &wgpu::BindGroupLayout,
-        texture: &wgpu::Texture,
-        sampler: &wgpu::Sampler,
-        info: &wgpu::Buffer,
-    ) -> wgpu::BindGroup {
-        let view = texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default()
-        });
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("varstotas face textures"),
-            layout: bgl,
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
-                wgpu::BindGroupEntry { binding: 2, resource: info.as_entire_binding() },
-            ],
-        })
+    fn array_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+        texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() })
     }
 
-    /// Replace all textures; layer `i` (vertex layer index `i + 1`) is `images[i]`.
+    fn rebind(&mut self, device: &wgpu::Device) {
+        self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("varstotas face textures"),
+            layout: &self.bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.color_view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.info.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&self.data_view) },
+                wgpu::BindGroupEntry { binding: 4, resource: self.data_info.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 5, resource: self.materials.as_entire_binding() },
+            ],
+        });
+    }
+
+    /// Replace the colour textures (sRGB); layer `i` (vertex layer index `i + 1`) is `images[i]`.
     pub fn set(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, images: &[TextureData]) {
+        self.color_view = self.upload(device, queue, images, wgpu::TextureFormat::Rgba8UnormSrgb, false);
+        self.rebind(device);
+    }
+
+    /// Replace the data textures (linear: packed occlusion / roughness / metalness, normals).
+    pub fn set_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, images: &[TextureData]) {
+        self.data_view = self.upload(device, queue, images, wgpu::TextureFormat::Rgba8Unorm, true);
+        self.rebind(device);
+    }
+
+    /// Replace the PBR material table (material `i` = vertex index `i + 1`).
+    pub fn set_materials(&mut self, queue: &wgpu::Queue, mats: &[crate::PbrMaterial]) {
+        let mut v = vec![[0f32; 4]; MAX_MATERIALS * 4];
+        for (i, m) in mats.iter().take(MAX_MATERIALS).enumerate() {
+            v[i * 4] = [m.metallic, m.roughness, m.transmission, m.ior];
+            v[i * 4 + 1] = [m.emission[0], m.emission[1], m.emission[2], m.normal_scale];
+            v[i * 4 + 2] = [m.emission_layer as f32, m.orm_layer as f32, m.normal_layer as f32, m.orm_mask as f32];
+        }
+        queue.write_buffer(&self.materials, 0, bytemuck::cast_slice(&v));
+    }
+
+    fn upload(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        images: &[TextureData],
+        format: wgpu::TextureFormat,
+        data: bool,
+    ) -> wgpu::TextureView {
         let images = &images[..images.len().min(self.max_layers as usize)];
         let biggest = images.iter().map(|t| t.width.max(t.height)).max().unwrap_or(1);
         // Many textures share a smaller layer size to bound GPU memory (~5.6 MB per 1024² layer).
         let cap = if images.len() > 16 { MAX_SIDE / 2 } else { MAX_SIDE };
         let side = biggest.clamp(1, cap).next_power_of_two().min(cap);
         let mips = side.ilog2() + 1;
-        let texture = Self::create_texture(device, side, images.len() as u32, mips);
+        let texture = Self::create_texture(device, side, images.len() as u32, mips, format);
         let mut info = vec![[0f32; 4]; MAX_LAYERS];
         for (layer, img) in images.iter().enumerate() {
             info[layer] = [1.0 / img.size_mm[0].max(1e-3), 1.0 / img.size_mm[1].max(1e-3), 0.0, 0.0];
@@ -132,8 +191,8 @@ impl FaceTextures {
                 }
             }
         }
-        queue.write_buffer(&self.info, 0, bytemuck::cast_slice(&info));
-        self.bind_group = Self::bind(device, &self.bgl, &texture, &self.sampler, &self.info);
+        queue.write_buffer(if data { &self.data_info } else { &self.info }, 0, bytemuck::cast_slice(&info));
+        Self::array_view(&texture)
     }
 }
 

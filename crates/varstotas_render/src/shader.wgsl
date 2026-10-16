@@ -17,7 +17,8 @@ struct Globals {
     mono_front: vec4<f32>,
     mono_back: vec4<f32>,
     hidden_face: vec4<f32>,
-    params: vec4<f32>,        // x: face mode (0 shaded, 1 mono, 2 hidden-line); y: alpha mul;
+    params: vec4<f32>,        // x: face mode (0 shaded, 1 mono, 2 hidden-line, 3 wireframe tint,
+                              //    4 realistic); y: alpha mul;
                               // z: line bias relative; w: 1 = encode gamma manually
     params2: vec4<f32>,       // x: line bias absolute (ndc); y: ground enabled;
                               // z: highlight hide mask (bit 0 Selected, bit 1 Dimmed)
@@ -76,6 +77,95 @@ fn highlight_edge(c: vec4<f32>, state: u32) -> vec4<f32> {
 @group(0) @binding(0) var<uniform> g: Globals;
 @group(0) @binding(1) var shadow_map: texture_depth_2d;
 @group(0) @binding(2) var shadow_sampler: sampler_comparison;
+
+// Environment of the Realistic style (see env.rs): equirect panorama with mips + SH irradiance.
+struct EnvU {
+    sh: array<vec4<f32>, 9>, // irradiance per SH basis function (rgb)
+    p: vec4<f32>,            // x: rotation (rad); y: intensity; z: last mip; w: 1 = background
+    p2: vec4<f32>,           // x: exposure multiplier; y: tone map (0 ACES, 1 AgX, 2 clamp); z: sun
+};
+@group(0) @binding(3) var env_map: texture_2d<f32>;
+@group(0) @binding(4) var env_sampler: sampler;
+@group(0) @binding(5) var<uniform> env: EnvU;
+
+const PI: f32 = 3.14159265;
+
+fn realistic() -> bool {
+    return g.params.x > 3.5;
+}
+
+/// World direction -> environment direction (the panorama turned by `env.p.x`).
+fn env_dir(d: vec3<f32>) -> vec3<f32> {
+    let c = cos(env.p.x);
+    let s = sin(env.p.x);
+    return vec3<f32>(c * d.x + s * d.y, -s * d.x + c * d.y, d.z);
+}
+
+/// Radiance of the environment toward -d (d = direction looking out), mip `lod`.
+fn env_radiance(d: vec3<f32>, lod: f32) -> vec3<f32> {
+    let e = env_dir(normalize(d));
+    let u = (atan2(e.y, e.x) + PI) / (2.0 * PI);
+    let v = acos(clamp(e.z, -1.0, 1.0)) / PI;
+    return textureSampleLevel(env_map, env_sampler, vec2<f32>(u, v), lod).rgb * env.p.y;
+}
+
+/// Diffuse irradiance arriving at a surface with normal `n`.
+fn env_irradiance(n: vec3<f32>) -> vec3<f32> {
+    let d = env_dir(n);
+    let x = d.x;
+    let y = d.y;
+    let z = d.z;
+    var e = env.sh[0].rgb * 0.282095;
+    e += env.sh[1].rgb * (0.488603 * y) + env.sh[2].rgb * (0.488603 * z) + env.sh[3].rgb * (0.488603 * x);
+    e += env.sh[4].rgb * (1.092548 * x * y) + env.sh[5].rgb * (1.092548 * y * z);
+    e += env.sh[6].rgb * (0.315392 * (3.0 * z * z - 1.0)) + env.sh[7].rgb * (1.092548 * x * z);
+    e += env.sh[8].rgb * (0.546274 * (x * x - y * y));
+    return max(e, vec3<f32>(0.0)) * env.p.y;
+}
+
+fn aces(x: vec3<f32>) -> vec3<f32> {
+    // Narkowicz 2015 fit
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+fn agx(x: vec3<f32>) -> vec3<f32> {
+    // Minimal AgX (Benjamin Wrensch): inset, log2 encoding, polynomial contrast, outset; linear out.
+    let inset = mat3x3<f32>(
+        vec3<f32>(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
+        vec3<f32>(0.0784335999999992, 0.878468636469772, 0.0784336),
+        vec3<f32>(0.0792237451477643, 0.0791661274605434, 0.879142973793104));
+    let outset = mat3x3<f32>(
+        vec3<f32>(1.19687900512017, -0.0528968517574562, -0.0529716355144438),
+        vec3<f32>(-0.0980208811401368, 1.15190312990417, -0.0980434501171241),
+        vec3<f32>(-0.0990297440797205, -0.0989611768448433, 1.15107367264116));
+    let min_ev = -12.47393;
+    let max_ev = 4.026069;
+    var v = inset * max(x, vec3<f32>(1e-10));
+    v = clamp(log2(v), vec3<f32>(min_ev), vec3<f32>(max_ev));
+    v = (v - min_ev) / (max_ev - min_ev);
+    let v2 = v * v;
+    let v4 = v2 * v2;
+    v = 15.5 * v4 * v2 - 40.14 * v4 * v + 31.96 * v4 - 6.868 * v2 * v + 0.4298 * v2 + 0.1191 * v - 0.00232;
+    v = outset * v;
+    return pow(clamp(v, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(2.2));
+}
+
+/// Scene light (linear) -> display (linear 0..1): exposure, then the tone map.
+fn tonemap(c: vec3<f32>) -> vec3<f32> {
+    let x = max(c, vec3<f32>(0.0)) * env.p2.x;
+    if env.p2.y < 0.5 {
+        return aces(x);
+    }
+    if env.p2.y < 1.5 {
+        return agx(x);
+    }
+    return clamp(x, vec3<f32>(0.0), vec3<f32>(1.0));
+}
 
 /// Fraction of sunlight reaching local-frame point `p` with normal `n` (1 = lit), 3×3 PCF.
 /// Points outside the map are lit; points beyond its far plane compare as far.
@@ -201,6 +291,10 @@ fn pixel_ray(ndc: vec2<f32>) -> Ray {
 
 @fragment
 fn fs_sky(in: FsOut) -> @location(0) vec4<f32> {
+    if realistic() && env.p.w > 0.5 {
+        let r = pixel_ray(in.ndc);
+        return out_color(vec4<f32>(tonemap(env_radiance(r.d, 0.0)), 1.0));
+    }
     var t: f32;
     if g.eye_rel.w > 0.5 {
         t = clamp(in.ndc.y * 0.5 + 0.5, 0.0, 1.0);
@@ -267,6 +361,19 @@ fn fs_ground(in: FsOut) -> GroundOut {
         alpha *= smoothstep(0.0, 0.035, -r.d.z);
     }
     var col = g.ground.rgb;
+    if realistic() {
+        // A diffuse plane lit by the environment and the sun.
+        var vis = 1.0;
+        if g.shadow.y > 0.5 && g.shadow2.z > 0.5 {
+            vis = shadow_vis(hit + g.origin.xyz, vec3<f32>(0.0, 0.0, 1.0));
+        }
+        let sun = env.p2.z * PI * max(g.light.z, 0.0) * vis;
+        col = tonemap(col / PI * (env_irradiance(vec3<f32>(0.0, 0.0, 1.0)) + sun));
+        var o: GroundOut;
+        o.color = out_color(vec4<f32>(col, alpha));
+        o.depth = depth;
+        return o;
+    }
     if g.shadow.y > 0.5 && g.shadow2.z > 0.5 {
         // Ground shadows: darker and more opaque where the sun is blocked.
         let shade = 1.0 - shadow_vis(hit + g.origin.xyz, vec3<f32>(0.0, 0.0, 1.0));
@@ -354,6 +461,7 @@ struct FaceIn {
     @location(4) state: u32,
     @location(5) uv: vec2<f32>,
     @location(6) layers: vec2<u32>,
+    @location(7) mats: vec2<u32>,
 };
 
 struct FaceOut {
@@ -366,12 +474,20 @@ struct FaceOut {
     @location(5) @interpolate(flat) layers: vec2<u32>,
     @location(6) clip: f32,
     @location(7) lpos: vec3<f32>,
+    @location(8) @interpolate(flat) mats: vec2<u32>,
 };
 
 // Material textures (see textures.rs): layer i + 1 in `layers`; `tex_info[i].xy` = 1 / tile size (mm).
 @group(1) @binding(0) var face_tex: texture_2d_array<f32>;
 @group(1) @binding(1) var face_tex_sampler: sampler;
 @group(1) @binding(2) var<uniform> tex_info: array<vec4<f32>, 256>;
+// Data textures (linear: packed occlusion / roughness / metalness, normal maps), same scheme.
+@group(1) @binding(3) var data_tex: texture_2d_array<f32>;
+@group(1) @binding(4) var<uniform> data_info: array<vec4<f32>, 256>;
+// PBR materials (textures.rs `set_materials`), 4 vec4 each; material i + 1 in `mats`:
+// [metallic, roughness, transmission, ior], [emission rgb, normal scale],
+// [emission layer, orm layer, normal layer, orm mask].
+@group(1) @binding(5) var<uniform> materials: array<vec4<f32>, 1024>;
 
 @vertex
 fn vs_face(v: FaceIn) -> FaceOut {
@@ -385,7 +501,8 @@ fn vs_face(v: FaceIn) -> FaceOut {
     o.layers = v.layers;
     o.clip = sec_dist(v.pos);
     o.lpos = v.pos;
-    if g.params.x > 2.5 && o.state != HL_SELECTED {
+    o.mats = v.mats;
+    if g.params.x > 2.5 && g.params.x < 3.5 && o.state != HL_SELECTED {
         o.pos = vec4<f32>(0.0, 0.0, -2.0, 1.0); // wireframe tint pass: drop unselected triangles
     }
     return o;
@@ -398,6 +515,9 @@ fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f3
     }
     let mode = g.params.x;
     let alpha_mul = g.params.y;
+    if mode > 3.5 {
+        return fs_face_pbr(in, ff);
+    }
     if mode > 2.5 {
         return out_color(vec4<f32>(srgb_to_linear(g.hl_selected.rgb), 0.3));
     }
@@ -749,4 +869,159 @@ fn fs_sprite(in: SpriteOut) -> @location(0) vec4<f32> {
         c.a *= pow(cov, k);
     }
     return out_color(c);
+}
+
+// ---------------------------------------------------------------------------
+// Realistic faces: metallic-roughness PBR (GGX / Smith / Schlick), image-based light from the
+// environment (SH diffuse, mip-blurred reflections) and the sun, tone mapped.
+// ---------------------------------------------------------------------------
+
+/// Split-sum environment BRDF approximation (Karis, mobile).
+fn env_brdf(f0: vec3<f32>, rough: f32, nv: f32) -> vec3<f32> {
+    let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4<f32>(1.0, 0.0425, 1.04, -0.04);
+    let r = rough * c0 + c1;
+    let a004 = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
+    let ab = vec2<f32>(-1.04, 1.04) * a004 + r.zw;
+    return f0 * ab.x + ab.y;
+}
+
+fn fs_face_pbr(in: FaceOut, ff: bool) -> vec4<f32> {
+    // Derivatives first (uniform control flow); maps are sampled with explicit gradients.
+    let dp_dx = dpdx(in.lpos);
+    let dp_dy = dpdy(in.lpos);
+    let duv_dx = dpdx(in.uv);
+    let duv_dy = dpdy(in.uv);
+    var n = in.normal;
+    if dot(n, n) < 1e-12 {
+        n = -g.fwd.xyz;
+    } else {
+        n = normalize(n);
+    }
+    var c = in.color;
+    var layer = in.layers.x;
+    var mat = in.mats.x;
+    if !ff {
+        n = -n;
+        c = in.back;
+        layer = in.layers.y;
+        mat = in.mats.y;
+    }
+    if layer > 0u {
+        let li = i32(layer) - 1;
+        let k = tex_info[li].xy;
+        let texel = textureSampleGrad(face_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k);
+        if texel.a < 0.5 {
+            discard;
+        }
+        c = vec4<f32>(texel.rgb, c.a);
+    }
+    var metallic = 0.0;
+    var rough = 0.6;
+    var transmission = 0.0;
+    var emission = vec3<f32>(0.0);
+    var ao = 1.0;
+    if mat > 0u {
+        let m = (mat - 1u) * 4u;
+        let m0 = materials[m];
+        let m1 = materials[m + 1u];
+        let m2 = materials[m + 2u];
+        metallic = m0.x;
+        rough = m0.y;
+        transmission = m0.z;
+        emission = m1.rgb;
+        let orm_layer = u32(m2.y + 0.5);
+        if orm_layer > 0u {
+            let li = i32(orm_layer) - 1;
+            let k = data_info[li].xy;
+            let orm = textureSampleGrad(data_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k).rgb;
+            let mask = u32(m2.w + 0.5);
+            if (mask & 1u) != 0u {
+                ao = orm.r;
+            }
+            if (mask & 2u) != 0u {
+                rough *= orm.g;
+            }
+            if (mask & 4u) != 0u {
+                metallic *= orm.b;
+            }
+        }
+        let em_layer = u32(m2.x + 0.5);
+        if em_layer > 0u {
+            let li = i32(em_layer) - 1;
+            let k = tex_info[li].xy;
+            emission *= textureSampleGrad(face_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k).rgb;
+        }
+        let nl = u32(m2.z + 0.5);
+        if nl > 0u {
+            // Tangent frame from the planar coordinates (cotangent frame, no stored tangents).
+            let li = i32(nl) - 1;
+            let k = data_info[li].xy;
+            let tn = textureSampleGrad(data_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k).rgb * 2.0 - 1.0;
+            let dp2perp = cross(dp_dy, n);
+            let dp1perp = cross(n, dp_dx);
+            var t = dp2perp * duv_dx.x + dp1perp * duv_dy.x;
+            var b = dp2perp * duv_dx.y + dp1perp * duv_dy.y;
+            let inv = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1e-20));
+            t *= inv;
+            b *= inv;
+            let pn = normalize(t * tn.x * m1.w + b * tn.y * m1.w + n * max(tn.z, 1e-3));
+            if all(pn == pn) {
+                n = pn;
+            }
+        }
+    }
+    rough = clamp(rough, 0.03, 1.0);
+    metallic = clamp(metallic, 0.0, 1.0);
+    let albedo = c.rgb;
+    // View direction (toward the eye).
+    var v = -g.fwd.xyz;
+    if g.eye_rel.w < 0.5 {
+        v = normalize(g.eye_rel.xyz - (in.lpos - g.origin.xyz));
+    }
+    let nv = max(dot(n, v), 1e-4);
+    let f0 = mix(vec3<f32>(0.04), albedo, metallic);
+    let diffuse_col = albedo * (1.0 - metallic) * (1.0 - transmission);
+    // Image-based light.
+    let r = reflect(-v, n);
+    let lod = env.p.z * (1.0 - pow(1.0 - rough, 2.0)) * 0.85;
+    let spec_ibl = env_radiance(r, lod) * env_brdf(f0, rough, nv);
+    var col = (diffuse_col * env_irradiance(n) / PI) * ao + spec_ibl * ao;
+    // The sun.
+    let l = g.light.xyz;
+    let nl_ = dot(n, l);
+    var sun = env.p2.z;
+    if g.shadow2.w > 0.5 {
+        sun *= g.shadow2.z;
+        if g.shadow.x > 0.5 && sun > 0.0 && nl_ > 0.0 {
+            sun *= shadow_vis(in.lpos, n);
+        }
+    }
+    if nl_ > 0.0 && sun > 0.0 {
+        let h = normalize(v + l);
+        let nh = max(dot(n, h), 0.0);
+        let vh = max(dot(v, h), 0.0);
+        let a = rough * rough;
+        let a2 = a * a;
+        let dd = nh * nh * (a2 - 1.0) + 1.0;
+        let d = a2 / (PI * dd * dd);
+        let k = (rough + 1.0) * (rough + 1.0) / 8.0;
+        let vis = 1.0 / ((nv * (1.0 - k) + k) * (nl_ * (1.0 - k) + k));
+        let f = f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vh, 5.0);
+        let spec = d * vis * 0.25 * f;
+        // `sun` = irradiance in units of a white sky's (E = π·sun).
+        col += (diffuse_col / PI * (vec3<f32>(1.0) - f) + spec) * sun * PI * nl_;
+    }
+    col += emission;
+    // Glass: reflections must survive alpha blending, so the opacity rises with the Fresnel
+    // reflectance and the colour is divided back.
+    var a = c.a * g.params.y;
+    if a < 0.999 {
+        let fr = env_brdf(f0, rough, nv).g + 0.04;
+        let a2 = clamp(mix(a, 1.0, fr), a, 1.0);
+        col = (col - spec_ibl * ao) * (a / a2) + spec_ibl * ao / a2;
+        a = a2;
+    }
+    let mapped = highlight_face(vec4<f32>(tonemap(col), 1.0), in.state);
+    return out_color(vec4<f32>(mapped.rgb, a));
 }
