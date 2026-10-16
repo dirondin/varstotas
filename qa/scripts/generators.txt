@@ -5,7 +5,7 @@ view iso
 action components
 wait 40
 screenshot shots/gen_tray.bmp
-# the Shelf button of the Components card (scrolled into view), real mouse
+# the Shelf tile (Examples folder) of the Components card, real mouse
 raw click 1280 343
 wait 3
 rawp click 0 0 0
@@ -53,7 +53,7 @@ screenshot shots/gen_scaled.bmp
 action gen back=false
 wait 3
 expect back=false,finish=Walnut
-raw click 1171 77
+raw click 1171 46
 wait 3
 expect undo=Some("Reset Parameters")
 expect gen_defs=1

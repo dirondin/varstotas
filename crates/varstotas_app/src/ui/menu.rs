@@ -358,6 +358,10 @@ impl VarstotasApp {
                     self.actions.push(Action::WorkPlanes);
                     ui.close();
                 }
+                if ui.add(egui::Button::new("Generator Editor…").selected(self.gen_editor.open)).clicked() {
+                    self.actions.push(Action::GeneratorEditor);
+                    ui.close();
+                }
                 let b = egui::Button::new("Script Console").selected(self.console.open);
                 if ui.add(b).clicked() {
                     self.actions.push(Action::ToggleConsole);

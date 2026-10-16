@@ -1,7 +1,9 @@
-//! Components: a local library of `.vrst` files (the Default Tray card). The library is
-//! `~/.varstotas/components` plus folders added by the user; subfolders are categories. A click
-//! on an item places it as a component (one definition per document, however often it is
-//! placed); "Save Selection" writes the selection to the library.
+//! Components: a local library (the Default Tray card) of `.vrst` files and generators
+//! (`.rhai`, components with parameters — see `ui/generators.rs`), in one list. The library is
+//! `~/.varstotas/components` (or a folder chosen by the user); subfolders are categories, the
+//! bundled example generators show under "Examples". A click on an item places it as a
+//! component (one definition per document, however often it is placed); "Save Selection"
+//! writes the selection to the library.
 
 use crate::app::{Action, VarstotasApp};
 use crate::clipboard::Clipboard;
@@ -37,7 +39,7 @@ pub struct LibraryState {
     pub scanned: Option<PathBuf>,
     /// Open the tray card on the next frame (Window → Components).
     pub open_card: bool,
-    /// Generators (`~/.varstotas/generators`).
+    /// Generators of the same folder.
     pub gens: super::generators::GenLibrary,
 }
 
@@ -61,6 +63,13 @@ pub(crate) fn thumbnail(edges: &[(DVec3, DVec3)]) -> Vec<(egui::Pos2, egui::Pos2
     let off = ((span - (hi.0 - lo.0)) / 2.0, (span - (hi.1 - lo.1)) / 2.0);
     let q = |(u, v): (f64, f64)| pos2(((u - lo.0 + off.0) / span) as f32, ((v - lo.1 + off.1) / span) as f32);
     pts.chunks(2).map(|c| (q(c[0]), q(c[1]))).collect()
+}
+
+/// A tile of the Components list.
+#[derive(Clone, Copy)]
+enum Tile {
+    Comp(usize),
+    Gen(usize),
 }
 
 fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
@@ -138,6 +147,7 @@ impl VarstotasApp {
         self.library.items = items;
         self.library.errors = errors;
         self.library.scanned = Some(dir);
+        self.refresh_generators();
     }
 
     pub(crate) fn library_index(&self, name: &str) -> Option<usize> {
@@ -205,10 +215,12 @@ impl VarstotasApp {
         }
         let unit = self.doc.model.unit;
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.library.filter).hint_text("Search").desired_width(ui.available_width() - 70.0));
+            ui.add(egui::TextEdit::singleline(&mut self.library.filter).hint_text("Search").desired_width(ui.available_width() - 100.0));
             if ui.button("⟳").on_hover_text("Refresh").clicked() {
                 self.refresh_library();
-                self.refresh_generators();
+            }
+            if ui.button("+").on_hover_text("New generator: a component built by a script with parameters (Window → Generator Editor)").clicked() {
+                self.gen_editor.new_generator();
             }
             if ui.button("…").on_hover_text("Choose the library folder").clicked()
                 && let Some(d) = rfd::FileDialog::new().pick_folder()
@@ -229,51 +241,71 @@ impl VarstotasApp {
             });
         }
         let filter = self.library.filter.trim().to_lowercase();
-        let shown: Vec<usize> =
-            (0..self.library.items.len()).filter(|i| filter.is_empty() || self.library.items[*i].name.to_lowercase().contains(&filter)).collect();
-        if self.library.items.is_empty() {
+        let found = |name: &str| filter.is_empty() || name.to_lowercase().contains(&filter);
+        // Components and generators in one list: by folder, then name.
+        let gens = self.generator_items();
+        let mut shown: Vec<(String, String, Tile)> = self
+            .library
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, it)| found(&it.name))
+            .map(|(i, it)| (it.folder.clone(), it.name.to_lowercase(), Tile::Comp(i)))
+            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
+            .collect();
+        shown.sort_by(|a, b| (a.0 == super::generators::EXAMPLES_FOLDER).cmp(&(b.0 == super::generators::EXAMPLES_FOLDER)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
+        if self.library.items.is_empty() && gens.is_empty() {
             ui.label(RichText::new("No components yet: select something and use Save Selection.").weak());
         } else if shown.is_empty() {
             ui.label(RichText::new("Nothing found").weak());
         }
-        let mut place = None;
+        let (mut place, mut place_gen, mut edit) = (None, None, None);
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
-        let mut folder: Option<&str> = None;
-        let items = &self.library.items;
-        let mut row: Vec<usize> = Vec::new();
-        let mut flush = |ui: &mut Ui, row: &mut Vec<usize>| {
-            if row.is_empty() {
-                return;
+        let mut k = 0;
+        while k < shown.len() {
+            let folder = shown[k].0.clone();
+            if !folder.is_empty() {
+                ui.label(RichText::new(&folder).strong().small());
             }
-            ui.horizontal(|ui| {
-                for &i in row.iter() {
-                    if tile(ui, &items[i], unit) {
-                        place = Some(i);
+            let end = shown[k..].iter().position(|t| t.0 != folder).map_or(shown.len(), |n| k + n);
+            for row in shown[k..end].chunks(cols) {
+                ui.horizontal(|ui| {
+                    for (_, _, t) in row {
+                        match *t {
+                            Tile::Comp(i) => {
+                                if tile(ui, &self.library.items[i], unit) {
+                                    place = Some(i);
+                                }
+                            }
+                            Tile::Gen(i) => {
+                                let (p, e) = self.generator_tile(ui, &gens[i]);
+                                if p {
+                                    place_gen = Some(gens[i].source.clone());
+                                }
+                                if e {
+                                    edit = Some(i);
+                                }
+                            }
+                        }
                     }
-                }
-            });
-            row.clear();
-        };
-        for &i in &shown {
-            let it = &items[i];
-            if folder != Some(it.folder.as_str()) {
-                flush(ui, &mut row);
-                if !it.folder.is_empty() {
-                    ui.label(RichText::new(&it.folder).strong().small());
-                }
-                folder = Some(it.folder.as_str());
+                });
             }
-            row.push(i);
-            if row.len() == cols {
-                flush(ui, &mut row);
-            }
+            k = end;
         }
-        flush(ui, &mut row);
+        if let Some(src) = place_gen {
+            self.actions.push(Action::PlaceGenerator(src, Default::default()));
+        }
+        if let Some(i) = edit {
+            self.gen_editor.edit(&gens[i].source, gens[i].file.clone());
+        }
         if !self.library.errors.is_empty() {
             ui.label(RichText::new(format!("{} file(s) could not be read", self.library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.library.errors.join("\n"));
         }
-        self.generators_panel(ui);
+        if !self.library.gens.errors.is_empty() {
+            ui.label(RichText::new(format!("{} generator(s) could not be read", self.library.gens.errors.len())).color(Color32::from_rgb(200, 50, 40)))
+                .on_hover_text(self.library.gens.errors.join("\n"));
+        }
         ui.add_space(4.0);
         match self.library.save_name.as_mut() {
             None => {
@@ -312,7 +344,7 @@ impl VarstotasApp {
 
 /// One library item; true when clicked.
 fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> bool {
-    tile_ex(ui, &it.name, &it.thumb, it.size, unit, false, "")
+    tile_ex(ui, &it.name, &it.thumb, it.size, unit, false, "").clicked()
 }
 
 /// A library tile: thumbnail edges in the unit square, the name below; `gear` marks a
@@ -325,7 +357,7 @@ pub(crate) fn tile_ex(
     unit: varstotas_kernel::LengthUnit,
     gear: bool,
     note: &str,
-) -> bool {
+) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(TILE, TILE + 16.0), Sense::click());
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
@@ -355,5 +387,5 @@ pub(crate) fn tile_ex(
     }
     let f = |v: f64| varstotas_kernel::units::format_length(v, unit);
     let note = if note.is_empty() { String::new() } else { format!("{note}\n") };
-    resp.on_hover_text(format!("{name}\n{note}{} × {} × {}\nClick to place", f(size.x), f(size.y), f(size.z))).clicked()
+    resp.on_hover_text(format!("{name}\n{note}{} × {} × {}\nClick to place", f(size.x), f(size.y), f(size.z)))
 }

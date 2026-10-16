@@ -493,6 +493,7 @@ pub fn engine(limit: Duration) -> Engine {
     register_ops(&mut e);
     register_context(&mut e);
     register_generators(&mut e);
+    crate::generator::register_math(&mut e);
     e
 }
 

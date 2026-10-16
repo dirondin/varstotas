@@ -89,6 +89,10 @@ pub const FNS: &[FnDoc] = &[
     f("print", &["print(value)"], "Write to the console log."),
     f("len", &["len(array)"], "Length of an array / string."),
     f("range", &["range(from, to)", "range(from, to, step)"], "Integers from..to (to excluded), for loops."),
+    f("min", &["min(a, b)"], "The smaller number."),
+    f("max", &["max(a, b)"], "The larger number."),
+    f("clamp", &["clamp(x, lo, hi)"], "x kept within lo..hi."),
+    f("ceil", &["ceil(x)"], "Round up to a whole number (as a float)."),
 ];
 
 /// What a script expression is, as far as the editor can tell (for completion after a dot).
@@ -413,6 +417,9 @@ pub const TAGS: &[(&str, &str, &str)] = &[
     ("select", "@select \"Prompt\"", "objects selected before the run → objects"),
     ("import", "@import ext, ext", "a File → Import entry; the file in path"),
     ("export", "@export ext", "a File → Export entry; the file in path"),
+    ("generator", "@generator Name", "generator: makes this file a generator (see docs/GENERATORS.md)"),
+    ("formula", "@formula key[:type] = expression \"Label\"", "generator: a value computed from the parameters, in p"),
+    ("check", "@check expression \"Message\"", "generator: values for which it is false are refused"),
 ];
 
 /// Types of `@param key:type`.
@@ -422,6 +429,10 @@ pub const PARAM_TYPES: &[(&str, &str)] = &[
     ("number", "fractional number"),
     ("text", "text — the default for a quoted value"),
     ("bool", "check box — the default for true / false"),
+    ("choice", "generator: one of choice(a|b|c)"),
+    ("angle", "generator: degrees, a slider"),
+    ("percent", "generator: 0–100, a slider"),
+    ("material", "generator: a material name of the document"),
 ];
 
 /// Completion in a header comment line.

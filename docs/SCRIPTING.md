@@ -33,6 +33,7 @@ Varstotas встраивает язык [Rhai](https://rhai.rs/book/) — про
 | `v.x`, `v.y`, `v.z` | компоненты (можно присваивать) |
 | `v.length()`, `v.normalize()`, `a.dot(b)`, `a.cross(b)`, `a.distance(b)` | |
 | `length("2.5m")` | разобрать длину с единицами → мм |
+| `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)`, `ceil(x)` | числа (целые и дробные вперемешку) |
 
 ## Построение
 | Функция | Результат |

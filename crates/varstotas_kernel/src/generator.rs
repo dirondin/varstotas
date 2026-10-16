@@ -18,6 +18,8 @@
 //! // @param fill:percent = 50 "Fill"
 //! // @param board:material = "" "Board"
 //! // @param handles:bool = true "Handles"
+//! // @formula inner = width - 2 * 18 "Inner width"
+//! // @check shelves * 250 <= width + 2000 "Too many shelves"
 //! fn build(p) { ... }
 //! ```
 
@@ -179,7 +181,31 @@ pub struct Generator {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
     pub params: Vec<GenParam>,
+    /// Derived values (`@formula`), in order: each may use the parameters and earlier formulas.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formulas: Vec<GenFormula>,
+    /// Conditions on the values (`@check`): a failing one stops the build with its message.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<GenCheck>,
     pub source: String,
+}
+
+/// `@formula key[:type] = expression "Label"`: a value computed from the parameters (a Rhai
+/// expression over their keys), passed to `build` in `p` like a parameter and shown read-only
+/// in Entity Info. The type only says how it is shown (length by default).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GenFormula {
+    pub key: String,
+    pub label: String,
+    pub kind: GenKind,
+    pub expr: String,
+}
+
+/// `@check expression "Message"`: values for which the expression is false are refused.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GenCheck {
+    pub expr: String,
+    pub message: String,
 }
 
 /// On a generated definition: the generator and the values it was built with.
@@ -231,6 +257,61 @@ fn parse_range(p: &mut GenParam, r: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// `expression "Label"` → (expression, label). A quoted string at the end is the label unless
+/// it is an operand (`finish == "Oak"`).
+fn split_expr_label(s: &str) -> (String, Option<String>) {
+    let t = s.trim();
+    if let Some(body) = t.strip_suffix('"')
+        && let Some(i) = body.rfind('"')
+    {
+        let expr = body[..i].trim_end();
+        let operand = expr.ends_with(|c: char| "=<>!+-*/%(,&|".contains(c));
+        if !expr.is_empty() && !operand {
+            return (expr.to_string(), Some(body[i + 1..].to_string()));
+        }
+    }
+    (t.to_string(), None)
+}
+
+fn is_key(key: &str) -> bool {
+    !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !key.starts_with(|c: char| c.is_ascii_digit())
+}
+
+fn parse_formula(s: &str) -> Result<GenFormula, String> {
+    let (decl, rhs) = s.split_once('=').ok_or_else(|| format!("@formula needs `name = expression`: {s}"))?;
+    let (key, ty) = match decl.split_once(':') {
+        Some((k, t)) => (k.trim(), Some(t.trim())),
+        None => (decl.trim(), None),
+    };
+    if !is_key(key) {
+        return Err(format!("bad formula name `{key}`"));
+    }
+    let kind = match ty {
+        None | Some("length") => GenKind::Length,
+        Some("int") => GenKind::Int,
+        Some("number") => GenKind::Number,
+        Some("bool") => GenKind::Bool,
+        Some("angle") => GenKind::Angle,
+        Some("percent") => GenKind::Percent,
+        Some("text") => GenKind::Material,
+        Some(t) => return Err(format!("{key}: a formula is length, int, number, bool, angle, percent or text, not `{t}`")),
+    };
+    let (expr, label) = split_expr_label(rhs);
+    if expr.is_empty() {
+        return Err(format!("{key}: empty formula"));
+    }
+    Ok(GenFormula { key: key.to_string(), label: label.unwrap_or_else(|| key.replace('_', " ")), kind, expr })
+}
+
+fn parse_check(s: &str) -> Result<GenCheck, String> {
+    let (expr, msg) = split_expr_label(s);
+    if expr.is_empty() {
+        return Err("empty @check".into());
+    }
+    let message = msg.unwrap_or_else(|| format!("check failed: {expr}"));
+    Ok(GenCheck { expr, message })
+}
+
 fn parse_param(s: &str) -> Result<GenParam, String> {
     let (decl, default) = s.split_once('=').ok_or_else(|| format!("@param needs `name = default`: {s}"))?;
     let decl = decl.trim();
@@ -238,7 +319,7 @@ fn parse_param(s: &str) -> Result<GenParam, String> {
         Some((k, t)) => (k.trim(), Some(t.trim())),
         None => (decl, None),
     };
-    if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || key.starts_with(|c: char| c.is_ascii_digit()) {
+    if !is_key(key) {
         return Err(format!("bad parameter name `{key}`"));
     }
     let (ty, args) = match ty {
@@ -314,7 +395,7 @@ fn parse_param(s: &str) -> Result<GenParam, String> {
 impl Generator {
     /// Parse the header of `source`. A generator needs `@generator Name` and a `build` function.
     pub fn parse(source: &str) -> Result<Generator, String> {
-        let mut g = Generator { name: String::new(), description: String::new(), params: Vec::new(), source: source.to_string() };
+        let mut g = Generator { name: String::new(), description: String::new(), params: Vec::new(), formulas: Vec::new(), checks: Vec::new(), source: source.to_string() };
         let mut tagged = false;
         for line in source.lines() {
             let t = line.trim();
@@ -338,6 +419,14 @@ impl Generator {
                     }
                     g.params.push(p);
                 }
+                "formula" => {
+                    let f = parse_formula(rest)?;
+                    if g.param(&f.key).is_some() || g.formulas.iter().any(|x| x.key == f.key) {
+                        return Err(format!("`{}` twice (formulas and parameters share names)", f.key));
+                    }
+                    g.formulas.push(f);
+                }
+                "check" => g.checks.push(parse_check(rest)?),
                 _ => {}
             }
         }

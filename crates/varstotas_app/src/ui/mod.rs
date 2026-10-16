@@ -4,6 +4,7 @@ pub mod code_editor;
 pub mod console;
 pub mod dialogs;
 pub mod extensions;
+pub mod gen_editor;
 pub mod generators;
 pub mod icons;
 pub mod library;

@@ -23,6 +23,8 @@ pub struct ScriptEditor {
     dismissed: Option<usize>,
     /// Header variables in the completer's dictionary (it is rebuilt when they change).
     header_vars: Vec<String>,
+    /// Id of the editor (two editors can be open at once).
+    id: &'static str,
 }
 
 struct MemberPopup {
@@ -89,11 +91,16 @@ impl Default for ScriptEditor {
             .with_types(BTreeSet::from_iter(help::CONSTANTS.iter().copied()))
             .with_special(BTreeSet::from_iter(help::FNS.iter().map(|f| f.name)));
         let completer = Completer::new_with_syntax(&syntax).with_user_words().with_auto_indent();
-        Self { syntax, completer, text_id: None, members: None, dismissed: None, header_vars: Vec::new() }
+        Self { syntax, completer, text_id: None, members: None, dismissed: None, header_vars: Vec::new(), id: "script_console_code" }
     }
 }
 
 impl ScriptEditor {
+    /// An editor with its own id (the default one is the Script Console's).
+    pub fn with_id(id: &'static str) -> Self {
+        Self { id, ..Self::default() }
+    }
+
     pub fn has_focus(&self, ui: &Ui) -> bool {
         self.text_id.is_some_and(|id| ui.memory(|m| m.has_focus(id)))
     }
@@ -140,7 +147,7 @@ impl ScriptEditor {
             self.completer.handle_input(ui.ctx());
         }
         let mut editor = CodeEditor::default()
-            .id_source("script_console_code")
+            .id_source(self.id)
             .with_rows(rows)
             .with_fontsize(font)
             .with_theme(theme)
@@ -150,7 +157,7 @@ impl ScriptEditor {
             .with_marked_words(vars, marked)
             .vscroll(false);
         let mut out = egui::ScrollArea::vertical()
-            .id_salt("console_code_scroll")
+            .id_salt((self.id, "scroll"))
             .max_height(height)
             .min_scrolled_height(height)
             .auto_shrink([false, false])

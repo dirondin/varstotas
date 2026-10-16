@@ -226,7 +226,12 @@ pub enum Action {
     SaveToLibrary(String),
     ShowComponents,
     /// Components card → Generators: place a component of this generator source.
-    PlaceGenerator(String),
+    /// Place generator source with values (over its defaults).
+    PlaceGenerator(String, varstotas_kernel::GenValues),
+    /// Window → Generator Editor (a new generator when nothing is open).
+    GeneratorEditor,
+    GenEditorSave,
+    GenEditorApply,
     /// Entity Info: generator values for the selected generated components (true = reset to
     /// the defaults first).
     SetGenValues(varstotas_kernel::GenValues, bool),
@@ -375,6 +380,7 @@ pub struct VarstotasApp {
     pub(crate) sheets: crate::ui::sheets::SheetsState,
     /// Window → Work Planes… window.
     pub(crate) planes_window: crate::ui::workplanes::WorkPlanesWindow,
+    pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
     pub(crate) text_prompt: Option<TextPrompt>,
@@ -493,6 +499,7 @@ impl VarstotasApp {
             unfold: Default::default(),
             sheets: Default::default(),
             planes_window: Default::default(),
+            gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
             autosave: AutosaveState {
@@ -1246,7 +1253,15 @@ impl VarstotasApp {
             Action::ToggleConsole => self.console.open = !self.console.open,
             Action::Plugin(i, path) => self.start_plugin(i, path),
             Action::PlaceComponent(i) => self.place_component(i),
-            Action::PlaceGenerator(src) => self.place_generator(&src),
+            Action::PlaceGenerator(src, values) => self.place_generator(&src, &values),
+            Action::GeneratorEditor => {
+                if self.gen_editor.source.is_empty() {
+                    self.gen_editor.new_generator();
+                }
+                self.gen_editor.open = true;
+            }
+            Action::GenEditorSave => self.gen_editor_save(),
+            Action::GenEditorApply => self.gen_editor_apply(),
             Action::SetGenValues(v, reset) => self.set_gen_values(v, reset),
             Action::MakeUnique => {
                 let path = self.doc.active_path.clone();
@@ -2364,6 +2379,7 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.console_window(&ctx);
+        self.gen_editor_window(&ctx);
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
         self.sheets_window(&ctx);

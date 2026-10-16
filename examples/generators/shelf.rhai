@@ -8,6 +8,8 @@
 // @param back:bool = true "Back panel"
 // @param finish:choice(Oak|Walnut|White) = Oak "Finish"
 // @param paint_with:material = "" "Material"
+// @formula gap = (height - board) / (shelves + 1) - board "Gap between shelves"
+// @check gap >= 100 "Shelves closer than 100 mm: fewer shelves or a taller unit"
 
 fn build(p) {
     let colors = #{ Oak: "#C8A26B", Walnut: "#6B4A2F", White: "#F2F0EB" };
@@ -20,7 +22,7 @@ fn build(p) {
         box(vec3(t, 0, 0), inner, p.depth, t),
         box(vec3(t, 0, p.height - t), inner, p.depth, t),
     ];
-    let step = (p.height - t) / (p.shelves + 1);
+    let step = p.gap + t;
     for i in 1..=p.shelves {
         parts.push(box(vec3(t, 0, i * step), inner, p.depth - 10, t));
     }

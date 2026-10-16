@@ -1,0 +1,106 @@
+# Generators batch 2: the bundled stair / cabinet / railing / table with formulas and checks,
+# and Window → Generator Editor (live preview, parameters, Save to Library, Apply, Place).
+wait 10
+view iso
+action generator Stair
+wait 3
+rawp click 0 0 0
+wait 3
+action generator Cabinet
+wait 3
+rawp click 0 1500 0
+wait 3
+zoom_extents
+wait 3
+action generator Railing
+wait 3
+rawp click 0 -800 0
+wait 3
+zoom_extents
+wait 3
+action generator Table
+wait 3
+rawp click 1500 2600 0
+wait 3
+expect gens=["Cabinet", "Railing", "Stair", "Table"]
+expect gen_defs=4
+zoom_extents
+wait 3
+screenshot shots/ged_all.bmp
+# the stair: a landing (a formula moves the second flight), then a check refuses the values
+tool select
+select_none
+rawp click 2000 450 1300
+wait 3
+expect gen=Stair{
+action gen layout=landing
+wait 3
+expect layout=landing
+action gen going=350 max_riser=220
+wait 3
+expect going=270
+screenshot shots/ged_stair.bmp
+# the cabinet: one door opened, three drawers
+select_none
+rawp click 400 1500 500
+wait 3
+expect gen=Cabinet{
+action gen doors=1 open=70 drawers=3
+wait 3
+expect drawers=3
+expect open=70
+screenshot shots/ged_cabinet.bmp
+# the editor on the Shelf example: preview, a value, a source edit, errors
+action gen_editor Shelf
+wait 40
+expect ged=Shelf{p=8,f=1}:preview(
+screenshot shots/ged_open.bmp
+action ged shelves=6
+wait 5
+expect ged=Shelf{p=8,f=1}:preview(
+action ged_sub // @generator Shelf|// @generator Tall Shelf
+action ged_sub = 1200 "Height"|= 2000 "Height"
+wait 40
+expect ged=Tall Shelf{p=8,f=1}:preview(
+expect x300x2000
+screenshot shots/ged_edited.bmp
+action ged_sub fn build(p) {|fn build(p) { throw "oops";
+wait 40
+expect :err(Tall_Shelf:
+action ged_sub fn build(p) { throw "oops";|fn build(p) {
+wait 40
+action ged_save
+wait 3
+expect Saved_to
+action ged_apply
+wait 3
+expect applied_to_the_document
+expect gens=["Cabinet", "Railing", "Stair", "Table", "Tall Shelf"]
+action ged_place
+wait 3
+screenshot shots/ged_window.bmp
+dump ged_before_resize
+# the window shrinks and grows by its bottom-right corner (real mouse); the editor follows
+raw down 950 707
+raw move 950 650
+raw move 950 509
+raw up 950 509
+wait 5
+expect :h378
+raw down 950 509
+raw move 950 600
+raw move 950 650
+raw up 950 650
+wait 5
+expect :h510
+screenshot shots/ged_resized.bmp
+action ged_close
+wait 3
+rawp click 2500 -1500 0
+wait 3
+expect gen_defs=5
+# the saved file shows in the Components list (one list with the components)
+action components
+wait 40
+screenshot shots/ged_tray.bmp
+dump done

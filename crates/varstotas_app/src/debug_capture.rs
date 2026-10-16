@@ -1162,7 +1162,7 @@ impl VarstotasApp {
                 self.refresh_generators();
             }
             match self.generator_source(n) {
-                Some(src) => self.actions.push(Action::PlaceGenerator(src)),
+                Some(src) => self.actions.push(Action::PlaceGenerator(src, Default::default())),
                 None => log::warn!("script: no generator named {n}"),
             }
             return;
@@ -1180,6 +1180,55 @@ impl VarstotasApp {
                 })
                 .collect();
             self.actions.push(Action::SetGenValues(values, false));
+            return;
+        }
+        // Generator Editor: `gen_editor [name]` (open that generator, else a new one),
+        // `ged key=value …` (preview values), `ged_sub old|new` (edit the source),
+        // `ged_save`, `ged_apply`, `ged_place`, `ged_close`.
+        if name == "gen_editor" || name.starts_with("gen_editor ") {
+            if !self.library.gens.scanned {
+                self.refresh_generators();
+            }
+            match name.strip_prefix("gen_editor ").and_then(|n| self.generator_items().into_iter().find(|g| g.name.eq_ignore_ascii_case(n.trim()))) {
+                Some(it) => self.gen_editor.edit(&it.source, it.file.clone()),
+                None => self.gen_editor.new_generator(),
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("ged ") {
+            for (k, v) in args.split_whitespace().filter_map(|a| a.split_once('=')) {
+                let v = match v {
+                    "true" | "false" => varstotas_kernel::GenValue::Bool(v == "true"),
+                    _ => varstotas_kernel::GenValue::Text(v.replace('_', " ")),
+                };
+                if let Ok(g) = &self.gen_editor.parsed
+                    && let Some(v) = g.param(k).and_then(|p| p.normalize(&v).ok())
+                {
+                    self.gen_editor.values.insert(k.to_string(), v);
+                }
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("ged_sub ") {
+            if let Some((a, b)) = args.split_once('|') {
+                self.gen_editor.source = self.gen_editor.source.replacen(a, b, 1);
+            }
+            return;
+        }
+        if name == "ged_close" {
+            self.gen_editor.open = false;
+            return;
+        }
+        if name == "ged_save" {
+            self.actions.push(Action::GenEditorSave);
+            return;
+        }
+        if name == "ged_apply" {
+            self.actions.push(Action::GenEditorApply);
+            return;
+        }
+        if name == "ged_place" {
+            self.actions.push(Action::PlaceGenerator(self.gen_editor.source.clone(), self.gen_editor.values.clone()));
             return;
         }
         if name == "gen_reset" {
@@ -1479,7 +1528,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
@@ -1673,6 +1722,24 @@ impl VarstotasApp {
 
 impl VarstotasApp {
     /// Selected generated components for the dump: `Name{k=v,…}@WxDxH` per instance, or none.
+    /// Generator Editor: `-` closed, else `Name{p=…,f=…}:preview(edges,WxDxH)|err(…):status:h<code height>`.
+    fn ged_dump(&self) -> String {
+        let ed = &self.gen_editor;
+        if !ed.open {
+            return "-".into();
+        }
+        let head = match &ed.parsed {
+            Ok(g) => format!("{}{{p={},f={}}}", g.name, g.params.len(), g.formulas.len()),
+            Err(e) => format!("bad({})", e.chars().take(60).collect::<String>()),
+        };
+        let pre = match &ed.preview {
+            Some(Ok(p)) => format!("preview({},{:.0}x{:.0}x{:.0})", p.edges.len(), p.size.x, p.size.y, p.size.z),
+            Some(Err(e)) => format!("err({})", e.chars().take(80).collect::<String>().replace(' ', "_")),
+            None => "none".into(),
+        };
+        format!("{head}:{pre}:{}:h{}", ed.status.replace(' ', "_"), ed.code_h.round())
+    }
+
     fn gen_dump(&self) -> String {
         let Some((ids, g, values)) = self.selected_generated() else { return "none".into() };
         let mesh = self.doc.active_mesh();

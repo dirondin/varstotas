@@ -32,11 +32,83 @@ pub fn values_map(g: &Generator, values: &GenValues) -> rhai::Map {
     m
 }
 
+/// A Rhai value as a generator value (numbers, flags, texts).
+fn to_value(d: &rhai::Dynamic) -> Option<GenValue> {
+    if let Ok(x) = d.as_float() {
+        Some(GenValue::Num(x))
+    } else if let Ok(i) = d.as_int() {
+        Some(GenValue::Num(i as f64))
+    } else if let Ok(b) = d.as_bool() {
+        Some(GenValue::Bool(b))
+    } else {
+        d.clone().into_string().ok().map(GenValue::Text)
+    }
+}
+
+/// `min`, `max`, `clamp` over mixed numbers and `ceil` (also in the script API).
+pub(crate) fn register_math(e: &mut rhai::Engine) {
+    type R = Result<f64, Box<rhai::EvalAltResult>>;
+    fn f(d: &rhai::Dynamic) -> Result<f64, Box<rhai::EvalAltResult>> {
+        d.as_float().or_else(|_| d.as_int().map(|i| i as f64)).map_err(|t| format!("expected a number, got {t}").into())
+    }
+    e.register_fn("min", |a: rhai::Dynamic, b: rhai::Dynamic| -> R { Ok(f(&a)?.min(f(&b)?)) });
+    e.register_fn("max", |a: rhai::Dynamic, b: rhai::Dynamic| -> R { Ok(f(&a)?.max(f(&b)?)) });
+    e.register_fn("clamp", |x: rhai::Dynamic, a: rhai::Dynamic, b: rhai::Dynamic| -> R { Ok(f(&x)?.max(f(&a)?).min(f(&b)?)) });
+    e.register_fn("ceil", |x: rhai::Dynamic| -> R { Ok(f(&x)?.ceil()) });
+}
+
+/// The engine for `@formula` / `@check` expressions: Rhai's standard functions plus
+/// [`register_math`].
+fn expr_engine() -> rhai::Engine {
+    let mut e = rhai::Engine::new();
+    e.set_max_operations(100_000);
+    register_math(&mut e);
+    e
+}
+
+/// The parameter values (normalized) with the `@formula` values after them, as the script's
+/// `p` map; `Err` names a failing formula or `@check`.
+pub fn derive(g: &Generator, values: &GenValues) -> Result<rhai::Map, String> {
+    let mut map = values_map(g, values);
+    if g.formulas.is_empty() && g.checks.is_empty() {
+        return Ok(map);
+    }
+    let engine = expr_engine();
+    let mut scope = rhai::Scope::new();
+    for (k, v) in &map {
+        scope.push_dynamic(k.to_string(), v.clone());
+    }
+    for f in &g.formulas {
+        let mut v = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, &f.expr).map_err(|e| format!("{}: formula {}: {e}", g.name, f.key))?;
+        if f.kind == GenKind::Int
+            && let Ok(x) = v.as_float()
+        {
+            v = rhai::Dynamic::from_int(x.round() as i64);
+        }
+        scope.push_dynamic(f.key.clone(), v.clone());
+        map.insert(f.key.as_str().into(), v);
+    }
+    for c in &g.checks {
+        let ok = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, &c.expr).map_err(|e| format!("{}: check `{}`: {e}", g.name, c.expr))?;
+        if !ok.as_bool().map_err(|_| format!("{}: check `{}` is not true / false", g.name, c.expr))? {
+            return Err(format!("{}: {}", g.name, c.message));
+        }
+    }
+    Ok(map)
+}
+
+/// The formula values for `values` (normalized), for showing: (formula, value).
+pub fn formula_values(g: &Generator, values: &GenValues) -> Result<Vec<(varstotas_kernel::GenFormula, GenValue)>, String> {
+    let map = derive(g, values)?;
+    Ok(g.formulas.iter().filter_map(|f| map.get(f.key.as_str()).and_then(to_value).map(|v| (f.clone(), v))).collect())
+}
+
 /// Run the generator with `values` (normalized) into a fresh model.
 fn build(model: &Model, g: &Generator, values: &GenValues) -> Result<Model, String> {
     if DEPTH.get() >= 4 {
         return Err(format!("{}: generators nested too deep", g.name));
     }
+    let p = derive(g, values)?;
     let mut tmp = Model::new();
     tmp.unit = model.unit;
     tmp.materials = model.materials.clone();
@@ -45,7 +117,7 @@ fn build(model: &Model, g: &Generator, values: &GenValues) -> Result<Model, Stri
     let ctx = ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(Duration::from_secs(10)) };
     let src = format!("{}\nbuild(p);\n", g.source);
     DEPTH.set(DEPTH.get() + 1);
-    let (run, _) = run_with(&mut tmp, &ctx, &src, vec![("p".into(), rhai::Dynamic::from_map(values_map(g, values)))], |_| ());
+    let (run, _) = run_with(&mut tmp, &ctx, &src, vec![("p".into(), rhai::Dynamic::from_map(p))], |_| ());
     DEPTH.set(DEPTH.get() - 1);
     match run.error {
         Some(e) => Err(format!("{}: {e}", g.name)),
