@@ -73,7 +73,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
 | `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`); splitter between log and code (`code_h`) |
-| `ui/code_editor.rs` | console editor: `egui_code_editor` (highlighting, line numbers, completion) + parameter hints from `varstotas_script::help` (`call_context`, `fn_doc`) |
+| `ui/code_editor.rs` | console editor: `egui_code_editor` (highlighting, line numbers, completion) + our completion list: members after a dot by the receiver's type (`member_context`, `members_for`), header tags / `@param` types (`tag_context`); header lines highlighted (`with_doc_tags`, vendored) + parameter hints from `varstotas_script::help` (`call_context`, `fn_doc`) |
 | `bridge.rs` | local server (127.0.0.1 + token, JSON lines / HTTP `POST /rpc`), `~/.varstotas/bridge.json`, installs `python/*.py` |
 | `plugins.rs` | plugin header parsing (`@name/@menu/@param/@pick/@select/@import/@export`), scan of `~/.varstotas/plugins`, bundled examples |
 | `ui/extensions.rs` | Extensions menu, File → Import / Export plugin entries, parameter dialog, running plugins; console code with a header runs as the pseudo plugin `CONSOLE` (`run_console_code`, `plugin_at`); steps `plugin_go`: points → objects → run |

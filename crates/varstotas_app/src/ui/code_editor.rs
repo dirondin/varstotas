@@ -1,11 +1,13 @@
 //! The Script Console's code editor: `egui_code_editor` (Rhai highlighting, line numbers,
-//! completion from the API, keywords and the script's own words) plus parameter hints — the
-//! signature of the call at the cursor with the current argument in bold
-//! (`varstotas_script::help`).
+//! completion from the API, keywords and the script's own words), plus our own completion of
+//! properties and methods after a dot by the receiver's type (`g.` after `let g = box(…)` →
+//! `name`, `definition`, …) and of header tags (`// @param`, `@param key:type`), and hints —
+//! the signature of the call at the cursor with the current argument underlined, or the
+//! syntax of the header tag on the line (`varstotas_script::help`).
 
 use egui::text::{CCursor, LayoutJob, TextFormat};
 use egui::text_edit::TextEditOutput;
-use egui::{Align2, Color32, FontId, Id, Order, Ui};
+use egui::{Align2, Color32, Event, FontId, Id, Key, Modifiers, Order, Ui};
 use egui_code_editor::{CodeEditor, ColorTheme, Completer, Syntax};
 use varstotas_script::help;
 use std::collections::BTreeSet;
@@ -15,6 +17,66 @@ pub struct ScriptEditor {
     completer: Completer,
     /// Id of the text field (known after the first frame), for focus checks.
     pub text_id: Option<Id>,
+    /// The member list shown last frame (its keys are read before the field).
+    members: Option<MemberPopup>,
+    /// Esc closed the member list for the member starting here.
+    dismissed: Option<usize>,
+    /// Header variables in the completer's dictionary (it is rebuilt when they change).
+    header_vars: Vec<String>,
+}
+
+struct MemberPopup {
+    items: Vec<Item>,
+    sel: usize,
+    /// Char index where the completed word starts.
+    start: usize,
+}
+
+/// A row of our completion list.
+struct Item {
+    name: &'static str,
+    /// Shown instead of the name (`dot(b)`, `@param`).
+    label: String,
+    /// Inserted after the typed prefix.
+    insert: String,
+    detail: String,
+}
+
+impl Item {
+    /// A property or method (methods get their parentheses).
+    fn member(m: &help::Member, prefix: &str) -> Self {
+        let rest = m.name.get(prefix.len()..).unwrap_or_default();
+        let insert = match m.sig {
+            Some(sig) if sig.ends_with("()") => format!("{rest}()"),
+            Some(_) => format!("{rest}("),
+            None => rest.to_string(),
+        };
+        let what = if m.sig.is_some() { m.ty.label().to_string() } else { format!(": {}", m.ty.label()) };
+        Self { name: m.name, label: m.sig.unwrap_or(m.name).to_string(), insert, detail: format!("{what}  — {}", m.doc) }
+    }
+}
+
+/// The list for the text before the cursor: header tags, `@param` types or members after a dot.
+fn items_at(text: &str, idx: usize) -> Option<(Vec<Item>, String, usize)> {
+    let rest = |name: &str, prefix: &str| name.get(prefix.len()..).unwrap_or_default().to_string();
+    if let Some((ctx, prefix, start)) = help::tag_context(text, idx) {
+        let items = match ctx {
+            help::TagCtx::Tag => help::TAGS
+                .iter()
+                .filter(|t| t.0.starts_with(prefix.as_str()))
+                .map(|t| Item { name: t.0, label: format!("@{}", t.0), insert: format!("{} ", rest(t.0, &prefix)), detail: format!("{}  — {}", t.1, t.2) })
+                .collect(),
+            help::TagCtx::ParamType => help::PARAM_TYPES
+                .iter()
+                .filter(|t| t.0.starts_with(prefix.as_str()))
+                .map(|t| Item { name: t.0, label: t.0.to_string(), insert: rest(t.0, &prefix), detail: format!("— {}", t.1) })
+                .collect(),
+        };
+        return Some((items, prefix, start));
+    }
+    let (ty, prefix, start) = help::member_context(text, idx)?;
+    let items = help::members_for(ty).into_iter().filter(|m| m.name.starts_with(prefix.as_str())).map(|m| Item::member(m, &prefix)).collect();
+    Some((items, prefix, start))
 }
 
 impl Default for ScriptEditor {
@@ -26,12 +88,8 @@ impl Default for ScriptEditor {
             .with_keywords(BTreeSet::from_iter(help::KEYWORDS.iter().copied()))
             .with_types(BTreeSet::from_iter(help::CONSTANTS.iter().copied()))
             .with_special(BTreeSet::from_iter(help::FNS.iter().map(|f| f.name)));
-        let mut completer = Completer::new_with_syntax(&syntax).with_user_words().with_auto_indent();
-        // Properties / methods of entities and vectors (array methods would only crowd the list).
-        for (m, _) in help::MEMBERS.iter().filter(|(m, _)| !matches!(*m, "push" | "len")) {
-            completer.push_word(m);
-        }
-        Self { syntax, completer, text_id: None }
+        let completer = Completer::new_with_syntax(&syntax).with_user_words().with_auto_indent();
+        Self { syntax, completer, text_id: None, members: None, dismissed: None, header_vars: Vec::new() }
     }
 }
 
@@ -45,10 +103,40 @@ impl ScriptEditor {
         let font = ui.text_style_height(&egui::TextStyle::Monospace);
         let rows = ((height - 8.0) / (font + 2.0)).floor().max(2.0) as usize;
         let focused = self.has_focus(ui);
-        let theme = if ui.visuals().dark_mode { ColorTheme::GITHUB_DARK } else { ColorTheme::GITHUB_LIGHT };
+        // GitHub colours with comments in dark green (a lighter green on the dark theme).
+        let theme = if ui.visuals().dark_mode {
+            ColorTheme { comments: "6a9955", ..ColorTheme::GITHUB_DARK }
+        } else {
+            ColorTheme { comments: "1a7f37", ..ColorTheme::GITHUB_LIGHT }
+        };
+        // Variables from the script header (`@param` keys, points, objects, path): dark teal,
+        // and offered by the completer.
+        let vars: Vec<String> = help::header_vars(code).into_iter().map(|(n, _)| n).collect();
+        if vars != self.header_vars {
+            self.completer = Completer::new_with_syntax(&self.syntax).with_user_words().with_auto_indent();
+            for v in &vars {
+                self.completer.push_word(v);
+            }
+            self.header_vars = vars.clone();
+        }
+        let marked = if ui.visuals().dark_mode { Color32::from_rgb(0x4e, 0xc9, 0xb0) } else { Color32::from_rgb(0x00, 0x7a, 0x87) };
         // The completer reads keys before the field (↑ / ↓ / Tab / Esc in its popup); only
         // while the editor has focus, so Esc and arrows still reach the viewport otherwise.
-        if focused {
+        if focused && let Some(pop) = &mut self.members {
+            // The member list owns ↑ / ↓ / Tab / Enter / Esc while it is open.
+            ui.input_mut(|i| {
+                let n = pop.items.len();
+                if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                    pop.sel = (pop.sel + 1) % n;
+                } else if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                    pop.sel = (pop.sel + n - 1) % n;
+                } else if i.consume_key(Modifiers::NONE, Key::Tab) || i.consume_key(Modifiers::NONE, Key::Enter) {
+                    i.events.push(Event::Paste(pop.items[pop.sel].insert.clone()));
+                } else if i.consume_key(Modifiers::NONE, Key::Escape) {
+                    self.dismissed = Some(pop.start);
+                }
+            });
+        } else if focused {
             self.completer.handle_input(ui.ctx());
         }
         let mut editor = CodeEditor::default()
@@ -58,6 +146,8 @@ impl ScriptEditor {
             .with_theme(theme)
             .with_numlines(true)
             .with_clickable_links(false)
+            .with_doc_tags(true)
+            .with_marked_words(vars, marked)
             .vscroll(false);
         let mut out = egui::ScrollArea::vertical()
             .id_salt("console_code_scroll")
@@ -68,11 +158,76 @@ impl ScriptEditor {
             .inner;
         self.text_id = Some(out.response.id);
         if out.response.has_focus() {
-            self.completer.show(&self.syntax, &theme, font, &mut out);
+            self.update_members(&out);
+            match &self.members {
+                Some(pop) => member_popup(ui, &out, pop, font),
+                None => self.completer.show(&self.syntax, &theme, font, &mut out),
+            }
             param_hint(ui, &out, font);
+        } else {
+            self.members = None;
         }
         out
     }
+
+    /// The member list for the text at the cursor (after `receiver.`), keeping the selection.
+    fn update_members(&mut self, out: &TextEditOutput) {
+        let text = out.galley.text();
+        let ctx = out.cursor_range.and_then(|r| items_at(text, r.primary.index.0.min(text.chars().count())));
+        let Some((items, prefix, start)) = ctx else {
+            self.members = None;
+            self.dismissed = None;
+            return;
+        };
+        if self.dismissed == Some(start) {
+            self.members = None;
+            return;
+        }
+        self.dismissed = None;
+        if items.is_empty() || (items.len() == 1 && items[0].name == prefix) {
+            self.members = None;
+            return;
+        }
+        let sel = match &self.members {
+            Some(old) if old.start == start => old.items.get(old.sel).and_then(|m| items.iter().position(|x| x.name == m.name)).unwrap_or(0),
+            _ => 0,
+        };
+        self.members = Some(MemberPopup { items, sel, start });
+    }
+}
+
+/// The member list under the cursor: name, call / type, description; the selected row framed.
+fn member_popup(ui: &Ui, out: &TextEditOutput, pop: &MemberPopup, font: f32) {
+    let text = out.galley.text();
+    let idx = out.cursor_range.map_or(0, |r| r.primary.index.0.min(text.chars().count()));
+    let cursor = out.galley.pos_from_cursor(CCursor::new(idx)).translate(out.galley_pos.to_vec2());
+    let weak = ui.visuals().weak_text_color();
+    let strong = ui.visuals().text_color();
+    let sel_bg = ui.visuals().selection.bg_fill.gamma_multiply(0.35);
+    egui::Area::new(Id::new("script_member_list"))
+        .order(Order::Tooltip)
+        .interactable(false)
+        .fixed_pos(cursor.left_bottom() + egui::vec2(0.0, 2.0))
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::symmetric(4, 3)).show(ui, |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                ui.spacing_mut().item_spacing.y = 0.0;
+                // Up to 12 rows around the selection.
+                let from = pop.sel.saturating_sub(11);
+                for (i, m) in pop.items.iter().enumerate().skip(from).take(12) {
+                    let mut job = LayoutJob::default();
+                    job.append(&m.label, 0.0, TextFormat::simple(FontId::monospace(font), strong));
+                    job.append(&format!("  {}", m.detail), 0.0, TextFormat::simple(FontId::proportional(font * 0.85), weak));
+                    let fill = if i == pop.sel { sel_bg } else { Color32::TRANSPARENT };
+                    egui::Frame::new().fill(fill).corner_radius(3.0).inner_margin(egui::Margin::symmetric(4, 1)).show(ui, |ui| {
+                        ui.label(job);
+                    });
+                }
+                if pop.items.len() > 12 {
+                    ui.label(egui::RichText::new(format!("{} of {}", pop.sel + 1, pop.items.len())).small().color(weak));
+                }
+            });
+        });
 }
 
 /// The signature of the call around the cursor, above the cursor line.
@@ -80,10 +235,16 @@ fn param_hint(ui: &Ui, out: &TextEditOutput, font: f32) {
     let Some(range) = out.cursor_range else { return };
     let text = out.galley.text();
     let idx = range.primary.index.0.min(text.chars().count());
+    if let Some(t) = help::tag_at(text, idx) {
+        let mut job = LayoutJob::default();
+        job.append(t.1, 0.0, TextFormat::simple(FontId::monospace(font), ui.visuals().text_color()));
+        job.append(&format!("  — {}", t.2), 0.0, TextFormat::simple(FontId::proportional(font * 0.9), ui.visuals().weak_text_color()));
+        return show_hint(ui, out, idx, job);
+    }
     let Some((name, arg, member)) = help::call_context(text, idx) else { return };
     let job = if member {
-        let Some((_, doc)) = help::MEMBERS.iter().find(|(m, _)| *m == name) else { return };
-        hint_job(ui, &format!("{name}()"), usize::MAX, doc, font)
+        let Some(m) = help::MEMBERS.iter().find(|m| m.name == name && m.sig.is_some()) else { return };
+        hint_job(ui, m.sig.unwrap_or(m.name), arg, m.doc, font)
     } else {
         let Some(d) = help::fn_doc(&name) else { return };
         // The first overload with enough arguments, else the longest.
@@ -95,6 +256,11 @@ fn param_hint(ui: &Ui, out: &TextEditOutput, font: f32) {
         }
         job
     };
+    show_hint(ui, out, idx, job);
+}
+
+/// A one-line hint just above the cursor line.
+fn show_hint(ui: &Ui, out: &TextEditOutput, idx: usize, job: LayoutJob) {
     let cursor = out.galley.pos_from_cursor(CCursor::new(idx)).translate(out.galley_pos.to_vec2());
     egui::Area::new(Id::new("script_param_hint"))
         .order(Order::Tooltip)

@@ -33,15 +33,29 @@ fn main() -> eframe::Result<()> {
         // with vsync macOS stops handing out frames to an occluded window.
         wgpu_options.surface.present_mode = egui_wgpu::wgpu::PresentMode::AutoNoVsync;
     }
-    let options = eframe::NativeOptions {
+    // Scripted runs stay in the background (the harness feeds its own input and fakes the
+    // window focus): the window opens inactive, on macOS the app is not activated and has no
+    // Dock icon. It still has to stay uncovered: eframe skips frames of an occluded window
+    // and macOS gives it no drawables. VARSTOTAS_FOREGROUND=1 activates the window as before.
+    let background = std::env::var_os("VARSTOTAS_SCRIPT").is_some() && std::env::var_os("VARSTOTAS_FOREGROUND").is_none();
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+    let mut options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_title("Varstotas")
             .with_inner_size([1400.0, 900.0])
-            .with_min_inner_size([800.0, 500.0]),
+            .with_min_inner_size([800.0, 500.0])
+            .with_active(!background),
         wgpu_options,
         ..Default::default()
     };
+    #[cfg(target_os = "macos")]
+    if background {
+        use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+        options.event_loop_builder = Some(Box::new(|b| {
+            b.with_activation_policy(ActivationPolicy::Accessory).with_activate_ignoring_other_apps(false);
+        }));
+    }
     eframe::run_native(
         "Varstotas",
         options,

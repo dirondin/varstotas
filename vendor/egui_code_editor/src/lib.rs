@@ -78,6 +78,8 @@ mod tests;
 mod themes;
 #[cfg(feature = "egui")]
 use egui::Stroke;
+#[cfg(feature = "egui")]
+use egui::Color32;
 #[cfg(feature = "editor")]
 use egui::text::CCursorRange;
 #[cfg(feature = "egui")]
@@ -126,6 +128,11 @@ pub struct CodeEditor {
     desired_width: f32,
     wrap: bool,
     hint_text: Option<String>,
+    /// Highlight `// @tag args` header lines inside comments (Varstotas addition).
+    doc_tags: bool,
+    /// Words drawn in their own colour on a light background (Varstotas addition).
+    marked: Vec<String>,
+    marked_color: Color32,
 }
 
 #[cfg(feature = "editor")]
@@ -134,6 +141,9 @@ impl Hash for CodeEditor {
         self.theme.hash(state);
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         (self.fontsize as u32).hash(state);
+        self.doc_tags.hash(state);
+        self.marked.hash(state);
+        self.marked_color.hash(state);
     }
 }
 
@@ -154,6 +164,9 @@ impl Default for CodeEditor {
             desired_width: f32::INFINITY,
             wrap: false,
             hint_text: None,
+            doc_tags: false,
+            marked: Vec::new(),
+            marked_color: Color32::TRANSPARENT,
         }
     }
 }
@@ -285,6 +298,17 @@ impl CodeEditor {
             stick_to_bottom,
             ..self
         }
+    }
+
+    /// Highlight `// @tag args` lines in comments: the tag like a keyword, then quoted
+    /// strings, numbers, `true` / `false`, `:type` and names (Varstotas addition).
+    pub fn with_doc_tags(self, doc_tags: bool) -> Self {
+        CodeEditor { doc_tags, ..self }
+    }
+
+    /// Draw these identifiers in `color` (Varstotas addition: variables a script gets from its header).
+    pub fn with_marked_words(self, words: Vec<String>, color: Color32) -> Self {
+        CodeEditor { marked: words, marked_color: color, ..self }
     }
 
     pub fn hint_text<S: Into<String>>(self, hint_text: S) -> Self {
@@ -485,9 +509,74 @@ impl CodeEditor {
 #[cfg(feature = "egui")]
 impl Editor for CodeEditor {
     fn append(&self, job: &mut LayoutJob, token: &Token) {
-        if !token.buffer().is_empty() {
-            job.append(token.buffer(), 0.0, self.format_token(token.ty()));
+        if token.buffer().is_empty() {
+            return;
         }
+        if self.doc_tags
+            && matches!(token.ty(), TokenType::Comment(_))
+            && self.append_doc_tags(job, token.buffer())
+        {
+            return;
+        }
+        if token.ty() == TokenType::Literal && self.marked.iter().any(|w| w == token.buffer()) {
+            let f = egui::text::TextFormat::simple(egui::FontId::monospace(self.fontsize), self.marked_color);
+            job.append(token.buffer(), 0.0, f);
+            return;
+        }
+        job.append(token.buffer(), 0.0, self.format_token(token.ty()));
+    }
+}
+
+#[cfg(feature = "editor")]
+#[cfg(feature = "egui")]
+impl CodeEditor {
+    /// `// @tag args`: false when the comment is not such a line.
+    fn append_doc_tags(&self, job: &mut LayoutJob, text: &str) -> bool {
+        let Some(body) = text.strip_prefix("//") else { return false };
+        let lead = body.len() - body.trim_start().len();
+        let rest = &body[lead..];
+        let Some(after) = rest.strip_prefix('@') else { return false };
+        let tag_len = after.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(after.len());
+        if tag_len == 0 {
+            return false;
+        }
+        let head = 2 + lead;
+        job.append(&text[..head], 0.0, self.format_token(TokenType::Comment(false)));
+        job.append(&text[head..head + 1 + tag_len], 0.0, self.format_token(TokenType::Keyword));
+        let args = &text[head + 1 + tag_len..];
+        let mut after_colon = false;
+        let mut i = 0;
+        while i < args.len() {
+            let c = args[i..].chars().next().unwrap_or(' ');
+            let (len, ty) = if c == '"' {
+                let end = args[i + 1..].find('"').map_or(args.len(), |e| i + 1 + e + 1);
+                (end - i, TokenType::Str('"'))
+            } else if c.is_ascii_digit() || (c == '-' && args[i + 1..].starts_with(|d: char| d.is_ascii_digit())) {
+                let n = args[i + 1..].find(|d: char| !(d.is_alphanumeric() || d == '.')).map_or(args.len() - i, |e| e + 1);
+                (n, TokenType::Numeric(false))
+            } else if c.is_alphanumeric() || c == '_' {
+                let n = args[i..].find(|d: char| !(d.is_alphanumeric() || d == '_')).unwrap_or(args.len() - i);
+                let word = &args[i..i + n];
+                let ty = if after_colon {
+                    TokenType::Type
+                } else if word == "true" || word == "false" {
+                    TokenType::Keyword
+                } else {
+                    TokenType::Literal
+                };
+                (n, ty)
+            } else if c.is_whitespace() {
+                (c.len_utf8(), TokenType::Whitespace(c))
+            } else {
+                (c.len_utf8(), TokenType::Punctuation(c))
+            };
+            if !c.is_whitespace() {
+                after_colon = c == ':';
+            }
+            job.append(&args[i..i + len], 0.0, self.format_token(ty));
+            i += len;
+        }
+        true
     }
 }
 

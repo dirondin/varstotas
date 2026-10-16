@@ -15,6 +15,8 @@ pub struct DebugCapture {
     /// Set once the capture is written: the app should close without the save prompt.
     pub force_close: bool,
     script: Option<Script>,
+    /// Last occlusion state of the window seen by a scripted run (logged when it changes).
+    occluded: Option<bool>,
     /// Frame-time measurement window started by the `perf` script command.
     pub perf: Option<PerfWindow>,
 }
@@ -85,6 +87,13 @@ impl DebugCapture {
 
     /// Returns true on the frame when the debug "select all" should happen.
     pub fn update(&mut self, ctx: &Context) -> bool {
+        if self.script_active() {
+            let occ = ctx.input(|i| i.viewport().occluded);
+            if occ != self.occluded {
+                self.occluded = occ;
+                log::info!("script: window occluded={occ:?}");
+            }
+        }
         let Some(path) = self.path.clone() else { return false };
         self.frame += 1;
         let select_all = self.frame == 20 && std::env::var("VARSTOTAS_SELECT_ALL").is_ok_and(|v| v == "1");

@@ -1934,6 +1934,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skrifa",
+ "winit",
  "winresource",
 ]
 

@@ -35,4 +35,43 @@ raw drag 340 270 340 170
 wait 5
 expect code_h=250
 screenshot shots/code_split.bmp
+# completion after a dot by type: a group offers name / definition, Enter takes the selection
+raw click 400 400
+wait 2
+raw key Enter
+raw text let g = box(ORIGIN, 100, 100, 100);
+raw key Enter
+raw text g.
+wait 3
+screenshot shots/code_members.bmp
+raw text na
+wait 2
+raw key Enter
+raw text  = "Shelf"; print(g.name);
+wait 2
+expect \nlet g = box(ORIGIN, 100, 100, 100);\ng.name= \"Shelf\"; print(g.name);
+# a face: ↓ walks the list, Tab inserts a method with its parenthesis
+raw key Enter
+raw text f.vertices[0].
+wait 3
+screenshot shots/code_members_vec.bmp
+raw text di
+raw key Tab
+raw text ORIGIN));
+wait 2
+expect \nf.vertices[0].distance(ORIGIN));"
+# header tags: `// @pa` offers @param, `key:in` offers int; tag lines are highlighted
+raw key Enter
+raw text // @pa
+wait 3
+screenshot shots/code_tags.bmp
+raw key Tab
+raw text steps:in
+wait 3
+screenshot shots/code_tag_types.bmp
+raw key Enter
+raw text  = 12 "Steps"
+wait 3
+expect \n// @param steps:int= 12 \"Steps\""
+screenshot shots/code_tag_line.bmp
 dump done

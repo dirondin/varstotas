@@ -83,32 +83,425 @@ pub const FNS: &[FnDoc] = &[
     f("range", &["range(from, to)", "range(from, to, step)"], "Integers from..to (to excluded), for loops."),
 ];
 
-/// Methods and properties after a dot (entities, vectors, arrays).
-pub const MEMBERS: &[(&str, &str)] = &[
-    ("kind", "entity kind: face, edge, vertex, group, component, parametric"),
-    ("valid", "the entity still exists"),
-    ("area", "face area (mm²)"),
-    ("length", "edge length; v.length() for vectors"),
-    ("normal", "face normal"),
-    ("center", "centre point"),
-    ("vertices", "points of a face / edge"),
-    ("edges", "edges of a face"),
-    ("faces", "faces of an edge / neighbours of a face"),
-    ("name", "group / component name (assignable)"),
-    ("definition", "component definition name"),
-    ("material", "material name"),
-    ("tag", "tag name"),
-    ("soft", "edge is soft"),
-    ("x", "vector component"),
-    ("y", "vector component"),
-    ("z", "vector component"),
-    ("normalize", "v.normalize()"),
-    ("dot", "a.dot(b)"),
-    ("cross", "a.cross(b)"),
-    ("distance", "a.distance(b)"),
-    ("push", "array.push(value)"),
-    ("len", "array.len()"),
+/// What a script expression is, as far as the editor can tell (for completion after a dot).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ty {
+    Face,
+    Edge,
+    Group,
+    Vector,
+    Num,
+    Bool,
+    Str,
+    /// `bounds()`: `#{ min, max, size, center }`.
+    Bounds,
+    Faces,
+    Edges,
+    Groups,
+    Vecs,
+    Array,
+    Any,
+}
+
+impl Ty {
+    /// Element type of an array.
+    fn elem(self) -> Ty {
+        match self {
+            Ty::Faces => Ty::Face,
+            Ty::Edges => Ty::Edge,
+            Ty::Groups => Ty::Group,
+            Ty::Vecs => Ty::Vector,
+            _ => Ty::Any,
+        }
+    }
+}
+
+/// A property (`f.area`) or method (`v.dot(b)`, `sig` has the parentheses) after a dot.
+#[derive(Clone, Copy, Debug)]
+pub struct Member {
+    pub name: &'static str,
+    /// `None` for a property, else the call (`dot(b)`).
+    pub sig: Option<&'static str>,
+    pub doc: &'static str,
+    pub on: &'static [Ty],
+    pub ty: Ty,
+}
+
+const fn prop(name: &'static str, doc: &'static str, on: &'static [Ty], ty: Ty) -> Member {
+    Member { name, sig: None, doc, on, ty }
+}
+
+const fn meth(name: &'static str, sig: &'static str, doc: &'static str, on: &'static [Ty], ty: Ty) -> Member {
+    Member { name, sig: Some(sig), doc, on, ty }
+}
+
+use Ty::*;
+const ENT: &[Ty] = &[Face, Edge, Group];
+const ARR: &[Ty] = &[Faces, Edges, Groups, Vecs, Array];
+
+/// Properties and methods of entities, vectors, arrays, strings and bounds.
+pub const MEMBERS: &[Member] = &[
+    prop("kind", "\"face\", \"edge\", \"group\", \"component\" …", ENT, Str),
+    prop("valid", "the entity still exists", ENT, Bool),
+    prop("area", "face area, mm²", &[Face], Num),
+    prop("normal", "face normal (world)", &[Face], Vector),
+    prop("edges", "edges of the face", &[Face], Edges),
+    prop("faces", "faces of the edge / neighbours of the face", &[Face, Edge], Faces),
+    prop("length", "edge length, mm", &[Edge], Num),
+    prop("soft", "the edge is soft", &[Edge], Bool),
+    prop("center", "centre of the bounds (world)", &[Face, Edge, Group], Vector),
+    prop("vertices", "points of the face / edge (world)", &[Face, Edge], Vecs),
+    prop("name", "group / component name (assignable)", &[Group], Str),
+    prop("definition", "component definition name", &[Group], Str),
+    prop("material", "material name or ()", &[Face, Group], Str),
+    prop("tag", "tag name or ()", ENT, Str),
+    prop("x", "x coordinate (assignable)", &[Vector], Num),
+    prop("y", "y coordinate (assignable)", &[Vector], Num),
+    prop("z", "z coordinate (assignable)", &[Vector], Num),
+    meth("length", "length()", "vector length", &[Vector], Num),
+    meth("normalize", "normalize()", "unit vector", &[Vector], Vector),
+    meth("dot", "dot(b)", "dot product", &[Vector], Num),
+    meth("cross", "cross(b)", "cross product", &[Vector], Vector),
+    meth("distance", "distance(b)", "distance to b", &[Vector], Num),
+    prop("min", "minimum corner", &[Bounds], Vector),
+    prop("max", "maximum corner", &[Bounds], Vector),
+    prop("size", "size along x, y, z", &[Bounds], Vector),
+    prop("center", "centre", &[Bounds], Vector),
+    meth("len", "len()", "number of items", ARR, Num),
+    meth("is_empty", "is_empty()", "no items", ARR, Bool),
+    meth("push", "push(value)", "append an item", ARR, Any),
+    meth("pop", "pop()", "remove and return the last item", ARR, Any),
+    meth("insert", "insert(index, value)", "insert an item", ARR, Any),
+    meth("remove", "remove(index)", "remove and return an item", ARR, Any),
+    meth("contains", "contains(value)", "the array / string contains the value", &[Faces, Edges, Groups, Vecs, Array, Str], Bool),
+    meth("index_of", "index_of(value)", "index of the value or -1", ARR, Num),
+    meth("filter", "filter(|x| condition)", "items where the closure is true", ARR, Any),
+    meth("map", "map(|x| value)", "a new array of the closure results", ARR, Array),
+    meth("reduce", "reduce(|sum, x| sum + x, start)", "fold the items", ARR, Any),
+    meth("len", "len()", "number of characters", &[Str], Num),
+    meth("to_upper", "to_upper()", "upper case (in place)", &[Str], Any),
+    meth("to_lower", "to_lower()", "lower case (in place)", &[Str], Any),
+    meth("trim", "trim()", "strip spaces (in place)", &[Str], Any),
+    meth("split", "split(separator)", "split into an array", &[Str], Array),
+    meth("starts_with", "starts_with(text)", "the string starts with text", &[Str], Bool),
+    meth("to_string", "to_string()", "as text", &[Face, Edge, Group, Vector, Num], Str),
 ];
+
+/// What a function returns.
+fn fn_ty(name: &str) -> Ty {
+    match name {
+        "face" | "rect" | "circle" | "polygon" | "pushpull" | "offset" => Face,
+        "box" | "cylinder" | "group" | "component" | "union" | "subtract" | "intersect" | "trim" | "outer_shell" => Group,
+        "line" | "arc" | "edges" => Edges,
+        "faces" | "all_faces" => Faces,
+        "groups" | "split" => Groups,
+        "all" | "entities" | "selection" | "copy" | "materials" | "range" => Array,
+        "vec3" => Vector,
+        "bounds" | "model_bounds" => Bounds,
+        "material" | "units" | "read_text" => Str,
+        "length" | "len" => Num,
+        _ => Any,
+    }
+}
+
+/// Members that apply to `ty` (all entity and vector members for an unknown type).
+pub fn members_for(ty: Ty) -> Vec<&'static Member> {
+    let any = [Face, Edge, Group, Vector];
+    let mut out: Vec<&Member> = Vec::new();
+    for m in MEMBERS {
+        let fits = if ty == Any { m.on.iter().any(|t| any.contains(t)) } else { m.on.contains(&ty) };
+        if fits && !out.iter().any(|o| o.name == m.name) {
+            out.push(m);
+        }
+    }
+    out
+}
+
+fn is_ident(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// The completion context after a dot: the receiver's type, the typed part of the member name
+/// and its start (char indices into `src`; `cursor` is a char index).
+pub fn member_context(src: &str, cursor: usize) -> Option<(Ty, String, usize)> {
+    let chars: Vec<char> = src.chars().take(cursor).collect();
+    let mut i = chars.len();
+    while i > 0 && is_ident(chars[i - 1]) {
+        i -= 1;
+    }
+    let prefix: String = chars[i..].iter().collect();
+    if i == 0 || chars[i - 1] != '.' || in_comment_or_string(&chars[..i]) {
+        return None;
+    }
+    let ty = expr_ty(&chars, i - 1, 0)?;
+    Some((ty, prefix, i))
+}
+
+/// The cursor is inside a `//` comment or a string.
+fn in_comment_or_string(chars: &[char]) -> bool {
+    let line_start = chars.iter().rposition(|c| *c == '\n').map_or(0, |p| p + 1);
+    let line = &chars[line_start..];
+    let mut quote: Option<char> = None;
+    for (k, c) in line.iter().enumerate() {
+        match quote {
+            Some(q) if *c == q => quote = None,
+            Some(_) => {}
+            None if *c == '"' || *c == '`' => quote = Some(*c),
+            None if *c == '/' && line.get(k + 1) == Some(&'/') => return true,
+            None => {}
+        }
+    }
+    quote.is_some()
+}
+
+/// Type of the expression ending just before `end` (the dot): `name`, `name(…)`, `x[…]`,
+/// `x.member`, a constant.
+fn expr_ty(chars: &[char], end: usize, depth: usize) -> Option<Ty> {
+    if depth > 8 {
+        return Some(Any);
+    }
+    let mut j = end;
+    while j > 0 && chars[j - 1] == ' ' {
+        j -= 1;
+    }
+    if j == 0 {
+        return None;
+    }
+    let last = chars[j - 1];
+    // `x[i]`: an item of the array.
+    if last == ']' || last == ')' {
+        let open_c = if last == ']' { '[' } else { '(' };
+        let mut d = 0;
+        let mut k = j;
+        while k > 0 {
+            k -= 1;
+            if chars[k] == last {
+                d += 1;
+            } else if chars[k] == open_c {
+                d -= 1;
+                if d == 0 {
+                    break;
+                }
+            }
+        }
+        if last == ']' {
+            return Some(if k > 0 && (is_ident(chars[k - 1]) || matches!(chars[k - 1], ')' | ']')) { expr_ty(chars, k, depth + 1)?.elem() } else { Array });
+        }
+        let mut s = k;
+        while s > 0 && is_ident(chars[s - 1]) {
+            s -= 1;
+        }
+        let name: String = chars[s..k].iter().collect();
+        if name.is_empty() {
+            return Some(Any);
+        }
+        if s > 0 && chars[s - 1] == '.' {
+            return Some(member_ty(expr_ty(chars, s - 1, depth + 1)?, &name));
+        }
+        return Some(fn_ty(&name));
+    }
+    if !is_ident(last) {
+        return None;
+    }
+    let mut s = j;
+    while s > 0 && is_ident(chars[s - 1]) {
+        s -= 1;
+    }
+    let name: String = chars[s..j].iter().collect();
+    if name.starts_with(|c: char| c.is_ascii_digit()) {
+        return None; // `1.5`
+    }
+    if s > 0 && chars[s - 1] == '.' {
+        return Some(member_ty(expr_ty(chars, s - 1, depth + 1)?, &name));
+    }
+    if CONSTANTS.contains(&name.as_str()) {
+        return Some(Vector);
+    }
+    Some(var_ty(chars, &name, s, depth))
+}
+
+fn member_ty(recv: Ty, name: &str) -> Ty {
+    let ms = members_for(recv);
+    ms.iter().find(|m| m.name == name).map_or(Any, |m| m.ty)
+}
+
+/// Type of a variable from its last `let name = …` / `for name in …` before `before`.
+fn var_ty(chars: &[char], name: &str, before: usize, depth: usize) -> Ty {
+    let text: String = chars[..before].iter().collect();
+    if let Some((_, t)) = header_vars(&text).into_iter().find(|(n, _)| n == name) {
+        return t;
+    }
+    match name {
+        "points" => return Vecs,
+        "objects" => return Array,
+        _ => {}
+    }
+    let mut best: Option<(usize, Ty)> = None;
+    for kw in ["let", "const", "for"] {
+        let pat = format!("{kw} {name}");
+        let mut from = 0;
+        while let Some(p) = text[from..].find(&pat) {
+            let at = from + p;
+            from = at + pat.len();
+            let before_ok = at == 0 || !text[..at].chars().next_back().is_some_and(is_ident);
+            let rest = &text[at + pat.len()..];
+            if !before_ok || rest.starts_with(is_ident) {
+                continue;
+            }
+            let rest = rest.trim_start();
+            let expr = if kw == "for" { rest.strip_prefix("in") } else { rest.strip_prefix('=') };
+            let Some(expr) = expr else { continue };
+            let e: Vec<char> = expr.trim_start().chars().take_while(|c| *c != ';' && *c != '{' && *c != '\n').collect();
+            let e_str: String = e.iter().collect();
+            let e_trim = e_str.trim_end();
+            let ty = if e_trim.starts_with('[') {
+                Array
+            } else if e_trim.starts_with('"') || e_trim.starts_with('`') {
+                Str
+            } else if e_trim.starts_with(|c: char| c.is_ascii_digit() || c == '-') && !e_trim.contains("..") {
+                Num
+            } else {
+                let ec: Vec<char> = e_trim.chars().collect();
+                expr_ty(&ec, ec.len(), depth + 1).unwrap_or(Any)
+            };
+            let ty = if kw == "for" { if e_trim.contains("..") { Num } else { ty.elem() } } else { ty };
+            if best.is_none_or(|(b, _)| at > b) {
+                best = Some((at, ty));
+            }
+        }
+    }
+    best.map_or(Any, |(_, t)| t)
+}
+
+impl Ty {
+    pub fn label(self) -> &'static str {
+        match self {
+            Face => "face",
+            Edge => "edge",
+            Group => "group",
+            Vector => "vector",
+            Num => "number",
+            Bool => "bool",
+            Str => "string",
+            Bounds => "bounds",
+            Faces => "array of faces",
+            Edges => "array of edges",
+            Groups => "array of groups",
+            Vecs => "array of points",
+            Array => "array",
+            Any => "entity / vector",
+        }
+    }
+}
+
+/// Header tags of plugins and console scripts (`// @tag …`, see `docs/PLUGINS.md`): name,
+/// syntax, what it does.
+pub const TAGS: &[(&str, &str, &str)] = &[
+    ("name", "@name Title", "name in the menu and the dialog title"),
+    ("menu", "@menu Folder / Item", "path under Extensions"),
+    ("description", "@description Text", "tooltip and text of the dialog"),
+    ("param", "@param key[:type] = default \"Label\"", "a value asked in the dialog before the run"),
+    ("pick", "@pick N \"Prompt\"", "N points clicked before the run → points"),
+    ("select", "@select \"Prompt\"", "objects selected before the run → objects"),
+    ("import", "@import ext, ext", "a File → Import entry; the file in path"),
+    ("export", "@export ext", "a File → Export entry; the file in path"),
+];
+
+/// Types of `@param key:type`.
+pub const PARAM_TYPES: &[(&str, &str)] = &[
+    ("length", "length with units (\"1.2m\"), mm in the script — the default for numbers"),
+    ("int", "whole number"),
+    ("number", "fractional number"),
+    ("text", "text — the default for a quoted value"),
+    ("bool", "check box — the default for true / false"),
+];
+
+/// Completion in a header comment line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TagCtx {
+    /// `// @pa|`: the tag name.
+    Tag,
+    /// `// @param w:in|`: the parameter type.
+    ParamType,
+}
+
+/// The header-tag context at `cursor` (char index): what is completed, the typed prefix and
+/// its start.
+pub fn tag_context(src: &str, cursor: usize) -> Option<(TagCtx, String, usize)> {
+    let chars: std::vec::Vec<char> = src.chars().take(cursor).collect();
+    let line_start = chars.iter().rposition(|c| *c == '\n').map_or(0, |p| p + 1);
+    let line: String = chars[line_start..].iter().collect();
+    let body = line.trim_start().strip_prefix("//")?.trim_start();
+    let after = body.strip_prefix('@')?;
+    let word_len = after.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(after.len());
+    if word_len == after.len() {
+        return Some((TagCtx::Tag, after.to_string(), cursor - after.chars().count()));
+    }
+    let rest = after.strip_prefix("param")?;
+    let rest = rest.strip_prefix(char::is_whitespace)?.trim_start();
+    let (key, ty) = rest.split_once(':')?;
+    let key = key.trim_end();
+    if key.is_empty() || !key.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
+    let ty = ty.trim_start();
+    if !ty.chars().all(|c| c.is_alphanumeric()) {
+        return None;
+    }
+    Some((TagCtx::ParamType, ty.to_string(), cursor - ty.chars().count()))
+}
+
+/// Variables a script gets from its header (the comment lines at the top): `@param` keys,
+/// `points` (`@pick`), `objects` (`@select`), `path` (`@import` / `@export`), with types.
+pub fn header_vars(src: &str) -> std::vec::Vec<(String, Ty)> {
+    let mut out = std::vec::Vec::new();
+    for line in src.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let Some(c) = t.strip_prefix("//") else { break };
+        let Some(tag) = c.trim().strip_prefix('@') else { continue };
+        let (key, rest) = tag.split_once(char::is_whitespace).unwrap_or((tag, ""));
+        match key {
+            "param" => {
+                let Some((decl, default)) = rest.split_once('=') else { continue };
+                let (name, ty) = decl.split_once(':').map_or((decl, None), |(n, t)| (n, Some(t.trim())));
+                let name = name.trim();
+                if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    continue;
+                }
+                let d = default.trim();
+                let ty = match ty {
+                    Some("text") => Str,
+                    Some("bool") => Bool,
+                    Some(_) => Num,
+                    None if d.starts_with("true") || d.starts_with("false") => Bool,
+                    None if d.starts_with('"') => Str,
+                    None => Num,
+                };
+                out.push((name.to_string(), ty));
+            }
+            "pick" => out.push(("points".into(), Vecs)),
+            "select" => out.push(("objects".into(), Array)),
+            "import" | "export" if !out.iter().any(|(n, _)| n == "path") => out.push(("path".into(), Str)),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The tag of the header line around `cursor`, for the syntax hint.
+pub fn tag_at(src: &str, cursor: usize) -> Option<&'static (&'static str, &'static str, &'static str)> {
+    let chars: std::vec::Vec<char> = src.chars().collect();
+    let cursor = cursor.min(chars.len());
+    let start = chars[..cursor].iter().rposition(|c| *c == '\n').map_or(0, |p| p + 1);
+    let end = chars[cursor..].iter().position(|c| *c == '\n').map_or(chars.len(), |p| cursor + p);
+    let line: String = chars[start..end].iter().collect();
+    let after = line.trim_start().strip_prefix("//")?.trim_start().strip_prefix('@')?;
+    let word = after.split(|c: char| !(c.is_alphanumeric() || c == '_')).next()?;
+    TAGS.iter().find(|t| t.0 == word)
+}
 
 pub const KEYWORDS: &[&str] = &[
     "let", "const", "fn", "if", "else", "for", "in", "while", "loop", "break", "continue", "return", "true", "false", "switch",
@@ -224,6 +617,51 @@ mod tests {
         assert_eq!(sig_args("box(origin, sx, sy, sz)"), ["origin", "sx", "sy", "sz"]);
         assert_eq!(sig_args("set_params(g, #{ x, y })"), ["g", "#{ x, y }"]);
         assert!(sig_args("exit()").is_empty());
+    }
+
+    #[test]
+    fn member_completion_by_type() {
+        let at = |s: &str| member_context(s, s.chars().count()).map(|(t, p, _)| (t, p));
+        assert_eq!(at("let g = box(ORIGIN, 1, 2, 3);\ng.na"), Some((Ty::Group, "na".into())));
+        assert_eq!(at("let f = rect(ORIGIN, 1, 2);\nf."), Some((Ty::Face, "".into())));
+        assert_eq!(at("let f = rect(ORIGIN, 1, 2);\nf.normal."), Some((Ty::Vector, "".into())));
+        assert_eq!(at("for e in edges() { e."), Some((Ty::Edge, "".into())));
+        assert_eq!(at("for i in 0..3 { i."), Some((Ty::Num, "".into())));
+        assert_eq!(at("faces()[0].ar"), Some((Ty::Face, "ar".into())));
+        assert_eq!(at("box(ORIGIN, 1, 2, 3)."), Some((Ty::Group, "".into())));
+        assert_eq!(at("bounds(g).size.x"), Some((Ty::Vector, "x".into())));
+        assert_eq!(at("points[0]."), Some((Ty::Vector, "".into())));
+        assert_eq!(at("let p = ORIGIN; p."), Some((Ty::Vector, "".into())));
+        assert_eq!(at("unknown."), Some((Ty::Any, "".into())));
+        assert_eq!(at("let x = 1.5"), None);
+        assert_eq!(at("// g."), None);
+        assert_eq!(at("print(\"a.b"), None);
+        let names: std::vec::Vec<_> = members_for(Ty::Group).iter().map(|m| m.name).collect();
+        assert!(names.contains(&"name") && !names.contains(&"area"));
+    }
+
+    #[test]
+    fn header_variables() {
+        let src = "// @name X\n// @param w = 100 \"W\"\n// @param n:int = 3\n// @param label = \"a\"\n// @param on = true\n// @pick 2\n// @select\nlet a = 1; // @param late = 1\n";
+        let v = header_vars(src);
+        let names: std::vec::Vec<_> = v.iter().map(|(n, t)| (n.as_str(), *t)).collect();
+        assert_eq!(names, [("w", Ty::Num), ("n", Ty::Num), ("label", Ty::Str), ("on", Ty::Bool), ("points", Ty::Vecs), ("objects", Ty::Array)]);
+        let s = format!("{src}label.");
+        assert_eq!(member_context(&s, s.chars().count()).map(|c| c.0), Some(Ty::Str));
+    }
+
+    #[test]
+    fn header_tag_completion() {
+        let at = |s: &str| tag_context(s, s.chars().count()).map(|(t, p, _)| (t, p));
+        assert_eq!(at("// @pa"), Some((TagCtx::Tag, "pa".into())));
+        assert_eq!(at("let a = 1;\n  //@"), Some((TagCtx::Tag, "".into())));
+        assert_eq!(at("// @param w:in"), Some((TagCtx::ParamType, "in".into())));
+        assert_eq!(at("// @param w : "), Some((TagCtx::ParamType, "".into())));
+        assert_eq!(at("// @param w = 1"), None);
+        assert_eq!(at("// @pick 2"), None);
+        assert_eq!(at("let x = a@"), None);
+        assert_eq!(tag_at("// @pick 2 \"x\"", 3).map(|t| t.0), Some("pick"));
+        assert_eq!(tag_at("// plain", 3), None);
     }
 
     #[test]

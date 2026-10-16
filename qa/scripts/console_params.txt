@@ -12,10 +12,16 @@ raw text // @param h = 200 "Height"
 raw key Enter
 raw text // @select "Select faces to raise"
 raw key Enter
-raw text for o in objects { pushpull(o, h); }
+# header variables are offered by the completer: `obj` + Tab → objects
+raw text for o in obj
+wait 3
+screenshot shots/console_params_complete.bmp
+raw key Tab
+raw text  { pushpull(o, h); }
 raw key Enter
 raw text print(`raised ${objects.len()}`);
 wait 2
+expect objects{ pushpull(o, h); }
 raw mods cmd
 raw key Enter
 raw mods none
