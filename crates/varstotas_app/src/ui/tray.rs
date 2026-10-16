@@ -99,6 +99,9 @@ pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
     [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0]
 }
 
+/// Default Tray cards in their order (Window menu checkboxes, `Prefs::tray_hidden`).
+pub(crate) const TRAY_CARDS: [&str; 9] = ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Soften Edges", "Instructor"];
+
 fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl FnOnce(&mut Ui) -> R) {
     card_ex(ui, title, icon, default_open, false, body)
 }
@@ -202,17 +205,40 @@ impl VarstotasApp {
     }
 
     fn tray_cards(&mut self, ui: &mut Ui) {
+        let hidden = self.prefs.tray_hidden.clone();
+        let on = |n: &str| !hidden.iter().any(|h| h == n);
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            card(ui, "Entity Info", Icon::Info, true, |ui| self.entity_info(ui));
-            card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui));
-            let open = self.library_open_requested();
-            card_ex(ui, "Components", Icon::Group, false, open, |ui| self.library_panel(ui));
-            card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));
-            card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui));
-            card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui));
-            card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui));
-            card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui));
-            card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui));
+            if on("Entity Info") {
+                card(ui, "Entity Info", Icon::Info, true, |ui| self.entity_info(ui));
+            }
+            if on("Materials") {
+                card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui));
+            }
+            if on("Components") {
+                let open = self.library_open_requested();
+                card_ex(ui, "Components", Icon::Group, false, open, |ui| self.library_panel(ui));
+            }
+            if on("Tags") {
+                card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));
+            }
+            if on("Outliner") {
+                card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui));
+            }
+            if on("Scenes") {
+                card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui));
+            }
+            if on("Shadows") {
+                card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui));
+            }
+            if on("Soften Edges") {
+                card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui));
+            }
+            if on("Instructor") {
+                card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui));
+            }
+            if hidden.len() >= TRAY_CARDS.len() {
+                ui.label(RichText::new("Every card is off: Window → Tray cards").color(theme::TEXT_DIM));
+            }
         });
     }
 

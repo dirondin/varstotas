@@ -37,7 +37,7 @@ pub struct LibraryState {
     /// Name being typed for Save Selection.
     pub save_name: Option<String>,
     pub scanned: Option<PathBuf>,
-    /// Open the tray card on the next frame (Window → Components).
+    /// Open the tray card on the next frame (the `components` harness command).
     pub open_card: bool,
     /// Folders of the list drawn last: (folder, tiles, folded), for the harness.
     pub shown_folders: Vec<(String, usize, bool)>,
@@ -208,8 +208,8 @@ impl VarstotasApp {
         }
     }
 
-    /// A folder heading of the Components list: a fold arrow and the name, a link showing the
-    /// folder in the Finder (the bundled Examples and the Document folder: Hide instead). True
+    /// A folder heading of the Components list ("" = the library folder itself): a fold arrow
+    /// and the name, a link showing the folder in the Finder (the bundled Examples and the Document folder: Hide instead). True
     /// when folded.
     fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>) -> bool {
         let folded = self.prefs.library_collapsed.iter().any(|f| f == folder);
@@ -236,6 +236,17 @@ impl VarstotasApp {
                 ui.label(folder).on_hover_text("Generators found only in the open document (Edit → Save to Library makes a file)");
                 if ui.small_button("Hide").on_hover_text("Hide the document's generators (… → Show Document brings them back)").clicked() {
                     self.prefs.hide_document = true;
+                }
+            } else if folder.is_empty() {
+                // The library folder: its name, a link; Default when the user chose another one.
+                if let Some(dir) = root {
+                    let name = dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    if ui.link(name).on_hover_text(format!("{}\nClick to show in the Finder", dir.display())).clicked() {
+                        crate::ui::extensions::reveal(dir);
+                    }
+                }
+                if self.prefs.library_dir.is_some() && ui.small_button("Default").on_hover_text("Back to ~/.varstotas/components").clicked() {
+                    self.prefs.library_dir = None;
                 }
             } else if let Some(dir) = root.map(|r| r.join(folder))
                 && ui.link(folder).on_hover_text(format!("{}\nClick to show in the Finder", dir.display())).clicked()
@@ -347,18 +358,6 @@ impl VarstotasApp {
             .response
             .on_hover_text("Library folder, examples");
         });
-        if let Some(d) = self.library_dir() {
-            let custom = self.prefs.library_dir.is_some();
-            ui.horizontal(|ui| {
-                let shown = d.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                if ui.link(RichText::new(shown).small()).on_hover_text(format!("{}\nClick to show in the Finder", d.display())).clicked() {
-                    crate::ui::extensions::reveal(&d);
-                }
-                if custom && ui.small_button("Default").on_hover_text("Back to ~/.varstotas/components").clicked() {
-                    self.prefs.library_dir = None;
-                }
-            });
-        }
         let filter = self.library.filter.trim().to_lowercase();
         let found = |name: &str| filter.is_empty() || name.to_lowercase().contains(&filter);
         // Components and generators in one list: by folder, then name.
@@ -389,11 +388,13 @@ impl VarstotasApp {
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         self.library.shown_folders.clear();
+        // The library folder itself: always a heading (its own items fold under it).
+        let root_folded = self.folder_header(ui, "", lib_dir.as_deref());
         let mut k = 0;
         while k < shown.len() {
             let folder = shown[k].0.clone();
             let end = shown[k..].iter().position(|t| t.0 != folder).map_or(shown.len(), |n| k + n);
-            let folded = !folder.is_empty() && self.folder_header(ui, &folder, lib_dir.as_deref());
+            let folded = if folder.is_empty() { root_folded } else { self.folder_header(ui, &folder, lib_dir.as_deref()) };
             self.library.shown_folders.push((folder.clone(), end - k, folded));
             if folded {
                 k = end;

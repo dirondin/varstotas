@@ -341,15 +341,30 @@ impl VarstotasApp {
 
             ui.menu_button("Extensions", |ui| self.extensions_menu(ui));
 
-            ui.menu_button("Window", |ui| {
+            // Stays open on clicks so several tray cards can be toggled; buttons close it.
+            let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+            egui::containers::menu::MenuButton::new("Window").config(keep).ui(ui, |ui| {
                 let mut open = self.prefs.tray_open;
                 if ui.checkbox(&mut open, "Default Tray").clicked() {
                     self.actions.push(Action::ToggleTray);
                 }
-                if ui.button("Components").clicked() {
-                    self.actions.push(Action::ShowComponents);
-                    ui.close();
-                }
+                // The tray's cards: a checkbox each (turning one on opens the tray).
+                ui.indent("tray_cards", |ui| {
+                    for c in crate::ui::tray::TRAY_CARDS {
+                        let mut shown = !self.prefs.tray_hidden.iter().any(|h| h == c);
+                        if ui.checkbox(&mut shown, c).clicked() {
+                            if shown {
+                                self.prefs.tray_hidden.retain(|h| h != c);
+                                if !self.prefs.tray_open {
+                                    self.actions.push(Action::ToggleTray);
+                                }
+                            } else {
+                                self.prefs.tray_hidden.push(c.to_string());
+                            }
+                        }
+                    }
+                });
+                ui.separator();
                 if ui.add(egui::Button::new("Sheets…").selected(self.sheets.open)).clicked() {
                     self.actions.push(Action::Sheets);
                     ui.close();
@@ -368,7 +383,10 @@ impl VarstotasApp {
                     ui.close();
                 }
                 ui.separator();
-                self.item(ui, "Preferences…", None, true, Action::Preferences);
+                if ui.button("Preferences…").clicked() {
+                    self.actions.push(Action::Preferences);
+                    ui.close();
+                }
             });
 
             ui.menu_button("Help", |ui| {

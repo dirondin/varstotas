@@ -85,6 +85,8 @@ pub struct Prefs {
     pub hide_document: bool,
     /// Components list: collapsed folders.
     pub library_collapsed: Vec<String>,
+    /// Default Tray cards turned off in the Window menu (by title, see `ui::tray::TRAY_CARDS`).
+    pub tray_hidden: Vec<String>,
     /// View → Snapping: master switch and the inferences turned off.
     pub snapping: crate::inference::settings::SnapPrefs,
     /// View → Grid.
@@ -110,6 +112,7 @@ impl Default for Prefs {
             hide_examples: false,
             hide_document: false,
             library_collapsed: Vec::new(),
+            tray_hidden: Vec::new(),
             snapping: Default::default(),
             grid: Default::default(),
         }
@@ -1288,6 +1291,7 @@ impl VarstotasApp {
             Action::SaveToLibrary(name) => self.save_to_library(&name),
             Action::ShowComponents => {
                 self.prefs.tray_open = true;
+                self.prefs.tray_hidden.retain(|c| c != "Components");
                 self.library.open_card = true;
             }
             Action::PluginImport(i) => self.plugin_file(i, false),

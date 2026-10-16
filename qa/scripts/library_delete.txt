@@ -19,6 +19,14 @@ raw click 792 389
 wait 5
 expect lib_delete=None
 expect library=1
+# the library folder itself folds like a subfolder
+raw click 1152 120
+wait 5
+expect lib_folders=[("", 1, true), ("Kitchen", 1, false)
+screenshot shots/libd_rootfold.bmp
+raw click 1152 120
+wait 5
+expect lib_folders=[("", 1, false), ("Kitchen", 1, false)
 # the Counter generator (Kitchen/counter.rhai): Edit Generator… / Place / Delete…
 raw rclick 1185 301
 wait 5

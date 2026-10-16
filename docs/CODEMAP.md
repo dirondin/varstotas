@@ -118,7 +118,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `tools/workplane.rs` | Guide Plane tool (3 points, face, normal by arrows; gizmo drags of the active plane), `draw_work_planes` |
 | `ui/workplanes.rs` | Window → Work Planes… (list, active, visibility, names, origin and angles; edits → one undo step) |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
-| `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags (Untagged eye, delete),  Outliner, Scenes (play, settings), Soften Edges, Instructor |
+| `ui/tray.rs` | cards toggled by `TRAY_CARDS` / `Prefs::tray_hidden` (Window menu); Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags (Untagged eye, delete),  Outliner, Scenes (play, settings), Soften Edges, Instructor |
 | `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text; library delete confirmation lives in `library.rs`) |
 | `ui/theme.rs` | look and feel |
 
