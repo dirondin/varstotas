@@ -1043,6 +1043,37 @@ impl VarstotasApp {
             crate::inference::settings::publish_grid(&self.prefs.grid);
             return;
         }
+        // `snap_inc move|rotate|scale on|off [step=V]`.
+        if let Some(args) = name.strip_prefix("snap_inc ") {
+            let inc = &mut self.prefs.snapping.increments;
+            let mut it = args.split_whitespace();
+            let what = it.next().unwrap_or("");
+            for a in it {
+                let on = match a {
+                    "on" => Some(true),
+                    "off" => Some(false),
+                    _ => None,
+                };
+                let step = a.strip_prefix("step=").and_then(|v| v.parse::<f64>().ok());
+                let (flag, val) = match what {
+                    "move" => (&mut inc.move_on, &mut inc.move_step),
+                    "rotate" => (&mut inc.rotate_on, &mut inc.angle_step),
+                    "scale" => (&mut inc.scale_on, &mut inc.scale_step),
+                    _ => {
+                        eprintln!("[debug] snap_inc: unknown {what:?}");
+                        break;
+                    }
+                };
+                if let Some(on) = on {
+                    *flag = on;
+                }
+                if let Some(v) = step {
+                    *val = v;
+                }
+            }
+            crate::inference::settings::publish(&self.prefs.snapping);
+            return;
+        }
         if let Some(v) = name.strip_prefix("snap_all ") {
             for k in crate::inference::settings::all_kinds() {
                 self.prefs.snapping.set(k, v.trim() == "on");
@@ -1404,7 +1435,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} snap={:?} grid={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major));
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",
@@ -1542,6 +1573,12 @@ impl VarstotasApp {
 }
 
 impl VarstotasApp {
+    /// Increments for the dump: (move, rotate, scale) steps, `None` when off.
+    fn inc_dump(&self) -> (Option<f64>, Option<f64>, Option<f64>) {
+        let i = self.prefs.snapping.increments;
+        (i.move_on.then_some(i.move_step), i.rotate_on.then_some(i.angle_step), i.scale_on.then_some(i.scale_step))
+    }
+
     /// Harness `workplane …` sub-commands (each one undo step).
     fn workplane_cmd(&mut self, args: &str) {
         let mut it = args.split_whitespace();

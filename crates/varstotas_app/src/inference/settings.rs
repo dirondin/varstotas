@@ -96,12 +96,40 @@ pub struct SnapPrefs {
     pub enabled: bool,
     /// Keys of the kinds turned off.
     pub off: Vec<String>,
+    /// Move / Rotate / Scale by increments.
+    pub increments: Increments,
 }
 
 impl Default for SnapPrefs {
     fn default() -> Self {
-        Self { enabled: true, off: Vec::new() }
+        Self { enabled: true, off: Vec::new(), increments: Increments::default() }
     }
+}
+
+/// Increments (magnet menu): Move / Copy distances, Rotate and Protractor angles and Scale
+/// factors are rounded to a step unless the point snaps to model geometry or a value is typed.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Increments {
+    pub move_on: bool,
+    /// Distance step (mm).
+    pub move_step: f64,
+    pub rotate_on: bool,
+    /// Angle step (degrees).
+    pub angle_step: f64,
+    pub scale_on: bool,
+    pub scale_step: f64,
+}
+
+impl Default for Increments {
+    fn default() -> Self {
+        Self { move_on: false, move_step: 10.0, rotate_on: false, angle_step: 15.0, scale_on: false, scale_step: 0.1 }
+    }
+}
+
+/// `v` rounded to a multiple of `step` (unchanged for a bad step).
+pub fn round_to(v: f64, step: f64) -> f64 {
+    if step > 1e-9 && step.is_finite() { (v / step).round() * step } else { v }
 }
 
 impl SnapPrefs {
@@ -182,11 +210,52 @@ fn bit(kind: InferenceKind) -> u32 {
 thread_local! {
     /// (master switch, mask of the kinds turned off).
     static CURRENT: Cell<(bool, u32)> = const { Cell::new((true, 0)) };
+    static INCREMENTS: Cell<Option<Increments>> = const { Cell::new(None) };
 }
 
 /// Publish the preferences (called every frame and after they change).
 pub fn publish(p: &SnapPrefs) {
     CURRENT.with(|c| c.set((p.enabled, p.mask())));
+    INCREMENTS.with(|c| c.set(p.enabled.then_some(p.increments)));
+}
+
+fn step(on: fn(&Increments) -> bool, step: fn(&Increments) -> f64) -> Option<f64> {
+    let i = INCREMENTS.with(|c| c.get())?;
+    let s = step(&i);
+    (on(&i) && s > 1e-9 && s.is_finite()).then_some(s)
+}
+
+/// Move / Copy distance step (mm), when on.
+pub fn move_step() -> Option<f64> {
+    step(|i| i.move_on, |i| i.move_step)
+}
+
+/// Rotate / Protractor angle step (degrees), when on.
+pub fn angle_step() -> Option<f64> {
+    step(|i| i.rotate_on, |i| i.angle_step)
+}
+
+/// Scale factor step, when on.
+pub fn scale_step() -> Option<f64> {
+    step(|i| i.scale_on, |i| i.scale_step)
+}
+
+/// A free Move / Copy destination rounded by the distance step: along the inferred direction,
+/// else per drawing-axes component. Snaps to model geometry are kept as they are.
+pub fn round_move(from: varstotas_kernel::glam::DVec3, r: &mut super::InferenceResult) {
+    let Some(s) = move_step() else { return };
+    if r.is_geometry_snap() {
+        return;
+    }
+    let d = r.point - from;
+    r.point = match r.constraint_dir {
+        Some(dir) => from + dir * round_to(d.dot(dir), s),
+        None => {
+            let ax = crate::axes::current();
+            let l = ax.local_vec(d);
+            from + ax.world_vec(varstotas_kernel::glam::DVec3::new(round_to(l.x, s), round_to(l.y, s), round_to(l.z, s)))
+        }
+    };
 }
 
 /// Whether the engine and the tools may offer this kind of snap.
@@ -218,6 +287,34 @@ mod tests {
         p.enabled = false;
         publish(&p);
         assert!(!allowed(InferenceKind::Endpoint) && allowed(InferenceKind::Free));
+        publish(&SnapPrefs::default());
+    }
+
+    #[test]
+    fn increments_round_free_moves_only() {
+        use varstotas_kernel::glam::DVec3;
+        let mut p = SnapPrefs::default();
+        publish(&p);
+        assert_eq!(move_step(), None);
+        p.increments.move_on = true;
+        p.increments.rotate_on = true;
+        publish(&p);
+        assert_eq!((move_step(), angle_step(), scale_step()), (Some(10.0), Some(15.0), None));
+        let mut r = super::super::InferenceResult::free(DVec3::new(123.4, -56.0, 4.9));
+        round_move(DVec3::new(1.0, 0.0, 0.0), &mut r);
+        assert!(r.point.distance(DVec3::new(121.0, -60.0, 0.0)) < 1e-9);
+        // Along a direction: the length is rounded.
+        let mut r = super::super::InferenceResult::with_kind(DVec3::new(30.0, 40.0, 0.0) * 0.987, InferenceKind::ParallelToEdge);
+        r.constraint_dir = Some(DVec3::new(0.6, 0.8, 0.0));
+        round_move(DVec3::ZERO, &mut r);
+        assert!(r.point.distance(DVec3::new(30.0, 40.0, 0.0)) < 1e-9);
+        // Model geometry wins.
+        let mut r = super::super::InferenceResult::with_kind(DVec3::new(3.0, 0.0, 0.0), InferenceKind::Endpoint);
+        round_move(DVec3::ZERO, &mut r);
+        assert_eq!(r.point, DVec3::new(3.0, 0.0, 0.0));
+        p.enabled = false;
+        publish(&p);
+        assert_eq!(move_step(), None);
         publish(&SnapPrefs::default());
     }
 }

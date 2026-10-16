@@ -407,6 +407,29 @@ impl VarstotasApp {
                     }
                 }
             });
-        }
+        }        // Increments: round free moves, angles and scale factors to a step.
+        ui.separator();
+        ui.label(egui::RichText::new("Increments").small().weak());
+        let unit = self.doc.model.unit;
+        ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
+            let inc = &mut self.prefs.snapping.increments;
+            egui::Grid::new("snap_increments").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
+                ui.checkbox(&mut inc.move_on, "Move");
+                ui.add(
+                    egui::DragValue::new(&mut inc.move_step)
+                        .range(0.001..=1.0e6)
+                        .speed(1.0)
+                        .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
+                        .custom_parser(move |t| varstotas_kernel::units::parse_length(t, unit)),
+                );
+                ui.end_row();
+                ui.checkbox(&mut inc.rotate_on, "Rotate");
+                ui.add(egui::DragValue::new(&mut inc.angle_step).range(0.01..=180.0).speed(0.5).suffix("°"));
+                ui.end_row();
+                ui.checkbox(&mut inc.scale_on, "Scale");
+                ui.add(egui::DragValue::new(&mut inc.scale_step).range(0.001..=10.0).speed(0.01).max_decimals(3));
+                ui.end_row();
+            });
+        });
     }
 }

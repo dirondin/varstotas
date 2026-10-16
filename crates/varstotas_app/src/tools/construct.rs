@@ -305,7 +305,11 @@ impl ProtractorTool {
             let d = q - c;
             if d.length() > 1e-9 {
                 let a = signed_angle(zero, d.normalize(), n);
-                self.angle = if r.is_geometry_snap() { a } else { snap_angle(a, 15.0, 3.0).0 };
+                self.angle = match crate::inference::settings::angle_step() {
+                    _ if r.is_geometry_snap() => a,
+                    Some(st) => crate::inference::settings::round_to(a, st),
+                    None => snap_angle(a, 15.0, 3.0).0,
+                };
             }
         }
         self.cur = Some(r);

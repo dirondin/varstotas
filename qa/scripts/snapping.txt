@@ -69,7 +69,7 @@ raw move 1346 -66
 raw click 1346 -66
 wait 30
 screenshot shots/snapping_menu.bmp
-raw move 1216 346
-raw click 1216 346
+raw move 1288 282
+raw click 1288 282
 wait 5
 expect snapping=(true, [])

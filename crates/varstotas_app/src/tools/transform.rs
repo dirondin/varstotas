@@ -270,7 +270,11 @@ impl MoveTool {
         if self.from.is_none() {
             (self.hover, self.hover_guide) = hover_with_guides(ctx);
         }
-        self.cur = Some(infer(&mut self.engine, ctx, self.from, None, None));
+        let mut r = infer(&mut self.engine, ctx, self.from, None, None);
+        if let Some(from) = self.from {
+            crate::inference::settings::round_move(from, &mut r);
+        }
+        self.cur = Some(r);
     }
 
     fn vector(&self) -> Option<DVec3> {
@@ -522,7 +526,11 @@ impl RotateTool {
             let d = q - c;
             if d.length() > 1e-9 {
                 let a = signed_angle(zero, d.normalize(), n);
-                let (a, s) = if r.is_geometry_snap() { (a, false) } else { snap_angle(a, 15.0, 3.0) };
+                let (a, s) = match crate::inference::settings::angle_step() {
+                    _ if r.is_geometry_snap() => (a, false),
+                    Some(st) => (crate::inference::settings::round_to(a, st), true),
+                    None => snap_angle(a, 15.0, 3.0),
+                };
                 self.angle = a;
                 self.snapped = s;
             }
@@ -653,7 +661,11 @@ impl Tool for RotateTool {
             None => "Select the rotation center (face orients the protractor; arrows lock its axis).".into(),
             Some(RotStage::Center { .. }) => "Select the zero direction.".into(),
             Some(RotStage::Angle { .. }) => format!(
-                "Select the angle (snaps every 15°) or type degrees. Ctrl/Option = copy{}; after a copy type `6x` for a radial array.",
+                "Select the angle ({}) or type degrees. Ctrl/Option = copy{}; after a copy type `6x` for a radial array.",
+                match crate::inference::settings::angle_step() {
+                    Some(st) => format!("rounded to {st}°"),
+                    None => "snaps every 15°".into(),
+                },
                 if self.copy.on { " (on)" } else { "" }
             ),
         }
@@ -895,7 +907,14 @@ impl ScaleTool {
             }
         };
         let r = infer(&mut self.engine, ctx, Some(d.anchor), constraint, None);
-        if let Some(f) = grip_factors(&d.grip, d.anchor, r.point) {
+        if let Some(mut f) = grip_factors(&d.grip, d.anchor, r.point) {
+            // Increments: round the free factors (never to zero).
+            if let Some(st) = crate::inference::settings::scale_step().filter(|_| !r.is_geometry_snap()) {
+                for a in 0..3 {
+                    let v = crate::inference::settings::round_to(f[a], st);
+                    f[a] = if v.abs() < st * 0.5 { st.copysign(f[a]) } else { v };
+                }
+            }
             d.factor = f;
         }
         self.drag = Some(d);

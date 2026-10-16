@@ -1,0 +1,76 @@
+# Increments (track П batch 4): Move / Rotate / Scale rounded to a step with a real mouse,
+# model geometry and typed values win, the steps in the magnet menu.
+box 0 0 0 1000 600 400
+view iso
+zoom_extents
+wait 10
+zoompx 0.5
+wait 5
+expect inc=(None, None, None)
+# Scale: the corner grip dragged along the diagonal to ~1.234 → 1.2
+action snap_inc scale on step=0.1
+select_all
+tool scale
+rawp move 1000 600 400
+wait 2
+rawp click 1000 600 400
+wait 2
+rawp move 1234 740.4 493.6
+wait 3
+dump scale_drag
+expect vcbv="1.200"
+rawp click 1234 740.4 493.6
+wait 3
+expect undo=Some("Scale")
+undo
+wait 2
+action snap_inc scale off
+# Move: free destination rounded per axis to 100 mm
+view top
+zoom_extents
+wait 5
+zoompx 0.3
+wait 5
+action snap_inc move on step=100
+expect inc=(Some(100.0), None, None)
+select_all
+tool move
+rawp click 0 0 400
+wait 2
+rawp move -366 -267 400
+wait 3
+dump move_drag
+# (-366, -267) from the corner → (-400, -300): 500 mm
+expect vcbv="500 mm"
+rawp click -366 -267 400
+wait 3
+expect undo=Some("Move")
+# a typed distance wins over the step: redo the move at 437 mm (real keys)
+raw text 437
+raw key Enter
+wait 3
+expect vcbv="437 mm"
+# Rotate: 37° → 40° with a 10° step
+action snap_inc rotate on step=10
+select_all
+tool rotate
+rawp click -400 -300 400
+wait 2
+rawp click -900 -300 400
+wait 2
+rawp move -719.5 -540.7 400
+wait 3
+dump rotate_drag
+expect vcbv="40
+rawp click -719.5 -540.7 400
+wait 3
+expect undo=Some("Rotate")
+screenshot shots/increments.bmp
+# the steps in the magnet menu (real click)
+raw move 1346 -66
+wait 2
+raw click 1346 -66
+wait 5
+screenshot shots/increments_menu.bmp
+raw key Escape
+wait 2

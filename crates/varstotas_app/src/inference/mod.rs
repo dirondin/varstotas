@@ -1177,7 +1177,7 @@ mod tests {
         publish(&p);
         assert_eq!(e.infer(&query(&m, &cam, on_red, Some(anchor))).kind, InferenceKind::Free);
         // Master switch off: nothing snaps, but an arrow lock still constrains.
-        publish(&SnapPrefs { enabled: false, off: Vec::new() });
+        publish(&SnapPrefs { enabled: false, ..Default::default() });
         let mid = screen(&cam, DVec3::new(1000.0, 0.0, 0.0));
         assert_eq!(e.infer(&query(&m, &cam, mid, None)).kind, InferenceKind::Free);
         e.handle_arrow(egui::Key::ArrowRight);
