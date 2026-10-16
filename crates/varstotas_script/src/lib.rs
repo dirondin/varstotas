@@ -6,6 +6,7 @@
 //! goes into the current context (the open group, or `enter(group)` inside the script).
 
 mod api;
+pub mod help;
 mod json;
 
 pub use json::{EvalJson, entity_id, eval_json, parse_entity_id};

@@ -1,0 +1,45 @@
+use crate::syntax::Patch;
+
+use super::{DEFAULT_QUOTES, Syntax};
+use std::collections::BTreeSet;
+
+impl Syntax {
+    pub fn python() -> Syntax {
+        Syntax {
+            language: "Python",
+            case_sensitive: true,
+            comment: "#",
+            comment_multiline: [r#"'''"#, r#"'''"#],
+            quotes: DEFAULT_QUOTES.into(),
+            word_start: BTreeSet::from(['_']),
+            hyperlinks: BTreeSet::from([
+                "http:", "HTTP:", "https:", "HTTPS:", "www.", "WWW.", "ftp:", "FTP:", "file:",
+                "FILE:",
+            ]),
+            keywords: BTreeSet::from([
+                "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else",
+                "except", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda",
+                "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with",
+                "yield",
+            ]),
+            types: BTreeSet::from([
+                "bool",
+                "int",
+                "float",
+                "complex",
+                "str",
+                "list",
+                "tuple",
+                "range",
+                "bytes",
+                "bytearray",
+                "memoryview",
+                "dict",
+                "set",
+                "frozenset",
+            ]),
+            special: BTreeSet::from(["False", "None", "True"]),
+            patch: Patch::default(),
+        }
+    }
+}

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/varstotas_kernel", "crates/varstotas_render", "crates/varstotas_script", "crates/varstotas_app"]
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -35,3 +36,7 @@ opt-level = 3
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# Vendored with a fix for egui persistence, see vendor/egui_code_editor/VARSTOTAS.md.
+[patch.crates-io]
+egui_code_editor = { path = "vendor/egui_code_editor" }

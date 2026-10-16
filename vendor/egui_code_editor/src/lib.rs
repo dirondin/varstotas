@@ -1,0 +1,526 @@
+#![allow(rustdoc::invalid_rust_codeblocks)]
+//! Text Editor Widget for [egui](https://github.com/emilk/egui) with numbered lines and simple syntax highlighting based on keywords sets.
+//!
+//! ## Usage with egui
+//!
+//! ```rust
+//! use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+//!
+//! CodeEditor::default()
+//!   .id_source("code editor")
+//!   .with_rows(12)
+//!   .with_fontsize(14.0)
+//!   .with_theme(ColorTheme::GRUVBOX)
+//!   .with_numlines(true)
+//!   .with_clickable_links(true)
+//!   .show(ui, &self.syntax, &mut self.code);
+//! ```
+//!
+//! ## Usage as lexer without egui
+//!
+//! **Cargo.toml**
+//!
+//! ```toml
+//! [dependencies]
+//! egui_code_editor = { version = "0.2" , default-features = false }
+//! colorful = "0.2.2"
+//! ```
+//!
+//! **main.rs**
+//!
+//! ```rust
+//! use colorful::{Color, Colorful};
+//! use egui_code_editor::{Syntax, Token, TokenType};
+//!
+//! fn color(token: TokenType) -> Color {
+//!     match token {
+//!         TokenType::Comment(_) => Color::Grey37,
+//!         TokenType::Function => Color::Yellow3b,
+//!         TokenType::Keyword => Color::IndianRed1c,
+//!         TokenType::Literal => Color::NavajoWhite1,
+//!         TokenType::Numeric(_) => Color::MediumPurple,
+//!         TokenType::Punctuation(_) => Color::Orange3,
+//!         TokenType::Special => Color::Cyan,
+//!         TokenType::Str(_) => Color::Green,
+//!         TokenType::Type => Color::GreenYellow,
+//!         TokenType::Whitespace(_) => Color::White,
+//!         TokenType::Unknown => Color::Pink1,
+//!     }
+//! }
+//!
+//! fn main() {
+//!     let text = r#"// Code Editor
+//! CodeEditor::default()
+//!     .id_source("code editor")
+//!     .with_rows(12)
+//!     .with_fontsize(14.0)
+//!     .with_theme(self.theme)
+//!     .with_numlines(true)
+//!     .vscroll(true)
+//!     .show(ui, &self.syntax, &mut self.code);
+//!     "#;
+//!
+//!     let syntax = Syntax::rust();
+//!     for token in Token::default().tokens(&syntax, text) {
+//!         print!("{}", token.buffer().color(color(token.ty())));
+//!     }
+//! }
+//! ```
+
+#[cfg(feature = "egui")]
+mod completer;
+pub mod highlighting;
+#[cfg(feature = "egui")]
+mod hyperlinks;
+mod syntax;
+#[cfg(test)]
+mod tests;
+mod themes;
+#[cfg(feature = "egui")]
+use egui::Stroke;
+#[cfg(feature = "editor")]
+use egui::text::CCursorRange;
+#[cfg(feature = "egui")]
+use egui::text::LayoutJob;
+#[cfg(feature = "egui")]
+use egui::widgets::text_edit::TextEditOutput;
+pub use highlighting::Token;
+#[cfg(feature = "egui")]
+use highlighting::highlight;
+#[cfg(feature = "egui")]
+pub use hyperlinks::SPACE_HOLDER;
+#[cfg(feature = "egui")]
+use hyperlinks::handle_links;
+#[cfg(feature = "editor")]
+use std::hash::{Hash, Hasher};
+pub use syntax::{Patch, Syntax, TokenType};
+pub use themes::ColorTheme;
+pub use themes::DEFAULT_THEMES;
+
+#[cfg(feature = "egui")]
+pub use crate::completer::Completer;
+
+#[cfg(feature = "egui")]
+pub trait Editor: Hash {
+    fn append(&self, job: &mut LayoutJob, token: &Token);
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct CursorState(Option<CCursorRange>);
+
+#[cfg(feature = "editor")]
+#[derive(Clone, Debug)]
+/// CodeEditor struct which stores settings for highlighting.
+pub struct CodeEditor {
+    id: String,
+    theme: ColorTheme,
+    // syntax: &'a Syntax,
+    numlines: bool,
+    numlines_shift: isize,
+    numlines_only_natural: bool,
+    fontsize: f32,
+    clickable_links: bool,
+    rows: usize,
+    vscroll: bool,
+    stick_to_bottom: bool,
+    desired_width: f32,
+    wrap: bool,
+    hint_text: Option<String>,
+}
+
+#[cfg(feature = "editor")]
+impl Hash for CodeEditor {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.theme.hash(state);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        (self.fontsize as u32).hash(state);
+    }
+}
+
+#[cfg(feature = "editor")]
+impl Default for CodeEditor {
+    fn default() -> CodeEditor {
+        CodeEditor {
+            id: String::from("Code Editor"),
+            theme: ColorTheme::GRUVBOX,
+            numlines: true,
+            numlines_shift: 0,
+            numlines_only_natural: false,
+            fontsize: 10.0,
+            clickable_links: true,
+            rows: 10,
+            vscroll: true,
+            stick_to_bottom: false,
+            desired_width: f32::INFINITY,
+            wrap: false,
+            hint_text: None,
+        }
+    }
+}
+
+#[cfg(feature = "editor")]
+impl CodeEditor {
+    pub fn id_source(self, id_source: impl Into<String>) -> Self {
+        CodeEditor {
+            id: id_source.into(),
+            ..self
+        }
+    }
+
+    /// Minimum number of rows to show.
+    ///
+    /// **Default: 10**
+    pub fn with_rows(self, rows: usize) -> Self {
+        CodeEditor { rows, ..self }
+    }
+
+    /// Use custom Color Theme
+    ///
+    /// **Default: Gruvbox**
+    pub fn with_theme(self, theme: ColorTheme) -> Self {
+        CodeEditor { theme, ..self }
+    }
+
+    /// Use custom font size
+    ///
+    /// **Default: 10.0**
+    pub fn with_fontsize(self, fontsize: f32) -> Self {
+        CodeEditor { fontsize, ..self }
+    }
+
+    #[cfg(feature = "egui")]
+    /// Use UI font size
+    pub fn with_ui_fontsize(self, ui: &mut egui::Ui) -> Self {
+        CodeEditor {
+            fontsize: egui::TextStyle::Monospace.resolve(ui.style()).size,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "egui")]
+    /// Make hyperlinks clickable
+    pub fn with_clickable_links(self, clickable_links: bool) -> Self {
+        CodeEditor {
+            clickable_links,
+            ..self
+        }
+    }
+    /// Show or hide lines numbering. If true ignores text wrapping mode.
+    ///
+    /// **Default: true**
+    pub fn with_numlines(self, numlines: bool) -> Self {
+        CodeEditor { numlines, ..self }
+    }
+
+    /// Shift lines numbering by this value
+    ///
+    /// **Default: 0**
+    pub fn with_numlines_shift(self, numlines_shift: isize) -> Self {
+        CodeEditor {
+            numlines_shift,
+            ..self
+        }
+    }
+
+    /// Show lines numbering only above zero, useful for enabling numbering since nth row
+    ///
+    /// **Default: false**
+    pub fn with_numlines_only_natural(self, numlines_only_natural: bool) -> Self {
+        CodeEditor {
+            numlines_only_natural,
+            ..self
+        }
+    }
+
+    /// Allows editing text to wrap. Ignored if numlines enabled.
+    ///
+    /// **Default: false**
+    pub fn with_wrap(self, wrap: bool) -> Self {
+        CodeEditor { wrap, ..self }
+    }
+    // Use custom syntax for highlighting
+    //
+    // **Default: Rust**
+    // pub fn with_syntax(self, syntax: Syntax) -> Self {
+    // CodeEditor { syntax, ..self }
+    // }
+
+    /// Turn on/off scrolling on the vertical axis.
+    ///
+    /// **Default: true**
+    pub fn vscroll(self, vscroll: bool) -> Self {
+        CodeEditor { vscroll, ..self }
+    }
+    /// Should the containing area shrink if the content is small?
+    ///
+    /// **Default: false**
+    pub fn auto_shrink(self, shrink: bool) -> Self {
+        CodeEditor {
+            desired_width: if shrink { 0.0 } else { self.desired_width },
+            ..self
+        }
+    }
+
+    /// Sets the desired width of the code editor
+    ///
+    /// **Default: `f32::INFINITY`**
+    pub fn desired_width(self, width: f32) -> Self {
+        CodeEditor {
+            desired_width: width,
+            ..self
+        }
+    }
+
+    /// Stick to bottom
+    /// The scroll handle will stick to the bottom position even while the content size
+    /// changes dynamically. This can be useful to simulate terminal UIs or log/info scrollers.
+    /// The scroll handle remains stuck until user manually changes position. Once "unstuck"
+    /// it will remain focused on whatever content viewport the user left it on. If the scroll
+    /// handle is dragged to the bottom it will again become stuck and remain there until manually
+    /// pulled from the end position.
+    ///
+    /// **Default: false**
+    pub fn stick_to_bottom(self, stick_to_bottom: bool) -> Self {
+        CodeEditor {
+            stick_to_bottom,
+            ..self
+        }
+    }
+
+    pub fn hint_text<S: Into<String>>(self, hint_text: S) -> Self {
+        let hint_text = hint_text.into();
+        let rows = self.rows.max(hint_text.lines().count());
+        CodeEditor {
+            hint_text: Some(hint_text),
+            rows,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "egui")]
+    pub fn format_token(&self, ty: TokenType) -> egui::text::TextFormat {
+        format_token(&self.theme, self.fontsize, ty)
+    }
+
+    #[cfg(feature = "egui")]
+    fn numlines_show(&self, ui: &mut egui::Ui, text: &str) {
+        use egui::TextBuffer;
+
+        let total = if text.ends_with('\n') || text.is_empty() {
+            text.lines().count() + 1
+        } else {
+            text.lines().count()
+        }
+        .max(self.rows) as isize;
+        let max_indent = total
+            .to_string()
+            .len()
+            .max(!self.numlines_only_natural as usize * self.numlines_shift.to_string().len());
+        let mut counter = (1..=total)
+            .map(|i| {
+                let num = i + self.numlines_shift;
+                if num <= 0 && self.numlines_only_natural {
+                    String::new()
+                } else {
+                    let label = num.to_string();
+                    format!(
+                        "{}{label}",
+                        " ".repeat(max_indent.saturating_sub(label.len()))
+                    )
+                }
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        #[allow(clippy::cast_precision_loss)]
+        let width = max_indent as f32
+            * self.fontsize
+            * 0.5
+            * !(total + self.numlines_shift <= 0 && self.numlines_only_natural) as u8 as f32;
+
+        let mut layouter = |ui: &egui::Ui, text_buffer: &dyn TextBuffer, _wrap_width: f32| {
+            let layout_job = egui::text::LayoutJob::single_section(
+                text_buffer.as_str().to_string(),
+                egui::TextFormat::simple(
+                    egui::FontId::monospace(self.fontsize),
+                    self.theme.type_color(TokenType::Comment(true)),
+                ),
+            );
+            ui.fonts_mut(|f| f.layout_job(layout_job))
+        };
+
+        ui.add(
+            egui::TextEdit::multiline(&mut counter)
+                .id_source(format!("{}_numlines", self.id))
+                .font(egui::TextStyle::Monospace)
+                .interactive(false)
+                .frame(egui::Frame::NONE)
+                .desired_rows(self.rows)
+                .desired_width(width)
+                .layouter(&mut layouter),
+        );
+    }
+
+    #[cfg(feature = "egui")]
+    /// Show Code Editor with auto-completion feature
+    pub fn show_with_completer(
+        &mut self,
+        ui: &mut egui::Ui,
+        text: &mut dyn egui::TextBuffer,
+        syntax: &Syntax,
+        completer: &mut Completer,
+    ) -> (TextEditOutput, Vec<Token>) {
+        completer.handle_input(ui.ctx());
+        let (mut editor_output, tokens) = self.show(ui, text, syntax);
+        completer.show(syntax, &self.theme, self.fontsize, &mut editor_output);
+        (editor_output, tokens)
+    }
+
+    #[cfg(feature = "egui")]
+    /// Show Code Editor
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        text: &mut dyn egui::TextBuffer,
+        syntax: &Syntax,
+    ) -> (TextEditOutput, Vec<Token>) {
+        use egui::TextBuffer;
+
+        // let mut text_edit_output: Option<TextEditOutput> = None;
+        let mut tokens = vec![];
+        let mut code_editor = |ui: &mut egui::Ui| -> Option<TextEditOutput> {
+            let frame = egui::Frame::new().fill(self.theme.bg());
+            let mut text_edit_output: Option<TextEditOutput> = None;
+            frame.show(ui, |ui| {
+                ui.horizontal_top(|h| {
+                    self.theme.modify_style(h, self.fontsize);
+                    if self.numlines {
+                        self.numlines_show(h, text.as_str());
+                    }
+                    egui::ScrollArea::horizontal()
+                        .id_salt(format!("{}_inner_scroll", self.id))
+                        .show(h, |ui| {
+                            use crate::highlighting::Links;
+
+                            let mut links_ranges = Links::default();
+                            let mut layouter =
+                                |ui: &egui::Ui, text_buffer: &dyn TextBuffer, wrap_width: f32| {
+                                    let text_str = text_buffer.as_str();
+                                    let (mut layout_job, links, received_tokens) =
+                                        highlight(ui.ctx(), self, text_str, syntax);
+                                    links_ranges = links;
+                                    tokens = received_tokens;
+                                    if !self.numlines && self.wrap {
+                                        layout_job.wrap =
+                                            egui::text::TextWrapping::wrap_at_width(wrap_width);
+                                    }
+                                    ui.fonts_mut(|f| f.layout_job(layout_job))
+                                };
+
+                            let mut text_edit = egui::TextEdit::multiline(text)
+                                .id_source(&self.id)
+                                .lock_focus(true)
+                                .desired_rows(self.rows)
+                                .desired_width(self.desired_width)
+                                .layouter(&mut layouter);
+                            if let Some(hint) = self.hint_text.as_ref() {
+                                text_edit = text_edit.hint_text(hint);
+                            }
+                            let output = text_edit.show(ui);
+
+                            if self.clickable_links {
+                                handle_links(&output, &links_ranges);
+                            }
+
+                            text_edit_output = Some(output);
+                        });
+                });
+            });
+            text_edit_output
+        };
+
+        let mut text_edit_output: Option<TextEditOutput> = None;
+        if self.vscroll {
+            egui::ScrollArea::vertical()
+                .id_salt(format!("{}_outer_scroll", self.id))
+                .stick_to_bottom(self.stick_to_bottom)
+                .auto_shrink(true)
+                .show(ui, |ui| {
+                    text_edit_output = code_editor(ui);
+                    if let Some(output) = &text_edit_output
+                        && output.response.has_focus()
+                    {
+                        let cursor_state = ui
+                            .data_mut(|data| data.get_temp::<CursorState>(output.response.id))
+                            .unwrap_or_default();
+
+                        if cursor_state.0 != output.cursor_range
+                            && let Some(cursor_range) = output.cursor_range.map(|c| c.primary)
+                        {
+                            let cursor_rect = output
+                                .galley
+                                .pos_from_cursor(cursor_range)
+                                .translate(output.galley_pos.to_vec2());
+                            ui.scroll_to_rect(cursor_rect, None);
+                        }
+                    }
+                });
+        } else {
+            text_edit_output = code_editor(ui);
+        };
+        if let Some(output) = &text_edit_output {
+            ui.data_mut(|data| {
+                data.insert_temp(output.response.id, CursorState(output.cursor_range))
+            });
+        }
+
+        (
+            text_edit_output.expect("TextEditOutput should exist at this point"),
+            tokens,
+        )
+    }
+}
+
+#[cfg(feature = "editor")]
+#[cfg(feature = "egui")]
+impl Editor for CodeEditor {
+    fn append(&self, job: &mut LayoutJob, token: &Token) {
+        if !token.buffer().is_empty() {
+            job.append(token.buffer(), 0.0, self.format_token(token.ty()));
+        }
+    }
+}
+
+#[cfg(feature = "egui")]
+pub fn format_token(theme: &ColorTheme, fontsize: f32, ty: TokenType) -> egui::text::TextFormat {
+    let font_id = egui::FontId::monospace(fontsize);
+    let color = theme.type_color(ty);
+
+    let mut tf = egui::text::TextFormat::simple(font_id, color);
+    if ty == TokenType::Hyperlink {
+        tf.underline = Stroke::new(fontsize * 0.1, color);
+    }
+    tf
+}
+
+#[cfg(feature = "egui")]
+pub fn push_dropped_files(ui: &mut egui::Ui, text: &mut String) -> bool {
+    ui.ctx().input(|i| {
+        if !i.raw.dropped_files.is_empty() {
+            let dropped = i
+                .raw
+                .dropped_files
+                .iter()
+                .filter_map(|p| {
+                    p.path()
+                        .to_str()
+                        .map(|s| format!("file://{}", s.replace(' ', SPACE_HOLDER)))
+                })
+                .collect::<Vec<String>>()
+                .join("\n");
+            text.push('\n');
+            text.push_str(&dropped);
+        }
+        !i.raw.dropped_files.is_empty()
+    })
+}

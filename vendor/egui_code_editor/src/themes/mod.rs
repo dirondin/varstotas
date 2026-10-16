@@ -1,0 +1,164 @@
+#![allow(dead_code)]
+pub mod ayu;
+pub mod github;
+pub mod gruvbox;
+pub mod sonokai;
+
+use super::syntax::TokenType;
+#[cfg(feature = "egui")]
+use egui::Color32;
+
+#[cfg(feature = "egui")]
+pub const ERROR_COLOR: Color32 = Color32::from_rgb(255, 0, 255);
+
+/// Array of default themes.
+pub const DEFAULT_THEMES: [ColorTheme; 8] = [
+    ColorTheme::AYU,
+    ColorTheme::AYU_MIRAGE,
+    ColorTheme::AYU_DARK,
+    ColorTheme::GITHUB_DARK,
+    ColorTheme::GITHUB_LIGHT,
+    ColorTheme::GRUVBOX,
+    ColorTheme::GRUVBOX_LIGHT,
+    ColorTheme::SONOKAI,
+];
+
+#[cfg(feature = "egui")]
+pub const fn color_from_hex(hex: &str) -> Color32 {
+    let (r_s, rest) = hex.split_at(2);
+    let (g_s, b_s) = rest.split_at(2);
+
+    let r = hex_u8(r_s).expect(hex);
+    let g = hex_u8(g_s).expect(hex);
+    let b = hex_u8(b_s).expect(hex);
+
+    Color32::from_rgb(r, g, b)
+}
+
+const fn hex_u8(hex: &str) -> Option<u8> {
+    match u8::from_str_radix(hex, 16) {
+        Ok(v) => Some(v),
+        Err(_) => None,
+    }
+}
+
+#[derive(Hash, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+/// Colors in hexadecimal notation without '#'.
+pub struct ColorTheme {
+    pub name: &'static str,
+    pub dark: bool,
+    pub bg: &'static str,
+    pub cursor: &'static str,
+    pub selection: &'static str,
+    pub comments: &'static str,
+    pub functions: &'static str,
+    pub keywords: &'static str,
+    pub literals: &'static str,
+    pub numerics: &'static str,
+    pub punctuation: &'static str,
+    pub strs: &'static str,
+    pub types: &'static str,
+    pub special: &'static str,
+}
+impl Default for ColorTheme {
+    fn default() -> Self {
+        ColorTheme::GRUVBOX
+    }
+}
+impl ColorTheme {
+    pub fn name(&self) -> &str {
+        self.name
+    }
+
+    pub fn is_dark(&self) -> bool {
+        self.dark
+    }
+
+    #[cfg(feature = "egui")]
+    pub fn bg(&self) -> Color32 {
+        color_from_hex(self.bg)
+    }
+
+    #[cfg(feature = "egui")]
+    pub fn cursor(&self) -> Color32 {
+        color_from_hex(self.cursor)
+    }
+
+    #[cfg(feature = "egui")]
+    pub fn selection(&self) -> Color32 {
+        color_from_hex(self.selection)
+    }
+
+    #[cfg(feature = "egui")]
+    pub fn modify_style(&self, ui: &mut egui::Ui, fontsize: f32) {
+        let style = ui.style_mut();
+        let bg = self.bg();
+        style.visuals.widgets.noninteractive.bg_fill = bg;
+        style.visuals.window_fill = bg;
+        style.visuals.panel_fill = bg;
+        style.visuals.faint_bg_color = bg;
+        style.visuals.extreme_bg_color = bg;
+        style.visuals.selection.stroke.color = self.cursor();
+        style.visuals.selection.bg_fill = self.selection();
+        style.override_font_id = Some(egui::FontId::monospace(fontsize));
+        style.visuals.text_cursor.stroke.width = fontsize * 0.1;
+    }
+
+    pub const fn type_color_str(&self, ty: TokenType) -> &'static str {
+        match ty {
+            TokenType::Comment(_) => self.comments,
+            TokenType::Function => self.functions,
+            TokenType::Keyword => self.keywords,
+            TokenType::Literal => self.literals,
+            TokenType::Hyperlink => self.special,
+            TokenType::Numeric(_) => self.numerics,
+            TokenType::Punctuation(_) => self.punctuation,
+            TokenType::Special => self.special,
+            TokenType::Str(_) => self.strs,
+            TokenType::Type => self.types,
+            TokenType::Whitespace(_) | TokenType::Unknown => self.comments,
+        }
+    }
+
+    #[cfg(feature = "egui")]
+    pub fn type_color(&self, ty: TokenType) -> Color32 {
+        match ty {
+            TokenType::Comment(_) => color_from_hex(self.comments),
+            TokenType::Function => color_from_hex(self.functions),
+            TokenType::Keyword => color_from_hex(self.keywords),
+            TokenType::Literal => color_from_hex(self.literals),
+            TokenType::Hyperlink => color_from_hex(self.special),
+            TokenType::Numeric(_) => color_from_hex(self.numerics),
+            TokenType::Punctuation(_) => color_from_hex(self.punctuation),
+            TokenType::Special => color_from_hex(self.special),
+            TokenType::Str(_) => color_from_hex(self.strs),
+            TokenType::Type => color_from_hex(self.types),
+            TokenType::Whitespace(_) | TokenType::Unknown => color_from_hex(self.comments),
+        }
+    }
+
+    pub fn monocolor(
+        dark: bool,
+        bg: &'static str,
+        fg: &'static str,
+        cursor: &'static str,
+        selection: &'static str,
+    ) -> Self {
+        ColorTheme {
+            name: "monocolor",
+            dark,
+            bg,
+            cursor,
+            selection,
+            literals: fg,
+            numerics: fg,
+            keywords: fg,
+            functions: fg,
+            punctuation: fg,
+            types: fg,
+            strs: fg,
+            comments: fg,
+            special: fg,
+        }
+    }
+}

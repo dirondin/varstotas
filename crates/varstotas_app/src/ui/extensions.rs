@@ -1,5 +1,7 @@
 //! Plugins in the app (see `plugins.rs`): the Extensions menu, File → Import / Export entries,
-//! the parameter dialog, point picking and running. A Rhai plugin run is one undo step named
+//! the parameter dialog, point picking, object selection and running. Console code with a
+//! plugin header (`@param`, `@pick`, `@select`) goes the same way as the pseudo plugin
+//! [`CONSOLE`]. A Rhai plugin run is one undo step named
 //! after the plugin; a Python plugin runs like File → Run Script… with its values in
 //! `VARSTOTAS_PARAMS`.
 
@@ -11,6 +13,9 @@ use varstotas_kernel::glam::DVec3;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+/// Plugin index of the Script Console's code (see [`PluginState::console`]).
+pub const CONSOLE: usize = usize::MAX;
 
 /// The values being edited for a plugin run.
 pub struct ParamDialog {
@@ -27,8 +32,10 @@ pub struct PluginState {
     pub list: Vec<Plugin>,
     pub errors: Vec<String>,
     pub dialog: Option<ParamDialog>,
-    /// Values waiting for the `@pick` points.
+    /// Values waiting for the `@pick` points / `@select` objects.
     pending: Option<(usize, Map<String, Value>)>,
+    /// Console code run with its header: the parsed header and the source.
+    pub console: Option<(Plugin, String)>,
     /// Last values per plugin file (the dialog starts from them).
     last: HashMap<PathBuf, Vec<String>>,
 }
@@ -51,6 +58,27 @@ impl VarstotasApp {
         log::info!("plugins: {} loaded from {}", list.len(), dir.display());
         self.plugins.list = list;
         self.plugins.errors = errors;
+    }
+
+    /// A plugin by index ([`CONSOLE`] = the console code being run).
+    pub(crate) fn plugin_at(&self, idx: usize) -> Option<&Plugin> {
+        if idx == CONSOLE { self.plugins.console.as_ref().map(|(p, _)| p) } else { self.plugins.list.get(idx) }
+    }
+
+    /// Console code: with a header asking for parameters, points or objects it runs like a
+    /// plugin (dialog, picking, then the run); else directly.
+    pub(crate) fn run_console_code(&mut self, src: &str) {
+        match crate::plugins::parse(src, std::path::Path::new("Script.rhai")) {
+            Ok(p) if !p.params.is_empty() || p.pick.is_some() || p.select.is_some() => {
+                self.plugins.console = Some((p, src.to_string()));
+                self.start_plugin(CONSOLE, None);
+            }
+            Ok(_) => self.run_script_source(src, "Script"),
+            Err(e) => {
+                self.console.log.push(LogLine::Error(format!("header: {e}")));
+                self.console.last = Some((false, e));
+            }
+        }
     }
 
     pub(crate) fn plugin_by_name(&self, name: &str) -> Option<usize> {
@@ -162,7 +190,7 @@ impl VarstotasApp {
     pub(crate) fn start_plugin(&mut self, idx: usize, path: Option<PathBuf>) {
         // Plugins run with their own working directory: pass an absolute path.
         let path = path.map(|p| std::path::absolute(&p).unwrap_or(p));
-        let Some(p) = self.plugins.list.get(idx) else { return };
+        let Some(p) = self.plugin_at(idx) else { return };
         if p.params.is_empty() {
             let mut vars = Map::new();
             if let Some(f) = path {
@@ -180,7 +208,7 @@ impl VarstotasApp {
 
     /// Values of the dialog as script variables.
     fn plugin_vars(&self, d: &ParamDialog) -> Result<Map<String, Value>, String> {
-        let p = &self.plugins.list[d.idx];
+        let Some(p) = self.plugin_at(d.idx) else { return Err("the script is gone".into()) };
         let mut vars = Map::new();
         for (q, v) in p.params.iter().zip(&d.values) {
             let t = v.trim();
@@ -200,12 +228,17 @@ impl VarstotasApp {
         Ok(vars)
     }
 
-    /// Run, or pick points first.
+    /// The next step: pick the points, select the objects, then run.
     fn plugin_go(&mut self, idx: usize, vars: Map<String, Value>) {
-        let Some(p) = self.plugins.list.get(idx) else { return };
-        if let Some((n, prompt)) = p.pick.clone() {
+        let Some(p) = self.plugin_at(idx) else { return };
+        if let Some((n, prompt)) = p.pick.clone().filter(|_| !vars.contains_key("points")) {
             self.plugins.pending = Some((idx, vars));
             self.install_tool(Box::new(crate::tools::plugin_pick::PluginPickTool::new(n, prompt)));
+            return;
+        }
+        if let Some(prompt) = p.select.clone().filter(|_| !vars.contains_key("objects")) {
+            self.plugins.pending = Some((idx, vars));
+            self.install_tool(Box::new(crate::tools::plugin_select::PluginSelectTool::new(prompt)));
             return;
         }
         self.run_plugin(idx, vars);
@@ -215,22 +248,37 @@ impl VarstotasApp {
     pub(crate) fn plugin_points(&mut self, pts: Vec<DVec3>) {
         if let Some((idx, mut vars)) = self.plugins.pending.take() {
             vars.insert("points".into(), Value::Array(pts.into_iter().map(vec_json).collect()));
-            self.run_plugin(idx, vars);
+            self.plugin_go(idx, vars);
+        }
+    }
+
+    /// The `@select` objects were confirmed: the selection (of the open context) as `objects`.
+    pub(crate) fn plugin_objects(&mut self) {
+        if let Some((idx, mut vars)) = self.plugins.pending.take() {
+            let path = &self.doc.active_path;
+            let objs = self.doc.selection.iter().map(|e| json!({ "$entity": varstotas_script::entity_id(path, *e) })).collect();
+            vars.insert("objects".into(), Value::Array(objs));
+            self.plugin_go(idx, vars);
         }
     }
 
     pub(crate) fn run_plugin(&mut self, idx: usize, vars: Map<String, Value>) {
-        let Some(p) = self.plugins.list.get(idx).cloned() else { return };
+        let Some(p) = self.plugin_at(idx).cloned() else { return };
         if p.lang == Lang::Python {
             self.run_python_with(&p.path, Some(Value::Object(vars).to_string()));
             return;
         }
-        let src = match std::fs::read_to_string(&p.path) {
-            Ok(s) => s,
-            Err(e) => return self.flash_error(format!("Cannot read {}: {e}", p.path.display())),
+        let src = if idx == CONSOLE {
+            self.plugins.console.as_ref().map(|(_, s)| s.clone()).unwrap_or_default()
+        } else {
+            match std::fs::read_to_string(&p.path) {
+                Ok(s) => s,
+                Err(e) => return self.flash_error(format!("Cannot read {}: {e}", p.path.display())),
+            }
         };
         let ctx = varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None };
-        self.console.log.push(LogLine::Input(format!("plugin {}", p.name)));
+        let what = if idx == CONSOLE { "script" } else { "plugin" };
+        self.console.log.push(LogLine::Input(format!("{what} {}", p.name)));
         let r = self.doc.try_commit_if(&p.name, |m| Ok::<_, String>(varstotas_script::eval_json(m, &ctx, &src, &vars)), |r| r.run.changed);
         let Some(r) = r else {
             let e = self.doc.last_error.take().unwrap_or_else(|| "plugin failed".into());
@@ -263,7 +311,7 @@ impl VarstotasApp {
 
     pub(crate) fn plugin_dialog(&mut self, ctx: &Context) {
         let Some(mut d) = self.plugins.dialog.take() else { return };
-        let p = self.plugins.list[d.idx].clone();
+        let Some(p) = self.plugin_at(d.idx).cloned() else { return };
         let pos = self.viewport.rect.min + egui::vec2(40.0, 40.0);
         let mut open = true;
         let (mut run, mut cancel) = (false, false);
@@ -307,7 +355,13 @@ impl VarstotasApp {
             }
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                let label = if p.pick.is_some() { "Pick Points" } else { "Run" };
+                let label = if p.pick.is_some() {
+                    "Pick Points"
+                } else if p.select.is_some() {
+                    "Select Objects"
+                } else {
+                    "Run"
+                };
                 run |= ui.button(label).clicked();
                 cancel = ui.button("Cancel").clicked();
             });

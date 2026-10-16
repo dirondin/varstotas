@@ -59,6 +59,8 @@ pub struct Plugin {
     pub params: Vec<Param>,
     /// Points to pick in the viewport before running, and the prompt.
     pub pick: Option<(usize, String)>,
+    /// `@select "prompt"`: objects to select in the viewport (after the points), the prompt.
+    pub select: Option<String>,
     /// File extensions for File → Import / Export (lower case, no dot).
     pub import: Vec<String>,
     pub export: Vec<String>,
@@ -125,6 +127,7 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         path: path.to_path_buf(),
         params: Vec::new(),
         pick: None,
+        select: None,
         import: Vec::new(),
         export: Vec::new(),
     };
@@ -152,6 +155,7 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
                 }
                 p.pick = Some((n, label.unwrap_or_else(|| format!("Click {n} point(s)"))));
             }
+            "select" => p.select = Some(split_label(rest).1.unwrap_or_else(|| "Select objects".into())),
             "import" => p.import = exts(),
             "export" => p.export = exts(),
             // Unknown tags are ignored (room for later additions).
@@ -227,6 +231,7 @@ mod tests {
 // @param label = "Main" "Label text"
 // @param rails = true
 // @pick 2 "Click the start and the end"
+// @select "Select the walls"
 // @export JSON, .txt
 let x = 1; // @name not a header any more
 "#;
@@ -245,6 +250,8 @@ let x = 1; // @name not a header any more
             ]
         );
         assert_eq!(p.pick, Some((2, "Click the start and the end".into())));
+        assert_eq!(p.select.as_deref(), Some("Select the walls"));
+        assert_eq!(parse("// @select\n", Path::new("a.rhai")).unwrap().select.as_deref(), Some("Select objects"));
         assert_eq!(p.export, ["json", "txt"]);
         let p = parse("# @import csv\nimport varstotas\n", Path::new("points_in.py")).unwrap();
         assert_eq!((p.name.as_str(), p.lang, p.import.as_slice(), p.menu.len()), ("points in", Lang::Python, &["csv".to_string()][..], 1));

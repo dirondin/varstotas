@@ -25,6 +25,8 @@ image.workspace = true
 # 3D Text: glyph outlines of egui's bundled fonts (both are already in egui's dependency tree).
 skrifa = "0.44"
 epaint_default_fonts = "0.36"
+# Script Console editor: highlighting, line numbers, completion (egui 0.36).
+egui_code_editor = { version = "0.4.2", default-features = false, features = ["egui", "editor"] }
 
 # Windows-only: embeds icon + version info into varstotas.exe (see build.rs).
 [build-dependencies]

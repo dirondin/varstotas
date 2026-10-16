@@ -18,6 +18,7 @@ mod draw;
 mod edit;
 mod nav_tools;
 pub mod plugin_pick;
+pub mod plugin_select;
 pub(crate) mod section;
 pub(crate) mod workplane;
 mod chamfer;
@@ -523,6 +524,8 @@ pub enum ToolRequest {
     EditDimensionText(varstotas_kernel::DimId),
     /// A plugin's `@pick` points were clicked: run it.
     PluginPoints(Vec<varstotas_kernel::glam::DVec3>),
+    /// `@select` finished (Enter): the selection goes to the script as `objects`.
+    PluginObjects,
 }
 
 /// Everything a tool can touch while handling an event.

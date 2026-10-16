@@ -1,0 +1,38 @@
+# Script Console editor: highlighting, parameter hints, completion with the real keyboard,
+# the splitter between the output and the code.
+action console
+wait 30
+raw click 300 350
+wait 2
+raw text // a shelf
+raw key Enter
+raw text let f = rect(ORIGIN, 1000
+wait 3
+screenshot shots/code_hint.bmp
+raw text , 300);
+raw key Enter
+raw text pushp
+wait 3
+screenshot shots/code_complete.bmp
+# Tab takes the completion
+raw key Tab
+wait 2
+raw text (f, 
+wait 3
+screenshot shots/code_hint2.bmp
+raw text 200);
+wait 2
+expect code="// a shelf\nlet f = rect(ORIGIN, 1000, 300);\npushpull(f,200);"
+raw mods cmd
+raw key Enter
+raw mods none
+wait 5
+expect script=Some((true,
+expect model_faces=6
+# the splitter above the code: drag it up, the code area grows
+expect code_h=150
+raw drag 340 270 340 170
+wait 5
+expect code_h=250
+screenshot shots/code_split.bmp
+dump done

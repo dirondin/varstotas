@@ -72,12 +72,14 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `viewport.rs` | 3D view widget: input, renderer, overlays |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures), new textured material |
-| `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`) |
+| `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`); splitter between log and code (`code_h`) |
+| `ui/code_editor.rs` | console editor: `egui_code_editor` (highlighting, line numbers, completion) + parameter hints from `varstotas_script::help` (`call_context`, `fn_doc`) |
 | `bridge.rs` | local server (127.0.0.1 + token, JSON lines / HTTP `POST /rpc`), `~/.varstotas/bridge.json`, installs `python/*.py` |
-| `plugins.rs` | plugin header parsing (`@name/@menu/@param/@pick/@import/@export`), scan of `~/.varstotas/plugins`, bundled examples |
-| `ui/extensions.rs` | Extensions menu, File → Import / Export plugin entries, parameter dialog, running plugins |
+| `plugins.rs` | plugin header parsing (`@name/@menu/@param/@pick/@select/@import/@export`), scan of `~/.varstotas/plugins`, bundled examples |
+| `ui/extensions.rs` | Extensions menu, File → Import / Export plugin entries, parameter dialog, running plugins; console code with a header runs as the pseudo plugin `CONSOLE` (`run_console_code`, `plugin_at`); steps `plugin_go`: points → objects → run |
 | `ui/library.rs` | Components tray card: library scan, thumbnails, place (`PasteTool::named`), Save Selection to Library |
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
+| `tools/plugin_select.rs` | object selection for `@select` (click toggles, Enter → `ToolRequest::PluginObjects`) |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |
 | `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF (`to_pdf_pages`: one page per drawing) |
 | `layout.rs` | Sheets on paper: `viewport_drawing` (scene camera → `view_lines`, fit or 1:N, clipped), `sheet_drawing` (border, title block, texts, parts tables), `standard_views` (3 views + iso at a standard scale), overall dims (`auto_dims`), `table_rows` / `table_size`, `sheets_pdf`, `scene_camera` / `camera_scene` |

@@ -51,7 +51,7 @@
 | Липкая геометрия (vertex/edge/face, авто-грани, разбиение) | ядро модели | P0 | ✅ |
 | Groups (Ctrl+G) | изоляция геометрии, двойной клик — войти в редактирование, остальное тускнеет | P0 | ✅ |
 | Components | определение + экземпляры; правка одного меняет все; Make Unique | P1 | ✅ |
-| Ruby Console → Script Console (Rhai): API построения/правки модели, File → Run Script…, один шаг Undo на запуск | скрипты `.rhai`, `docs/SCRIPTING.md` | P2 | ✅ |
+| Ruby Console → Script Console (Rhai): API построения/правки модели, редактор с подсветкой, автодополнением и подсказками параметров, параметры скрипта (`@param` / `@pick` / `@select`), File → Run Script…, один шаг Undo на запуск | скрипты `.rhai`, `docs/SCRIPTING.md` | P2 | ✅ |
 | Ruby API извне / расширения → Python-клиент через локальный мост, MCP-сервер для ИИ-агентов | `python/varstotas.py`, `varstotas_mcp.py`, `.py` из File → Run Script… | P2 | ✅ |
 | Extensions (Ruby plugins) → плагины `.rhai` / `.py`: меню, диалог параметров, выбор точек, импортёры/экспортёры | `docs/PLUGINS.md` | P2 | ✅ |
 | Окно компонентов → локальная библиотека компонентов (эскизы, поиск, размещение, сохранение выделения) | раздел Components в трее | P2 | ✅ |

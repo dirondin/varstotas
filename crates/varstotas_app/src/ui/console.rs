@@ -24,6 +24,9 @@ pub struct ConsoleState {
     hist_pos: Option<usize>,
     /// Last run for the script harness dump: (ok, output or error).
     pub last: Option<(bool, String)>,
+    editor: super::code_editor::ScriptEditor,
+    /// Height of the code editor (the splitter above it drags it); 0 = default.
+    pub code_h: f32,
 }
 
 impl VarstotasApp {
@@ -101,7 +104,11 @@ impl VarstotasApp {
             .resizable(true)
             .show(ctx, |ui| {
             let mono = egui::TextStyle::Monospace;
-            let out_h = (ui.available_height() - 190.0).max(80.0);
+            // Output | splitter | code | buttons: the splitter trades output for code height.
+            let avail = ui.available_height();
+            let max_code = (avail - 130.0).max(60.0);
+            let code_h = if self.console.code_h > 0.0 { self.console.code_h } else { 150.0 }.clamp(60.0, max_code);
+            let out_h = (avail - code_h - 70.0).max(50.0);
             egui::Frame::new().fill(theme::TRAY_BG).inner_margin(6.0).show(ui, |ui| {
                 ScrollArea::vertical().max_height(out_h).min_scrolled_height(out_h).stick_to_bottom(true).auto_shrink([false, false]).show(
                     ui,
@@ -123,8 +130,13 @@ impl VarstotasApp {
                     },
                 );
             });
-            let id = egui::Id::new("script_console_code");
-            let focused = ui.memory(|m| m.has_focus(id));
+            let (split, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 8.0), egui::Sense::drag());
+            let resp = resp.on_hover_cursor(egui::CursorIcon::ResizeVertical);
+            let c = if resp.hovered() || resp.dragged() { theme::TEXT_DIM } else { Color32::from_gray(200) };
+            ui.painter().hline(split.center().x - 20.0..=split.center().x + 20.0, split.center().y - 1.5, egui::Stroke::new(1.0, c));
+            ui.painter().hline(split.center().x - 20.0..=split.center().x + 20.0, split.center().y + 1.5, egui::Stroke::new(1.0, c));
+            self.console.code_h = (code_h - resp.drag_delta().y).clamp(60.0, max_code);
+            let focused = self.console.editor.has_focus(ui);
             if focused && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Enter)) {
                 run = Some(self.prefs.console_code.clone());
             }
@@ -143,16 +155,7 @@ impl VarstotasApp {
                     self.prefs.console_code = self.console.history[pos].clone();
                 }
             }
-            ScrollArea::vertical().id_salt("console_code_scroll").max_height(130.0).show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut self.prefs.console_code)
-                        .id(id)
-                        .code_editor()
-                        .desired_rows(7)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("let f = rect(ORIGIN, 1000, 500);\npushpull(f, 300);"),
-                );
-            });
+            self.console.editor.show(ui, &mut self.prefs.console_code, code_h);
             ui.horizontal(|ui| {
                 if ui.button("Run").on_hover_text("Cmd+Enter").clicked() {
                     run = Some(self.prefs.console_code.clone());
@@ -191,7 +194,7 @@ impl VarstotasApp {
                 self.console.history.push(src.clone());
             }
             self.console.hist_pos = None;
-            self.run_script_source(&src, "Script");
+            self.run_console_code(&src);
         }
         self.console.open = open;
     }

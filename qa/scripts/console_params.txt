@@ -1,0 +1,48 @@
+# Console code with a plugin header: @param opens the dialog, @select lets the user click
+# objects in the viewport (Enter continues), the script gets them as `objects`.
+action script rect(ORIGIN, 1000, 500); rect(vec3(2000, 0, 0), 500, 500);
+view iso
+zoom_extents
+wait 10
+action console
+wait 30
+raw click 300 350
+wait 2
+raw text // @param h = 200 "Height"
+raw key Enter
+raw text // @select "Select faces to raise"
+raw key Enter
+raw text for o in objects { pushpull(o, h); }
+raw key Enter
+raw text print(`raised ${objects.len()}`);
+wait 2
+raw mods cmd
+raw key Enter
+raw mods none
+wait 10
+expect plugin_dialog=Some("Script")
+screenshot shots/console_params_dialog.bmp
+# Enter in the focused field: on to the selection
+raw key Enter
+wait 5
+expect plugin_dialog=None
+expect tool=Select
+action console
+wait 5
+rawp move 500 250 0
+wait 3
+rawp click 500 250 0
+wait 3
+rawp click 2250 250 0
+wait 3
+expect sel F=2
+screenshot shots/console_params_select.bmp
+raw key Enter
+wait 10
+expect script=Some((true, "raised 2"))
+expect model_faces=12
+expect undo=Some("Script")
+action undo
+wait 3
+expect model_faces=2
+dump done

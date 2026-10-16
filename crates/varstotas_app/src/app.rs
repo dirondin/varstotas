@@ -582,6 +582,7 @@ impl VarstotasApp {
                 ToolRequest::ZoomExtents => self.actions.push(Action::ZoomExtents),
                 ToolRequest::ConfirmResize(f) => self.resize_confirm = Some(f),
                 ToolRequest::PluginPoints(pts) => self.plugin_points(pts),
+                ToolRequest::PluginObjects => self.plugin_objects(),
                 ToolRequest::EditDimensionText(id) => {
                     let path = self.doc.active_path.clone();
                     if let Some(g) = self.doc.model.dimension_in(&path, id) {

@@ -1,0 +1,119 @@
+# Egui Code Editor
+[![Latest version](https://img.shields.io/crates/v/egui_code_editor.svg)](https://crates.io/crates/egui_code_editor)
+
+![Completer](screenshots/completer.gif)
+
+Text Editor Widget for [egui](https://github.com/emilk/egui) with numbered lines, clickable hyperlinks, simple syntax highlighting based on keywords sets and auto-completion feature.
+
+### Auto-completion
+![Completer](screenshots/completer_demo.gif)
+
+Offers completions from the syntax dictionary and optionally from words previously entered by the user.
+
+Optionally enables auto-indent for new lines.
+
+*Usage:*
+- UP/DOWN Arrows: Select
+- TAB: Complete
+- ESC: Hide
+
+## Usage with egui
+
+```rust
+use egui_code_editor::{CodeEditor, Completer, ColorTheme, Syntax};
+let syntax = Syntax::rust();
+let mut completer = Completer::new_with_syntax(&syntax).with_user_words();
+
+CodeEditor::default()
+  .id_source("code editor")
+  .with_rows(12)
+  .with_fontsize(14.0)
+  .with_theme(ColorTheme::GRUVBOX)
+  .with_numlines(true)
+  .with_clickable_links(true)
+  .show_with_completer(ui, &mut self.code, &syntax, &mut completer);
+  // .show(ui, &mut self.code, &syntax); // to use without completer
+```
+
+## Usage as lexer without egui
+
+**Cargo.toml**
+
+```toml
+[dependencies]
+egui_code_editor = { version = "0.2" , default-features = false }
+colorful = "0.2.2"
+```
+
+**main.rs**
+
+```rust
+use colorful::{Color, Colorful};
+use egui_code_editor::{Syntax, Token, TokenType};
+
+fn color(token: TokenType) -> Color {
+    match token {
+        TokenType::Comment(_) => Color::Grey37,
+        TokenType::Function => Color::Yellow3b,
+        TokenType::Keyword => Color::IndianRed1c,
+        TokenType::Literal => Color::NavajoWhite1,
+        TokenType::Numeric(_) => Color::MediumPurple,
+        TokenType::Punctuation(_) => Color::Orange3,
+        TokenType::Special => Color::Cyan,
+        TokenType::Str(_) => Color::Green,
+        TokenType::Type => Color::GreenYellow,
+        TokenType::Whitespace(_) => Color::White,
+        TokenType::Unknown => Color::Pink1,
+    }
+}
+
+fn main() {
+    let text = r#"// Code Editor
+CodeEditor::default()
+    .id_source("code editor")
+    .with_rows(12)
+    .with_fontsize(14.0)
+    .with_theme(self.theme)
+    .with_numlines(true)
+    .vscroll(true)
+    .with_clickable_links(true)
+    .show(ui, &mut self.code, &self.syntax);
+    "#;
+
+    let syntax = Syntax::rust();
+    for token in Token::default().tokens(&syntax, text) {
+        print!("{}", token.buffer().color(color(token.ty())));
+    }
+}
+```
+
+
+## Themes
+
+Based on themes in [Helix Editor](https://github.com/helix-editor/helix).
+
+Font used in examples is [Comic Code](https://tosche.net/fonts/comic-code) by Toshi Omagari.
+
+### Ayu
+![Ayu](screenshots/ayu.png)
+
+### Ayu Dark
+![Ayu Dark](screenshots/ayu_dark.png)
+
+### Ayu Mirage
+![Ayu Mirage](screenshots/ayu_mirage.png)
+
+### Github Dark
+![Github Dark](screenshots/github_dark.png)
+
+### Github Light
+![Github Light](screenshots/github_light.png)
+
+### Gruvbox
+![Gruvbox](screenshots/gruvbox.png)
+
+### Gruvbox Light
+![Gruvbox Light](screenshots/gruvbox_light.png)
+
+### Sonokai
+![Sonokai](screenshots/sonokai.png)
