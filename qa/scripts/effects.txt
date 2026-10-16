@@ -1,0 +1,132 @@
+# Track Р batch 2: effects of the Realistic style (soft shadows, AO, reflections, bloom, DOF, fog,
+# vignette), clay, NPR styles, custom WGSL surface shaders (presets, parameters, errors).
+box 0 0 0 7000 4500 100
+box 500 500 100 1000 1000 1000
+box 2500 500 100 1000 1000 1000
+box 4500 500 100 1000 1000 1000
+box 2500 2700 100 1000 1000 600
+box 5000 2600 100 300 300 2200
+view iso
+zoom_extents
+wait 10
+action mat_pbr Grey metallic=1 roughness=0.08
+action mat_pbr Brick roughness=0.5
+action mat_pbr Orange emission=1,0.55,0.2 strength=4
+action mat_pbr Concrete roughness=0.12
+tool paint
+material Concrete
+rawp click 6500 4000 100
+material Grey
+rawp click 1000 500 600
+rawp click 500 1000 600
+rawp click 1500 1000 600
+rawp click 1000 1000 1100
+material Brick
+rawp click 3000 500 600
+rawp click 2500 1000 600
+rawp click 3500 1000 600
+rawp click 3000 1000 1100
+material Orange
+rawp click 3000 2700 400
+rawp click 2500 3200 400
+rawp click 3500 3200 400
+rawp click 3000 3200 700
+tool select
+style realistic
+action toggle_shadows
+wait 10
+expect fx=-
+screenshot shots/fx_none.bmp
+action fx soft=on softness=3
+wait 10
+expect fx=soft
+screenshot shots/fx_soft.bmp
+action fx soft=off ao=on ao_strength=2
+wait 10
+expect fx=ao
+screenshot shots/fx_ao.bmp
+action fx ao=off ssr=on
+wait 10
+screenshot shots/fx_ssr.bmp
+action fx ssr=off bloom=on bloom_strength=0.8 threshold=1.5
+wait 10
+screenshot shots/fx_bloom.bmp
+action fx bloom=off dof=on aperture=3
+wait 10
+screenshot shots/fx_dof.bmp
+action fx dof=off fog=on fog_distance=8000 vignette=0.6
+wait 10
+expect fx=fog,vig
+screenshot shots/fx_fog.bmp
+action fx fog=off vignette=0 preset=quality
+wait 10
+expect fx=soft,ao,ssr,bloom,vig,hq
+screenshot shots/fx_quality.bmp
+action fx clay=on
+wait 10
+screenshot shots/fx_clay.bmp
+action fx clay=off stylize=pencil
+wait 10
+screenshot shots/fx_pencil.bmp
+action fx stylize=watercolor
+wait 10
+screenshot shots/fx_watercolor.bmp
+action fx stylize=technical
+wait 10
+screenshot shots/fx_technical.bmp
+action fx preset=balanced stylize=none
+wait 5
+# custom surface shaders
+action mat_shader Brick wood
+action mat_shader Concrete water
+action mat_shader Orange glow
+action mat_shader Grey reededglass
+wait 20
+expect shader_err=[]
+screenshot shots/fx_shaders.bmp
+action mat_param Brick 0 6
+action mat_param Orange 0 0.6
+wait 10
+expect shaders=[("Grey", "Reeded Glass", [12.0, 0.6, 0.08, 0.15]), ("Brick", "Wood", [6.0, 0.55, 0.5, 0.35]), ("Orange", "Glow", [0.6, 4.0, 0.3, 0.0]), ("Concrete", "Water", [400.0, 0.4, 0.6, 0.5])]
+screenshot shots/fx_params.bmp
+export_png effects_export.png 800 500
+wait 10
+# the shader editor: an error names its line and keeps the last working shader; valid code applies
+action shader_editor Brick
+wait 5
+screenshot shots/fx_editor.bmp
+action shader_code fn surface(s: Surface, p: Params) -> Surface {\n    return s.nope;\n}
+wait 45
+expect shader_edit=Some(("Brick", Some("line 2:
+expect ("Brick", "Wood", [6.0, 0.55, 0.5, 0.35])
+screenshot shots/fx_editor_error.bmp
+action shader_code // @param size = 300 (10..2000)\nfn surface(s: Surface, p: Params) -> Surface {\n    var o = s;\n    let c = floor(s.pos / p.size);\n    o.base = s.base * (0.5 + 0.5 * fract((c.x + c.y + c.z) * 0.5) * 2.0);\n    return o;\n}
+wait 45
+expect shader_edit=Some(("Brick", None))
+expect ("Brick", "custom", [300.0])
+screenshot shots/fx_editor_ok.bmp
+# the tray: Materials (Shader row and its sliders) and Environment (Effects) only, real mouse
+material Brick
+raw click 344 -106
+wait 3
+raw click 388 -50
+raw click 388 4
+raw click 388 31
+raw click 388 58
+raw click 388 85
+raw click 388 112
+wait 3
+raw key Escape
+wait 5
+screenshot shots/fx_tray.bmp
+# hide Materials too, close the editor and open the Environment card (its Effects section is open)
+raw click 344 -106
+wait 3
+raw click 388 -23
+wait 3
+raw key Escape
+wait 3
+action shader_editor_close
+raw click 1137 58
+wait 5
+screenshot shots/fx_env_card.bmp

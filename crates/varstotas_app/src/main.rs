@@ -15,6 +15,7 @@ mod inference;
 mod layout;
 mod nav;
 mod pbr;
+mod shaders;
 mod overlay;
 mod plugins;
 mod scene_builder;

@@ -562,6 +562,7 @@ impl VarstotasApp {
             on_ground: sh.on_ground,
         });
         s.env = crate::pbr::env_style(&self.doc.model.environment);
+        s.env.effects.time = (self.now % 3600.0) as f32;
         s
     }
 
@@ -2413,6 +2414,9 @@ impl eframe::App for VarstotasApp {
             }
             let (o3, o2) = self.tool_overlays();
             let style = self.render_style();
+            if style.face_style == varstotas_render::FaceStyle::Realistic && crate::pbr::animated(&self.doc.model) {
+                ctx.request_repaint();
+            }
             self.viewport.show_textures = matches!(self.prefs.face_style, FaceStylePref::Shaded | FaceStylePref::Realistic);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
@@ -2436,6 +2440,7 @@ impl eframe::App for VarstotasApp {
         self.dialogs(&ctx);
         self.console_window(&ctx);
         self.gen_editor_window(&ctx);
+        self.shader_editor_window(&ctx);
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
         self.sheets_window(&ctx);

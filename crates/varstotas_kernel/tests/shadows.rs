@@ -48,7 +48,7 @@ fn sun_position() {
 #[test]
 fn physical_materials_and_environment_are_saved() {
     use varstotas_kernel::io::{from_json, to_json};
-    use varstotas_kernel::{Environment, Model, Pbr, Scene, SkyKind, TextureImage, Tonemap};
+    use varstotas_kernel::{CustomShader, Effects, Environment, Model, Pbr, Scene, SkyKind, Stylize, TextureImage, Tonemap};
     let mut m = Model::new();
     let plain = m.add_material("Plain", [1.0; 4]);
     let gold = m.add_material("Gold", [1.0, 0.8, 0.3, 1.0]);
@@ -56,11 +56,13 @@ fn physical_materials_and_environment_are_saved() {
         metallic: 1.0,
         roughness: 0.2,
         normal_map: Some(TextureImage::new(b"\x89PNG-not-really".to_vec(), "n.png", 300.0)),
+        shader: Some(CustomShader { source: "// @param k = 2\nfn surface(s: Surface, p: Params) -> Surface { return s; }".into(), params: vec![3.0] }),
         ..Default::default()
     });
     let plain_json = to_json(&m).unwrap();
     assert!(!plain_json.contains("\"environment\""), "the default environment is not written");
-    let env = Environment { sky: SkyKind::Hdri, rotation_deg: 90.0, exposure: 1.5, tonemap: Tonemap::Agx, ..Default::default() };
+    let effects = Effects { ao: true, fog: true, stylize: Stylize::Pencil, ..Effects::default().with_preset("balanced").unwrap() };
+    let env = Environment { sky: SkyKind::Hdri, rotation_deg: 90.0, exposure: 1.5, tonemap: Tonemap::Agx, effects, ..Default::default() };
     m.environment = env;
     m.hdri = Some(TextureImage::new(b"#?RADIANCE".to_vec(), "sky.hdr", 1000.0));
     let mut sc = Scene::camera("Dusk", glam::DVec3::new(1.0, 2.0, 3.0), glam::DVec3::ZERO, glam::DVec3::Z, 35.0, false);
@@ -71,6 +73,7 @@ fn physical_materials_and_environment_are_saved() {
     let p = back.materials[gold].pbr.as_ref().unwrap();
     assert_eq!((p.metallic, p.roughness), (1.0, 0.2));
     assert_eq!(p.normal_map.as_ref().map(|t| t.size[0]), Some(300.0));
+    assert_eq!(p.shader.as_ref().map(|sh| sh.param(0)), Some(3.0));
     assert_eq!(back.environment, env);
     assert_eq!(back.hdri.as_ref().map(|h| h.file_name.as_str()), Some("sky.hdr"));
     assert_eq!(back.scenes[0].environment.map(|e| e.exposure), Some(-1.0));

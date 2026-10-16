@@ -54,6 +54,8 @@ pub struct Viewport {
     /// Data textures and the HDRI of the Realistic style uploaded to the renderer.
     data_textures: crate::pbr::DataSync,
     hdri: crate::pbr::EnvSync,
+    /// Custom surface shaders that do not compile: (source, message).
+    pub shader_errors: Vec<(String, String)>,
     /// Render origin of the uploaded geometry (kept stable between rebuilds).
     origin: Option<varstotas_kernel::glam::DVec3>,
     /// PNG export to run at the next paint (needs the GPU renderer).
@@ -81,6 +83,7 @@ impl Default for Viewport {
             textures: Default::default(),
             data_textures: Default::default(),
             hdri: Default::default(),
+            shader_errors: Vec::new(),
             show_textures: true,
             origin: None,
             export: None,
@@ -166,6 +169,17 @@ impl Viewport {
                             && let Err(e) = guarded(|| renderer.set_data_textures(rs, &images))
                         {
                             log::warn!("set_data_textures failed: {e}");
+                        }
+                        let customs = crate::pbr::custom_surfaces(&doc.model);
+                        match guarded(|| renderer.set_custom_shaders(rs, &customs)) {
+                            Ok(errs) => {
+                                self.shader_errors = customs
+                                    .into_iter()
+                                    .zip(errs)
+                                    .filter_map(|(c, e)| Some((c.source, e?)))
+                                    .collect();
+                            }
+                            Err(e) => log::warn!("set_custom_shaders failed: {e}"),
                         }
                         let table = crate::pbr::material_table(&doc.model);
                         if let Err(e) = guarded(|| renderer.set_materials(rs, &table)) {

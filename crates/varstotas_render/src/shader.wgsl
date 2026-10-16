@@ -82,8 +82,15 @@ fn highlight_edge(c: vec4<f32>, state: u32) -> vec4<f32> {
 struct EnvU {
     sh: array<vec4<f32>, 9>, // irradiance per SH basis function (rgb)
     p: vec4<f32>,            // x: rotation (rad); y: intensity; z: last mip; w: 1 = background
-    p2: vec4<f32>,           // x: exposure multiplier; y: tone map (0 ACES, 1 AgX, 2 clamp); z: sun
+    p2: vec4<f32>,           // x: exposure multiplier; y: tone map (0 ACES, 1 AgX, 2 clamp); z: sun;
+                             // w: time (s, custom shaders)
+    p3: vec4<f32>,           // x: 1 = clay; y: soft shadow penumbra per shadow-map depth (0 = off);
+                             // z: 1 = high quality
 };
+
+// Scene pass of the effects path (post.rs): light stays linear (exposure applied, no tone
+// curve, no manual gamma); the final post pass maps it.
+override HDR_OUT: bool = false;
 @group(0) @binding(3) var env_map: texture_2d<f32>;
 @group(0) @binding(4) var env_sampler: sampler;
 @group(0) @binding(5) var<uniform> env: EnvU;
@@ -155,9 +162,18 @@ fn agx(x: vec3<f32>) -> vec3<f32> {
     return pow(clamp(v, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(2.2));
 }
 
-/// Scene light (linear) -> display (linear 0..1): exposure, then the tone map.
+/// Scene light (linear) -> display (linear 0..1): exposure, then the tone map (only the
+/// exposure in the effects path, see `HDR_OUT`).
 fn tonemap(c: vec3<f32>) -> vec3<f32> {
     let x = max(c, vec3<f32>(0.0)) * env.p2.x;
+    if HDR_OUT {
+        return min(x, vec3<f32>(60000.0));
+    }
+    return tone_curve(x);
+}
+
+/// The tone map alone (exposure already applied).
+fn tone_curve(x: vec3<f32>) -> vec3<f32> {
     if env.p2.y < 0.5 {
         return aces(x);
     }
@@ -176,6 +192,9 @@ fn shadow_vis(p: vec3<f32>, n: vec3<f32>) -> f32 {
         return 1.0;
     }
     let z = min(c.z, 1.0);
+    if realistic() && env.p3.y > 0.0 {
+        return shadow_pcss(uv, z, p);
+    }
     var sum = 0.0;
     for (var i = -1; i <= 1; i++) {
         for (var j = -1; j <= 1; j++) {
@@ -184,6 +203,55 @@ fn shadow_vis(p: vec3<f32>, n: vec3<f32>) -> f32 {
         }
     }
     return sum / 9.0;
+}
+
+const POISSON: array<vec2<f32>, 16> = array<vec2<f32>, 16>(
+    vec2<f32>(-0.94201624, -0.39906216), vec2<f32>(0.94558609, -0.76890725),
+    vec2<f32>(-0.09418410, -0.92938870), vec2<f32>(0.34495938, 0.29387760),
+    vec2<f32>(-0.91588581, 0.45771432), vec2<f32>(-0.81544232, -0.87912464),
+    vec2<f32>(-0.38277543, 0.27676845), vec2<f32>(0.97484398, 0.75648379),
+    vec2<f32>(0.44323325, -0.97511554), vec2<f32>(0.53742981, -0.47373420),
+    vec2<f32>(-0.26496911, -0.41893023), vec2<f32>(0.79197514, 0.19090188),
+    vec2<f32>(-0.24188840, 0.99706507), vec2<f32>(-0.81409955, 0.91437590),
+    vec2<f32>(0.19984126, 0.78641367), vec2<f32>(0.14383161, -0.14100790));
+
+/// Interleaved gradient noise of a position (0..1), stable per surface point.
+fn ign(p: vec2<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(p, vec2<f32>(0.06711056, 0.00583715))));
+}
+
+/// Percentage-closer soft shadows: the average blocker depth sets the filter width, so the
+/// penumbra grows with the distance between the occluder and the receiver.
+/// The fragment's pixel (set by the fragment shaders that sample soft shadows): the per-pixel
+/// rotation of the PCSS kernel.
+var<private> frag_px: vec2<f32>;
+
+fn shadow_pcss(uv: vec2<f32>, z: f32, p: vec3<f32>) -> f32 {
+    let texel = g.shadow2.y;
+    let dims = vec2<f32>(textureDimensions(shadow_map));
+    let k = env.p3.y;
+    let a = ign(frag_px) * 6.2831853;
+    let rot = mat2x2<f32>(cos(a), sin(a), -sin(a), cos(a));
+    let search = clamp(k * z, 2.0 * texel, 48.0 * texel);
+    var blockers = 0.0;
+    var sum = 0.0;
+    for (var i = 0; i < 16; i++) {
+        let t = clamp(uv + rot * POISSON[i] * search, vec2<f32>(0.0), vec2<f32>(0.9999));
+        let d = textureLoad(shadow_map, vec2<i32>(t * dims), 0);
+        if d < z - 1.5 * texel {
+            blockers += 1.0;
+            sum += d;
+        }
+    }
+    if blockers < 0.5 {
+        return 1.0;
+    }
+    let width = clamp((z - sum / blockers) * k, 1.0 * texel, 48.0 * texel);
+    var lit = 0.0;
+    for (var i = 0; i < 16; i++) {
+        lit += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + rot * POISSON[i] * width, z);
+    }
+    return lit / 16.0;
 }
 
 // Shadow pass (group 0 unused, so the map can be bound elsewhere in the frame).
@@ -230,6 +298,9 @@ fn lin(c: vec4<f32>) -> vec4<f32> {
 }
 
 fn out_color(c: vec4<f32>) -> vec4<f32> {
+    if HDR_OUT {
+        return c;
+    }
     if g.params.w > 0.5 {
         return vec4<f32>(linear_to_srgb(clamp(c.rgb, vec3<f32>(0.0), vec3<f32>(1.0))), c.a);
     }
@@ -325,11 +396,24 @@ fn fs_sky(in: FsOut) -> @location(0) vec4<f32> {
 
 struct GroundOut {
     @location(0) color: vec4<f32>,
+    /// Effects path only (post.rs): surface normal, roughness, metalness.
+    @location(1) gbuf: vec4<f32>,
     @builtin(frag_depth) depth: f32,
 };
 
+/// G-buffer texel of the effects path (Rgba8Unorm): octahedral world normal, roughness
+/// (never 0: 0 marks the background) and metalness.
+fn gbuf_pack(n: vec3<f32>, rough: f32, metal: f32) -> vec4<f32> {
+    var o = n.xy / (abs(n.x) + abs(n.y) + abs(n.z));
+    if n.z < 0.0 {
+        o = (1.0 - abs(o.yx)) * select(vec2<f32>(-1.0), vec2<f32>(1.0), o >= vec2<f32>(0.0));
+    }
+    return vec4<f32>(o * 0.5 + 0.5, clamp(rough, 0.02, 1.0), clamp(metal, 0.0, 1.0));
+}
+
 @fragment
 fn fs_ground(in: FsOut) -> GroundOut {
+    frag_px = in.pos.xy;
     let r = pixel_ray(in.ndc);
     let ortho = g.eye_rel.w > 0.5;
     // origin.w = world z of the geometry's local frame (SceneGeometry::origin.z).
@@ -371,6 +455,7 @@ fn fs_ground(in: FsOut) -> GroundOut {
         col = tonemap(col / PI * (env_irradiance(vec3<f32>(0.0, 0.0, 1.0)) + sun));
         var o: GroundOut;
         o.color = out_color(vec4<f32>(col, alpha));
+        o.gbuf = gbuf_pack(vec3<f32>(0.0, 0.0, 1.0), 1.0, 0.0);
         o.depth = depth;
         return o;
     }
@@ -383,6 +468,7 @@ fn fs_ground(in: FsOut) -> GroundOut {
     }
     var o: GroundOut;
     o.color = out_color(vec4<f32>(col, alpha));
+    o.gbuf = gbuf_pack(vec3<f32>(0.0, 0.0, 1.0), 1.0, 0.0);
     o.depth = depth;
     return o;
 }
@@ -484,10 +570,11 @@ struct FaceOut {
 // Data textures (linear: packed occlusion / roughness / metalness, normal maps), same scheme.
 @group(1) @binding(3) var data_tex: texture_2d_array<f32>;
 @group(1) @binding(4) var<uniform> data_info: array<vec4<f32>, 256>;
-// PBR materials (textures.rs `set_materials`), 4 vec4 each; material i + 1 in `mats`:
+// PBR materials (textures.rs `set_materials`), 6 vec4 each; material i + 1 in `mats`:
 // [metallic, roughness, transmission, ior], [emission rgb, normal scale],
-// [emission layer, orm layer, normal layer, orm mask].
-@group(1) @binding(5) var<uniform> materials: array<vec4<f32>, 1024>;
+// [emission layer, orm layer, normal layer, orm mask], [custom shader + 1, 0, 0, 0],
+// custom shader parameters 0..3, 4..7.
+@group(1) @binding(5) var<uniform> materials: array<vec4<f32>, 1536>;
 
 @vertex
 fn vs_face(v: FaceIn) -> FaceOut {
@@ -508,16 +595,31 @@ fn vs_face(v: FaceIn) -> FaceOut {
     return o;
 }
 
+struct FaceFrag {
+    @location(0) color: vec4<f32>,
+    /// Effects path only (post.rs, Realistic): see `gbuf_pack`.
+    @location(1) gbuf: vec4<f32>,
+};
+
 @fragment
-fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> @location(0) vec4<f32> {
+fn fs_face(in: FaceOut, @builtin(front_facing) ff: bool) -> FaceFrag {
     if in.clip < 0.0 {
         discard;
     }
+    frag_px = in.pos.xy;
     let mode = g.params.x;
-    let alpha_mul = g.params.y;
     if mode > 3.5 {
         return fs_face_pbr(in, ff);
     }
+    var o: FaceFrag;
+    o.color = face_classic(in, ff);
+    o.gbuf = vec4<f32>(0.5, 0.5, 1.0, 0.0);
+    return o;
+}
+
+fn face_classic(in: FaceOut, ff: bool) -> vec4<f32> {
+    let mode = g.params.x;
+    let alpha_mul = g.params.y;
     if mode > 2.5 {
         return out_color(vec4<f32>(srgb_to_linear(g.hl_selected.rgb), 0.3));
     }
@@ -886,7 +988,7 @@ fn env_brdf(f0: vec3<f32>, rough: f32, nv: f32) -> vec3<f32> {
     return f0 * ab.x + ab.y;
 }
 
-fn fs_face_pbr(in: FaceOut, ff: bool) -> vec4<f32> {
+fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
     // Derivatives first (uniform control flow); maps are sampled with explicit gradients.
     let dp_dx = dpdx(in.lpos);
     let dp_dy = dpdy(in.lpos);
@@ -921,8 +1023,9 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> vec4<f32> {
     var transmission = 0.0;
     var emission = vec3<f32>(0.0);
     var ao = 1.0;
-    if mat > 0u {
-        let m = (mat - 1u) * 4u;
+    let clay = env.p3.x > 0.5;
+    if mat > 0u && !clay {
+        let m = (mat - 1u) * 6u;
         let m0 = materials[m];
         let m1 = materials[m + 1u];
         let m2 = materials[m + 2u];
@@ -971,14 +1074,48 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> vec4<f32> {
             }
         }
     }
-    rough = clamp(rough, 0.03, 1.0);
-    metallic = clamp(metallic, 0.0, 1.0);
-    let albedo = c.rgb;
     // View direction (toward the eye).
     var v = -g.fwd.xyz;
     if g.eye_rel.w < 0.5 {
         v = normalize(g.eye_rel.xyz - (in.lpos - g.origin.xyz));
     }
+    if mat > 0u && !clay {
+        let m = (mat - 1u) * 6u;
+        let id = u32(materials[m + 3u].x + 0.5);
+        if id > 0u {
+            var s: Surface;
+            s.base = c.rgb;
+            s.alpha = c.a;
+            s.metallic = metallic;
+            s.roughness = rough;
+            s.transmission = transmission;
+            s.emission = emission;
+            s.normal = n;
+            s.pos = in.lpos + vec3<f32>(0.0, 0.0, g.origin.w);
+            s.uv = in.uv;
+            s.view = v;
+            s.time = env.p2.w;
+            s = custom_surface(id, s, materials[m + 4u], materials[m + 5u]);
+            c = vec4<f32>(max(s.base, vec3<f32>(0.0)), clamp(s.alpha, 0.0, 1.0));
+            metallic = s.metallic;
+            rough = s.roughness;
+            transmission = clamp(s.transmission, 0.0, 1.0);
+            emission = max(s.emission, vec3<f32>(0.0));
+            if dot(s.normal, s.normal) > 1e-8 {
+                n = normalize(s.normal);
+            }
+        }
+    }
+    if clay {
+        c = vec4<f32>(0.62, 0.6, 0.57, select(c.a, 1.0, c.a > 0.3));
+        metallic = 0.0;
+        rough = 0.75;
+        transmission = 0.0;
+        emission = vec3<f32>(0.0);
+    }
+    rough = clamp(rough, 0.03, 1.0);
+    metallic = clamp(metallic, 0.0, 1.0);
+    let albedo = c.rgb;
     let nv = max(dot(n, v), 1e-4);
     let f0 = mix(vec3<f32>(0.04), albedo, metallic);
     let diffuse_col = albedo * (1.0 - metallic) * (1.0 - transmission);
@@ -1023,5 +1160,85 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> vec4<f32> {
         a = a2;
     }
     let mapped = highlight_face(vec4<f32>(tonemap(col), 1.0), in.state);
-    return out_color(vec4<f32>(mapped.rgb, a));
+    var o: FaceFrag;
+    o.color = out_color(vec4<f32>(mapped.rgb, a));
+    o.gbuf = gbuf_pack(n, rough, metallic);
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+// Custom WGSL surfaces (docs/SHADERS.md): `custom_surface` is generated by custom.rs, which
+// appends each material's `fn surface(s: Surface, p: Params) -> Surface` (names suffixed).
+// ---------------------------------------------------------------------------
+
+struct Surface {
+    base: vec3<f32>,     // linear base colour
+    alpha: f32,          // opacity (the material's; faces are blended only if it is below 1)
+    metallic: f32,
+    roughness: f32,
+    transmission: f32,   // glass: 1 = light passes through
+    emission: vec3<f32>, // linear, strength included
+    normal: vec3<f32>,   // world, unit, facing the viewer
+    pos: vec3<f32>,      // model position (mm, relative to the render frame; z = world z)
+    uv: vec2<f32>,       // planar texture coordinates (mm)
+    view: vec3<f32>,     // unit direction toward the eye
+    time: f32,           // seconds
+};
+
+fn hash3(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let r = q + dot(q, q.yzx + 33.33);
+    return fract((r.x + r.y) * r.z);
+}
+
+/// Value noise, -1..1 is never reached: 0..1, smooth.
+fn noise(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = mix(mix(hash3(i), hash3(i + vec3<f32>(1.0, 0.0, 0.0)), u.x),
+                mix(hash3(i + vec3<f32>(0.0, 1.0, 0.0)), hash3(i + vec3<f32>(1.0, 1.0, 0.0)), u.x), u.y);
+    let b = mix(mix(hash3(i + vec3<f32>(0.0, 0.0, 1.0)), hash3(i + vec3<f32>(1.0, 0.0, 1.0)), u.x),
+                mix(hash3(i + vec3<f32>(0.0, 1.0, 1.0)), hash3(i + vec3<f32>(1.0, 1.0, 1.0)), u.x), u.y);
+    return mix(a, b, u.z);
+}
+
+/// Fractal noise: `octaves` layers of `noise`, 0..1.
+fn fbm(p: vec3<f32>, octaves: i32) -> f32 {
+    var sum = 0.0;
+    var amp = 0.5;
+    var q = p;
+    var norm = 0.0;
+    for (var i = 0; i < octaves; i++) {
+        sum += amp * noise(q);
+        norm += amp;
+        q = q * 2.03 + vec3<f32>(17.1, 3.7, 9.2);
+        amp *= 0.5;
+    }
+    return sum / max(norm, 1e-6);
+}
+
+/// sRGB colour (0..1) -> linear.
+fn srgb(c: vec3<f32>) -> vec3<f32> {
+    return srgb_to_linear(c);
+}
+
+/// Hue, saturation, value (0..1) -> linear colour.
+fn hsv(h: f32, sat: f32, v: f32) -> vec3<f32> {
+    let k = vec3<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0);
+    let q = abs(fract(vec3<f32>(h) + k) * 6.0 - 3.0);
+    return srgb_to_linear(v * mix(vec3<f32>(1.0), clamp(q - 1.0, vec3<f32>(0.0), vec3<f32>(1.0)), sat));
+}
+
+/// A unit vector across `n` (with `cross(n, t)` it makes a tangent frame).
+fn tangent_of(n: vec3<f32>) -> vec3<f32> {
+    return normalize(cross(n, select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(1.0, 0.0, 0.0), abs(n.z) > 0.9)));
+}
+
+/// `n` tilted by the slope of a height field: `dh` = change of height along the tangent
+/// frame's two directions (per unit of their length).
+fn bump(n: vec3<f32>, dh: vec2<f32>) -> vec3<f32> {
+    let t = tangent_of(n);
+    let b = cross(n, t);
+    return normalize(n - t * dh.x - b * dh.y);
 }

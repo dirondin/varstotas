@@ -60,6 +60,10 @@ pub struct PbrMaterial {
     pub orm_mask: u8,
     /// Data-texture layer + 1 of the tangent-space normal map (0 = none).
     pub normal_layer: u16,
+    /// Index + 1 of the material's surface in `Renderer::set_custom_shaders` (0 = none).
+    pub shader: u16,
+    /// Values of the custom surface's parameters.
+    pub params: [f32; 8],
 }
 
 impl Default for PbrMaterial {
@@ -75,6 +79,8 @@ impl Default for PbrMaterial {
             orm_layer: 0,
             orm_mask: 0,
             normal_layer: 0,
+            shader: 0,
+            params: [0.0; 8],
         }
     }
 }
@@ -123,11 +129,76 @@ pub struct EnvStyle {
     /// Exposure in stops.
     pub exposure: f32,
     pub tonemap: ToneMap,
+    pub effects: Effects,
 }
 
 impl Default for EnvStyle {
     fn default() -> Self {
-        Self { source: EnvSource::Sky, rotation_deg: 0.0, intensity: 1.0, background: true, sun: 3.0, exposure: 0.0, tonemap: ToneMap::Aces }
+        Self {
+            source: EnvSource::Sky,
+            rotation_deg: 0.0,
+            intensity: 1.0,
+            background: true,
+            sun: 3.0,
+            exposure: 0.0,
+            tonemap: ToneMap::Aces,
+            effects: Effects::default(),
+        }
+    }
+}
+
+/// A stylized look of `FaceStyle::Realistic` (drawn by the effects pass).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Stylize {
+    #[default]
+    None,
+    Pencil,
+    Watercolor,
+    Technical,
+}
+
+/// Screen effects of `FaceStyle::Realistic`; a zero strength / distance switches one off.
+/// Lengths in mm.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct Effects {
+    /// Soft shadows (PCSS): apparent sun size, 0 = the usual filtered shadows.
+    pub soft_shadows: f32,
+    pub ao_strength: f32,
+    pub ao_radius: f32,
+    /// Screen-space reflections.
+    pub reflections: f32,
+    pub bloom: f32,
+    /// Light above this (1 = white) glows.
+    pub bloom_threshold: f32,
+    /// Depth of field blur (0 = off).
+    pub aperture: f32,
+    /// 0 = what is in the middle of the view.
+    pub focus_distance: f32,
+    /// Distance at which fog hides half of the light (0 = no fog).
+    pub fog_distance: f32,
+    /// sRGB.
+    pub fog_color: [f32; 3],
+    /// 0 = even fog, 1 = haze near the ground.
+    pub fog_height: f32,
+    pub vignette: f32,
+    /// Every material as matte clay.
+    pub clay: bool,
+    pub stylize: Stylize,
+    pub high_quality: bool,
+    /// Seconds, for animated custom surfaces.
+    pub time: f32,
+}
+
+impl Effects {
+    /// Needs the effects path (float scene target + full-screen passes).
+    pub fn needs_post(&self) -> bool {
+        self.ao_strength > 0.0
+            || self.reflections > 0.0
+            || self.bloom > 0.0
+            || self.aperture > 0.0
+            || self.fog_distance > 0.0
+            || self.vignette > 0.0
+            || self.stylize != Stylize::None
     }
 }
 
@@ -417,6 +488,12 @@ pub struct ShadowStyle {
 
 mod grid;
 pub use grid::{GRID_MIN_PX, GridStyle};
+mod custom;
+pub use custom::CustomSurface;
+pub mod shaders {
+    //! Checking custom surface shaders before use.
+    pub use crate::custom::check;
+}
 mod renderer;
 mod textures;
 pub use textures::{MAX_LAYERS as MAX_TEXTURE_LAYERS, MAX_MATERIALS as MAX_PBR_MATERIALS};

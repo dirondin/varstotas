@@ -60,7 +60,10 @@ pub use model::{
 };
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;
-pub use pbr::{Environment, PBR_MAPS, Pbr, SkyKind, Tonemap};
+pub use pbr::{
+    CustomShader, EFFECT_PRESETS, Effects, Environment, MAX_SHADER_PARAMS, PBR_MAPS, Pbr, ShaderParam, SkyKind, Stylize, Tonemap,
+    shader_params,
+};
 pub use section::{SectionDisplay, SectionPlane};
 pub use workplane::WorkPlane;
 pub use shadows::ShadowSettings;

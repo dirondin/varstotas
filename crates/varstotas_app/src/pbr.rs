@@ -52,9 +52,25 @@ fn srgb(x: f32) -> f32 {
     if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
 }
 
+/// The custom surface shaders of the table's materials (each source once, in order of first
+/// use): `PbrMaterial::shader` = index + 1.
+pub fn custom_surfaces(model: &Model) -> Vec<varstotas_render::CustomSurface> {
+    let mut out: Vec<varstotas_render::CustomSurface> = Vec::new();
+    for id in pbr_materials(model) {
+        if let Some(sh) = model.materials[id].pbr.as_ref().and_then(|p| p.shader.as_ref())
+            && !out.iter().any(|c| c.source == sh.source)
+        {
+            let params = varstotas_kernel::shader_params(&sh.source).into_iter().map(|p| p.name).collect();
+            out.push(varstotas_render::CustomSurface { source: sh.source.clone(), params });
+        }
+    }
+    out
+}
+
 /// The renderer's material table (`Renderer::set_materials`), in `pbr_materials` order.
 pub fn material_table(model: &Model) -> Vec<PbrMaterial> {
     let base = crate::scene_builder::texture_layers(model).len();
+    let customs = custom_surfaces(model);
     let emission = emission_layers(model);
     let data = data_layers(model);
     let layer = |i: Option<usize>| i.map_or(0, |i| (i + 1).min(u16::MAX as usize) as u16);
@@ -66,6 +82,16 @@ pub fn material_table(model: &Model) -> Vec<PbrMaterial> {
             let orm = data.iter().position(|d| *d == (id, DataKind::Orm));
             let normal = data.iter().position(|d| *d == (id, DataKind::Normal));
             let mask = p.ao_map.is_some() as u8 | (p.roughness_map.is_some() as u8) << 1 | (p.metallic_map.is_some() as u8) << 2;
+            let (shader, params) = match &p.shader {
+                Some(sh) => {
+                    let mut v = [0.0; 8];
+                    for (i, x) in v.iter_mut().enumerate().take(varstotas_kernel::shader_params(&sh.source).len()) {
+                        *x = sh.param(i);
+                    }
+                    (customs.iter().position(|c| c.source == sh.source).map_or(0, |i| i as u16 + 1), v)
+                }
+                None => (0, [0.0; 8]),
+            };
             PbrMaterial {
                 metallic: p.metallic,
                 roughness: p.roughness,
@@ -77,14 +103,20 @@ pub fn material_table(model: &Model) -> Vec<PbrMaterial> {
                 orm_layer: layer(orm),
                 orm_mask: mask,
                 normal_layer: layer(normal),
+                shader,
+                params,
             }
         })
         .collect()
 }
 
-/// Face alpha of a material in the Realistic style: transmission makes it see-through.
+/// Face alpha of a material in the Realistic style: transmission makes it see-through, also a
+/// custom shader that sets it (its faces must be blended to show what is behind).
 pub fn realistic_alpha(color_alpha: f32, pbr: Option<&varstotas_kernel::Pbr>) -> f32 {
-    let t = pbr.map_or(0.0, |p| p.transmission.clamp(0.0, 1.0));
+    let t = pbr.map_or(0.0, |p| {
+        let by_shader = p.shader.as_ref().is_some_and(|sh| sh.source.contains(".transmission"));
+        if by_shader { 1.0 } else { p.transmission.clamp(0.0, 1.0) }
+    });
     color_alpha * (1.0 - 0.9 * t)
 }
 
@@ -221,7 +253,46 @@ pub fn env_style(e: &varstotas_kernel::Environment) -> varstotas_render::EnvStyl
             Tonemap::Agx => varstotas_render::ToneMap::Agx,
             Tonemap::Clamp => varstotas_render::ToneMap::Clamp,
         },
+        effects: effects_style(&e.effects),
     }
+}
+
+/// The renderer's effects (a switched-off effect gets a zero strength).
+pub fn effects_style(f: &varstotas_kernel::Effects) -> varstotas_render::Effects {
+    use varstotas_kernel::Stylize;
+    let on = |b: bool, v: f32| if b { v } else { 0.0 };
+    varstotas_render::Effects {
+        soft_shadows: on(f.soft_shadows, f.shadow_softness),
+        ao_strength: on(f.ao, f.ao_strength),
+        ao_radius: f.ao_radius,
+        reflections: on(f.reflections, f.reflection_strength),
+        bloom: on(f.bloom, f.bloom_strength),
+        bloom_threshold: f.bloom_threshold,
+        aperture: on(f.dof, f.aperture),
+        focus_distance: f.focus_distance,
+        fog_distance: on(f.fog, f.fog_distance),
+        fog_color: f.fog_color,
+        fog_height: f.fog_height,
+        vignette: f.vignette,
+        clay: f.clay,
+        stylize: match f.stylize {
+            Stylize::None => varstotas_render::Stylize::None,
+            Stylize::Pencil => varstotas_render::Stylize::Pencil,
+            Stylize::Watercolor => varstotas_render::Stylize::Watercolor,
+            Stylize::Technical => varstotas_render::Stylize::Technical,
+        },
+        high_quality: f.high_quality,
+        time: 0.0,
+    }
+}
+
+/// Some custom surface of the model changes with time (redraw continuously in Realistic).
+pub fn animated(model: &Model) -> bool {
+    pbr_materials(model).iter().any(|id| {
+        model.materials[*id].pbr.as_ref().and_then(|p| p.shader.as_ref()).is_some_and(|s| {
+            s.source.lines().map(|l| l.split("//").next().unwrap_or("")).any(|l| l.contains(".time"))
+        })
+    })
 }
 
 #[cfg(test)]

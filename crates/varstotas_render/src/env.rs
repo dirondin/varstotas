@@ -19,8 +19,11 @@ pub(crate) struct EnvUniform {
     sh: [[f32; 4]; 9],
     /// x: rotation (rad); y: intensity; z: last mip level; w: 1 = environment as background.
     p: [f32; 4],
-    /// x: exposure multiplier; y: tone map (0 ACES, 1 AgX, 2 clamp); z: sun strength.
+    /// x: exposure multiplier; y: tone map (0 ACES, 1 AgX, 2 clamp); z: sun strength;
+    /// w: time (s).
     p2: [f32; 4],
+    /// x: 1 = clay; y: soft shadow penumbra per shadow-map depth (0 = off); z: 1 = high quality.
+    p3: [f32; 4],
 }
 
 /// What the current panorama was built from.
@@ -113,7 +116,14 @@ impl Env {
         true
     }
 
-    pub fn write_uniform(&self, queue: &wgpu::Queue, env: &EnvStyle) {
+    /// The environment itself is drawn behind the model (else the style's gradient).
+    pub fn shows_background(&self, env: &EnvStyle) -> bool {
+        env.background && !self.sky
+    }
+
+    /// `shadow_depth_over_width` = depth range / side of the shadow map's box (world).
+    pub fn write_uniform(&self, queue: &wgpu::Queue, env: &EnvStyle, shadow_depth_over_width: f32) {
+        let fx = &env.effects;
         let u = EnvUniform {
             sh: self.sh,
             p: [
@@ -124,18 +134,31 @@ impl Env {
                 if env.background && !self.sky { 1.0 } else { 0.0 },
             ],
             p2: [
-                EXPOSURE_SCALE * 2f32.powf(env.exposure.clamp(-20.0, 20.0)),
+                exposure_mult(env.exposure),
                 match env.tonemap {
                     ToneMap::Aces => 0.0,
                     ToneMap::Agx => 1.0,
                     ToneMap::Clamp => 2.0,
                 },
                 env.sun.max(0.0),
+                fx.time,
+            ],
+            p3: [
+                if fx.clay { 1.0 } else { 0.0 },
+                // Penumbra width (map uv) per unit of normalized map depth between the blocker
+                // and the receiver: a sun about 1.2° across at softness 1.
+                fx.soft_shadows.max(0.0) * 0.01 * shadow_depth_over_width,
+                if fx.high_quality { 1.0 } else { 0.0 },
                 0.0,
             ],
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
     }
+}
+
+/// The light multiplier of an exposure in stops.
+pub(crate) fn exposure_mult(ev: f32) -> f32 {
+    EXPOSURE_SCALE * 2f32.powf(ev.clamp(-20.0, 20.0))
 }
 
 fn srgb(x: f32) -> f32 {

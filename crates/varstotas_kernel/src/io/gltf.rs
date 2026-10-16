@@ -570,6 +570,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 metallic_map: mr,
                 ao_map: tex(&m["occlusionTexture"]),
                 emission_map: tex(&m["emissiveTexture"]),
+                shader: None,
             };
             model.materials[id].pbr = Some(p.sanitized());
             Some(id)

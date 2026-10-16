@@ -42,6 +42,8 @@ pub struct TrayState {
     /// sphere preview (key, texture).
     pub(crate) pbr_draft: Option<(String, varstotas_kernel::Pbr)>,
     pub(crate) pbr_preview: Option<(u64, egui::TextureHandle)>,
+    /// The shader editor window (open while `Some`).
+    pub(crate) shader_edit: Option<crate::ui::realistic::ShaderEdit>,
 }
 
 /// Soften/Smooth Edges panel settings.

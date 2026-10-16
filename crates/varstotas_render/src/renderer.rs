@@ -35,6 +35,8 @@ mod export;
 mod annot;
 #[path = "env.rs"]
 mod env;
+#[path = "post.rs"]
+mod post;
 use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
 pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage};
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -334,8 +336,25 @@ struct Pipelines {
     sprite_top: wgpu::RenderPipeline,
 }
 
+/// Pipeline layouts kept to rebuild the pipelines with another shader module (custom surfaces).
+struct Layouts {
+    scene: wgpu::PipelineLayout,
+    face: wgpu::PipelineLayout,
+    seg: Option<wgpu::PipelineLayout>,
+    text: wgpu::PipelineLayout,
+}
+
 pub struct Renderer {
     color_format: wgpu::TextureFormat,
+    layouts: Layouts,
+    shader: wgpu::ShaderModule,
+    /// Custom surfaces of the current module and their errors (`set_custom_shaders`).
+    custom: Vec<crate::CustomSurface>,
+    custom_errors: Vec<Option<String>>,
+    /// Scene pipelines of the effects path (float target + G-buffer), made on first use.
+    pipelines_hdr: Option<Pipelines>,
+    post: Option<post::Post>,
+    post_targets: Option<post::PostTargets>,
     /// Format of the view handed to egui (non-sRGB view of the same texture).
     egui_view_format: wgpu::TextureFormat,
     manual_gamma: bool,
@@ -458,7 +477,7 @@ impl Renderer {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("varstotas scene shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(crate::custom::compose(&[]).0.into()),
         });
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("varstotas globals"),
@@ -569,11 +588,18 @@ impl Renderer {
             bind_group_layouts: &[Some(&bgl), Some(&face_textures.bgl)],
             immediate_size: 0,
         });
-        let pipelines =
-            build_pipelines(device, &shader, &layout, &face_layout, seg_layout.as_ref(), &text_layout, color_format);
+        let layouts = Layouts { scene: layout, face: face_layout, seg: seg_layout, text: text_layout };
+        let pipelines = build_pipelines(device, &shader, &layouts, color_format, false);
         let vb = wgpu::BufferUsages::VERTEX;
         Renderer {
             color_format,
+            layouts,
+            shader,
+            custom: Vec::new(),
+            custom_errors: Vec::new(),
+            pipelines_hdr: None,
+            post: None,
+            post_targets: None,
             egui_view_format,
             manual_gamma,
             pipelines,
@@ -1025,13 +1051,18 @@ impl Renderer {
         let globals = self.globals(camera, style, size, size, ppp, TILE_FULL, HL_SHOW_ALL);
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         let counts = self.prepare_frame(rs, camera, overlay, style, size, ppp);
+        let post = self.prepare_post(rs, style, size);
+        if post {
+            self.write_post_uniform(rs, style, &globals, size, ppp);
+        }
 
         let t = self.targets.as_ref().expect("targets");
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("varstotas render"),
         });
         let opts = PassOpts { ppp, background: true, selection_tint: true };
-        self.encode_scene(&mut enc, &t.msaa_view, &t.depth_view, &t.resolve_view, style, &counts, opts);
+        let pt = if post { self.post_targets.as_ref() } else { None };
+        self.encode_scene(&mut enc, &t.msaa_view, &t.depth_view, &t.resolve_view, pt, style, &counts, opts);
         let submission = queue.submit(Some(enc.finish()));
         if let Some(t) = self.timing.as_mut() {
             t.cpu += t_start.elapsed();
@@ -1334,46 +1365,89 @@ impl Renderer {
 
     /// Record the scene render pass (globals and per-frame buffers must be up to date).
     #[allow(clippy::too_many_arguments)]
+    /// Record the frame into `msaa_view` / `resolve_view`. With `post` (the effects path) the
+    /// scene goes to its float target and G-buffer first, then the effects passes, then the
+    /// result and the overlays are drawn into `msaa_view`.
+    #[allow(clippy::too_many_arguments)]
     fn encode_scene(
         &self,
         enc: &mut wgpu::CommandEncoder,
         msaa_view: &wgpu::TextureView,
         depth_view: &wgpu::TextureView,
         resolve_view: &wgpu::TextureView,
+        post: Option<&post::PostTargets>,
         style: &RenderStyle,
         c: &FrameCounts,
         opts: PassOpts,
     ) {
-        let ppp = opts.ppp;
-        let draw_faces = style.face_style != FaceStyle::Wireframe;
-        let opaque_all = matches!(style.face_style, FaceStyle::Monochrome | FaceStyle::HiddenLine);
         let clear = if opts.background { wgpu::Color::WHITE } else { wgpu::Color::TRANSPARENT };
-        let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("varstotas scene"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: msaa_view,
+        let color = |view, resolve, load| {
+            Some(wgpu::RenderPassColorAttachment {
+                view,
                 depth_slice: None,
-                resolve_target: Some(resolve_view),
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear),
-                    store: wgpu::StoreOp::Discard,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(0.0),
-                    store: wgpu::StoreOp::Discard,
-                }),
+                resolve_target: Some(resolve),
+                ops: wgpu::Operations { load, store: wgpu::StoreOp::Discard },
+            })
+        };
+        let depth = |view, load, store| {
+            Some(wgpu::RenderPassDepthStencilAttachment {
+                view,
+                depth_ops: Some(wgpu::Operations { load, store }),
                 stencil_ops: None,
-            }),
+            })
+        };
+        let (Some(pt), Some(fx), Some(hp)) = (post, self.post.as_ref(), self.pipelines_hdr.as_ref()) else {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("varstotas scene"),
+                color_attachments: &[color(msaa_view, resolve_view, wgpu::LoadOp::Clear(clear))],
+                depth_stencil_attachment: depth(depth_view, wgpu::LoadOp::Clear(0.0), wgpu::StoreOp::Discard),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            self.draw_scene(&mut pass, &self.pipelines, style, c, opts);
+            self.draw_overlays(&mut pass, c);
+            return;
+        };
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("varstotas scene (effects)"),
+                color_attachments: &[
+                    color(&pt.hdr_ms, &pt.hdr, wgpu::LoadOp::Clear(clear)),
+                    color(&pt.gbuf_ms, &pt.gbuf, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
+                ],
+                depth_stencil_attachment: depth(&pt.depth_ms, wgpu::LoadOp::Clear(0.0), wgpu::StoreOp::Store),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            self.draw_scene(&mut pass, hp, style, c, opts);
+        }
+        pt.encode(enc, fx, &self.bind_group, &style.env.effects);
+        let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("varstotas overlays (effects)"),
+            color_attachments: &[color(msaa_view, resolve_view, wgpu::LoadOp::Clear(clear))],
+            depth_stencil_attachment: depth(&pt.depth_ms, wgpu::LoadOp::Load, wgpu::StoreOp::Discard),
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
         });
         pass.set_bind_group(0, &self.bind_group, &[]);
-        let p = &self.pipelines;
+        pass.set_pipeline(&fx.pipes.final_);
+        pass.set_bind_group(1, pt.final_group(&style.env.effects), &[]);
+        pass.draw(0..3, 0..1);
+        self.draw_overlays(&mut pass, c);
+    }
+
+    /// Sky, faces, edges, profiles, ground, grid, axes and translucent faces.
+    fn draw_scene(&self, pass: &mut wgpu::RenderPass<'_>, p: &Pipelines, style: &RenderStyle, c: &FrameCounts, opts: PassOpts) {
+        let ppp = opts.ppp;
+        let draw_faces = style.face_style != FaceStyle::Wireframe;
+        let opaque_all = matches!(style.face_style, FaceStyle::Monochrome | FaceStyle::HiddenLine);
         let g = &self.geo;
+        let pass = &mut *pass;
 
         // 1. sky
         if opts.background {
@@ -1397,7 +1471,7 @@ impl Renderer {
         let total_face_verts = g.face_verts;
 
         // 2. opaque faces
-        if draw_faces && !style.xray && set_face_buffers(&mut pass) {
+        if draw_faces && !style.xray && set_face_buffers(pass) {
             pass.set_pipeline(&p.face_opaque);
             if opaque_all || g.translucent.is_empty() {
                 if total_face_verts > 0 {
@@ -1473,7 +1547,7 @@ impl Renderer {
 
         // 7. translucent faces / x-ray: sorted back-to-front, no depth write, both sides
         //    in one pass (the fragment shader picks the front/back color).
-        if c.blend > 0 && set_face_buffers(&mut pass) {
+        if c.blend > 0 && set_face_buffers(pass) {
             pass.set_pipeline(&p.face_blend);
             pass.set_index_buffer(self.blend.buf.buf.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..c.blend, 0, 0..1);
@@ -1484,13 +1558,17 @@ impl Renderer {
         if style.face_style == FaceStyle::Wireframe
             && g.any_face_selected
             && opts.selection_tint
-            && set_face_buffers(&mut pass)
+            && set_face_buffers(pass)
         {
             pass.set_pipeline(&p.face_blend);
             pass.draw(0..total_face_verts, 0..1);
         }
+    }
 
-        // 8. overlays: depth-tested, then on top
+    /// 8. overlays: depth-tested, then on top.
+    fn draw_overlays(&self, pass: &mut wgpu::RenderPass<'_>, c: &FrameCounts) {
+        let p = &self.pipelines;
+        let pass = &mut *pass;
         if c.polys_depth > 0 {
             pass.set_pipeline(&p.poly_depth);
             pass.set_vertex_buffer(0, self.overlay_polys.buf.slice(..));
@@ -1560,7 +1638,83 @@ impl Renderer {
         if style.face_style == FaceStyle::Realistic && self.env.update(&rs.device, &rs.queue, style) {
             self.bind_group = globals_bind_group(&rs.device, &self.bgl, &self.globals, &self.shadow, &self.env);
         }
-        self.env.write_uniform(&rs.queue, &style.env);
+        // The shadow box is 3 r deep and 2 r wide (update_shadow_map).
+        self.env.write_uniform(&rs.queue, &style.env, 1.5);
+    }
+
+    /// The effects path is used for this style: make its pipelines and `size` targets.
+    fn prepare_post(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle, size: [u32; 2]) -> bool {
+        if !self.ensure_post(rs, style) {
+            return false;
+        }
+        if self.post_targets.as_ref().is_none_or(|t| t.size != size) {
+            let post = self.post.as_ref().expect("post");
+            self.post_targets = Some(post::PostTargets::new(&rs.device, post, size));
+        }
+        true
+    }
+
+    /// Effects pipelines (no targets) when `style` needs them.
+    fn ensure_post(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle) -> bool {
+        if style.face_style != FaceStyle::Realistic || !style.env.effects.needs_post() {
+            return false;
+        }
+        if self.post.is_none() {
+            self.post = Some(post::Post::new(&rs.device, &self.bgl, &self.shader, self.color_format));
+        }
+        if self.pipelines_hdr.is_none() {
+            self.pipelines_hdr = Some(build_pipelines(&rs.device, &self.shader, &self.layouts, self.color_format, true));
+        }
+        true
+    }
+
+    fn write_post_uniform(&self, rs: &egui_wgpu::RenderState, style: &RenderStyle, globals: &Globals, size: [u32; 2], ppp: f32) {
+        let Some(post) = &self.post else { return };
+        let inv = glam::Mat4::from_cols_array_2d(&globals.view_proj).inverse();
+        let u = post::PostUniform::new(
+            &style.env.effects,
+            inv,
+            size,
+            ppp,
+            env::exposure_mult(style.env.exposure),
+            self.geo.radius as f32,
+            !self.env.shows_background(&style.env),
+        );
+        rs.queue.write_buffer(&post.uniform, 0, bytemuck::bytes_of(&u));
+    }
+
+    /// Replace the custom surface shaders (`PbrMaterial::shader` = index + 1). Shaders that do
+    /// not compile are left out (their materials keep their factors); the result has one entry
+    /// per shader, `Some(message)` for those. Unchanged lists cost nothing.
+    pub fn set_custom_shaders(&mut self, rs: &egui_wgpu::RenderState, shaders: &[crate::CustomSurface]) -> Vec<Option<String>> {
+        if self.custom == shaders {
+            return self.custom_errors.clone();
+        }
+        let errors: Vec<Option<String>> = shaders.iter().map(crate::custom::check).collect();
+        let ok: Vec<Option<&crate::CustomSurface>> =
+            shaders.iter().zip(&errors).map(|(s, e)| e.is_none().then_some(s)).collect();
+        let (src, _) = crate::custom::compose(&ok);
+        if let Err((line, msg)) = crate::custom::validate(&src) {
+            // Each one compiles alone but not together (a name clash): keep the old module.
+            log::warn!("custom shaders: line {line:?}: {msg}");
+            let all = Some(format!("does not compile with the other shaders: {msg}"));
+            return vec![all; shaders.len()];
+        }
+        let device = &rs.device;
+        self.shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("varstotas scene shader"),
+            source: wgpu::ShaderSource::Wgsl(src.into()),
+        });
+        self.pipelines = build_pipelines(device, &self.shader, &self.layouts, self.color_format, false);
+        if self.pipelines_hdr.is_some() {
+            self.pipelines_hdr = Some(build_pipelines(device, &self.shader, &self.layouts, self.color_format, true));
+        }
+        if let Some(p) = &mut self.post {
+            p.rebuild(device, &self.shader, self.color_format);
+        }
+        self.custom = shaders.to_vec();
+        self.custom_errors = errors.clone();
+        errors
     }
 
     /// Section cut (world plane `[n.x, n.y, n.z, d]`, unit `n`): model faces and edges with
@@ -1904,15 +2058,20 @@ fn radix_sort_pairs(keys: &mut Vec<u32>, vals: &mut Vec<u32>, tmp_k: &mut Vec<u3
     }
 }
 
+/// `hdr`: the scene pass of the effects path (float colour + G-buffer targets, `HDR_OUT`).
 fn build_pipelines(
     device: &wgpu::Device,
     shader: &wgpu::ShaderModule,
-    layout: &wgpu::PipelineLayout,
-    face_layout: &wgpu::PipelineLayout,
-    seg_layout: Option<&wgpu::PipelineLayout>,
-    text_layout: &wgpu::PipelineLayout,
+    layouts: &Layouts,
     color_format: wgpu::TextureFormat,
+    hdr: bool,
 ) -> Pipelines {
+    let layout = &layouts.scene;
+    let face_layout = &layouts.face;
+    let seg_layout = layouts.seg.as_ref();
+    let text_layout = &layouts.text;
+    let color_format = if hdr { post::HDR_FORMAT } else { color_format };
+    let constants: &[(&str, f64)] = if hdr { &[("HDR_OUT", 1.0)] } else { &[] };
     let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4];
     let back_attrs = wgpu::vertex_attr_array![3 => Float32x4];
     let face_state_attrs = wgpu::vertex_attr_array![4 => Uint32];
@@ -2005,13 +2164,28 @@ fn build_pipelines(
         cull: Option<wgpu::Face>,
     }
     let make_with = |d: Desc<'_>, layout: &wgpu::PipelineLayout| {
+        // Effects path: opaque faces and the ground write the G-buffer (and the ground its
+        // depth, for the fog and ambient occlusion); everything else leaves it.
+        let gbuf_write = (d.fs == "fs_face" && !d.blend) || d.fs == "fs_ground";
+        let color = Some(wgpu::ColorTargetState {
+            format: color_format,
+            blend: if d.blend { Some(BLEND) } else { None },
+            write_mask: wgpu::ColorWrites::ALL,
+        });
+        let gbuf = Some(wgpu::ColorTargetState {
+            format: post::GBUF_FORMAT,
+            blend: None,
+            write_mask: if gbuf_write { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() },
+        });
+        let targets = [color, gbuf];
+        let opts = wgpu::PipelineCompilationOptions { constants, ..Default::default() };
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(d.label),
             layout: Some(layout),
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: Some(d.vs),
-                compilation_options: Default::default(),
+                compilation_options: opts.clone(),
                 buffers: d.buffers,
             },
             primitive: wgpu::PrimitiveState {
@@ -2021,7 +2195,7 @@ fn build_pipelines(
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: Some(d.depth_write),
+                depth_write_enabled: Some(d.depth_write || (hdr && d.fs == "fs_ground")),
                 depth_compare: Some(d.depth_compare),
                 stencil: Default::default(),
                 bias: d.bias,
@@ -2034,12 +2208,8 @@ fn build_pipelines(
             fragment: Some(wgpu::FragmentState {
                 module: shader,
                 entry_point: Some(d.fs),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: color_format,
-                    blend: if d.blend { Some(BLEND) } else { None },
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                compilation_options: opts,
+                targets: if hdr { &targets } else { &targets[..1] },
             }),
             multiview_mask: None,
             cache: None,
@@ -2268,13 +2438,14 @@ mod tests {
         assert_eq!(std::mem::size_of::<TriVertex>(), 40);
         assert_eq!(std::mem::size_of::<LineVertex>(), 28);
         assert_eq!(std::mem::size_of::<TexVertex>(), 16);
-        assert_eq!(std::mem::size_of::<env::EnvUniform>(), 11 * 16);
+        assert_eq!(std::mem::size_of::<env::EnvUniform>(), 12 * 16);
+        assert_eq!(std::mem::size_of::<post::PostUniform>(), 12 * 16);
     }
 
     #[test]
     fn shader_parses() {
         // Validate WGSL at test time via naga (re-exported by wgpu).
-        let src = include_str!("shader.wgsl");
+        let src = &crate::custom::compose(&[]).0;
         let module = wgpu::naga::front::wgsl::parse_str(src).expect("wgsl parse");
         let mut v = wgpu::naga::valid::Validator::new(
             wgpu::naga::valid::ValidationFlags::all(),

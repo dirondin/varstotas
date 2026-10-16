@@ -16,7 +16,7 @@ pub(crate) struct FaceTextures {
     sampler: wgpu::Sampler,
     info: wgpu::Buffer,
     data_info: wgpu::Buffer,
-    /// PBR material table: 4 × vec4 per material (see `set_materials`).
+    /// PBR material table: 6 × vec4 per material (see `set_materials`).
     materials: wgpu::Buffer,
     color_view: wgpu::TextureView,
     data_view: wgpu::TextureView,
@@ -24,8 +24,10 @@ pub(crate) struct FaceTextures {
     max_layers: u32,
 }
 
-/// Most PBR materials in the table (4 × 16 bytes each: a 16 KB uniform).
+/// Most PBR materials in the table (6 × 16 bytes each: a 24 KB uniform).
 pub const MAX_MATERIALS: usize = 256;
+/// vec4s per material in the table (`materials` in shader.wgsl).
+const MATERIAL_VEC4S: usize = 6;
 
 impl FaceTextures {
     pub fn new(device: &wgpu::Device) -> Self {
@@ -68,7 +70,7 @@ impl FaceTextures {
         };
         let info = buffer("varstotas texture info", MAX_LAYERS * 16);
         let data_info = buffer("varstotas data texture info", MAX_LAYERS * 16);
-        let materials = buffer("varstotas pbr materials", MAX_MATERIALS * 64);
+        let materials = buffer("varstotas pbr materials", MAX_MATERIALS * MATERIAL_VEC4S * 16);
         let max_layers = device.limits().max_texture_array_layers.min(MAX_LAYERS as u32);
         let color_view = Self::array_view(&Self::create_texture(device, 1, 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb));
         let data_view = Self::array_view(&Self::create_texture(device, 1, 1, 1, wgpu::TextureFormat::Rgba8Unorm));
@@ -144,11 +146,15 @@ impl FaceTextures {
 
     /// Replace the PBR material table (material `i` = vertex index `i + 1`).
     pub fn set_materials(&mut self, queue: &wgpu::Queue, mats: &[crate::PbrMaterial]) {
-        let mut v = vec![[0f32; 4]; MAX_MATERIALS * 4];
+        let mut v = vec![[0f32; 4]; MAX_MATERIALS * MATERIAL_VEC4S];
         for (i, m) in mats.iter().take(MAX_MATERIALS).enumerate() {
-            v[i * 4] = [m.metallic, m.roughness, m.transmission, m.ior];
-            v[i * 4 + 1] = [m.emission[0], m.emission[1], m.emission[2], m.normal_scale];
-            v[i * 4 + 2] = [m.emission_layer as f32, m.orm_layer as f32, m.normal_layer as f32, m.orm_mask as f32];
+            let k = i * MATERIAL_VEC4S;
+            v[k] = [m.metallic, m.roughness, m.transmission, m.ior];
+            v[k + 1] = [m.emission[0], m.emission[1], m.emission[2], m.normal_scale];
+            v[k + 2] = [m.emission_layer as f32, m.orm_layer as f32, m.normal_layer as f32, m.orm_mask as f32];
+            v[k + 3] = [m.shader as f32, 0.0, 0.0, 0.0];
+            v[k + 4] = [m.params[0], m.params[1], m.params[2], m.params[3]];
+            v[k + 5] = [m.params[4], m.params[5], m.params[6], m.params[7]];
         }
         queue.write_buffer(&self.materials, 0, bytemuck::cast_slice(&v));
     }

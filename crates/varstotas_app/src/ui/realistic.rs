@@ -5,7 +5,7 @@ use super::{color_f32, color32, theme};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
 use crate::document::PaletteMaterial;
 use egui::{Color32, RichText, Sense, Ui, vec2};
-use varstotas_kernel::{Environment, MaterialId, PBR_MAPS, Pbr, SkyKind, TextureImage, Tonemap};
+use varstotas_kernel::{CustomShader, EFFECT_PRESETS, Effects, Environment, MaterialId, PBR_MAPS, Pbr, SkyKind, Stylize, TextureImage, Tonemap, shader_params};
 use std::path::Path;
 
 /// Starting points of the material editor: (name, metallic, roughness, transmission, emission).
@@ -176,6 +176,9 @@ impl VarstotasApp {
             ui.end_row();
         });
         ui.checkbox(&mut e.background, "Show the environment behind the model");
+        egui::CollapsingHeader::new("Effects").id_salt("env_effects").default_open(e.effects.needs_post()).show(ui, |ui| {
+            effects_ui(ui, &mut e.effects);
+        });
         if ui.small_button("Reset").clicked() {
             e = Environment::default();
         }
@@ -254,6 +257,56 @@ impl VarstotasApp {
                 });
                 ui.end_row();
             });
+            ui.horizontal(|ui| {
+                ui.label("Shader").on_hover_text("A WGSL surface program (docs/SHADERS.md): procedural patterns, waves, glow");
+                let shown = match &p.shader {
+                    None => "None",
+                    Some(sh) => crate::shaders::preset_name(&sh.source).unwrap_or("Custom"),
+                };
+                egui::ComboBox::from_id_salt("pbr_shader").selected_text(shown).show_ui(ui, |ui| {
+                    if ui.selectable_label(p.shader.is_none(), "None").clicked() {
+                        p.shader = None;
+                        commit = true;
+                    }
+                    for (name, src) in crate::shaders::PRESETS {
+                        if ui.selectable_label(shown == name, name).clicked() {
+                            p.shader = Some(CustomShader::new(src));
+                            commit = true;
+                        }
+                    }
+                });
+                if ui.small_button("Edit…").on_hover_text("Write or change the shader").clicked() {
+                    let code = p.shader.as_ref().map_or_else(|| NEW_SHADER.to_string(), |sh| sh.source.clone());
+                    self.tray.shader_edit = Some(ShaderEdit { material: cur.name.clone(), code, changed: None, error: None });
+                }
+            });
+            if let Some(sh) = &mut p.shader {
+                let err = self.viewport.shader_errors.iter().find(|(src, _)| *src == sh.source).map(|(_, e)| e.clone());
+                if let Some(err) = err {
+                    ui.label(RichText::new(err).small().color(ERROR_RED));
+                }
+                let params = shader_params(&sh.source);
+                if !params.is_empty() {
+                    egui::Grid::new("pbr_shader_params").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                        ui.spacing_mut().slider_width = 120.0;
+                        for (i, q) in params.iter().enumerate() {
+                            let mut v = sh.param(i);
+                            ui.label(if q.label.is_empty() { q.name.as_str() } else { q.label.as_str() });
+                            let resp = ui.add(egui::Slider::new(&mut v, q.min..=q.max).clamping(egui::SliderClamping::Never));
+                            if resp.changed() {
+                                while sh.params.len() <= i {
+                                    let k = sh.params.len();
+                                    sh.params.push(sh.param(k));
+                                }
+                                sh.params[i] = v;
+                            }
+                            dragging |= resp.dragged();
+                            commit |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
+                            ui.end_row();
+                        }
+                    });
+                }
+            }
             ui.add_space(2.0);
             egui::Grid::new("pbr_maps").num_columns(3).spacing([6.0, 3.0]).show(ui, |ui| {
                 for (map, label) in PBR_MAPS.iter().zip(MAP_LABELS) {
@@ -297,6 +350,74 @@ impl VarstotasApp {
             }
         } else if dragging {
             self.tray.pbr_draft = Some((cur.name.clone(), p));
+        }
+    }
+
+    /// The shader editor window: changes apply half a second after typing stops when the
+    /// shader compiles; errors show under the code.
+    pub(crate) fn shader_editor_window(&mut self, ctx: &egui::Context) {
+        let Some(mut ed) = self.tray.shader_edit.take() else { return };
+        let mut open = true;
+        let mut apply = false;
+        egui::Window::new(format!("Shader — {}", ed.material))
+            .id(egui::Id::new("shader_editor"))
+            .open(&mut open)
+            .default_pos(self.viewport.rect.min + vec2(60.0, 40.0))
+            .default_size(vec2(560.0, 460.0))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("fn surface(s: Surface, p: Params) -> Surface").monospace().small());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Apply").clicked() {
+                            apply = true;
+                        }
+                    });
+                });
+                let theme = if ui.visuals().dark_mode { egui_code_editor::ColorTheme::GITHUB_DARK } else { egui_code_editor::ColorTheme::GITHUB_LIGHT };
+                let h = (ui.available_height() - 50.0).max(120.0);
+                let out = egui::ScrollArea::vertical()
+                    .max_height(h)
+                    .min_scrolled_height(h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        egui_code_editor::CodeEditor::default()
+                            .id_source("shader_code")
+                            .with_rows(24)
+                            .with_fontsize(12.0)
+                            .with_theme(theme)
+                            .with_numlines(true)
+                            .vscroll(false)
+                            .show(ui, &mut ed.code, &egui_code_editor::Syntax::rust())
+                            .0
+                    })
+                    .inner;
+                if out.response.changed() {
+                    ed.changed = Some(std::time::Instant::now());
+                }
+                match &ed.error {
+                    Some(e) => ui.label(RichText::new(e).color(ERROR_RED)),
+                    None => ui.label(RichText::new("Compiles; the material uses it").small().color(theme::TEXT_DIM)),
+                };
+            });
+        if let Some(t) = ed.changed {
+            let left = std::time::Duration::from_millis(500).saturating_sub(t.elapsed());
+            if left.is_zero() {
+                apply = true;
+            } else {
+                ctx.request_repaint_after(left);
+            }
+        }
+        if apply {
+            ed.changed = None;
+            let params: Vec<String> = shader_params(&ed.code).into_iter().map(|q| q.name).collect();
+            ed.error = varstotas_render::shaders::check(&varstotas_render::CustomSurface { source: ed.code.clone(), params });
+            if ed.error.is_none() {
+                let code = ed.code.clone();
+                self.edit_pbr(&ed.material, move |p| p.shader = Some(rebased(p.shader.take(), code)));
+            }
+        }
+        if open {
+            self.tray.shader_edit = Some(ed);
         }
     }
 
@@ -425,6 +546,144 @@ pub(crate) fn preview_sphere(color: [f32; 4], p: &Pbr, env: &Environment, side: 
     }
     egui::ColorImage::new([side, side], px)
 }
+
+/// The shader editor's state: the material, its code, when it last changed, the last error.
+pub(crate) struct ShaderEdit {
+    pub material: String,
+    pub code: String,
+    pub changed: Option<std::time::Instant>,
+    pub error: Option<String>,
+}
+
+/// A starting point for a new shader.
+const NEW_SHADER: &str = r#"// Checker pattern: `// @param` lines become sliders in the material editor.
+// @param size = 200 (10..2000) "Square size (mm)"
+// @param contrast = 0.5 (0..1) "Contrast"
+fn surface(s: Surface, p: Params) -> Surface {
+    var o = s;
+    let c = floor(s.pos / p.size);
+    let odd = fract((c.x + c.y + c.z) * 0.5) * 2.0;
+    o.base = s.base * (1.0 - p.contrast * odd);
+    return o;
+}
+"#;
+
+/// `code` keeping the old shader's parameter values by name.
+fn rebased(old: Option<CustomShader>, code: String) -> CustomShader {
+    let mut sh = CustomShader::new(code);
+    if let Some(old) = old {
+        let names = shader_params(&old.source);
+        for (i, q) in shader_params(&sh.source).iter().enumerate() {
+            if let Some(j) = names.iter().position(|o| o.name == q.name) {
+                sh.params[i] = old.param(j);
+            }
+        }
+    }
+    sh
+}
+
+/// The Effects section of the Environment card: a checkbox per effect, the settings of the
+/// ones that are on below it.
+fn effects_ui(ui: &mut Ui, x: &mut Effects) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+        ui.label(RichText::new("Preset").small().color(theme::TEXT_DIM));
+        for name in EFFECT_PRESETS {
+            let mut label = name.to_string();
+            label[..1].make_ascii_uppercase();
+            if ui.small_button(label).clicked()
+                && let Some(n) = x.with_preset(name)
+            {
+                *x = n;
+            }
+        }
+    });
+    ui.spacing_mut().slider_width = (ui.available_width() - 150.0).clamp(50.0, 140.0);
+    let settings = |ui: &mut Ui, id: &str, rows: &mut dyn FnMut(&mut Ui)| {
+        ui.indent(id, |ui| {
+            egui::Grid::new(id).num_columns(2).spacing([6.0, 2.0]).show(ui, |ui| rows(ui));
+        });
+    };
+    let slider = |ui: &mut Ui, label: &str, v: &mut f32, r: std::ops::RangeInclusive<f32>, log: bool, dec: usize| {
+        ui.label(RichText::new(label).small());
+        ui.add(egui::Slider::new(v, r).logarithmic(log).fixed_decimals(dec));
+        ui.end_row();
+    };
+    ui.checkbox(&mut x.soft_shadows, "Soft shadows").on_hover_text("Shadows blur away from what casts them");
+    if x.soft_shadows {
+        settings(ui, "fx_soft", &mut |ui| slider(ui, "Sun size", &mut x.shadow_softness, 0.1..=5.0, false, 1));
+    }
+    ui.checkbox(&mut x.ao, "Ambient occlusion").on_hover_text("Darker creases and contact shadows");
+    if x.ao {
+        settings(ui, "fx_ao", &mut |ui| {
+            slider(ui, "Radius, mm", &mut x.ao_radius, 50.0..=5000.0, true, 0);
+            slider(ui, "Strength", &mut x.ao_strength, 0.0..=3.0, false, 2);
+        });
+    }
+    ui.checkbox(&mut x.reflections, "Reflections").on_hover_text("The model mirrored in glossy surfaces (screen space)");
+    if x.reflections {
+        settings(ui, "fx_ssr", &mut |ui| slider(ui, "Strength", &mut x.reflection_strength, 0.0..=2.0, false, 2));
+    }
+    ui.checkbox(&mut x.bloom, "Bloom").on_hover_text("Bright light glows");
+    if x.bloom {
+        settings(ui, "fx_bloom", &mut |ui| {
+            slider(ui, "Strength", &mut x.bloom_strength, 0.0..=2.0, false, 2);
+            slider(ui, "Threshold", &mut x.bloom_threshold, 0.0..=8.0, false, 2);
+        });
+    }
+    ui.checkbox(&mut x.dof, "Depth of field").on_hover_text("Blur in front of and behind the focus distance");
+    if x.dof {
+        settings(ui, "fx_dof", &mut |ui| {
+            slider(ui, "Blur", &mut x.aperture, 0.0..=4.0, false, 2);
+            ui.label(RichText::new("Focus, mm").small()).on_hover_text("0 = the point at the centre of the view");
+            ui.add(egui::Slider::new(&mut x.focus_distance, 0.0..=100000.0).logarithmic(true).fixed_decimals(0));
+            ui.end_row();
+        });
+    }
+    ui.checkbox(&mut x.fog, "Fog").on_hover_text("Haze growing with distance");
+    if x.fog {
+        settings(ui, "fx_fog", &mut |ui| {
+            slider(ui, "Distance, mm", &mut x.fog_distance, 1000.0..=1_000_000.0, true, 0);
+            ui.label(RichText::new("Height, mm").small()).on_hover_text("0 = even fog; else it thins out over this height");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut x.fog_height).speed(50.0).range(0.0..=1_000_000.0));
+                let mut c = color32([x.fog_color[0], x.fog_color[1], x.fog_color[2], 1.0]);
+                if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::Opaque).changed() {
+                    let f = color_f32(c);
+                    x.fog_color = [f[0], f[1], f[2]];
+                }
+            });
+            ui.end_row();
+        });
+    }
+    egui::Grid::new("env_look").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+        ui.label("Vignette");
+        ui.add(egui::Slider::new(&mut x.vignette, 0.0..=1.0).fixed_decimals(2));
+        ui.end_row();
+        ui.label("Style");
+        egui::ComboBox::from_id_salt("env_stylize").selected_text(stylize_name(x.stylize)).show_ui(ui, |ui| {
+            for s in Stylize::ALL {
+                ui.selectable_value(&mut x.stylize, s, stylize_name(s));
+            }
+        });
+        ui.end_row();
+    });
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut x.clay, "Clay").on_hover_text("Every material as plain clay (a massing model)");
+        ui.checkbox(&mut x.high_quality, "High quality").on_hover_text("More samples for soft shadows, occlusion and reflections");
+    });
+}
+
+fn stylize_name(s: Stylize) -> &'static str {
+    match s {
+        Stylize::None => "Photo",
+        Stylize::Pencil => "Pencil",
+        Stylize::Watercolor => "Watercolor",
+        Stylize::Technical => "Technical",
+    }
+}
+
+const ERROR_RED: Color32 = Color32::from_rgb(0xC6, 0x28, 0x28);
 
 #[cfg(test)]
 mod tests {

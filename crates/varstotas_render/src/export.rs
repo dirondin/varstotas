@@ -213,6 +213,11 @@ impl Renderer {
         self.update_shadow_map(rs, style);
         self.update_env(rs, style);
         let counts: FrameCounts = self.prepare_frame(rs, camera, overlay, style, size, ppp);
+        // The effects path renders each tile with its own targets (effects that reach across
+        // tile borders may show seams in images larger than one tile).
+        let post_targets = self
+            .ensure_post(rs, style)
+            .then(|| super::post::PostTargets::new(device, self.post.as_ref().expect("post"), [tw, th]));
         let pass = PassOpts { ppp, background: !opts.transparent_background, selection_tint: opts.show_selection };
         let mut pixels = vec![0u8; w as usize * h as usize * 4];
         for y0 in (0..h).step_by(th as usize) {
@@ -220,10 +225,13 @@ impl Renderer {
                 let t = tile_transform(w, h, x0, y0, tw, th);
                 let globals = self.globals(camera, style, size, [tw, th], ppp, t, hide_mask);
                 rs.queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
+                if post_targets.is_some() {
+                    self.write_post_uniform(rs, style, &globals, [tw, th], ppp);
+                }
                 let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("varstotas export"),
                 });
-                self.encode_scene(&mut enc, &msaa_view, &depth_view, &resolve_view, style, &counts, pass);
+                self.encode_scene(&mut enc, &msaa_view, &depth_view, &resolve_view, post_targets.as_ref(), style, &counts, pass);
                 let (cw, ch) = ((w - x0).min(tw), (h - y0).min(th));
                 enc.copy_texture_to_buffer(
                     wgpu::TexelCopyTextureInfo {

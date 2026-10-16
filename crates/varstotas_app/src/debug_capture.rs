@@ -879,6 +879,104 @@ impl VarstotasApp {
             self.actions.push(Action::SetEnvironment(e));
             return;
         }
+        // `fx key=value…`: effects of the Realistic style (`preset=off|fast|balanced|quality` first).
+        if let Some(args) = name.strip_prefix("fx ") {
+            let mut e = self.doc.model.environment;
+            let on = |v: &str| matches!(v, "on" | "1" | "true");
+            for kv in args.split_whitespace() {
+                let Some((k, v)) = kv.split_once('=') else { continue };
+                let f = v.parse::<f32>().ok();
+                let x = &mut e.effects;
+                match k {
+                    "preset" => *x = x.with_preset(v).unwrap_or(*x),
+                    "soft" => x.soft_shadows = on(v),
+                    "softness" => x.shadow_softness = f.unwrap_or(x.shadow_softness),
+                    "ao" => x.ao = on(v),
+                    "ao_radius" => x.ao_radius = f.unwrap_or(x.ao_radius),
+                    "ao_strength" => x.ao_strength = f.unwrap_or(x.ao_strength),
+                    "ssr" => x.reflections = on(v),
+                    "ssr_strength" => x.reflection_strength = f.unwrap_or(x.reflection_strength),
+                    "bloom" => x.bloom = on(v),
+                    "bloom_strength" => x.bloom_strength = f.unwrap_or(x.bloom_strength),
+                    "threshold" => x.bloom_threshold = f.unwrap_or(x.bloom_threshold),
+                    "dof" => x.dof = on(v),
+                    "focus" => x.focus_distance = f.unwrap_or(x.focus_distance),
+                    "aperture" => x.aperture = f.unwrap_or(x.aperture),
+                    "fog" => x.fog = on(v),
+                    "fog_distance" => x.fog_distance = f.unwrap_or(x.fog_distance),
+                    "fog_height" => x.fog_height = f.unwrap_or(x.fog_height),
+                    "fog_color" => {
+                        let c: Vec<f32> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+                        if let [r, g, b] = c[..] {
+                            x.fog_color = [r, g, b];
+                        }
+                    }
+                    "vignette" => x.vignette = f.unwrap_or(x.vignette),
+                    "clay" => x.clay = on(v),
+                    "stylize" => x.stylize = varstotas_kernel::Stylize::from_key(v).unwrap_or(x.stylize),
+                    "hq" => x.high_quality = on(v),
+                    _ => log::warn!("script: fx: unknown key {k}"),
+                }
+            }
+            self.actions.push(Action::SetEnvironment(e));
+            return;
+        }
+        // `mat_shader <material> <preset name without spaces|none>`, `mat_param <material> <i> <value>`.
+        if let Some(args) = name.strip_prefix("mat_shader ") {
+            let v: Vec<&str> = args.split_whitespace().collect();
+            if let [mat, preset] = v[..] {
+                let src = crate::shaders::PRESETS
+                    .iter()
+                    .find(|(n, _)| n.replace(' ', "").eq_ignore_ascii_case(preset))
+                    .map(|(_, s)| *s);
+                if src.is_none() && preset != "none" {
+                    log::warn!("script: mat_shader: unknown preset {preset}");
+                    return;
+                }
+                self.edit_pbr(&mat.replace('_', " "), |p| p.shader = src.map(varstotas_kernel::CustomShader::new));
+            } else {
+                log::warn!("script: mat_shader needs <material> <preset|none>");
+            }
+            return;
+        }
+        // `shader_editor <material>` opens the shader editor; `shader_code <text>` (`\n` = new
+        // line) replaces its code as if typed (applied after the usual pause).
+        if let Some(mat) = name.strip_prefix("shader_editor ") {
+            let mat = mat.trim().replace('_', " ");
+            let code = self.doc.model.materials.values().find(|m| m.name == mat).and_then(|m| m.pbr.as_ref()?.shader.as_ref()).map(|sh| sh.source.clone());
+            self.tray.shader_edit = Some(crate::ui::realistic::ShaderEdit { material: mat, code: code.unwrap_or_default(), changed: None, error: None });
+            return;
+        }
+        if name == "shader_editor_close" {
+            self.tray.shader_edit = None;
+            return;
+        }
+        if let Some(code) = name.strip_prefix("shader_code ") {
+            if let Some(ed) = &mut self.tray.shader_edit {
+                ed.code = code.replace("\\n", "\n");
+                ed.changed = Some(std::time::Instant::now());
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("mat_param ") {
+            let v: Vec<&str> = args.split_whitespace().collect();
+            if let [mat, i, val] = v[..]
+                && let (Ok(i), Ok(val)) = (i.parse::<usize>(), val.parse::<f32>())
+            {
+                self.edit_pbr(&mat.replace('_', " "), |p| {
+                    if let Some(sh) = &mut p.shader {
+                        while sh.params.len() <= i {
+                            let k = sh.params.len();
+                            sh.params.push(sh.param(k));
+                        }
+                        sh.params[i] = val;
+                    }
+                });
+            } else {
+                log::warn!("script: mat_param needs <material> <index> <value>");
+            }
+            return;
+        }
         if let Some(path) = name.strip_prefix("hdri ") {
             if path.trim() == "none" {
                 self.doc.mutate_untracked(|m| m.hdri = None);
@@ -1614,7 +1712,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -1825,6 +1923,42 @@ impl VarstotasApp {
             e.tonemap.key(),
             e.background
         )
+    }
+
+    /// The effects that are on, `-` for none: `soft,ao,ssr,bloom,dof,fog,vig,clay,<stylize>,hq`.
+    fn fx_dump(&self) -> String {
+        let x = &self.doc.model.environment.effects;
+        let mut v: Vec<&str> = Vec::new();
+        for (on, n) in [
+            (x.soft_shadows, "soft"),
+            (x.ao, "ao"),
+            (x.reflections, "ssr"),
+            (x.bloom, "bloom"),
+            (x.dof, "dof"),
+            (x.fog, "fog"),
+            (x.vignette > 0.0, "vig"),
+            (x.clay, "clay"),
+            (x.stylize != varstotas_kernel::Stylize::None, x.stylize.key()),
+            (x.high_quality, "hq"),
+        ] {
+            if on {
+                v.push(n);
+            }
+        }
+        if v.is_empty() { "-".into() } else { v.join(",") }
+    }
+
+    /// Materials with a custom shader: (name, preset or `custom`, params).
+    fn shaders_dump(&self) -> Vec<(String, &'static str, Vec<f32>)> {
+        self.doc
+            .model
+            .materials
+            .values()
+            .filter_map(|m| {
+                let sh = m.pbr.as_ref()?.shader.as_ref()?;
+                Some((m.name.clone(), crate::shaders::preset_name(&sh.source).unwrap_or("custom"), sh.params.clone()))
+            })
+            .collect()
     }
 
     /// Materials with physical properties: (name, metallic, roughness, transmission, maps).
