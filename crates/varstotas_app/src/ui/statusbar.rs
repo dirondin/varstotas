@@ -12,7 +12,8 @@ impl VarstotasApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 self.vcb_box(ui);
                 ui.add_space(6.0);
-                ui.label(RichText::new(self.tool.vcb_label()).color(theme::TEXT_DIM));
+                let label = if self.grid_vcb() { "Grid Step" } else { self.tool.vcb_label() };
+                ui.label(RichText::new(label).color(theme::TEXT_DIM));
                 ui.add_space(12.0);
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
@@ -38,7 +39,13 @@ impl VarstotasApp {
 
     fn vcb_box(&mut self, ui: &mut Ui) {
         let typing = !self.vcb.is_empty();
-        let text = if typing { self.vcb.clone() } else { self.tool.vcb_value() };
+        let text = if typing {
+            self.vcb.clone()
+        } else if self.grid_vcb() {
+            crate::tools::common::fmt_len(&self.doc.model, self.prefs.grid.step)
+        } else {
+            self.tool.vcb_value()
+        };
         let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 22.0), Sense::click());
         let p = ui.painter();
         let border = if self.vcb_error {

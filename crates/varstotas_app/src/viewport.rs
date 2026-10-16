@@ -197,7 +197,7 @@ impl Viewport {
                         show_selection: false,
                         show_context_dimming: true,
                     };
-                    let style = RenderStyle { show_axes: style.show_axes && job.axes, ..style.clone() };
+                    let style = RenderStyle { show_axes: style.show_axes && job.axes, grid: None, ..style.clone() };
                     let r = guarded(|| renderer.render_to_image(rs, &job.camera, &job.overlay, &style, job.size, &opts))
                         .and_then(|r| r.map_err(|e| e.to_string()))
                         .and_then(|img| img.write_png(&job.path).map_err(|e| e.to_string()))

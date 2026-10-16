@@ -456,6 +456,24 @@ impl VarstotasApp {
                             .color(theme::TEXT_DIM),
                     );
                     ui.add_space(8.0);
+                    ui.label(RichText::new("Grid").strong());
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut self.prefs.grid.show, "Show grid, step");
+                        ui.add(
+                            egui::DragValue::new(&mut self.prefs.grid.step)
+                                .range(0.01..=1.0e6)
+                                .speed(1.0)
+                                .suffix(" mm"),
+                        );
+                        ui.label("major every");
+                        ui.add(egui::DragValue::new(&mut self.prefs.grid.major).range(2..=20).speed(0.1));
+                    });
+                    ui.label(
+                        RichText::new("Zooming out multiplies the step by the major count. With Select active, typing a length sets the step.")
+                            .small()
+                            .color(theme::TEXT_DIM),
+                    );
+                    ui.add_space(8.0);
                     ui.label(RichText::new("Template").strong());
                     let cur = self.prefs.template.unwrap_or(Template::ArchitecturalMm);
                     let mut t = cur;

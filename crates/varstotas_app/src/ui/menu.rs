@@ -233,6 +233,10 @@ impl VarstotasApp {
                 }
                 ui.checkbox(&mut self.prefs.show_axes, "Axes");
                 ui.checkbox(&mut self.prefs.show_ground, "Ground");
+                let mut grid = self.prefs.grid.show;
+                if ui.checkbox(&mut grid, "Grid").clicked() {
+                    self.actions.push(Action::ToggleGrid);
+                }
                 ui.separator();
                 ui.menu_button("Snapping", |ui| self.snapping_menu(ui));
                 ui.separator();
@@ -385,6 +389,12 @@ impl VarstotasApp {
         for (group, kinds) in GROUPS {
             ui.separator();
             ui.label(egui::RichText::new(group).small().weak());
+            if group == "Grid" {
+                let mut grid = self.prefs.grid.show;
+                if ui.checkbox(&mut grid, "Show Grid").clicked() {
+                    self.actions.push(Action::ToggleGrid);
+                }
+            }
             ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
                 for &k in kinds {
                     let mut v = self.prefs.snapping.is_on(k);

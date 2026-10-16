@@ -60,6 +60,10 @@ pub enum InferenceKind {
     HalfCircle,
     /// Arc leaves the start vertex tangent to the edge / arc ending there (cyan).
     Tangent,
+    /// Node of the drawing grid (View → Grid).
+    GridPoint,
+    /// Point on a grid line.
+    OnGridLine,
     /// No snap: point on the ground plane / at a default depth.
     Free,
 }
@@ -87,6 +91,8 @@ impl InferenceKind {
             Self::GoldenSection => "Golden Section",
             Self::HalfCircle => "Half Circle",
             Self::Tangent => "Tangent at Vertex",
+            Self::GridPoint => "Grid Point",
+            Self::OnGridLine => "On Grid Line",
             Self::Free => "",
         }
     }
@@ -104,16 +110,17 @@ impl InferenceKind {
             Self::FromPoint | Self::GuidePoint | Self::OnGuide => Color32::from_rgb(0x30, 0x30, 0x30),
             Self::Square | Self::GoldenSection | Self::HalfCircle => Color32::from_rgb(0xFF, 0x00, 0xFF),
             Self::Tangent => Color32::from_rgb(0x00, 0xC8, 0xD8),
+            Self::GridPoint | Self::OnGridLine => Color32::from_rgb(0x50, 0x58, 0x68),
             Self::Free => Color32::BLACK,
         }
     }
 
     pub fn marker(self) -> Option<MarkerShape> {
         Some(match self {
-            Self::Endpoint | Self::Midpoint | Self::GuidePoint | Self::Origin => MarkerShape::Dot,
+            Self::Endpoint | Self::Midpoint | Self::GuidePoint | Self::Origin | Self::GridPoint => MarkerShape::Dot,
             Self::Center => MarkerShape::Ring,
             Self::Intersection => MarkerShape::Cross,
-            Self::OnEdge | Self::OnGuide => MarkerShape::Square,
+            Self::OnEdge | Self::OnGuide | Self::OnGridLine => MarkerShape::Square,
             Self::OnFace => MarkerShape::Diamond,
             _ => return None,
         })
@@ -220,7 +227,8 @@ impl InferenceResult {
 
     /// Whether the point snapped to model geometry (not free / face / direction only).
     pub fn is_geometry_snap(&self) -> bool {
-        self.kind.is_point() || matches!(self.kind, InferenceKind::OnEdge | InferenceKind::OnGuide)
+        self.kind.is_point()
+            || matches!(self.kind, InferenceKind::OnEdge | InferenceKind::OnGuide | InferenceKind::GridPoint | InferenceKind::OnGridLine)
     }
 }
 
@@ -679,6 +687,10 @@ impl InferenceEngine {
                 }
             }
             if let Some((_, mut p, d, kind, seg)) = best_dir {
+                // A direction lying in the grid plane stops where it crosses grid lines.
+                if let Some(x) = grid_crossing(q, anchor, d, p) {
+                    p = x;
+                }
                 let mut r = InferenceResult::with_kind(p, kind);
                 r.constraint_dir = Some(d);
                 r.line_origin = Some(anchor);
@@ -700,6 +712,11 @@ impl InferenceEngine {
                 }
                 return finish(r);
             }
+        }
+
+        // Grid nodes and lines (below the model's geometry and the directions).
+        if let Some(r) = grid_snap(q, &ray, &visible) {
+            return finish(r);
         }
 
         // From point (axis lines through remembered points).
@@ -740,6 +757,74 @@ impl InferenceEngine {
         let plane = q.fallback_plane.unwrap_or_else(|| Plane::new(q.anchor.unwrap_or(ax.origin), ax.z));
         finish(InferenceResult::free(free_point(q, &ray, plane)))
     }
+}
+
+/// Snap to the shown grid (`settings::grid`): a node within the point radius, else a line
+/// within the edge radius. The step is the one drawn clearly at that spot.
+fn grid_snap(q: &Query, ray: &Ray, visible: &dyn Fn(DVec3) -> bool) -> Option<InferenceResult> {
+    let nodes = allowed(InferenceKind::GridPoint);
+    let lines = allowed(InferenceKind::OnGridLine);
+    if !nodes && !lines {
+        return None;
+    }
+    let g = settings::grid()?;
+    let (o, u, v, n) = (DVec3::from_array(g.origin), DVec3::from_array(g.u), DVec3::from_array(g.v), g.normal());
+    let plane = Plane::new(o, n);
+    let t = plane.intersect_ray(ray).filter(|t| *t > 0.0 || q.camera.ortho)?;
+    let p = ray.at(t);
+    let cos = ray.dir.dot(n).abs();
+    if !p.is_finite() || cos < 0.02 || !visible(p) {
+        return None;
+    }
+    let s = g.snap_step(q.camera.pixel_size_at(p, q.viewport) / cos.max(0.1));
+    let (cu, cv) = ((p - o).dot(u), (p - o).dot(v));
+    let (ru, rv) = ((cu / s).round() * s, (cv / s).round() * s);
+    let px = |x: DVec3| q.camera.world_to_screen(x, q.viewport).map_or(f64::INFINITY, |sc| sc.distance(q.cursor));
+    let node = o + u * ru + v * rv;
+    if nodes && px(node) <= POINT_PICK_PX {
+        return Some(InferenceResult::with_kind(node, InferenceKind::GridPoint));
+    }
+    if lines {
+        let on_u = o + u * cu + v * rv; // on the line v = rv
+        let on_v = o + u * ru + v * cv;
+        let (du, dv) = (px(on_u), px(on_v));
+        let (best, d, dir) = if du <= dv { (on_u, du, u) } else { (on_v, dv, v) };
+        if d <= EDGE_PICK_PX {
+            let mut r = InferenceResult::with_kind(best, InferenceKind::OnGridLine);
+            r.edge = Some((best - dir * s * 0.5, best + dir * s * 0.5));
+            return Some(r);
+        }
+    }
+    None
+}
+
+/// Where a direction from `anchor` (lying in the grid plane) crosses a grid line next to
+/// `p`, if that is within the point radius.
+fn grid_crossing(q: &Query, anchor: DVec3, d: DVec3, p: DVec3) -> Option<DVec3> {
+    if !allowed(InferenceKind::GridPoint) && !allowed(InferenceKind::OnGridLine) {
+        return None;
+    }
+    let g = settings::grid()?;
+    let (o, n) = (DVec3::from_array(g.origin), g.normal());
+    if d.dot(n).abs() > 1e-9 || (anchor - o).dot(n).abs() > 1e-6 {
+        return None;
+    }
+    let s = g.snap_step(q.camera.pixel_size_at(p, q.viewport) / q.camera.basis().forward.dot(n).abs().max(0.1));
+    let px = |x: DVec3| q.camera.world_to_screen(x, q.viewport).map_or(f64::INFINITY, |sc| sc.distance(q.cursor));
+    [DVec3::from_array(g.u), DVec3::from_array(g.v)]
+        .into_iter()
+        .filter_map(|a| {
+            let da = d.dot(a);
+            if da.abs() < 1e-9 {
+                return None;
+            }
+            let c = (p - o).dot(a);
+            Some(p + d * (((c / s).round() * s - c) / da))
+        })
+        .map(|x| (px(x), x))
+        .filter(|(dd, _)| *dd <= POINT_PICK_PX)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, x)| x)
 }
 
 /// Point on `plane` under the ray, or on the view plane through the anchor/target if the
@@ -1101,6 +1186,38 @@ mod tests {
         publish(&SnapPrefs::default());
         e.handle_arrow(egui::Key::ArrowRight);
         assert_eq!(e.infer(&query(&m, &cam, mid, None)).kind, InferenceKind::Midpoint);
+    }
+
+    #[test]
+    fn grid_nodes_lines_and_crossings() {
+        use settings::{GridPrefs, SnapPrefs, publish, publish_grid};
+        let m = Model::new();
+        let cam = camera_top();
+        let mut e = InferenceEngine::default();
+        let p = |x, y| screen(&cam, DVec3::new(x, y, 0.0));
+        // Hidden grid: free points.
+        assert_eq!(e.infer(&query(&m, &cam, p(1003.0, 1497.0), None)).kind, InferenceKind::Free);
+        // Top view of ~6 m (≈10 mm per pixel): 1 m lines are drawn clearly, so the snap step is 1 m.
+        publish_grid(&GridPrefs { show: true, step: 10.0, major: 10 });
+        let r = e.infer(&query(&m, &cam, p(1003.0, 1997.0), None));
+        assert_eq!(r.kind, InferenceKind::GridPoint);
+        assert!(r.point.distance(DVec3::new(1000.0, 2000.0, 0.0)) < 1e-6);
+        let r = e.infer(&query(&m, &cam, p(1500.0, 1990.0), None));
+        assert_eq!(r.kind, InferenceKind::OnGridLine);
+        assert!((r.point.y - 2000.0).abs() < 1e-6 && (r.point.x - 1500.0).abs() < 20.0);
+        // The origin outranks the grid; the red axis from an anchor stops at grid lines.
+        assert_eq!(e.infer(&query(&m, &cam, p(2.0, 1.0), None)).kind, InferenceKind::Origin);
+        let r = e.infer(&query(&m, &cam, p(-1030.0, -1045.0), Some(DVec3::new(-2500.0, -1050.0, 0.0))));
+        assert_eq!(r.kind, InferenceKind::OnRedAxis);
+        assert!((r.point.x + 1000.0).abs() < 1e-6 && (r.point.y + 1050.0).abs() < 1e-6);
+        // Grid snaps off: the grid is still drawn but the cursor is free.
+        let mut s = SnapPrefs::default();
+        s.set(InferenceKind::GridPoint, false);
+        s.set(InferenceKind::OnGridLine, false);
+        publish(&s);
+        assert_eq!(e.infer(&query(&m, &cam, p(1003.0, 1997.0), None)).kind, InferenceKind::Free);
+        publish(&SnapPrefs::default());
+        publish_grid(&GridPrefs::default());
     }
 
     #[test]

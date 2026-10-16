@@ -45,6 +45,7 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | File | Contents |
 |---|---|
 | `renderer.rs` | `Renderer`: offscreen MSAA, styles, highlight, scene upload, axes |
+| `grid.rs` | `GridStyle` (plane, step, major ratio), `level` / `snap_step` (shared by the `fs_grid` shader pass and grid snapping), `origin_near` (f32-safe origin) |
 | `camera.rs` | f64 camera, orbit, pan, zoom, projections, zoom extents |
 | `overlay.rs` | `Overlay3d` (lines, polygons, texts, marks, arcs, dimensions, leaders), plus `annot.rs` for the CPU glyph expansion |
 | `export.rs` | `render_to_image` (PNG export) |
@@ -83,7 +84,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
-| `inference/settings.rs` | which snaps are on: `SnapPrefs` (in `Prefs::snapping`), `GROUPS` for the menus, `publish` once per frame, `allowed(kind)` checked by the engine and the tools |
+| `inference/settings.rs` | which snaps are on: `SnapPrefs` (in `Prefs::snapping`), `GROUPS` for the menus, `publish` once per frame, `allowed(kind)` checked by the engine and the tools; `GridPrefs` (in `Prefs::grid`) → `GridStyle` on the axes plane, `publish_grid` / `grid()` for grid snapping (`grid_snap`, `grid_crossing` in `inference/mod.rs`) |
 | `axes.rs` | custom drawing axes, published once per frame |
 | `clipboard.rs` | copy, cut, paste |
 | `autosave.rs` | autosave and recovery |

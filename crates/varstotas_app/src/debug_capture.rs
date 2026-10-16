@@ -1019,6 +1019,24 @@ impl VarstotasApp {
             crate::inference::settings::publish(&self.prefs.snapping);
             return;
         }
+        // `grid on|off [step=mm] [major=N]`.
+        if let Some(args) = name.strip_prefix("grid ") {
+            for a in args.split_whitespace() {
+                match a {
+                    "on" => self.prefs.grid.show = true,
+                    "off" => self.prefs.grid.show = false,
+                    _ => {
+                        if let Some(v) = a.strip_prefix("step=").and_then(|v| v.parse().ok()) {
+                            self.prefs.grid.step = v;
+                        } else if let Some(v) = a.strip_prefix("major=").and_then(|v| v.parse().ok()) {
+                            self.prefs.grid.major = v;
+                        }
+                    }
+                }
+            }
+            crate::inference::settings::publish_grid(&self.prefs.grid);
+            return;
+        }
         if let Some(v) = name.strip_prefix("snap_all ") {
             for k in crate::inference::settings::all_kinds() {
                 self.prefs.snapping.set(k, v.trim() == "on");
@@ -1379,7 +1397,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} snap={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)));
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} snap={:?} grid={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

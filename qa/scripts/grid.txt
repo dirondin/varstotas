@@ -1,0 +1,61 @@
+# Grid: View → Grid, drawing on the grid with a real mouse (nodes, lines, axis crossings),
+# the step typed into the Measurements box with the real keyboard, grid snaps in the magnet menu.
+box 0 0 0 1000 600 400
+view iso
+zoom_extents
+wait 10
+expect grid=(false, 10.0, 10)
+screenshot shots/grid_off.bmp
+action grid on
+wait 5
+expect grid=(true, 10.0, 10)
+screenshot shots/grid_iso.bmp
+view top
+zoom_extents
+wait 5
+zoompx 0.4
+wait 10
+screenshot shots/grid_top.bmp
+tool line
+rawp move 1503 -197 0
+wait 3
+expect snap=Some((GridPoint, 1500, -200, 0))
+rawp click 1503 -197 0
+wait 3
+# along red from the node: stops on the grid lines
+rawp move 1796 -199 0
+wait 3
+expect snap=Some((OnRedAxis, 1800, -200, 0))
+rawp click 1796 -199 0
+wait 3
+expect undo=Some("Line")
+raw key Escape
+wait 3
+# model geometry outranks the grid
+rawp move 1000 600 400
+wait 3
+expect snap=Some((Endpoint, 1000, 600, 400))
+# grid snaps off in the menu: free point
+action snap_kind grid_point off
+action snap_kind grid_line off
+rawp move 1303 -397 0
+wait 3
+expect snap=Some((Free,
+action snap_all on
+# the step from the Measurements box (Select tool, real keys)
+tool select
+raw text 250
+raw key Enter
+wait 5
+expect grid=(true, 250.0, 10)
+tool line
+rawp move 1253 -247 0
+wait 3
+expect snap=Some((GridPoint, 1250, -250, 0))
+screenshot shots/grid_step.bmp
+# hiding the grid stops grid snapping
+action grid off
+wait 3
+rawp move 1253 -247 0
+wait 3
+expect snap=Some((Free,

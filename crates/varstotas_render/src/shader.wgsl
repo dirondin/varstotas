@@ -29,6 +29,10 @@ struct Globals {
     shadow_vp: mat4x4<f32>,   // local frame -> shadow map clip (xy -1..1, z 0..1)
     shadow: vec4<f32>,        // x: faces receive; y: ground receives; z: light shade; w: dark shade
     shadow2: vec4<f32>,       // x: receiver normal offset; y: 1 / map size; z: 1 = sun up; w: 1 = sun shading
+    grid_o: vec4<f32>,        // xyz: grid origin relative to the render origin; w: finest step
+    grid_u: vec4<f32>,        // xyz: u axis; w: major ratio
+    grid_v: vec4<f32>,        // xyz: v axis; w: 1 = shown
+    grid_color: vec4<f32>,    // linear rgb, a = strength of major lines
 };
 
 // Highlight states (Rust `Highlight`): 0 none, 1 selected, 2 dimmed (outside the editing context).
@@ -273,6 +277,68 @@ fn fs_ground(in: FsOut) -> GroundOut {
     var o: GroundOut;
     o.color = out_color(vec4<f32>(col, alpha));
     o.depth = depth;
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+// Grid: lines on the plane (grid_o, grid_u, grid_v); levels step * ratio^k chosen per pixel
+// (crate::grid::GridStyle::level), the finer level fades out as the footprint grows.
+// ---------------------------------------------------------------------------
+
+/// Line coverage (0..1) of lines every `step` along both plane coordinates.
+fn grid_lines(c: vec2<f32>, w: vec2<f32>, step: f32) -> f32 {
+    let q = c / step;
+    let fw = max(w / step, vec2<f32>(1e-6));
+    let d = abs(fract(q - 0.5) - 0.5) / fw;
+    // ~1 px wide, antialiased.
+    return 1.0 - clamp(min(d.x, d.y) - 0.25, 0.0, 1.0);
+}
+
+@fragment
+fn fs_grid(in: FsOut) -> GroundOut {
+    let r = pixel_ray(in.ndc);
+    let n = normalize(cross(g.grid_u.xyz, g.grid_v.xyz));
+    let dn = dot(r.d, n);
+    let ortho = g.eye_rel.w > 0.5;
+    var t = 0.0;
+    if abs(dn) > 1e-7 {
+        t = dot(g.grid_o.xyz - r.o, n) / dn;
+    }
+    let valid = abs(dn) > 1e-7 && (ortho || t > 0.0);
+    let hit = r.o + r.d * t;
+    let rel = hit - g.grid_o.xyz;
+    let c = vec2<f32>(dot(rel, g.grid_u.xyz), dot(rel, g.grid_v.xyz));
+    let w = fwidth(c);
+    let clip = g.view_proj * vec4<f32>(hit, 1.0);
+    let depth_raw = clip.z / clip.w;
+    let slope = fwidth(depth_raw);
+    if !valid || depth_raw > 1.0 || depth_raw < 0.0 {
+        discard;
+    }
+    let ratio = max(g.grid_u.w, 2.0);
+    let step = max(g.grid_o.w, 1e-6);
+    let pixel = max(max(w.x, w.y), 1e-9);
+    let l = log(max(pixel * 40.0 / step, 1e-12)) / log(ratio); // GRID_MIN_PX
+    var k = 0.0;
+    var f = 0.0;
+    if l > 0.0 {
+        k = floor(l);
+        f = l - k;
+    }
+    let s0 = step * pow(ratio, k);
+    let a0 = grid_lines(c, w, s0) * 0.35 * (1.0 - f);
+    let a1 = grid_lines(c, w, s0 * ratio) * mix(0.8, 0.35, f);
+    let a2 = grid_lines(c, w, s0 * ratio * ratio) * 0.8;
+    var alpha = max(max(a0, a1), a2) * g.grid_color.a;
+    // Fade toward the horizon / when the plane turns edge-on.
+    alpha *= smoothstep(0.02, 0.12, abs(dn));
+    if alpha < 0.003 {
+        discard;
+    }
+    let margin = depth_raw * max(5.0 * g.params.z, 1e-6) + 6.0 * g.params2.x + 3.0 * slope;
+    var o: GroundOut;
+    o.color = out_color(vec4<f32>(g.grid_color.rgb, alpha));
+    o.depth = clamp(depth_raw - margin, 0.0, 1.0);
     return o;
 }
 

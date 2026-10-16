@@ -291,6 +291,8 @@ pub struct RenderStyle {
     pub ambient: f32,
     /// Sun shadows (shadow map); `None` = off (fixed `light_dir` shading).
     pub shadows: Option<ShadowStyle>,
+    /// Drawing grid; `None` = hidden.
+    pub grid: Option<GridStyle>,
 }
 
 /// Shadow settings for a frame (the classic Shadows panel).
@@ -314,6 +316,8 @@ pub struct ShadowStyle {
 // Renderer — see renderer.rs
 // ---------------------------------------------------------------------------
 
+mod grid;
+pub use grid::{GRID_MIN_PX, GridStyle};
 mod renderer;
 mod textures;
 pub use textures::MAX_LAYERS as MAX_TEXTURE_LAYERS;

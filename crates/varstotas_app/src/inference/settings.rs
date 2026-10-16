@@ -10,13 +10,14 @@ use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 
 /// Menu groups and their kinds, in menu order.
-pub const GROUPS: [(&str, &[InferenceKind]); 4] = {
+pub const GROUPS: [(&str, &[InferenceKind]); 5] = {
     use InferenceKind::*;
     [
         ("Points", &[Endpoint, Midpoint, Center, Intersection, Origin]),
         ("On Objects", &[OnEdge, OnFace, OnGuide, GuidePoint]),
         ("Directions", &[OnRedAxis, OnGreenAxis, OnBlueAxis, ParallelToEdge, PerpendicularToEdge, FromPoint, Tangent]),
         ("Shapes", &[Square, GoldenSection, HalfCircle]),
+        ("Grid", &[GridPoint, OnGridLine]),
     ]
 };
 
@@ -48,6 +49,8 @@ impl InferenceKind {
             Self::Square => "square",
             Self::GoldenSection => "golden",
             Self::HalfCircle => "half_circle",
+            Self::GridPoint => "grid_point",
+            Self::OnGridLine => "grid_line",
             Self::Free => "free",
         }
     }
@@ -78,6 +81,8 @@ impl InferenceKind {
             Self::Square => "Square",
             Self::GoldenSection => "Golden Section",
             Self::HalfCircle => "Half Circle",
+            Self::GridPoint => "Grid Points",
+            Self::OnGridLine => "Grid Lines",
             Self::Free => "",
         }
     }
@@ -120,6 +125,54 @@ impl SnapPrefs {
     fn mask(&self) -> u32 {
         all_kinds().filter(|k| !self.is_on(*k)).fold(0, |m, k| m | bit(k))
     }
+}
+
+/// View → Grid: shown, finest step (mm) and the major line ratio (persisted with the prefs).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GridPrefs {
+    pub show: bool,
+    pub step: f64,
+    pub major: u32,
+}
+
+impl Default for GridPrefs {
+    fn default() -> Self {
+        Self { show: false, step: 10.0, major: 10 }
+    }
+}
+
+impl GridPrefs {
+    /// The grid on the drawing axes' red-green plane (work planes come later).
+    pub fn style(&self) -> Option<varstotas_render::GridStyle> {
+        if !self.show || !(self.step > 0.0 && self.step.is_finite()) {
+            return None;
+        }
+        let ax = crate::axes::current();
+        Some(varstotas_render::GridStyle {
+            origin: ax.origin.to_array(),
+            u: ax.x.to_array(),
+            v: ax.y.to_array(),
+            step: self.step,
+            major: self.major.max(2),
+            color: [0.22, 0.25, 0.30, 0.55],
+        })
+    }
+}
+
+thread_local! {
+    static GRID: Cell<Option<(f64, u32)>> = const { Cell::new(None) };
+}
+
+/// Publish the grid (with [`publish`]); the engine snaps to it when it is shown.
+pub fn publish_grid(g: &GridPrefs) {
+    GRID.with(|c| c.set(g.show.then_some((g.step, g.major))));
+}
+
+/// The shown grid, for snapping.
+pub fn grid() -> Option<varstotas_render::GridStyle> {
+    let (step, major) = GRID.with(|c| c.get())?;
+    GridPrefs { show: true, step, major }.style()
 }
 
 fn bit(kind: InferenceKind) -> u32 {

@@ -74,6 +74,14 @@ struct Globals {
     shadow: [f32; 4],
     /// x: normal offset of receivers (local units); y: 1 / map size; z: 1 = sun above the horizon.
     shadow2: [f32; 4],
+    /// Grid: xyz origin relative to the render origin; w: finest step.
+    grid_o: [f32; 4],
+    /// xyz: grid u axis; w: major ratio.
+    grid_u: [f32; 4],
+    /// xyz: grid v axis; w: 1 = shown.
+    grid_v: [f32; 4],
+    /// Grid line colour (linear), alpha = strength.
+    grid_color: [f32; 4],
 }
 
 /// Shadow map side in texels (clamped to the device limit).
@@ -302,6 +310,7 @@ struct Timing {
 struct Pipelines {
     sky: wgpu::RenderPipeline,
     ground: wgpu::RenderPipeline,
+    grid: wgpu::RenderPipeline,
     face_opaque: wgpu::RenderPipeline,
     /// Translucent / X-ray faces: indexed back-to-front, no cull, no depth write.
     face_blend: wgpu::RenderPipeline,
@@ -401,6 +410,7 @@ impl Default for RenderStyle {
             light_dir: DEFAULT_LIGHT_DIR,
             ambient: DEFAULT_AMBIENT,
             shadows: None,
+            grid: None,
         }
     }
 }
@@ -1135,7 +1145,23 @@ impl Renderer {
                 if sh.is_some_and(|s| s.sun_dir[2] > 0.0) { 1.0 } else { 0.0 },
                 if sh.is_some() { 1.0 } else { 0.0 },
             ],
+            grid_o: [0.0; 4],
+            grid_u: [1.0, 0.0, 0.0, 10.0],
+            grid_v: [0.0, 1.0, 0.0, 0.0],
+            grid_color: [0.0; 4],
         };
+        if let Some(gs) = style.grid.filter(|g| g.step > 0.0 && g.step.is_finite()) {
+            // Keep the plane coordinates small near the camera (f32 in the shader).
+            let n = gs.normal();
+            let o = DVec3::from_array(gs.origin);
+            let near = camera.target - n * (camera.target - o).dot(n);
+            let extent = (camera.eye - camera.target).length() + (camera.eye - o).dot(n).abs();
+            let o = gs.origin_near(near, extent.max(gs.step));
+            globals.grid_o = v4(o - geo_origin - origin, gs.step);
+            globals.grid_u = v4(DVec3::from_array(gs.u), gs.major.max(2) as f64);
+            globals.grid_v = v4(DVec3::from_array(gs.v), 1.0);
+            globals.grid_color = conv(gs.color);
+        }
         globals.hidden_face[3] = 1.0;
         globals
     }
@@ -1393,6 +1419,12 @@ impl Renderer {
         // 5. ground (translucent, tints geometry below z = 0)
         if style.show_ground && opts.background {
             pass.set_pipeline(&p.ground);
+            pass.draw(0..3, 0..1);
+        }
+
+        // 5b. grid (translucent lines on its plane, behind coplanar faces)
+        if style.grid.is_some() && opts.background {
+            pass.set_pipeline(&p.grid);
             pass.draw(0..3, 0..1);
         }
 
@@ -2002,6 +2034,18 @@ fn build_pipelines(
             bias: no_bias,
             cull: None,
         }),
+        grid: make(Desc {
+            label: "varstotas grid",
+            vs: "vs_fullscreen",
+            fs: "fs_grid",
+            buffers: &[],
+            topology: TriangleList,
+            blend: true,
+            depth_write: false,
+            depth_compare: GreaterEqual,
+            bias: no_bias,
+            cull: None,
+        }),
         face_opaque: make_with(Desc {
             label: "varstotas faces",
             vs: "vs_face",
@@ -2149,7 +2193,7 @@ mod tests {
 
     #[test]
     fn layouts_match_shader() {
-        assert_eq!(std::mem::size_of::<Globals>(), 64 + 21 * 16 + 64 + 2 * 16);
+        assert_eq!(std::mem::size_of::<Globals>(), 64 + 21 * 16 + 64 + 2 * 16 + 4 * 16);
         assert_eq!(std::mem::size_of::<ShadowUniform>(), 80);
         assert_eq!(std::mem::size_of::<ThickLine>(), 48);
         assert_eq!(std::mem::size_of::<LineInst>(), 64);

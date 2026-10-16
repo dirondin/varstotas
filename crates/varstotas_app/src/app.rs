@@ -80,6 +80,8 @@ pub struct Prefs {
     pub library_dir: Option<PathBuf>,
     /// View → Snapping: master switch and the inferences turned off.
     pub snapping: crate::inference::settings::SnapPrefs,
+    /// View → Grid.
+    pub grid: crate::inference::settings::GridPrefs,
 }
 
 impl Default for Prefs {
@@ -99,6 +101,7 @@ impl Default for Prefs {
             console_code: String::new(),
             library_dir: None,
             snapping: Default::default(),
+            grid: Default::default(),
         }
     }
 }
@@ -172,6 +175,8 @@ pub enum Action {
     ToggleGuides,
     /// View → Snapping → Snapping on/off (Shift+S).
     ToggleSnapping,
+    /// View → Grid (show / hide).
+    ToggleGrid,
     /// File → Export → 2D Graphic… (opens the export dialog).
     ExportImage,
     NewFromTemplate(Template),
@@ -402,6 +407,7 @@ fn fallback_style() -> RenderStyle {
         light_dir: varstotas_render::DEFAULT_LIGHT_DIR,
         ambient: varstotas_render::DEFAULT_AMBIENT,
         shadows: None,
+        grid: None,
     }
 }
 
@@ -502,6 +508,7 @@ impl VarstotasApp {
         s.profiles = self.prefs.profiles;
         s.show_axes = self.prefs.show_axes;
         s.show_ground = self.prefs.show_ground;
+        s.grid = self.prefs.grid.style();
         let sh = &self.doc.model.shadows;
         s.shadows = sh.enabled.then(|| varstotas_render::ShadowStyle {
             sun_dir: sh.sun_direction().to_array(),
@@ -603,7 +610,29 @@ impl VarstotasApp {
         self.tool_pressed = false;
     }
 
+    /// The Measurements box sets the grid step while the grid is shown and Select is idle.
+    pub(crate) fn grid_vcb(&self) -> bool {
+        self.prefs.grid.show && self.tool_id() == ToolId::Select
+    }
+
     pub(crate) fn submit_vcb(&mut self) {
+        if self.grid_vcb() {
+            let input = std::mem::take(&mut self.vcb);
+            match varstotas_kernel::units::parse_length(&input, self.doc.model.unit).filter(|v| *v > 1e-6 && v.is_finite()) {
+                Some(v) => {
+                    self.prefs.grid.step = v;
+                    crate::inference::settings::publish_grid(&self.prefs.grid);
+                    self.vcb_error = false;
+                    let msg = format!("Grid step {}", crate::tools::common::fmt_len(&self.doc.model, v));
+                    self.flash(msg);
+                }
+                None => {
+                    self.vcb_error = true;
+                    self.flash_error(format!("Invalid grid step: {input}"));
+                }
+            }
+            return;
+        }
         let input = std::mem::take(&mut self.vcb);
         let p = self.current_pointer();
         let ok = self.with_tool(p.clone(), |t, ctx| t.on_vcb(ctx, &input));
@@ -1186,7 +1215,12 @@ impl VarstotasApp {
             Action::ToggleSnapping => {
                 self.prefs.snapping.enabled = !self.prefs.snapping.enabled;
                 crate::inference::settings::publish(&self.prefs.snapping);
+        crate::inference::settings::publish_grid(&self.prefs.grid);
                 self.flash(if self.prefs.snapping.enabled { "Snapping on" } else { "Snapping off" });
+            }
+            Action::ToggleGrid => {
+                self.prefs.grid.show = !self.prefs.grid.show;
+                crate::inference::settings::publish_grid(&self.prefs.grid);
             }
             Action::ToggleGuides => {
                 let hidden = !self.doc.model.guides_hidden;
@@ -2226,6 +2260,7 @@ impl eframe::App for VarstotasApp {
 
         crate::axes::sync(&self.doc.model);
         crate::inference::settings::publish(&self.prefs.snapping);
+        crate::inference::settings::publish_grid(&self.prefs.grid);
         self.handle_close_request(&ctx);
         self.handle_keyboard(&ctx);
         crate::axes::sync(&self.doc.model);
@@ -2238,6 +2273,7 @@ impl eframe::App for VarstotasApp {
             .show(ui, |ui| self.toolbar(ui));
         // The Snapping menus may have changed the switches before the viewport runs the tool.
         crate::inference::settings::publish(&self.prefs.snapping);
+        crate::inference::settings::publish_grid(&self.prefs.grid);
         egui::Panel::bottom("status_bar")
             .frame(crate::ui::theme::bar_frame(&ctx))
             .show(ui, |ui| self.status_bar(ui));
