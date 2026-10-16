@@ -10,6 +10,7 @@ pub mod icons;
 pub mod library;
 pub mod menu;
 pub mod realistic;
+pub mod render;
 pub mod sheets;
 pub mod statusbar;
 pub mod theme;

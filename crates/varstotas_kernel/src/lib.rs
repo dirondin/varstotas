@@ -35,6 +35,7 @@ pub mod mesh;
 pub mod model;
 pub mod generator;
 pub mod params;
+pub mod lights;
 pub mod pbr;
 pub mod report;
 pub mod section;
@@ -60,6 +61,7 @@ pub use model::{
 };
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;
+pub use lights::{Light, LightKind, RenderSettings};
 pub use pbr::{
     CustomShader, EFFECT_PRESETS, Effects, Environment, MAX_SHADER_PARAMS, PBR_MAPS, Pbr, ShaderParam, SkyKind, Stylize, Tonemap,
     shader_params,

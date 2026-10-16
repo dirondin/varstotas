@@ -123,11 +123,14 @@ impl VarstotasApp {
                         SkyKind::Sky => "Sky",
                         SkyKind::Color => "Color",
                         SkyKind::Hdri => "HDRI",
+                        SkyKind::Physical => "Physical sky",
                     })
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut e.sky, SkyKind::Sky, "Sky");
                         ui.selectable_value(&mut e.sky, SkyKind::Color, "Color");
                         ui.selectable_value(&mut e.sky, SkyKind::Hdri, "HDRI");
+                        ui.selectable_value(&mut e.sky, SkyKind::Physical, "Physical sky")
+                            .on_hover_text("Daylight for the sun's position in the Shadows card");
                     });
                 if e.sky == SkyKind::Color {
                     let mut c = color32([e.color[0], e.color[1], e.color[2], 1.0]);
@@ -138,6 +141,12 @@ impl VarstotasApp {
                 }
             });
             ui.end_row();
+            if e.sky == SkyKind::Physical {
+                ui.label("Haze");
+                ui.add(egui::Slider::new(&mut e.turbidity, 1.7..=10.0).fixed_decimals(1))
+                    .on_hover_text("Turbidity: 2 = clear blue sky, 10 = hazy; the sun's time and date are in the Shadows card");
+                ui.end_row();
+            }
             if e.sky == SkyKind::Hdri {
                 ui.label("HDRI");
                 ui.horizontal(|ui| {
@@ -683,7 +692,7 @@ fn stylize_name(s: Stylize) -> &'static str {
     }
 }
 
-const ERROR_RED: Color32 = Color32::from_rgb(0xC6, 0x28, 0x28);
+pub(crate) const ERROR_RED: Color32 = Color32::from_rgb(0xC6, 0x28, 0x28);
 
 #[cfg(test)]
 mod tests {

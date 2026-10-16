@@ -161,6 +161,12 @@ pub struct Model {
     /// is [`crate::pbr::SkyKind::Hdri`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hdri: Option<crate::texture::TextureImage>,
+    /// Light objects (path tracer and the Realistic style), world space.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lights: Vec<crate::lights::Light>,
+    /// Settings of the Render window.
+    #[serde(default, skip_serializing_if = "crate::lights::RenderSettings::is_default")]
+    pub render: crate::lights::RenderSettings,
     /// Untagged top-level entities hidden (the eye of "Untagged" in the Tags card).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub untagged_hidden: bool,
@@ -232,6 +238,8 @@ impl Model {
             untagged_hidden: false,
             environment: Default::default(),
             hdri: None,
+            lights: Vec::new(),
+            render: Default::default(),
             scenes: Vec::new(),
             scene_settings: SceneSettings::default(),
             guides: SlotMap::with_key(),

@@ -33,7 +33,8 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `workplane.rs` | `WorkPlane` (guide planes: origin, red / green, angles tilt-azimuth-spin), `Model::work_planes` / `active_plane`, `drawing_frame` (active plane, else axes), `set_drawing_frame` |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |
-| `pbr.rs` | `Pbr` (physical material: metallic, roughness, emission, transmission, IOR, maps), `Environment` (`SkyKind`, `Tonemap`, rotation, exposure, `Effects` with `EFFECT_PRESETS` and `Stylize`), `CustomShader` + `shader_params` (`// @param` header) |
+| `lights.rs` | `Light` (`LightKind` point / spot / area: position, direction, colour, power W, radius, cone, size), `RenderSettings` (size, samples, time limit, bounces, denoise, match view) — `Model::lights`, `Model::render` |
+| `pbr.rs` | `Pbr` (physical material: metallic, roughness, emission, transmission, IOR, maps), `Environment` (`SkyKind` incl. `Physical` + `turbidity`, `Tonemap`, rotation, exposure, `Effects` with `EFFECT_PRESETS` and `Stylize`), `CustomShader` + `shader_params` (`// @param` header) |
 | `text3d.rs` | 3D Text: outlines → faces (even-odd nesting), extrusion, group (`Model::add_text3d_in`) |
 | `texture.rs` | `TextureImage` (embedded PNG/JPEG, tile size), `TexPlacement` (per-face texture position), texture axes, base64 |
 | `units.rs` | parsing and formatting for the Measurements box (VCB) |
@@ -51,7 +52,9 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | `grid.rs` | `GridStyle` (plane, step, major ratio), `level` / `snap_step` (shared by the `fs_grid` shader pass and grid snapping), `origin_near` (f32-safe origin) |
 | `camera.rs` | f64 camera, orbit, pan, zoom, projections, zoom extents |
 | `overlay.rs` | `Overlay3d` (lines, polygons, texts, marks, arcs, dimensions, leaders), plus `annot.rs` for the CPU glyph expansion |
-| `export.rs` | `render_to_image` (PNG export) |
+| `export.rs` | `render_to_image` (PNG export), `encode_exr` (uncompressed float OpenEXR) |
+| `bvh.rs` | binned-SAH BVH over triangles, flattened to 2 `vec4` per node for the GPU |
+| `pathtrace.rs`, `pathtrace.wgsl` | GPU path tracer (`Renderer::pt_start / pt_step / pt_resolve / pt_image / pt_linear`): triangle / light records, compute passes `pt_trace` (BVH walk, GGX + diffuse, NEE to sun and lights, glass, ground plane, custom surfaces), `pt_denoise` (à-trous), `pt_resolve`, `pt_linear`; the WGSL is part of the scene module (`custom::BASE`) |
 | `textures.rs` | face textures (group 1): colour `texture_2d_array`, data array (ORM / normal), PBR material table; CPU resample and mips (`set_textures`, `set_data_textures`, `set_materials`) |
 | `env.rs` | environment for Realistic: Rgba16Float equirect with mips, SH9 irradiance, `EnvUniform` (group 0, bindings 3–5) |
 | `shader.wgsl` | shaders (`HDR_OUT` override: the Realistic scene pass writes linear HDR + a G-buffer when effects are on; PCSS soft shadows; `Surface` + helpers for custom shaders) |
@@ -75,10 +78,10 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 |---|---|
 | `app.rs` | `VarstotasApp`: layout, actions, input routing, files |
 | `document.rs` | open document: model, history, selection, editing context |
-| `viewport.rs` | 3D view widget: input, renderer, overlays |
+| `viewport.rs` | 3D view widget: input, renderer, overlays; `PtJob` (path traced render advanced each paint, save PNG / EXR) |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures + emission maps), new textured material |
-| `pbr.rs` | Realistic style data: `material_table` (+ shader id / params), `custom_surfaces`, `animated`, `emission_layers` / `data_layers`, `DataSync` (ORM packing), `EnvSync` (HDRI decode), `env_style` |
+| `pbr.rs` | Realistic style data: `material_table` (+ shader id / params), `custom_surfaces`, `animated`, `emission_layers` / `data_layers`, `DataSync` (ORM packing), `EnvSync` (HDRI decode), `env_style`, `pt_lights` |
 | `ui/realistic.rs` | Materials → "Physical (Realistic)" editor (sphere preview, presets, maps, Shader row + parameter sliders), shader editor window (`ShaderEdit`, live apply), Environment card with Effects, HDRI / map loading |
 | `shaders.rs` | bundled custom shaders (`PRESETS`: Wood, Water, Reeded Glass, Glow; docs/SHADERS.md) |
 | `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`); splitter between log and code (`code_h`) |
@@ -123,6 +126,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `tools/section.rs` | Section Plane tool; drawing and picking of section planes, cut lines and fill |
 | `tools/workplane.rs` | Guide Plane tool (3 points, face, normal by arrows; gizmo drags of the active plane), `draw_work_planes` |
+| `ui/render.rs` | Window → Render… (`RenderWindow`: settings, Render / Stop / Continue / More Samples, preview, Save PNG / EXR, Render All Scenes batch, lights list + editor, light markers; edits → one undo step) |
 | `ui/workplanes.rs` | Window → Work Planes… (list, active, visibility, names, origin and angles; edits → one undo step) |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
 | `ui/tray.rs` | cards toggled by `TRAY_CARDS` / `Prefs::tray_hidden` (Window menu); Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags (Untagged eye, delete),  Outliner, Scenes (play, settings), Soften Edges, Instructor |

@@ -80,6 +80,63 @@ impl RgbaImage {
     }
 }
 
+/// Encode linear RGB (`width * height * 3` floats, rows top to bottom) as an uncompressed
+/// 32-bit float OpenEXR image.
+pub fn encode_exr(width: u32, height: u32, rgb: &[f32]) -> Vec<u8> {
+    let (w, h) = (width as usize, height as usize);
+    let mut out = Vec::with_capacity(w * h * 12 + 512);
+    out.extend_from_slice(&[0x76, 0x2f, 0x31, 0x01, 2, 0, 0, 0]);
+    let attr = |out: &mut Vec<u8>, name: &str, ty: &str, value: &[u8]| {
+        out.extend_from_slice(name.as_bytes());
+        out.push(0);
+        out.extend_from_slice(ty.as_bytes());
+        out.push(0);
+        out.extend_from_slice(&(value.len() as i32).to_le_bytes());
+        out.extend_from_slice(value);
+    };
+    // Channels in alphabetical order: FLOAT (2), linear flag 0, sampling 1×1.
+    let mut ch = Vec::new();
+    for c in ["B", "G", "R"] {
+        ch.extend_from_slice(c.as_bytes());
+        ch.push(0);
+        ch.extend_from_slice(&2i32.to_le_bytes());
+        ch.extend_from_slice(&[0, 0, 0, 0]);
+        ch.extend_from_slice(&1i32.to_le_bytes());
+        ch.extend_from_slice(&1i32.to_le_bytes());
+    }
+    ch.push(0);
+    attr(&mut out, "channels", "chlist", &ch);
+    attr(&mut out, "compression", "compression", &[0]);
+    let mut b = Vec::new();
+    for v in [0i32, 0, width as i32 - 1, height as i32 - 1] {
+        b.extend_from_slice(&v.to_le_bytes());
+    }
+    attr(&mut out, "dataWindow", "box2i", &b);
+    attr(&mut out, "displayWindow", "box2i", &b);
+    attr(&mut out, "lineOrder", "lineOrder", &[0]);
+    attr(&mut out, "pixelAspectRatio", "float", &1f32.to_le_bytes());
+    attr(&mut out, "screenWindowCenter", "v2f", &[0; 8]);
+    attr(&mut out, "screenWindowWidth", "float", &1f32.to_le_bytes());
+    out.push(0);
+    // Offset table, then one scan line per block: y, size, B, G, R rows.
+    let line = 8 + w * 12;
+    let table_end = out.len() + h * 8;
+    for y in 0..h {
+        out.extend_from_slice(&((table_end + y * line) as u64).to_le_bytes());
+    }
+    for y in 0..h {
+        out.extend_from_slice(&(y as i32).to_le_bytes());
+        out.extend_from_slice(&((w * 12) as i32).to_le_bytes());
+        for c in [2, 1, 0] {
+            for x in 0..w {
+                let v = rgb.get((y * w + x) * 3 + c).copied().unwrap_or(0.0);
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+    }
+    out
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExportError {
     /// Width or height is 0.
@@ -286,6 +343,20 @@ impl Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exr_layout() {
+        let rgb = [1.0f32, 0.5, 0.25, 2.0, 0.0, 0.0];
+        let e = encode_exr(2, 1, &rgb);
+        assert_eq!(&e[..4], &[0x76, 0x2f, 0x31, 0x01]);
+        // The last block: y = 0, 24 bytes, then B, G, R rows of 2 floats.
+        let block = &e[e.len() - 32..];
+        assert_eq!(&block[..8], &[0, 0, 0, 0, 24, 0, 0, 0]);
+        let f = |i: usize| f32::from_le_bytes(block[8 + 4 * i..12 + 4 * i].try_into().unwrap());
+        assert_eq!([f(0), f(1), f(2), f(3), f(4), f(5)], [0.25, 0.0, 0.5, 0.0, 1.0, 2.0]);
+        let off = u64::from_le_bytes(e[e.len() - 40..e.len() - 32].try_into().unwrap());
+        assert_eq!(off as usize, e.len() - 32);
+    }
 
     #[test]
     fn tiles_cover_the_whole_image_ndc() {

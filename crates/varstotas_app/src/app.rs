@@ -405,6 +405,7 @@ pub struct VarstotasApp {
     pub(crate) sheets: crate::ui::sheets::SheetsState,
     /// Window → Work Planes… window.
     pub(crate) planes_window: crate::ui::workplanes::WorkPlanesWindow,
+    pub(crate) render_window: crate::ui::render::RenderWindow,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -525,6 +526,7 @@ impl VarstotasApp {
             unfold: Default::default(),
             sheets: Default::default(),
             planes_window: Default::default(),
+            render_window: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -561,7 +563,7 @@ impl VarstotasApp {
             on_faces: sh.on_faces,
             on_ground: sh.on_ground,
         });
-        s.env = crate::pbr::env_style(&self.doc.model.environment);
+        s.env = crate::pbr::env_style(&self.doc.model.environment, sh.sun_direction().as_vec3().to_array());
         s.env.effects.time = (self.now % 3600.0) as f32;
         s
     }
@@ -1724,7 +1726,7 @@ impl VarstotasApp {
     }
 
     /// Camera stored in scene `s` (projection size taken from the eye distance).
-    fn scene_camera(&self, s: &Scene) -> Camera {
+    pub(crate) fn scene_camera(&self, s: &Scene) -> Camera {
         let mut to = self.camera.clone();
         to.eye = s.eye;
         to.target = s.target;
@@ -2318,6 +2320,7 @@ impl VarstotasApp {
         tools::section::draw_sections(&view, &mut o3);
         tools::workplane::draw_work_planes(&view, &mut o3);
         self.section_cut_overlay(&mut o3);
+        self.light_overlays(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
         o2.extend(self.tool.cursor_glyph());
         (o3, o2)
@@ -2445,6 +2448,7 @@ impl eframe::App for VarstotasApp {
         self.unfold_window(&ctx);
         self.sheets_window(&ctx);
         self.work_planes_window(&ctx);
+        self.render_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

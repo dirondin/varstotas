@@ -6,7 +6,7 @@
 use crate::wgpu::naga;
 
 /// The scene shader (scene passes and the effects passes) without custom surfaces.
-pub(crate) const BASE: &str = concat!(include_str!("shader.wgsl"), "\n", include_str!("post.wgsl"));
+pub(crate) const BASE: &str = concat!(include_str!("shader.wgsl"), "\n", include_str!("post.wgsl"), "\n", include_str!("pathtrace.wgsl"));
 
 /// A material's surface shader for `Renderer::set_custom_shaders`.
 #[derive(Clone, Debug, PartialEq)]

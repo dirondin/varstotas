@@ -31,7 +31,7 @@ const MATERIAL_VEC4S: usize = 6;
 
 impl FaceTextures {
     pub fn new(device: &wgpu::Device) -> Self {
-        let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty, count: None };
+        let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE, ty, count: None };
         let array = wgpu::BindingType::Texture {
             sample_type: wgpu::TextureSampleType::Float { filterable: true },
             view_dimension: wgpu::TextureViewDimension::D2Array,

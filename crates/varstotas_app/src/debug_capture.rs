@@ -506,6 +506,8 @@ pub struct Script {
     cmds: Vec<ScriptCmd>,
     pc: usize,
     wait: u32,
+    /// Wait for the path traced render (and a scene batch) to finish.
+    pt_wait: bool,
     frame: u32,
     shot: Option<String>,
     /// Viewport size seen last frame and for how many frames it has been unchanged.
@@ -525,6 +527,7 @@ impl Script {
             raw,
             pc: 0,
             wait: 0,
+            pt_wait: false,
             frame: 0,
             shot: None,
             last_vp: None,
@@ -617,6 +620,13 @@ impl VarstotasApp {
         if script.wait > 0 {
             script.wait -= 1;
             return;
+        }
+        if script.pt_wait {
+            let busy = self.viewport.pt.as_ref().is_some_and(|j| j.running || j.restart || j.save.is_some()) || self.render_window.batch.is_some();
+            if busy {
+                return;
+            }
+            script.pt_wait = false;
         }
         // A Python script started by `run_script x.py` runs to its end first; so do
         // bridge calls waiting for a confirmation that the script itself may answer.
@@ -858,6 +868,7 @@ impl VarstotasApp {
                         e.sky = match v {
                             "color" => varstotas_kernel::SkyKind::Color,
                             "hdri" => varstotas_kernel::SkyKind::Hdri,
+                            "physical" => varstotas_kernel::SkyKind::Physical,
                             _ => varstotas_kernel::SkyKind::Sky,
                         }
                     }
@@ -871,12 +882,109 @@ impl VarstotasApp {
                     "intensity" => e.intensity = f.unwrap_or(e.intensity),
                     "sun" => e.sun = f.unwrap_or(e.sun),
                     "exposure" => e.exposure = f.unwrap_or(e.exposure),
+                    "turbidity" => e.turbidity = f.unwrap_or(e.turbidity),
                     "background" => e.background = matches!(v, "on" | "1" | "true"),
                     "tonemap" => e.tonemap = varstotas_kernel::Tonemap::from_key(v).unwrap_or(e.tonemap),
                     _ => log::warn!("script: env: unknown key {k}"),
                 }
             }
             self.actions.push(Action::SetEnvironment(e));
+            return;
+        }
+        // Path tracing: `render_window` / `render_window_close`; `render_set w= h= samples=
+        // time= bounces= denoise= match=`; `light_add point|spot|area x y z` (mm) and
+        // `light key=value…` (power, color=r,g,b, dir=x,y,z, angle, blend, size=w,h, radius,
+        // on) for the last light; `render_start` renders the view and waits for the end (`render_wait`
+        // only waits);
+        // `render_save <path>` (.png / .exr); `render_scenes <folder>` renders every scene.
+        if name == "render_window" || name == "render_window_close" {
+            self.render_window.open = name == "render_window";
+            return;
+        }
+        if let Some(args) = name.strip_prefix("render_set ") {
+            let mut r = self.doc.model.render;
+            for kv in args.split_whitespace() {
+                let Some((k, v)) = kv.split_once('=') else { continue };
+                let n = v.parse::<f32>().ok();
+                let on = matches!(v, "on" | "1" | "true");
+                match k {
+                    "w" => r.width = n.map_or(r.width, |x| x as u32),
+                    "h" => r.height = n.map_or(r.height, |x| x as u32),
+                    "samples" => r.samples = n.map_or(r.samples, |x| x as u32),
+                    "time" => r.time_limit = n.unwrap_or(r.time_limit),
+                    "bounces" => r.bounces = n.map_or(r.bounces, |x| x as u32),
+                    "denoise" => r.denoise = on,
+                    "match" => r.match_view = on,
+                    _ => log::warn!("script: render_set: unknown key {k}"),
+                }
+            }
+            self.doc.commit("Render Settings", |m| m.render = r.sanitized());
+            return;
+        }
+        if let Some(args) = name.strip_prefix("light_add ") {
+            let v: Vec<&str> = args.split_whitespace().collect();
+            let kind = v.first().and_then(|k| varstotas_kernel::LightKind::from_key(k));
+            let xyz: Vec<f64> = v.iter().skip(1).filter_map(|x| x.parse().ok()).collect();
+            if let (Some(kind), &[x, y, z]) = (kind, &xyz[..]) {
+                self.doc.commit("Add Light", |m| m.lights.push(varstotas_kernel::Light::new(kind, DVec3::new(x, y, z))));
+            } else {
+                log::warn!("script: light_add needs point|spot|area x y z");
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("light ") {
+            let Some(mut l) = self.doc.model.lights.last().cloned() else { return };
+            for kv in args.split_whitespace() {
+                let Some((k, v)) = kv.split_once('=') else { continue };
+                let nums: Vec<f32> = v.split(',').filter_map(|x| x.parse().ok()).collect();
+                match (k, &nums[..]) {
+                    ("power", [p]) => l.power = *p,
+                    ("color", [r, g, b]) => l.color = [*r, *g, *b],
+                    ("dir", [x, y, z]) => l.direction = DVec3::new(*x as f64, *y as f64, *z as f64).normalize_or(DVec3::NEG_Z),
+                    ("angle", [a]) => l.spot_angle = *a,
+                    ("blend", [b]) => l.spot_blend = *b,
+                    ("size", [w, h]) => l.size = [*w, *h],
+                    ("radius", [r]) => l.radius = *r,
+                    ("on", _) => l.enabled = matches!(v, "on" | "1" | "true"),
+                    _ => log::warn!("script: light: bad {kv}"),
+                }
+            }
+            self.doc.commit("Edit Light", |m| {
+                if let Some(last) = m.lights.last_mut() {
+                    *last = l.sanitized();
+                }
+            });
+            return;
+        }
+        if name == "render_wait" {
+            if let Some(s) = self.debug.script.as_mut() {
+                s.pt_wait = true;
+            }
+            return;
+        }
+        if name == "render_start" {
+            self.start_render(self.camera.clone());
+            if let Some(s) = self.debug.script.as_mut() {
+                s.pt_wait = true;
+            }
+            return;
+        }
+        if let Some(path) = name.strip_prefix("render_save ") {
+            if let Some(job) = &mut self.viewport.pt {
+                job.save = Some(std::path::PathBuf::from(path.trim()));
+            }
+            if let Some(s) = self.debug.script.as_mut() {
+                s.pt_wait = true;
+            }
+            return;
+        }
+        if let Some(folder) = name.strip_prefix("render_scenes ") {
+            let folder = std::path::PathBuf::from(folder.trim());
+            let _ = std::fs::create_dir_all(&folder);
+            self.render_all_scenes(folder);
+            if let Some(s) = self.debug.script.as_mut() {
+                s.pt_wait = true;
+            }
             return;
         }
         // `fx key=value…`: effects of the Realistic style (`preset=off|fast|balanced|quality` first).
@@ -1712,7 +1820,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())));
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -1926,6 +2034,19 @@ impl VarstotasApp {
     }
 
     /// The effects that are on, `-` for none: `soft,ao,ssr,bloom,dof,fog,vig,clay,<stylize>,hq`.
+    fn render_dump(&self) -> String {
+        let r = &self.doc.model.render;
+        let job = self.viewport.pt.as_ref().map(|j| {
+            let size = self.viewport.pt_texture().map(|t| t.1);
+            format!("{}spp{:?}{}{}{}", j.samples, size, if j.running { ",running" } else { "" }, if j.denoised { ",denoised" } else { "" }, match &j.saved {
+                Some(Err(e)) => format!(",error:{e}"),
+                _ => String::new(),
+            })
+        });
+        let lights: Vec<String> = self.doc.model.lights.iter().map(|l| format!("{}:{}W", l.kind.key(), l.power)).collect();
+        format!("({}x{} {}spp b{}{}{} job={:?} lights={:?} window={})", r.width, r.height, r.samples, r.bounces, if r.denoise { " dn" } else { "" }, if r.match_view { " match" } else { "" }, job, lights, self.render_window.open)
+    }
+
     fn fx_dump(&self) -> String {
         let x = &self.doc.model.environment.effects;
         let mut v: Vec<&str> = Vec::new();

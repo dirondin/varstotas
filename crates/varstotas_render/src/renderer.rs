@@ -38,7 +38,7 @@ mod env;
 #[path = "post.rs"]
 mod post;
 use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
-pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage};
+pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage, encode_exr};
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Uniform block, mirrors `Globals` in shader.wgsl.
@@ -393,6 +393,8 @@ pub struct Renderer {
     seg_bgl: Option<wgpu::BindGroupLayout>,
     max_storage_binding: u64,
     timing: Option<Timing>,
+    /// The path tracer (`pt_*`), made on first use.
+    pt: Option<crate::pathtrace::PathTracer>,
 }
 
 fn srgb_to_linear(c: [f32; 4]) -> [f32; 4] {
@@ -484,7 +486,7 @@ impl Renderer {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -494,7 +496,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Depth,
                         view_dimension: wgpu::TextureViewDimension::D2,
@@ -504,13 +506,13 @@ impl Renderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         view_dimension: wgpu::TextureViewDimension::D2,
@@ -520,13 +522,13 @@ impl Renderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 4,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -671,6 +673,7 @@ impl Renderer {
             timing: std::env::var("VARSTOTAS_RENDER_TIMING")
                 .is_ok_and(|v| !v.is_empty() && v != "0")
                 .then(Timing::default),
+            pt: None,
         }
     }
 
@@ -1712,9 +1715,73 @@ impl Renderer {
         if let Some(p) = &mut self.post {
             p.rebuild(device, &self.shader, self.color_format);
         }
+        if let Some(pt) = &mut self.pt {
+            pt.rebuild(device, &self.shader);
+        }
         self.custom = shaders.to_vec();
         self.custom_errors = errors.clone();
         errors
+    }
+
+    /// Start a path traced render of `geo` (any geometry, e.g. the one of `set_geometry`) from
+    /// `camera` with the Realistic environment, materials and effects of `style`; `pt_step`
+    /// adds samples. The image size may be lowered to fit the device.
+    pub fn pt_start(
+        &mut self,
+        rs: &egui_wgpu::RenderState,
+        geo: &SceneGeometry,
+        lights: &[crate::PtLight],
+        camera: &Camera,
+        style: &RenderStyle,
+        settings: &crate::PtSettings,
+    ) {
+        self.update_env(rs, style);
+        let pt = self.pt.get_or_insert_with(|| {
+            crate::pathtrace::PathTracer::new(&rs.device, &self.shader, &self.bgl, &self.face_textures.bgl)
+        });
+        pt.start(rs, geo, lights, camera, style, settings);
+    }
+
+    /// Add samples to the render (up to `max_samples`, for about `budget`); the samples so far.
+    /// `style` = the one of `pt_start` (its environment is current on the GPU).
+    pub fn pt_step(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle, max_samples: u32, budget: std::time::Duration) -> u32 {
+        self.update_env(rs, style);
+        let Some(pt) = &mut self.pt else { return 0 };
+        pt.step(rs, [&self.bind_group, &self.face_textures.bind_group], max_samples, budget)
+    }
+
+    /// Update the render's texture (`pt_texture`) with the samples so far.
+    pub fn pt_resolve(&mut self, rs: &egui_wgpu::RenderState, denoise: bool) {
+        let Some(pt) = &mut self.pt else { return };
+        pt.resolve(rs, [&self.bind_group, &self.face_textures.bind_group], denoise);
+    }
+
+    /// The render's image in egui and its size.
+    pub fn pt_texture(&self) -> Option<(egui::TextureId, [u32; 2])> {
+        let pt = self.pt.as_ref()?;
+        Some((pt.texture_id()?, pt.size()?))
+    }
+
+    pub fn pt_samples(&self) -> u32 {
+        self.pt.as_ref().map_or(0, |p| p.samples())
+    }
+
+    /// The shown image (after `pt_resolve`), sRGB.
+    pub fn pt_image(&self, rs: &egui_wgpu::RenderState) -> Option<RgbaImage> {
+        self.pt.as_ref()?.read_image(rs)
+    }
+
+    /// The render as linear RGB with the exposure applied (for EXR): width, height, pixels.
+    pub fn pt_linear(&mut self, rs: &egui_wgpu::RenderState, denoise: bool) -> Option<(u32, u32, Vec<f32>)> {
+        let pt = self.pt.as_mut()?;
+        pt.read_linear(rs, [&self.bind_group, &self.face_textures.bind_group], denoise)
+    }
+
+    /// Drop the render (its buffers and texture).
+    pub fn pt_clear(&mut self, rs: &egui_wgpu::RenderState) {
+        if let Some(pt) = &mut self.pt {
+            pt.clear(rs);
+        }
     }
 
     /// Section cut (world plane `[n.x, n.y, n.z, d]`, unit `n`): model faces and edges with

@@ -211,6 +211,9 @@ pub enum SkyKind {
     Color,
     /// The document's HDRI panorama ([`crate::Model::hdri`]); the sky when there is none.
     Hdri,
+    /// A physical daylight sky for the sun's position (Shadows card) and the haze
+    /// ([`Environment::turbidity`]).
+    Physical,
 }
 
 /// Tone mapping of the Realistic style: scene light → screen colours.
@@ -260,6 +263,8 @@ pub struct Environment {
     pub exposure: f32,
     pub tonemap: Tonemap,
     pub effects: Effects,
+    /// Haze of the physical sky (2 = clear, 10 = hazy).
+    pub turbidity: f32,
 }
 
 impl Default for Environment {
@@ -274,6 +279,7 @@ impl Default for Environment {
             exposure: 0.0,
             tonemap: Tonemap::Aces,
             effects: Effects::default(),
+            turbidity: 3.0,
         }
     }
 }
@@ -295,6 +301,7 @@ impl Environment {
         self.sun = c(self.sun, 0.0, 100.0, d.sun);
         self.exposure = c(self.exposure, -10.0, 10.0, 0.0);
         self.effects = self.effects.sanitized();
+        self.turbidity = c(self.turbidity, 1.7, 12.0, d.turbidity);
         self
     }
 }

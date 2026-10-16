@@ -1,0 +1,92 @@
+# Track Р batch 3: the GPU path tracer (Window → Render…) — PBR materials, glass, emission,
+# sun + physical sky, point / spot / area lights, denoising, PNG / EXR, every scene.
+box 0 0 0 7000 4500 100
+box 500 500 100 1000 1000 1000
+box 2500 500 100 1000 1000 1000
+box 4500 500 100 1000 1000 1000
+box 2500 2700 100 1000 1000 600
+view iso
+zoom_extents
+wait 10
+action mat_pbr Grey metallic=1 roughness=0.15
+action mat_pbr Brick roughness=0.4
+action mat_pbr Sky glass=1 roughness=0.02
+action mat_pbr Orange emission=1,0.55,0.2 strength=4
+tool paint
+material Grey
+rawp click 1000 500 600
+rawp click 500 1000 600
+rawp click 1500 1000 600
+rawp click 1000 1000 1100
+material Brick
+rawp click 3000 500 600
+rawp click 2500 1000 600
+rawp click 3500 1000 600
+rawp click 3000 1000 1100
+material Sky
+rawp click 5000 500 600
+rawp click 4500 1000 600
+rawp click 5500 1000 600
+rawp click 5000 1000 1100
+material Orange
+rawp click 3000 2700 400
+rawp click 2500 3200 400
+rawp click 3500 3200 400
+rawp click 3000 3200 700
+tool select
+wait 5
+# daylight: physical sky, sun from the shadows' settings
+action toggle_shadows
+action env sky=physical turbidity=3 sun=3
+action render_set w=480 h=300 samples=48 bounces=5 denoise=on match=off
+# Window → Render… (real mouse)
+raw click 344 -106
+wait 3
+raw click 355 258
+wait 5
+expect render=(480x300 48spp b5 dn job=None lights=[] window=true)
+action render_start
+wait 3
+expect render=(480x300 48spp b5 dn job=Some("48sppSome([480, 300]),denoised") lights=[] window=true)
+screenshot shots/render_day.bmp
+action render_save render_day.png
+action render_save render_day.exr
+wait 3
+# night: no sun, dim colour sky, the lights do the work
+action env sky=color color=0.02,0.025,0.04 sun=0
+action light_add point 3000 1800 2200
+action light power=150 color=1,0.85,0.6 radius=80
+action light_add spot 1000 -800 2600
+action light dir=0,0.6,-0.8 angle=50 blend=0.4 power=400
+action light_add area 5000 1000 2600
+action light dir=0,0,-1 size=800,500 power=200 color=0.7,0.85,1
+wait 3
+# the Render button (real mouse)
+action render_set samples=40
+raw click 75 160
+wait 2
+action render_wait
+expect render=(480x300 40spp b5 dn job=Some("40sppSome([480, 300]),denoised") lights=["point:150W", "spot:400W", "area:200W"] window=true)
+screenshot shots/render_night.bmp
+# not denoised
+action render_set denoise=off samples=16
+action render_start
+wait 3
+expect render=(480x300 16spp b5 job=Some("16sppSome([480, 300])") lights=["point:150W", "spot:400W", "area:200W"] window=true)
+screenshot shots/render_noisy.bmp
+# select a light in the list: its editor and the markers in the view
+raw click 152 619
+wait 5
+screenshot shots/render_light.bmp
+# every scene into a folder
+action render_set samples=8
+action add_scene
+view top
+zoom_extents
+wait 10
+action add_scene
+action render_scenes render_scenes
+wait 3
+expect render=(480x300 8spp b5 job=Some("8sppSome([480, 300])") lights=["point:150W", "spot:400W", "area:200W"] window=true)
+action render_window_close
+wait 3

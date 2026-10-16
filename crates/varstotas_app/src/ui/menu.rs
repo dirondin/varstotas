@@ -370,6 +370,10 @@ impl VarstotasApp {
                     self.actions.push(Action::Sheets);
                     ui.close();
                 }
+                if ui.add(egui::Button::new("Render…").selected(self.render_window.open)).clicked() {
+                    self.render_window.open = !self.render_window.open;
+                    ui.close();
+                }
                 if ui.add(egui::Button::new("Work Planes…").selected(self.planes_window.open)).clicked() {
                     self.actions.push(Action::WorkPlanes);
                     ui.close();

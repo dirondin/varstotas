@@ -103,6 +103,9 @@ pub enum EnvSource {
     Color([f32; 3]),
     /// The panorama of `Renderer::set_environment` (the sky when there is none).
     Image,
+    /// A daylight sky (Preetham) for the sun toward `sun` (unit, world) and the haze
+    /// `turbidity` (2 clear … 10 hazy).
+    Physical { sun: [f32; 3], turbidity: f32 },
 }
 
 /// Tone mapping of `FaceStyle::Realistic`.
@@ -494,13 +497,16 @@ pub mod shaders {
     //! Checking custom surface shaders before use.
     pub use crate::custom::check;
 }
+mod bvh;
+mod pathtrace;
+pub use pathtrace::{PtLight, PtLightKind, PtSettings};
 mod renderer;
 mod textures;
 pub use textures::{MAX_LAYERS as MAX_TEXTURE_LAYERS, MAX_MATERIALS as MAX_PBR_MATERIALS};
 pub use renderer::{
     DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
     DIM_FACE_TARGET, ExportError, ExportOptions, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, MAX_EXPORT_DIM,
-    OVERLAY_DASH_PERIOD, Renderer, RgbaImage,
+    OVERLAY_DASH_PERIOD, Renderer, RgbaImage, encode_exr,
 };
 
 #[cfg(test)]

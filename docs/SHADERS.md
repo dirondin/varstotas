@@ -93,3 +93,6 @@ fn surface(s: Surface, p: Params) -> Surface {
 
 To see what the presets do, pick one and press **Edit…**. Their source lives in
 `crates/varstotas_app/src/shaders.rs`.
+
+The path tracer (Window → Render…) runs the same `surface` function at every hit, so a
+custom material looks the same in a render; `s.view` is the direction back along the ray.

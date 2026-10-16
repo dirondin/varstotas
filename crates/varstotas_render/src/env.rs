@@ -32,6 +32,7 @@ enum SourceKey {
     Sky([u32; 9]),
     Color([u32; 3]),
     Image(u64),
+    Physical([u32; 5]),
 }
 
 pub(crate) struct Env {
@@ -92,6 +93,11 @@ impl Env {
             }
             EnvSource::Color(c) => SourceKey::Color(std::array::from_fn(|i| c[i].to_bits())),
             EnvSource::Image => SourceKey::Image(self.image_rev),
+            EnvSource::Physical { sun, turbidity } => {
+                // Rebuilt when the sun moves by more than about 0.3°.
+                let q = |v: f32| ((v * 200.0).round() as i32) as u32;
+                SourceKey::Physical([q(sun[0]), q(sun[1]), q(sun[2]), q(turbidity), style.env.rotation_deg.to_bits()])
+            }
         };
         self.sky = source == EnvSource::Sky;
         if self.key == Some(key) {
@@ -107,6 +113,13 @@ impl Env {
             EnvSource::Image => {
                 let img = self.image.as_ref().expect("image");
                 Panorama::from_image(img)
+            }
+            EnvSource::Physical { sun, turbidity } => {
+                // The panorama is turned with the environment, the sun stays where it is.
+                let r = -style.env.rotation_deg.to_radians();
+                let (c, s) = (r.cos(), r.sin());
+                let sun = [c * sun[0] - s * sun[1], s * sun[0] + c * sun[1], sun[2]];
+                physical_sky(sun, turbidity)
             }
         };
         self.sh = irradiance_sh(&pano);
@@ -251,6 +264,63 @@ fn sky_panorama(style: &RenderStyle) -> Panorama {
     p
 }
 
+/// Preetham et al. 1999 daylight: Perez distributions of luminance and chromaticity around
+/// the sun, scaled so a high sun gives a sky about as bright as the style's. Below the
+/// horizon: a dim ground. A sun under the horizon leaves a fading dusk sky.
+fn physical_sky(sun: [f32; 3], t: f32) -> Panorama {
+    let (w, h) = (256u32, 128u32);
+    let len = (sun[0] * sun[0] + sun[1] * sun[1] + sun[2] * sun[2]).sqrt().max(1e-6);
+    let mut s = [sun[0] / len, sun[1] / len, sun[2] / len];
+    let dusk = ((s[2] + 0.1) / 0.15).clamp(0.0, 1.0);
+    if s[2] < 0.02 {
+        let k = ((1.0 - 0.02f32 * 0.02) / (s[0] * s[0] + s[1] * s[1]).max(1e-9)).sqrt();
+        s = [s[0] * k, s[1] * k, 0.02];
+    }
+    let theta_s = s[2].clamp(-1.0, 1.0).acos();
+    let perez = |c: [f32; 5], cos_t: f32, gamma: f32| (1.0 + c[0] * (c[1] / cos_t.max(0.01)).exp()) * (1.0 + c[2] * (c[3] * gamma).exp() + c[4] * gamma.cos().powi(2));
+    let cy = [0.1787 * t - 1.4630, -0.3554 * t + 0.4275, -0.0227 * t + 5.3251, 0.1206 * t - 2.5771, -0.0670 * t + 0.3703];
+    let cx = [-0.0193 * t - 0.2592, -0.0665 * t + 0.0008, -0.0004 * t + 0.2125, -0.0641 * t - 0.8989, -0.0033 * t + 0.0452];
+    let cyy = [-0.0167 * t - 0.2608, -0.0950 * t + 0.0092, -0.0079 * t + 0.2102, -0.0441 * t - 1.6537, -0.0109 * t + 0.0529];
+    let chi = (4.0 / 9.0 - t / 120.0) * (std::f32::consts::PI - 2.0 * theta_s);
+    let zy = ((4.0453 * t - 4.9710) * chi.tan() - 0.2155 * t + 2.4192).max(0.05);
+    let th = [theta_s.powi(3), theta_s.powi(2), theta_s, 1.0];
+    let dot4 = |a: [f32; 4]| a[0] * th[0] + a[1] * th[1] + a[2] * th[2] + a[3] * th[3];
+    let zx = t * t * dot4([0.00166, -0.00375, 0.00209, 0.0]) + t * dot4([-0.02903, 0.06377, -0.03202, 0.00394]) + dot4([0.11693, -0.21196, 0.06052, 0.25886]);
+    let zyc = t * t * dot4([0.00275, -0.00610, 0.00317, 0.0]) + t * dot4([-0.04214, 0.08970, -0.04153, 0.00516]) + dot4([0.15346, -0.26756, 0.06670, 0.26688]);
+    let (ny, nx, nyc) = (perez(cy, 1.0, theta_s), perez(cx, 1.0, theta_s), perez(cyy, 1.0, theta_s));
+    // kcd/m² → scene units (a white overcast sky ≈ 1), dimmed at dusk.
+    let scale = 0.12 * (0.04 + 0.96 * dusk);
+    let rgb_of = |d: [f32; 3]| -> [f32; 3] {
+        let cos_t = d[2].max(0.0);
+        let gamma = (d[0] * s[0] + d[1] * s[1] + d[2] * s[2]).clamp(-1.0, 1.0).acos();
+        let yv = zy * perez(cy, cos_t, gamma) / ny;
+        let x = zx * perez(cx, cos_t, gamma) / nx;
+        let y = (zyc * perez(cyy, cos_t, gamma) / nyc).max(1e-4);
+        let (xx, zz) = (x / y * yv, (1.0 - x - y) / y * yv);
+        let r = 3.2406 * xx - 1.5372 * yv - 0.4986 * zz;
+        let g = -0.9689 * xx + 1.8758 * yv + 0.0415 * zz;
+        let b = 0.0557 * xx - 0.2040 * yv + 1.0570 * zz;
+        [r.max(0.0) * scale, g.max(0.0) * scale, b.max(0.0) * scale]
+    };
+    let mut p = Panorama { width: w, height: h, rgb: Vec::with_capacity((w * h * 3) as usize) };
+    for y in 0..h {
+        for x in 0..w {
+            let d = p.dir(x, y);
+            let c = if d[2] >= 0.0 {
+                rgb_of(d)
+            } else {
+                // The horizon's colour fading into a dim ground lit by the sky.
+                let hz = rgb_of([d[0], d[1], 0.0]);
+                let k = (-d[2] / 0.05).clamp(0.0, 1.0);
+                let g = [0.3 * scale * 2.5 * (0.2 + 0.8 * s[2].max(0.0)); 3];
+                std::array::from_fn(|i| hz[i] + (g[i] - hz[i]) * k)
+            };
+            p.rgb.extend_from_slice(&c);
+        }
+    }
+    p
+}
+
 /// Real SH basis (l ≤ 2) for unit `d`.
 pub(crate) fn sh_basis(d: [f32; 3]) -> [f32; 9] {
     let [x, y, z] = d;
@@ -354,6 +424,30 @@ fn upload(device: &wgpu::Device, queue: &wgpu::Queue, pano: &Panorama) -> (wgpu:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn physical_sky_is_blue_and_dims_at_dusk() {
+        let at = |p: &Panorama, d: [f32; 3]| {
+            let (mut best, mut i) = (f32::MAX, 0);
+            for y in 0..p.height {
+                for x in 0..p.width {
+                    let q = p.dir(x, y);
+                    let e = (q[0] - d[0]).powi(2) + (q[1] - d[1]).powi(2) + (q[2] - d[2]).powi(2);
+                    if e < best {
+                        best = e;
+                        i = (y * p.width + x) as usize * 3;
+                    }
+                }
+            }
+            [p.rgb[i], p.rgb[i + 1], p.rgb[i + 2]]
+        };
+        let noon = physical_sky([0.3, -0.5, 0.8], 3.0);
+        let z = at(&noon, [0.0, 0.0, 1.0]);
+        eprintln!("zenith {z:?} horizon {:?}", at(&noon, [-1.0, 0.0, 0.05]));
+        assert!(z[2] > z[0] && z[2] > 0.3, "{z:?}");
+        let dusk = physical_sky([0.3, -0.9, -0.05], 3.0);
+        assert!(at(&dusk, [0.0, 0.0, 1.0])[2] < z[2] * 0.2);
+    }
 
     #[test]
     fn half_floats() {

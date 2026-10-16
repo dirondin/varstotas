@@ -62,6 +62,58 @@ pub struct Viewport {
     pub export: Option<crate::app::ExportJob>,
     /// Outcome of the last export (path written or error), taken by the app.
     pub export_result: Option<Result<std::path::PathBuf, String>>,
+    /// The path traced render of the Render window.
+    pub pt: Option<PtJob>,
+}
+
+/// A path traced render (Window → Render…), advanced by every `paint` while it runs.
+pub struct PtJob {
+    pub camera: Camera,
+    /// A Realistic style (environment, materials, effects).
+    pub style: RenderStyle,
+    pub lights: Vec<varstotas_render::PtLight>,
+    pub settings: varstotas_render::PtSettings,
+    pub max_samples: u32,
+    /// Seconds (0 = no limit).
+    pub time_limit: f64,
+    pub denoise: bool,
+    /// Set up the buffers (again) at the next paint.
+    pub restart: bool,
+    pub running: bool,
+    pub samples: u32,
+    /// Seconds rendered so far.
+    pub elapsed: f64,
+    /// The texture shows the denoised image.
+    pub denoised: bool,
+    /// Save the image at the next paint: `.exr` = linear float, else PNG.
+    pub save: Option<std::path::PathBuf>,
+    pub saved: Option<Result<std::path::PathBuf, String>>,
+}
+
+impl PtJob {
+    pub fn new(camera: Camera, style: RenderStyle, lights: Vec<varstotas_render::PtLight>, settings: varstotas_render::PtSettings) -> Self {
+        Self {
+            camera,
+            style,
+            lights,
+            settings,
+            max_samples: 256,
+            time_limit: 0.0,
+            denoise: true,
+            restart: true,
+            running: true,
+            samples: 0,
+            elapsed: 0.0,
+            denoised: false,
+            save: None,
+            saved: None,
+        }
+    }
+
+    /// Finished: enough samples or time.
+    pub fn done(&self) -> bool {
+        self.samples >= self.max_samples || (self.time_limit > 0.0 && self.elapsed >= self.time_limit)
+    }
 }
 
 impl Default for Viewport {
@@ -88,6 +140,7 @@ impl Default for Viewport {
             origin: None,
             export: None,
             export_result: None,
+            pt: None,
         }
     }
 }
@@ -102,6 +155,11 @@ impl Viewport {
 
     pub fn size(&self) -> egui::Vec2 {
         self.rect.size()
+    }
+
+    /// The path traced image and its size.
+    pub fn pt_texture(&self) -> Option<(egui::TextureId, [u32; 2])> {
+        self.renderer.as_ref()?.pt_texture()
     }
 
     /// Force a geometry rebuild on the next paint (e.g. after loading a file).
@@ -226,6 +284,72 @@ impl Viewport {
                     ((rect.width() * ppp).round() as u32).max(1),
                     ((rect.height() * ppp).round() as u32).max(1),
                 ];
+                if let Some(job) = &mut self.pt {
+                    if job.restart {
+                        job.restart = false;
+                        // The Realistic resources may be stale when the view shows another style.
+                        if let Some(images) = self.textures.changed(&doc.model) {
+                            let _ = guarded(|| renderer.set_textures(rs, &images));
+                        }
+                        if let Some(images) = self.data_textures.changed(&doc.model) {
+                            let _ = guarded(|| renderer.set_data_textures(rs, &images));
+                        }
+                        if let Some(img) = self.hdri.changed(&doc.model) {
+                            renderer.set_environment(img);
+                        }
+                        let customs = crate::pbr::custom_surfaces(&doc.model);
+                        let _ = guarded(|| renderer.set_custom_shaders(rs, &customs));
+                        let table = crate::pbr::material_table(&doc.model);
+                        let _ = guarded(|| renderer.set_materials(rs, &table));
+                        let params = BuildParams { face_style: FaceStyle::Realistic, textures: true, prev_origin: self.origin };
+                        let r = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params)).and_then(|geo| {
+                            guarded(|| renderer.pt_start(rs, &geo, &job.lights, &job.camera, &job.style, &job.settings))
+                        });
+                        if let Err(e) = r {
+                            log::warn!("path tracer: {e}");
+                            job.running = false;
+                            job.saved = Some(Err(e));
+                        }
+                        job.samples = 0;
+                        job.elapsed = 0.0;
+                        job.denoised = false;
+                    }
+                    if job.running && !job.done() {
+                        let t0 = std::time::Instant::now();
+                        let budget = std::time::Duration::from_millis(40);
+                        job.samples = guarded(|| renderer.pt_step(rs, &job.style, job.max_samples, budget)).unwrap_or(job.max_samples);
+                        job.elapsed += t0.elapsed().as_secs_f64();
+                        let finished = job.done();
+                        let _ = guarded(|| renderer.pt_resolve(rs, finished && job.denoise));
+                        job.denoised = finished && job.denoise;
+                        if finished {
+                            job.running = false;
+                        }
+                        ui.ctx().request_repaint();
+                    } else if job.running {
+                        job.running = false;
+                    }
+                    if !job.running && job.denoise != job.denoised && job.samples > 0 {
+                        // Stopped early, or the denoise switch changed.
+                        let _ = guarded(|| renderer.pt_resolve(rs, job.denoise));
+                        job.denoised = job.denoise;
+                    }
+                    if let Some(path) = job.save.take() {
+                        let exr = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("exr"));
+                        let r = if exr {
+                            renderer
+                                .pt_linear(rs, job.denoised)
+                                .ok_or_else(|| "nothing rendered".to_string())
+                                .and_then(|(w, h, rgb)| std::fs::write(&path, varstotas_render::encode_exr(w, h, &rgb)).map_err(|e| e.to_string()))
+                        } else {
+                            renderer
+                                .pt_image(rs)
+                                .ok_or_else(|| "nothing rendered".to_string())
+                                .and_then(|img| img.write_png(&path).map_err(|e| e.to_string()))
+                        };
+                        job.saved = Some(r.map(|_| path));
+                    }
+                }
                 if let Some(job) = self.export.take() {
                     let opts = ExportOptions {
                         transparent_background: job.transparent,

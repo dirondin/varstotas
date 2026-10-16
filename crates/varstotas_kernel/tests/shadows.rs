@@ -78,3 +78,25 @@ fn physical_materials_and_environment_are_saved() {
     assert_eq!(back.hdri.as_ref().map(|h| h.file_name.as_str()), Some("sky.hdr"));
     assert_eq!(back.scenes[0].environment.map(|e| e.exposure), Some(-1.0));
 }
+
+#[test]
+fn lights_render_settings_and_physical_sky_are_saved() {
+    use varstotas_kernel::io::{from_json, to_json};
+    use varstotas_kernel::{Environment, Light, LightKind, Model, RenderSettings, SkyKind};
+    let mut m = Model::new();
+    let plain = to_json(&m).unwrap();
+    assert!(!plain.contains("\"lights\"") && !plain.contains("\"render\""), "defaults are not written");
+    let mut spot = Light::new(LightKind::Spot, glam::DVec3::new(100.0, 200.0, 3000.0));
+    spot.power = 250.0;
+    spot.spot_angle = 30.0;
+    m.lights.push(spot.clone());
+    m.lights.push(Light { enabled: false, ..Light::new(LightKind::Area, glam::DVec3::ZERO) });
+    m.render = RenderSettings { width: 640, height: 480, samples: 64, denoise: false, ..Default::default() };
+    m.environment = Environment { sky: SkyKind::Physical, turbidity: 6.0, ..Default::default() };
+    let back = from_json(&to_json(&m).unwrap()).unwrap();
+    assert_eq!(back.lights.len(), 2);
+    assert_eq!(back.lights[0], spot);
+    assert!(!back.lights[1].enabled && back.lights[1].kind == LightKind::Area);
+    assert_eq!(back.render, m.render);
+    assert_eq!((back.environment.sky, back.environment.turbidity), (SkyKind::Physical, 6.0));
+}

@@ -235,13 +235,15 @@ impl EnvSync {
 }
 
 /// The renderer's environment settings from the document's.
-pub fn env_style(e: &varstotas_kernel::Environment) -> varstotas_render::EnvStyle {
+/// `sun` = the direction toward the sun (Shadows card), for the physical sky.
+pub fn env_style(e: &varstotas_kernel::Environment, sun: [f32; 3]) -> varstotas_render::EnvStyle {
     use varstotas_kernel::{SkyKind, Tonemap};
     varstotas_render::EnvStyle {
         source: match e.sky {
             SkyKind::Sky => varstotas_render::EnvSource::Sky,
             SkyKind::Color => varstotas_render::EnvSource::Color(e.color),
             SkyKind::Hdri => varstotas_render::EnvSource::Image,
+            SkyKind::Physical => varstotas_render::EnvSource::Physical { sun, turbidity: e.turbidity },
         },
         rotation_deg: e.rotation_deg,
         intensity: e.intensity,
@@ -293,6 +295,31 @@ pub fn animated(model: &Model) -> bool {
             s.source.lines().map(|l| l.split("//").next().unwrap_or("")).any(|l| l.contains(".time"))
         })
     })
+}
+
+/// The model's enabled lights for the path tracer (linear colours).
+pub fn pt_lights(model: &Model) -> Vec<varstotas_render::PtLight> {
+    use varstotas_kernel::LightKind;
+    model
+        .lights
+        .iter()
+        .filter(|l| l.enabled)
+        .map(|l| varstotas_render::PtLight {
+            kind: match l.kind {
+                LightKind::Point => varstotas_render::PtLightKind::Point,
+                LightKind::Spot => varstotas_render::PtLightKind::Spot,
+                LightKind::Area => varstotas_render::PtLightKind::Area,
+            },
+            position: l.position.to_array(),
+            direction: l.direction.as_vec3().to_array(),
+            color: l.color.map(srgb),
+            power: l.power,
+            radius: l.radius,
+            spot_angle: l.spot_angle,
+            spot_blend: l.spot_blend,
+            size: l.size,
+        })
+        .collect()
 }
 
 #[cfg(test)]
