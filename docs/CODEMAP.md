@@ -83,6 +83,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
+| `inference/settings.rs` | which snaps are on: `SnapPrefs` (in `Prefs::snapping`), `GROUPS` for the menus, `publish` once per frame, `allowed(kind)` checked by the engine and the tools |
 | `axes.rs` | custom drawing axes, published once per frame |
 | `clipboard.rs` | copy, cut, paste |
 | `autosave.rs` | autosave and recovery |

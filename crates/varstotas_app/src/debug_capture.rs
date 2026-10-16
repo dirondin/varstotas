@@ -999,6 +999,33 @@ impl VarstotasApp {
             }
             return;
         }
+        // `snap on|off|toggle` (master switch), `snap_kind <key> on|off` (one inference),
+        // `snap_all on|off`.
+        if let Some(arg) = name.strip_prefix("snap ") {
+            match arg.trim() {
+                "toggle" => self.actions.push(Action::ToggleSnapping),
+                v => self.prefs.snapping.enabled = v == "on",
+            }
+            crate::inference::settings::publish(&self.prefs.snapping);
+            return;
+        }
+        if let Some(args) = name.strip_prefix("snap_kind ") {
+            let mut it = args.split_whitespace();
+            if let (Some(k), Some(v)) = (it.next().and_then(crate::inference::InferenceKind::from_key), it.next()) {
+                self.prefs.snapping.set(k, v == "on");
+            } else {
+                eprintln!("[debug] snap_kind: unknown kind in {args:?}");
+            }
+            crate::inference::settings::publish(&self.prefs.snapping);
+            return;
+        }
+        if let Some(v) = name.strip_prefix("snap_all ") {
+            for k in crate::inference::settings::all_kinds() {
+                self.prefs.snapping.set(k, v.trim() == "on");
+            }
+            crate::inference::settings::publish(&self.prefs.snapping);
+            return;
+        }
         if let Some(i) = name.strip_prefix("sheet_select ") {
             self.sheets.current = i.trim().parse::<usize>().unwrap_or(1).saturating_sub(1);
             self.sheets.selected = None;
@@ -1352,7 +1379,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} snap={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().map(|d| self.plugins.list[d.idx].name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} transition={:.1}s/{}",

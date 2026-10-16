@@ -59,6 +59,30 @@ impl VarstotasApp {
         }
     }
 
+    /// The magnet: a click opens the Snapping menu. Crossed out when snapping is off, a dot
+    /// when some inferences are off.
+    fn snap_button(&mut self, ui: &mut Ui) {
+        let snap = &self.prefs.snapping;
+        let (on, partial) = (snap.enabled, snap.partial());
+        let resp = icon_button(ui, Icon::Magnet, false, BTN);
+        let p = ui.painter();
+        let r = resp.rect.shrink(7.0);
+        if !on {
+            p.line_segment([r.left_bottom(), r.right_top()], egui::Stroke::new(2.5, theme::TEXT_DIM));
+        } else if partial {
+            p.circle_filled(r.right_top() + egui::vec2(2.0, -2.0), 3.5, egui::Color32::from_rgb(0xE8, 0x7A, 0x1E));
+        }
+        let state = match (on, partial) {
+            (false, _) => "Snapping is off.",
+            (true, true) => "Some snaps are off.",
+            _ => "All snaps are on.",
+        };
+        let resp = tip(resp, "Snapping", Some("Shift+S"), &format!("Choose which points and directions the cursor snaps to. {state}"));
+        egui::Popup::menu(&resp)
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show(|ui| self.snapping_menu(ui));
+    }
+
     pub(crate) fn toolbar(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
@@ -125,6 +149,8 @@ impl VarstotasApp {
                 "Toggle perspective / parallel projection.",
                 Action::SetParallel(!ortho),
             );
+            group_sep(ui);
+            self.snap_button(ui);
             group_sep(ui);
             let xray = self.prefs.xray;
             let resp = icon_button(ui, Icon::StyleXRay, xray, BTN);

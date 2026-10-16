@@ -65,6 +65,7 @@ pub enum Icon {
     Refresh,
     Info,
     Group,
+    Magnet,
 }
 
 /// Palette used by icons.
@@ -520,6 +521,16 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                 pen.painter.add(Shape::convex_polygon(pts, SHADE, pen.thin()));
                 pen.dot((x, y + 8.6), 2.0, pen.ink);
             }
+        }
+        Icon::Magnet => {
+            // Horseshoe magnet opening up: red band, light pole tips.
+            let band = Stroke::new(4.4 * pen.s, RED);
+            pen.arc((12.0, 13.0), 5.8, 0.0, 180.0, band);
+            pen.line_c(&[(6.2, 13.2), (6.2, 8.0)], band);
+            pen.line_c(&[(17.8, 13.2), (17.8, 8.0)], band);
+            let tip = Stroke::new(1.0 * pen.s, pen.ink);
+            pen.poly_c(&[(4.0, 3.5), (8.4, 3.5), (8.4, 8.0), (4.0, 8.0)], FILL, tip);
+            pen.poly_c(&[(15.6, 3.5), (20.0, 3.5), (20.0, 8.0), (15.6, 8.0)], FILL, tip);
         }
         Icon::Section => {
             // A cube cut by an orange plane with an arrow.

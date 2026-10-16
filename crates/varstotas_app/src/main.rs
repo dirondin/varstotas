@@ -27,12 +27,19 @@ mod viewport;
 
 fn main() -> eframe::Result<()> {
     env_logger::init();
+    let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
+    if std::env::var_os("VARSTOTAS_SCRIPT").is_some() {
+        // Scripted runs must not stall when the window is hidden or on another desktop:
+        // with vsync macOS stops handing out frames to an occluded window.
+        wgpu_options.surface.present_mode = egui_wgpu::wgpu::PresentMode::AutoNoVsync;
+    }
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_title("Varstotas")
             .with_inner_size([1400.0, 900.0])
             .with_min_inner_size([800.0, 500.0]),
+        wgpu_options,
         ..Default::default()
     };
     eframe::run_native(

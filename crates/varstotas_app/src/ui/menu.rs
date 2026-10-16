@@ -234,6 +234,8 @@ impl VarstotasApp {
                 ui.checkbox(&mut self.prefs.show_axes, "Axes");
                 ui.checkbox(&mut self.prefs.show_ground, "Ground");
                 ui.separator();
+                ui.menu_button("Snapping", |ui| self.snapping_menu(ui));
+                ui.separator();
                 let mut shadows = self.doc.model.shadows.enabled;
                 if ui.checkbox(&mut shadows, "Shadows").clicked() {
                     self.actions.push(Action::ToggleShadows);
@@ -361,5 +363,36 @@ impl VarstotasApp {
                 self.item(ui, "About Varstotas", None, true, Action::About);
             });
         });
+    }
+
+    /// View → Snapping and the magnet button's menu: the master switch and every inference.
+    pub(crate) fn snapping_menu(&mut self, ui: &mut Ui) {
+        use crate::inference::settings::GROUPS;
+        let mut on = self.prefs.snapping.enabled;
+        if ui.add(egui::Checkbox::new(&mut on, "Snapping")).on_hover_text("Shift+S").clicked() {
+            self.actions.push(Action::ToggleSnapping);
+        }
+        ui.horizontal(|ui| {
+            if ui.small_button("All On").clicked() {
+                self.prefs.snapping.off.clear();
+            }
+            if ui.small_button("All Off").clicked() {
+                for k in crate::inference::settings::all_kinds() {
+                    self.prefs.snapping.set(k, false);
+                }
+            }
+        });
+        for (group, kinds) in GROUPS {
+            ui.separator();
+            ui.label(egui::RichText::new(group).small().weak());
+            ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
+                for &k in kinds {
+                    let mut v = self.prefs.snapping.is_on(k);
+                    if ui.checkbox(&mut v, k.menu_label()).changed() {
+                        self.prefs.snapping.set(k, v);
+                    }
+                }
+            });
+        }
     }
 }

@@ -86,9 +86,10 @@
 | On Red/Green/Blue Axis (направление) | цветная линия | P0 | ✅ |
 | Parallel / Perpendicular to edge | пурпурная линия | P0 | ✅ |
 | From Point (пунктир от точки по оси) | пунктир | P0 | ✅ |
-| Tangent at vertex (дуги) | голубая | P1 | ⬜ |
+| Tangent at vertex (дуги) | голубая | P1 | ✅ |
 | Shift — заблокировать inference; стрелки ↑→← ↓ — фиксация оси | | P0 | ✅ |
 | Guide points / guide lines | | P0 | ✅ |
+| Меню привязок (магнит, View → Snapping): каждая привязка вкл/выкл, общий выключатель Shift+S, сохраняется в настройках | | P1 | ✅ |
 
 ## 7. Measurements box (VCB)
 - Ввод без фокуса: просто печатать цифры во время инструмента — P0.

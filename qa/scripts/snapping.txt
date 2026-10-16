@@ -1,0 +1,75 @@
+# Snapping switches (View → Snapping / the magnet): each inference on and off, the master
+# switch with the real Shift+S key, persisted prefs in the dump.
+box 0 0 0 400 300 200
+view iso
+zoom_extents
+wait 10
+tool line
+rawp move 400 0 200
+wait 3
+expect snapping=(true, [])
+expect snap=Some((Endpoint, 400, 0, 200))
+action snap_kind endpoint off
+rawp move 401 0 200
+wait 3
+expect snapping=(true, ["endpoint"])
+expect snap=Some((OnEdge,
+rawp move 200 0 200
+wait 3
+expect snap=Some((Midpoint, 200, 0, 200))
+action snap_kind midpoint off
+action snap_kind edge off
+rawp move 201 0 200
+wait 3
+expect snap=Some((OnFace,
+action snap_kind face off
+rawp move 200 1 200
+wait 3
+expect snap=Some((Free,
+action snap_all on
+rawp move 200 0 200
+wait 3
+expect snap=Some((Midpoint, 200, 0, 200))
+# the master switch with the real keyboard
+raw mods shift
+raw key S
+raw mods none
+wait 3
+rawp move 201 0 200
+wait 3
+expect snapping=(false, [])
+expect snap=Some((Free,
+screenshot shots/snapping_off.bmp
+raw mods shift
+raw key S
+raw mods none
+wait 3
+rawp move 200 0 200
+wait 3
+expect snapping=(true, [])
+expect snap=Some((Midpoint, 200, 0, 200))
+# directions: red off, a line from the corner along red stays free
+rawp click 0 0 0
+wait 3
+action snap_kind red off
+rawp move -60 1 0
+wait 3
+expect snap=Some((Free,
+action snap_kind red on
+rawp move -60 1 0
+wait 3
+expect snap=Some((OnRedAxis,
+raw key Escape
+action snap_kind red off
+wait 3
+screenshot shots/snapping_partial.bmp
+# the magnet menu with a real click (toolbar above the viewport); a real click on a
+# checkbox there turns Red Axis back on
+raw move 1308 -66
+raw click 1308 -66
+wait 30
+screenshot shots/snapping_menu.bmp
+raw move 1216 346
+raw click 1216 346
+wait 5
+expect snapping=(true, [])

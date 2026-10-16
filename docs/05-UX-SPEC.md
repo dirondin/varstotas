@@ -21,7 +21,7 @@
 Светлая тема, мягкие цвета: небо `#A8C8E8→#E8F0F8`, земля `#C8C0B0` (прозрачная при взгляде снизу), фронт грани `#FFFFFF`, тыл `#A4B0C8`, рёбра `#000000`, выделение `#0050FF`.
 
 ## Горячие клавиши
-Space Select · L Line · A Arc · R Rectangle · C Circle · E Eraser · B Paint · P Push/Pull · M Move · Q Rotate · S Scale · F Offset · T Tape · O Orbit · H Pan · Z Zoom · Shift+Z Zoom Extents · G Make Group/Component · Ctrl/Cmd+Z/Y undo/redo · Delete — удалить выделение · Esc — отмена шага · Ctrl/Cmd+A — выделить всё · Ctrl/Cmd+S/O/N.
+Space Select · L Line · A Arc · R Rectangle · C Circle · E Eraser · B Paint · P Push/Pull · M Move · Q Rotate · S Scale · F Offset · T Tape · O Orbit · H Pan · Z Zoom · Shift+Z Zoom Extents · Shift+S привязки вкл/выкл · G Make Group/Component · Ctrl/Cmd+Z/Y undo/redo · Delete — удалить выделение · Esc — отмена шага · Ctrl/Cmd+A — выделить всё · Ctrl/Cmd+S/O/N.
 Средняя кнопка — Orbit, Shift+средняя — Pan, колесо — Zoom к курсору (в любом инструменте). На трекпаде Mac: два пальца — orbit, Shift+два пальца — pan, pinch — zoom.
 
 ## Measurements box (VCB)

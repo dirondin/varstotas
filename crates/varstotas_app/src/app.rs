@@ -78,6 +78,8 @@ pub struct Prefs {
     pub console_code: String,
     /// Components library folder (None = ~/.varstotas/components).
     pub library_dir: Option<PathBuf>,
+    /// View → Snapping: master switch and the inferences turned off.
+    pub snapping: crate::inference::settings::SnapPrefs,
 }
 
 impl Default for Prefs {
@@ -96,6 +98,7 @@ impl Default for Prefs {
             template: None,
             console_code: String::new(),
             library_dir: None,
+            snapping: Default::default(),
         }
     }
 }
@@ -167,6 +170,8 @@ pub enum Action {
     DeleteGuides,
     /// View → Guides (show / hide).
     ToggleGuides,
+    /// View → Snapping → Snapping on/off (Shift+S).
+    ToggleSnapping,
     /// File → Export → 2D Graphic… (opens the export dialog).
     ExportImage,
     NewFromTemplate(Template),
@@ -676,6 +681,7 @@ impl VarstotasApp {
                             self.vcb_error = false;
                         }
                         Key::Z if modifiers.shift && !typing => self.actions.push(Action::ZoomExtents),
+                        Key::S if modifiers.shift && !typing => self.actions.push(Action::ToggleSnapping),
                         Key::G if !typing && !modifiers.shift => self.actions.push(Action::MakeGroup),
                         Key::PageDown if !typing => self.actions.push(Action::NextScene),
                         Key::PageUp if !typing => self.actions.push(Action::PrevScene),
@@ -1176,6 +1182,11 @@ impl VarstotasApp {
                 if !self.doc.delete_all_guides() {
                     self.flash("There are no guides");
                 }
+            }
+            Action::ToggleSnapping => {
+                self.prefs.snapping.enabled = !self.prefs.snapping.enabled;
+                crate::inference::settings::publish(&self.prefs.snapping);
+                self.flash(if self.prefs.snapping.enabled { "Snapping on" } else { "Snapping off" });
             }
             Action::ToggleGuides => {
                 let hidden = !self.doc.model.guides_hidden;
@@ -2205,12 +2216,16 @@ impl eframe::App for VarstotasApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        if self.debug.script_active() {
+            pace_script_frame();
+        }
         let frame_start = std::time::Instant::now();
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
 
         crate::axes::sync(&self.doc.model);
+        crate::inference::settings::publish(&self.prefs.snapping);
         self.handle_close_request(&ctx);
         self.handle_keyboard(&ctx);
         crate::axes::sync(&self.doc.model);
@@ -2221,6 +2236,8 @@ impl eframe::App for VarstotasApp {
         egui::Panel::top("toolbar")
             .frame(crate::ui::theme::toolbar_frame(&ctx))
             .show(ui, |ui| self.toolbar(ui));
+        // The Snapping menus may have changed the switches before the viewport runs the tool.
+        crate::inference::settings::publish(&self.prefs.snapping);
         egui::Panel::bottom("status_bar")
             .frame(crate::ui::theme::bar_frame(&ctx))
             .show(ui, |ui| self.status_bar(ui));
@@ -2334,4 +2351,24 @@ impl eframe::App for VarstotasApp {
         }
         self.autosave.worker.flush();
     }
+}
+
+/// Scripted runs draw without vsync (see `main`), so they keep the frame rate a display
+/// would give: double clicks, hover times and animations then see the usual timing.
+fn pace_script_frame() {
+    use std::cell::Cell;
+    use std::time::{Duration, Instant};
+    thread_local! {
+        static LAST: Cell<Option<Instant>> = const { Cell::new(None) };
+    }
+    const FRAME: Duration = Duration::from_micros(16_667);
+    LAST.with(|l| {
+        if let Some(t) = l.get() {
+            let spent = t.elapsed();
+            if spent < FRAME {
+                std::thread::sleep(FRAME - spent);
+            }
+        }
+        l.set(Some(Instant::now()));
+    });
 }

@@ -297,15 +297,16 @@ impl RectangleTool {
             let q = plane_point(ctx, &r, &plane);
             let (mut w, mut h) = ((q - c1).dot(u), (q - c1).dot(v));
             if !r.is_geometry_snap() && w.abs() > TOL && h.abs() > TOL {
-                // Square / golden section inference (within ~10 px).
-                let px = ctx.camera.pixel_size_at(q, ctx.viewport_d()) * 10.0;
                 let cands = [
                     (w.abs(), InferenceKind::Square),
                     (w.abs() / GOLDEN, InferenceKind::GoldenSection),
                     (w.abs() * GOLDEN, InferenceKind::GoldenSection),
                 ];
+                // Square / golden section inference (within ~10 px).
+                let px = ctx.camera.pixel_size_at(q, ctx.viewport_d()) * 10.0;
                 if let Some((hh, k)) = cands
                     .iter()
+                    .filter(|(_, k)| crate::inference::allowed(*k))
                     .map(|(hh, k)| (*hh, *k, (hh - h.abs()).abs()))
                     .filter(|c| c.2 <= px)
                     .min_by(|a, b| a.2.total_cmp(&b.2))
@@ -816,7 +817,7 @@ impl ArcTool {
             {
                 h = ht;
                 self.tangent_snap = true;
-            } else if (h.abs() - half).abs() <= px {
+            } else if crate::inference::allowed(InferenceKind::HalfCircle) && (h.abs() - half).abs() <= px {
                 h = half * h.signum();
                 self.half = true;
             }
@@ -836,7 +837,7 @@ impl ArcTool {
                 let (n, fixed) = shape_normal(&self.engine, &r);
                 self.a = Some((r.point, fixed.then_some(n)));
                 self.tangent =
-                    if r.kind == InferenceKind::Endpoint { tangent_at_point(ctx.doc, r.point) } else { None };
+                    if r.kind == InferenceKind::Endpoint && crate::inference::allowed(InferenceKind::Tangent) { tangent_at_point(ctx.doc, r.point) } else { None };
             }
             (Some((a, _)), None) => {
                 if a.distance(r.point) > TOL {

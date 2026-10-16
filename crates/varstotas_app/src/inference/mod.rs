@@ -11,10 +11,12 @@
 //! (→ red, ← green, ↑ blue, ↓ parallel to the last hovered edge).
 
 pub mod geo;
+pub mod settings;
 
 use crate::document::guarded;
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::Color32;
+pub use settings::allowed;
 use geo::{CamKey, GeoCache, ScreenCache, closest_on_line_to_ray, closest_on_seg_to_ray, dist_point_seg2};
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, Model, Plane, Ray};
@@ -270,6 +272,16 @@ struct SharedCaches {
 }
 
 thread_local! {
+    /// The latest inference of any engine (the harness dump).
+    static LAST_SNAP: std::cell::Cell<Option<(InferenceKind, DVec3)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Kind and point of the latest inference.
+pub fn last_snap() -> Option<(InferenceKind, DVec3)> {
+    LAST_SNAP.with(|l| l.get())
+}
+
+thread_local! {
     static SHARED: RefCell<SharedCaches> = RefCell::new(SharedCaches::default());
 }
 
@@ -367,6 +379,7 @@ impl InferenceEngine {
         let r = guarded(|| self.infer_inner(q)).unwrap_or_else(|_| InferenceResult::free(safe_fallback(q)));
         let r = if r.point.is_finite() { r } else { InferenceResult::free(safe_fallback(q)) };
         self.last = Some(r.clone());
+        LAST_SNAP.with(|l| l.set(Some((r.kind, r.point))));
         r
     }
 
@@ -459,7 +472,7 @@ impl InferenceEngine {
         for (i, s) in screen.points.iter().enumerate() {
             if let Some(s) = s {
                 let d = s.distance(q.cursor);
-                if d <= POINT_PICK_PX {
+                if d <= POINT_PICK_PX && allowed(geo.points[i].kind) {
                     pts.push((geo.points[i].kind.point_rank(), d, i));
                 }
             }
@@ -487,9 +500,10 @@ impl InferenceEngine {
 
         // Intersections between near edges / guides.
         let mut best_ix: Option<(f64, DVec3)> = None;
-        for (k, (_, i)) in near_edges.iter().enumerate() {
+        let ix_edges = if allowed(InferenceKind::Intersection) { &near_edges[..] } else { &[] };
+        for (k, (_, i)) in ix_edges.iter().enumerate() {
             let e1 = &geo.edges[*i];
-            for (_, j) in near_edges.iter().skip(k + 1) {
+            for (_, j) in ix_edges.iter().skip(k + 1) {
                 let e2 = &geo.edges[*j];
                 if let Some((s, t, c1, c2)) = varstotas_kernel::geom::seg_seg_closest(e1.a, e1.b, e2.a, e2.b) {
                     let interior = |x: f64| x > 1e-6 && x < 1.0 - 1e-6;
@@ -509,7 +523,8 @@ impl InferenceEngine {
 
         // Guides.
         let mut best_guide: Option<(f64, DVec3, DVec3)> = None;
-        for (o, d) in &geo.guides {
+        let guides = if allowed(InferenceKind::OnGuide) { &geo.guides[..] } else { &[] };
+        for (o, d) in guides {
             if let Some(p) = closest_on_line_to_ray(*o, *d, ro, rd)
                 && (p - ro).dot(rd) > 0.0
             {
@@ -525,6 +540,7 @@ impl InferenceEngine {
         if let Some((e, _)) = best_edge {
             self.remember_edge((e.a, e.b));
         }
+        let from_points = if allowed(InferenceKind::FromPoint) { self.from_points.clone() } else { Vec::new() };
 
         let finish = |mut r: InferenceResult| {
             r.face = face.clone();
@@ -548,7 +564,7 @@ impl InferenceEngine {
                     // Only point-like snaps (endpoints, midpoints, intersections) are projected
                     // onto the line; an edge snap would project an arbitrary point.
                     let snap_src = best_point.map(|p| p.pos).or(best_ix.map(|x| x.1));
-                    let from = self.from_points.iter().rev().copied().find(|fp| px_dist(proj(*fp)) <= FROM_POINT_PX);
+                    let from = from_points.iter().rev().copied().find(|fp| px_dist(proj(*fp)) <= FROM_POINT_PX);
                     if let Some(src) = snap_src {
                         r.point = proj(src);
                         if src.distance(r.point) > 1e-6 {
@@ -604,7 +620,7 @@ impl InferenceEngine {
         if let Some((_, p)) = best_ix {
             return finish(InferenceResult::with_kind(p, InferenceKind::Intersection));
         }
-        if let Some((e, p)) = best_edge {
+        if let Some((e, p)) = best_edge.filter(|_| allowed(InferenceKind::OnEdge)) {
             let mut r = InferenceResult::with_kind(p, InferenceKind::OnEdge);
             r.ref_entity = e.r.clone();
             r.edge = Some((e.a, e.b));
@@ -644,7 +660,7 @@ impl InferenceEngine {
             let a_s = to_screen(anchor);
             let px = cam.pixel_size_at(anchor, vp);
             let mut best_dir: Option<BestDir> = None;
-            for (d, kind, seg) in dirs {
+            for (d, kind, seg) in dirs.into_iter().filter(|c| allowed(c.1)) {
                 // Skip lines that are (nearly) end-on in screen space: tiny cursor offsets
                 // would map to huge distances along them.
                 if let (Some(sa), Some(sb)) = (a_s, to_screen(anchor + d * px * 40.0))
@@ -669,8 +685,7 @@ impl InferenceEngine {
                 r.ref_edge = seg;
                 // From-point alignment along this direction.
                 let proj = |x: DVec3| anchor + d * (x - anchor).dot(d);
-                if let Some(fp) = self
-                    .from_points
+                if let Some(fp) = from_points
                     .iter()
                     .rev()
                     .copied()
@@ -689,7 +704,7 @@ impl InferenceEngine {
 
         // From point (axis lines through remembered points).
         let mut best_from: Option<(f64, DVec3, DVec3, InferenceKind)> = None;
-        for fp in self.from_points.iter().rev() {
+        for fp in from_points.iter().rev() {
             if q.anchor.is_some_and(|a| a.distance_squared(*fp) < 1e-6) {
                 continue;
             }
@@ -714,7 +729,7 @@ impl InferenceEngine {
             return finish(r);
         }
 
-        if let Some(f) = &face {
+        if let Some(f) = face.as_ref().filter(|_| allowed(InferenceKind::OnFace)) {
             let mut r = InferenceResult::with_kind(f.point, InferenceKind::OnFace);
             r.ref_entity = Some(InferenceRef { path: f.path.clone(), entity: EntityRef::Face(f.face) });
             return finish(r);
@@ -1053,6 +1068,39 @@ mod tests {
             let r = e.infer(&query(&m, &cam, DVec2::new(400.0, y), None));
             assert!(r.point.is_finite());
         }
+    }
+
+    #[test]
+    fn disabled_snaps_are_skipped() {
+        use settings::{SnapPrefs, publish};
+        let m = square_model();
+        let cam = camera_top();
+        let mut e = InferenceEngine::default();
+        let corner = screen(&cam, DVec3::new(2000.0, 0.0, 0.0)) + DVec2::new(3.0, 0.0);
+        let mut p = SnapPrefs::default();
+        p.set(InferenceKind::Endpoint, false);
+        publish(&p);
+        assert_eq!(e.infer(&query(&m, &cam, corner, None)).kind, InferenceKind::OnEdge);
+        p.set(InferenceKind::OnEdge, false);
+        p.set(InferenceKind::OnFace, false);
+        publish(&p);
+        assert_eq!(e.infer(&query(&m, &cam, corner, None)).kind, InferenceKind::Free);
+        // Directions: red off, green still on.
+        let anchor = DVec3::new(-1000.0, -1000.0, 0.0);
+        let on_red = screen(&cam, DVec3::new(500.0, -1000.0, 0.0)) + DVec2::new(0.0, 4.0);
+        p.set(InferenceKind::OnRedAxis, false);
+        publish(&p);
+        assert_eq!(e.infer(&query(&m, &cam, on_red, Some(anchor))).kind, InferenceKind::Free);
+        // Master switch off: nothing snaps, but an arrow lock still constrains.
+        publish(&SnapPrefs { enabled: false, off: Vec::new() });
+        let mid = screen(&cam, DVec3::new(1000.0, 0.0, 0.0));
+        assert_eq!(e.infer(&query(&m, &cam, mid, None)).kind, InferenceKind::Free);
+        e.handle_arrow(egui::Key::ArrowRight);
+        let r = e.infer(&query(&m, &cam, screen(&cam, DVec3::new(700.0, 900.0, 0.0)), Some(DVec3::ZERO)));
+        assert!(r.locked && r.point.y.abs() < 1e-6);
+        publish(&SnapPrefs::default());
+        e.handle_arrow(egui::Key::ArrowRight);
+        assert_eq!(e.infer(&query(&m, &cam, mid, None)).kind, InferenceKind::Midpoint);
     }
 
     #[test]
