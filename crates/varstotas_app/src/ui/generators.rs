@@ -72,6 +72,8 @@ pub(crate) fn kept_values(g: &Generator, values: &GenValues) -> GenValues {
 
 /// The folder of the bundled examples in the Components list.
 pub const EXAMPLES_FOLDER: &str = "Examples";
+/// The Components list folder of generators found only in the open document.
+pub const DOCUMENT_FOLDER: &str = "Document";
 
 /// `~/.varstotas/generators`, where generators lived before they joined the components.
 fn legacy_dir() -> Option<PathBuf> {
@@ -333,7 +335,7 @@ impl VarstotasApp {
                     description: g.description.clone(),
                     source: g.source.clone(),
                     file: None,
-                    folder: String::new(),
+                    folder: DOCUMENT_FOLDER.into(),
                     bundled: false,
                 });
             }
@@ -382,7 +384,8 @@ impl VarstotasApp {
                 place = true;
                 ui.close();
             }
-            if it.file.is_some() && ui.button("Delete…").clicked() {
+            let only_doc = it.file.is_none() && !it.bundled && it.folder == DOCUMENT_FOLDER;
+            if (it.file.is_some() || only_doc) && ui.button("Delete…").clicked() {
                 delete = true;
                 ui.close();
             }

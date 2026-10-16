@@ -264,3 +264,20 @@ fn bundled_generators_build() {
     let f = generator::formula_values(&m.generators["Railing"], &g.values).unwrap();
     assert_eq!(f[0].1, GenValue::Num(3.0), "3000 / 1500 → 3 posts");
 }
+
+#[test]
+fn removing_a_generator_keeps_plain_components() {
+    let mut m = Model::new();
+    generator::add(&mut m, SHELF).unwrap();
+    let none = GenValues::new();
+    let a = generator::place(&mut m, &[], "Shelf", &none, DMat4::IDENTITY).unwrap();
+    generator::place(&mut m, &[], "Shelf", &none, DMat4::from_translation(DVec3::X * 2000.0)).unwrap();
+    assert_eq!(m.generator_uses("Shelf"), 2);
+    assert_eq!(m.remove_generator("Shelf"), Some(2));
+    assert_eq!(m.remove_generator("Shelf"), None);
+    assert!(m.generators.is_empty());
+    // The components stay, without parameters.
+    assert!(m.defs[def_of(&m, a)].generated.is_none());
+    assert_eq!(m.root_mesh().instances.len(), 2);
+    assert_eq!(m.generator_uses("Shelf"), 0);
+}

@@ -43,8 +43,8 @@ pub struct LibraryState {
     pub shown_folders: Vec<(String, usize, bool)>,
     /// Generators of the same folder.
     pub gens: super::generators::GenLibrary,
-    /// A library file to delete once confirmed: (path, shown name).
-    pub delete_ask: Option<(PathBuf, String)>,
+    /// To delete once confirmed: (library file, or None for a generator of the document; name).
+    pub delete_ask: Option<(Option<PathBuf>, String)>,
 }
 
 /// `~/.varstotas/components`.
@@ -209,10 +209,12 @@ impl VarstotasApp {
     }
 
     /// A folder heading of the Components list: a fold arrow and the name, a link showing the
-    /// folder in the Finder (the bundled Examples: Hide instead). True when folded.
+    /// folder in the Finder (the bundled Examples and the Document folder: Hide instead). True
+    /// when folded.
     fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>) -> bool {
         let folded = self.prefs.library_collapsed.iter().any(|f| f == folder);
         let examples = folder == super::generators::EXAMPLES_FOLDER;
+        let document = folder == super::generators::DOCUMENT_FOLDER;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             let arrow = ui
@@ -230,6 +232,11 @@ impl VarstotasApp {
                 if ui.small_button("Hide").on_hover_text("Hide the bundled examples (… → Show Examples brings them back)").clicked() {
                     self.prefs.hide_examples = true;
                 }
+            } else if document {
+                ui.label(folder).on_hover_text("Generators found only in the open document (Edit → Save to Library makes a file)");
+                if ui.small_button("Hide").on_hover_text("Hide the document's generators (… → Show Document brings them back)").clicked() {
+                    self.prefs.hide_document = true;
+                }
             } else if let Some(dir) = root.map(|r| r.join(folder))
                 && ui.link(folder).on_hover_text(format!("{}\nClick to show in the Finder", dir.display())).clicked()
             {
@@ -245,11 +252,25 @@ impl VarstotasApp {
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("library_delete")).show(ctx, |ui| {
             ui.set_width(360.0);
-            ui.heading("Delete from the library?");
-            ui.add_space(4.0);
-            ui.label(format!("“{name}” will be deleted from the library folder:"));
-            ui.label(RichText::new(path.display().to_string()).small().weak());
-            ui.label(RichText::new("This cannot be undone. Copies already placed in documents stay.").weak());
+            match &path {
+                Some(path) => {
+                    ui.heading("Delete from the library?");
+                    ui.add_space(4.0);
+                    ui.label(format!("“{name}” will be deleted from the library folder:"));
+                    ui.label(RichText::new(path.display().to_string()).small().weak());
+                    ui.label(RichText::new("This cannot be undone. Copies already placed in documents stay.").weak());
+                }
+                None => {
+                    ui.heading("Delete from the document?");
+                    ui.add_space(4.0);
+                    ui.label(format!("The generator “{name}” will be removed from this document."));
+                    let uses = self.doc.model.generator_uses(&name);
+                    if uses > 0 {
+                        ui.label(RichText::new(format!("{uses} placed component(s) stay as plain components, without parameters.")).weak());
+                    }
+                    ui.label(RichText::new("Edit → Undo brings it back.").weak());
+                }
+            }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -266,8 +287,16 @@ impl VarstotasApp {
             choice = Some(false);
         }
         match choice {
+            Some(true) if path.is_none() => {
+                self.library.delete_ask = None;
+                if let Some(Some(n)) = self.doc.commit(&format!("Delete Generator {name}"), |m| m.remove_generator(&name)) {
+                    self.flash(if n > 0 { format!("Removed the generator {name}: {n} component(s) stay without parameters") } else { format!("Removed the generator {name}") });
+                }
+                self.library.gens.thumbs.clear();
+            }
             Some(true) => {
                 self.library.delete_ask = None;
+                let path = path.unwrap_or_default();
                 match std::fs::remove_file(&path) {
                     Ok(()) => {
                         self.flash(format!("Deleted from the library: {name}"));
@@ -310,6 +339,10 @@ impl VarstotasApp {
                 if ui.checkbox(&mut show, "Show Examples").on_hover_text("The bundled example generators").changed() {
                     self.prefs.hide_examples = !show;
                 }
+                let mut show = !self.prefs.hide_document;
+                if ui.checkbox(&mut show, "Show Document").on_hover_text("Generators found only in the open document").changed() {
+                    self.prefs.hide_document = !show;
+                }
             })
             .response
             .on_hover_text("Library folder, examples");
@@ -330,6 +363,7 @@ impl VarstotasApp {
         let found = |name: &str| filter.is_empty() || name.to_lowercase().contains(&filter);
         // Components and generators in one list: by folder, then name.
         let gens = self.generator_items();
+        let is_doc = |g: &super::generators::GenItem| g.file.is_none() && !g.bundled && g.folder == super::generators::DOCUMENT_FOLDER;
         let mut shown: Vec<(String, String, Tile)> = self
             .library
             .items
@@ -337,9 +371,15 @@ impl VarstotasApp {
             .enumerate()
             .filter(|(_, it)| found(&it.name))
             .map(|(i, it)| (it.folder.clone(), it.name.to_lowercase(), Tile::Comp(i)))
-            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
+            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples) && !(is_doc(g) && self.prefs.hide_document)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
             .collect();
-        shown.sort_by(|a, b| (a.0 == super::generators::EXAMPLES_FOLDER).cmp(&(b.0 == super::generators::EXAMPLES_FOLDER)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
+        // Library folders first, then Document, then Examples.
+        let rank = |f: &str| match f {
+            super::generators::DOCUMENT_FOLDER => 1,
+            super::generators::EXAMPLES_FOLDER => 2,
+            _ => 0,
+        };
+        shown.sort_by(|a, b| rank(&a.0).cmp(&rank(&b.0)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
         if self.library.items.is_empty() && gens.is_empty() {
             ui.label(RichText::new("No components yet: select something and use Save Selection.").weak());
         } else if shown.is_empty() {
@@ -375,15 +415,15 @@ impl VarstotasApp {
                                         ui.close();
                                     }
                                     if ui.button("Delete…").clicked() {
-                                        delete = Some((it.path.clone(), it.name.clone()));
+                                        delete = Some((Some(it.path.clone()), it.name.clone()));
                                         ui.close();
                                     }
                                 });
                             }
                             Tile::Gen(i) => {
                                 let (p, e, d) = self.generator_tile(ui, &gens[i]);
-                                if d && let Some(f) = &gens[i].file {
-                                    delete = Some((f.clone(), gens[i].name.clone()));
+                                if d {
+                                    delete = Some((gens[i].file.clone(), gens[i].name.clone()));
                                 }
                                 if p {
                                     place_gen = Some(gens[i].source.clone());

@@ -491,6 +491,28 @@ impl Model {
     pub fn add_generator(&mut self, g: Generator) {
         self.generators.insert(g.name.clone(), g);
     }
+
+    /// Remove generator `name` from the document. Its components stay as plain components
+    /// (their definitions forget the generator). The number of placed instances they had, or
+    /// None when there is no such generator.
+    pub fn remove_generator(&mut self, name: &str) -> Option<usize> {
+        self.generators.remove(name)?;
+        let ds: Vec<DefId> = self.defs.iter().filter(|(_, d)| d.generated.as_ref().is_some_and(|g| g.generator == name)).map(|(id, _)| id).collect();
+        let placed = ds.iter().map(|d| self.instance_count(*d)).sum();
+        for d in ds {
+            self.defs[d].generated = None;
+        }
+        Some(placed)
+    }
+
+    /// Placed instances of the components built by generator `name`.
+    pub fn generator_uses(&self, name: &str) -> usize {
+        self.defs
+            .iter()
+            .filter(|(_, d)| d.generated.as_ref().is_some_and(|g| g.generator == name))
+            .map(|(id, _)| self.instance_count(id))
+            .sum()
+    }
 }
 
 /// Source-model id → this-model id maps for [`Model::graft_content`].

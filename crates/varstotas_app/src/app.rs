@@ -80,6 +80,9 @@ pub struct Prefs {
     pub library_dir: Option<PathBuf>,
     /// Components list: the bundled example generators hidden.
     pub hide_examples: bool,
+    /// Components list: the document's own generators (the Document folder) hidden.
+    #[serde(default)]
+    pub hide_document: bool,
     /// Components list: collapsed folders.
     pub library_collapsed: Vec<String>,
     /// View → Snapping: master switch and the inferences turned off.
@@ -105,6 +108,7 @@ impl Default for Prefs {
             console_code: String::new(),
             library_dir: None,
             hide_examples: false,
+            hide_document: false,
             library_collapsed: Vec::new(),
             snapping: Default::default(),
             grid: Default::default(),
