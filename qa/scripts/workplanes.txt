@@ -1,0 +1,113 @@
+# Work planes (track П batch 3): Guide Plane tool by three points with a real mouse, drawing in
+# the air on the active plane (grid nodes on it), plane of a face by double-click, normal by an
+# arrow key, origin dragged by its gizmo handle, angles, activate / hide / delete, undo.
+box 0 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+tool guide_plane
+expect tool=GuidePlane
+# three points: the front face's plane (y = 0), red along +X, normal -Y
+rawp click 0 0 0
+wait 2
+rawp click 2000 0 0
+wait 2
+rawp click 0 0 1000
+wait 3
+expect undo=Some("Add Guide Plane")
+expect planes=["Plane 1* o(0,0,0) n(0.00,-1.00,0.00) a(90,-90,0)"]
+dump workplane
+screenshot shots/workplanes_wall.bmp
+# drawing in the air lands on the active plane: grid nodes on the wall, its green goes up
+action grid on step=100
+view front
+zoom_extents
+wait 5
+zoompx 0.5
+wait 5
+tool line
+rawp move 2503 0 497
+wait 3
+expect snap=Some((GridPoint, 2500, 0, 500))
+rawp click 2503 0 497
+wait 3
+rawp move 2503 0 1203
+wait 3
+expect snap=Some((OnGreenAxis, 2500, 0, 1200))
+rawp click 2503 0 1203
+wait 3
+expect undo=Some("Line")
+raw key Escape
+action grid off
+view iso
+zoom_extents
+wait 5
+# plane of a face: double-click the right face (x = 2000)
+tool guide_plane
+rawp dblclick 2000 500 500
+wait 3
+expect undo=Some("Add Guide Plane")
+expect "Plane 2* o(2000,500,500) n(1.00,0.00,0.00)
+# normal by an arrow key after the first click: ↑ = blue of the active plane (+X now)
+rawp click 1000 1000 1000
+wait 2
+raw key ArrowUp
+wait 3
+expect "Plane 3* o(1000,1000,1000) n(1.00,0.00,0.00)
+undo
+wait 2
+expect "Plane 2* o(2000
+# drag the active plane's origin handle onto the box corner
+rawp drag 2000 500 500 2000 1000 1000 12
+wait 3
+expect undo=Some("Edit Guide Plane")
+expect "Plane 2* o(2000,1000,1000) n(1.00,0.00,0.00)
+dump gizmo
+# drag the normal tip (handle 2 of gizmo=) onto the box corner: normal → -Y
+raw down 902 284
+wait 2
+rawp move 1500 300 1000 6
+rawp move 2000 0 1000
+wait 3
+rawp up 2000 0 1000
+wait 3
+expect undo=Some("Edit Guide Plane")
+expect "Plane 2* o(2000,1000,1000) n(0.00,-1.00,0.00)
+dump gizmo2
+# spin by the red handle (now handle 3) toward the far corner: red turns to -X
+raw down 902 284
+wait 2
+rawp move 1000 0 1000 6
+rawp move 0 0 1000
+wait 3
+rawp up 0 0 1000
+wait 3
+expect undo=Some("Edit Guide Plane")
+expect "Plane 2* o(2000,1000,1000) n(0.00,-1.00,0.00) a(90,-90,180)
+screenshot shots/workplanes_gizmo.bmp
+undo
+undo
+wait 2
+# angles, activate, hide, delete
+action workplane angles 0 0 0
+wait 2
+expect "Plane 2* o(2000,1000,1000) n(0.00,0.00,1.00) a(0,0,0)
+action workplane activate 1
+wait 2
+expect "Plane 1* o(0,0,0)
+action workplane hide 2
+wait 2
+expect "Plane 2 hidden o(2000
+action work_planes
+wait 5
+screenshot shots/workplanes_window.bmp
+action workplane remove 1
+wait 2
+expect planes=["Plane 2 hidden o(2000,1000,1000) n(0.00,0.00,1.00) a(0,0,0)"]
+action workplane activate none
+wait 2
+expect undo=Some("Activate Work Plane")
+undo
+undo
+wait 2
+expect "Plane 1* o(0,0,0)

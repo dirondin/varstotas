@@ -1019,6 +1019,12 @@ impl VarstotasApp {
             crate::inference::settings::publish(&self.prefs.snapping);
             return;
         }
+        // `workplane add ox oy oz nx ny nz` | `activate N|none` | `angles tilt az spin` |
+        // `origin x y z` | `hide N` | `show N` | `remove N` (N is 1-based).
+        if let Some(args) = name.strip_prefix("workplane ") {
+            self.workplane_cmd(args);
+            return;
+        }
         // `grid on|off [step=mm] [major=N]`.
         if let Some(args) = name.strip_prefix("grid ") {
             for a in args.split_whitespace() {
@@ -1206,6 +1212,7 @@ impl VarstotasApp {
             "export_dialog" => Action::ExportImage,
             "unfold" => Action::Unfold,
             "sheets" => Action::Sheets,
+            "work_planes" => Action::WorkPlanes,
             "new" => Action::New,
             "preferences" => Action::Preferences,
             "about" => Action::About,
@@ -1416,6 +1423,31 @@ impl VarstotasApp {
         );
         let sd = m.section_display;
         let cut = self.section_cut.borrow().as_ref().filter(|_| m.active_section().is_some()).map_or((0, 0), |c| (c.1.len(), c.2.len()));
+        let planes: Vec<String> = m
+            .work_planes
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let (n, (t, a, sp)) = (p.normal(), p.angles());
+                format!(
+                    "{}{}{} o({:.0},{:.0},{:.0}) n({:.2},{:.2},{:.2}) a({:.0},{:.0},{:.0})",
+                    p.name,
+                    if m.active_plane == Some(i) { "*" } else { "" },
+                    if p.hidden { " hidden" } else { "" },
+                    p.origin.x,
+                    p.origin.y,
+                    p.origin.z,
+                    n.x,
+                    n.y,
+                    n.z,
+                    t,
+                    a,
+                    sp
+                )
+            })
+            .collect();
+        let gizmo = crate::tools::workplane::gizmo_screen(&self.doc, &self.camera, self.viewport.size());
+        let extra = format!("{extra} planes={planes:?} gizmo={gizmo:?}");
         let extra = format!(
             "{extra} sections={:?} secsel={:?} secdisp={}{}{} cut={}/{}",
             m.sections
@@ -1506,6 +1538,55 @@ impl VarstotasApp {
             t0.elapsed()
         );
         self.actions.push(crate::app::Action::ZoomExtents);
+    }
+}
+
+impl VarstotasApp {
+    /// Harness `workplane …` sub-commands (each one undo step).
+    fn workplane_cmd(&mut self, args: &str) {
+        let mut it = args.split_whitespace();
+        let cmd = it.next().unwrap_or("");
+        let rest: Vec<&str> = it.collect();
+        let nums: Vec<f64> = rest.iter().filter_map(|t| t.parse().ok()).collect();
+        let idx = rest.first().and_then(|t| t.parse::<usize>().ok()).and_then(|n| n.checked_sub(1));
+        match (cmd, &nums[..]) {
+            ("add", [ox, oy, oz, nx, ny, nz, ..]) => {
+                let o = DVec3::new(*ox, *oy, *oz);
+                match varstotas_kernel::WorkPlane::from_normal("", o, DVec3::new(*nx, *ny, *nz), None) {
+                    Some(p) => {
+                        self.doc.commit("Add Guide Plane", |m| m.add_work_plane(p));
+                    }
+                    None => eprintln!("[debug] workplane add: degenerate normal"),
+                }
+            }
+            ("activate", _) => {
+                let a = idx.filter(|&i| i < self.doc.model.work_planes.len());
+                self.doc.commit("Activate Work Plane", |m| m.active_plane = a);
+            }
+            ("angles", [t, a, sp, ..]) => {
+                if let Some(i) = self.doc.model.active_plane {
+                    self.doc.commit("Edit Work Planes", |m| m.work_planes[i].set_angles(*t, *a, *sp));
+                }
+            }
+            ("origin", [x, y, z, ..]) => {
+                if let Some(i) = self.doc.model.active_plane {
+                    self.doc.commit("Edit Work Planes", |m| m.work_planes[i].origin = DVec3::new(*x, *y, *z));
+                }
+            }
+            ("hide" | "show", _) => {
+                if let Some(i) = idx.filter(|&i| i < self.doc.model.work_planes.len()) {
+                    let h = cmd == "hide";
+                    self.doc.commit("Edit Work Planes", |m| m.work_planes[i].hidden = h);
+                }
+            }
+            ("remove", _) => {
+                if let Some(i) = idx {
+                    self.doc.commit("Delete Work Plane", |m| m.remove_work_plane(i));
+                }
+            }
+            _ => eprintln!("[debug] workplane: bad command {args:?}"),
+        }
+        crate::axes::sync(&self.doc.model);
     }
 }
 

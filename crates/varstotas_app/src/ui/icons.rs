@@ -66,6 +66,7 @@ pub enum Icon {
     Info,
     Group,
     Magnet,
+    GuidePlane,
 }
 
 /// Palette used by icons.
@@ -531,6 +532,15 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             let tip = Stroke::new(1.0 * pen.s, pen.ink);
             pen.poly_c(&[(4.0, 3.5), (8.4, 3.5), (8.4, 8.0), (4.0, 8.0)], FILL, tip);
             pen.poly_c(&[(15.6, 3.5), (20.0, 3.5), (20.0, 8.0), (15.6, 8.0)], FILL, tip);
+        }
+        Icon::GuidePlane => {
+            // A tilted orange plane with a blue normal arrow and a red in-plane axis.
+            let orange = Color32::from_rgb(0xE8, 0x7A, 0x1E);
+            pen.poly_c(&[(2.5, 15.0), (14.0, 9.5), (21.5, 14.5), (10.0, 20.5)], Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70), Stroke::new(1.4 * pen.s, orange));
+            let blue = Color32::from_rgb(0x2A, 0x5C, 0xD6);
+            pen.line_c(&[(12.0, 15.0), (12.0, 5.0)], Stroke::new(1.6 * pen.s, blue));
+            pen.head((12.0, 3.0), (0.0, -1.0), 3.5, blue);
+            pen.line_c(&[(12.0, 15.0), (17.5, 12.3)], Stroke::new(1.6 * pen.s, RED));
         }
         Icon::Section => {
             // A cube cut by an orange plane with an arrow.

@@ -65,8 +65,8 @@ wait 3
 screenshot shots/snapping_partial.bmp
 # the magnet menu with a real click (toolbar above the viewport); a real click on a
 # checkbox there turns Red Axis back on
-raw move 1308 -66
-raw click 1308 -66
+raw move 1346 -66
+raw click 1346 -66
 wait 30
 screenshot shots/snapping_menu.bmp
 raw move 1216 346

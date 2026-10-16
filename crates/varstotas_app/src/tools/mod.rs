@@ -19,6 +19,7 @@ mod edit;
 mod nav_tools;
 pub mod plugin_pick;
 pub(crate) mod section;
+pub(crate) mod workplane;
 mod chamfer;
 pub(crate) mod solid;
 mod text;
@@ -68,6 +69,7 @@ pub enum ToolId {
     Dimension,
     Text,
     Section,
+    GuidePlane,
     Orbit,
     Pan,
     Zoom,
@@ -77,7 +79,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 34] = [
+    pub const ALL: [ToolId; 35] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -106,6 +108,7 @@ impl ToolId {
         ToolId::Dimension,
         ToolId::Text,
         ToolId::Section,
+        ToolId::GuidePlane,
         ToolId::Orbit,
         ToolId::Pan,
         ToolId::Zoom,
@@ -144,6 +147,7 @@ impl ToolId {
             ToolId::Dimension => "Dimensions",
             ToolId::Text => "Text",
             ToolId::Section => "Section Plane",
+            ToolId::GuidePlane => "Guide Plane",
             ToolId::Orbit => "Orbit",
             ToolId::Pan => "Pan",
             ToolId::Zoom => "Zoom",
@@ -184,6 +188,7 @@ impl ToolId {
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
             | ToolId::Section
+            | ToolId::GuidePlane
             | ToolId::Text
             | ToolId::PositionCamera
             | ToolId::LookAround
@@ -228,6 +233,7 @@ impl ToolId {
             ToolId::Dimension => Icon::Dimension,
             ToolId::Text => Icon::Text,
             ToolId::Section => Icon::Section,
+            ToolId::GuidePlane => Icon::GuidePlane,
             ToolId::Orbit => Icon::Orbit,
             ToolId::Pan => Icon::Pan,
             ToolId::Zoom => Icon::Zoom,
@@ -268,6 +274,7 @@ impl ToolId {
             ToolId::Dimension => "Place linear dimensions between points or on edges.",
             ToolId::Text => "Add a text with a leader pointing at the model.",
             ToolId::Section => "Cut the model with a section plane to see inside.",
+            ToolId::GuidePlane => "Add a work plane to draw on in the air; the axes and the grid follow it.",
             ToolId::Orbit => "Rotate the camera around the model.",
             ToolId::Pan => "Move the camera sideways.",
             ToolId::Zoom => "Zoom the camera in or out.",
@@ -405,6 +412,14 @@ impl ToolId {
                  • Right-click a plane: Active Cut, Reverse, Align View.\n\
                  • View → Section Planes / Section Cuts / Section Fill."
             }
+            ToolId::GuidePlane => {
+                "Click three points: origin, a point along red, a point on the plane.\n\
+                 • Double-click a face (or Enter after the first click): the plane of that face.\n\
+                 • After the first click, arrows set the normal: → red, ← green, ↑ blue, ↓ last edge.\n\
+                 • The new plane is active: points in the air land on it, axes and grid follow it.\n\
+                 • Drag the active plane's handles: origin, normal tip (tilt), red handle (spin).\n\
+                 • Window → Work Planes… to activate, hide, rename, delete or type angles."
+            }
             ToolId::Orbit => {
                 "Drag to orbit around the point under the cursor.\n\
                  Middle mouse button orbits in any tool; Shift+middle pans.\n\
@@ -458,6 +473,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Axes => Box::new(construct::AxesTool::default()),
         ToolId::Dimension => Box::new(dims::DimensionTool::default()),
         ToolId::Section => Box::new(section::SectionTool::default()),
+        ToolId::GuidePlane => Box::new(workplane::GuidePlaneTool::default()),
         ToolId::Text => Box::new(text::TextTool::default()),
         ToolId::Eraser => Box::new(edit::EraserTool::default()),
         ToolId::Paint => Box::new(edit::PaintTool::default()),

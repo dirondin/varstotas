@@ -59,10 +59,10 @@ impl Axes {
         self.x * v.x + self.y * v.y + self.z * v.z
     }
 
-    /// The model's drawing axes.
+    /// The model's drawing axes: the active work plane's frame, else the drawing axes.
     pub fn of_model(m: &varstotas_kernel::Model) -> Axes {
-        let [x, y, z] = m.axes_dirs();
-        Axes { origin: m.axes_origin(), x, y, z }
+        let f = m.drawing_frame();
+        Axes { origin: f.translation, x: f.matrix3.x_axis, y: f.matrix3.y_axis, z: f.matrix3.z_axis }
     }
 
     pub fn is_valid(&self) -> bool {

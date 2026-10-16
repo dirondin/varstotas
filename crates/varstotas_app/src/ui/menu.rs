@@ -310,7 +310,7 @@ impl VarstotasApp {
             });
 
             ui.menu_button("Tools", |ui| {
-                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section] {
+                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section, ToolId::GuidePlane] {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
@@ -352,6 +352,10 @@ impl VarstotasApp {
                 }
                 if ui.add(egui::Button::new("Sheets…").selected(self.sheets.open)).clicked() {
                     self.actions.push(Action::Sheets);
+                    ui.close();
+                }
+                if ui.add(egui::Button::new("Work Planes…").selected(self.planes_window.open)).clicked() {
+                    self.actions.push(Action::WorkPlanes);
                     ui.close();
                 }
                 let b = egui::Button::new("Script Console").selected(self.console.open);

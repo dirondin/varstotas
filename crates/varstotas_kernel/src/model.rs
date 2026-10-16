@@ -161,6 +161,12 @@ pub struct Model {
     /// Layout sheets (paper with viewports, texts, title block).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sheets: Vec<crate::layout::LayoutSheet>,
+    /// Work planes (world space), see [`crate::workplane`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_planes: Vec<crate::WorkPlane>,
+    /// Index of the active work plane (drawing happens on it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_plane: Option<usize>,
 }
 
 /// Result of a model-wide ray pick.
@@ -200,6 +206,8 @@ impl Model {
             section_display: Default::default(),
             shadows: Default::default(),
             sheets: Vec::new(),
+            work_planes: Vec::new(),
+            active_plane: None,
         }
     }
     pub fn root_mesh(&self) -> &Mesh {

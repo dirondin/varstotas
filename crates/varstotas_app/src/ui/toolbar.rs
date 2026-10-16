@@ -114,7 +114,7 @@ impl VarstotasApp {
                 self.tool_button(ui, id);
             }
             self.action_button(ui, Icon::Text3d, false, "3D Text", None, "Add text as 3D geometry (a group).", Action::Text3d);
-            for id in [ToolId::Axes, ToolId::Section] {
+            for id in [ToolId::Axes, ToolId::Section, ToolId::GuidePlane] {
                 self.tool_button(ui, id);
             }
             group_sep(ui);

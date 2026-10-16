@@ -45,6 +45,7 @@ mod topology;
 pub mod triangulate;
 pub mod unfold;
 pub mod units;
+pub mod workplane;
 
 pub use curves::{CurveInfo, CurveKind};
 pub use dims::{DimAnchor, DimGeom, DimId, Dimension};
@@ -57,6 +58,7 @@ pub use model::{
 };
 pub use params::Parametric;
 pub use section::{SectionDisplay, SectionPlane};
+pub use workplane::WorkPlane;
 pub use shadows::ShadowSettings;
 pub use text3d::Text3dOptions;
 pub use texture::{TexPlacement, TextureImage};

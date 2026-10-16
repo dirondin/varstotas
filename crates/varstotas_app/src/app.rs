@@ -130,6 +130,7 @@ pub enum Action {
     Unfold,
     /// Window → Sheets…: layout sheets.
     Sheets,
+    WorkPlanes,
     InsertDemo,
     Quit,
     Undo,
@@ -365,6 +366,8 @@ pub struct VarstotasApp {
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
     /// Window → Sheets… window.
     pub(crate) sheets: crate::ui::sheets::SheetsState,
+    /// Window → Work Planes… window.
+    pub(crate) planes_window: crate::ui::workplanes::WorkPlanesWindow,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
     pub(crate) text_prompt: Option<TextPrompt>,
@@ -482,6 +485,7 @@ impl VarstotasApp {
             text3d_dialog: None,
             unfold: Default::default(),
             sheets: Default::default(),
+            planes_window: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
             autosave: AutosaveState {
@@ -958,7 +962,7 @@ impl VarstotasApp {
                 let r = ang.to_radians();
                 let x = a.x * r.cos() + a.y * r.sin();
                 let y = a.y * r.cos() - a.x * r.sin();
-                if self.doc.try_commit("Move Axes", |m| m.set_axes(origin, x, y)).is_some() {
+                if self.doc.try_commit("Move Axes", |m| m.set_drawing_frame(origin, x, y)).is_some() {
                     crate::axes::sync(&self.doc.model);
                 }
                 true
@@ -1019,6 +1023,7 @@ impl VarstotasApp {
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
             Action::Sheets => self.sheets.open = true,
+            Action::WorkPlanes => self.planes_window.open = true,
             Action::InsertDemo => self.insert_demo(),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
@@ -2217,6 +2222,7 @@ impl VarstotasApp {
         self.context_box_lines(&mut o3);
         self.selection_boxes(&mut o3);
         tools::section::draw_sections(&view, &mut o3);
+        tools::workplane::draw_work_planes(&view, &mut o3);
         self.section_cut_overlay(&mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
         o2.extend(self.tool.cursor_glyph());
@@ -2339,6 +2345,7 @@ impl eframe::App for VarstotasApp {
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
         self.sheets_window(&ctx);
+        self.work_planes_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

@@ -182,8 +182,9 @@ impl Viewport {
                     self.highlight_count += 1;
                     self.last_highlight_ms = t0.elapsed().as_secs_f64() * 1e3;
                 }
-                // Custom drawing axes (Axes tool) replace the main axes.
-                let frame = doc.model.axes.map(|a| varstotas_render::AxesFrame::from_transform(&varstotas_kernel::glam::DMat4::from(a)));
+                // Custom drawing axes (Axes tool) or the active work plane replace the main axes.
+                let custom = doc.model.axes.is_some() || doc.model.active_work_plane().is_some();
+                let frame = custom.then(|| doc.model.drawing_frame()).map(|a| varstotas_render::AxesFrame::from_transform(&varstotas_kernel::glam::DMat4::from(a)));
                 renderer.set_axes_frame(frame);
                 renderer.set_section(doc.model.active_section().map(|s| s.plane()));
                 let size_px = [

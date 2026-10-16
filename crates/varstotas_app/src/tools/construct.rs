@@ -519,7 +519,7 @@ impl AxesTool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, a: crate::axes::Axes) {
-        if ctx.doc.try_commit("Place Axes", |m| m.set_axes(a.origin, a.x, a.y)).is_some() {
+        if ctx.doc.try_commit("Place Axes", |m| m.set_drawing_frame(a.origin, a.x, a.y)).is_some() {
             crate::axes::set_current(a);
             ctx.requests.push(super::ToolRequest::SwitchTool(ToolId::Select));
         }

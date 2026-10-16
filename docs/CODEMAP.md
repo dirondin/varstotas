@@ -29,6 +29,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `unfold.rs` | Unfold: `UnfoldInput::from_model` (selection → world faces, soft edges), `unfold` (pieces without overlaps, mountain/valley folds, tabs, edge numbers, sheet packing), `to_dxf` |
 | `report.rs` | parts list (cut-list sizes, counts, area, volume) and material areas → CSV |
 | `tessellate.rs` | model → world triangles and edges (plus planar texture coordinates, smooth vertex normals across smooth edges) |
+| `workplane.rs` | `WorkPlane` (guide planes: origin, red / green, angles tilt-azimuth-spin), `Model::work_planes` / `active_plane`, `drawing_frame` (active plane, else axes), `set_drawing_frame` |
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |
 | `text3d.rs` | 3D Text: outlines → faces (even-odd nesting), extrusion, group (`Model::add_text3d_in`) |
@@ -85,7 +86,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `nav.rs` | mouse and trackpad camera navigation |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
 | `inference/settings.rs` | which snaps are on: `SnapPrefs` (in `Prefs::snapping`), `GROUPS` for the menus, `publish` once per frame, `allowed(kind)` checked by the engine and the tools; `GridPrefs` (in `Prefs::grid`) → `GridStyle` on the axes plane, `publish_grid` / `grid()` for grid snapping (`grid_snap`, `grid_crossing` in `inference/mod.rs`) |
-| `axes.rs` | custom drawing axes, published once per frame |
+| `axes.rs` | drawing frame (active work plane, else custom axes), published once per frame |
 | `clipboard.rs` | copy, cut, paste |
 | `autosave.rs` | autosave and recovery |
 | `templates.rs` | File → New templates |
@@ -108,6 +109,8 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`).
 | `text3d.rs` | glyph outlines of egui's bundled fonts (`skrifa`), `Text3dParams` |
 | `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `tools/section.rs` | Section Plane tool; drawing and picking of section planes, cut lines and fill |
+| `tools/workplane.rs` | Guide Plane tool (3 points, face, normal by arrows; gizmo drags of the active plane), `draw_work_planes` |
+| `ui/workplanes.rs` | Window → Work Planes… (list, active, visibility, names, origin and angles; edits → one undo step) |
 | `ui/menu.rs`, `ui/toolbar.rs`, `ui/icons.rs`, `ui/statusbar.rs` | menus, toolbar, icons, status bar with the VCB |
 | `ui/tray.rs` | Entity Info (incl. face texture position), Materials (Texture…, tile size), Tags, Outliner, Scenes (play, settings), Soften Edges, Instructor |
 | `ui/dialogs.rs` | modal dialogs (export, resize, recovery, text) |
