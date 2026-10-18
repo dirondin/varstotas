@@ -173,6 +173,14 @@ pub enum Action {
     ToggleTray,
     SelectInstance(ContextPath, InstanceId),
     ToggleInstanceHidden(ContextPath, InstanceId),
+    /// Outliner: select the instance and frame it in the view.
+    FocusInstance(ContextPath, InstanceId),
+    /// Outliner: open the group / component for editing.
+    EditInstance(ContextPath, InstanceId),
+    /// Outliner: delete the instance (one undo step).
+    DeleteInstance(ContextPath, InstanceId),
+    /// Outliner: move the instance into another context, keeping it in place (one undo step).
+    MoveInstance(ContextPath, InstanceId, ContextPath),
     AddScene,
     UpdateScene(usize),
     DeleteScene(usize),
@@ -1205,6 +1213,48 @@ impl VarstotasApp {
             Action::SelectInstance(path, id) => {
                 self.doc.set_active_path(path);
                 self.doc.set_selection(vec![EntityRef::Instance(id)]);
+            }
+            Action::FocusInstance(path, id) => {
+                self.doc.set_active_path(path.clone());
+                self.doc.set_selection(vec![EntityRef::Instance(id)]);
+                if let Some(b) = self.doc.model.instance_world_bounds(&path, id) {
+                    let mut to = self.camera.clone();
+                    to.zoom_extents(b.min, b.max, self.aspect());
+                    self.animate_to(to);
+                }
+            }
+            Action::EditInstance(path, id) => {
+                let mut p = path;
+                p.push(id);
+                if self.doc.model.def_at(&p).is_some() {
+                    self.doc.set_active_path(p);
+                }
+            }
+            Action::DeleteInstance(path, id) => {
+                let mut inner = path.clone();
+                inner.push(id);
+                if self.doc.active_path.starts_with(&inner) {
+                    self.doc.set_active_path(path.clone());
+                }
+                self.doc.selection.retain(|e| *e != EntityRef::Instance(id));
+                self.doc.commit("Delete", |m| m.remove_instance(&path, id));
+                self.doc.selection_version += 1;
+            }
+            Action::MoveInstance(from, id, to) => {
+                if !self.doc.model.can_move_instance(&from, id, &to) {
+                    self.flash("Can't move a group or component into itself");
+                    return;
+                }
+                let mut inner = from.clone();
+                inner.push(id);
+                if self.doc.active_path.starts_with(&inner) {
+                    self.doc.set_active_path(Vec::new());
+                }
+                let label = if to.is_empty() { "Move Out of Group" } else { "Move into Group" };
+                if let Some(Some(nid)) = self.doc.commit(label, |m| m.move_instance(&from, id, &to)) {
+                    self.doc.set_active_path(to);
+                    self.doc.set_selection(vec![EntityRef::Instance(nid)]);
+                }
             }
             Action::ToggleInstanceHidden(path, id) => {
                 self.doc.commit("Hide", |m| {

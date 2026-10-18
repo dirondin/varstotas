@@ -1605,6 +1605,12 @@ impl VarstotasApp {
             self.mat_library.delete_ask = self.mat_library.items.iter().filter_map(|i| i.path.clone()).find(|p| p.file_stem().is_some_and(|s| s == n.trim()));
             return;
         }
+        // `tray_only <Card>,<Card>…`: hide the other Default Tray cards.
+        if let Some(list) = name.strip_prefix("tray_only ") {
+            let keep: Vec<&str> = list.split(',').map(str::trim).collect();
+            self.prefs.tray_hidden = crate::ui::tray::TRAY_CARDS.iter().filter(|c| !keep.iter().any(|k| k.eq_ignore_ascii_case(c))).map(|c| c.to_string()).collect();
+            return;
+        }
         if name == "mat_refresh" {
             self.refresh_materials();
             return;
@@ -1896,7 +1902,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} matlib={:?} mat_delete={:?} current_mat={:?} {:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.anim_window.last);
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} outliner={} matlib={:?} mat_delete={:?} current_mat={:?} {:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.outliner_dump(), self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.anim_window.last);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -2159,6 +2165,41 @@ impl VarstotasApp {
     }
 
     /// Materials with physical properties: (name, metallic, roughness, transmission, maps).
+    /// The instance tree: `name[child child]` ("*" = selected, "~" = hidden), the open context's depth.
+    fn outliner_dump(&self) -> String {
+        fn level(m: &varstotas_kernel::Model, mesh: &varstotas_kernel::Mesh, sel: &[varstotas_kernel::EntityRef], path: &mut Vec<varstotas_kernel::InstanceId>, active: &[varstotas_kernel::InstanceId], out: &mut String) {
+            let mut first = true;
+            for (id, inst) in mesh.instances.iter() {
+                if !first {
+                    out.push(' ');
+                }
+                first = false;
+                let def = m.defs.get(inst.def);
+                let name = if inst.name.is_empty() { def.map(|d| d.name.clone()).unwrap_or_default() } else { inst.name.clone() };
+                if path.as_slice() == active && sel.contains(&varstotas_kernel::EntityRef::Instance(id)) {
+                    out.push('*');
+                }
+                if inst.hidden {
+                    out.push('~');
+                }
+                out.push_str(&name.replace(' ', "_"));
+                if let Some(d) = def.filter(|d| !d.mesh.instances.is_empty()) {
+                    out.push('[');
+                    path.push(id);
+                    level(m, &d.mesh, sel, path, active, out);
+                    path.pop();
+                    out.push(']');
+                }
+            }
+        }
+        let mut out = String::new();
+        let m = &self.doc.model;
+        if let Some(mesh) = m.mesh_at(&[]) {
+            level(m, mesh, &self.doc.selection, &mut Vec::new(), &self.doc.active_path, &mut out);
+        }
+        format!("{{{out}}} ctx={}", self.doc.active_path.len())
+    }
+
     /// Library materials as "folder/name" (the examples not built).
     fn matlib_dump(&self) -> Vec<String> {
         self.mat_library.items.iter().map(|i| if i.folder.is_empty() { i.mat.name.clone() } else { format!("{}/{}", i.folder, i.mat.name) }).collect()

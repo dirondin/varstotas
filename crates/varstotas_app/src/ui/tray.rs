@@ -1321,16 +1321,19 @@ impl VarstotasApp {
         let r = guarded(|| {
             let model = &self.doc.model;
             let root = model.root_mesh();
-            ui.horizontal(|ui| {
+            let hdr = ui.horizontal(|ui| {
                 let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                 paint_icon(ui.painter(), rect, Icon::ViewIso, false);
                 ui.label(RichText::new(self.doc.display_name()).strong());
             });
+            // Drop on the document: move to the top level.
+            drop_target(ui, model, &hdr.response, &Vec::new(), &mut actions);
             if root.instances.is_empty() {
                 ui.label(RichText::new("No groups or components yet.").color(theme::TEXT_DIM));
             }
             outliner_level(ui, model, root, &Vec::new(), &self.doc.active_path, &self.doc.selection, &mut actions);
         });
+        outliner_drag_label(ui.ctx());
         if let Err(e) = r {
             ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::TEXT_DIM));
         }
@@ -1488,9 +1491,46 @@ fn outliner_level(
             if inst.hidden {
                 text = text.color(theme::TEXT_DIM).italics();
             }
-            if ui.selectable_label(selected, text).clicked() {
+            let resp = ui.selectable_label(selected, text).interact(Sense::drag());
+            if resp.double_clicked() {
+                actions.push(Action::FocusInstance(path.clone(), id));
+            } else if resp.clicked() {
                 actions.push(Action::SelectInstance(path.clone(), id));
             }
+            if resp.drag_started() {
+                egui::DragAndDrop::set_payload(ui.ctx(), OutlinerDrag { path: path.clone(), id, label: label.clone() });
+            }
+            drop_target(ui, model, &resp, &child_path, actions);
+            resp.context_menu(|ui| {
+                if ui.button("Zoom To").on_hover_text("Select it and frame it in the view (double-click)").clicked() {
+                    actions.push(Action::FocusInstance(path.clone(), id));
+                    ui.close();
+                }
+                if ui.button(if is_group { "Edit Group" } else { "Edit Component" }).clicked() {
+                    actions.push(Action::EditInstance(path.clone(), id));
+                    ui.close();
+                }
+                if ui.button(if inst.hidden { "Unhide" } else { "Hide" }).clicked() {
+                    actions.push(Action::ToggleInstanceHidden(path.clone(), id));
+                    ui.close();
+                }
+                if ui.button("Explode").clicked() {
+                    actions.push(Action::SelectInstance(path.clone(), id));
+                    actions.push(Action::Explode);
+                    ui.close();
+                }
+                if let Some((_, parent)) = path.split_last()
+                    && ui.button("Move Out of Group").on_hover_text("Into the group / component around this one (or drag the row)").clicked()
+                {
+                    actions.push(Action::MoveInstance(path.clone(), id, parent.to_vec()));
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Delete").clicked() {
+                    actions.push(Action::DeleteInstance(path.clone(), id));
+                    ui.close();
+                }
+            });
         };
         if has_children {
             let cid = ui.make_persistent_id(("outliner", &child_path));
@@ -1508,6 +1548,38 @@ fn outliner_level(
             });
         }
     }
+}
+
+/// An outliner row being dragged (to another group, or onto the document for the top level).
+#[derive(Clone)]
+struct OutlinerDrag {
+    path: ContextPath,
+    id: InstanceId,
+    label: String,
+}
+
+/// `resp` (a row, or the document heading) takes a dragged row into the context `to`: an
+/// outline while one hovers that can go there, a Move on release.
+fn drop_target(ui: &Ui, model: &Model, resp: &egui::Response, to: &ContextPath, actions: &mut Vec<Action>) {
+    if let Some(d) = resp.dnd_hover_payload::<OutlinerDrag>()
+        && model.can_move_instance(&d.path, d.id, to)
+    {
+        ui.painter().rect_stroke(resp.rect.expand(1.0), 4.0, Stroke::new(1.5, theme::ACCENT), egui::StrokeKind::Outside);
+    }
+    if let Some(d) = resp.dnd_release_payload::<OutlinerDrag>()
+        && model.can_move_instance(&d.path, d.id, to)
+    {
+        actions.push(Action::MoveInstance(d.path.clone(), d.id, to.clone()));
+    }
+}
+
+/// While a row is dragged: its name at the pointer.
+fn outliner_drag_label(ctx: &egui::Context) {
+    let (Some(d), Some(p)) = (egui::DragAndDrop::payload::<OutlinerDrag>(ctx), ctx.pointer_latest_pos()) else { return };
+    ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+    egui::Area::new(egui::Id::new("outliner_drag")).order(egui::Order::Tooltip).fixed_pos(p + vec2(12.0, 6.0)).interactable(false).show(ctx, |ui| {
+        egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(&d.label));
+    });
 }
 
 /// A text field was left with its value accepted (Enter, Tab or a click elsewhere); Escape

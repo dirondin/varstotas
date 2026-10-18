@@ -283,6 +283,51 @@ impl Model {
         Some(&mut self.defs[d].mesh)
     }
 
+    /// Definition `d` contains `target` (itself or nested at any depth).
+    pub fn def_contains(&self, d: DefId, target: DefId) -> bool {
+        fn walk(m: &Model, d: DefId, target: DefId, depth: usize) -> bool {
+            d == target || (depth < 64 && m.defs.get(d).is_some_and(|x| x.mesh.instances.values().any(|i| walk(m, i.def, target, depth + 1))))
+        }
+        walk(self, d, target, 0)
+    }
+
+    /// Whether instance `id` of the context `from` can move into the context `to`: both exist,
+    /// `to` is another context and not inside the instance (no definition would contain itself).
+    pub fn can_move_instance(&self, from: &[InstanceId], id: InstanceId, to: &[InstanceId]) -> bool {
+        let (Some(inst), Some(dest)) = (self.mesh_at(from).and_then(|m| m.instances.get(id)), self.def_at(to)) else { return false };
+        from != to && !self.def_contains(inst.def, dest)
+    }
+
+    /// Move instance `id` from the context `from` into the context `to` (paths from the root),
+    /// keeping where it is in the world. Returns its id there.
+    pub fn move_instance(&mut self, from: &[InstanceId], id: InstanceId, to: &[InstanceId]) -> Option<InstanceId> {
+        if !self.can_move_instance(from, id, to) {
+            return None;
+        }
+        let world = self.transform_at(from);
+        let dest = self.transform_at(to);
+        let mut inst = self.mesh_at_mut(from)?.instances.remove(id)?;
+        inst.transform = dest.inverse() * world * inst.transform;
+        Some(self.mesh_at_mut(to)?.instances.insert(inst))
+    }
+
+    /// Remove instance `id` from the context `path`.
+    pub fn remove_instance(&mut self, path: &[InstanceId], id: InstanceId) -> bool {
+        self.mesh_at_mut(path).and_then(|m| m.instances.remove(id)).is_some()
+    }
+
+    /// World bounds of instance `id` of the context `path`.
+    pub fn instance_world_bounds(&self, path: &[InstanceId], id: InstanceId) -> Option<Aabb> {
+        let inst = self.mesh_at(path)?.instances.get(id)?;
+        let b = self.def_bounds(inst.def)?;
+        let xf = self.transform_at(path) * inst.transform;
+        let corners = (0..8).map(|i| {
+            let p = DVec3::new(if i & 1 == 0 { b.min.x } else { b.max.x }, if i & 2 == 0 { b.min.y } else { b.max.y }, if i & 4 == 0 { b.min.z } else { b.max.z });
+            xf.transform_point3(p)
+        });
+        Aabb::from_points(corners)
+    }
+
     /// World transform of the context reached through `path`.
     pub fn transform_at(&self, path: &[InstanceId]) -> DMat4 {
         let mut m = DMat4::IDENTITY;
@@ -800,5 +845,41 @@ impl Model {
         for d in self.defs.values_mut() {
             d.mesh.rebuild_caches();
         }
+    }
+}
+
+#[cfg(test)]
+mod move_tests {
+    use super::*;
+
+    fn group(m: &mut Model, parent: &[InstanceId], name: &str, at: DVec3) -> (DefId, InstanceId) {
+        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None });
+        m.defs[d].mesh.add_face(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]);
+        let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false };
+        let id = m.mesh_at_mut(parent).unwrap().instances.insert(inst);
+        (d, id)
+    }
+
+    #[test]
+    fn an_instance_moves_between_contexts_in_place() {
+        let mut m = Model::new();
+        let (_, a) = group(&mut m, &[], "A", DVec3::new(1000.0, 0.0, 0.0));
+        let (_, b) = group(&mut m, &[], "B", DVec3::new(0.0, 500.0, 0.0));
+        let before = m.instance_world_bounds(&[], b).unwrap();
+        // B into A: same place in the world.
+        let nb = m.move_instance(&[], b, &[a]).unwrap();
+        assert_eq!(m.root_mesh().instances.len(), 1);
+        let after = m.instance_world_bounds(&[a], nb).unwrap();
+        assert!((after.min - before.min).length() < 1e-9 && (after.max - before.max).length() < 1e-9, "{after:?} {before:?}");
+        // A can't go into B (now inside A), nor into its own context.
+        assert!(!m.can_move_instance(&[], a, &[a, nb]));
+        assert!(!m.can_move_instance(&[], a, &[]));
+        // Back out to the top level.
+        let back = m.move_instance(&[a], nb, &[]).unwrap();
+        assert_eq!(m.root_mesh().instances.len(), 2);
+        let out = m.instance_world_bounds(&[], back).unwrap();
+        assert!((out.min - before.min).length() < 1e-9);
+        assert!(m.remove_instance(&[], back));
+        assert_eq!(m.root_mesh().instances.len(), 1);
     }
 }
