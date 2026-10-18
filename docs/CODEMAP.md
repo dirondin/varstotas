@@ -54,7 +54,9 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | `overlay.rs` | `Overlay3d` (lines, polygons, texts, marks, arcs, dimensions, leaders), plus `annot.rs` for the CPU glyph expansion |
 | `export.rs` | `render_to_image` (PNG export), `encode_exr` (uncompressed float OpenEXR) |
 | `bvh.rs` | binned-SAH BVH over triangles, flattened to 2 `vec4` per node for the GPU |
-| `pathtrace.rs`, `pathtrace.wgsl` | GPU path tracer (`Renderer::pt_start / pt_step / pt_resolve / pt_image / pt_linear`): triangle / light records, compute passes `pt_trace` (BVH walk, GGX + diffuse, NEE to sun and lights, glass, ground plane, custom surfaces), `pt_denoise` (à-trous), `pt_resolve`, `pt_linear`; the WGSL is part of the scene module (`custom::BASE`) |
+| `pathtrace.rs`, `pathtrace.wgsl` | GPU path tracer (`Renderer::pt_start / pt_step / pt_resolve / pt_image / pt_linear`): triangle / light records, compute passes `pt_trace` (BVH walk, GGX + diffuse, NEE to the sun and one light picked by its estimated share, any-hit shadows, glass, ground plane, custom surfaces, several samples per dispatch), `pt_denoise` (à-trous), `pt_resolve`, `pt_linear`; the WGSL is part of the scene module (`custom::BASE`); OIDN pass (`oidn`), `accel_structures` (BLAS / TLAS) |
+| `pathtrace_rq.wgsl` | ray query `intersect` / `transmittance` replacing the BVH section of `pathtrace.wgsl` (`rq_source`) when the device has `EXPERIMENTAL_RAY_QUERY` (requested in `main.rs`) |
+| `oidn.rs` | Intel Open Image Denoise loaded at run time (libloading): `available`, `denoise` |
 | `textures.rs` | face textures (group 1): colour `texture_2d_array`, data array (ORM / normal), PBR material table; CPU resample and mips (`set_textures`, `set_data_textures`, `set_materials`) |
 | `env.rs` | environment for Realistic: Rgba16Float equirect with mips, SH9 irradiance, `EnvUniform` (group 0, bindings 3–5) |
 | `shader.wgsl` | shaders (`HDR_OUT` override: the Realistic scene pass writes linear HDR + a G-buffer when effects are on; PCSS soft shadows; `Surface` + helpers for custom shaders) |

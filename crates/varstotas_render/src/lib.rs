@@ -498,6 +498,8 @@ pub mod shaders {
     pub use crate::custom::check;
 }
 mod bvh;
+mod oidn;
+pub use oidn::available as oidn_available;
 mod pathtrace;
 pub use pathtrace::{PtLight, PtLightKind, PtSettings};
 mod renderer;

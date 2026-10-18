@@ -40,6 +40,10 @@ struct PtU {
 const NO_HIT: u32 = 0xffffffffu;
 
 var<private> rng_state: u32;
+// The first hit of the current path: albedo, [normal, distance] (summed over the samples in
+// `aov`, the denoisers' guides).
+var<private> first_albedo: vec3<f32>;
+var<private> first_nd: vec4<f32>;
 
 fn pcg(v: u32) -> u32 {
     let s = v * 747796405u + 2891336453u;
@@ -56,6 +60,12 @@ fn lum(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
 }
 
+/// `c` scaled down to luminance `k` at most (keeps its hue, unlike clamping each channel).
+fn clamp_lum(c: vec3<f32>, k: f32) -> vec3<f32> {
+    let l = max(c.r, max(c.g, c.b));
+    return select(c, c * (k / l), l > k);
+}
+
 struct Hit {
     t: f32,
     tri: u32,
@@ -63,30 +73,18 @@ struct Hit {
     v: f32,
 };
 
-/// Entry distance of the ray into node `n`'s box, or a huge value when it misses.
-fn node_enter(n: u32, o: vec3<f32>, inv: vec3<f32>, tmax: f32) -> f32 {
-    let a = bvh[2u * n].xyz;
-    let b = bvh[2u * n + 1u].xyz;
-    let t0 = (a - o) * inv;
-    let t1 = (b - o) * inv;
-    let tn = max(max(min(t0.x, t1.x), min(t0.y, t1.y)), max(min(t0.z, t1.z), 0.0));
-    let tf = min(min(max(t0.x, t1.x), max(t0.y, t1.y)), min(max(t0.z, t1.z), tmax));
-    return select(1e30, tn, tn <= tf);
-}
-
 /// A textured side with a transparent texel at the hit is cut out (like the raster path).
 fn cut_out(tri: u32, u: f32, v: f32, front: bool) -> bool {
     let layers = bitcast<u32>(tri_geo[3u * tri + 2u].w);
     let layer = select(layers >> 16u, layers & 0xffffu, front);
-    if layer == 0u {
+    if layer == 0u || tex_info[layer - 1u].z < 0.5 {
         return false;
     }
     let a3 = tri_attr[5u * tri + 3u];
     let a4 = tri_attr[5u * tri + 4u];
     let uv = a3.xy * (1.0 - u - v) + a3.zw * u + a4.xy * v;
     let li = i32(layer) - 1;
-    let k = tex_info[li].xy;
-    return textureSampleLevel(face_tex, face_tex_sampler, uv * k, li, 0.0).a < 0.5;
+    return textureSampleLevel(face_tex, face_tex_sampler, uv * tex_info[li].xy, li, 0.0).a < 0.5;
 }
 
 /// Material of the side of `tri` a ray along `d` hits. Glass is a volume: from inside a glass
@@ -108,6 +106,19 @@ fn side_material(tri: u32, d: vec3<f32>) -> vec2<u32> {
 
 fn is_glass(mat: u32) -> bool {
     return mat > 0u && materials[(mat - 1u) * 6u].z > 0.5 && env.p3.x < 0.5;
+}
+
+// ---- bvh traversal (pathtrace_rq.wgsl replaces it with ray queries) ----
+
+/// Entry distance of the ray into node `n`'s box, or a huge value when it misses.
+fn node_enter(n: u32, o: vec3<f32>, inv: vec3<f32>, tmax: f32) -> f32 {
+    let a = bvh[2u * n].xyz;
+    let b = bvh[2u * n + 1u].xyz;
+    let t0 = (a - o) * inv;
+    let t1 = (b - o) * inv;
+    let tn = max(max(min(t0.x, t1.x), min(t0.y, t1.y)), max(min(t0.z, t1.z), 0.0));
+    let tf = min(min(max(t0.x, t1.x), max(t0.y, t1.y)), min(max(t0.z, t1.z), tmax));
+    return select(1e30, tn, tn <= tf);
 }
 
 /// Closest triangle along `o + d·t`, t in (0, tmax).
@@ -172,28 +183,60 @@ fn intersect(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
     return hit;
 }
 
-/// Light passing from `o` along `d` for `tmax`: 0 when blocked; glass lets most of it through.
+/// Light passing from `o` along `d` for `tmax`: 0 when blocked; each glass face lets most of
+/// it through. One traversal in any order that stops at the first opaque face.
 fn transmittance(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> f32 {
-    var origin = o;
-    var left = tmax;
+    let inv = 1.0 / select(d, vec3<f32>(1e-20), abs(d) < vec3<f32>(1e-20));
     var tr = 1.0;
-    for (var k = 0; k < 8; k++) {
-        let h = intersect(origin, d, left);
-        if h.tri == NO_HIT {
-            return tr;
+    var stack: array<u32, 64>;
+    var sp = 0;
+    if node_enter(0u, o, inv, tmax) < 1e29 {
+        stack[0] = 0u;
+        sp = 1;
+    }
+    while sp > 0 {
+        sp -= 1;
+        let n = stack[sp];
+        let first = bitcast<u32>(bvh[2u * n].w);
+        let count = bitcast<u32>(bvh[2u * n + 1u].w);
+        if count == 0u {
+            if node_enter(first, o, inv, tmax) < 1e29 && sp < 64 { stack[sp] = first; sp += 1; }
+            if node_enter(first + 1u, o, inv, tmax) < 1e29 && sp < 64 { stack[sp] = first + 1u; sp += 1; }
+            continue;
         }
-        if !is_glass(side_material(h.tri, d).x) {
-            return 0.0;
-        }
-        tr *= 0.85;
-        origin = origin + d * (h.t + 0.5);
-        left -= h.t + 0.5;
-        if left <= 0.0 {
-            return tr;
+        for (var i = first; i < first + count; i++) {
+            let g0 = tri_geo[3u * i];
+            let e1 = tri_geo[3u * i + 1u].xyz;
+            let e2 = tri_geo[3u * i + 2u].xyz;
+            let pv = cross(d, e2);
+            let det = dot(e1, pv);
+            if abs(det) < 1e-12 {
+                continue;
+            }
+            let id = 1.0 / det;
+            let tv = o - g0.xyz;
+            let u = dot(tv, pv) * id;
+            if u < 0.0 || u > 1.0 {
+                continue;
+            }
+            let qv = cross(tv, e1);
+            let v = dot(d, qv) * id;
+            if v < 0.0 || u + v > 1.0 {
+                continue;
+            }
+            let t = dot(e2, qv) * id;
+            if t > 1e-4 && t < tmax && !cut_out(i, u, v, det > 0.0) {
+                if !is_glass(side_material(i, d).x) {
+                    return 0.0;
+                }
+                tr *= 0.85;
+            }
         }
     }
     return tr;
 }
+
+// ---- end bvh traversal ----
 
 /// A direction around `n` with density cos/π.
 fn sample_cosine(n: vec3<f32>) -> vec3<f32> {
@@ -444,8 +487,34 @@ fn direct_light(m: Mat, p: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
             col += f * (PI * pt.sun.w) * transmittance(o, l, 1e9);
         }
     }
+    // One light, picked by a guess of its share of the light here (intensity / distance², facing).
     let count = u32(pt.lens.z);
-    for (var i = 0u; i < count; i++) {
+    if count == 0u {
+        return col;
+    }
+    var total = 0.0;
+    for (var j = 0u; j < count; j++) {
+        total += light_weight(j, o, m.n);
+    }
+    var pick = rnd() * total;
+    var i = count - 1u;
+    var w = 0.0;
+    for (var j = 0u; j < count; j++) {
+        w = light_weight(j, o, m.n);
+        pick -= w;
+        if pick < 0.0 {
+            i = j;
+            break;
+        }
+    }
+    if i == count - 1u {
+        w = light_weight(i, o, m.n);
+    }
+    let prob = w / max(total, 1e-30);
+    if prob <= 0.0 {
+        return col;
+    }
+    {
         let l0 = lights[4u * i];
         let l1 = lights[4u * i + 1u];
         let l2 = lights[4u * i + 2u];
@@ -472,19 +541,39 @@ fn direct_light(m: Mat, p: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
         } else if l0.w > 0.5 {
             k = smoothstep(l2.w, l3.w, dot(l1.xyz, -l));
         }
-        if k <= 0.0 {
-            continue;
-        }
         let f = eval_opaque(m, v, l);
-        if any(f > vec3<f32>(0.0)) {
-            col += f * l2.rgb * (k / d2) * transmittance(o, l, dist - 1.0);
+        if k > 0.0 && any(f > vec3<f32>(0.0)) {
+            col += f * l2.rgb * (k / (d2 * prob)) * transmittance(o, l, dist - 1.0);
         }
     }
     return col;
 }
 
+/// How much light `i` may give a point `o` with normal `n` (relative; never 0 for a light that
+/// can reach it, so picking by it stays unbiased).
+fn light_weight(i: u32, o: vec3<f32>, n: vec3<f32>) -> f32 {
+    let l0 = lights[4u * i];
+    let l1 = lights[4u * i + 1u];
+    let l2 = lights[4u * i + 2u];
+    let l3 = lights[4u * i + 3u];
+    let to = l0.xyz - o;
+    var size = l1.w;
+    if l0.w > 1.5 {
+        size = max(l1.w, length(l3.xyz));
+    }
+    let d2 = max(dot(to, to), max(size * size, 1.0));
+    let l = to * inverseSqrt(max(dot(to, to), 1e-6));
+    var k = 0.05 + max(dot(n, l), 0.0);
+    if l0.w > 1.5 {
+        k *= 0.05 + max(dot(l1.xyz, -l), 0.0);
+    } else if l0.w > 0.5 {
+        k *= 0.02 + smoothstep(l2.w, l3.w, dot(l1.xyz, -l));
+    }
+    return lum(l2.rgb) * k / d2;
+}
+
 /// One path through pixel `px`.
-fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
+fn trace_path(px: vec2<f32>) -> vec3<f32> {
     // Camera ray through a jittered point of the pixel.
     let jitter = vec2<f32>(rnd(), rnd());
     let ndc = vec2<f32>((px.x + jitter.x) / pt.size.x * 2.0 - 1.0, 1.0 - (px.y + jitter.y) / pt.size.y * 2.0);
@@ -509,6 +598,9 @@ fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
     let bounces = u32(pt.size.w);
     var b = 0u;
     var passes = 0u;
+    // After a diffuse bounce glossy surfaces are rougher (path regularization): the caustics
+    // that a few samples would only show as fireflies become soft.
+    var blur = 0.0;
     loop {
         let h = intersect(o, d, 1e9);
         // The ground plane under the model (its world z = 0), when shown.
@@ -518,9 +610,9 @@ fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
         }
         if h.tri == NO_HIT && tg > 1e29 {
             col += thr * env_radiance(d, 0.0);
-            if first && b == 0u {
-                aov[2u * pix] = vec4<f32>(1.0);
-                aov[2u * pix + 1u] = vec4<f32>(-d, 1e9);
+            if b == 0u {
+                first_albedo = vec3<f32>(1.0);
+                first_nd = vec4<f32>(-d, 1e9);
             }
             break;
         }
@@ -543,6 +635,7 @@ fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
         if tg >= h.t {
             m = surface_at(h, d, p);
         }
+        m.rough = max(m.rough, blur);
         let v = -d;
         // Partly transparent (not glass): passes straight through with probability 1 - alpha.
         if m.alpha < 0.999 && m.transmission < 0.01 && rnd() > m.alpha {
@@ -553,13 +646,16 @@ fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
             }
             continue;
         }
-        if first && b == 0u {
-            aov[2u * pix] = vec4<f32>(max(m.albedo, vec3<f32>(0.02)), 1.0);
-            aov[2u * pix + 1u] = vec4<f32>(m.n, t);
+        if b == 0u {
+            first_albedo = max(m.albedo, vec3<f32>(0.02));
+            first_nd = vec4<f32>(m.n, t);
         }
         var e = thr * m.emission;
         if b > 0u {
-            e = min(e, vec3<f32>(pt.lens.w));
+            // Emitters seen after a diffuse bounce are mostly lamp bulbs, whose light the lamp's
+            // light object already brings (with shadow rays): at most a bright surface here,
+            // or the few paths that find a bulb become fireflies.
+            e = clamp_lum(e, select(pt.lens.w, 1.0, blur > 0.0));
         }
         col += e;
         if b >= bounces {
@@ -591,7 +687,7 @@ fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
             }
         } else {
             let direct = thr * direct_light(m, p, v);
-            col += select(min(direct, vec3<f32>(pt.lens.w)), direct, b == 0u);
+            col += select(clamp_lum(direct, pt.lens.w), direct, b == 0u);
             // Next direction: the specular or the diffuse lobe.
             let nv = max(dot(m.n, v), 1e-4);
             let f0 = mix(vec3<f32>(0.04), m.albedo, m.metallic);
@@ -615,6 +711,7 @@ fn trace_path(px: vec2<f32>, first: bool, pix: u32) -> vec3<f32> {
                 }
                 thr *= diff * (vec3<f32>(1.0) - fv) / (1.0 - ps);
                 d = l;
+                blur = 0.35;
             }
             o = p + m.ng * 0.5;
         }
@@ -640,22 +737,49 @@ fn pt_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let pix = gid.y * w + gid.x;
     let frame = u32(pt.size.z);
-    rng_state = pcg(pix * 9781u + pcg(frame * 6271u + 17u));
-    var c = trace_path(vec2<f32>(gid.xy), frame == 0u, pix);
-    if any(c != c) {
-        c = vec3<f32>(0.0);
+    // misc.w samples per dispatch.
+    let n = max(u32(pt.misc.w), 1u);
+    var sum = vec3<f32>(0.0);
+    var sa = vec3<f32>(0.0);
+    var sn = vec4<f32>(0.0);
+    for (var k = 0u; k < n; k++) {
+        rng_state = pcg(pix * 9781u + pcg((frame + k) * 6271u + 17u));
+        first_albedo = vec3<f32>(1.0);
+        first_nd = vec4<f32>(0.0, 0.0, 1.0, 1e9);
+        let c = trace_path(vec2<f32>(gid.xy));
+        if all(c == c) {
+            sum += c;
+        }
+        sa += first_albedo;
+        sn += first_nd;
     }
     if frame == 0u {
-        accum[pix] = vec4<f32>(c, 1.0);
+        accum[pix] = vec4<f32>(sum, f32(n));
+        aov[2u * pix] = vec4<f32>(sa, 0.0);
+        aov[2u * pix + 1u] = sn;
     } else {
-        accum[pix] += vec4<f32>(c, 1.0);
+        accum[pix] += vec4<f32>(sum, f32(n));
+        aov[2u * pix] += vec4<f32>(sa, 0.0);
+        aov[2u * pix + 1u] += sn;
     }
+}
+
+/// Mean first-hit albedo of a pixel.
+fn aov_albedo(pix: u32) -> vec3<f32> {
+    return max(aov[2u * pix].rgb / max(accum[pix].w, 1.0), vec3<f32>(0.02));
+}
+
+/// Mean first-hit normal and distance of a pixel.
+fn aov_nd(pix: u32) -> vec4<f32> {
+    let a = aov[2u * pix + 1u] / max(accum[pix].w, 1.0);
+    let l = length(a.xyz);
+    return vec4<f32>(select(vec3<f32>(0.0, 0.0, 1.0), a.xyz / l, l > 1e-6), a.w);
 }
 
 /// Mean of the samples so far, divided by the albedo (the denoiser smooths light, not texture).
 fn demodulated(pix: u32) -> vec3<f32> {
     let a = accum[pix];
-    return a.rgb / max(a.w, 1.0) / max(aov[2u * pix].rgb, vec3<f32>(0.02));
+    return a.rgb / max(a.w, 1.0) / aov_albedo(pix);
 }
 
 /// One à-trous step (edge-avoiding wavelet filter, guided by normals, distance and albedo).
@@ -670,8 +794,8 @@ fn pt_denoise(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pix = gid.y * u32(w) + gid.x;
     let from_accum = dn.y > 0.5;
     var c0 = select(dn_in[pix].rgb, demodulated(pix), from_accum);
-    let n0 = aov[2u * pix + 1u];
-    let a0 = aov[2u * pix].rgb;
+    let n0 = aov_nd(pix);
+    let a0 = aov_albedo(pix);
     let kern = array<f32, 3>(0.375, 0.25, 0.0625);
     var sum = vec3<f32>(0.0);
     var wsum = 0.0;
@@ -683,8 +807,8 @@ fn pt_denoise(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
             let qi = u32(q.y * w + q.x);
             let c = select(dn_in[qi].rgb, demodulated(qi), from_accum);
-            let nq = aov[2u * qi + 1u];
-            let aq = aov[2u * qi].rgb;
+            let nq = aov_nd(qi);
+            let aq = aov_albedo(qi);
             let dc = c - c0;
             let wc = exp(-dot(dc, dc) / (dn.z * dn.z * (lum(c0) + lum(c) + 0.05)));
             let wn = pow(max(dot(n0.xyz, nq.xyz), 0.0), 64.0);
@@ -709,7 +833,7 @@ fn pt_resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pix = gid.y * w + gid.x;
     var c: vec3<f32>;
     if dn.w > 0.5 {
-        c = dn_in[pix].rgb * max(aov[2u * pix].rgb, vec3<f32>(0.02));
+        c = dn_in[pix].rgb * aov_albedo(pix);
     } else {
         let a = accum[pix];
         c = a.rgb / max(a.w, 1.0);
@@ -727,7 +851,7 @@ fn pt_linear(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let pix = gid.y * w + gid.x;
     if dn.w > 0.5 {
-        dn_out[pix] = vec4<f32>(dn_in[pix].rgb * max(aov[2u * pix].rgb, vec3<f32>(0.02)) * env.p2.x, 1.0);
+        dn_out[pix] = vec4<f32>(dn_in[pix].rgb * aov_albedo(pix) * env.p2.x, 1.0);
     } else {
         let a = accum[pix];
         dn_out[pix] = vec4<f32>(a.rgb / max(a.w, 1.0) * env.p2.x, 1.0);

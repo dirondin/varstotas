@@ -11,6 +11,7 @@ egui.workspace = true
 egui-wgpu.workspace = true
 log.workspace = true
 png = "0.18"
+libloading = "0.8"
 
 [dev-dependencies]
 eframe.workspace = true

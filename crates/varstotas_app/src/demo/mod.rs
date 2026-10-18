@@ -7,6 +7,7 @@ mod textures;
 
 use varstotas_kernel::glam::{DMat4, DQuat, DVec3};
 use varstotas_kernel::{
+    Tonemap,
     Definition, EFFECT_PRESETS, EntityRef, Environment, Face, Instance, Light, LightKind, Material, MaterialId, Mesh, Model, Pbr,
     RenderSettings, Scene, SceneSettings, SceneStyle, ShadowSettings, SkyKind, TagId,
 };
@@ -961,7 +962,7 @@ fn lights(m: &mut Model) {
 }
 
 fn settings(m: &mut Model) {
-    let mut env = Environment { sky: SkyKind::Physical, turbidity: 2.5, sun: 3.0, exposure: 0.0, ..Environment::default() };
+    let mut env = Environment { sky: SkyKind::Physical, turbidity: 2.5, sun: 3.0, exposure: 0.0, tonemap: Tonemap::Agx, ..Environment::default() };
     if let Some(fx) = env.effects.with_preset(EFFECT_PRESETS[2]) {
         env.effects = fx;
     }

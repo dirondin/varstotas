@@ -22,6 +22,10 @@ pub(crate) struct FaceTextures {
     data_view: wgpu::TextureView,
     pub bind_group: wgpu::BindGroup,
     max_layers: u32,
+    /// Colour layer i has cut-out texels; material i is glass (the path tracer's ray queries
+    /// test those triangles in the shader).
+    pub cut: Vec<bool>,
+    pub glass: Vec<bool>,
 }
 
 /// Most PBR materials in the table (6 × 16 bytes each: a 24 KB uniform).
@@ -95,6 +99,8 @@ impl FaceTextures {
             color_view,
             data_view,
             max_layers,
+            cut: Vec::new(),
+            glass: Vec::new(),
         };
         t.rebind(device);
         t
@@ -134,6 +140,7 @@ impl FaceTextures {
 
     /// Replace the colour textures (sRGB); layer `i` (vertex layer index `i + 1`) is `images[i]`.
     pub fn set(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, images: &[TextureData]) {
+        self.cut = images.iter().map(|img| img.rgba.iter().skip(3).step_by(4).any(|&a| a < 128)).collect();
         self.color_view = self.upload(device, queue, images, wgpu::TextureFormat::Rgba8UnormSrgb, false);
         self.rebind(device);
     }
@@ -146,6 +153,7 @@ impl FaceTextures {
 
     /// Replace the PBR material table (material `i` = vertex index `i + 1`).
     pub fn set_materials(&mut self, queue: &wgpu::Queue, mats: &[crate::PbrMaterial]) {
+        self.glass = mats.iter().map(|m| m.transmission > 0.5).collect();
         let mut v = vec![[0f32; 4]; MAX_MATERIALS * MATERIAL_VEC4S];
         for (i, m) in mats.iter().take(MAX_MATERIALS).enumerate() {
             let k = i * MATERIAL_VEC4S;
@@ -176,7 +184,9 @@ impl FaceTextures {
         let texture = Self::create_texture(device, side, images.len() as u32, mips, format);
         let mut info = vec![[0f32; 4]; MAX_LAYERS];
         for (layer, img) in images.iter().enumerate() {
-            info[layer] = [1.0 / img.size_mm[0].max(1e-3), 1.0 / img.size_mm[1].max(1e-3), 0.0, 0.0];
+            // z: the texture has cut-out texels (the path tracer only samples those for hits).
+            let cut = !data && self.cut.get(layer).copied().unwrap_or(false);
+            info[layer] = [1.0 / img.size_mm[0].max(1e-3), 1.0 / img.size_mm[1].max(1e-3), if cut { 1.0 } else { 0.0 }, 0.0];
             let mut level = resample(img, side);
             let mut s = side;
             for mip in 0..mips {

@@ -83,6 +83,8 @@ pub struct PtJob {
     pub samples: u32,
     /// Seconds rendered so far.
     pub elapsed: f64,
+    /// When the render (re)started: wall-clock time for the log.
+    started: std::time::Instant,
     /// The texture shows the denoised image.
     pub denoised: bool,
     /// Save the image at the next paint: `.exr` = linear float, else PNG.
@@ -104,6 +106,7 @@ impl PtJob {
             running: true,
             samples: 0,
             elapsed: 0.0,
+            started: std::time::Instant::now(),
             denoised: false,
             save: None,
             saved: None,
@@ -312,6 +315,7 @@ impl Viewport {
                         }
                         job.samples = 0;
                         job.elapsed = 0.0;
+                        job.started = std::time::Instant::now();
                         job.denoised = false;
                     }
                     if job.running && !job.done() {
@@ -324,6 +328,13 @@ impl Viewport {
                         job.denoised = finished && job.denoise;
                         if finished {
                             job.running = false;
+                            let [w, h] = [job.settings.width, job.settings.height];
+                            log::info!(
+                                "path tracer: {} spp {w}x{h} in {:.2} s ({:.2} s wall)",
+                                job.samples,
+                                job.elapsed,
+                                job.started.elapsed().as_secs_f64()
+                            );
                         }
                         ui.ctx().request_repaint();
                     } else if job.running {

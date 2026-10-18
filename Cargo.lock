@@ -1959,6 +1959,7 @@ dependencies = [
  "egui-wgpu",
  "env_logger",
  "glam",
+ "libloading",
  "log",
  "png",
 ]

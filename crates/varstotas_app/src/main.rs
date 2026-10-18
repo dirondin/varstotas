@@ -32,6 +32,28 @@ mod viewport;
 fn main() -> eframe::Result<()> {
     env_logger::init();
     let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
+    if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
+        // Ray queries (hardware / driver ray tracing) for the path tracer, where there are any.
+        let base = setup.device_descriptor.clone();
+        setup.device_descriptor = std::sync::Arc::new(move |adapter| {
+            use egui_wgpu::wgpu;
+            let mut d = base(adapter);
+            if adapter.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY) && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none() {
+                d.required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
+                let have = adapter.limits();
+                d.required_limits.max_blas_primitive_count = have.max_blas_primitive_count;
+                d.required_limits.max_blas_geometry_count = have.max_blas_geometry_count;
+                d.required_limits.max_tlas_instance_count = have.max_tlas_instance_count;
+                d.required_limits.max_acceleration_structures_per_shader_stage = have.max_acceleration_structures_per_shader_stage.min(4);
+                d.required_limits.max_buffers_and_acceleration_structures_per_shader_stage =
+                    d.required_limits.max_buffers_and_acceleration_structures_per_shader_stage.max(have.max_buffers_and_acceleration_structures_per_shader_stage.min(64));
+                // SAFETY: only the path tracer uses the experimental feature (ray queries in
+                // its own shader module); the rest of the renderer does not depend on it.
+                d.experimental_features = unsafe { wgpu::ExperimentalFeatures::enabled() };
+            }
+            d
+        });
+    }
     if std::env::var_os("VARSTOTAS_SCRIPT").is_some() {
         // Scripted runs must not stall when the window is hidden or on another desktop:
         // with vsync macOS stops handing out frames to an occluded window.

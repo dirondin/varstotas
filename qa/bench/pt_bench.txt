@@ -1,0 +1,21 @@
+# Path tracer benchmark (not a regression script): the demo house at 960×540, 64 spp.
+# run: qa/bench/run.sh — prints the "path tracer:" log lines.
+action demo_house
+wait 30
+action scene_timing_0_1
+action render_set w=960 h=540 samples=64 match=off denoise=off
+action render_start
+wait 3
+action scene_2
+wait 40
+action render_start
+wait 3
+action scene_4
+wait 40
+action render_start
+wait 3
+action scene_6
+wait 40
+action render_start
+wait 3
+quit

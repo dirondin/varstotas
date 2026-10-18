@@ -348,6 +348,8 @@ pub struct Renderer {
     color_format: wgpu::TextureFormat,
     layouts: Layouts,
     shader: wgpu::ShaderModule,
+    /// Its WGSL (the path tracer composes its ray query variant from it).
+    shader_src: String,
     /// Custom surfaces of the current module and their errors (`set_custom_shaders`).
     custom: Vec<crate::CustomSurface>,
     custom_errors: Vec<Option<String>>,
@@ -477,9 +479,10 @@ impl Renderer {
             (wgpu::TextureFormat::Rgba8Unorm, wgpu::TextureFormat::Rgba8Unorm, true)
         };
 
+        let shader_src = crate::custom::compose(&[]).0;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("varstotas scene shader"),
-            source: wgpu::ShaderSource::Wgsl(crate::custom::compose(&[]).0.into()),
+            source: wgpu::ShaderSource::Wgsl(shader_src.clone().into()),
         });
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("varstotas globals"),
@@ -597,6 +600,7 @@ impl Renderer {
             color_format,
             layouts,
             shader,
+            shader_src,
             custom: Vec::new(),
             custom_errors: Vec::new(),
             pipelines_hdr: None,
@@ -1706,8 +1710,9 @@ impl Renderer {
         let device = &rs.device;
         self.shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("varstotas scene shader"),
-            source: wgpu::ShaderSource::Wgsl(src.into()),
+            source: wgpu::ShaderSource::Wgsl(src.clone().into()),
         });
+        self.shader_src = src;
         self.pipelines = build_pipelines(device, &self.shader, &self.layouts, self.color_format, false);
         if self.pipelines_hdr.is_some() {
             self.pipelines_hdr = Some(build_pipelines(device, &self.shader, &self.layouts, self.color_format, true));
@@ -1716,7 +1721,7 @@ impl Renderer {
             p.rebuild(device, &self.shader, self.color_format);
         }
         if let Some(pt) = &mut self.pt {
-            pt.rebuild(device, &self.shader);
+            pt.rebuild(device, &self.shader, &self.shader_src);
         }
         self.custom = shaders.to_vec();
         self.custom_errors = errors.clone();
@@ -1737,9 +1742,10 @@ impl Renderer {
     ) {
         self.update_env(rs, style);
         let pt = self.pt.get_or_insert_with(|| {
-            crate::pathtrace::PathTracer::new(&rs.device, &self.shader, &self.bgl, &self.face_textures.bgl)
+            crate::pathtrace::PathTracer::new(&rs.device, &self.shader, &self.shader_src, &self.bgl, &self.face_textures.bgl)
         });
-        pt.start(rs, geo, lights, camera, style, settings);
+        let test = crate::pathtrace::ShaderTest { cut: &self.face_textures.cut, glass: &self.face_textures.glass };
+        pt.start(rs, geo, lights, camera, style, settings, &test);
     }
 
     /// Add samples to the render (up to `max_samples`, for about `budget`); the samples so far.

@@ -155,7 +155,12 @@ impl VarstotasApp {
                 ui.end_row();
                 ui.label("Bounces");
                 ui.add(egui::DragValue::new(&mut settings.bounces).range(1..=32));
-                ui.checkbox(&mut settings.denoise, "Denoise");
+                let oidn = varstotas_render::oidn_available();
+                ui.checkbox(&mut settings.denoise, "Denoise").on_hover_text(if oidn {
+                    "Intel Open Image Denoise (AI denoiser) on the finished render"
+                } else {
+                    "Built-in edge-aware filter; install Open Image Denoise (brew install open-image-denoise) for a cleaner result"
+                });
                 ui.end_row();
             });
             ui.horizontal(|ui| {

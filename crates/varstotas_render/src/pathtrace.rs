@@ -137,6 +137,113 @@ pub(crate) fn triangle_records(geo: &SceneGeometry) -> (crate::bvh::Bvh, Vec<[f3
     (bvh, tri_geo, tri_attr)
 }
 
+/// The acceleration structures of a render with ray queries.
+pub(crate) struct Accel {
+    tlas: wgpu::Tlas,
+    /// Instance offset + primitive → triangle record (`rq_tri`), 4 per vec4: in place of the
+    /// BVH.
+    map: Vec<[f32; 4]>,
+}
+
+/// Build the BLAS of the opaque triangles and of those the shader tests (glass, cut-out
+/// textures on a side; `rq_tri` instance offset = the opaque count) and the TLAS of both.
+fn accel_structures(rs: &egui_wgpu::RenderState, tri_geo: &[[f32; 4]], test: &ShaderTest<'_>) -> Accel {
+    use wgpu::util::DeviceExt;
+    let device = &rs.device;
+    let n = tri_geo.len() / 3;
+    let mut verts: Vec<[f32; 3]> = Vec::with_capacity(n * 3);
+    let (mut opaque, mut tested) = (Vec::new(), Vec::new());
+    let flag = |list: &[bool], i: u32| i > 0 && list.get(i as usize - 1).copied().unwrap_or(false);
+    for t in 0..n {
+        let [g0, g1, g2] = [tri_geo[3 * t], tri_geo[3 * t + 1], tri_geo[3 * t + 2]];
+        let v0 = [g0[0], g0[1], g0[2]];
+        verts.push(v0);
+        verts.push([v0[0] + g1[0], v0[1] + g1[1], v0[2] + g1[2]]);
+        verts.push([v0[0] + g2[0], v0[1] + g2[1], v0[2] + g2[2]]);
+        let layers = g2[3].to_bits();
+        let shader = flag(test.glass, g0[3].to_bits())
+            || flag(test.glass, g1[3].to_bits())
+            || flag(test.cut, layers & 0xffff)
+            || flag(test.cut, layers >> 16);
+        if shader { &mut tested } else { &mut opaque }.push(t as u32);
+    }
+    if verts.is_empty() {
+        verts.push([0.0; 3]);
+    }
+    let vb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("varstotas pt vertices"),
+        contents: bytemuck::cast_slice(&verts),
+        usage: wgpu::BufferUsages::BLAS_INPUT,
+    });
+    let mut tlas = device.create_tlas(&wgpu::CreateTlasDescriptor {
+        label: Some("varstotas pt tlas"),
+        max_instances: 2,
+        flags: wgpu::AccelerationStructureFlags::PREFER_FAST_TRACE,
+        update_mode: wgpu::AccelerationStructureUpdateMode::Build,
+    });
+    let mut parts = Vec::new();
+    for (k, (list, geo_flags)) in [
+        (&opaque, wgpu::AccelerationStructureGeometryFlags::OPAQUE),
+        (&tested, wgpu::AccelerationStructureGeometryFlags::NO_DUPLICATE_ANY_HIT_INVOCATION),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if list.is_empty() {
+            continue;
+        }
+        let idx: Vec<u32> = list.iter().flat_map(|&t| [3 * t, 3 * t + 1, 3 * t + 2]).collect();
+        let ib = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("varstotas pt indices"),
+            contents: bytemuck::cast_slice(&idx),
+            usage: wgpu::BufferUsages::BLAS_INPUT,
+        });
+        let size = wgpu::BlasTriangleGeometrySizeDescriptor {
+            vertex_format: wgpu::VertexFormat::Float32x3,
+            vertex_count: verts.len() as u32,
+            index_format: Some(wgpu::IndexFormat::Uint32),
+            index_count: Some(idx.len() as u32),
+            flags: geo_flags,
+        };
+        let blas = device.create_blas(
+            &wgpu::CreateBlasDescriptor {
+                label: Some("varstotas pt blas"),
+                flags: wgpu::AccelerationStructureFlags::PREFER_FAST_TRACE,
+                update_mode: wgpu::AccelerationStructureUpdateMode::Build,
+            },
+            wgpu::BlasGeometrySizeDescriptors::Triangles { descriptors: vec![size.clone()] },
+        );
+        let offset = if k == 0 { 0 } else { opaque.len() as u32 };
+        tlas[k] = Some(wgpu::TlasInstance::new(&blas, [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0], offset, 0xff));
+        parts.push((blas, ib, size));
+    }
+    let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("varstotas pt accel") });
+    let entries: Vec<wgpu::BlasBuildEntry<'_>> = parts
+        .iter()
+        .map(|(blas, ib, size)| wgpu::BlasBuildEntry {
+            blas,
+            geometry: wgpu::BlasGeometries::TriangleGeometries(vec![wgpu::BlasTriangleGeometry {
+                size,
+                vertex_buffer: &vb,
+                first_vertex: 0,
+                vertex_stride: 12,
+                index_buffer: Some(ib),
+                first_index: Some(0),
+                transform_buffer: None,
+                transform_buffer_offset: None,
+            }]),
+        })
+        .collect();
+    enc.build_acceleration_structures(entries.iter(), std::iter::once(&tlas));
+    rs.queue.submit(Some(enc.finish()));
+    let ids: Vec<u32> = opaque.into_iter().chain(tested).collect();
+    let map = ids.chunks(4).map(|c| std::array::from_fn(|i| f32::from_bits(c.get(i).copied().unwrap_or(0)))).collect();
+    Accel { tlas, map }
+}
+
+/// Target length of one tracing dispatch (s).
+const BATCH_TIME: f64 = 0.03;
+
 /// Denoise passes (à-trous step widths).
 const DENOISE_STEPS: [f32; 5] = [1.0, 2.0, 4.0, 8.0, 16.0];
 
@@ -152,6 +259,28 @@ pub(crate) struct PathTracer {
     dn_uniform: wgpu::Buffer,
     dn_bg: wgpu::BindGroup,
     job: Option<Job>,
+    /// The device traces with ray queries (`pathtrace_rq.wgsl`) instead of the BVH.
+    rq: bool,
+}
+
+/// Which triangles a ray query hands to the shader (the others are opaque to it): colour
+/// layer i has cut-out texels, material i is glass.
+pub(crate) struct ShaderTest<'a> {
+    pub cut: &'a [bool],
+    pub glass: &'a [bool],
+}
+
+/// The tracing module with ray queries: `src` (the scene module) with its BVH traversal
+/// replaced by `pathtrace_rq.wgsl`.
+pub(crate) fn rq_source(src: &str) -> String {
+    let (a, b) = ("// ---- bvh traversal", "// ---- end bvh traversal ----");
+    let (i, j) = (src.find(a).expect("bvh section"), src.find(b).expect("bvh section end"));
+    format!("enable wgpu_ray_query;\n{}{}{}", &src[..i], include_str!("pathtrace_rq.wgsl"), &src[j..])
+}
+
+/// Ray queries are used when the device has them (VARSTOTAS_NO_RAY_QUERY=1 turns them off).
+fn use_rq(device: &wgpu::Device) -> bool {
+    device.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY) && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none()
 }
 
 /// Buffers of one render.
@@ -159,6 +288,8 @@ struct Job {
     size: [u32; 2],
     u: PtUniform,
     samples: u32,
+    /// Samples per pixel of one dispatch (grows while dispatches stay short).
+    batch: u32,
     /// dn_in = A, dn_out = B, and the other way round.
     bg_ab: wgpu::BindGroup,
     bg_ba: wgpu::BindGroup,
@@ -166,6 +297,13 @@ struct Job {
     out_view: wgpu::TextureView,
     /// Pixel buffer A (the linear image of `read_linear` ends up there).
     dn_a: wgpu::Buffer,
+    /// Buffer B: the denoised image the output passes read; the accumulation and the AOVs (read
+    /// back for Open Image Denoise).
+    dn_b: wgpu::Buffer,
+    accum: wgpu::Buffer,
+    aov: wgpu::Buffer,
+    /// The samples B holds an OIDN result of (0 = none).
+    oidn_samples: u32,
     texture_id: Option<egui::TextureId>,
 }
 
@@ -196,10 +334,9 @@ fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 }
 
 impl PathTracer {
-    pub fn new(device: &wgpu::Device, shader: &wgpu::ShaderModule, globals: &wgpu::BindGroupLayout, faces: &wgpu::BindGroupLayout) -> Self {
-        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("varstotas pt"),
-            entries: &[
+    pub fn new(device: &wgpu::Device, shader: &wgpu::ShaderModule, src: &str, globals: &wgpu::BindGroupLayout, faces: &wgpu::BindGroupLayout) -> Self {
+        let rq = use_rq(device);
+        let mut entries = vec![
                 uniform_entry(0),
                 storage_entry(1, true),
                 storage_entry(2, true),
@@ -219,8 +356,16 @@ impl PathTracer {
                     },
                     count: None,
                 },
-            ],
-        });
+        ];
+        if rq {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 10,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::AccelerationStructure { vertex_return: false },
+                count: None,
+            });
+        }
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("varstotas pt"), entries: &entries });
         let dn_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("varstotas pt denoise"),
             entries: &[uniform_entry(0)],
@@ -247,16 +392,25 @@ impl PathTracer {
             layout: &dn_bgl,
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: dn_uniform.as_entire_binding() }],
         });
-        let [trace, denoise, resolve, linear] = Self::pipelines(device, &layout, shader);
-        Self { bgl, dn_bgl, layout, trace, denoise, resolve, linear, uniform, dn_uniform, dn_bg, job: None }
+        let [trace, denoise, resolve, linear] = Self::pipelines(device, &layout, shader, src, rq);
+        if rq {
+            log::info!("path tracer: ray queries");
+        }
+        Self { bgl, dn_bgl, layout, trace, denoise, resolve, linear, uniform, dn_uniform, dn_bg, job: None, rq }
     }
 
-    fn pipelines(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &wgpu::ShaderModule) -> [wgpu::ComputePipeline; 4] {
+    fn pipelines(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &wgpu::ShaderModule, src: &str, rq: bool) -> [wgpu::ComputePipeline; 4] {
+        let traced = rq.then(|| {
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("varstotas path tracer (ray queries)"),
+                source: wgpu::ShaderSource::Wgsl(rq_source(src).into()),
+            })
+        });
         ["pt_trace", "pt_denoise", "pt_resolve", "pt_linear"].map(|entry| {
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some(entry),
                 layout: Some(layout),
-                module: shader,
+                module: if entry == "pt_trace" { traced.as_ref().unwrap_or(shader) } else { shader },
                 entry_point: Some(entry),
                 compilation_options: Default::default(),
                 cache: None,
@@ -265,8 +419,8 @@ impl PathTracer {
     }
 
     /// The scene module changed (custom shaders).
-    pub fn rebuild(&mut self, device: &wgpu::Device, shader: &wgpu::ShaderModule) {
-        [self.trace, self.denoise, self.resolve, self.linear] = Self::pipelines(device, &self.layout, shader);
+    pub fn rebuild(&mut self, device: &wgpu::Device, shader: &wgpu::ShaderModule, src: &str) {
+        [self.trace, self.denoise, self.resolve, self.linear] = Self::pipelines(device, &self.layout, shader, src, self.rq);
         let _ = &self.dn_bgl;
     }
 
@@ -286,6 +440,7 @@ impl PathTracer {
         camera: &Camera,
         style: &RenderStyle,
         settings: &PtSettings,
+        test: &ShaderTest<'_>,
     ) {
         let device = &rs.device;
         let max = Self::max_pixels(device);
@@ -297,7 +452,9 @@ impl PathTracer {
         }
         let origin = DVec3::from_array(geo.origin);
         let (bvh, tri_geo, tri_attr) = triangle_records(geo);
-        self.upload_scene(device, &bvh.nodes, &tri_geo, &tri_attr, &light_records(lights, origin), [w, h]);
+        let accel = self.rq.then(|| accel_structures(rs, &tri_geo, test));
+        let nodes = accel.as_ref().map_or(&bvh.nodes, |a| &a.map);
+        self.upload_scene(device, nodes, &tri_geo, &tri_attr, &light_records(lights, origin), [w, h], accel.as_ref());
         let job = self.job.as_mut().expect("job");
         job.u = frame_uniform(camera, style, origin, [w, h], settings, lights.len());
         let mut r = rs.renderer.write();
@@ -307,6 +464,7 @@ impl PathTracer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn upload_scene(
         &mut self,
         device: &wgpu::Device,
@@ -315,6 +473,7 @@ impl PathTracer {
         tri_attr: &[[f32; 4]],
         lights: &[[f32; 4]],
         size: [u32; 2],
+        accel: Option<&Accel>,
     ) {
         use wgpu::util::DeviceExt;
         let buf = |label: &str, data: &[[f32; 4]]| {
@@ -340,10 +499,10 @@ impl PathTracer {
                 mapped_at_creation: false,
             })
         };
-        let accum = pixels("varstotas pt accumulation", 1, wgpu::BufferUsages::empty());
-        let aov = pixels("varstotas pt aov", 2, wgpu::BufferUsages::empty());
+        let accum = pixels("varstotas pt accumulation", 1, wgpu::BufferUsages::COPY_SRC);
+        let aov = pixels("varstotas pt aov", 2, wgpu::BufferUsages::COPY_SRC);
         let dn_a = pixels("varstotas pt denoise a", 1, wgpu::BufferUsages::COPY_SRC);
-        let dn_b = pixels("varstotas pt denoise b", 1, wgpu::BufferUsages::empty());
+        let dn_b = pixels("varstotas pt denoise b", 1, wgpu::BufferUsages::COPY_DST);
         let out = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("varstotas pt image"),
             size: wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 },
@@ -370,13 +529,16 @@ impl PathTracer {
                     buf_entry(7, a),
                     buf_entry(8, b),
                     wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(&out_view) },
-                ],
+                ]
+                .into_iter()
+                .chain(accel.map(|a| wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::AccelerationStructure(&a.tlas) }))
+                .collect::<Vec<_>>(),
             })
         };
         let bg_ab = bg(&dn_a, &dn_b);
         let bg_ba = bg(&dn_b, &dn_a);
         let texture_id = self.job.take().and_then(|j| j.texture_id);
-        self.job = Some(Job { size, u: PtUniform::default(), samples: 0, bg_ab, bg_ba, out, out_view, dn_a, texture_id });
+        self.job = Some(Job { size, u: PtUniform::default(), samples: 0, batch: 1, bg_ab, bg_ba, out, out_view, dn_a, dn_b, accum, aov, oidn_samples: 0, texture_id });
     }
 
     pub fn samples(&self) -> u32 {
@@ -417,7 +579,10 @@ impl PathTracer {
         let t0 = std::time::Instant::now();
         let wg = [job.size[0].div_ceil(8), job.size[1].div_ceil(8)];
         while job.samples < max_samples.max(1) {
+            let n = job.batch.min(max_samples.max(1) - job.samples);
             job.u.size[2] = job.samples as f32;
+            job.u.misc[3] = n as f32;
+            let t = std::time::Instant::now();
             rs.queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&job.u));
             let mut enc = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("varstotas pt") });
             {
@@ -428,7 +593,12 @@ impl PathTracer {
             }
             let sub = rs.queue.submit(Some(enc.finish()));
             let _ = rs.device.poll(wgpu::PollType::Wait { submission_index: Some(sub), timeout: None });
-            job.samples += 1;
+            job.samples += n;
+            // About BATCH_TIME per dispatch: few round trips, yet the UI stays responsive.
+            let per = t.elapsed().as_secs_f64() / n as f64;
+            if n == job.batch {
+                job.batch = ((BATCH_TIME / per.max(1e-6)) as u32).clamp(1, 16).min(job.batch * 2);
+            }
             if t0.elapsed() >= budget {
                 break;
             }
@@ -444,6 +614,7 @@ impl PathTracer {
     /// Denoise steps (ending in buffer B), then `pt_resolve` or `pt_linear` reading B.
     fn run_output(&mut self, rs: &egui_wgpu::RenderState, groups: [&wgpu::BindGroup; 2], denoise: bool, linear: bool) {
         let set = self.groups(groups);
+        let oidn = denoise && self.oidn(rs);
         let Some(job) = &self.job else { return };
         if job.samples == 0 {
             return;
@@ -461,7 +632,7 @@ impl PathTracer {
             }
             rs.queue.submit(Some(enc.finish()));
         };
-        if denoise {
+        if denoise && !oidn {
             // Odd steps write B (bg_ab), even ones A; 5 steps end in B.
             for (i, &step) in DENOISE_STEPS.iter().enumerate() {
                 let bg = if i % 2 == 0 { &job.bg_ab } else { &job.bg_ba };
@@ -470,6 +641,63 @@ impl PathTracer {
         }
         let flag = if denoise { 1.0 } else { 0.0 };
         run(if linear { &self.linear } else { &self.resolve }, &job.bg_ba, [0.0, 0.0, 0.0, flag]);
+    }
+
+    /// Denoise the samples so far with Open Image Denoise into buffer B (as the à-trous filter
+    /// leaves it: light divided by the albedo); false when OIDN is missing or fails.
+    fn oidn(&mut self, rs: &egui_wgpu::RenderState) -> bool {
+        let Some(job) = &mut self.job else { return false };
+        if job.samples == 0 || !crate::oidn::available() {
+            return false;
+        }
+        if job.oidn_samples == job.samples {
+            return true;
+        }
+        let [w, h] = job.size;
+        let px = w as u64 * h as u64;
+        let read = |src: &wgpu::Buffer, size: u64| {
+            let buf = rs.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("varstotas pt readback"),
+                size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let mut enc = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("varstotas pt readback") });
+            enc.copy_buffer_to_buffer(src, 0, &buf, 0, size);
+            map_read(rs, &buf, enc)
+        };
+        let (Some(acc), Some(aov)) = (read(&job.accum, px * 16), read(&job.aov, px * 32)) else { return false };
+        let acc: &[[f32; 4]] = bytemuck::cast_slice(&acc);
+        let aov: &[[f32; 4]] = bytemuck::cast_slice(&aov);
+        let mut color = Vec::with_capacity(px as usize * 3);
+        let mut albedo = Vec::with_capacity(px as usize * 3);
+        let mut normal = Vec::with_capacity(px as usize * 3);
+        // Means over the samples (the AOVs are sums too, see pt_trace).
+        let mean_albedo = |i: usize| {
+            let (al, k) = (aov[2 * i], 1.0 / acc[i][3].max(1.0));
+            [0, 1, 2].map(|c| (al[c] * k).clamp(0.02, 1.0))
+        };
+        for (i, a) in acc.iter().enumerate() {
+            let k = 1.0 / a[3].max(1.0);
+            color.extend([a[0] * k, a[1] * k, a[2] * k]);
+            albedo.extend(mean_albedo(i));
+            let n = aov[2 * i + 1];
+            normal.extend([n[0] * k, n[1] * k, n[2] * k]);
+        }
+        let t = std::time::Instant::now();
+        let Some(out) = crate::oidn::denoise(w as usize, h as usize, &mut color, &mut albedo, &mut normal) else { return false };
+        log::info!("denoiser: {w}x{h} in {:.2} s", t.elapsed().as_secs_f64());
+        // B holds light / albedo (pt_resolve multiplies by max(albedo, 0.02)).
+        let b: Vec<[f32; 4]> = (0..px as usize)
+            .map(|i| {
+                let al = mean_albedo(i);
+                let c = |k: usize| out[3 * i + k].max(0.0) / al[k];
+                [c(0), c(1), c(2), 1.0]
+            })
+            .collect();
+        rs.queue.write_buffer(&job.dn_b, 0, bytemuck::cast_slice(&b));
+        job.oidn_samples = job.samples;
+        true
     }
 
     /// The shown image as sRGB RGBA8 (after `resolve`).
@@ -614,6 +842,18 @@ mod tests {
         let u = Vec3::new(r[7][0], r[7][1], r[7][2]);
         assert!((u.length() - 400.0).abs() < 1e-3 && u.z.abs() < 1e-6);
         assert!((r[6][0] - 100.0 * 1e6 / std::f32::consts::PI).abs() < 10.0);
+    }
+
+    #[test]
+    fn the_ray_query_module_is_valid() {
+        use crate::wgpu::naga;
+        let src = rq_source(&crate::custom::compose(&[]).0);
+        assert!(src.starts_with("enable wgpu_ray_query;") && !src.contains("fn node_enter"));
+        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
+        let caps = naga::valid::Capabilities::RAY_QUERY;
+        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), caps)
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
     }
 
     #[test]
