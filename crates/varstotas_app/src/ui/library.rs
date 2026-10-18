@@ -62,6 +62,8 @@ pub struct LibraryState {
     pub gens: super::generators::GenLibrary,
     /// To delete once confirmed: (library file, or None for a generator of the document; name).
     pub delete_ask: Option<(Option<PathBuf>, String)>,
+    /// A document's component to delete once confirmed (it has placed copies).
+    pub def_delete: Option<varstotas_kernel::DefId>,
     /// Thumbnails of the document's components (Document folder).
     pub def_thumbs: std::collections::HashMap<varstotas_kernel::DefId, DefThumb>,
 }
@@ -352,6 +354,63 @@ impl VarstotasApp {
         }
     }
 
+    /// Delete the document's component `d`: at once when nothing places it, else after the
+    /// "Delete from the document?" question ([`Self::def_delete_dialog`]).
+    pub(crate) fn ask_delete_definition(&mut self, d: varstotas_kernel::DefId) {
+        if self.doc.model.instance_count(d) == 0 {
+            self.delete_definition(d);
+        } else {
+            self.library.def_delete = Some(d);
+        }
+    }
+
+    /// Remove component `d` and its placed copies (one undo step).
+    pub(crate) fn delete_definition(&mut self, d: varstotas_kernel::DefId) {
+        let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+        if let Some(n) = self.doc.try_commit(&format!("Delete Component {name}"), |m| m.delete_definition(d)) {
+            self.library.def_thumbs.remove(&d);
+            self.flash(if n > 0 { format!("Deleted {name} and {n} placed copy(ies)") } else { format!("Deleted {name} from the document") });
+        }
+    }
+
+    /// "Delete from the document?" for a component with placed copies.
+    pub(crate) fn def_delete_dialog(&mut self, ctx: &egui::Context) {
+        let Some(d) = self.library.def_delete else { return };
+        let Some(def) = self.doc.model.defs.get(d) else {
+            self.library.def_delete = None;
+            return;
+        };
+        let (name, uses) = (def.name.clone(), self.doc.model.instance_count(d));
+        let mut choice = None;
+        let resp = egui::Modal::new(egui::Id::new("def_delete")).show(ctx, |ui| {
+            ui.set_width(360.0);
+            ui.heading("Delete from the document?");
+            ui.add_space(4.0);
+            ui.label(format!("“{name}” is placed {uses} time(s). The component and all its copies will be removed."));
+            ui.label(RichText::new("Edit → Undo brings them back.").weak());
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(egui::Button::new(RichText::new("Delete").strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+        });
+        if resp.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        if let Some(ok) = choice {
+            self.library.def_delete = None;
+            if ok {
+                self.delete_definition(d);
+            }
+        }
+    }
+
     pub(crate) fn library_open_requested(&mut self) -> bool {
         std::mem::take(&mut self.library.open_card)
     }
@@ -548,6 +607,7 @@ impl VarstotasApp {
             ui.label(RichText::new("Nothing found").weak());
         }
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
+        let mut delete_def = None;
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         let mut set_preview: Option<(PathBuf, bool)> = None;
@@ -607,6 +667,10 @@ impl VarstotasApp {
                                         select_def = Some(d);
                                         ui.close();
                                     }
+                                    if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
+                                        delete_def = Some(d);
+                                        ui.close();
+                                    }
                                 });
                             }
                             Tile::Gen(i) => {
@@ -641,6 +705,9 @@ impl VarstotasApp {
         }
         if let Some(d) = select_def {
             self.select_definition(d);
+        }
+        if let Some(d) = delete_def {
+            self.ask_delete_definition(d);
         }
         if let Some(src) = place_gen {
             self.actions.push(Action::PlaceGenerator(src, Default::default()));

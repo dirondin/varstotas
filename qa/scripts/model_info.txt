@@ -1,0 +1,68 @@
+# Window → Model Info (statistics: scene vs file, libraries; Purge Unused) and Components →
+# Document → Delete from Document… Real mouse: Make Component, place a copy from the tile,
+# delete the component with its copies (asked), undo, erase the copies and purge.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+select_all
+wait 3
+rawp rclick 500 0 500
+wait 5
+raw click 515 257
+wait 5
+action components
+wait 40
+raw click 1185 204
+wait 5
+raw move 150 560
+wait 3
+raw click 150 600
+wait 5
+expect outliner={Component#1 *Component#1}
+# paint one copy Grey (Paint tool on an instance)
+action mat_use Gold
+wait 3
+raw click 735 369
+wait 5
+tool select
+action tray_only Components
+action components
+wait 10
+action model_info
+wait 10
+screenshot shots/mi_1.bmp
+expect stats=(12 24 0 2 | 1/1 0/0 1/1) None
+# Document tile → right click → Delete from Document… (placed twice: asked)
+raw rclick 1185 204
+wait 5
+screenshot shots/mi_2.bmp
+raw click 1220 275
+wait 5
+expect def_delete=Some("Component#1")
+screenshot shots/mi_3.bmp
+raw click 852 376
+wait 5
+expect stats=(0 0 0 0 | 0/0 0/0 0/1) None
+expect def_delete=None
+action undo
+wait 5
+expect stats=(12 24 0 2 | 1/1 0/0 1/1) None
+# erase both copies: the component and Gold stay in the file, unused
+select_all
+wait 3
+raw key Delete
+wait 5
+expect stats=(0 0 0 0 | 0/1 0/0 0/1) None
+screenshot shots/mi_4.bmp
+# Purge Unused in the window
+raw click 95 613
+wait 5
+expect stats=(0 0 0 0 | 0/0 0/0 0/0) Some("Purged 1 component(s), 1 material(s)")
+screenshot shots/mi_5.bmp
+action undo
+wait 5
+expect stats=(0 0 0 0 | 0/1 0/0 0/1)
+action purge_unused
+wait 5
+expect stats=(0 0 0 0 | 0/0 0/0 0/0)

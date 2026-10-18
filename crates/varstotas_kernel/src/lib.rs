@@ -40,6 +40,7 @@ pub mod pbr;
 pub mod report;
 pub mod section;
 pub mod shadows;
+pub mod stats;
 mod ops;
 pub mod tessellate;
 pub mod text3d;

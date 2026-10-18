@@ -204,6 +204,7 @@ impl VarstotasApp {
                 let has_sel = !self.doc.selection.is_empty();
                 self.clipboard_items(ui);
                 self.item(ui, "Delete", Some("Delete"), any_sel, Action::Delete);
+                self.item(ui, "Purge Unused", None, true, Action::PurgeUnused);
                 let has_guides = self.doc.model.has_any_guides();
                 self.item(ui, "Delete Guides", None, has_guides, Action::DeleteGuides);
                 ui.separator();
@@ -388,6 +389,10 @@ impl VarstotasApp {
                 }
                 if ui.add(egui::Button::new("Work Planes…").selected(self.planes_window.open)).clicked() {
                     self.actions.push(Action::WorkPlanes);
+                    ui.close();
+                }
+                if ui.add(egui::Button::new("Model Info…").selected(self.model_info.open)).on_hover_text("Statistics of the document, Purge Unused").clicked() {
+                    self.actions.push(Action::ModelInfo);
                     ui.close();
                 }
                 if ui.add(egui::Button::new("3D Library…").selected(self.models.open)).clicked() {

@@ -166,6 +166,10 @@ pub enum Action {
     ImportModelPlugin(usize),
     /// Window → 3D Library.
     ModelLibrary,
+    /// Window → Model Info.
+    ModelInfo,
+    /// Edit → Purge Unused: components, groups and materials nothing in the scene uses.
+    PurgeUnused,
     /// File → Preview Image: from an image file, from the current view, remove.
     PreviewFromFile,
     PreviewFromView,
@@ -451,6 +455,8 @@ pub struct VarstotasApp {
     pub(crate) anim_window: crate::ui::animation::AnimWindow,
     pub(crate) online: crate::ui::online_mats::OnlineWindow,
     pub(crate) models: crate::ui::model_library::ModelWindow,
+    /// Window → Model Info.
+    pub(crate) model_info: crate::ui::model_info::ModelInfoWindow,
     /// File → Preview Image → Use Current View: the PNG being rendered for it.
     pub(crate) preview_shot: Option<PathBuf>,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
@@ -579,6 +585,7 @@ impl VarstotasApp {
             online: Default::default(),
             models: Default::default(),
             preview_shot: None,
+            model_info: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -1139,6 +1146,8 @@ impl VarstotasApp {
                 }
             }
             Action::PreviewFromView => self.preview_from_view(),
+            Action::ModelInfo => self.model_info.open = !self.model_info.open,
+            Action::PurgeUnused => self.purge_unused(true, true),
             Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
@@ -2582,6 +2591,7 @@ impl eframe::App for VarstotasApp {
         self.dialogs(&ctx);
         self.console_window(&ctx);
         self.gen_editor_window(&ctx);
+        self.model_info_window(&ctx);
         self.shader_editor_window(&ctx);
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
