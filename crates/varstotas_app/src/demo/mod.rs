@@ -884,7 +884,8 @@ fn bathroom(b: &mut Builder, g: DefId) {
 fn garden_and_terrace(b: &mut Builder, g: DefId) {
     // Lawn, a gravel path, the terrace with steps and the entrance landing.
     b.solid(g, "Lawn", Some("Grass"), |m| {
-        m.add_face_exact(&[v(-30000.0, -30000.0, 2.0), v(42000.0, -30000.0, 2.0), v(42000.0, 36000.0, 2.0), v(-30000.0, 36000.0, 2.0)]);
+        let r = 150_000.0;
+        m.add_face_exact(&[v(-r, -r, 2.0), v(r, -r, 2.0), v(r, r, 2.0), v(-r, r, 2.0)]);
     });
     b.part(g, "Gravel", v(3000.0, -16000.0, 0.0), v(4000.0, -3700.0, 8.0));
     b.part(g, "Gravel", v(7400.0, LY + 1300.0, 0.0), v(8600.0, LY + 9000.0, 8.0));
