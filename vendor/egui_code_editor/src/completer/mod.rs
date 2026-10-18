@@ -75,6 +75,11 @@ impl Completer {
             ..self
         }
     }
+    /// The completion popup was shown last frame.
+    pub fn is_open(&self) -> bool {
+        self.showed && !self.completions.is_empty()
+    }
+
     pub fn push_word(&mut self, word: &str) {
         self.trie_syntax.push(word);
     }

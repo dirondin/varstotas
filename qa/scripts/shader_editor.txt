@@ -1,0 +1,62 @@
+# The shader editor (Materials → Shader → Edit…): WGSL highlighting, completion of Surface
+# fields after `o.`, of @params after `p.`, swizzles, the call hint, the reference column,
+# Start from… presets. Real keyboard.
+box 0 0 0 2000 2000 1000
+view iso
+zoom_extents
+action mat_pbr Brick roughness=0.5
+tool paint
+material Brick
+rawp click 1000 0 500
+tool select
+style realistic
+wait 10
+action shader_editor Brick
+wait 10
+action shader_code // @param size = 300 (10..2000) "Size"\n// @param contrast = 0.5\nfn surface(s: Surface, p: Params) -> Surface {\n    var o = s;\n    return o;\n}
+wait 10
+screenshot shots/shed_open.bmp
+# click at the end of `var o = s;` (line 4) and type on a new line
+raw click 330 168
+raw key End
+raw key Enter
+raw text o.ro
+wait 3
+expect shader_members=["roughness"]
+screenshot shots/shed_members.bmp
+raw key Tab
+wait 2
+raw text = p.
+wait 3
+expect shader_members=["size", "contrast"]
+raw text c
+wait 2
+expect shader_members=["contrast"]
+raw key Tab
+wait 2
+expect shader_line="    o.roughness= p.contrast"
+raw text ;
+wait 2
+expect shader_line="    o.roughness= p.contrast;"
+expect shader_members=[]
+# swizzles after a vector field
+raw key Enter
+raw text let q = s.pos.x
+wait 3
+expect shader_members=["x", "xy", "xz", "xyz"]
+raw key Escape
+wait 2
+expect shader_members=[]
+raw text y;
+wait 2
+expect shader_line="    let q = s.pos.xy;"
+# a call hint
+raw key Enter
+raw text let n = fbm(vec3(q, 0.0), 
+wait 3
+screenshot shots/shed_hint.bmp
+raw text 4);
+wait 50
+expect shader_edit=Some(("Brick", None))
+screenshot shots/shed_done.bmp
+quit

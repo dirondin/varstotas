@@ -12,7 +12,17 @@ use egui_code_editor::{CodeEditor, ColorTheme, Completer, Syntax};
 use varstotas_script::help;
 use std::collections::BTreeSet;
 
+/// The language an editor is for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Lang {
+    /// Rhai scripts (`varstotas_script::help`).
+    Rhai,
+    /// WGSL custom surface shaders (`crate::shader_help`).
+    Wgsl,
+}
+
 pub struct ScriptEditor {
+    lang: Lang,
     syntax: Syntax,
     completer: Completer,
     /// Id of the text field (known after the first frame), for focus checks.
@@ -25,6 +35,8 @@ pub struct ScriptEditor {
     header_vars: Vec<String>,
     /// Id of the editor (two editors can be open at once).
     id: &'static str,
+    /// Cursor (char index) last frame.
+    cursor: Option<usize>,
 }
 
 struct MemberPopup {
@@ -36,7 +48,7 @@ struct MemberPopup {
 
 /// A row of our completion list.
 struct Item {
-    name: &'static str,
+    name: String,
     /// Shown instead of the name (`dot(b)`, `@param`).
     label: String,
     /// Inserted after the typed prefix.
@@ -54,24 +66,29 @@ impl Item {
             None => rest.to_string(),
         };
         let what = if m.sig.is_some() { m.ty.label().to_string() } else { format!(": {}", m.ty.label()) };
-        Self { name: m.name, label: m.sig.unwrap_or(m.name).to_string(), insert, detail: format!("{what}  — {}", m.doc) }
+        Self { name: m.name.to_string(), label: m.sig.unwrap_or(m.name).to_string(), insert, detail: format!("{what}  — {}", m.doc) }
     }
 }
 
 /// The list for the text before the cursor: header tags, `@param` types or members after a dot.
-fn items_at(text: &str, idx: usize) -> Option<(Vec<Item>, String, usize)> {
+fn items_at(lang: Lang, text: &str, idx: usize) -> Option<(Vec<Item>, String, usize)> {
+    if lang == Lang::Wgsl {
+        let (rows, prefix, start) = crate::shader_help::items_at(text, idx)?;
+        let items = rows.into_iter().map(|(name, label, insert, detail)| Item { name, label, insert, detail }).collect();
+        return Some((items, prefix, start));
+    }
     let rest = |name: &str, prefix: &str| name.get(prefix.len()..).unwrap_or_default().to_string();
     if let Some((ctx, prefix, start)) = help::tag_context(text, idx) {
         let items = match ctx {
             help::TagCtx::Tag => help::TAGS
                 .iter()
                 .filter(|t| t.0.starts_with(prefix.as_str()))
-                .map(|t| Item { name: t.0, label: format!("@{}", t.0), insert: format!("{} ", rest(t.0, &prefix)), detail: format!("{}  — {}", t.1, t.2) })
+                .map(|t| Item { name: t.0.to_string(), label: format!("@{}", t.0), insert: format!("{} ", rest(t.0, &prefix)), detail: format!("{}  — {}", t.1, t.2) })
                 .collect(),
             help::TagCtx::ParamType => help::PARAM_TYPES
                 .iter()
                 .filter(|t| t.0.starts_with(prefix.as_str()))
-                .map(|t| Item { name: t.0, label: t.0.to_string(), insert: rest(t.0, &prefix), detail: format!("— {}", t.1) })
+                .map(|t| Item { name: t.0.to_string(), label: t.0.to_string(), insert: rest(t.0, &prefix), detail: format!("— {}", t.1) })
                 .collect(),
         };
         return Some((items, prefix, start));
@@ -91,7 +108,7 @@ impl Default for ScriptEditor {
             .with_types(BTreeSet::from_iter(help::CONSTANTS.iter().copied()))
             .with_special(BTreeSet::from_iter(help::FNS.iter().map(|f| f.name)));
         let completer = Completer::new_with_syntax(&syntax).with_user_words().with_auto_indent();
-        Self { syntax, completer, text_id: None, members: None, dismissed: None, header_vars: Vec::new(), id: "script_console_code" }
+        Self { lang: Lang::Rhai, syntax, completer, text_id: None, members: None, dismissed: None, header_vars: Vec::new(), id: "script_console_code", cursor: None }
     }
 }
 
@@ -99,6 +116,35 @@ impl ScriptEditor {
     /// An editor with its own id (the default one is the Script Console's).
     pub fn with_id(id: &'static str) -> Self {
         Self { id, ..Self::default() }
+    }
+
+    /// A WGSL shader editor (`crate::shader_help`): `@param`s marked and completed after `p.`.
+    pub fn wgsl(id: &'static str) -> Self {
+        use crate::shader_help as sh;
+        let syntax = Syntax::new("wgsl")
+            .with_case_sensitive(true)
+            .with_comment("//")
+            .with_comment_multiline(["/*", "*/"])
+            .with_keywords(BTreeSet::from_iter(sh::KEYWORDS.iter().copied()))
+            .with_types(BTreeSet::from_iter(sh::TYPES.iter().copied()))
+            .with_special(BTreeSet::from_iter(sh::FNS.iter().map(|f| f.0)));
+        let completer = Completer::new_with_syntax(&syntax).with_user_words().with_auto_indent();
+        Self { lang: Lang::Wgsl, syntax, completer, id, ..Self::default() }
+    }
+
+    /// The line of `code` the cursor was on last frame (for the harness).
+    pub fn cursor_line(&self, code: &str) -> String {
+        let Some(c) = self.cursor else { return String::new() };
+        let chars: Vec<char> = code.chars().collect();
+        let c = c.min(chars.len());
+        let start = chars[..c].iter().rposition(|x| *x == '\n').map_or(0, |p| p + 1);
+        let end = chars[c..].iter().position(|x| *x == '\n').map_or(chars.len(), |p| c + p);
+        chars[start..end].iter().collect()
+    }
+
+    /// Names in the member list now open (for the harness).
+    pub fn member_names(&self) -> Vec<String> {
+        self.members.as_ref().map(|p| p.items.iter().map(|i| i.name.clone()).collect()).unwrap_or_default()
     }
 
     pub fn has_focus(&self, ui: &Ui) -> bool {
@@ -118,7 +164,10 @@ impl ScriptEditor {
         };
         // Variables from the script header (`@param` keys, points, objects, path): dark teal,
         // and offered by the completer.
-        let vars: Vec<String> = help::header_vars(code).into_iter().map(|(n, _)| n).collect();
+        let vars: Vec<String> = match self.lang {
+            Lang::Rhai => help::header_vars(code).into_iter().map(|(n, _)| n).collect(),
+            Lang::Wgsl => varstotas_kernel::shader_params(code).into_iter().map(|p| p.name).collect(),
+        };
         if vars != self.header_vars {
             self.completer = Completer::new_with_syntax(&self.syntax).with_user_words().with_auto_indent();
             for v in &vars {
@@ -140,6 +189,7 @@ impl ScriptEditor {
                 } else if i.consume_key(Modifiers::NONE, Key::Tab) || i.consume_key(Modifiers::NONE, Key::Enter) {
                     i.events.push(Event::Paste(pop.items[pop.sel].insert.clone()));
                 } else if i.consume_key(Modifiers::NONE, Key::Escape) {
+                    // Esc closes the list only; egui would also take the focus from the field.
                     self.dismissed = Some(pop.start);
                 }
             });
@@ -164,13 +214,19 @@ impl ScriptEditor {
             .show(ui, |ui| editor.show(ui, code, &self.syntax).0)
             .inner;
         self.text_id = Some(out.response.id);
+        self.cursor = out.cursor_range.map(|r| r.primary.index.0);
         if out.response.has_focus() {
             self.update_members(&out);
             match &self.members {
                 Some(pop) => member_popup(ui, &out, pop, font),
                 None => self.completer.show(&self.syntax, &theme, font, &mut out),
             }
-            param_hint(ui, &out, font);
+            param_hint(ui, &out, font, self.lang);
+            // egui drops the focus on Esc before any widget runs; while a popup is open the
+            // field keeps it (the popup closes instead).
+            let popup = self.members.is_some() || self.completer.is_open();
+            let filter = egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: popup };
+            ui.memory_mut(|m| m.set_focus_lock_filter(out.response.id, filter));
         } else {
             self.members = None;
         }
@@ -180,7 +236,8 @@ impl ScriptEditor {
     /// The member list for the text at the cursor (after `receiver.`), keeping the selection.
     fn update_members(&mut self, out: &TextEditOutput) {
         let text = out.galley.text();
-        let ctx = out.cursor_range.and_then(|r| items_at(text, r.primary.index.0.min(text.chars().count())));
+        let lang = self.lang;
+        let ctx = out.cursor_range.and_then(|r| items_at(lang, text, r.primary.index.0.min(text.chars().count())));
         let Some((items, prefix, start)) = ctx else {
             self.members = None;
             self.dismissed = None;
@@ -238,10 +295,24 @@ fn member_popup(ui: &Ui, out: &TextEditOutput, pop: &MemberPopup, font: f32) {
 }
 
 /// The signature of the call around the cursor, above the cursor line.
-fn param_hint(ui: &Ui, out: &TextEditOutput, font: f32) {
+fn param_hint(ui: &Ui, out: &TextEditOutput, font: f32, lang: Lang) {
     let Some(range) = out.cursor_range else { return };
     let text = out.galley.text();
     let idx = range.primary.index.0.min(text.chars().count());
+    if lang == Lang::Wgsl {
+        let t = crate::shader_help::PARAM_TAG;
+        let job = if crate::shader_help::on_param_line(text, idx) {
+            let mut job = LayoutJob::default();
+            job.append(t.1, 0.0, TextFormat::simple(FontId::monospace(font), ui.visuals().text_color()));
+            job.append(&format!("  — {}", t.2), 0.0, TextFormat::simple(FontId::proportional(font * 0.9), ui.visuals().weak_text_color()));
+            job
+        } else {
+            let Some((name, arg, false)) = help::call_context(text, idx) else { return };
+            let Some((sig, doc)) = crate::shader_help::fn_doc(&name) else { return };
+            hint_job(ui, sig, arg, doc, font)
+        };
+        return show_hint(ui, out, idx, job);
+    }
     if let Some(t) = help::tag_at(text, idx) {
         let mut job = LayoutJob::default();
         job.append(t.1, 0.0, TextFormat::simple(FontId::monospace(font), ui.visuals().text_color()));

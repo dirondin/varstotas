@@ -68,6 +68,14 @@ A shader can have at most 8 parameters. When you edit the code, parameters keep 
 
 You can also use any WGSL built-in (`fract`, `smoothstep`, `mix`, `sin`, …).
 
+## The editor
+
+The shader window highlights WGSL and completes as you type: after `s.` or `o.` it lists the
+`Surface` fields, after `p.` your parameters, after `s.pos.` the swizzles, and on a `// @` line
+the parameter tag. ↑ / ↓ pick, Tab or Enter inserts, Esc closes the list. Inside a helper call
+(`fbm(`, `noise(`, …) a hint shows the signature with the current argument. **Start from…**
+replaces the code with a preset, and **Reference** shows the fields and functions beside the code.
+
 ## Errors
 
 The editor applies the code half a second after you stop typing, or when you press **Apply**, but

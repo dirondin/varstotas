@@ -17,6 +17,7 @@ mod inference;
 mod layout;
 mod nav;
 mod pbr;
+mod shader_help;
 mod shaders;
 mod overlay;
 mod plugins;

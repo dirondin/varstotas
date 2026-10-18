@@ -286,7 +286,7 @@ impl VarstotasApp {
                 });
                 if ui.small_button("Edit…").on_hover_text("Write or change the shader").clicked() {
                     let code = p.shader.as_ref().map_or_else(|| NEW_SHADER.to_string(), |sh| sh.source.clone());
-                    self.tray.shader_edit = Some(ShaderEdit { material: cur.name.clone(), code, changed: None, error: None });
+                    self.tray.shader_edit = Some(ShaderEdit::new(cur.name.clone(), code));
                 }
             });
             if let Some(sh) = &mut p.shader {
@@ -372,32 +372,39 @@ impl VarstotasApp {
             .id(egui::Id::new("shader_editor"))
             .open(&mut open)
             .default_pos(self.viewport.rect.min + vec2(60.0, 40.0))
-            .default_size(vec2(560.0, 460.0))
+            .default_size(vec2(760.0, 480.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("fn surface(s: Surface, p: Params) -> Surface").monospace().small());
+                    egui::ComboBox::from_id_salt("shader_start").selected_text("Start from…").show_ui(ui, |ui| {
+                        for (name, src) in crate::shaders::PRESETS.iter().copied().chain([("Checker (new)", NEW_SHADER)]) {
+                            if ui.selectable_label(false, name).on_hover_text("Replace the code with this shader").clicked() {
+                                ed.code = src.to_string();
+                                ed.changed = Some(std::time::Instant::now());
+                            }
+                        }
+                    });
+                    ui.toggle_value(&mut ed.reference, "Reference").on_hover_text("Surface fields, helpers and built-ins");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Apply").clicked() {
                             apply = true;
                         }
                     });
                 });
-                let theme = if ui.visuals().dark_mode { egui_code_editor::ColorTheme::GITHUB_DARK } else { egui_code_editor::ColorTheme::GITHUB_LIGHT };
-                let h = (ui.available_height() - 50.0).max(120.0);
-                let out = egui::ScrollArea::vertical()
-                    .max_height(h)
-                    .min_scrolled_height(h)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        egui_code_editor::CodeEditor::default()
-                            .id_source("shader_code")
-                            .with_rows(24)
-                            .with_fontsize(12.0)
-                            .with_theme(theme)
-                            .with_numlines(true)
-                            .vscroll(false)
-                            .show(ui, &mut ed.code, &egui_code_editor::Syntax::rust())
-                            .0
+                let h = (ui.available_height() - 28.0).max(120.0);
+                let out = ui
+                    .horizontal_top(|ui| {
+                        let side = if ed.reference { 230.0 } else { 0.0 };
+                        let out = ui.vertical(|ui| {
+                            ui.set_width((ui.available_width() - side).max(200.0));
+                            ed.editor.show(ui, &mut ed.code, h)
+                        });
+                        if ed.reference {
+                            ui.vertical(|ui| {
+                                ui.set_width(side - 8.0);
+                                shader_reference(ui, h);
+                            });
+                        }
+                        out.inner
                     })
                     .inner;
                 if out.response.changed() {
@@ -562,6 +569,35 @@ pub(crate) struct ShaderEdit {
     pub code: String,
     pub changed: Option<std::time::Instant>,
     pub error: Option<String>,
+    /// The code editor (WGSL highlighting, completion, call hints).
+    pub editor: crate::ui::code_editor::ScriptEditor,
+    /// The reference column is shown.
+    pub reference: bool,
+}
+
+impl ShaderEdit {
+    pub(crate) fn new(material: String, code: String) -> Self {
+        Self { material, code, changed: None, error: None, editor: crate::ui::code_editor::ScriptEditor::wgsl("shader_code"), reference: true }
+    }
+}
+
+/// The reference column of the shader editor: `Surface`'s fields, the helpers and built-ins.
+fn shader_reference(ui: &mut Ui, h: f32) {
+    use crate::shader_help as sh;
+    egui::ScrollArea::vertical().id_salt("shader_ref").max_height(h).auto_shrink([false, false]).show(ui, |ui| {
+        ui.label(RichText::new("Surface (s, o)").strong());
+        for (name, ty, doc) in sh::SURFACE {
+            ui.label(RichText::new(format!("{name}: {ty}")).monospace().small()).on_hover_text(*doc);
+        }
+        ui.add_space(4.0);
+        ui.label(RichText::new("Parameters").strong());
+        ui.label(RichText::new(sh::PARAM_TAG.1).monospace().small()).on_hover_text(sh::PARAM_TAG.2);
+        ui.add_space(4.0);
+        ui.label(RichText::new("Functions").strong());
+        for (_, sig, doc) in sh::FNS {
+            ui.label(RichText::new(*sig).monospace().small()).on_hover_text(*doc);
+        }
+    });
 }
 
 /// A starting point for a new shader.
