@@ -368,6 +368,7 @@ pub struct VarstotasApp {
     pub(crate) bridge: crate::bridge_ops::BridgeState,
     pub(crate) plugins: crate::ui::extensions::PluginState,
     pub(crate) library: crate::ui::library::LibraryState,
+    pub(crate) mat_library: crate::ui::mat_library::MatLibraryState,
     /// Transient status message (text, expiry time).
     /// Transient message (text, expiry time, is_error), shown next to the tool hint.
     pub(crate) flash: Option<(String, f64, bool)>,
@@ -506,6 +507,7 @@ impl VarstotasApp {
             bridge: Default::default(),
             plugins: Default::default(),
             library: Default::default(),
+            mat_library: Default::default(),
             flash: None,
             tray: TrayState::default(),
             debug,
@@ -1709,6 +1711,7 @@ impl VarstotasApp {
             name,
             color: crate::textures::average_color(&decoded),
             image: Some(tex),
+            pbr: None,
         };
         let p2 = pm.clone();
         self.doc.commit("Add Material", |m| {

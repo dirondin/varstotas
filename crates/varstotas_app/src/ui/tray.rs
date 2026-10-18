@@ -824,7 +824,7 @@ impl VarstotasApp {
     }
 
     /// Thumbnail of a texture for the material swatches (decoded once).
-    fn thumbnail(&mut self, ctx: &egui::Context, img: &varstotas_kernel::TextureImage) -> Option<egui::TextureId> {
+    pub(crate) fn thumbnail(&mut self, ctx: &egui::Context, img: &varstotas_kernel::TextureImage) -> Option<egui::TextureId> {
         let key = std::sync::Arc::as_ptr(&img.bytes) as *const u8 as usize;
         if let Some(t) = self.tray.thumbs.get(&key) {
             return Some(t.id());
@@ -1178,24 +1178,21 @@ impl VarstotasApp {
         if !self.doc.model.materials.is_empty() {
             ui.add_space(4.0);
             ui.label(RichText::new("In Model").small().color(theme::TEXT_DIM));
-            let mats: Vec<varstotas_kernel::Material> = self.doc.model.materials.values().cloned().collect();
+            let mats: Vec<(varstotas_kernel::MaterialId, varstotas_kernel::Material)> = self.doc.model.materials.iter().map(|(id, m)| (id, m.clone())).collect();
             let ctx = ui.ctx().clone();
             ui.horizontal_wrapped(|ui| {
-                for m in &mats {
+                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                for (id, m) in &mats {
                     let sel = cur.as_ref().is_some_and(|c| c.name == m.name);
-                    let r = swatch(ui, color32(m.color), 22.0, sel).on_hover_text(&m.name);
-                    if let Some(img) = &m.image
-                        && let Some(t) = self.thumbnail(&ctx, img)
-                    {
-                        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                        ui.painter().image(t, r.rect.shrink(3.0), uv, Color32::WHITE);
-                    }
+                    let r = self.material_swatch(ui, &ctx, m, 22.0, sel).on_hover_text(crate::ui::mat_library::describe(m));
                     if r.clicked() {
                         picked = Some(Some(PaletteMaterial::of(m)));
                     }
+                    r.context_menu(|ui| self.model_material_menu(ui, *id));
                 }
             });
         }
+        self.material_library_ui(ui);
         self.texture_size_editor(ui);
         self.pbr_editor(ui);
         if let Some(p) = picked {

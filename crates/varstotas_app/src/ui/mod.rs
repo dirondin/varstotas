@@ -9,6 +9,7 @@ pub mod gen_editor;
 pub mod generators;
 pub mod icons;
 pub mod library;
+pub mod mat_library;
 pub mod menu;
 pub mod realistic;
 pub mod render;

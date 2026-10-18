@@ -1,0 +1,54 @@
+# Materials library: a model material saved to ~/.varstotas/materials (.vrstmat), used in a new
+# document (added with its PBR, then painted), the bundled examples (the gallery's materials),
+# export / import of a material file, Delete… asks first.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+action mat_pbr Grey metallic=1 roughness=0.1
+action mat_save Grey
+expect matlib=["Grey"]
+action mat_export Grey|exported.vrstmat
+save qa_matlib.vrst
+action new
+wait 10
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+expect matlib=["Grey"]
+expect pbr=[]
+action mat_use Grey
+expect current_mat=Some(("Grey", Some((1.0, 0.0))))
+expect pbr=[("Grey", 1.0, 0.1, 0.0, [])]
+wait 3
+expect tool=Paint
+rawp click 500 0 500
+wait 5
+expect mats={"-": 5, "Grey": 1}
+# an example (bundled) material: glass
+action mat_use Clear Glass
+expect current_mat=Some(("Clear Glass", Some((0.0, 1.0))))
+rawp click 500 500 1000
+wait 5
+expect mats={"-": 4, "Clear Glass": 1, "Grey": 1}
+# import the exported file: the same material is reused, not duplicated
+action mat_import exported.vrstmat
+expect pbr=[("Grey", 1.0, 0.1, 0.0, []), ("Clear Glass", 0.0, 0.0, 1.0, [])]
+# a different material of the same name gets a new name
+action mat_pbr Grey roughness=0.5
+action mat_import exported.vrstmat
+expect pbr=[("Grey", 1.0, 0.5, 0.0, []), ("Clear Glass", 0.0, 0.0, 1.0, []), ("Grey 2", 1.0, 0.1, 0.0, [])]
+style realistic
+wait 20
+screenshot shots/matlib.bmp
+# Delete… asks; Cancel keeps the file
+action mat_delete Grey
+wait 5
+expect mat_delete=Some("Grey")
+screenshot shots/matlib_ask.bmp
+raw click 792 382
+wait 5
+expect mat_delete=None
+expect matlib=["Grey"]
+quit

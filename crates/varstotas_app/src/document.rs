@@ -51,6 +51,8 @@ pub struct PaletteMaterial {
     pub color: [f32; 4],
     /// Texture of a textured material (bytes shared, cheap to clone).
     pub image: Option<varstotas_kernel::TextureImage>,
+    /// PBR parameters, maps and shader (a library material brings its own).
+    pub pbr: Option<varstotas_kernel::Pbr>,
 }
 
 #[allow(dead_code)] // used by the Paint tool (Tools agent)
@@ -62,17 +64,18 @@ impl PaletteMaterial {
         }
         let id = model.add_material(&self.name, self.color);
         model.materials[id].image = self.image.clone();
+        model.materials[id].pbr = self.pbr.clone();
         id
     }
 
     /// A plain colour.
     pub fn color(name: impl Into<String>, color: [f32; 4]) -> Self {
-        Self { name: name.into(), color, image: None }
+        Self { name: name.into(), color, image: None, pbr: None }
     }
 
     /// The palette entry for a model material.
     pub fn of(m: &varstotas_kernel::Material) -> Self {
-        Self { name: m.name.clone(), color: m.color, image: m.image.clone() }
+        Self { name: m.name.clone(), color: m.color, image: m.image.clone(), pbr: m.pbr.clone() }
     }
 }
 

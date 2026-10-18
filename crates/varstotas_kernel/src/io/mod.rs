@@ -9,7 +9,7 @@ mod threemf;
 
 pub use dxf::{DxfData, add_dxf, export_dxf, import_dxf, import_dxf_with, parse_dxf, write_dxf};
 pub use gltf::{add_gltf, export_glb, import_gltf, import_gltf_with, write_glb};
-pub use native::{from_json, load, save, to_json};
+pub use native::{MATERIAL_EXT, MATERIAL_FORMAT, from_json, load, load_material, save, save_material, to_json};
 pub use obj::{export_obj, import_obj, import_obj_with, write_obj, write_obj_with_textures};
 pub use threemf::{export_3mf, write_3mf, write_3mf_model};
 pub use stl::{export_stl, import_stl, import_stl_with, write_stl_binary};
