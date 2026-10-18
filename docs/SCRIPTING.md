@@ -87,6 +87,9 @@ Varstotas встраивает язык [Rhai](https://rhai.rs/book/) — про
 | `units()`, `materials()` | единицы модели, имена материалов |
 | `all_faces()` | все грани модели, включая вложенные группы (для экспортёров) |
 | `read_text(path)`, `write_text(path, text)` | чтение / запись текстового файла |
+| `file_exists(path)`, `list_files(dir, ext)`, `list_dirs(dir)` | есть ли файл; файлы с расширением (`""` — любые, с подпапками, до 5000); папки внутри |
+| `parse_json(text)` | JSON → map / массив / числа / строки |
+| `fetch_text(url)`, `fetch_file(url, path)` | загрузка по сети (системный curl): текст / в файл |
 
 Свойства сущности: `e.kind` (`"face"`, `"edge"`, `"vertex"`, `"group"`, `"component"`, `"parametric"`), `e.valid`, `e.area` (грань, мм²), `e.length` (ребро), `e.normal` (грань), `e.center`, `e.vertices` (точки), `e.edges` (рёбра грани), `e.faces` (грани ребра / соседи грани), `e.name` (группа, можно присваивать), `e.definition`, `e.material`, `e.tag`, `e.soft`.
 

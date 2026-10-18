@@ -1,11 +1,16 @@
 //! Online Materials window (Materials card → Library → Online…): browse the Poly Haven and
 //! ambientCG catalogues, download a material's 1K maps into the materials library
-//! (`<library>/Poly Haven/…`) and paint with it. See `crate::online_mats`.
+//! (`<library>/Poly Haven/…`) and paint with it. Material source plugins (`@material_source`)
+//! join the Source dropdown, their parameters above the grid. See `crate::online_mats`,
+//! `crate::mat_plugins`.
 
 use crate::app::VarstotasApp;
-use crate::online_mats::{Asset, Msg, Online, Source};
+use crate::online_mats::{Asset, Msg, Online, PluginSource, Source};
+use crate::plugins::{ParamKind, Plugin};
 use egui::{Color32, RichText, Ui};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 const TILE: f32 = 96.0;
 
@@ -30,6 +35,8 @@ pub struct OnlineWindow {
     pub selected: Option<String>,
     /// The last finished download: "<key> ok <file>" / "<key> error <message>" (harness).
     pub last: Option<String>,
+    /// Parameter values (text) of the source plugins, by plugin file.
+    pub plugin_values: HashMap<PathBuf, Vec<String>>,
     pub work: Online,
 }
 
@@ -46,6 +53,7 @@ impl Default for OnlineWindow {
             downloading: HashSet::new(),
             selected: None,
             last: None,
+            plugin_values: HashMap::new(),
             work: Online::default(),
         }
     }
@@ -70,8 +78,8 @@ impl OnlineWindow {
 
     /// Start loading the current source's catalogue if it isn't there.
     pub fn ensure_catalogue(&mut self, ctx: &egui::Context) {
-        if !self.catalogues.contains_key(&self.source) && self.loading.insert(self.source) {
-            self.work.load_catalogue(self.source, ctx);
+        if !self.catalogues.contains_key(&self.source) && self.loading.insert(self.source.clone()) {
+            self.work.load_catalogue(self.source.clone(), ctx);
         }
     }
 
@@ -88,6 +96,12 @@ impl OnlineWindow {
             }
         }
     }
+}
+
+/// A parameter that names a folder or a file (`folder`, `dir`, `path`…).
+fn is_path_param(key: &str) -> bool {
+    let k = key.to_lowercase();
+    ["folder", "dir", "path", "file"].iter().any(|w| k.contains(w))
 }
 
 /// Open `url` in the browser (not in scripted runs).
@@ -109,6 +123,52 @@ fn open_url(url: &str) {
 }
 
 impl VarstotasApp {
+    /// The `@material_source` plugins.
+    pub(crate) fn source_plugins(&self) -> Vec<Plugin> {
+        self.plugins.list.iter().filter(|p| p.material_source).cloned().collect()
+    }
+
+    /// Plugin `p` as a source with its current parameter values.
+    fn plugin_source(&self, p: &Plugin) -> Result<Source, String> {
+        let values = self.online.plugin_values.get(&p.path).cloned().unwrap_or_default();
+        let mut params = crate::plugins::param_values(p, &values, self.doc.model.unit)?;
+        // Folders and files as absolute paths (the plugin's answers resolve against other folders).
+        for q in p.params.iter().filter(|q| q.kind == ParamKind::Text && is_path_param(&q.key)) {
+            if let Some(serde_json::Value::String(v)) = params.get_mut(&q.key)
+                && !v.trim().is_empty()
+            {
+                *v = std::path::absolute(v.trim()).map(|a| a.to_string_lossy().to_string()).unwrap_or_else(|_| v.clone());
+            }
+        }
+        Ok(Source::Plugin(Arc::new(PluginSource { plugin: p.clone(), params })))
+    }
+
+    /// Show `source` (a plugin's catalogue is loaded again when `reload`).
+    pub(crate) fn online_set_source(&mut self, source: Source, reload: bool, ctx: &egui::Context) {
+        if self.online.source != source {
+            self.online.category.clear();
+            self.online.selected = None;
+        }
+        if reload && !self.online.loading.contains(&source) {
+            self.online.catalogues.remove(&source);
+        }
+        self.online.source = source;
+        self.online.ensure_catalogue(ctx);
+    }
+
+    /// Switch to plugin `p` (by its name or `plugin-<file stem>` key) with its values.
+    pub(crate) fn online_plugin_source(&mut self, key: &str, reload: bool, ctx: &egui::Context) -> bool {
+        let found = self.source_plugins().into_iter().find(|p| {
+            p.name.eq_ignore_ascii_case(key.trim()) || p.path.file_stem().is_some_and(|s| format!("plugin-{}", s.to_string_lossy()).eq_ignore_ascii_case(key.trim()))
+        });
+        let Some(p) = found else { return false };
+        match self.plugin_source(&p) {
+            Ok(s) => self.online_set_source(s, reload, ctx),
+            Err(e) => self.flash_error(e),
+        }
+        true
+    }
+
     /// Download asset `key` into the library (and paint with it when `use_it`).
     pub(crate) fn online_download(&mut self, key: &str, use_it: bool, ctx: &egui::Context) {
         let (Some(asset), Some(dir)) = (self.online.asset(key).cloned(), self.material_library_dir()) else {
@@ -122,7 +182,7 @@ impl VarstotasApp {
 
     /// The library material downloaded for `a` (same folder and name), if any.
     fn online_in_library(&self, a: &Asset) -> Option<varstotas_kernel::Material> {
-        self.mat_library.items.iter().find(|i| i.folder == a.source.label() && i.mat.name == a.name).map(|i| i.mat.clone())
+        self.mat_library.items.iter().find(|i| i.folder == a.source.folder() && i.mat.name == a.name).map(|i| i.mat.clone())
     }
 
     /// Take the results of the background work.
@@ -181,14 +241,29 @@ impl VarstotasApp {
     }
 
     fn online_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        let plugins = self.source_plugins();
+        let mut pick: Option<Result<Source, String>> = None;
         ui.horizontal(|ui| {
-            for s in Source::ALL {
-                if ui.selectable_label(self.online.source == s, s.label()).clicked() && self.online.source != s {
-                    self.online.source = s;
-                    self.online.category.clear();
-                    self.online.ensure_catalogue(ctx);
+            ui.label("Source");
+            let cur = self.online.source.clone();
+            egui::ComboBox::from_id_salt("online_source").selected_text(cur.label()).width(150.0).show_ui(ui, |ui| {
+                for s in Source::BUILT_IN {
+                    if ui.selectable_label(cur == s, s.label()).clicked() {
+                        pick = Some(Ok(s));
+                    }
                 }
-            }
+                ui.separator();
+                for p in &plugins {
+                    let on = matches!(&cur, Source::Plugin(x) if x.plugin.path == p.path);
+                    let r = ui.selectable_label(on, &p.name).on_hover_text(format!("{}\n{}", p.description, p.path.display()));
+                    if r.clicked() {
+                        pick = Some(self.plugin_source(p));
+                    }
+                }
+                if plugins.is_empty() {
+                    ui.label(RichText::new("Plugins with @material_source\nare listed here").small().weak());
+                }
+            });
             ui.separator();
             ui.add(egui::TextEdit::singleline(&mut self.online.query).hint_text("Search: brick, oak, concrete…").desired_width(180.0).id_salt("online_search"));
             let cats: Vec<String> = match self.online.catalogues.get(&self.online.source) {
@@ -208,7 +283,21 @@ impl VarstotasApp {
                 }
             });
         });
-        ui.label(RichText::new("Free CC0 photo scans (colour, normal, roughness, occlusion, metal maps at real-world size). Downloads go to the materials library.").small().weak());
+        match &pick {
+            Some(Ok(s)) if *s != self.online.source => self.online_set_source(s.clone(), false, ctx),
+            Some(Err(e)) => self.flash_error(e.clone()),
+            _ => {}
+        }
+        let plugin = match &self.online.source {
+            Source::Plugin(p) => plugins.iter().find(|x| x.path == p.plugin.path).cloned(),
+            _ => None,
+        };
+        match &plugin {
+            Some(p) => self.online_plugin_header(ui, p, ctx),
+            None => {
+                ui.label(RichText::new("Free CC0 photo scans (colour, normal, roughness, occlusion, metal maps at real-world size). Downloads go to the materials library.").small().weak());
+            }
+        }
         ui.separator();
         // Details of the selected asset (bottom), the grid above.
         let sel = self.online.selected.clone().and_then(|k| self.online.asset(&k).cloned());
@@ -226,7 +315,9 @@ impl VarstotasApp {
                         }
                         ui.vertical(|ui| {
                             ui.label(RichText::new(&a.name).strong());
-                            ui.label(RichText::new(format!("{} · {} · {} wide · CC0", a.source.label(), a.category, varstotas_kernel::units::format_length(a.width_mm, self.doc.model.unit))).small().weak());
+                            let mut info = vec![a.source.label().to_string()];
+                            info.extend([a.category.clone(), format!("{} wide", varstotas_kernel::units::format_length(a.width_mm, self.doc.model.unit)), a.license.clone()].into_iter().filter(|x| !x.is_empty()));
+                            ui.label(RichText::new(info.join(" · ")).small().weak());
                             ui.horizontal(|ui| {
                                 let key = a.key();
                                 if self.online.downloading.contains(&key) {
@@ -247,8 +338,8 @@ impl VarstotasApp {
                                         self.online_download(&key, false, ctx);
                                     }
                                 }
-                                if ui.button("Web Page").clicked() {
-                                    open_url(&a.source.page_url(&a.id));
+                                if !a.page.is_empty() && ui.button("Web Page").clicked() {
+                                    open_url(&a.page);
                                 }
                             });
                         });
@@ -263,6 +354,9 @@ impl VarstotasApp {
                     ui.spinner();
                     ui.label(format!("Loading the {} catalogue…", self.online.source.label()));
                 });
+                if !self.online.loading.contains(&self.online.source) {
+                    self.online.ensure_catalogue(ctx);
+                }
                 return;
             }
             Some(Err(e)) => {
@@ -328,6 +422,50 @@ impl VarstotasApp {
                     None => self.online_download(&key, true, ctx),
                 }
             }
+        }
+    }
+
+    /// A source plugin's description, its parameters and Load.
+    fn online_plugin_header(&mut self, ui: &mut Ui, p: &Plugin, ctx: &egui::Context) {
+        if !p.description.is_empty() {
+            ui.label(RichText::new(&p.description).small().weak());
+        }
+        if p.params.is_empty() {
+            if ui.small_button("Reload").clicked() {
+                self.online_plugin_source(&p.name, true, ctx);
+            }
+            return;
+        }
+        let values = self.online.plugin_values.entry(p.path.clone()).or_insert_with(|| p.params.iter().map(|q| q.default.clone()).collect());
+        values.resize(p.params.len(), String::new());
+        let mut load = false;
+        ui.horizontal_wrapped(|ui| {
+            for (q, v) in p.params.iter().zip(values.iter_mut()) {
+                ui.label(&q.label);
+                if q.kind == ParamKind::Bool {
+                    let mut on = v == "true";
+                    if ui.checkbox(&mut on, "").changed() {
+                        *v = on.to_string();
+                    }
+                } else {
+                    let w = if q.kind == ParamKind::Text { 220.0 } else { 70.0 };
+                    let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(&q.default).id_salt(("online_param", &q.key)));
+                    load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    // A folder / file parameter: pick it.
+                    if q.kind == ParamKind::Text && is_path_param(&q.key) && ui.small_button("…").on_hover_text("Choose it").clicked() {
+                        let d = rfd::FileDialog::new();
+                        let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
+                        if let Some(d) = picked {
+                            *v = d.to_string_lossy().to_string();
+                            load = true;
+                        }
+                    }
+                }
+            }
+            load |= ui.button("Load").on_hover_text("Ask the plugin for its materials with these values").clicked();
+        });
+        if load {
+            self.online_plugin_source(&p.name, true, ctx);
         }
     }
 }

@@ -9,6 +9,8 @@
 //! // @param steps:int = 12 "Steps"         (:int, :number, :text, :bool)
 //! // @pick 2 "Click the start and the end"  (pick points first: `points`)
 //! // @import csv / @export json            (File → Import / Export: `path`)
+//! // @material_import mat                  (Materials → Import…, see `mat_plugins`)
+//! // @material_source                      (a source of the Online Materials window)
 //! ```
 //!
 //! The header ends at the first line that is not a comment. Examples ship in `examples/plugins`
@@ -21,6 +23,9 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     ("beam.rhai", include_str!("../../../examples/plugins/beam.rhai")),
     ("import_points_csv.rhai", include_str!("../../../examples/plugins/import_points_csv.rhai")),
     ("export_faces_json.py", include_str!("../../../examples/plugins/export_faces_json.py")),
+    ("unity_material.rhai", include_str!("../../../examples/plugins/unity_material.rhai")),
+    ("texture_folders.rhai", include_str!("../../../examples/plugins/texture_folders.rhai")),
+    ("ambientcg_python.py", include_str!("../../../examples/plugins/ambientcg_python.py")),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +69,36 @@ pub struct Plugin {
     /// File extensions for File → Import / Export (lower case, no dot).
     pub import: Vec<String>,
     pub export: Vec<String>,
+    /// `@material_import`: material file extensions it reads (Materials → Import…).
+    pub material_import: Vec<String>,
+    /// `@material_source`: a catalogue of materials to download (Online Materials window).
+    pub material_source: bool,
+}
+
+impl Plugin {
+    /// A plugin of the Extensions menu (not a file or a material plugin).
+    pub fn in_menu(&self) -> bool {
+        self.import.is_empty() && self.export.is_empty() && self.material_import.is_empty() && !self.material_source
+    }
+}
+
+/// A parameter's text value as a script value (lengths in mm, with `unit` for bare numbers).
+pub fn param_value(q: &Param, v: &str, unit: varstotas_kernel::LengthUnit) -> Result<serde_json::Value, String> {
+    use serde_json::json;
+    let t = v.trim();
+    let bad = || format!("{}: not a valid value: {t}", q.label);
+    Ok(match q.kind {
+        ParamKind::Length => json!(varstotas_kernel::units::parse_length(t, unit).ok_or_else(bad)?),
+        ParamKind::Int => json!(t.parse::<i64>().map_err(|_| bad())?),
+        ParamKind::Number => json!(t.replace(',', ".").parse::<f64>().map_err(|_| bad())?),
+        ParamKind::Bool => json!(t == "true"),
+        ParamKind::Text => json!(v),
+    })
+}
+
+/// The parameters of `p` with `values` (text, in order; the defaults where missing).
+pub fn param_values(p: &Plugin, values: &[String], unit: varstotas_kernel::LengthUnit) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    p.params.iter().enumerate().map(|(i, q)| Ok((q.key.clone(), param_value(q, values.get(i).unwrap_or(&q.default), unit)?))).collect()
 }
 
 /// Split `text "quoted label"` → (text, label).
@@ -130,6 +165,8 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         select: None,
         import: Vec::new(),
         export: Vec::new(),
+        material_import: Vec::new(),
+        material_source: false,
     };
     for line in src.lines() {
         let t = line.trim();
@@ -158,6 +195,8 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             "select" => p.select = Some(split_label(rest).1.unwrap_or_else(|| "Select objects".into())),
             "import" => p.import = exts(),
             "export" => p.export = exts(),
+            "material_import" => p.material_import = exts(),
+            "material_source" => p.material_source = true,
             // Unknown tags are ignored (room for later additions).
             _ => {}
         }
@@ -255,6 +294,11 @@ let x = 1; // @name not a header any more
         assert_eq!(p.export, ["json", "txt"]);
         let p = parse("# @import csv\nimport varstotas\n", Path::new("points_in.py")).unwrap();
         assert_eq!((p.name.as_str(), p.lang, p.import.as_slice(), p.menu.len()), ("points in", Lang::Python, &["csv".to_string()][..], 1));
+        let p = parse("// @name Unity\n// @material_import .mat, MATERIAL\n", Path::new("u.rhai")).unwrap();
+        assert_eq!((p.material_import.as_slice(), p.material_source, p.in_menu()), (&["mat".to_string(), "material".to_string()][..], false, false));
+        let p = parse("# @material_source\n", Path::new("site.py")).unwrap();
+        assert!(p.material_source && !p.in_menu());
+        assert!(parse("// @name X\n", Path::new("x.rhai")).unwrap().in_menu());
         assert!(parse("// @param 1x = 3", Path::new("a.rhai")).is_err());
         assert!(parse("// @param x:float = 3", Path::new("a.rhai")).is_err());
     }

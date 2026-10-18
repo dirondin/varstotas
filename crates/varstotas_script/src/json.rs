@@ -67,7 +67,7 @@ pub fn parse_entity_id(s: &str) -> Option<(ContextPath, EntityRef)> {
     Some((path, r))
 }
 
-fn from_json(v: &Value) -> Result<Dynamic, String> {
+pub(crate) fn from_json(v: &Value) -> Result<Dynamic, String> {
     Ok(match v {
         Value::Null => Dynamic::UNIT,
         Value::Bool(b) => Dynamic::from_bool(*b),

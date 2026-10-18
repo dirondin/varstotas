@@ -268,3 +268,29 @@ fn example_plugins_run() {
     assert!(m.root_mesh().faces.values().all(|f| f.normal.z > 0.99), "the outline faces up");
     let _ = std::fs::remove_file(f);
 }
+
+#[test]
+fn files_and_json() {
+    let d = std::env::temp_dir().join(format!("varstotas_script_files_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("a").join("b")).unwrap();
+    std::fs::write(d.join("a").join("x.meta"), "guid: 1").unwrap();
+    std::fs::write(d.join("a").join("b").join("y.META"), "").unwrap();
+    std::fs::write(d.join("z.txt"), "").unwrap();
+    let dir = d.to_string_lossy().replace('\\', "/");
+    let mut m = Model::new();
+    let src = format!(
+        r#"let j = parse_json("{{\"n\": 2, \"list\": [1, \"a\"], \"o\": {{\"k\": true}}}}");
+print(j.n + j.list.len());
+print(j.o.k);
+print(list_files("{dir}", "meta").len());
+print(list_files("{dir}", "").len());
+print(list_dirs("{dir}").len());
+print(file_exists("{dir}/z.txt"));
+print(file_exists("{dir}/none"));"#
+    );
+    let r = go(&mut m, &src);
+    assert_eq!(r.output, "4\ntrue\n2\n3\n1\ntrue\nfalse\n");
+    assert!(run(&mut m, &ScriptCtx::default(), "parse_json(\"{oops\")").error.is_some());
+    let _ = std::fs::remove_dir_all(d);
+}

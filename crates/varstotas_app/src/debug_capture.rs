@@ -1643,16 +1643,36 @@ impl VarstotasApp {
             self.prefs.tray_hidden = crate::ui::tray::TRAY_CARDS.iter().filter(|c| !keep.iter().any(|k| k.eq_ignore_ascii_case(c))).map(|c| c.to_string()).collect();
             return;
         }
-        // Online Materials: `online [polyhaven|ambientcg]` opens the window (on that source),
-        // `online_search <words>`, `online_get <source>:<id> [use]` downloads into the library,
-        // `online_wait` waits for catalogues and downloads.
+        // Online Materials: `online [polyhaven|ambientcg|<source plugin name>|plugin-<file stem>]`
+        // opens the window (on that source), `online_param <key> <value>` sets a source plugin's
+        // parameter and loads its catalogue again, `online_search <words>`,
+        // `online_get <source>:<id> [use]` downloads into the library, `online_wait` waits for
+        // catalogues and downloads.
         if name == "online" || name.starts_with("online ") {
             self.online.open = true;
-            if let Some(s) = name.strip_prefix("online ").and_then(crate::online_mats::Source::from_key) {
-                self.online.source = s;
-                self.online.category.clear();
+            if let Some(key) = name.strip_prefix("online ") {
+                match crate::online_mats::Source::from_key(key) {
+                    Some(s) => self.online_set_source(s, false, ctx),
+                    None => {
+                        if !self.online_plugin_source(key, false, ctx) {
+                            log::warn!("online: no source {key}");
+                        }
+                    }
+                }
             }
             self.online.ensure_catalogue(ctx);
+            return;
+        }
+        if let Some(args) = name.strip_prefix("online_param ") {
+            let (key, value) = args.trim().split_once(' ').unwrap_or((args.trim(), ""));
+            if let crate::online_mats::Source::Plugin(src) = self.online.source.clone() {
+                let p = &src.plugin;
+                if let Some(i) = p.params.iter().position(|q| q.key == key) {
+                    let values = self.online.plugin_values.entry(p.path.clone()).or_insert_with(|| p.params.iter().map(|q| q.default.clone()).collect());
+                    values[i] = value.to_string();
+                }
+                self.online_plugin_source(&p.name, true, ctx);
+            }
             return;
         }
         if let Some(q) = name.strip_prefix("online_search ") {
@@ -2320,7 +2340,7 @@ impl VarstotasApp {
         let o = &self.online;
         let n = match o.catalogues.get(&o.source) {
             Some(Ok(l)) => l.len().to_string(),
-            Some(Err(_)) => "error".into(),
+            Some(Err(e)) => format!("error {e:?}"),
             None => "-".into(),
         };
         format!("({} {} catalogue={n} shown={} busy={} sel={:?} last={:?})", o.open, o.source.key(), o.shown().len(), o.work.busy, o.selected, o.last)

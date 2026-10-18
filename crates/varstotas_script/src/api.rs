@@ -19,8 +19,48 @@ pub const NAMES: &[&str] = &[
     "subtract", "intersect", "trim", "split", "outer_shell", "reverse", "soften", "material", "paint", "tag",
     "make_parametric", "set_params", "params", "dimension", "note", "enter", "exit", "faces", "edges", "groups", "all",
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
-    "write_text", "generators", "add_generator", "generate", "reset_params",
+    "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
+    "parse_json", "fetch_text", "fetch_file",
 ];
+
+/// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
+/// sorted.
+pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
+    fn walk(d: &std::path::Path, ext: &str, depth: usize, out: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(d) else { return };
+        for e in rd.flatten() {
+            if out.len() >= 5000 {
+                return;
+            }
+            let p = e.path();
+            if p.is_dir() {
+                if depth < 8 {
+                    walk(&p, ext, depth + 1, out);
+                }
+            } else if ext.is_empty() || p.extension().is_some_and(|x| x.to_string_lossy().eq_ignore_ascii_case(ext)) {
+                out.push(p.to_string_lossy().to_string());
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, ext, 0, &mut out);
+    out.sort();
+    out
+}
+
+/// GET `url` with the system curl (into the file `to`, else the bytes back).
+fn fetch(url: &str, to: Option<&str>) -> Result<Vec<u8>, String> {
+    let mut cmd = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
+    cmd.args(["-sSfL", "--max-time", "180", "--retry", "2", "--user-agent", "Varstotas"]);
+    if let Some(p) = to {
+        cmd.arg("-o").arg(p);
+    }
+    let out = cmd.arg(url).output().map_err(|e| format!("curl: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("{url}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(out.stdout)
+}
 
 fn err<T>(msg: impl Into<String>) -> R<T> {
     Err(msg.into().into())
@@ -1208,6 +1248,31 @@ fn register_context(e: &mut Engine) {
     });
     e.register_fn("write_text", |path: ImmutableString, text: ImmutableString| -> R<()> {
         std::fs::write(path.as_str(), text.as_str()).or_else(|e| err(format!("{path}: {e}")))
+    });
+    e.register_fn("file_exists", |path: ImmutableString| std::path::Path::new(path.as_str()).exists());
+    e.register_fn("list_files", |dir: ImmutableString, ext: ImmutableString| -> Array {
+        list_files(std::path::Path::new(dir.as_str()), ext.trim_start_matches('.')).into_iter().map(Dynamic::from).collect()
+    });
+    e.register_fn("list_dirs", |dir: ImmutableString| -> Array {
+        let mut out: Vec<String> = std::fs::read_dir(dir.as_str())
+            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).map(|p| p.to_string_lossy().to_string()).collect())
+            .unwrap_or_default();
+        out.sort();
+        out.into_iter().map(Dynamic::from).collect()
+    });
+    e.register_fn("parse_json", |text: ImmutableString| -> R<Dynamic> {
+        let v: serde_json::Value = serde_json::from_str(text.as_str()).or_else(|e| err(format!("JSON: {e}")))?;
+        crate::json::from_json(&v).or_else(err)
+    });
+    e.register_fn("fetch_text", |url: ImmutableString| -> R<String> {
+        let bytes = fetch(&url, None).or_else(err)?;
+        Ok(String::from_utf8_lossy(&bytes).to_string())
+    });
+    e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString| -> R<()> {
+        if let Some(d) = std::path::Path::new(path.as_str()).parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        fetch(&url, Some(path.as_str())).map(|_| ()).or_else(err)
     });
     e.register_fn("materials", || -> R<Array> {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))

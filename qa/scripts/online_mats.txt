@@ -11,7 +11,7 @@ wait 5
 action online_wait
 wait 5
 expect online=(true polyhaven catalogue=
-raw click 399 110
+raw click 427 110
 raw text red brick
 wait 5
 expect shown=94
@@ -35,10 +35,12 @@ expect online=(false
 rawp click 500 0 500
 wait 5
 expect mats={"-": 5, "Red Brick": 1}
-# ambientCG: same search, double-click the first tile (Online… lower: the In Model row)
+# ambientCG (Source dropdown): same search, double-click the first tile (Online… lower: the In Model row)
 raw click 1348 335
 wait 5
-raw click 253 110
+raw click 245 110
+wait 5
+raw click 219 166
 wait 5
 action online_wait
 wait 10
@@ -57,6 +59,30 @@ wait 5
 rawp click 1000 500 500
 wait 5
 expect mats={"-": 4,
+# A source plugin in Python (example: ambientCG search "metal"): its catalogue, a download.
+raw click 1348 335
+wait 5
+raw click 245 110
+wait 5
+raw click 266 231
+wait 5
+action online_wait
+wait 10
+expect online=(true plugin-ambientcg_python catalogue=
+action online_param search brick
+wait 5
+action online_wait
+wait 10
+expect online=(true plugin-ambientcg_python catalogue=
+action online_get plugin-ambientcg_python:Bricks097
+wait 5
+action online_wait
+wait 10
+expect last=Some("plugin-ambientcg_python:Bricks097 ok
+expect "ambientCG Search (Python)/
+expect ["normal", "roughness", "ao"])
+raw click 743 76
+wait 5
 raw move 60 640
 style realistic
 wait 30

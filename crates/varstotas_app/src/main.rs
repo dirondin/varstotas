@@ -16,6 +16,7 @@ mod document;
 mod inference;
 mod layout;
 mod nav;
+mod mat_plugins;
 mod online_mats;
 mod pbr;
 mod shader_help;

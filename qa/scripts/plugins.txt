@@ -3,7 +3,7 @@
 # (save the selection, place it twice with real clicks: one definition).
 action components
 wait 10
-expect plugins=4 plugin_errors=0
+expect plugins=7 plugin_errors=0
 expect library=0
 # --- library ---------------------------------------------------------------
 action script let b = box(ORIGIN, 600, 400, 300); b.name = "Crate"; select(b);

@@ -230,14 +230,45 @@ impl VarstotasApp {
     }
 
     /// Import… : add material files chosen by the user to the document.
+    /// Materials → Import…: Varstotas materials and whatever the `@material_import` plugins read.
     pub(crate) fn import_materials(&mut self) {
-        let Some(paths) = rfd::FileDialog::new().add_filter("Varstotas material", &[MATERIAL_EXT]).pick_files() else { return };
+        let importers: Vec<_> = self.plugins.list.iter().filter(|p| !p.material_import.is_empty()).cloned().collect();
+        let mut all: Vec<&str> = vec![MATERIAL_EXT];
+        all.extend(importers.iter().flat_map(|p| p.material_import.iter().map(String::as_str)));
+        let mut d = rfd::FileDialog::new();
+        if !importers.is_empty() {
+            d = d.add_filter("All materials", &all);
+        }
+        d = d.add_filter("Varstotas material", &[MATERIAL_EXT]);
+        for p in &importers {
+            let exts: Vec<&str> = p.material_import.iter().map(String::as_str).collect();
+            d = d.add_filter(p.name.clone(), &exts);
+        }
+        let Some(paths) = d.pick_files() else { return };
         for p in paths {
             self.import_material_from(&p);
         }
     }
 
+    /// A `.vrstmat`, or a file of a material importer plugin (its extension).
     pub(crate) fn import_material_from(&mut self, path: &Path) {
+        let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        let plugin = self.plugins.list.iter().find(|p| p.material_import.contains(&ext)).cloned();
+        if let Some(p) = plugin.filter(|_| ext != MATERIAL_EXT) {
+            let res = crate::plugins::param_values(&p, &[], self.doc.model.unit).and_then(|params| crate::mat_plugins::import(&p, path, params));
+            match res {
+                Ok(mats) if !mats.is_empty() => {
+                    for m in &mats {
+                        self.use_material(m);
+                    }
+                    let names: Vec<&str> = mats.iter().map(|m| m.name.as_str()).collect();
+                    self.flash(format!("Imported {} with {}", names.join(", "), p.name));
+                }
+                Ok(_) => self.flash_error(format!("{}: no materials in {}", p.name, path.display())),
+                Err(e) => self.flash_error(format!("Can't import {} with {}: {e}", path.display(), p.name)),
+            }
+            return;
+        }
         match varstotas_kernel::io::load_material(path) {
             Ok(mat) => {
                 self.use_material(&mat);

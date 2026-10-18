@@ -92,7 +92,7 @@ impl VarstotasApp {
             .list
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.import.is_empty() && p.export.is_empty())
+            .filter(|(_, p)| p.in_menu())
             .map(|(i, p)| (i, p.menu.clone()))
             .collect();
         if entries.is_empty() {
@@ -211,16 +211,7 @@ impl VarstotasApp {
         let Some(p) = self.plugin_at(d.idx) else { return Err("the script is gone".into()) };
         let mut vars = Map::new();
         for (q, v) in p.params.iter().zip(&d.values) {
-            let t = v.trim();
-            let bad = || format!("{}: not a valid value: {t}", q.label);
-            let val = match q.kind {
-                ParamKind::Length => json!(varstotas_kernel::units::parse_length(t, self.doc.model.unit).ok_or_else(bad)?),
-                ParamKind::Int => json!(t.parse::<i64>().map_err(|_| bad())?),
-                ParamKind::Number => json!(t.replace(',', ".").parse::<f64>().map_err(|_| bad())?),
-                ParamKind::Bool => json!(t == "true"),
-                ParamKind::Text => json!(v),
-            };
-            vars.insert(q.key.clone(), val);
+            vars.insert(q.key.clone(), crate::plugins::param_value(q, v, self.doc.model.unit)?);
         }
         if let Some(f) = &d.path {
             vars.insert("path".into(), json!(f.to_string_lossy()));

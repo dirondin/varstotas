@@ -3,6 +3,7 @@
 //! through the system `curl` (no HTTP stack in the app) on background threads; catalogues and
 //! thumbnails are cached in `~/.varstotas/cache/online`. A downloaded material becomes a
 //! `.vrstmat` in the materials library (`<library>/Poly Haven/…`, `<library>/ambientCG/…`).
+//! Plugins add more sources (`@material_source`, see `mat_plugins`).
 
 use varstotas_kernel::{Material, Pbr, TextureImage};
 use serde_json::Value;
@@ -12,46 +13,86 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+use crate::plugins::Plugin;
+
+/// A material plugin as a source, with the values of its parameters for this catalogue.
+#[derive(Clone, Debug)]
+pub struct PluginSource {
+    pub plugin: Plugin,
+    pub params: serde_json::Map<String, Value>,
+}
+
+#[derive(Clone, Debug)]
 pub enum Source {
     PolyHaven,
     AmbientCg,
+    /// A `@material_source` plugin (the same source whatever its parameters).
+    Plugin(Arc<PluginSource>),
+}
+
+impl PartialEq for Source {
+    fn eq(&self, o: &Self) -> bool {
+        match (self, o) {
+            (Source::Plugin(a), Source::Plugin(b)) => a.plugin.path == b.plugin.path,
+            _ => std::mem::discriminant(self) == std::mem::discriminant(o),
+        }
+    }
+}
+
+impl Eq for Source {}
+
+impl std::hash::Hash for Source {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        std::mem::discriminant(self).hash(h);
+        if let Source::Plugin(p) = self {
+            p.plugin.path.hash(h);
+        }
+    }
 }
 
 impl Source {
-    pub const ALL: [Source; 2] = [Source::PolyHaven, Source::AmbientCg];
+    pub const BUILT_IN: [Source; 2] = [Source::PolyHaven, Source::AmbientCg];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(&self) -> &str {
         match self {
             Source::PolyHaven => "Poly Haven",
             Source::AmbientCg => "ambientCG",
+            Source::Plugin(p) => &p.plugin.name,
         }
     }
 
-    /// Short name (harness, cache files).
-    pub fn key(self) -> &'static str {
+    /// Short name (harness, cache files): `polyhaven`, `ambientcg`, `plugin-<file stem>`.
+    pub fn key(&self) -> String {
         match self {
-            Source::PolyHaven => "polyhaven",
-            Source::AmbientCg => "ambientcg",
+            Source::PolyHaven => "polyhaven".into(),
+            Source::AmbientCg => "ambientcg".into(),
+            Source::Plugin(p) => format!("plugin-{}", p.plugin.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()),
         }
     }
 
     pub fn from_key(s: &str) -> Option<Source> {
-        Source::ALL.into_iter().find(|x| x.key().eq_ignore_ascii_case(s.trim()))
+        Source::BUILT_IN.into_iter().find(|x| x.key().eq_ignore_ascii_case(s.trim()))
     }
 
-    fn catalogue_url(self) -> &'static str {
+    /// The library folder of its downloads.
+    pub fn folder(&self) -> String {
+        crate::ui::mat_library::safe_name(self.label())
+    }
+
+    fn catalogue_url(&self) -> &'static str {
         match self {
             Source::PolyHaven => "https://api.polyhaven.com/assets?t=textures",
             Source::AmbientCg => "https://ambientcg.com/api/v2/full_json?type=Material&limit=600&include=displayData,dimensionsData,previewData&sort=Popular",
+            Source::Plugin(_) => "",
         }
     }
 
     /// The asset's page on the site.
-    pub fn page_url(self, id: &str) -> String {
+    fn page_url(&self, id: &str) -> String {
         match self {
             Source::PolyHaven => format!("https://polyhaven.com/a/{id}"),
             Source::AmbientCg => format!("https://ambientcg.com/view?id={id}"),
+            Source::Plugin(_) => String::new(),
         }
     }
 }
@@ -67,7 +108,11 @@ pub struct Asset {
     pub keywords: String,
     /// Real-world width of the texture (mm).
     pub width_mm: f64,
+    /// Thumbnail: a URL or a local file.
     pub thumb: String,
+    /// Its web page ("" = none).
+    pub page: String,
+    pub license: String,
 }
 
 impl Asset {
@@ -90,6 +135,46 @@ pub enum MapKind {
     Roughness,
     Ao,
     Metal,
+    Emission,
+}
+
+/// The map an image file is by the words of its name (`bricks_nor_gl_1k.jpg`,
+/// `Wood_BaseColor.png`, `T_Rock_Roughness.tga`): the last telling word decides; DirectX
+/// normal maps (`_dx`, `NormalDX`) and height / displacement maps are left out (None).
+pub fn guess_map(file: &str) -> Option<MapKind> {
+    let name = Path::new(file).file_stem()?.to_string_lossy().to_lowercase();
+    for w in name.split(|c: char| !c.is_ascii_alphanumeric()).rev() {
+        let kind = match w {
+            "dx" | "normaldx" | "disp" | "displacement" | "height" | "bump" | "specular" | "spec" | "gloss" | "glossiness" | "mask" | "opacity" | "alpha" => return None,
+            "nor" | "nrm" | "norm" | "normal" | "normalgl" | "normals" | "n" => MapKind::Normal,
+            "rough" | "roughness" | "rgh" | "r" => MapKind::Roughness,
+            "ao" | "occlusion" | "ambientocclusion" | "occ" => MapKind::Ao,
+            "metal" | "metallic" | "metalness" | "mtl" | "m" => MapKind::Metal,
+            "emission" | "emissive" | "emit" | "glow" | "e" => MapKind::Emission,
+            "albedo" | "diffuse" | "diff" | "basecolor" | "color" | "colour" | "col" | "base" | "d" | "c" => MapKind::Color,
+            _ => continue,
+        };
+        return Some(kind);
+    }
+    None
+}
+
+/// Image bytes as PNG / JPEG (the formats a material embeds): other formats (TGA, BMP) are
+/// converted to PNG.
+pub fn embeddable(bytes: Vec<u8>, file: &str) -> Result<(Vec<u8>, String), String> {
+    if bytes.starts_with(b"\x89PNG") || bytes.starts_with(&[0xFF, 0xD8]) {
+        return Ok((bytes, file.to_string()));
+    }
+    let fmt = image::ImageFormat::from_path(file).ok();
+    let img = match fmt {
+        Some(f) => image::load_from_memory_with_format(&bytes, f),
+        None => image::load_from_memory(&bytes),
+    }
+    .map_err(|e| format!("{file}: {e}"))?;
+    let mut out = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    let stem = Path::new(file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "map".into());
+    Ok((out, format!("{stem}.png")))
 }
 
 fn curl() -> &'static str {
@@ -165,6 +250,8 @@ pub fn parse_polyhaven(json: &[u8]) -> Result<Vec<Asset>, String> {
                 keywords: format!("{} {} {id}", strs("tags").join(" "), cats.join(" ")),
                 width_mm,
                 thumb: format!("https://cdn.polyhaven.com/asset_img/thumbs/{id}.png?width=128&height=128"),
+                page: Source::PolyHaven.page_url(id),
+                license: "CC0".into(),
             };
             (a["download_count"].as_i64().unwrap_or(0), asset)
         })
@@ -193,6 +280,8 @@ pub fn parse_ambientcg(json: &[u8]) -> Result<Vec<Asset>, String> {
                 keywords: format!("{tags} {id}"),
                 width_mm,
                 thumb: a["previewImage"]["128-PNG"].as_str().unwrap_or_default().to_string(),
+                page: Source::AmbientCg.page_url(&id),
+                license: "CC0".into(),
                 id,
             })
         })
@@ -276,6 +365,15 @@ fn average_color(bytes: &[u8]) -> Option<[f32; 3]> {
 /// A material from downloaded maps (`(kind, file name, bytes)`): the colour map as its texture
 /// at `width_mm`, the others as PBR maps of the same size (their factors 1: the maps decide).
 pub fn build_material(name: &str, width_mm: f64, maps: Vec<(MapKind, String, Vec<u8>)>) -> Result<Material, String> {
+    let m = material_from_maps(name, width_mm, maps);
+    if m.image.is_none() {
+        return Err("no colour map".into());
+    }
+    Ok(m)
+}
+
+/// [`build_material`] without the need of a colour map (grey then).
+pub fn material_from_maps(name: &str, width_mm: f64, maps: Vec<(MapKind, String, Vec<u8>)>) -> Material {
     let mut pbr = Pbr { roughness: 0.8, ..Pbr::default() };
     let mut image = None;
     let mut color = [0.6, 0.6, 0.6];
@@ -299,15 +397,18 @@ pub fn build_material(name: &str, width_mm: f64, maps: Vec<(MapKind, String, Vec
                 pbr.metallic = 1.0;
                 pbr.metallic_map = Some(tex);
             }
+            MapKind::Emission => {
+                pbr.emission = [1.0; 3];
+                pbr.emission_map = Some(tex);
+            }
         }
     }
-    let image = image.ok_or("no colour map")?;
-    Ok(Material { name: name.to_string(), color: [color[0], color[1], color[2], 1.0], texture: None, image: Some(image), pbr: Some(pbr) })
+    Material { name: name.to_string(), color: [color[0], color[1], color[2], 1.0], texture: None, image, pbr: Some(pbr) }
 }
 
 /// Download `asset`'s 1K maps and build its material.
 pub fn download(asset: &Asset) -> Result<Material, String> {
-    let maps = match asset.source {
+    let maps = match &asset.source {
         Source::PolyHaven => {
             let files = fetch(&format!("https://api.polyhaven.com/files/{}", asset.id))?;
             polyhaven_maps(&files)?
@@ -322,16 +423,20 @@ pub fn download(asset: &Asset) -> Result<Material, String> {
             let zip = fetch(&format!("https://ambientcg.com/get?file={}_1K-JPG.zip", asset.id))?;
             unzip(&zip, |n| ambientcg_map(n).is_some())?.into_iter().filter_map(|(file, bytes)| Some((ambientcg_map(&file)?, file, bytes))).collect()
         }
+        Source::Plugin(p) => return crate::mat_plugins::download(p, asset),
     };
     build_material(&asset.name, asset.width_mm, maps)
 }
 
 /// The catalogue of `source` (cached for a day).
-pub fn catalogue(source: Source) -> Result<Vec<Asset>, String> {
+pub fn catalogue(source: &Source) -> Result<Vec<Asset>, String> {
+    if let Source::Plugin(p) = source {
+        return crate::mat_plugins::catalogue(p);
+    }
     let json = cached(source.catalogue_url(), &format!("{}.json", source.key()), Some(Duration::from_secs(24 * 3600)))?;
     match source {
         Source::PolyHaven => parse_polyhaven(&json),
-        Source::AmbientCg => parse_ambientcg(&json),
+        _ => parse_ambientcg(&json),
     }
 }
 
@@ -366,7 +471,8 @@ impl Online {
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
         self.busy += 1;
         std::thread::spawn(move || {
-            let _ = tx.send(Msg::Catalogue(source, catalogue(source)));
+            let res = catalogue(&source);
+            let _ = tx.send(Msg::Catalogue(source, res));
             ctx.request_repaint();
         });
     }
@@ -377,7 +483,7 @@ impl Online {
         self.busy += 1;
         std::thread::spawn(move || {
             let res = download(&asset).and_then(|m| {
-                let path = dir.join(asset.source.label()).join(format!("{}.{}", crate::ui::mat_library::safe_name(&m.name), varstotas_kernel::io::MATERIAL_EXT));
+                let path = dir.join(asset.source.folder()).join(format!("{}.{}", crate::ui::mat_library::safe_name(&m.name), varstotas_kernel::io::MATERIAL_EXT));
                 let _ = std::fs::create_dir_all(path.parent().unwrap_or(&dir));
                 varstotas_kernel::io::save_material(&m, &path).map_err(|e| e.to_string())?;
                 Ok((path, Box::new(m)))
@@ -399,10 +505,12 @@ impl Online {
                         // Take the job, then let the lock go (the others fetch meanwhile).
                         let job = qrx.lock().ok().and_then(|r| r.recv().ok());
                         let Some((url, name)) = job else { break };
-                        let img = cached(&url, &format!("thumbs/{}.png", file_safe(&name)), None)
+                        let local = !url.starts_with("http://") && !url.starts_with("https://");
+                        let bytes = if local { std::fs::read(url.trim_start_matches("file://")).map_err(|e| e.to_string()) } else { cached(&url, &format!("thumbs/{}.png", file_safe(&name)), None) };
+                        let img = bytes
                             .ok()
                             .and_then(|b| image::load_from_memory(&b).ok())
-                            .map(|i| i.to_rgba8())
+                            .map(|i| i.thumbnail(256, 256).to_rgba8())
                             .map(|i| (i.width(), i.height(), i.into_raw()));
                         if tx.send(Msg::Thumb(url, img)).is_err() {
                             break;
