@@ -184,7 +184,7 @@ fn curl() -> &'static str {
 /// GET `url` with the system curl (follows redirects; fails on HTTP errors).
 pub fn fetch(url: &str) -> Result<Vec<u8>, String> {
     let out = std::process::Command::new(curl())
-        .args(["-sSfL", "--max-time", "180", "--retry", "2", "--user-agent", "Varstotas"])
+        .args(["-sSfL", "--max-time", "600", "--retry", "2", "--user-agent", "Varstotas"])
         .arg(url)
         .output()
         .map_err(|e| format!("curl: {e}"))?;
@@ -201,7 +201,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 
 /// `url` through the cache file `name` (re-fetched when older than `max_age`; a stale copy
 /// still serves when offline).
-fn cached(url: &str, name: &str, max_age: Option<Duration>) -> Result<Vec<u8>, String> {
+pub(crate) fn cached(url: &str, name: &str, max_age: Option<Duration>) -> Result<Vec<u8>, String> {
     let path = cache_dir().map(|d| d.join(name));
     if let Some(p) = &path
         && let Ok(bytes) = std::fs::read(p)
@@ -226,7 +226,7 @@ fn store(path: &Path, bytes: &[u8]) {
     let _ = std::fs::write(path, bytes);
 }
 
-fn file_safe(s: &str) -> String {
+pub(crate) fn file_safe(s: &str) -> String {
     s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
 }
 
@@ -449,11 +449,16 @@ pub enum Msg {
     Thumb(String, Option<Thumb>),
     /// Asset key, the saved file and its material (or the error), "use it" flag.
     Material(String, Result<(PathBuf, Box<Material>), String>, bool),
+    /// 3D Library (`online_models`): a source's models for a search.
+    Models(crate::online_models::ModelSource, String, Result<Vec<crate::online_models::ModelAsset>, String>),
+    /// 3D Library: asset key, the saved component file and its face count (or the error),
+    /// "place it" flag.
+    Model(String, Result<(PathBuf, usize), String>, bool),
 }
 
 /// Background workers: one thread per catalogue / download, a few for thumbnails.
 pub struct Online {
-    tx: Sender<Msg>,
+    pub(crate) tx: Sender<Msg>,
     pub rx: Receiver<Msg>,
     thumbs: Option<Sender<(String, String)>>,
     pub busy: usize,
@@ -526,7 +531,7 @@ impl Online {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -558,7 +563,7 @@ mod tests {
     }
 
     /// A zip with one stored and one deflated file, written by hand.
-    fn zip(files: &[(&str, &[u8], bool)]) -> Vec<u8> {
+    pub(crate) fn zip(files: &[(&str, &[u8], bool)]) -> Vec<u8> {
         use std::io::Write;
         let (mut out, mut dir) = (Vec::new(), Vec::new());
         for (name, data, deflate) in files {

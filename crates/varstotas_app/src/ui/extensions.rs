@@ -171,6 +171,28 @@ impl VarstotasApp {
         }
     }
 
+    /// File → Import items of the `@model_import` plugins.
+    pub(crate) fn model_import_items(&mut self, ui: &mut Ui) {
+        let items: Vec<(usize, String)> = self
+            .plugins
+            .list
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| !p.model_import.is_empty())
+            .map(|(i, p)| (i, format!("{} ({})…", p.name, p.model_import.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", "))))
+            .collect();
+        if items.is_empty() {
+            return;
+        }
+        ui.separator();
+        for (i, label) in items {
+            if ui.button(label).clicked() {
+                self.actions.push(Action::ImportModelPlugin(i));
+                ui.close();
+            }
+        }
+    }
+
     /// File dialog for an importer / exporter plugin, then [`Self::start_plugin`].
     pub(crate) fn plugin_file(&mut self, idx: usize, export: bool) {
         let Some(p) = self.plugins.list.get(idx) else { return };

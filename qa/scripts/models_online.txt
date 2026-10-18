@@ -1,0 +1,51 @@
+# 3D Library over the network: Poly Haven (download a 196-triangle table with its textures,
+# placed with a real click: real size, credit), NASA's GitHub catalogue (download a GLB),
+# the Smithsonian searched on the server.
+action tray_only Components
+action components
+wait 10
+action models polyhaven
+wait 5
+action online_wait
+wait 10
+expect models=(true polyhaven models=5
+action models_search wooden table
+wait 5
+screenshot shots/modnet_1.bmp
+action models_get polyhaven:wooden_table_02 place
+wait 5
+action online_wait
+wait 10
+expect last=Some("polyhaven:wooden_table_02 ok
+raw click 945 579
+wait 10
+expect credits=["Wooden Table 02"]
+screenshot shots/modnet_2.bmp
+action models nasa
+wait 5
+action online_wait
+wait 10
+expect models=(true nasa models=
+action models_search apollo lunar module
+wait 3
+action models_get @0
+wait 5
+action online_wait
+wait 10
+expect last=Some("nasa:
+expect .vrst faces=
+screenshot shots/modnet_3.bmp
+action models smithsonian
+action models_search chair
+wait 5
+action online_wait
+wait 10
+expect models=(true smithsonian models=
+wait 60
+screenshot shots/modnet_4.bmp
+action models_get @0
+wait 5
+action online_wait
+wait 10
+expect last=Some("smithsonian:
+expect .vrst faces=

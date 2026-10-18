@@ -1,0 +1,579 @@
+//! 3D Library window (Window → 3D Library…, Components card → 3D Library…): browse free models
+//! of Poly Haven, the Smithsonian and NASA (and of `@model_source` plugins), download one into
+//! the components library (`<library>/<source>/<name>.vrst`, the credit kept in the
+//! component) and place it; a model file URL imports the same way. See `crate::online_models`.
+
+use crate::app::VarstotasApp;
+use crate::online_mats::{Msg, Online, PluginSource};
+use crate::online_models::{ModelAsset, ModelSource};
+use crate::plugins::{ParamKind, Plugin};
+use crate::ui::online_mats::{ThumbState, open_url};
+use egui::{Color32, RichText, Ui};
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+const TILE: f32 = 96.0;
+/// Above this many triangles a model is marked heavy.
+const HEAVY: u64 = 100_000;
+
+pub struct ModelWindow {
+    pub open: bool,
+    pub source: ModelSource,
+    pub query: String,
+    /// "" = every category.
+    pub category: String,
+    /// Each source's models and the search they answer ("" for whole catalogues).
+    pub results: HashMap<ModelSource, (String, Result<Vec<ModelAsset>, String>)>,
+    loading: HashSet<ModelSource>,
+    thumbs: HashMap<String, ThumbState>,
+    /// Asset keys being downloaded.
+    pub downloading: HashSet<String>,
+    pub selected: Option<String>,
+    /// The last finished download: "<key> ok <file> faces=N" / "<key> error <message>" (harness).
+    pub last: Option<String>,
+    /// Parameter values (text) of the source plugins, by plugin file.
+    pub plugin_values: HashMap<PathBuf, Vec<String>>,
+    /// Import from URL.
+    pub url: String,
+    /// Assets of URL imports (by key).
+    web: Vec<ModelAsset>,
+    pub work: Online,
+}
+
+impl Default for ModelWindow {
+    fn default() -> Self {
+        Self {
+            open: false,
+            source: ModelSource::PolyHaven,
+            query: String::new(),
+            category: String::new(),
+            results: HashMap::new(),
+            loading: HashSet::new(),
+            thumbs: HashMap::new(),
+            downloading: HashSet::new(),
+            selected: None,
+            last: None,
+            plugin_values: HashMap::new(),
+            url: String::new(),
+            web: Vec::new(),
+            work: Online::default(),
+        }
+    }
+}
+
+impl ModelWindow {
+    pub fn busy(&self) -> bool {
+        self.work.busy > 0
+    }
+
+    pub fn list(&self) -> Option<&Result<Vec<ModelAsset>, String>> {
+        self.results.get(&self.source).map(|(_, r)| r)
+    }
+
+    /// The models of the current source passing the search (sources that search themselves
+    /// answered it already) and the category.
+    pub fn shown(&self) -> Vec<&ModelAsset> {
+        let local = !self.source.searches();
+        match self.list() {
+            Some(Ok(list)) => list.iter().filter(|a| (self.category.is_empty() || a.category == self.category) && (!local || a.matches(&self.query))).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn asset(&self, key: &str) -> Option<&ModelAsset> {
+        self.results.values().filter_map(|(_, r)| r.as_ref().ok()).flatten().chain(&self.web).find(|a| a.key() == key)
+    }
+
+    /// Load the current source's models (for a searching source: for the current search) if
+    /// they aren't there.
+    pub fn ensure(&mut self, ctx: &egui::Context) {
+        let q = if self.source.searches() { self.query.trim().to_string() } else { String::new() };
+        if self.source.searches() && q.is_empty() {
+            return;
+        }
+        let have = self.results.get(&self.source).is_some_and(|(s, _)| *s == q);
+        if !have && self.loading.insert(self.source.clone()) {
+            self.work.load_models(self.source.clone(), q, ctx);
+        }
+    }
+
+    fn thumb(&mut self, ctx: &egui::Context, a: &ModelAsset) -> Option<egui::TextureId> {
+        match self.thumbs.get(&a.thumb) {
+            Some(ThumbState::Ready(t)) => Some(t.id()),
+            Some(_) => None,
+            None => {
+                if !a.thumb.is_empty() {
+                    self.thumbs.insert(a.thumb.clone(), ThumbState::Loading);
+                    self.work.thumb(&a.thumb, &format!("model_{}", a.key()), ctx);
+                }
+                None
+            }
+        }
+    }
+}
+
+/// A parameter that names a folder or a file (`folder`, `dir`, `path`…).
+fn is_path_param(key: &str) -> bool {
+    let k = key.to_lowercase();
+    ["folder", "dir", "path", "file"].iter().any(|w| k.contains(w))
+}
+
+/// "12.3 MB".
+fn megabytes(b: u64) -> String {
+    format!("{:.1} MB", b as f64 / 1_048_576.0)
+}
+
+impl VarstotasApp {
+    /// The `@model_source` plugins.
+    pub(crate) fn model_source_plugins(&self) -> Vec<Plugin> {
+        self.plugins.list.iter().filter(|p| p.model_source.is_some()).cloned().collect()
+    }
+
+    /// The `@model_import` plugins.
+    pub(crate) fn model_importers(&self) -> Vec<Plugin> {
+        self.plugins.list.iter().filter(|p| !p.model_import.is_empty()).cloned().collect()
+    }
+
+    fn model_plugin_source(&self, p: &Plugin) -> Result<ModelSource, String> {
+        let values = self.models.plugin_values.get(&p.path).cloned().unwrap_or_default();
+        let mut params = crate::plugins::param_values(p, &values, self.doc.model.unit)?;
+        for q in p.params.iter().filter(|q| q.kind == ParamKind::Text && is_path_param(&q.key)) {
+            if let Some(serde_json::Value::String(v)) = params.get_mut(&q.key)
+                && !v.trim().is_empty()
+            {
+                *v = std::path::absolute(v.trim()).map(|a| a.to_string_lossy().to_string()).unwrap_or_else(|_| v.clone());
+            }
+        }
+        Ok(ModelSource::Plugin(Arc::new(PluginSource { plugin: p.clone(), params })))
+    }
+
+    /// Show `source` (its models are asked for again when `reload`).
+    pub(crate) fn models_set_source(&mut self, source: ModelSource, reload: bool, ctx: &egui::Context) {
+        if self.models.source != source {
+            self.models.category.clear();
+            self.models.selected = None;
+        }
+        if reload && !self.models.loading.contains(&source) {
+            self.models.results.remove(&source);
+        }
+        self.models.source = source;
+        self.models.ensure(ctx);
+    }
+
+    /// Switch to plugin source `key` (its name or `plugin-<file stem>`).
+    pub(crate) fn models_plugin_source(&mut self, key: &str, reload: bool, ctx: &egui::Context) -> bool {
+        let found = self.model_source_plugins().into_iter().find(|p| {
+            p.name.eq_ignore_ascii_case(key.trim()) || p.path.file_stem().is_some_and(|s| format!("plugin-{}", s.to_string_lossy()).eq_ignore_ascii_case(key.trim()))
+        });
+        let Some(p) = found else { return false };
+        match self.model_plugin_source(&p) {
+            Ok(s) => self.models_set_source(s, reload, ctx),
+            Err(e) => self.flash_error(e),
+        }
+        true
+    }
+
+    /// Search: a searching source asks again, the others filter what they have.
+    pub(crate) fn models_search(&mut self, ctx: &egui::Context) {
+        if self.models.source.searches() {
+            self.models.category.clear();
+            self.models.ensure(ctx);
+        }
+    }
+
+    /// Download model `key` into the components library (and place it when `place`).
+    pub(crate) fn models_download(&mut self, key: &str, place: bool, ctx: &egui::Context) {
+        let (Some(asset), Some(dir)) = (self.models.asset(key).cloned(), self.library_dir()) else {
+            log::warn!("models: no asset {key}");
+            return;
+        };
+        if self.models.downloading.insert(key.to_string()) {
+            let importers = self.model_importers();
+            self.models.work.download_model(asset, dir, importers, place, ctx);
+        }
+    }
+
+    /// Download and import the model file at `url` (glb, gltf, obj, stl, dxf, zip…).
+    pub(crate) fn models_from_url(&mut self, url: &str, place: bool, ctx: &egui::Context) {
+        let url = url.trim();
+        if !(url.starts_with("http://") || url.starts_with("https://")) {
+            self.flash_error("Paste the address of a model file (https://…/model.glb)".to_string());
+            return;
+        }
+        let a = crate::online_models::url_asset(url);
+        let key = a.key();
+        if !self.models.web.iter().any(|w| w.key() == key) {
+            self.models.web.push(a);
+        }
+        self.models_download(&key, place, ctx);
+    }
+
+    /// The components library item downloaded for `a`, if any.
+    fn models_in_library(&self, a: &ModelAsset) -> Option<usize> {
+        let (folder, name) = (a.source.folder(), crate::ui::mat_library::safe_name(&a.name));
+        self.library.items.iter().position(|i| i.folder == folder && i.name == name)
+    }
+
+    fn models_poll(&mut self, ctx: &egui::Context) {
+        while let Ok(msg) = self.models.work.rx.try_recv() {
+            match msg {
+                Msg::Models(src, query, res) => {
+                    self.models.work.busy -= 1;
+                    self.models.loading.remove(&src);
+                    if let Err(e) = &res {
+                        log::warn!("models: {} catalogue: {e}", src.label());
+                    }
+                    self.models.results.insert(src, (query, res));
+                    // The search changed meanwhile.
+                    self.models.ensure(ctx);
+                }
+                Msg::Thumb(url, img) => {
+                    let state = match img {
+                        Some((w, h, px)) => {
+                            let ci = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &px);
+                            ThumbState::Ready(ctx.load_texture(format!("models:{url}"), ci, egui::TextureOptions::LINEAR))
+                        }
+                        None => ThumbState::Failed,
+                    };
+                    self.models.thumbs.insert(url, state);
+                }
+                Msg::Model(key, res, place) => {
+                    self.models.work.busy -= 1;
+                    self.models.downloading.remove(&key);
+                    match res {
+                        Ok((path, faces)) => {
+                            self.models.last = Some(format!("{key} ok {} faces={faces}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
+                            self.refresh_library();
+                            let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                            match self.library.items.iter().position(|i| i.path == path) {
+                                Some(i) if place => self.place_component(i),
+                                Some(_) => self.flash(format!("Downloaded {name} ({faces} faces) to Components → {}", path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string()).unwrap_or_default())),
+                                None => self.flash_error(format!("{} is not in the components library", path.display())),
+                            }
+                        }
+                        Err(e) => {
+                            self.models.last = Some(format!("{key} error {e}"));
+                            self.flash_error(format!("Download failed: {e}"));
+                        }
+                    }
+                }
+                Msg::Catalogue(..) | Msg::Material(..) => {}
+            }
+        }
+    }
+
+    pub(crate) fn models_window(&mut self, ctx: &egui::Context) {
+        self.models_poll(ctx);
+        if !self.models.open {
+            return;
+        }
+        self.models.ensure(ctx);
+        let mut open = true;
+        egui::Window::new("3D Library").open(&mut open).default_pos([140.0, 160.0]).default_size([660.0, 580.0]).min_width(440.0).collapsible(false).show(ctx, |ui| self.models_ui(ui, ctx));
+        self.models.open &= open;
+    }
+
+    fn models_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        let plugins = self.model_source_plugins();
+        let mut pick: Option<Result<ModelSource, String>> = None;
+        let mut search = false;
+        ui.horizontal(|ui| {
+            ui.label("Source");
+            let cur = self.models.source.clone();
+            egui::ComboBox::from_id_salt("models_source").selected_text(cur.label()).width(150.0).show_ui(ui, |ui| {
+                for s in ModelSource::BUILT_IN {
+                    if ui.selectable_label(cur == s, s.label()).clicked() {
+                        pick = Some(Ok(s));
+                    }
+                }
+                ui.separator();
+                for p in &plugins {
+                    let on = matches!(&cur, ModelSource::Plugin(x) if x.plugin.path == p.path);
+                    if ui.selectable_label(on, &p.name).on_hover_text(format!("{}\n{}", p.description, p.path.display())).clicked() {
+                        pick = Some(self.model_plugin_source(p));
+                    }
+                }
+                if plugins.is_empty() {
+                    ui.label(RichText::new("Plugins with @model_source\nare listed here").small().weak());
+                }
+            });
+            ui.separator();
+            let hint = if cur.searches() { "Search, then Enter: chair, skull…" } else { "Search: chair, rock, plant…" };
+            let r = ui.add(egui::TextEdit::singleline(&mut self.models.query).hint_text(hint).desired_width(180.0).id_salt("models_search"));
+            search = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let cats: Vec<String> = match self.models.list() {
+                Some(Ok(list)) => {
+                    let mut c: Vec<String> = list.iter().map(|a| a.category.clone()).filter(|c| !c.is_empty()).collect();
+                    c.sort_by_key(|c| c.to_lowercase());
+                    c.dedup();
+                    c
+                }
+                _ => Vec::new(),
+            };
+            let label = if self.models.category.is_empty() { "All categories".to_string() } else { self.models.category.clone() };
+            egui::ComboBox::from_id_salt("models_cat").selected_text(label).height(400.0).show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.models.category, String::new(), "All categories");
+                for c in cats {
+                    ui.selectable_value(&mut self.models.category, c.clone(), c);
+                }
+            });
+        });
+        match &pick {
+            Some(Ok(s)) if *s != self.models.source => self.models_set_source(s.clone(), false, ctx),
+            Some(Err(e)) => self.flash_error(e.clone()),
+            _ => {}
+        }
+        if search {
+            self.models_search(ctx);
+        }
+        let plugin = match &self.models.source {
+            ModelSource::Plugin(p) => plugins.iter().find(|x| x.path == p.plugin.path).cloned(),
+            _ => None,
+        };
+        match &plugin {
+            Some(p) => self.models_plugin_header(ui, p, ctx),
+            None => {
+                ui.label(RichText::new(format!("{} Downloads go to the components library.", self.models.source.description())).small().weak());
+            }
+        }
+        // Import from URL.
+        ui.horizontal(|ui| {
+            ui.label("From URL");
+            let r = ui.add(egui::TextEdit::singleline(&mut self.models.url).hint_text("https://…/model.glb (gltf, obj, stl, dxf, zip)").desired_width(ui.available_width() - 70.0).id_salt("models_url"));
+            let go = (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) | ui.button("Import").on_hover_text("Download the file into the components library and place it").clicked();
+            if go && !self.models.url.trim().is_empty() {
+                let url = self.models.url.clone();
+                self.models_from_url(&url, true, ctx);
+            }
+        });
+        ui.separator();
+        let sel = self.models.selected.clone().and_then(|k| self.models.asset(&k).cloned());
+        egui::Panel::bottom("models_details").resizable(false).min_size(64.0).show(ui, |ui| {
+            ui.add_space(4.0);
+            match &sel {
+                None => {
+                    ui.label(RichText::new("Click a model to see it; double-click downloads it and places it.").weak());
+                }
+                Some(a) => self.models_details(ui, a, ctx),
+            }
+        });
+        if self.models.source.searches() && self.models.query.trim().is_empty() && !self.models.results.contains_key(&self.models.source) {
+            ui.label(RichText::new("Type a search and press Enter.").weak());
+            return;
+        }
+        match self.models.list().map(|r| r.as_ref().map(|l| l.len()).map_err(|e| e.clone())) {
+            None => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(format!("Loading {} models…", self.models.source.label()));
+                });
+                return;
+            }
+            Some(Err(e)) => {
+                ui.colored_label(Color32::from_rgb(200, 60, 40), format!("Can't load the models: {e}"));
+                if ui.button("Retry").clicked() {
+                    let s = self.models.source.clone();
+                    self.models_set_source(s, true, ctx);
+                }
+                return;
+            }
+            Some(Ok(_)) => {}
+        }
+        let loading = self.models.loading.contains(&self.models.source);
+        let shown: Vec<ModelAsset> = self.models.shown().into_iter().cloned().collect();
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(format!("{} models", shown.len())).small().weak());
+            if loading {
+                ui.spinner();
+            }
+        });
+        let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
+        let rows = shown.len().div_ceil(cols);
+        let row_h = TILE + 22.0;
+        let mut pick: Option<(String, bool)> = None;
+        egui::ScrollArea::vertical().auto_shrink(false).show_rows(ui, row_h, rows, |ui, range| {
+            for r in range {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    for a in shown.iter().skip(r * cols).take(cols) {
+                        let key = a.key();
+                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(TILE, row_h - 4.0), egui::Sense::click());
+                        let img = egui::Rect::from_min_size(rect.min, egui::vec2(TILE, TILE));
+                        let p = ui.painter();
+                        p.rect_filled(img, 4.0, Color32::from_gray(60));
+                        match self.models.thumb(ctx, a) {
+                            Some(t) => {
+                                p.image(t, img.shrink(2.0), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+                            }
+                            None => {
+                                p.text(img.center(), egui::Align2::CENTER_CENTER, "3D", egui::FontId::proportional(22.0), Color32::from_gray(110));
+                            }
+                        }
+                        let selected = self.models.selected.as_deref() == Some(key.as_str());
+                        if selected || resp.hovered() {
+                            let c = if selected { super::theme::ACCENT } else { Color32::from_gray(160) };
+                            p.rect_stroke(img, 4.0, egui::Stroke::new(2.0, c), egui::StrokeKind::Inside);
+                        }
+                        if self.models.downloading.contains(&key) {
+                            p.text(img.center(), egui::Align2::CENTER_CENTER, "⏳", egui::FontId::proportional(22.0), Color32::WHITE);
+                        } else if self.models_in_library(a).is_some() {
+                            p.text(img.right_top() + egui::vec2(-6.0, 4.0), egui::Align2::RIGHT_TOP, "✔", egui::FontId::proportional(14.0), Color32::from_rgb(120, 220, 120));
+                        }
+                        if a.polycount > HEAVY {
+                            p.text(img.left_top() + egui::vec2(5.0, 4.0), egui::Align2::LEFT_TOP, "⚠", egui::FontId::proportional(13.0), Color32::from_rgb(240, 180, 60));
+                        }
+                        let name = egui::text::LayoutJob::simple_singleline(a.name.clone(), egui::FontId::proportional(11.0), ui.visuals().text_color());
+                        let galley = ui.fonts_mut(|f| f.layout_job(name));
+                        let tp = egui::pos2(rect.min.x + ((TILE - galley.size().x) / 2.0).max(0.0), img.max.y + 3.0);
+                        ui.painter().with_clip_rect(rect).galley(tp, galley, Color32::WHITE);
+                        let resp = resp.on_hover_text(format!("{}\n{}", a.name, [a.category.as_str(), a.author.as_str()].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" · ")));
+                        if resp.double_clicked() {
+                            pick = Some((key.clone(), true));
+                        } else if resp.clicked() {
+                            pick = Some((key.clone(), false));
+                        }
+                    }
+                });
+            }
+        });
+        if let Some((key, go)) = pick {
+            self.models.selected = Some(key.clone());
+            if go {
+                match self.models.asset(&key).cloned().and_then(|a| self.models_in_library(&a)) {
+                    Some(i) => self.place_component(i),
+                    None => self.models_download(&key, true, ctx),
+                }
+            }
+        }
+    }
+
+    /// The selected model: its credit, size, and the buttons.
+    fn models_details(&mut self, ui: &mut Ui, a: &ModelAsset, ctx: &egui::Context) {
+        let in_lib = self.models_in_library(a);
+        let unit = self.doc.model.unit;
+        ui.horizontal(|ui| {
+            if let Some(t) = self.models.thumb(ctx, a) {
+                ui.image((t, egui::vec2(48.0, 48.0)));
+            }
+            ui.vertical(|ui| {
+                ui.label(RichText::new(&a.name).strong());
+                let mut info = vec![a.source.label().to_string()];
+                info.extend([a.category.clone(), a.author.clone(), a.license.clone()].into_iter().filter(|x| !x.is_empty()));
+                ui.label(RichText::new(info.join(" · ")).small().weak());
+                let mut more = Vec::new();
+                if let Some(s) = a.size_mm {
+                    more.push(s.iter().map(|v| varstotas_kernel::units::format_length(*v, unit)).collect::<Vec<_>>().join(" × "));
+                }
+                if a.polycount > 0 {
+                    more.push(format!("{} triangles", a.polycount));
+                }
+                if a.bytes > 0 {
+                    more.push(megabytes(a.bytes));
+                }
+                if !more.is_empty() {
+                    ui.label(RichText::new(more.join(" · ")).small().weak());
+                }
+                if a.polycount > HEAVY {
+                    ui.label(RichText::new("⚠ A heavy model: it may slow the view down.").small().color(Color32::from_rgb(220, 160, 50)));
+                }
+                ui.horizontal(|ui| {
+                    let key = a.key();
+                    if self.models.downloading.contains(&key) {
+                        ui.spinner();
+                        ui.label("Downloading…");
+                    } else if let Some(i) = in_lib {
+                        if ui.button("Place").on_hover_text("Already in the components library: place it in the model").clicked() {
+                            self.place_component(i);
+                        }
+                        if ui.button("Download Again").clicked() {
+                            self.models_download(&key, false, ctx);
+                        }
+                    } else {
+                        if ui.button("Download & Place").on_hover_text("Save it to the components library and place it in the model").clicked() {
+                            self.models_download(&key, true, ctx);
+                        }
+                        if ui.button("Download").on_hover_text("Save it to the components library").clicked() {
+                            self.models_download(&key, false, ctx);
+                        }
+                    }
+                    if !a.page.is_empty() && ui.button("Web Page").clicked() {
+                        open_url(&a.page);
+                    }
+                });
+            });
+        });
+    }
+
+    /// A source plugin's description, its parameters and Load.
+    fn models_plugin_header(&mut self, ui: &mut Ui, p: &Plugin, ctx: &egui::Context) {
+        if !p.description.is_empty() {
+            ui.label(RichText::new(&p.description).small().weak());
+        }
+        let searches = p.model_source == Some(true);
+        if p.params.is_empty() {
+            if !searches && ui.small_button("Reload").clicked() {
+                self.models_plugin_source(&p.name, true, ctx);
+            }
+            return;
+        }
+        let values = self.models.plugin_values.entry(p.path.clone()).or_insert_with(|| p.params.iter().map(|q| q.default.clone()).collect());
+        values.resize(p.params.len(), String::new());
+        let mut load = false;
+        ui.horizontal_wrapped(|ui| {
+            for (q, v) in p.params.iter().zip(values.iter_mut()) {
+                ui.label(&q.label);
+                if q.kind == ParamKind::Bool {
+                    let mut on = v == "true";
+                    if ui.checkbox(&mut on, "").changed() {
+                        *v = on.to_string();
+                    }
+                } else {
+                    let w = if q.kind == ParamKind::Text { 220.0 } else { 70.0 };
+                    let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(if !q.default.is_empty() { q.default.as_str() } else if is_path_param(&q.key) { "choose with …" } else { "—" }).id_salt(("models_param", &q.key)));
+                    load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if q.kind == ParamKind::Text && is_path_param(&q.key) && ui.small_button("…").on_hover_text("Choose it").clicked() {
+                        let d = rfd::FileDialog::new();
+                        let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
+                        if let Some(d) = picked {
+                            *v = d.to_string_lossy().to_string();
+                            load = true;
+                        }
+                    }
+                }
+            }
+            let tip = if searches { "Use these values (then search)" } else { "Ask the plugin for its models with these values" };
+            load |= ui.button(if searches { "Apply" } else { "Load" }).on_hover_text(tip).clicked();
+        });
+        if load {
+            self.models_plugin_source(&p.name, true, ctx);
+        }
+    }
+
+    /// File → Import with a `@model_import` plugin (or any file the 3D Library reads): the
+    /// model as one component at the origin.
+    pub(crate) fn import_model_file(&mut self, path: &std::path::Path) {
+        let importers = self.model_importers();
+        let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Model".into());
+        let clip = crate::online_models::import_file(path, &importers, 0)
+            .and_then(|(m, xf)| crate::online_models::library_model(m, xf, &name, None))
+            .and_then(|m| crate::clipboard::Clipboard::from_library(m, &name).map_err(|e| e.to_string()));
+        let clip = match clip {
+            Ok(c) => c,
+            Err(e) => {
+                self.flash_error(format!("Import {}: {e}", path.display()));
+                return;
+            }
+        };
+        let (uid, ctx) = (self.doc.uid, self.doc.active_path.clone());
+        let t = self.doc.model.transform_at(&ctx);
+        let r = self.doc.try_commit(&format!("Import {name}"), |m| clip.paste_into(m, uid, &ctx, &t));
+        if let Some((ents, _)) = r {
+            self.doc.set_selection(ents);
+            self.flash(format!("Imported {}", path.display()));
+            self.actions.push(crate::app::Action::ZoomExtents);
+        } else if let Some(e) = self.doc.last_error.clone() {
+            self.flash_error(e);
+        }
+    }
+}

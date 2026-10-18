@@ -159,6 +159,7 @@ impl VarstotasApp {
                     self.item(ui, "DXF…", None, true, Action::ImportDxf);
                     self.item(ui, "glTF / GLB…", None, true, Action::ImportGltf);
                     self.plugin_file_items(ui, false);
+                    self.model_import_items(ui);
                 });
                 ui.menu_button("Export", |ui| {
                     self.item(ui, "2D Graphic (PNG)…", None, true, Action::ExportImage);
@@ -174,6 +175,7 @@ impl VarstotasApp {
                     self.item(ui, "Sheets (PDF / SVG)…", None, true, Action::Sheets);
                     ui.separator();
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
+                    self.item(ui, "Attributions (credits of downloaded models)…", None, true, Action::ExportAttributions);
                     self.plugin_file_items(ui, true);
                 });
                 ui.separator();
@@ -379,6 +381,10 @@ impl VarstotasApp {
                 }
                 if ui.add(egui::Button::new("Work Planes…").selected(self.planes_window.open)).clicked() {
                     self.actions.push(Action::WorkPlanes);
+                    ui.close();
+                }
+                if ui.add(egui::Button::new("3D Library…").selected(self.models.open)).clicked() {
+                    self.actions.push(Action::ModelLibrary);
                     ui.close();
                 }
                 if ui.add(egui::Button::new("Generator Editor…").selected(self.gen_editor.open)).clicked() {

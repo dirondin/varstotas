@@ -36,6 +36,8 @@
 | `@export json` | экспортёр: пункт в **File → Export**, путь приходит в `path` |
 | `@material_import mat,material` | импортёр материалов: **Materials → Import…** читает эти файлы плагином (см. ниже) |
 | `@material_source` | источник материалов в окне **Online Materials** (см. ниже) |
+| `@model_import ply,…` | импортёр 3D-моделей: пункт в **File → Import**, такие файлы читает и **3D Library** (см. «Плагины моделей») |
+| `@model_source` / `@model_source search` | источник моделей в окне **3D Library**: весь каталог сразу / поиск на стороне сайта |
 
 Параметры, `points`, `objects` и `path` — обычные переменные скрипта. В редакторе Script Console они выделены тёмно-бирюзовым цветом и есть в списке автодополнения: видно, что значение приходит из заголовка.
 
@@ -55,7 +57,7 @@ for o in objects { pushpull(o, h); }
 ```
 
 ### Rhai
-Запуск Rhai-плагина — один шаг Undo с названием плагина; если плагин упал с ошибкой, модель не меняется. Вывод `print` попадает в Script Console, последняя строка появляется в строке состояния. Для импортёров и экспортёров в API есть `read_text(path)`, `write_text(path, text)`, `file_exists`, `list_files(dir, ext)`, `list_dirs(dir)`, `parse_json(text)`, `fetch_text(url)`, `fetch_file(url, path)` и `all_faces()` — все грани модели, включая вложенные группы (`f.vertices` возвращает мировые координаты).
+Запуск Rhai-плагина — один шаг Undo с названием плагина; если плагин упал с ошибкой, модель не меняется. Вывод `print` попадает в Script Console, последняя строка появляется в строке состояния. Для импортёров и экспортёров в API есть `read_text(path)`, `write_text(path, text)`, `file_exists`, `list_files(dir, ext)`, `list_dirs(dir)`, `parse_json(text)`, `fetch_text(url [, headers])`, `fetch_file(url, path [, headers])` (headers — map заголовков HTTP, например `#{ "x-auth-token": key }`), `url_encode(text)` и `all_faces()` — все грани модели, включая вложенные группы (`f.vertices` возвращает мировые координаты).
 
 ### Python
 Python-плагин запускается так же, как File → Run Script…: через `python3`, вывод идёт в Script Console. Значения приходят через `varstotas.params()`:
@@ -114,6 +116,29 @@ fn import_material(path, params) { … }   // → спецификация ил�
 | `metallic`, `roughness`, `transmission`, `ior`, `emission` (цвет), `emission_strength`, `normal_scale`, `clearcoat`, `clearcoat_roughness`, `sheen`, `sheen_tint`, `anisotropy`, `anti_tiling`, `bevel` (мм) | физические параметры (Physical в карточке Materials) |
 
 Пример импортёра — `unity_material.rhai`. Он читает `.mat` (Standard / URP / HDRP Lit): `m_Name`, `_BaseColor` / `_Color`, `_Metallic`, `_Smoothness` / `_Glossiness` (roughness = 1 − smoothness), `_BumpScale`, `_EmissionColor` и текстуры `_BaseMap` / `_MainTex`, `_BumpMap`, `_OcclusionMap`, `_EmissionMap`. Текстуры ищутся по GUID в `.meta`-файлах папки `Assets` проекта. Ширину текстуры задаёт параметр `width`. PSD / TIFF и `_MetallicGlossMap` (металл в канале R) не переносятся.
+
+### Плагины моделей (3D Library)
+Окно **Window → 3D Library…** (или кнопка **3D Library…** в карточке Components) ищет и скачивает готовые модели. Встроенные источники: **Poly Haven** (CC0, glTF с текстурами 1K, реальный размер), **Smithsonian** (CC0, сканы музейных предметов; поиск на сервере — Enter), **NASA** (GLB из репозитория NASA-3D-Resources). Скачанное импортируется, оборачивается в один компонент, кладётся на землю (bounding box от начала координат) и сохраняется в библиотеку компонентов: `<library>/<источник>/<имя>.vrst`. Файлы загрузок — в `~/.varstotas/downloads/<источник>/<id>/`. Двойной клик — скачать и поставить (кликом в модели, как компонент из библиотеки), кнопки Download & Place / Download / Place / Download Again / Web Page. Поле **From URL** скачивает прямую ссылку на `.glb` / `.gltf` / `.obj` / `.stl` / `.dxf` / `.zip` (папка библиотеки «Web»). Модели больше 100 тыс. треугольников помечены ⚠. glTF со сжатием Draco читается (декодер `draco-core`), meshopt — нет.
+
+Компонент помнит источник: название, автор, лицензия, ссылка (Entity Info → строка Source). **File → Export → Attributions…** сохраняет список кредитов всех скачанных компонентов модели — нужен для CC-BY.
+
+**Источник** (`@model_source`): `fn catalogue(params)` → массив моделей, поиск и категории фильтруют его в окне. С `@model_source search` вместо него `fn search(query, params)` — вызывается по Enter в строке поиска, ответ показывается как есть. В обоих случаях `fn download(id, dir, params)` → спецификация модели. Поля модели в каталоге: обязателен `id`; дальше `name`, `category`, `keywords` / `tags`, `author`, `license`, `thumb` (URL или путь), `page`, `polycount` (треугольники), `size` (`[x, y, z]`, мм), `bytes`. Параметры и кнопка Load / Apply — как у источников материалов.
+
+**Импортёр** (`@model_import ext,…`): `fn import_model(path, params)` → спецификация модели. Пункт «<плагин> (.ext)…» в **File → Import** вставляет модель компонентом; 3D Library импортирует плагином скачанные файлы с этим расширением (в том числе из zip и из ответа другого плагина, до трёх уровней).
+
+**Спецификация модели** — JSON-объект (в Rhai — map); относительные пути — от `dir` (у импортёра — от папки файла):
+
+| Поле | Смысл |
+|---|---|
+| `file` | файл модели: `glb`, `gltf`, `obj`, `stl`, `dxf`, `varstotas`, `zip` или расширение `@model_import`-плагина |
+| `url` | скачать файл по ссылке (zip распаковывается) |
+| `zip` | архив: распаковывается (пути с `..` отбрасываются), берётся первая модель по порядку glb → gltf → obj → stl → dxf → varstotas → файлы импортёров |
+| `meshes` | геометрия прямо в ответе: `[{ name, vertices: [[x,y,z], …], faces: [[i,j,k,…], …], material }]`, каждая — группа; `materials` — спецификации материалов (как у плагинов материалов) |
+| `unit` | `m` / `cm` / `mm` / `in` / `ft` — единицы `meshes` или файла без единиц (OBJ, STL); или `scale` — множитель до мм |
+| `up` | `"y"`: ось Y файла — вверх |
+| `name` | имя компонента |
+
+Python-плагины: `python3 plugin.py catalogue|search|download|import_model`, аргументы (`params`, `query`, `id`, `dir`, `path`) — JSON в stdin, ответ — JSON в последней строке stdout. Примеры в `examples/plugins`: `model_folders.rhai` (модели из папки на диске; картинка с тем же именем — превью), `poly_pizza.rhai` (Poly Pizza, бесплатный API-ключ, поиск), `sketchfab.py` (Sketchfab: поиск открыт, скачивание по личному токену), `import_ply.py` (импортёр PLY, ASCII и binary).
 
 ## Библиотека компонентов
 Раздел **Components** в Default Tray (включается галочкой в меню **Window**) показывает файлы `.vrst` из папки библиотеки. По умолчанию это `~/.varstotas/components`; кнопка «…» выбирает другую папку, «Default» в заголовке корневой папки возвращает папку по умолчанию. Подпапки показываются как категории со стрелкой сворачивания.

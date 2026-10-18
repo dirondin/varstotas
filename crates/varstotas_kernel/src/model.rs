@@ -27,6 +27,58 @@ pub struct Definition {
     /// Built by a generator with these values (see [`crate::generator`]). Omitted when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generated: Option<crate::generator::Generated>,
+    /// Where a downloaded component came from: author, licence, link (File → Export →
+    /// Attributions). Omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<Attribution>,
+}
+
+/// The origin of a downloaded model (3D Library): needed to credit CC-BY authors.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Attribution {
+    /// The library / site ("Poly Haven", "Smithsonian", a plugin's name).
+    pub source: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub author: String,
+    /// "CC0", "CC-BY 4.0", … ("" = unknown).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub license: String,
+    /// The model's web page (or the file's address).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub url: String,
+}
+
+impl Attribution {
+    /// One line: `Title by Author (Source, licence) — url`.
+    pub fn line(&self) -> String {
+        let mut s = self.title.clone();
+        if !self.author.is_empty() {
+            s += &format!(" by {}", self.author);
+        }
+        let lic = if self.license.is_empty() { "licence unknown" } else { &self.license };
+        s += &format!(" ({}, {lic})", self.source);
+        if !self.url.is_empty() {
+            s += &format!(" — {}", self.url);
+        }
+        s
+    }
+}
+
+impl Model {
+    /// Credits of the downloaded components placed in the model (one per definition, sorted).
+    pub fn attributions(&self) -> Vec<Attribution> {
+        let mut used = std::collections::HashSet::new();
+        for d in self.defs.values() {
+            for i in d.mesh.instances.values() {
+                used.insert(i.def);
+            }
+        }
+        let mut out: Vec<Attribution> = self.defs.iter().filter(|(id, _)| used.contains(id)).filter_map(|(_, d)| d.source.clone()).collect();
+        out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()).then_with(|| a.source.cmp(&b.source)));
+        out.dedup();
+        out
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -229,7 +281,7 @@ impl Model {
     /// Empty model: a root definition, no materials/tags, millimetres.
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None });
         Self {
             defs,
             root,
@@ -568,7 +620,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -853,7 +905,7 @@ mod move_tests {
     use super::*;
 
     fn group(m: &mut Model, parent: &[InstanceId], name: &str, at: DVec3) -> (DefId, InstanceId) {
-        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None });
+        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None });
         m.defs[d].mesh.add_face(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]);
         let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false };
         let id = m.mesh_at_mut(parent).unwrap().instances.insert(inst);

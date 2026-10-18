@@ -10,6 +10,7 @@ pub mod generator;
 pub mod help;
 mod json;
 
+pub use api::list_files;
 pub use json::{EvalJson, entity_id, eval_json, parse_entity_id};
 
 use varstotas_kernel::{ContextPath, EntityRef, Model};

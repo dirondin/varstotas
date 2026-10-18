@@ -16,19 +16,19 @@ dump folded
 raw click 1243 172
 wait 5
 expect lib_folders=[("Kitchen", 1, true)]
-raw click 1153 296
+raw click 1153 269
 wait 5
 expect lib_folders=[("Kitchen", 1, false)]
 # the Kitchen link shows the folder (recorded in scripted runs)
-raw click 1185 296
+raw click 1185 269
 wait 5
 expect revealed=Some("Kitchen")
 # … → Show Examples
-raw click 1364 241
+raw click 1364 214
 wait 5
 screenshot shots/libf_menu.bmp
 dump menu
-raw click 1320 297
+raw click 1320 270
 wait 10
 expect lib_folders=[("Kitchen", 1, false), ("Examples", 6, false)]
 screenshot shots/libf_back.bmp

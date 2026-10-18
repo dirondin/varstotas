@@ -48,10 +48,14 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
     out
 }
 
-/// GET `url` with the system curl (into the file `to`, else the bytes back).
-fn fetch(url: &str, to: Option<&str>) -> Result<Vec<u8>, String> {
+/// GET `url` with the system curl (into the file `to`, else the bytes back), with extra
+/// request headers (`#{ "Authorization": "Token …" }`).
+fn fetch(url: &str, to: Option<&str>, headers: &Map) -> Result<Vec<u8>, String> {
     let mut cmd = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
-    cmd.args(["-sSfL", "--max-time", "180", "--retry", "2", "--user-agent", "Varstotas"]);
+    cmd.args(["-sSfL", "--max-time", "300", "--retry", "2", "--user-agent", "Varstotas"]);
+    for (k, v) in headers {
+        cmd.arg("-H").arg(format!("{k}: {v}"));
+    }
     if let Some(p) = to {
         cmd.arg("-o").arg(p);
     }
@@ -403,6 +407,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         guides: Default::default(),
         params: None,
         generated: None,
+        source: None,
     });
     let m = mesh_mut(st, &path)?;
     let id = m.instances.insert(Instance {
@@ -1264,15 +1269,22 @@ fn register_context(e: &mut Engine) {
         let v: serde_json::Value = serde_json::from_str(text.as_str()).or_else(|e| err(format!("JSON: {e}")))?;
         crate::json::from_json(&v).or_else(err)
     });
-    e.register_fn("fetch_text", |url: ImmutableString| -> R<String> {
-        let bytes = fetch(&url, None).or_else(err)?;
+    fn fetch_text(url: &str, headers: &Map) -> R<String> {
+        let bytes = fetch(url, None, headers).or_else(err)?;
         Ok(String::from_utf8_lossy(&bytes).to_string())
-    });
-    e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString| -> R<()> {
-        if let Some(d) = std::path::Path::new(path.as_str()).parent() {
+    }
+    fn fetch_file(url: &str, path: &str, headers: &Map) -> R<()> {
+        if let Some(d) = std::path::Path::new(path).parent() {
             let _ = std::fs::create_dir_all(d);
         }
-        fetch(&url, Some(path.as_str())).map(|_| ()).or_else(err)
+        fetch(url, Some(path), headers).map(|_| ()).or_else(err)
+    }
+    e.register_fn("fetch_text", |url: ImmutableString| fetch_text(&url, &Map::new()));
+    e.register_fn("fetch_text", |url: ImmutableString, headers: Map| fetch_text(&url, &headers));
+    e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString| fetch_file(&url, &path, &Map::new()));
+    e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString, headers: Map| fetch_file(&url, &path, &headers));
+    e.register_fn("url_encode", |s: ImmutableString| -> String {
+        s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
     });
     e.register_fn("materials", || -> R<Array> {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))

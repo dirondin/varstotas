@@ -146,3 +146,61 @@ fn glb_keeps_physical_materials() {
     let inst = m.root_mesh().instances.values().next().unwrap();
     assert!(m.defs[inst.def].mesh.faces.values().any(|f| f.uv.is_some()));
 }
+
+/// A GLB whose square is Draco-compressed (KHR_draco_mesh_compression) imports as one face.
+#[test]
+fn gltf_draco_primitive() {
+    use draco_core::{DataType, EncoderBuffer, EncoderOptions, FaceIndex, GeometryAttributeType, Mesh, MeshEncoder, PointAttribute};
+    let mut mesh = Mesh::new();
+    mesh.set_num_points(4);
+    let mut pos = PointAttribute::new();
+    pos.init(GeometryAttributeType::Position, 3, DataType::Float32, false, 4);
+    let coords: [f32; 12] = [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, -1.0, 0.0, 0.0, -1.0];
+    for (i, v) in coords.iter().enumerate() {
+        pos.buffer_mut().write(i * 4, &v.to_le_bytes());
+    }
+    let id = mesh.add_attribute(pos);
+    mesh.set_num_faces(2);
+    mesh.set_face(FaceIndex(0), [0u32.into(), 1u32.into(), 2u32.into()]);
+    mesh.set_face(FaceIndex(1), [0u32.into(), 2u32.into(), 3u32.into()]);
+    let mut enc = MeshEncoder::new();
+    enc.set_mesh(mesh);
+    let mut out = EncoderBuffer::new();
+    enc.encode(&EncoderOptions::new(), &mut out).unwrap();
+    let mut bin = out.data().to_vec();
+    let len = bin.len();
+    while !bin.len().is_multiple_of(4) {
+        bin.push(0);
+    }
+    let doc = serde_json::json!({
+        "asset": {"version": "2.0"},
+        "extensionsUsed": ["KHR_draco_mesh_compression"],
+        "extensionsRequired": ["KHR_draco_mesh_compression"],
+        "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 4,
+            "extensions": {"KHR_draco_mesh_compression": {"bufferView": 0, "attributes": {"POSITION": id}}}}]}],
+        "accessors": [{"componentType": 5126, "count": 4, "type": "VEC3"}],
+        "bufferViews": [{"buffer": 0, "byteLength": len}],
+        "buffers": [{"byteLength": bin.len()}]
+    });
+    let mut json = serde_json::to_vec(&doc).unwrap();
+    while !json.len().is_multiple_of(4) {
+        json.push(b' ');
+    }
+    let mut glb = b"glTF".to_vec();
+    glb.extend(2u32.to_le_bytes());
+    glb.extend(((12 + 8 + json.len() + 8 + bin.len()) as u32).to_le_bytes());
+    glb.extend((json.len() as u32).to_le_bytes());
+    glb.extend(b"JSON");
+    glb.extend(&json);
+    glb.extend((bin.len() as u32).to_le_bytes());
+    glb.extend(b"BIN\0");
+    glb.extend(&bin);
+    let mut m = varstotas_kernel::Model::new();
+    varstotas_kernel::io::add_gltf(&mut m, &glb, None, &Default::default()).unwrap();
+    let faces: usize = m.defs.values().map(|d| d.mesh.faces.len()).sum();
+    assert_eq!(faces, 1, "the two triangles merge into one square");
+    let b = m.bounds().unwrap();
+    // glTF metres, Y-up: 2 m × 1 m on the ground.
+    assert!((b.max.x - b.min.x - 2000.0).abs() < 1e-3 && (b.max.y - b.min.y - 1000.0).abs() < 1e-3 && (b.max.z - b.min.z).abs() < 1e-3, "{b:?}");
+}

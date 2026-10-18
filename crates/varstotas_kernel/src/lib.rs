@@ -57,7 +57,7 @@ pub use history::History;
 pub use mesh::Mesh;
 pub use ops::{ChamferKind, ChamferResult, IntersectScope, SolidOp};
 pub use model::{
-    ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
+    Attribution, ContextPath, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;

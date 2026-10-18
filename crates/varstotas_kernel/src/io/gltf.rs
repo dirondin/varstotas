@@ -377,6 +377,12 @@ impl Gltf {
         if doc["asset"]["version"].as_str().is_some_and(|v| !v.starts_with('2')) {
             return Err(bad("only glTF 2.0 is supported"));
         }
+        // Draco is decoded (`draco`); meshopt needs a decoder this importer has not.
+        for e in doc["extensionsRequired"].as_array().into_iter().flatten().filter_map(|e| e.as_str()) {
+            if matches!(e, "EXT_meshopt_compression" | "KHR_meshopt_compression") {
+                return Err(bad(format!("compressed glTF ({e}) is not supported")));
+            }
+        }
         let mut buffers = Vec::new();
         let mut bin = bin;
         for b in doc["buffers"].as_array().into_iter().flatten() {
@@ -443,6 +449,24 @@ impl Gltf {
             out.push(v);
         }
         Ok(out)
+    }
+
+    /// A Draco-compressed primitive (`KHR_draco_mesh_compression`): its positions, texture
+    /// coordinates and triangle indices.
+    #[allow(clippy::type_complexity)]
+    fn draco(&self, ext: &Value) -> Result<(Vec<[f64; 3]>, Option<Vec<[f64; 2]>>, Vec<usize>), IoError> {
+        let view = ext["bufferView"].as_u64().ok_or_else(|| bad("Draco primitive without bufferView"))?;
+        let (bytes, _) = self.view_bytes(view as usize)?;
+        let mut buf = draco_core::DecoderBuffer::new(bytes);
+        let mut mesh = draco_core::Mesh::new();
+        draco_core::MeshDecoder::new().decode(&mut buf, &mut mesh).map_err(|e| bad(format!("Draco: {e:?}")))?;
+        let n = mesh.num_points();
+        let attr = |name: &str| ext["attributes"][name].as_u64().and_then(|id| mesh.attribute_by_unique_id(id as u32));
+        let pos = attr("POSITION").ok_or_else(|| bad("Draco primitive without POSITION"))?.read_f32s(n, 3);
+        let pos = pos.as_chunks::<3>().0.iter().map(|c| [c[0] as f64, c[1] as f64, c[2] as f64]).collect();
+        let uv = attr("TEXCOORD_0").map(|a| a.read_f32s(n, 2).as_chunks::<2>().0.iter().map(|c| [c[0] as f64, c[1] as f64]).collect());
+        let idx = mesh.faces().iter().flat_map(|f| f.iter().map(|p| p.0 as usize)).collect();
+        Ok((pos, uv, idx))
     }
 
     fn image(&self, tex: usize, dir: Option<&Path>) -> Option<(Vec<u8>, String)> {
@@ -593,19 +617,27 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             if !matches!(mode, 4..=6) {
                 continue;
             }
-            let Some(pa) = p["attributes"]["POSITION"].as_u64() else { continue };
-            let pos: Vec<DVec3> = g
-                .read(pa as usize)?
-                .iter()
-                .map(|v| from_gltf(m.transform_point3(DVec3::new(v[0], v[1], v[2]))))
-                .collect();
-            let uv: Option<Vec<DVec2>> = match p["attributes"]["TEXCOORD_0"].as_u64() {
-                Some(a) => Some(g.read(a as usize)?.iter().map(|v| DVec2::new(v[0], -v[1])).collect()),
-                None => None,
-            };
-            let idx: Vec<usize> = match p["indices"].as_u64() {
-                Some(a) => g.read(a as usize)?.iter().map(|v| v[0] as usize).collect(),
-                None => (0..pos.len()).collect(),
+            let draco = &p["extensions"]["KHR_draco_mesh_compression"];
+            let (pos, uv, idx): (Vec<DVec3>, Option<Vec<DVec2>>, Vec<usize>) = if draco.is_object() {
+                let (pos, uv, idx) = g.draco(draco)?;
+                let pos = pos.iter().map(|v| from_gltf(m.transform_point3(DVec3::new(v[0], v[1], v[2])))).collect();
+                (pos, uv.map(|uv| uv.iter().map(|v| DVec2::new(v[0], -v[1])).collect()), idx)
+            } else {
+                let Some(pa) = p["attributes"]["POSITION"].as_u64() else { continue };
+                let pos: Vec<DVec3> = g
+                    .read(pa as usize)?
+                    .iter()
+                    .map(|v| from_gltf(m.transform_point3(DVec3::new(v[0], v[1], v[2]))))
+                    .collect();
+                let uv: Option<Vec<DVec2>> = match p["attributes"]["TEXCOORD_0"].as_u64() {
+                    Some(a) => Some(g.read(a as usize)?.iter().map(|v| DVec2::new(v[0], -v[1])).collect()),
+                    None => None,
+                };
+                let idx: Vec<usize> = match p["indices"].as_u64() {
+                    Some(a) => g.read(a as usize)?.iter().map(|v| v[0] as usize).collect(),
+                    None => (0..pos.len()).collect(),
+                };
+                (pos, uv, idx)
             };
             let tris: Vec<[usize; 3]> = match mode {
                 5 => (2..idx.len()).map(|k| if k % 2 == 0 { [idx[k - 2], idx[k - 1], idx[k]] } else { [idx[k - 1], idx[k - 2], idx[k]] }).collect(),
@@ -641,7 +673,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             let made = new_faces(&mesh, &HashSet::<FaceId>::new());
             mesh.merge_coplanar_faces(&made);
         }
-        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None });
+        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None });
         let inst = Instance { def, transform: DMat4::IDENTITY, name, material: None, tag: None, hidden: false, locked: false };
         model.defs[pd].mesh.instances.insert(inst);
     }

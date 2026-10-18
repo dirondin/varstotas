@@ -552,6 +552,14 @@ impl VarstotasApp {
                         ui.label("Tag");
                         set_tag = tag_combo(ui, model, inst.tag, "inst");
                         ui.end_row();
+                        // A downloaded model's credit (3D Library).
+                        if let Some(c) = model.defs.get(inst.def).and_then(|d| d.source.as_ref()) {
+                            ui.label("Source");
+                            let lic = if c.license.is_empty() { "licence unknown" } else { &c.license };
+                            let who = if c.author.is_empty() { c.source.clone() } else { format!("{} · {}", c.author, c.source) };
+                            ui.add(egui::Label::new(format!("{who} · {lic}")).truncate()).on_hover_text(format!("{}\nFile → Export → Attributions lists the credits of the model", c.line()));
+                            ui.end_row();
+                        }
                     }
                     _ => {
                         let SelSummary { count, faces, edges, groups, components, guides, dims, area } = summary;

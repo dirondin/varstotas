@@ -555,6 +555,9 @@ impl VarstotasApp {
                 if ui.add_enabled(can, egui::Button::new("Save Selection to Library…")).clicked() {
                     self.library.save_name = Some(self.selection_name());
                 }
+                if ui.button("3D Library…").on_hover_text("Free models from the web (Poly Haven, Smithsonian, NASA, plugins)").clicked() {
+                    self.models.open = true;
+                }
             }
             Some(name) => {
                 let mut done = None;

@@ -105,7 +105,7 @@ fn is_path_param(key: &str) -> bool {
 }
 
 /// Open `url` in the browser (not in scripted runs).
-fn open_url(url: &str) {
+pub(crate) fn open_url(url: &str) {
     if std::env::var_os("VARSTOTAS_SCRIPT").is_some() {
         log::info!("open {url}");
         return;
@@ -207,6 +207,7 @@ impl VarstotasApp {
                     };
                     self.online.thumbs.insert(url, state);
                 }
+                Msg::Models(..) | Msg::Model(..) => {}
                 Msg::Material(key, res, use_it) => {
                     self.online.work.busy -= 1;
                     self.online.downloading.remove(&key);

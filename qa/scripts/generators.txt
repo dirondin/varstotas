@@ -57,7 +57,7 @@ expect back=false,finish=Walnut
 # (still scrolled to Components: Reset is lower)
 action tray_only Entity Info,Components
 wait 5
-raw click 1170 327
+raw click 1170 300
 wait 3
 expect undo=Some("Reset Parameters")
 expect gen_defs=1

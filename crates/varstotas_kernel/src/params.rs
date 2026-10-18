@@ -70,6 +70,7 @@ impl Model {
             guides: Default::default(),
             params: Some(Parametric::new(base)),
             generated: None,
+            source: None,
         });
         self.defs[pd].mesh.instances[inst].def = p;
         self.regenerate_params(p)?;

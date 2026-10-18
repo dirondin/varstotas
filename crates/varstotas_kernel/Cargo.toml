@@ -10,3 +10,9 @@ slotmap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# KHR_draco_mesh_compression in glTF (pure Rust, decoder only).
+draco-core = { version = "2.3.2", default-features = false, features = ["decoder", "edgebreaker_valence_decode", "legacy_bitstream_decode"] }
+
+[dev-dependencies]
+# Encodes the Draco test primitive.
+draco-core = "2.3.2"

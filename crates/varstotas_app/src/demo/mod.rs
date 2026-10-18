@@ -213,6 +213,7 @@ impl Builder {
             guides: Default::default(),
             params: None,
             generated: None,
+            source: None,
         })
     }
 

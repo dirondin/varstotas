@@ -160,6 +160,12 @@ pub enum Action {
     ExportGlb,
     Export3mf,
     ExportReport,
+    /// Credits of the downloaded components in the model (text).
+    ExportAttributions,
+    /// File → Import with a `@model_import` plugin (its index).
+    ImportModelPlugin(usize),
+    /// Window → 3D Library.
+    ModelLibrary,
     /// File → Export → 2D Drawing (SVG / PDF)…: the options dialog.
     ExportDrawing,
     /// Tools → Unfold…: the flat pattern window.
@@ -440,6 +446,7 @@ pub struct VarstotasApp {
     pub(crate) render_window: crate::ui::render::RenderWindow,
     pub(crate) anim_window: crate::ui::animation::AnimWindow,
     pub(crate) online: crate::ui::online_mats::OnlineWindow,
+    pub(crate) models: crate::ui::model_library::ModelWindow,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -564,6 +571,7 @@ impl VarstotasApp {
             render_window: Default::default(),
             anim_window: Default::default(),
             online: Default::default(),
+            models: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -1102,6 +1110,22 @@ impl VarstotasApp {
             Action::ExportGlb => self.export("glb"),
             Action::Export3mf => self.export("3mf"),
             Action::ExportReport => self.export("csv"),
+            Action::ExportAttributions => {
+                if self.doc.model.attributions().is_empty() {
+                    self.flash("No downloaded components with credits in this model".to_string());
+                } else {
+                    self.export("txt");
+                }
+            }
+            Action::ImportModelPlugin(i) => {
+                if let Some(p) = self.plugins.list.get(i) {
+                    let exts: Vec<&str> = p.model_import.iter().map(String::as_str).collect();
+                    if let Some(path) = rfd::FileDialog::new().add_filter(p.name.clone(), &exts).pick_file() {
+                        self.import_model_file(&path);
+                    }
+                }
+            }
+            Action::ModelLibrary => self.models.open = !self.models.open,
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
             Action::Sheets => self.sheets.open = true,
@@ -2100,6 +2124,10 @@ impl VarstotasApp {
             "glb" => io::export_glb(model, path),
             "3mf" => io::export_3mf(model, path),
             "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
+            "txt" => {
+                let lines: Vec<String> = model.attributions().iter().map(|a| a.line()).collect();
+                std::fs::write(path, format!("Credits of the 3D models in {}\n\n{}\n", self.doc.display_name(), lines.join("\n"))).map_err(Into::into)
+            }
             "svg" | "pdf" => {
                 let vp = self.viewport.size();
                 let d = crate::vector_export::build(model, &self.camera, varstotas_kernel::glam::DVec2::new(vp.x as f64, vp.y as f64), &self.vector_opts);
@@ -2547,6 +2575,7 @@ impl eframe::App for VarstotasApp {
         self.render_window(&ctx);
         self.animation_window(&ctx);
         self.online_window(&ctx);
+        self.models_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

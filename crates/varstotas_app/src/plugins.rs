@@ -11,6 +11,8 @@
 //! // @import csv / @export json            (File → Import / Export: `path`)
 //! // @material_import mat                  (Materials → Import…, see `mat_plugins`)
 //! // @material_source                      (a source of the Online Materials window)
+//! // @model_import ply                      (3D models: File → Import, 3D Library downloads)
+//! // @model_source [search]                 (a source of the 3D Library window)
 //! ```
 //!
 //! The header ends at the first line that is not a comment. Examples ship in `examples/plugins`
@@ -26,6 +28,10 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     ("unity_material.rhai", include_str!("../../../examples/plugins/unity_material.rhai")),
     ("texture_folders.rhai", include_str!("../../../examples/plugins/texture_folders.rhai")),
     ("ambientcg_python.py", include_str!("../../../examples/plugins/ambientcg_python.py")),
+    ("model_folders.rhai", include_str!("../../../examples/plugins/model_folders.rhai")),
+    ("poly_pizza.rhai", include_str!("../../../examples/plugins/poly_pizza.rhai")),
+    ("sketchfab.py", include_str!("../../../examples/plugins/sketchfab.py")),
+    ("import_ply.py", include_str!("../../../examples/plugins/import_ply.py")),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,12 +79,17 @@ pub struct Plugin {
     pub material_import: Vec<String>,
     /// `@material_source`: a catalogue of materials to download (Online Materials window).
     pub material_source: bool,
+    /// `@model_import`: 3D model file extensions it reads (see `online_models`).
+    pub model_import: Vec<String>,
+    /// `@model_source`: a catalogue of 3D models (3D Library window); `@model_source search`:
+    /// the source searches itself (`search(query, params)` instead of `catalogue(params)`).
+    pub model_source: Option<bool>,
 }
 
 impl Plugin {
     /// A plugin of the Extensions menu (not a file or a material plugin).
     pub fn in_menu(&self) -> bool {
-        self.import.is_empty() && self.export.is_empty() && self.material_import.is_empty() && !self.material_source
+        self.import.is_empty() && self.export.is_empty() && self.material_import.is_empty() && !self.material_source && self.model_import.is_empty() && self.model_source.is_none()
     }
 }
 
@@ -167,6 +178,8 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         export: Vec::new(),
         material_import: Vec::new(),
         material_source: false,
+        model_import: Vec::new(),
+        model_source: None,
     };
     for line in src.lines() {
         let t = line.trim();
@@ -197,6 +210,8 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             "export" => p.export = exts(),
             "material_import" => p.material_import = exts(),
             "material_source" => p.material_source = true,
+            "model_import" => p.model_import = exts(),
+            "model_source" => p.model_source = Some(rest.eq_ignore_ascii_case("search")),
             // Unknown tags are ignored (room for later additions).
             _ => {}
         }
@@ -299,6 +314,9 @@ let x = 1; // @name not a header any more
         let p = parse("# @material_source\n", Path::new("site.py")).unwrap();
         assert!(p.material_source && !p.in_menu());
         assert!(parse("// @name X\n", Path::new("x.rhai")).unwrap().in_menu());
+        let p = parse("# @model_import PLY\n# @model_source search\n", Path::new("m.py")).unwrap();
+        assert_eq!((p.model_import.as_slice(), p.model_source, p.in_menu()), (&["ply".to_string()][..], Some(true), false));
+        assert_eq!(parse("// @model_source\n", Path::new("m.rhai")).unwrap().model_source, Some(false));
         assert!(parse("// @param 1x = 3", Path::new("a.rhai")).is_err());
         assert!(parse("// @param x:float = 3", Path::new("a.rhai")).is_err());
     }

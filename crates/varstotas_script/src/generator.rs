@@ -154,6 +154,7 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
         guides: Default::default(),
         params: None,
         generated: Some(Generated { generator: name.to_string(), values }),
+        source: None,
     });
     model.graft_content(d, &built);
     Ok(d)

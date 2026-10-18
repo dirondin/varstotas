@@ -11,6 +11,7 @@ pub mod icons;
 pub mod library;
 pub mod mat_library;
 pub mod menu;
+pub mod model_library;
 pub mod online_mats;
 pub mod realistic;
 pub mod render;
