@@ -422,6 +422,7 @@ pub struct VarstotasApp {
     pub(crate) planes_window: crate::ui::workplanes::WorkPlanesWindow,
     pub(crate) render_window: crate::ui::render::RenderWindow,
     pub(crate) anim_window: crate::ui::animation::AnimWindow,
+    pub(crate) online: crate::ui::online_mats::OnlineWindow,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -545,6 +546,7 @@ impl VarstotasApp {
             planes_window: Default::default(),
             render_window: Default::default(),
             anim_window: Default::default(),
+            online: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -2527,6 +2529,7 @@ impl eframe::App for VarstotasApp {
         self.work_planes_window(&ctx);
         self.render_window(&ctx);
         self.animation_window(&ctx);
+        self.online_window(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

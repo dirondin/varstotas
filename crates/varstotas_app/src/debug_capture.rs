@@ -622,7 +622,7 @@ impl VarstotasApp {
             return;
         }
         if script.pt_wait {
-            let busy = self.viewport.pt.as_ref().is_some_and(|j| j.running || j.restart || j.save.is_some()) || self.render_window.batch.is_some() || self.anim_window.busy();
+            let busy = self.viewport.pt.as_ref().is_some_and(|j| j.running || j.restart || j.save.is_some()) || self.render_window.batch.is_some() || self.anim_window.busy() || self.online.busy();
             if busy {
                 return;
             }
@@ -814,7 +814,7 @@ impl VarstotasApp {
                 let size = size.unwrap_or([vp.x.round() as u32, vp.y.round() as u32]);
                 self.export_png_to(p.into(), size, content);
             }
-            ScriptCmd::Action(name) => self.script_action(&name),
+            ScriptCmd::Action(name) => self.script_action(&name, ctx),
             ScriptCmd::Raw(r) => self.queue_raw(r),
             ScriptCmd::RawWorld(sub, pts, steps) => {
                 let mut txt = sub.clone();
@@ -853,7 +853,7 @@ impl VarstotasApp {
     }
 
     /// `action <name>`: menu actions by name.
-    fn script_action(&mut self, name: &str) {
+    fn script_action(&mut self, name: &str, ctx: &Context) {
         use crate::app::Action;
         use varstotas_kernel::IntersectScope;
         // Realistic style: `env key=value…`, `hdri <path|none>`, `mat_pbr <material> key=value…`,
@@ -1632,6 +1632,35 @@ impl VarstotasApp {
             self.prefs.tray_hidden = crate::ui::tray::TRAY_CARDS.iter().filter(|c| !keep.iter().any(|k| k.eq_ignore_ascii_case(c))).map(|c| c.to_string()).collect();
             return;
         }
+        // Online Materials: `online [polyhaven|ambientcg]` opens the window (on that source),
+        // `online_search <words>`, `online_get <source>:<id> [use]` downloads into the library,
+        // `online_wait` waits for catalogues and downloads.
+        if name == "online" || name.starts_with("online ") {
+            self.online.open = true;
+            if let Some(s) = name.strip_prefix("online ").and_then(crate::online_mats::Source::from_key) {
+                self.online.source = s;
+                self.online.category.clear();
+            }
+            self.online.ensure_catalogue(ctx);
+            return;
+        }
+        if let Some(q) = name.strip_prefix("online_search ") {
+            self.online.query = q.trim().to_string();
+            return;
+        }
+        if let Some(args) = name.strip_prefix("online_get ") {
+            let mut it = args.split_whitespace();
+            let key = it.next().unwrap_or_default().to_string();
+            self.online.selected = Some(key.clone());
+            self.online_download(&key, it.next() == Some("use"), ctx);
+            return;
+        }
+        if name == "online_wait" {
+            if let Some(s) = self.debug.script.as_mut() {
+                s.pt_wait = true;
+            }
+            return;
+        }
         if name == "mat_refresh" {
             self.refresh_materials();
             return;
@@ -1923,7 +1952,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} mat_delete={:?} current_mat={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))));
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} online={} mat_delete={:?} current_mat={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.online_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -2262,6 +2291,17 @@ impl VarstotasApp {
             level(m, mesh, &self.doc.selection, &mut Vec::new(), &self.doc.active_path, &mut out);
         }
         format!("{{{out}}} ctx={}", self.doc.active_path.len())
+    }
+
+    /// `(open source catalogue=N shown=N busy=N sel=key last=…)`.
+    fn online_dump(&self) -> String {
+        let o = &self.online;
+        let n = match o.catalogues.get(&o.source) {
+            Some(Ok(l)) => l.len().to_string(),
+            Some(Err(_)) => "error".into(),
+            None => "-".into(),
+        };
+        format!("({} {} catalogue={n} shown={} busy={} sel={:?} last={:?})", o.open, o.source.key(), o.shown().len(), o.work.busy, o.selected, o.last)
     }
 
     /// Library materials as "folder/name" (the examples not built).

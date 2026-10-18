@@ -11,7 +11,7 @@ names=($@)
 fail=0
 for n in $names; do
   cd $out
-  rm -rf $out/home/.varstotas/components   # the library starts empty in every script
+  rm -rf $out/home/.varstotas/components $out/home/.varstotas/materials   # the libraries start empty in every script
   [[ -d $root/qa/fixtures/$n/components ]] && cp -R $root/qa/fixtures/$n/components $out/home/.varstotas/   # or with the script's fixture
   HOME=$out/home RUST_LOG=info VARSTOTAS_SCRIPT=$root/qa/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
   code=$?

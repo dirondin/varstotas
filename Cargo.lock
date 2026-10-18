@@ -1924,6 +1924,7 @@ dependencies = [
  "egui_code_editor",
  "env_logger",
  "epaint_default_fonts",
+ "flate2",
  "glam",
  "image",
  "log",

@@ -83,6 +83,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `viewport.rs` | 3D view widget: input, renderer, overlays; `PtJob` (path traced render advanced each paint, save PNG / EXR) |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures + emission maps), new textured material |
+| `online_mats.rs` | online PBR materials: Poly Haven / ambientCG catalogues (`parse_polyhaven`, `parse_ambientcg`, cached in `~/.varstotas/cache/online`), `fetch` (system curl), minimal `unzip` (flate2), `build_material` (1K maps at real-world size), `Online` background workers (catalogue / download / 4 thumbnail threads, `Msg`) |
 | `pbr.rs` | Realistic style data: `material_table` (+ shader id / params), `custom_surfaces`, `animated`, `emission_layers` / `data_layers`, `DataSync` (ORM packing), `EnvSync` (HDRI decode), `env_style`, `pt_lights` |
 | `ui/realistic.rs` | Materials → "Physical (Realistic)" editor (sphere preview, presets, maps, Shader row + parameter sliders), shader editor window (`ShaderEdit`: `ScriptEditor::wgsl`, Start from…, Reference column, live apply), Environment card with Effects, HDRI / map loading |
 | `shader_help.rs` | WGSL completion for the shader editor: Surface fields, `p.` params, swizzles, `// @param` tag (`items_at`), helper / built-in signatures (`fn_doc`) |
@@ -96,6 +97,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `ui/gen_editor.rs` | Window → Generator Editor: source (`ScriptEditor::with_id`), preview rebuilt after edits (`build_preview`, drag to turn), preview values, New / Open / Save to Library (`save_path`) / Apply to Document / Place |
 | `ui/library.rs` | Components tray card: one list of components (`.vrst`) and generators (`.rhai`) by folder (`Tile`) under `folder_header` (fold arrow, link revealing the folder, Hide for Examples), thumbnails, place (`PasteTool::named`), Save Selection to Library |
 | `ui/mat_library.rs` | Materials library in the Materials card: `.vrstmat` files in `~/.varstotas/materials` (subfolders = categories, `scan`), bundled Examples (the gallery demo materials), `use_material` (adds to the document, one undo step; same name + different look → new name), Save to Library / Export… (`model_material_menu`), Import…, Delete… dialog, `material_swatch` (texture thumbnail, metal / glass / emissive corner mark) |
+| `ui/online_mats.rs` | Online Materials window (`OnlineWindow`: source tabs, search, category, thumbnail grid via `show_rows`, details + Download & Use / Download / Use / Web Page; `online_poll` takes the worker results, `online_download`) |
 | `tools/plugin_pick.rs` | point picking for `@pick` plugins |
 | `tools/plugin_select.rs` | object selection for `@select` (click toggles, Enter → `ToolRequest::PluginObjects`) |
 | `bridge_ops.rs` | bridge calls on the UI thread (`bridge_tick`: eval, operations, camera, screenshot, save/export with confirmation), running `.py` files |

@@ -76,7 +76,7 @@ fn scan(root: &Path, old: Vec<MatItem>) -> (Vec<MatItem>, Vec<String>) {
     (items, errors)
 }
 
-fn safe_name(s: &str) -> String {
+pub(crate) fn safe_name(s: &str) -> String {
     let n: String = s.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
     let n = n.trim().trim_matches('.').to_string();
     if n.is_empty() { "Material".into() } else { n }
@@ -265,7 +265,7 @@ impl VarstotasApp {
             self.refresh_materials();
         }
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Library").small().color(super::theme::TEXT_DIM));
             if let Some(dir) = self.material_library_dir()
                 && ui.small_button("Folder").on_hover_text(format!("{}\nShow in the Finder", dir.display())).clicked()
@@ -274,6 +274,9 @@ impl VarstotasApp {
             }
             if ui.small_button("Import…").on_hover_text("Add material files (.vrstmat) to the document").clicked() {
                 self.import_materials();
+            }
+            if ui.small_button("Online…").on_hover_text("Download free PBR materials (Poly Haven, ambientCG)").clicked() {
+                self.online.open = true;
             }
             if ui.small_button("⟳").on_hover_text("Rescan the library folder").clicked() {
                 self.refresh_materials();

@@ -1,0 +1,64 @@
+# Online Materials (Materials card → Library → Online…): the Poly Haven catalogue, search,
+# a tile selected, Download & Use → a .vrstmat in <library>/Poly Haven with its PBR maps,
+# painted on a face; ambientCG: a double-click downloads (zip) and paints. Needs the network.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+action tray_only Materials
+wait 10
+raw click 1348 288
+wait 5
+action online_wait
+wait 5
+expect online=(true polyhaven catalogue=
+raw click 399 110
+raw text red brick
+wait 5
+expect shown=94
+raw click 175 215
+wait 10
+expect sel=Some("polyhaven:red_brick")
+raw click 244 599
+wait 5
+action online_wait
+wait 10
+expect ok Red Brick.vrstmat
+expect matlib=["Poly Haven/Red Brick"]
+expect current_mat=Some(("Red Brick"
+expect ("Red Brick", 0.0, 1.0, 0.0, ["normal", "roughness", "ao"])
+expect tool=Paint
+screenshot shots/online_ph.bmp
+# close the window, paint the front face
+raw click 743 76
+wait 5
+expect online=(false
+rawp click 500 0 500
+wait 5
+expect mats={"-": 5, "Red Brick": 1}
+# ambientCG: same search, double-click the first tile (Online… lower: the In Model row)
+raw click 1348 335
+wait 5
+raw click 253 110
+wait 5
+action online_wait
+wait 10
+expect online=(true ambientcg catalogue=600
+# (thumbnails settle first: slow frames would stretch the double-click)
+wait 40
+raw dblclick 175 215
+wait 5
+action online_wait
+wait 10
+expect last=Some("ambientcg:
+expect matlib=["Poly Haven/Red Brick", "ambientCG/
+screenshot shots/online_acg.bmp
+raw click 743 76
+wait 5
+rawp click 1000 500 500
+wait 5
+expect mats={"-": 4,
+raw move 60 640
+style realistic
+wait 30
+screenshot shots/online_painted.bmp
+quit
