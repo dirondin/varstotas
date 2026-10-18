@@ -45,6 +45,8 @@ pub struct LibraryState {
     pub gens: super::generators::GenLibrary,
     /// To delete once confirmed: (library file, or None for a generator of the document; name).
     pub delete_ask: Option<(Option<PathBuf>, String)>,
+    /// Thumbnails of the document's components (Document folder).
+    pub def_thumbs: std::collections::HashMap<varstotas_kernel::DefId, DefThumb>,
 }
 
 /// `~/.varstotas/components`.
@@ -74,6 +76,15 @@ pub(crate) fn thumbnail(edges: &[(DVec3, DVec3)]) -> Vec<(egui::Pos2, egui::Pos2
 enum Tile {
     Comp(usize),
     Gen(usize),
+    /// A component definition of the open document.
+    Def(varstotas_kernel::DefId),
+}
+
+/// Thumbnail and size of a document's component definition, for one model version.
+pub struct DefThumb {
+    version: u64,
+    thumb: Vec<(egui::Pos2, egui::Pos2)>,
+    size: DVec3,
 }
 
 fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
@@ -325,6 +336,63 @@ impl VarstotasApp {
         std::mem::take(&mut self.library.open_card)
     }
 
+    /// Component definitions of the open document (not groups, generated components or the
+    /// internal copies of parametric groups), with their names, by name.
+    pub(crate) fn document_components(&self) -> Vec<(varstotas_kernel::DefId, String)> {
+        let m = &self.doc.model;
+        let internal: std::collections::HashSet<_> =
+            m.defs.values().filter_map(|d| d.params.as_ref()).flat_map(|p| std::iter::once(p.base).chain(p.variant)).collect();
+        let mut out: Vec<_> = m
+            .defs
+            .iter()
+            .filter(|(id, d)| *id != m.root && !d.is_group && d.generated.is_none() && !internal.contains(id))
+            .map(|(id, d)| (id, if d.name.is_empty() { "Component".to_string() } else { d.name.clone() }))
+            .collect();
+        out.sort_by_key(|a| a.1.to_lowercase());
+        out
+    }
+
+    /// A tile of a document's component (thumbnail rebuilt when the model changes).
+    fn def_tile(&mut self, ui: &mut Ui, d: varstotas_kernel::DefId) -> egui::Response {
+        let version = self.doc.model_version;
+        let m = &self.doc.model;
+        let fresh = self.library.def_thumbs.get(&d).is_some_and(|t| t.version == version);
+        if !fresh {
+            let edges = crate::clipboard::def_edges(m, d, THUMB_EDGES);
+            let pts = edges.iter().flat_map(|(a, b)| [*a, *b]);
+            let size = varstotas_kernel::Aabb::from_points(pts).map_or(DVec3::ZERO, |b| b.max - b.min);
+            self.library.def_thumbs.insert(d, DefThumb { version, thumb: thumbnail(&edges), size });
+        }
+        let name = m.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+        let uses = m.defs.values().flat_map(|x| x.mesh.instances.values()).filter(|i| i.def == d).count();
+        let t = &self.library.def_thumbs[&d];
+        let note = format!("In this document: {uses} placed");
+        tile_ex(ui, &name, &t.thumb, t.size, m.unit, false, &note)
+    }
+
+    /// Place one more instance of the document's component `d`.
+    pub(crate) fn place_definition(&mut self, d: varstotas_kernel::DefId) {
+        let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+        match Clipboard::of_definition(&self.doc.model, self.doc.uid, d) {
+            Ok(clip) => {
+                let tool = crate::tools::transform::PasteTool::named(Rc::new(clip), name);
+                self.install_tool(Box::new(tool));
+            }
+            Err(e) => self.flash_error(format!("Place {name}: {e}")),
+        }
+    }
+
+    /// Select the instances of `d` placed at the top level of the model.
+    fn select_definition(&mut self, d: varstotas_kernel::DefId) {
+        let ids: Vec<_> = self.doc.model.root_mesh().instances.iter().filter(|(_, i)| i.def == d).map(|(id, _)| varstotas_kernel::EntityRef::Instance(id)).collect();
+        if ids.is_empty() {
+            self.flash("No copies of this component at the top level of the model".to_string());
+            return;
+        }
+        while self.doc.exit_context() {}
+        self.doc.set_selection(ids);
+    }
+
     /// The Components card.
     pub(crate) fn library_panel(&mut self, ui: &mut Ui) {
         if self.library.scanned != self.library_dir() {
@@ -362,6 +430,7 @@ impl VarstotasApp {
         let found = |name: &str| filter.is_empty() || name.to_lowercase().contains(&filter);
         // Components and generators in one list: by folder, then name.
         let gens = self.generator_items();
+        let doc_defs = if self.prefs.hide_document { Vec::new() } else { self.document_components() };
         let is_doc = |g: &super::generators::GenItem| g.file.is_none() && !g.bundled && g.folder == super::generators::DOCUMENT_FOLDER;
         let mut shown: Vec<(String, String, Tile)> = self
             .library
@@ -371,6 +440,7 @@ impl VarstotasApp {
             .filter(|(_, it)| found(&it.name))
             .map(|(i, it)| (it.folder.clone(), it.name.to_lowercase(), Tile::Comp(i)))
             .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples) && !(is_doc(g) && self.prefs.hide_document)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
+            .chain(doc_defs.iter().filter(|(_, n)| found(n)).map(|(d, n)| (super::generators::DOCUMENT_FOLDER.to_string(), n.to_lowercase(), Tile::Def(*d))))
             .collect();
         // Library folders first, then Document, then Examples.
         let rank = |f: &str| match f {
@@ -379,12 +449,12 @@ impl VarstotasApp {
             _ => 0,
         };
         shown.sort_by(|a, b| rank(&a.0).cmp(&rank(&b.0)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
-        if self.library.items.is_empty() && gens.is_empty() {
+        if self.library.items.is_empty() && gens.is_empty() && doc_defs.is_empty() {
             ui.label(RichText::new("No components yet: select something and use Save Selection.").weak());
         } else if shown.is_empty() {
             ui.label(RichText::new("Nothing found").weak());
         }
-        let (mut place, mut place_gen, mut edit, mut delete) = (None, None, None, None);
+        let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         self.library.shown_folders.clear();
@@ -421,6 +491,22 @@ impl VarstotasApp {
                                     }
                                 });
                             }
+                            Tile::Def(d) => {
+                                let resp = self.def_tile(ui, d);
+                                if resp.clicked() {
+                                    place_def = Some(d);
+                                }
+                                resp.context_menu(|ui| {
+                                    if ui.button("Place").clicked() {
+                                        place_def = Some(d);
+                                        ui.close();
+                                    }
+                                    if ui.button("Select Instances").clicked() {
+                                        select_def = Some(d);
+                                        ui.close();
+                                    }
+                                });
+                            }
                             Tile::Gen(i) => {
                                 let (p, e, d) = self.generator_tile(ui, &gens[i]);
                                 if d {
@@ -441,6 +527,12 @@ impl VarstotasApp {
         }
         if delete.is_some() {
             self.library.delete_ask = delete;
+        }
+        if let Some(d) = place_def {
+            self.place_definition(d);
+        }
+        if let Some(d) = select_def {
+            self.select_definition(d);
         }
         if let Some(src) = place_gen {
             self.actions.push(Action::PlaceGenerator(src, Default::default()));

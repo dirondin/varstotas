@@ -53,7 +53,11 @@ screenshot shots/gen_scaled.bmp
 action gen back=false
 wait 3
 expect back=false,finish=Walnut
-raw click 1171 46
+# the Materials card grew (library, Online…): only Entity Info and Components in the tray
+# (still scrolled to Components: Reset is lower)
+action tray_only Entity Info,Components
+wait 5
+raw click 1170 327
 wait 3
 expect undo=Some("Reset Parameters")
 expect gen_defs=1

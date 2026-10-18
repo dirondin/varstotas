@@ -63,6 +63,14 @@ fn reachable_defs(model: &Model, d: DefId, out: &mut HashSet<DefId>) {
     }
 }
 
+/// Edges of definition `d` in its own frame (thumbnails).
+pub fn def_edges(model: &Model, d: DefId, max: usize) -> Vec<(DVec3, DVec3)> {
+    let mut out = Vec::new();
+    collect_edges(model, d, DMat4::IDENTITY, &mut out, 0);
+    out.truncate(max);
+    out
+}
+
 fn collect_edges(model: &Model, d: DefId, m: DMat4, out: &mut Vec<(DVec3, DVec3)>, depth: usize) {
     if depth > 32 || out.len() >= PREVIEW_LIMIT {
         return;
@@ -189,6 +197,19 @@ impl Clipboard {
             collect_edges(&model, d, src_xf, &mut preview, 0);
         }
         Ok(Clipboard { model, def, src_xf, src_doc, guides, guide_points, dims: Vec::new(), bounds, preview, count, library: None })
+    }
+
+    /// One more instance of definition `d` of document `doc_uid` (the Components list's
+    /// Document folder): pasted back into that document it shares the definition.
+    pub fn of_definition(model: &Model, doc_uid: u64, d: DefId) -> OpResult<Clipboard> {
+        let mut m = model.clone();
+        let root = m.root;
+        m.defs[root].mesh = Mesh::new();
+        m.guides.clear();
+        m.guide_points.clear();
+        let inst = Instance { def: d, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false };
+        let i = m.root_mesh_mut().instances.insert(inst);
+        Self::from_parts(&m, doc_uid, &[], &[EntityRef::Instance(i)], &[])
     }
 
     /// A library file's content as one component named `name`, ready to place.
@@ -469,6 +490,22 @@ mod tests {
         assert_eq!(m.root_mesh().instances.len(), 2);
         assert!(m.root_mesh().instances.values().all(|i| i.def == crates[0]));
         assert!((m.bounds().unwrap().max.x - 3000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn document_component_placed_again_shares_its_definition() {
+        let mut doc = boxed_doc();
+        doc.select_all();
+        let sel = doc.selection.clone();
+        let c = doc.commit("component", |m| m.make_component(&[], &sel, "Box").unwrap()).unwrap();
+        let d = doc.model.root_mesh().instances[c].def;
+        let clip = Clipboard::of_definition(&doc.model, doc.uid, d).unwrap();
+        assert!(clip.preview.len() >= 12 && def_edges(&doc.model, d, 4).len() == 4);
+        assert!(crate::tools::transform::paste_clipboard(&mut doc, &clip, &DMat4::from_translation(DVec3::new(3000.0, 0.0, 0.0))));
+        let m = &doc.model;
+        assert_eq!(m.defs.values().filter(|x| x.name == "Box").count(), 1, "no copy of the definition");
+        assert_eq!(m.root_mesh().instances.len(), 2);
+        assert!(m.root_mesh().instances.values().all(|i| i.def == d));
     }
 
     #[test]
