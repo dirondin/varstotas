@@ -1,0 +1,26 @@
+# Edges: on in every face style but Realistic (its own switch, off by default); a Realistic
+# scene (like the demo house's) no longer turns the edges off in the other styles.
+box 0 0 0 2000 1500 1000
+view iso
+zoom_extents
+wait 10
+expect style=shaded edges=true
+# Realistic (toolbar, real mouse): no edges
+raw click 255 -26
+wait 5
+expect style=realistic edges=false
+screenshot shots/style_edges_realistic.bmp
+action add_scene
+wait 5
+# Shaded with Textures: edges back (scene tabs move the viewport down by 27)
+raw click 179 -53
+wait 5
+expect style=shaded edges=true
+screenshot shots/style_edges_shaded.bmp
+# the Realistic scene switches to Realistic without edges, Shaded keeps them
+action scene_0
+wait 40
+expect style=realistic edges=false
+raw click 179 -53
+wait 5
+expect style=shaded edges=true

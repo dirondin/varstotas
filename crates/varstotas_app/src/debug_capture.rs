@@ -1986,7 +1986,7 @@ impl VarstotasApp {
             self.camera.eye.y,
             self.camera.eye.z,
             self.prefs.face_style.key(),
-            self.prefs.show_edges,
+            self.prefs.edges_on(),
             m.tags.values().filter(|t| !t.visible).count(),
             m.tags.values().map(|t| t.name.as_str()).collect::<Vec<_>>(),
             m.untagged_hidden,

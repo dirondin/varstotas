@@ -70,7 +70,12 @@ pub struct Prefs {
     pub tray_open: bool,
     pub face_style: FaceStylePref,
     pub xray: bool,
+    /// Edges in every style but Realistic. Stored under a new key: the old `show_edges` was
+    /// shared with Realistic, and its scenes (demo house, gallery) left it off everywhere.
+    #[serde(rename = "edges_shown")]
     pub show_edges: bool,
+    /// Edges in the Realistic style (off by default: a photo has no lines).
+    pub realistic_edges: bool,
     pub profiles: bool,
     pub show_axes: bool,
     pub show_ground: bool,
@@ -99,6 +104,17 @@ pub struct Prefs {
     pub grid: crate::inference::settings::GridPrefs,
 }
 
+impl Prefs {
+    /// Edges are drawn in the current face style (View → Edges edits this style's switch).
+    pub fn edges_on(&self) -> bool {
+        if self.face_style == FaceStylePref::Realistic { self.realistic_edges } else { self.show_edges }
+    }
+
+    pub fn edges_mut(&mut self) -> &mut bool {
+        if self.face_style == FaceStylePref::Realistic { &mut self.realistic_edges } else { &mut self.show_edges }
+    }
+}
+
 impl Default for Prefs {
     fn default() -> Self {
         Self {
@@ -106,6 +122,7 @@ impl Default for Prefs {
             face_style: FaceStylePref::Shaded,
             xray: false,
             show_edges: true,
+            realistic_edges: false,
             profiles: true,
             show_axes: true,
             show_ground: true,
@@ -570,7 +587,7 @@ impl VarstotasApp {
         let mut s = self.base_style.clone();
         s.face_style = self.prefs.face_style.to_render();
         s.xray = self.prefs.xray;
-        s.show_edges = self.prefs.show_edges;
+        s.show_edges = self.prefs.edges_on();
         s.profiles = self.prefs.profiles;
         s.show_axes = self.prefs.show_axes;
         s.show_ground = self.prefs.show_ground;
@@ -1780,7 +1797,7 @@ impl VarstotasApp {
         s.style = Some(SceneStyle {
             face_style: self.prefs.face_style.key().into(),
             xray: self.prefs.xray,
-            edges: self.prefs.show_edges,
+            edges: self.prefs.edges_on(),
             profiles: self.prefs.profiles,
         });
         s.hidden_tags = Some(self.doc.model.tags.iter().filter(|(_, t)| !t.visible).map(|(id, _)| id).collect());
@@ -1816,7 +1833,7 @@ impl VarstotasApp {
                 self.prefs.face_style = fs;
             }
             self.prefs.xray = st.xray;
-            self.prefs.show_edges = st.edges;
+            *self.prefs.edges_mut() = st.edges;
             self.prefs.profiles = st.profiles;
         }
         if let Some(hidden) = &s.hidden_tags {

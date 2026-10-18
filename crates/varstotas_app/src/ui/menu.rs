@@ -228,7 +228,7 @@ impl VarstotasApp {
                 ui.checkbox(&mut self.prefs.xray, "X-Ray");
                 ui.separator();
                 ui.label(egui::RichText::new("Edge Style").small().weak());
-                ui.checkbox(&mut self.prefs.show_edges, "Edges");
+                ui.checkbox(self.prefs.edges_mut(), "Edges").on_hover_text("Edges in this face style (Realistic has its own switch)");
                 ui.checkbox(&mut self.prefs.profiles, "Profiles");
                 ui.separator();
                 let mut guides = !self.doc.model.guides_hidden;
