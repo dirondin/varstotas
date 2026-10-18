@@ -38,6 +38,26 @@ style realistic
 action toggle_shadows
 wait 10
 screenshot shots/realism_viewport.bmp
+# the Physical editor (real mouse): open it, collapse Entity Info, scroll the tray by its bar,
+# drag Sheen and Bevel of Brick ("Coat, Sheen, Edges" is open: Brick has a clear coat)
+material Brick
+wait 3
+raw click 1216 646
+wait 5
+raw click 1137 57
+wait 5
+raw move 1396 150
+wait 10
+raw drag 1396 150 1396 330 12
+wait 5
+screenshot shots/realism_editor.bmp
+raw drag 1262 437 1390 437 10
+wait 3
+raw drag 1262 541 1390 541 10
+wait 5
+expect ("Brick", [1.0, 1.0, 0.0, 0.0, 100.0])
+screenshot shots/realism_editor_set.bmp
+raw move 60 640
 # the path tracer: rounded edges (bevel) and the layers
 action env sky=physical turbidity=3 sun=3
 action render_set w=480 h=300 samples=64 bounces=5 denoise=on match=off

@@ -285,6 +285,7 @@ fn parse_raw(rest: &str) -> Option<RawCmd> {
         "dblclick" => RawCmd::DoubleClick(p(0)?),
         "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
         "dragfast" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: true },
+        "scroll" => RawCmd::Scroll(p(0)?, *n.get(2)?),
         "mods" => RawCmd::Mods(parse_mods(args)),
         "copy" => RawCmd::Copy,
         "cut" => RawCmd::Cut,
@@ -326,6 +327,9 @@ pub enum RawCmd {
     /// `raw drag x0 y0 x1 y1 [steps]` — move, press, `steps` moves (one per frame), release.
     /// `raw dragfast ...` delivers the last move and the release in the same frame.
     Drag { a: Pos2, b: Pos2, steps: u32, fast: bool },
+    /// `raw scroll x y dy` — move, then a trackpad swipe of `dy` points (negative: the
+    /// content moves up, i.e. scroll down).
+    Scroll(Pos2, f32),
     /// `raw mods shift+alt|none` — `ModifiersChanged` only (what winit emits for modifier
     /// keys; egui 0.36 tracks `InputState::modifiers` from it). Later pointer/key events
     /// carry the new state in their `modifiers` field. No `Key` events are sent.
@@ -1833,6 +1837,17 @@ impl VarstotasApp {
             RawCmd::Up(p) => vec![vec![mv(p)], vec![btn(p, false)]],
             RawCmd::Click(p) => vec![vec![mv(p)], vec![btn(p, true)], vec![btn(p, false)]],
             RawCmd::Tap(p) => vec![vec![mv(p), btn(p, true), btn(p, false)]],
+            RawCmd::Scroll(p, dy) => {
+                // A trackpad swipe: egui applies it at once (a wheel notch is smoothed over time).
+                let wheel = |phase: egui::TouchPhase, dy: f32| Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::vec2(0.0, dy),
+                    phase,
+                    modifiers: m,
+                };
+                let ph = egui::TouchPhase::Start;
+                vec![vec![mv(p)], vec![wheel(ph, 0.0)], vec![wheel(egui::TouchPhase::Move, dy)], vec![wheel(egui::TouchPhase::End, 0.0)]]
+            }
             RawCmd::RightClick(p) => {
                 let rb = |pressed: bool| Event::PointerButton {
                     pos: p + origin,
@@ -2433,6 +2448,7 @@ mod tests {
         assert_eq!(parse_cmd("stress 10"), Some(ScriptCmd::Stress(10)));
         assert_eq!(parse_cmd("raw paste"), Some(ScriptCmd::Raw(RawCmd::Paste("Varstotas".into()))));
         assert_eq!(parse_cmd("raw copy"), Some(ScriptCmd::Raw(RawCmd::Copy)));
+        assert_eq!(parse_cmd("raw scroll 3 4 -200"), Some(ScriptCmd::Raw(RawCmd::Scroll(Pos2::new(3.0, 4.0), -200.0))));
         assert_eq!(parse_cmd("raw rclick 3 4"), Some(ScriptCmd::Raw(RawCmd::RightClick(Pos2::new(3.0, 4.0)))));
         assert_eq!(
             parse_cmd("export_png a.png 640 480 transparent"),

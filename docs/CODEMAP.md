@@ -34,7 +34,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `section.rs` | `SectionPlane`, `SectionDisplay`, scene section state, `Model::section_cut`, `section_fill` |
 | `shadows.rs` | `ShadowSettings` (date, time, place, tones), sun direction |
 | `lights.rs` | `Light` (`LightKind` point / spot / area: position, direction, colour, power W, radius, cone, size), `Light::transformed`, `RenderSettings` (size, samples, time limit, bounces, denoise + AI, firefly clamp, match view, `RenderDof` + f-stop / focus, transparent background, grading: exposure, tone curve, white balance, tint, saturation, contrast, vignette), `RENDER_PRESETS`, `RENDER_SIZES` — `Model::lights`, `Model::render` |
-| `pbr.rs` | `Pbr` (physical material: metallic, roughness, emission, transmission, IOR, maps), `Environment` (`SkyKind` incl. `Physical` + `turbidity`, `Tonemap`, rotation, exposure, `Effects` with `EFFECT_PRESETS` and `Stylize`), `CustomShader` + `shader_params` (`// @param` header) |
+| `pbr.rs` | `Pbr` (physical material: metallic, roughness, emission, transmission, IOR, maps, clear coat, sheen, anisotropy, anti-tiling, bevel), `Environment` (`SkyKind` incl. `Physical` + `turbidity`, `Tonemap`, rotation, exposure, `Effects` with `EFFECT_PRESETS` and `Stylize`), `CustomShader` + `shader_params` (`// @param` header) |
 | `text3d.rs` | 3D Text: outlines → faces (even-odd nesting), extrusion, group (`Model::add_text3d_in`) |
 | `texture.rs` | `TextureImage` (embedded PNG/JPEG, tile size), `TexPlacement` (per-face texture position), texture axes, base64 |
 | `units.rs` | parsing and formatting for the Measurements box (VCB) |
@@ -54,12 +54,12 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | `overlay.rs` | `Overlay3d` (lines, polygons, texts, marks, arcs, dimensions, leaders), plus `annot.rs` for the CPU glyph expansion |
 | `export.rs` | `render_to_image` (PNG export), `encode_exr` (uncompressed float OpenEXR) |
 | `bvh.rs` | binned-SAH BVH over triangles, flattened to 2 `vec4` per node for the GPU |
-| `pathtrace.rs`, `pathtrace.wgsl` | GPU path tracer (`Renderer::pt_start / pt_step / pt_resolve / pt_image / pt_linear`): triangle / light records, compute passes `pt_trace` (BVH walk, GGX + diffuse, NEE to the sun and one light picked by its estimated share, any-hit shadows, glass, ground plane, custom surfaces, several samples per dispatch), `pt_denoise` (à-trous), `pt_resolve` (grading: `PtOutput` via `pt_set_output` — exposure, tone curve, white balance (`white_balance`), saturation, contrast, vignette, alpha of a transparent background), `pt_linear`; the WGSL is part of the scene module (`custom::BASE`); OIDN pass (`oidn`), `accel_structures` (BLAS / TLAS) |
+| `pathtrace.rs`, `pathtrace.wgsl` | GPU path tracer (`Renderer::pt_start / pt_step / pt_resolve / pt_image / pt_linear`): triangle / light records, compute passes `pt_trace` (BVH walk, GGX + diffuse, clear coat / sheen / anisotropic VNDF lobes, `bevel_normal` (rounded edges by probe rays), anti-tiled maps (`sample_tiled_l`), NEE to the sun and one light picked by its estimated share, any-hit shadows, glass, ground plane, custom surfaces, several samples per dispatch), `pt_denoise` (à-trous), `pt_resolve` (grading: `PtOutput` via `pt_set_output` — exposure, tone curve, white balance (`white_balance`), saturation, contrast, vignette, alpha of a transparent background), `pt_linear`; the WGSL is part of the scene module (`custom::BASE`); OIDN pass (`oidn`), `accel_structures` (BLAS / TLAS) |
 | `pathtrace_rq.wgsl` | ray query `intersect` / `transmittance` replacing the BVH section of `pathtrace.wgsl` (`rq_source`) when the device has `EXPERIMENTAL_RAY_QUERY` (requested in `main.rs`) |
 | `oidn.rs` | Intel Open Image Denoise loaded at run time (libloading): `available`, `denoise` |
 | `textures.rs` | face textures (group 1): colour `texture_2d_array`, data array (ORM / normal), PBR material table; CPU resample and mips (`set_textures`, `set_data_textures`, `set_materials`) |
 | `env.rs` | environment for Realistic: Rgba16Float equirect with mips, SH9 irradiance, `EnvUniform` (group 0, bindings 3–5) |
-| `shader.wgsl` | shaders (`HDR_OUT` override: the Realistic scene pass writes linear HDR + a G-buffer when effects are on; PCSS soft shadows; `Surface` + helpers for custom shaders) |
+| `shader.wgsl` | shaders (`HDR_OUT` override: the Realistic scene pass writes linear HDR + a G-buffer when effects are on; PCSS soft shadows; `fs_face_pbr` with clear coat, sheen, anisotropic GGX (`d_ggx_aniso`) and anti-tiling (`tile_mix` / `sample_tiled`, 8 vec4 per material); `Surface` + helpers for custom shaders) |
 | `post.rs`, `post.wgsl` | Realistic effects: `Post` (pipelines), `PostTargets` (HDR, G-buffer, linear depth, AO, bloom mips; `encode`), `PostUniform`; AO, SSR, fog, DOF, bloom, tone curve, NPR stylize, vignette |
 | `custom.rs` | custom WGSL surfaces: `compose` (per-shader name suffix, `Params` structs, `custom_surface` dispatch), `validate` (naga), `check` (message with the shader's line) |
 
@@ -85,7 +85,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `textures.rs` | image decoding (`image` crate), `TextureSync` (uploads the model's textures + emission maps), new textured material |
 | `online_mats.rs` | online PBR materials: Poly Haven / ambientCG catalogues (`parse_polyhaven`, `parse_ambientcg`, cached in `~/.varstotas/cache/online`), `fetch` (system curl), minimal `unzip` (flate2), `build_material` (1K maps at real-world size), `Online` background workers (catalogue / download / 4 thumbnail threads, `Msg`) |
 | `pbr.rs` | Realistic style data: `material_table` (+ shader id / params), `custom_surfaces`, `animated`, `emission_layers` / `data_layers`, `DataSync` (ORM packing), `EnvSync` (HDRI decode), `env_style`, `pt_lights` |
-| `ui/realistic.rs` | Materials → "Physical (Realistic)" editor (sphere preview, presets, maps, Shader row + parameter sliders), shader editor window (`ShaderEdit`: `ScriptEditor::wgsl`, Start from…, Reference column, live apply), Environment card with Effects, HDRI / map loading |
+| `ui/realistic.rs` | Materials → "Physical (Realistic)" editor (sphere preview, presets, "Coat, Sheen, Edges" sliders, maps, Shader row + parameter sliders), shader editor window (`ShaderEdit`: `ScriptEditor::wgsl`, Start from…, Reference column, live apply), Environment card with Effects, HDRI / map loading |
 | `shader_help.rs` | WGSL completion for the shader editor: Surface fields, `p.` params, swizzles, `// @param` tag (`items_at`), helper / built-in signatures (`fn_doc`) |
 | `shaders.rs` | bundled custom shaders (`PRESETS`: Wood, Water, Reeded Glass, Glow; docs/SHADERS.md) |
 | `ui/console.rs` | Window → Script Console and File → Run Script… (`run_script_source`: one undo step; `.py` → `run_python_file`); splitter between log and code (`code_h`) |
@@ -116,7 +116,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `demo/mod.rs` | File → Open Demo: Country House — `country_house()` builds the furnished demo model in code (walls with openings via `prism`, gable roof, partitions, fireplace, windows / doors as components, furniture components, garden), its materials, lights, render settings and 8 scenes |
 | `demo/textures.rs` | procedural tileable textures for the demo (siding, stone, roof metal, oak floor, decking, tiles, marble, woods, fabrics, rug, grass, gravel, brick, plaster): colour + normal + roughness maps as PNG (`Tex`, `Maps`) |
 | `demo/gallery.rs` | File → Open Demo: Material Gallery — `material_gallery()`: 24 bevelled cubes (`bevelled_cube`) in different materials, a studio cove (tag Cove, hidden outdoors), 8 scenes with different environments / styles |
-| `debug_capture.rs` | `VARSTOTAS_SCRIPT` harness, including the `raw` and `rawp` real-input commands |
+| `debug_capture.rs` | `VARSTOTAS_SCRIPT` harness, including the `raw` and `rawp` real-input commands (`raw scroll` = a trackpad swipe) |
 | `tools/mod.rs` | `Tool` trait and tool registry |
 | `tools/common.rs` | inference wrapper, context transforms, `dim_after_transform` |
 | `tools/select.rs` | Select tool |
