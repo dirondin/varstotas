@@ -170,7 +170,7 @@ impl Env {
 }
 
 /// The light multiplier of an exposure in stops.
-pub(crate) fn exposure_mult(ev: f32) -> f32 {
+pub fn exposure_mult(ev: f32) -> f32 {
     EXPOSURE_SCALE * 2f32.powf(ev.clamp(-20.0, 20.0))
 }
 

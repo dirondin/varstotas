@@ -63,7 +63,7 @@ action light dir=0,0,-1 size=800,500 power=200 color=0.7,0.85,1
 wait 3
 # the Render button (real mouse)
 action render_set samples=40
-raw click 75 160
+raw click 75 81
 wait 2
 action render_wait
 expect render=(480x300 40spp b5 dn job=Some("40sppSome([480, 300]),denoised") lights=["point:150W", "spot:400W", "area:200W"] window=true)
@@ -75,7 +75,7 @@ wait 3
 expect render=(480x300 16spp b5 job=Some("16sppSome([480, 300])") lights=["point:150W", "spot:400W", "area:200W"] window=true)
 screenshot shots/render_noisy.bmp
 # select a light in the list: its editor and the markers in the view
-raw click 152 619
+raw click 150 507
 wait 5
 screenshot shots/render_light.bmp
 # every scene into a folder

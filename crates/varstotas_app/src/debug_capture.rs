@@ -915,6 +915,23 @@ impl VarstotasApp {
                     "bounces" => r.bounces = n.map_or(r.bounces, |x| x as u32),
                     "denoise" => r.denoise = on,
                     "match" => r.match_view = on,
+                    "preset" => {
+                        r.apply_preset(v);
+                    }
+                    "clamp" => r.clamp = n.unwrap_or(r.clamp),
+                    "ai" => r.ai_denoise = on,
+                    "dof" => r.dof = varstotas_kernel::RenderDof::ALL.into_iter().find(|d| d.label().eq_ignore_ascii_case(v) || (v == "view" && *d == varstotas_kernel::RenderDof::View)).unwrap_or(r.dof),
+                    "fstop" => r.f_stop = n.unwrap_or(r.f_stop),
+                    "focus" => r.focus = n.map_or(r.focus, |x| x as f64),
+                    "transparent" => r.transparent = on,
+                    "exposure" => r.exposure = n.unwrap_or(r.exposure),
+                    "tonemap" => r.tonemap = varstotas_kernel::Tonemap::from_key(v),
+                    "temp" => r.temperature = n.unwrap_or(r.temperature),
+                    "tint" => r.tint = n.unwrap_or(r.tint),
+                    "sat" => r.saturation = n.unwrap_or(r.saturation),
+                    "contrast" => r.contrast = n.unwrap_or(r.contrast),
+                    "vignette" => r.vignette = n.unwrap_or(r.vignette),
+                    "reset_grade" => r.reset_grade(),
                     _ => log::warn!("script: render_set: unknown key {k}"),
                 }
             }
@@ -1902,7 +1919,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} mat_delete={:?} current_mat={:?} {:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.anim_window.last);
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} shader_members={:?} shader_line={:?} outliner={} matlib={:?} mat_delete={:?} current_mat={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -2126,7 +2143,30 @@ impl VarstotasApp {
             })
         });
         let lights: Vec<String> = self.doc.model.lights.iter().map(|l| format!("{}:{}W", l.kind.key(), l.power)).collect();
-        format!("({}x{} {}spp b{}{}{} job={:?} lights={:?} window={})", r.width, r.height, r.samples, r.bounces, if r.denoise { " dn" } else { "" }, if r.match_view { " match" } else { "" }, job, lights, self.render_window.open)
+        let grade = if r.neutral_grade() {
+            "neutral".to_string()
+        } else {
+            format!("{}ev,{:?},{}K,{},{},{},{}", r.exposure, r.tonemap.map(|t| t.key()), r.temperature, r.tint, r.saturation, r.contrast, r.vignette)
+        };
+        format!(
+            "({}x{} {}spp b{}{}{} job={:?} lights={:?} window={}) q={:?} clamp={} ai={} dof={}/f{} focus={} transparent={} grade={grade}",
+            r.width,
+            r.height,
+            r.samples,
+            r.bounces,
+            if r.denoise { " dn" } else { "" },
+            if r.match_view { " match" } else { "" },
+            job,
+            lights,
+            self.render_window.open,
+            r.preset(),
+            r.clamp,
+            r.ai_denoise,
+            r.dof.label(),
+            r.f_stop,
+            r.focus,
+            r.transparent
+        )
     }
 
     fn fx_dump(&self) -> String {

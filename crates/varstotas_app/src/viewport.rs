@@ -87,6 +87,8 @@ pub struct PtJob {
     started: std::time::Instant,
     /// The texture shows the denoised image.
     pub denoised: bool,
+    /// The image settings the texture was resolved with (`pbr::pt_output`).
+    output: Option<varstotas_render::PtOutput>,
     /// Save the image at the next paint: `.exr` = linear float, else PNG.
     pub save: Option<std::path::PathBuf>,
     pub saved: Option<Result<std::path::PathBuf, String>>,
@@ -108,6 +110,7 @@ impl PtJob {
             elapsed: 0.0,
             started: std::time::Instant::now(),
             denoised: false,
+            output: None,
             save: None,
             saved: None,
         }
@@ -317,6 +320,17 @@ impl Viewport {
                         job.elapsed = 0.0;
                         job.started = std::time::Instant::now();
                         job.denoised = false;
+                        job.output = None;
+                    }
+                    // Exposure, tone curve, grading: live, without new samples.
+                    let out = crate::pbr::pt_output(&doc.model);
+                    if job.output != Some(out) {
+                        let first = job.output.is_none();
+                        renderer.pt_set_output(out);
+                        job.output = Some(out);
+                        if !first && !job.running && job.samples > 0 {
+                            let _ = guarded(|| renderer.pt_resolve(rs, job.denoised));
+                        }
                     }
                     if job.running && !job.done() {
                         let t0 = std::time::Instant::now();

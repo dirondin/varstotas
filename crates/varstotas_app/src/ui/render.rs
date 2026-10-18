@@ -7,11 +7,11 @@ use crate::app::VarstotasApp;
 use crate::viewport::PtJob;
 use egui::{Context, RichText, vec2};
 use varstotas_kernel::glam::DVec3;
-use varstotas_kernel::{Light, LightKind, RenderSettings};
+use varstotas_kernel::{Environment, Light, LightKind, RENDER_PRESETS, RENDER_SIZES, RenderDof, RenderSettings, Tonemap};
 use varstotas_render::{Camera, FaceStyle, PtSettings};
 use std::path::PathBuf;
 
-type RenderState = (Vec<Light>, RenderSettings);
+type RenderState = (Vec<Light>, RenderSettings, Environment);
 
 #[derive(Default)]
 pub struct RenderWindow {
@@ -39,6 +39,16 @@ fn len_drag(v: &mut f64, unit: varstotas_kernel::LengthUnit) -> egui::DragValue<
         .custom_parser(move |s| varstotas_kernel::units::parse_length(s, unit))
 }
 
+/// Lens opening (radius, mm) of a 35 mm camera with the view's field of view at `f_stop`.
+pub fn lens_radius(camera: &Camera, f_stop: f32) -> f32 {
+    (focal_length(camera) / (2.0 * f_stop.max(0.5) as f64)) as f32
+}
+
+/// The 35 mm focal length of the view (mm; a 24 mm high frame).
+pub fn focal_length(camera: &Camera) -> f64 {
+    12.0 / (camera.fov_y_deg.to_radians() * 0.5).tan().max(1e-3)
+}
+
 /// A file name for a scene (no path separators or odd characters).
 pub fn file_stem(name: &str) -> String {
     let s: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' }).collect();
@@ -58,7 +68,12 @@ impl VarstotasApp {
         };
         let mut style = self.render_style();
         style.face_style = FaceStyle::Realistic;
-        let settings = PtSettings { width: w, height: h, bounces: rs.bounces, clamp: 20.0 };
+        let lens = match rs.dof {
+            RenderDof::View => None,
+            RenderDof::Off => Some([0.0, 0.0]),
+            RenderDof::On => Some([lens_radius(&camera, rs.f_stop), rs.focus as f32]),
+        };
+        let settings = PtSettings { width: w, height: h, bounces: rs.bounces, clamp: rs.clamp, lens, transparent: rs.transparent };
         let mut job = PtJob::new(camera, style, crate::pbr::pt_lights(m), settings);
         job.max_samples = rs.samples.max(1);
         job.time_limit = rs.time_limit as f64;
@@ -119,8 +134,8 @@ impl VarstotasApp {
         }
         let m = &self.doc.model;
         let unit = m.unit;
-        let (mut lights, mut settings) = (m.lights.clone(), m.render);
-        let before = (lights.clone(), settings);
+        let (mut lights, mut settings, mut env) = (m.lights.clone(), m.render, m.environment);
+        let before = (lights.clone(), settings, env);
         let mut sel = self.render_window.selected.filter(|i| *i < lights.len());
         let mut open = true;
         let mut start = false;
@@ -133,7 +148,7 @@ impl VarstotasApp {
             .open(&mut open)
             .collapsible(false)
             .default_pos(pos)
-            .default_size(vec2(620.0, 640.0));
+            .default_size(vec2(880.0, 640.0));
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -141,28 +156,6 @@ impl VarstotasApp {
         let mut job = self.viewport.pt.as_mut();
         let batch = self.render_window.batch.as_ref().map(|b| (b.next, b.written.len()));
         win.show(ctx, |ui| {
-            egui::Grid::new("render_settings").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
-                ui.label("Size");
-                ui.add_enabled(!settings.match_view, egui::DragValue::new(&mut settings.width).range(16..=8192).suffix(" px"));
-                ui.add(egui::DragValue::new(&mut settings.height).range(16..=8192).suffix(" px"));
-                ui.checkbox(&mut settings.match_view, "Match view").on_hover_text("The view's proportions at this height");
-                ui.end_row();
-                ui.label("Samples");
-                ui.add(egui::DragValue::new(&mut settings.samples).range(1..=100_000));
-                ui.label("Time limit");
-                ui.add(egui::DragValue::new(&mut settings.time_limit).range(0.0..=36_000.0).suffix(" s"))
-                    .on_hover_text("0 = until the samples are done");
-                ui.end_row();
-                ui.label("Bounces");
-                ui.add(egui::DragValue::new(&mut settings.bounces).range(1..=32));
-                let oidn = varstotas_render::oidn_available();
-                ui.checkbox(&mut settings.denoise, "Denoise").on_hover_text(if oidn {
-                    "Intel Open Image Denoise (AI denoiser) on the finished render"
-                } else {
-                    "Built-in edge-aware filter; install Open Image Denoise (brew install open-image-denoise) for a cleaner result"
-                });
-                ui.end_row();
-            });
             ui.horizontal(|ui| {
                 if ui.button("Render").on_hover_text("Render the current view").clicked() {
                     start = true;
@@ -214,11 +207,19 @@ impl VarstotasApp {
                     ui.label(RichText::new(e).color(crate::ui::realistic::ERROR_RED));
                 }
             }
-            if let Some((id, size)) = tex {
-                let avail = ui.available_width().max(100.0);
-                let k = (avail / size[0] as f32).min(420.0 / size[1] as f32).min(1.0);
-                ui.image(egui::load::SizedTexture::new(id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
-            }
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(360.0);
+                    egui::ScrollArea::vertical().id_salt("render_settings_scroll").max_height(440.0).show(ui, |ui| {
+                        settings_ui(ui, &mut settings, &mut env, &self.camera, unit);
+                    });
+                });
+                if let Some((id, size)) = tex {
+                    let avail = ui.available_width().max(100.0);
+                    let k = (avail / size[0] as f32).min(440.0 / size[1] as f32).min(1.0);
+                    ui.image(egui::load::SizedTexture::new(id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
+                }
+            });
             egui::CollapsingHeader::new(format!("Lights ({})", lights.len())).id_salt("render_lights").default_open(true).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for k in LightKind::ALL {
@@ -325,12 +326,14 @@ impl VarstotasApp {
         }
         let settings = settings.sanitized();
         let lights: Vec<Light> = lights.into_iter().map(Light::sanitized).collect();
-        if (lights.clone(), settings) != before {
+        let env = env.sanitized();
+        if (lights.clone(), settings, env) != before {
             if self.render_window.orig.is_none() {
                 self.render_window.orig = Some(before);
             }
             self.doc.model.lights = lights;
             self.doc.model.render = settings;
+            self.doc.model.environment = env;
         }
         self.finish_render_edit(ctx);
         if start {
@@ -391,13 +394,166 @@ impl VarstotasApp {
     /// Record the edit in progress as one undo step once the pointer is up and nothing has focus.
     fn finish_render_edit(&mut self, ctx: &Context) {
         if self.render_window.orig.is_some() && !ctx.egui_is_using_pointer() && ctx.memory(|m| m.focused().is_none()) {
-            let Some((lights, settings)) = self.render_window.orig.take() else { return };
+            let Some((lights, settings, env)) = self.render_window.orig.take() else { return };
             let m = &mut self.doc.model;
-            let now = (std::mem::replace(&mut m.lights, lights), std::mem::replace(&mut m.render, settings));
-            self.doc.commit("Edit Lights", |m| {
+            let now = (
+                std::mem::replace(&mut m.lights, lights),
+                std::mem::replace(&mut m.render, settings),
+                std::mem::replace(&mut m.environment, env),
+            );
+            let label = if now.0 != self.doc.model.lights { "Edit Lights" } else { "Render Settings" };
+            self.doc.commit(label, |m| {
                 m.lights = now.0;
                 m.render = now.1;
+                m.environment = now.2;
             });
         }
     }
+}
+
+fn section(ui: &mut egui::Ui, title: &str, open: bool, body: impl FnOnce(&mut egui::Ui)) {
+    egui::CollapsingHeader::new(title).id_salt(("render_section", title)).default_open(open).show(ui, |ui| {
+        egui::Grid::new(("render_grid", title)).num_columns(4).spacing([8.0, 4.0]).show(ui, body);
+    });
+}
+
+/// The settings part of the Render window: quality presets, image, sampling, camera, light and
+/// colour. Grading (Colour) shows on the render at once; the rest at the next render.
+fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment, camera: &Camera, unit: varstotas_kernel::LengthUnit) {
+    ui.horizontal(|ui| {
+        ui.label("Quality");
+        for (name, samples, bounces, _) in RENDER_PRESETS {
+            let tip = format!("{samples} samples, {bounces} bounces");
+            if ui.selectable_label(s.preset() == Some(name), name).on_hover_text(tip).clicked() {
+                s.apply_preset(name);
+            }
+        }
+    });
+    section(ui, "Image", true, |ui| {
+        ui.label("Size");
+        ui.add_enabled(!s.match_view, egui::DragValue::new(&mut s.width).range(16..=8192).suffix(" px"));
+        ui.add(egui::DragValue::new(&mut s.height).range(16..=8192).suffix(" px"));
+        ui.checkbox(&mut s.match_view, "Match view").on_hover_text("The view's proportions at this height");
+        ui.end_row();
+        ui.label("");
+        let current = RENDER_SIZES.iter().find(|r| (r.1, r.2) == (s.width, s.height) && !s.match_view).map_or("Custom", |r| r.0);
+        egui::ComboBox::from_id_salt("render_size").selected_text(current).width(150.0).show_ui(ui, |ui| {
+            for (name, w, h) in RENDER_SIZES {
+                if ui.selectable_label(current == name, name).clicked() {
+                    (s.width, s.height, s.match_view) = (w, h, false);
+                }
+            }
+        });
+        ui.checkbox(&mut s.transparent, "Transparent background")
+            .on_hover_text("The sky and the ground behind the model are transparent in the PNG (they still light it)");
+        ui.end_row();
+    });
+    section(ui, "Sampling", true, |ui| {
+        ui.label("Samples");
+        ui.add(egui::DragValue::new(&mut s.samples).range(1..=100_000));
+        ui.label("Time limit");
+        ui.add(egui::DragValue::new(&mut s.time_limit).range(0.0..=36_000.0).suffix(" s")).on_hover_text("0 = until the samples are done");
+        ui.end_row();
+        ui.label("Bounces");
+        ui.add(egui::DragValue::new(&mut s.bounces).range(1..=32));
+        ui.label("Clamp");
+        ui.add(egui::DragValue::new(&mut s.clamp).range(0.0..=1000.0).speed(0.5))
+            .on_hover_text("Brightest indirect light of a sample: lower kills fireflies, higher keeps bright bounce light; 0 = off");
+        ui.end_row();
+        ui.label("Denoiser");
+        let oidn = varstotas_render::oidn_available();
+        let current = match (s.denoise, s.ai_denoise && oidn) {
+            (false, _) => "Off",
+            (true, false) => "Built-in",
+            (true, true) => "AI (Open Image Denoise)",
+        };
+        egui::ComboBox::from_id_salt("render_denoiser").selected_text(current).width(150.0).show_ui(ui, |ui| {
+            if ui.selectable_label(!s.denoise, "Off").clicked() {
+                s.denoise = false;
+            }
+            if ui.selectable_label(current == "Built-in", "Built-in").on_hover_text("Edge-aware filter").clicked() {
+                (s.denoise, s.ai_denoise) = (true, false);
+            }
+            let ai = ui
+                .add_enabled(oidn, egui::Button::selectable(current.starts_with("AI"), "AI (Open Image Denoise)"))
+                .on_disabled_hover_text("Install Open Image Denoise: brew install open-image-denoise");
+            if ai.clicked() {
+                (s.denoise, s.ai_denoise) = (true, true);
+            }
+        });
+        ui.end_row();
+    });
+    section(ui, "Camera", false, |ui| {
+        ui.label("Depth of field");
+        egui::ComboBox::from_id_salt("render_dof").selected_text(s.dof.label()).width(90.0).show_ui(ui, |ui| {
+            for d in RenderDof::ALL {
+                ui.selectable_value(&mut s.dof, d, d.label());
+            }
+        })
+        .response
+        .on_hover_text("As view: the Effects' depth of field when it is on");
+        ui.label(RichText::new(format!("{:.0} mm lens", focal_length(camera))).weak()).on_hover_text("The view's field of view on a 35 mm camera");
+        ui.end_row();
+        if s.dof == RenderDof::On {
+            ui.label("Aperture");
+            ui.add(egui::DragValue::new(&mut s.f_stop).range(0.5..=64.0).speed(0.05).prefix("f/").max_decimals(1))
+                .on_hover_text("Smaller f-number = shallower focus");
+            ui.label("Focus");
+            ui.horizontal(|ui| {
+                let mut f = if s.focus > 0.0 { s.focus } else { camera.distance() };
+                if ui.add(len_drag(&mut f, unit)).changed() {
+                    s.focus = f.max(1.0);
+                }
+                if ui.small_button("Target").on_hover_text("Focus on the view's target (orbit centre)").clicked() {
+                    s.focus = 0.0;
+                }
+            });
+            ui.end_row();
+        }
+    });
+    section(ui, "Light", false, |ui| {
+        ui.label("Sun");
+        ui.add(egui::DragValue::new(&mut env.sun).range(0.0..=20.0).speed(0.02)).on_hover_text("Sun strength (its direction: Shadows)");
+        ui.label("Sky");
+        ui.add(egui::DragValue::new(&mut env.intensity).range(0.0..=20.0).speed(0.02)).on_hover_text("Environment light");
+        ui.end_row();
+        ui.label("Rotation");
+        ui.add(egui::DragValue::new(&mut env.rotation_deg).range(-360.0..=360.0).suffix("°")).on_hover_text("Turns the sky / HDRI");
+        ui.label("Exposure");
+        ui.add(egui::DragValue::new(&mut env.exposure).range(-10.0..=10.0).speed(0.02).suffix(" EV")).on_hover_text("The environment's exposure (view and render)");
+        ui.end_row();
+    });
+    section(ui, "Colour", false, |ui| {
+        ui.label("Exposure");
+        ui.add(egui::DragValue::new(&mut s.exposure).range(-10.0..=10.0).speed(0.02).suffix(" EV")).on_hover_text("Added to the environment's (render only)");
+        ui.label("Tone curve");
+        let label = |t: Option<Tonemap>| match t {
+            None => format!("Environment: {}", crate::ui::realistic::tonemap_name(env.tonemap)),
+            Some(t) => crate::ui::realistic::tonemap_name(t).to_string(),
+        };
+        egui::ComboBox::from_id_salt("render_tonemap").selected_text(label(s.tonemap)).width(130.0).show_ui(ui, |ui| {
+            for t in [None, Some(Tonemap::Aces), Some(Tonemap::Agx), Some(Tonemap::Clamp)] {
+                ui.selectable_value(&mut s.tonemap, t, label(t));
+            }
+        });
+        ui.end_row();
+        ui.label("White balance");
+        ui.add(egui::DragValue::new(&mut s.temperature).range(1500.0..=15000.0).speed(20.0).suffix(" K"))
+            .on_hover_text("6500 K = neutral; higher is warmer");
+        ui.label("Tint");
+        ui.add(egui::DragValue::new(&mut s.tint).range(-1.0..=1.0).speed(0.01)).on_hover_text("Green (−) .. magenta (+)");
+        ui.end_row();
+        ui.label("Saturation");
+        ui.add(egui::DragValue::new(&mut s.saturation).range(0.0..=2.0).speed(0.01));
+        ui.label("Contrast");
+        ui.add(egui::DragValue::new(&mut s.contrast).range(0.5..=2.0).speed(0.01));
+        ui.end_row();
+        ui.label("Vignette");
+        ui.add(egui::DragValue::new(&mut s.vignette).range(0.0..=1.0).speed(0.01));
+        ui.label("");
+        if ui.add_enabled(!s.neutral_grade(), egui::Button::new("Reset")).on_hover_text("Back to the default colour settings").clicked() {
+            s.reset_grade();
+        }
+        ui.end_row();
+    });
 }

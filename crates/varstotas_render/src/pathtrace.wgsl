@@ -15,6 +15,9 @@ struct PtU {
     sun: vec4<f32>,    // xyz: direction toward the sun; w: strength (0 = none)
     misc: vec4<f32>,   // x: z of the local frame in the world (custom shaders); y: time; z: 1 = ground
     ground: vec4<f32>, // rgb: ground colour (linear); w: z of the world ground plane (local frame)
+    grade: vec4<f32>,  // x: exposure (linear); y: tone curve (0 ACES, 1 AgX, 2 clip); z: saturation; w: contrast
+    grade2: vec4<f32>, // rgb: white balance; w: vignette
+    extra: vec4<f32>,  // x: 1 = transparent background (the sky and the ground plane seen directly)
 };
 
 @group(2) @binding(0) var<uniform> pt: PtU;
@@ -44,6 +47,8 @@ var<private> rng_state: u32;
 // `aov`, the denoisers' guides).
 var<private> first_albedo: vec3<f32>;
 var<private> first_nd: vec4<f32>;
+// 0 when the camera ray found the background (summed in `aov`: the alpha of a transparent one).
+var<private> first_cover: f32;
 
 fn pcg(v: u32) -> u32 {
     let s = v * 747796405u + 2891336453u;
@@ -609,11 +614,22 @@ fn trace_path(px: vec2<f32>) -> vec3<f32> {
             tg = (pt.ground.w - o.z) / d.z;
         }
         if h.tri == NO_HIT && tg > 1e29 {
-            col += thr * env_radiance(d, 0.0);
             if b == 0u {
                 first_albedo = vec3<f32>(1.0);
                 first_nd = vec4<f32>(-d, 1e9);
+                first_cover = 0.0;
+                if pt.extra.x > 0.5 {
+                    break;
+                }
             }
+            col += thr * env_radiance(d, 0.0);
+            break;
+        }
+        // A transparent background: the ground plane seen directly is background too.
+        if b == 0u && tg < h.t && pt.extra.x > 0.5 {
+            first_albedo = vec3<f32>(1.0);
+            first_nd = vec4<f32>(-d, 1e9);
+            first_cover = 0.0;
             break;
         }
         var m: Mat;
@@ -742,24 +758,27 @@ fn pt_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     var sum = vec3<f32>(0.0);
     var sa = vec3<f32>(0.0);
     var sn = vec4<f32>(0.0);
+    var cover = 0.0;
     for (var k = 0u; k < n; k++) {
         rng_state = pcg(pix * 9781u + pcg((frame + k) * 6271u + 17u));
         first_albedo = vec3<f32>(1.0);
         first_nd = vec4<f32>(0.0, 0.0, 1.0, 1e9);
+        first_cover = 1.0;
         let c = trace_path(vec2<f32>(gid.xy));
         if all(c == c) {
             sum += c;
         }
         sa += first_albedo;
         sn += first_nd;
+        cover += first_cover;
     }
     if frame == 0u {
         accum[pix] = vec4<f32>(sum, f32(n));
-        aov[2u * pix] = vec4<f32>(sa, 0.0);
+        aov[2u * pix] = vec4<f32>(sa, cover);
         aov[2u * pix + 1u] = sn;
     } else {
         accum[pix] += vec4<f32>(sum, f32(n));
-        aov[2u * pix] += vec4<f32>(sa, 0.0);
+        aov[2u * pix] += vec4<f32>(sa, cover);
         aov[2u * pix + 1u] += sn;
     }
 }
@@ -831,6 +850,23 @@ fn pt_resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let pix = gid.y * w + gid.x;
+    let px = pt_pixel(pix);
+    var c = max(px.rgb, vec3<f32>(0.0)) * pt.grade2.rgb;
+    var mapped = pt_tone(c);
+    let luma = dot(mapped, vec3<f32>(0.2126, 0.7152, 0.0722));
+    mapped = max(mix(vec3<f32>(luma), mapped, pt.grade.z), vec3<f32>(0.0));
+    var s = linear_to_srgb(clamp(mapped, vec3<f32>(0.0), vec3<f32>(1.0)));
+    s = (s - vec3<f32>(0.5)) * pt.grade.w + vec3<f32>(0.5);
+    // Vignette: darker towards the corners (by the distance over the half diagonal).
+    let uv = (vec2<f32>(gid.xy) + 0.5) / pt.size.xy * 2.0 - 1.0;
+    let r2 = dot(uv, uv) * 0.5;
+    s *= 1.0 - pt.grade2.w * r2 * (0.6 + 0.4 * r2);
+    textureStore(pt_out, vec2<i32>(gid.xy), vec4<f32>(clamp(s, vec3<f32>(0.0), vec3<f32>(1.0)), px.a));
+}
+
+/// Mean light of a pixel (denoised or not) with the exposure, and its alpha (1 unless the sky
+/// is transparent; the light is then divided by it).
+fn pt_pixel(pix: u32) -> vec4<f32> {
     var c: vec3<f32>;
     if dn.w > 0.5 {
         c = dn_in[pix].rgb * aov_albedo(pix);
@@ -838,8 +874,22 @@ fn pt_resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
         let a = accum[pix];
         c = a.rgb / max(a.w, 1.0);
     }
-    let mapped = tone_curve(max(c, vec3<f32>(0.0)) * env.p2.x);
-    textureStore(pt_out, vec2<i32>(gid.xy), vec4<f32>(linear_to_srgb(clamp(mapped, vec3<f32>(0.0), vec3<f32>(1.0))), 1.0));
+    var alpha = 1.0;
+    if pt.extra.x > 0.5 {
+        alpha = clamp(aov[2u * pix].w / max(accum[pix].w, 1.0), 0.0, 1.0);
+        c = c / max(alpha, 1e-3);
+    }
+    return vec4<f32>(c * pt.grade.x, alpha);
+}
+
+fn pt_tone(x: vec3<f32>) -> vec3<f32> {
+    if pt.grade.y < 0.5 {
+        return aces(x);
+    }
+    if pt.grade.y < 1.5 {
+        return agx(x);
+    }
+    return clamp(x, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 /// Linear light of a pixel for saving (EXR): the denoised or the accumulated mean.
@@ -850,10 +900,6 @@ fn pt_linear(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let pix = gid.y * w + gid.x;
-    if dn.w > 0.5 {
-        dn_out[pix] = vec4<f32>(dn_in[pix].rgb * aov_albedo(pix) * env.p2.x, 1.0);
-    } else {
-        let a = accum[pix];
-        dn_out[pix] = vec4<f32>(a.rgb / max(a.w, 1.0) * env.p2.x, 1.0);
-    }
+    let px = pt_pixel(pix);
+    dn_out[pix] = vec4<f32>(px.rgb * pt.grade2.rgb * px.a, px.a);
 }

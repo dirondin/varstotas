@@ -297,6 +297,26 @@ pub fn animated(model: &Model) -> bool {
     })
 }
 
+/// How a render's samples become its image: the environment's exposure and tone curve with the
+/// Render window's grading and denoiser.
+pub fn pt_output(model: &Model) -> varstotas_render::PtOutput {
+    let (e, r) = (&model.environment, &model.render);
+    let tonemap = match r.tonemap.unwrap_or(e.tonemap) {
+        varstotas_kernel::Tonemap::Aces => 0,
+        varstotas_kernel::Tonemap::Agx => 1,
+        varstotas_kernel::Tonemap::Clamp => 2,
+    };
+    varstotas_render::PtOutput {
+        exposure: varstotas_render::exposure_mult(e.exposure + r.exposure),
+        tonemap,
+        white: varstotas_render::white_balance(r.temperature, r.tint),
+        saturation: r.saturation,
+        contrast: r.contrast,
+        vignette: r.vignette,
+        ai_denoise: r.ai_denoise,
+    }
+}
+
 /// The model's enabled lights for the path tracer (linear colours).
 pub fn pt_lights(model: &Model) -> Vec<varstotas_render::PtLight> {
     use varstotas_kernel::LightKind;

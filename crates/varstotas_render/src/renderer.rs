@@ -35,6 +35,7 @@ mod export;
 mod annot;
 #[path = "env.rs"]
 mod env;
+pub use env::exposure_mult;
 #[path = "post.rs"]
 mod post;
 use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
@@ -1754,6 +1755,13 @@ impl Renderer {
         self.update_env(rs, style);
         let Some(pt) = &mut self.pt else { return 0 };
         pt.step(rs, [&self.bind_group, &self.face_textures.bind_group], max_samples, budget)
+    }
+
+    /// Exposure, tone curve, grading and denoiser of the render's image (next `pt_resolve`).
+    pub fn pt_set_output(&mut self, output: crate::PtOutput) {
+        if let Some(pt) = &mut self.pt {
+            pt.set_output(output);
+        }
     }
 
     /// Update the render's texture (`pt_texture`) with the samples so far.

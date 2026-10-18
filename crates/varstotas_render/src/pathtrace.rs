@@ -46,12 +46,64 @@ pub struct PtSettings {
     pub bounces: u32,
     /// Brightest indirect contribution of a sample (kills fireflies); 0 = no clamp.
     pub clamp: f32,
+    /// Depth of field: lens radius and focus distance (mm), instead of the style's effects.
+    pub lens: Option<[f32; 2]>,
+    /// The background (sky and ground plane seen directly) is transparent (alpha in the
+    /// image); it still lights the scene.
+    pub transparent: bool,
 }
 
 impl Default for PtSettings {
     fn default() -> Self {
-        Self { width: 1280, height: 720, bounces: 6, clamp: 20.0 }
+        Self { width: 1280, height: 720, bounces: 6, clamp: 20.0, lens: None, transparent: false }
     }
+}
+
+/// How the samples become the image (`Renderer::pt_set_output`; changes need no new samples).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PtOutput {
+    /// Linear multiplier (the environment's exposure and the render's offset).
+    pub exposure: f32,
+    /// 0 = ACES, 1 = AgX, 2 = clip (as `Tonemap`).
+    pub tonemap: u32,
+    /// White balance multipliers (linear RGB, see `white_balance`).
+    pub white: [f32; 3],
+    pub saturation: f32,
+    pub contrast: f32,
+    pub vignette: f32,
+    /// Denoise with Open Image Denoise when it is installed.
+    pub ai_denoise: bool,
+}
+
+impl Default for PtOutput {
+    fn default() -> Self {
+        Self { exposure: 1.0, tonemap: 0, white: [1.0; 3], saturation: 1.0, contrast: 1.0, vignette: 0.0, ai_denoise: true }
+    }
+}
+
+/// Colour of a black body at `kelvin` (linear RGB, max 1; Tanner Helland's fit).
+fn blackbody(kelvin: f32) -> [f32; 3] {
+    let t = kelvin.clamp(1000.0, 40000.0) / 100.0;
+    let r = if t <= 66.0 { 255.0 } else { 329.698_73 * (t - 60.0).powf(-0.133_204_76) };
+    let g = if t <= 66.0 { 99.470_8 * t.ln() - 161.119_57 } else { 288.122_16 * (t - 60.0).powf(-0.075_514_85) };
+    let b = if t >= 66.0 {
+        255.0
+    } else if t <= 19.0 {
+        0.0
+    } else {
+        138.517_73 * (t - 10.0).ln() - 305.044_8
+    };
+    [r, g, b].map(|c| lin(c / 255.0))
+}
+
+/// White balance multipliers for a `kelvin` setting (6500 = neutral; higher is warmer, as in a
+/// photo editor) and a `tint` (−1 green .. 1 magenta), keeping the brightness.
+pub fn white_balance(kelvin: f32, tint: f32) -> [f32; 3] {
+    let (n, k) = (blackbody(6500.0), blackbody(kelvin));
+    let mut m: [f32; 3] = std::array::from_fn(|i| n[i] / k[i].max(1e-3));
+    m[1] *= 1.0 - tint.clamp(-1.0, 1.0) * 0.25;
+    let luma = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+    m.map(|c| c / luma.max(1e-6))
 }
 
 #[repr(C)]
@@ -66,6 +118,9 @@ struct PtUniform {
     sun: [f32; 4],
     misc: [f32; 4],
     ground: [f32; 4],
+    grade: [f32; 4],
+    grade2: [f32; 4],
+    extra: [f32; 4],
 }
 
 /// Per-light records (4 vec4 each, `lights` in pathtrace.wgsl), positions relative to `origin`.
@@ -259,6 +314,7 @@ pub(crate) struct PathTracer {
     dn_uniform: wgpu::Buffer,
     dn_bg: wgpu::BindGroup,
     job: Option<Job>,
+    output: PtOutput,
     /// The device traces with ray queries (`pathtrace_rq.wgsl`) instead of the BVH.
     rq: bool,
 }
@@ -396,7 +452,7 @@ impl PathTracer {
         if rq {
             log::info!("path tracer: ray queries");
         }
-        Self { bgl, dn_bgl, layout, trace, denoise, resolve, linear, uniform, dn_uniform, dn_bg, job: None, rq }
+        Self { bgl, dn_bgl, layout, trace, denoise, resolve, linear, uniform, dn_uniform, dn_bg, job: None, output: PtOutput::default(), rq }
     }
 
     fn pipelines(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &wgpu::ShaderModule, src: &str, rq: bool) -> [wgpu::ComputePipeline; 4] {
@@ -457,6 +513,7 @@ impl PathTracer {
         self.upload_scene(device, nodes, &tri_geo, &tri_attr, &light_records(lights, origin), [w, h], accel.as_ref());
         let job = self.job.as_mut().expect("job");
         job.u = frame_uniform(camera, style, origin, [w, h], settings, lights.len());
+        set_grade(&mut job.u, &self.output);
         let mut r = rs.renderer.write();
         match job.texture_id {
             Some(id) => r.update_egui_texture_from_wgpu_texture(device, &job.out_view, wgpu::FilterMode::Linear, id),
@@ -541,6 +598,19 @@ impl PathTracer {
         self.job = Some(Job { size, u: PtUniform::default(), samples: 0, batch: 1, bg_ab, bg_ba, out, out_view, dn_a, dn_b, accum, aov, oidn_samples: 0, texture_id });
     }
 
+    /// Exposure, tone curve, grading and denoiser of the image (applied at the next resolve).
+    pub fn set_output(&mut self, output: PtOutput) {
+        if self.output.ai_denoise != output.ai_denoise
+            && let Some(job) = &mut self.job
+        {
+            job.oidn_samples = 0;
+        }
+        self.output = output;
+        if let Some(job) = &mut self.job {
+            set_grade(&mut job.u, &output);
+        }
+    }
+
     pub fn samples(&self) -> u32 {
         self.job.as_ref().map_or(0, |j| j.samples)
     }
@@ -614,7 +684,7 @@ impl PathTracer {
     /// Denoise steps (ending in buffer B), then `pt_resolve` or `pt_linear` reading B.
     fn run_output(&mut self, rs: &egui_wgpu::RenderState, groups: [&wgpu::BindGroup; 2], denoise: bool, linear: bool) {
         let set = self.groups(groups);
-        let oidn = denoise && self.oidn(rs);
+        let oidn = denoise && self.output.ai_denoise && self.oidn(rs);
         let Some(job) = &self.job else { return };
         if job.samples == 0 {
             return;
@@ -770,6 +840,11 @@ fn lin(x: f32) -> f32 {
     if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
 }
 
+fn set_grade(u: &mut PtUniform, o: &PtOutput) {
+    u.grade = [o.exposure.max(0.0), o.tonemap as f32, o.saturation, o.contrast];
+    u.grade2 = [o.white[0], o.white[1], o.white[2], o.vignette];
+}
+
 /// The camera, sun and lens of a render.
 fn frame_uniform(camera: &Camera, style: &RenderStyle, origin: DVec3, size: [u32; 2], s: &PtSettings, lights: usize) -> PtUniform {
     let b = camera.basis();
@@ -784,8 +859,11 @@ fn frame_uniform(camera: &Camera, style: &RenderStyle, origin: DVec3, size: [u32
     let fx = &style.env.effects;
     let eye = camera.eye - origin;
     let v4 = |v: DVec3, w: f64| [v.x as f32, v.y as f32, v.z as f32, w as f32];
-    let lens = if camera.ortho { 0.0 } else { fx.aperture.max(0.0) as f64 * 20.0 };
-    let focus = if fx.focus_distance > 0.0 { fx.focus_distance as f64 } else { camera.distance() };
+    let (lens, focus) = match s.lens {
+        _ if camera.ortho => (0.0, camera.distance()),
+        Some([r, f]) => (r.max(0.0) as f64, if f > 0.0 { f as f64 } else { camera.distance() }),
+        None => (fx.aperture.max(0.0) as f64 * 20.0, if fx.focus_distance > 0.0 { fx.focus_distance as f64 } else { camera.distance() }),
+    };
     let ld = DVec3::new(style.light_dir[0] as f64, style.light_dir[1] as f64, style.light_dir[2] as f64);
     let mut sun = ld.try_normalize().unwrap_or(DVec3::Z);
     let mut strength = style.env.sun.max(0.0);
@@ -807,6 +885,9 @@ fn frame_uniform(camera: &Camera, style: &RenderStyle, origin: DVec3, size: [u32
         sun: v4(sun, strength as f64),
         misc: [origin.z as f32, fx.time, if style.show_ground { 1.0 } else { 0.0 }, 0.0],
         ground: [lin(style.ground[0]), lin(style.ground[1]), lin(style.ground[2]), -origin.z as f32],
+        grade: [1.0, 0.0, 1.0, 1.0],
+        grade2: [1.0, 1.0, 1.0, 0.0],
+        extra: [if s.transparent { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
     }
 }
 
@@ -814,6 +895,16 @@ fn frame_uniform(camera: &Camera, style: &RenderStyle, origin: DVec3, size: [u32
 mod tests {
     use super::*;
     use crate::{TexVertex, TriVertex};
+
+    #[test]
+    fn white_balance_is_neutral_at_6500_and_warmer_above() {
+        let n = white_balance(6500.0, 0.0);
+        assert!(n.iter().all(|c| (c - 1.0).abs() < 1e-3), "{n:?}");
+        let warm = white_balance(9000.0, 0.0);
+        let cool = white_balance(3000.0, 0.0);
+        assert!(warm[0] > warm[2] && cool[2] > cool[0], "{warm:?} {cool:?}");
+        assert!(white_balance(6500.0, 1.0)[1] < 1.0);
+    }
 
     #[test]
     fn light_records_are_local_and_scaled() {

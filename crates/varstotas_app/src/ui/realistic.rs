@@ -461,7 +461,7 @@ fn map_normal_scale(p: &Pbr) -> bool {
     p.normal_map.is_some()
 }
 
-fn tonemap_name(t: Tonemap) -> &'static str {
+pub(crate) fn tonemap_name(t: Tonemap) -> &'static str {
     match t {
         Tonemap::Aces => "ACES (filmic)",
         Tonemap::Agx => "AgX (soft)",
