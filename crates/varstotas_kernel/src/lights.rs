@@ -2,7 +2,7 @@
 //! rectangular area lights placed in the model (world space, mm), and the Render window's
 //! settings saved with the document.
 
-use glam::DVec3;
+use glam::{DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -87,6 +87,16 @@ impl Light {
     }
 
     /// Clamp the values to their ranges (NaN → default), unit direction.
+    /// The light moved / turned by a world transform (Move, Rotate): position and aim.
+    pub fn transformed(&self, t: &DMat4) -> Light {
+        let d = t.transform_vector3(self.direction);
+        Light {
+            position: t.transform_point3(self.position),
+            direction: d.try_normalize().unwrap_or(self.direction),
+            ..self.clone()
+        }
+    }
+
     pub fn sanitized(mut self) -> Self {
         let d = Self::default();
         let c = |v: f32, lo: f32, hi: f32, def: f32| if v.is_finite() { v.clamp(lo, hi) } else { def };
@@ -286,6 +296,16 @@ mod tests {
         assert_eq!((r.width, r.bounces), (16, 32));
         let r = RenderSettings { temperature: 0.0, f_stop: f32::NAN, saturation: 9.0, ..Default::default() }.sanitized();
         assert_eq!((r.temperature, r.f_stop, r.saturation), (1500.0, 2.8, 2.0));
+    }
+
+    #[test]
+    fn lights_follow_transforms() {
+        let l = Light { direction: DVec3::X, ..Light::new(LightKind::Spot, DVec3::new(1000.0, 0.0, 0.0)) };
+        let t = DMat4::from_translation(DVec3::new(0.0, 0.0, 500.0)) * DMat4::from_rotation_z(std::f64::consts::FRAC_PI_2);
+        let m = l.transformed(&t);
+        assert!(m.position.distance(DVec3::new(0.0, 1000.0, 500.0)) < 1e-9);
+        assert!(m.direction.distance(DVec3::Y) < 1e-9);
+        assert_eq!((m.name, m.power), (l.name, l.power));
     }
 
     #[test]

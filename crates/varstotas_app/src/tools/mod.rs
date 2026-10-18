@@ -19,6 +19,7 @@ mod edit;
 mod nav_tools;
 pub mod plugin_pick;
 pub mod plugin_select;
+pub(crate) mod light;
 pub(crate) mod section;
 pub(crate) mod workplane;
 mod chamfer;

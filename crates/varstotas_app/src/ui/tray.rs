@@ -394,6 +394,10 @@ impl VarstotasApp {
             self.section_info(ui, i);
             return;
         }
+        if let Some(i) = self.doc.light_sel {
+            self.light_info(ui, i);
+            return;
+        }
         if sel.is_empty() && guides.len() == 1 && self.doc.dim_sel.is_empty() {
             self.guide_info(ui, guides[0]);
             return;
@@ -1023,6 +1027,27 @@ impl VarstotasApp {
     }
 
     /// Entity Info for a single selected guide line / guide point (world coordinates).
+    /// A selected light: its properties (one undo step per edit, as in the Render window).
+    fn light_info(&mut self, ui: &mut Ui, i: usize) {
+        let Some(mut l) = self.doc.model.lights.get(i).cloned() else { return };
+        let before = l.clone();
+        ui.label(RichText::new("Light").strong());
+        crate::ui::render::light_editor(ui, "entity_info_light", &mut l, self.doc.model.unit, &self.camera);
+        ui.horizontal(|ui| {
+            if ui.button("Render…").on_hover_text("Window → Render…").clicked() {
+                self.render_window.open = true;
+            }
+            if ui.button("Delete").clicked() {
+                self.actions.push(Action::Delete);
+            }
+        });
+        ui.label(RichText::new("Move / Rotate move and turn it; drag the square handle to aim it.").small().weak());
+        let l = l.sanitized();
+        if l != before {
+            self.edit_light(i, l);
+        }
+    }
+
     fn section_info(&mut self, ui: &mut Ui, i: usize) {
         let Some(s) = self.doc.model.sections.get(i).cloned() else { return };
         let unit = self.doc.model.unit;

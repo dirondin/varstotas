@@ -897,6 +897,10 @@ impl VarstotasApp {
         // on) for the last light; `render_start` renders the view and waits for the end (`render_wait`
         // only waits);
         // `render_save <path>` (.png / .exr); `render_scenes <folder>` renders every scene.
+        if let Some(i) = name.strip_prefix("select_light ").and_then(|v| v.trim().parse::<usize>().ok()) {
+            self.doc.select_light(i);
+            return;
+        }
         if name == "render_window" || name == "render_window_close" {
             self.render_window.open = name == "render_window";
             return;
@@ -1919,7 +1923,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} shader_members={:?} shader_line={:?} outliner={} matlib={:?} mat_delete={:?} current_mat={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))));
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} mat_delete={:?} current_mat={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))));
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -2133,6 +2137,26 @@ impl VarstotasApp {
     }
 
     /// The effects that are on, `-` for none: `soft,ao,ssr,bloom,dof,fog,vig,clay,<stylize>,hq`.
+    /// The selected light: index, position, aim, kind, and its marker / aim handle on screen
+    /// (viewport points, for `raw` clicks).
+    fn light_sel_dump(&self) -> String {
+        let Some((i, l)) = self.doc.light_sel.and_then(|i| self.doc.model.lights.get(i).map(|l| (i, l))) else { return "-".into() };
+        let p = l.position;
+        let d = l.direction;
+        let (m, a) = crate::tools::light::light_screen(l, &self.camera, self.viewport.size());
+        format!(
+            "({i} {} ({:.0},{:.0},{:.0}) aim=({:.2},{:.2},{:.2}) {}W at={m:?} handle={a:?})",
+            l.kind.key(),
+            p.x,
+            p.y,
+            p.z,
+            d.x,
+            d.y,
+            d.z,
+            l.power
+        )
+    }
+
     fn render_dump(&self) -> String {
         let r = &self.doc.model.render;
         let job = self.viewport.pt.as_ref().map(|j| {

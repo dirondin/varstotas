@@ -99,6 +99,8 @@ pub struct Document {
     pub dim_sel: Vec<DimId>,
     /// Selected section plane (index into `model.sections`); exclusive with other selections.
     pub section_sel: Option<usize>,
+    /// Selected light (index into `model.lights`); exclusive with other selections.
+    pub light_sel: Option<usize>,
     /// Editing context (empty = model root).
     pub active_path: ContextPath,
     /// Current paint material (None = "Default", i.e. remove material).
@@ -147,6 +149,7 @@ impl Document {
             guide_sel: Vec::new(),
             dim_sel: Vec::new(),
             section_sel: None,
+            light_sel: None,
             active_path: Vec::new(),
             current_material: None,
             last_error: None,
@@ -315,8 +318,9 @@ impl Document {
         guides.retain(|g| self.model.has_guide_in(&self.active_path, *g) && seen.insert(*g));
         let mut seen = std::collections::HashSet::new();
         dims.retain(|d| self.model.has_dimension_in(&self.active_path, *d) && seen.insert(*d));
-        if sel != self.selection || guides != self.guide_sel || dims != self.dim_sel || self.section_sel.is_some() {
+        if sel != self.selection || guides != self.guide_sel || dims != self.dim_sel || self.section_sel.is_some() || self.light_sel.is_some() {
             self.section_sel = None;
+            self.light_sel = None;
             self.selection = sel;
             self.guide_sel = guides;
             self.dim_sel = dims;
@@ -333,13 +337,22 @@ impl Document {
         }
     }
 
+    /// Select light `i` alone.
+    pub fn select_light(&mut self, i: usize) {
+        self.set_selection(Vec::new());
+        if i < self.model.lights.len() && self.light_sel != Some(i) {
+            self.light_sel = Some(i);
+            self.selection_version += 1;
+        }
+    }
+
     pub fn clear_selection(&mut self) {
         self.set_selection(Vec::new());
     }
 
     /// Anything (entities or guides) selected.
     pub fn has_selection(&self) -> bool {
-        !self.selection.is_empty() || !self.guide_sel.is_empty() || !self.dim_sel.is_empty() || self.section_sel.is_some()
+        !self.selection.is_empty() || !self.guide_sel.is_empty() || !self.dim_sel.is_empty() || self.section_sel.is_some() || self.light_sel.is_some()
     }
 
     /// Apply a selection operation to dimensions (mirrors the entity ops).
@@ -526,6 +539,10 @@ impl Document {
             self.section_sel = None;
             self.selection_version += 1;
         }
+        if self.light_sel.is_some_and(|i| i >= model.lights.len()) {
+            self.light_sel = None;
+            self.selection_version += 1;
+        }
         let Ok(Some(mesh)) = guarded(|| self.model.mesh_at(&self.active_path)) else {
             self.selection.clear();
             self.selection_version += 1;
@@ -552,10 +569,14 @@ impl Document {
         let guides = std::mem::take(&mut self.guide_sel);
         let dims = std::mem::take(&mut self.dim_sel);
         let section = self.section_sel.take();
+        let light = self.light_sel.take();
         let path = self.active_path.clone();
         self.commit(label, |m| {
             if let Some(i) = section.filter(|i| *i < m.sections.len()) {
                 m.sections.remove(i);
+            }
+            if let Some(i) = light.filter(|i| *i < m.lights.len()) {
+                m.lights.remove(i);
             }
             m.remove_guides_in(&path, &guides);
             m.remove_dimensions_in(&path, &dims);

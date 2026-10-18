@@ -16,7 +16,6 @@ type RenderState = (Vec<Light>, RenderSettings, Environment);
 #[derive(Default)]
 pub struct RenderWindow {
     pub open: bool,
-    pub selected: Option<usize>,
     /// Model state before the edit in progress.
     orig: Option<RenderState>,
     /// Rendering every scene into a folder.
@@ -136,7 +135,8 @@ impl VarstotasApp {
         let unit = m.unit;
         let (mut lights, mut settings, mut env) = (m.lights.clone(), m.render, m.environment);
         let before = (lights.clone(), settings, env);
-        let mut sel = self.render_window.selected.filter(|i| *i < lights.len());
+        let mut sel = self.doc.light_sel.filter(|i| *i < lights.len());
+        let sel_before = sel;
         let mut open = true;
         let mut start = false;
         let mut save: Option<&'static str> = None;
@@ -255,72 +255,10 @@ impl VarstotasApp {
                 }
                 if let Some(l) = sel.and_then(|i| lights.get_mut(i)) {
                     ui.separator();
-                    egui::Grid::new("render_light").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
-                        ui.label("Name");
-                        ui.add_sized([180.0, 20.0], egui::TextEdit::singleline(&mut l.name));
-                        egui::ComboBox::from_id_salt("light_kind").selected_text(l.kind.key()).show_ui(ui, |ui| {
-                            for k in LightKind::ALL {
-                                ui.selectable_value(&mut l.kind, k, k.key());
-                            }
-                        });
-                        ui.end_row();
-                        ui.label("Position");
-                        ui.add(len_drag(&mut l.position.x, unit));
-                        ui.add(len_drag(&mut l.position.y, unit));
-                        ui.add(len_drag(&mut l.position.z, unit));
-                        ui.end_row();
-                        ui.label("");
-                        if ui.small_button("To view centre").on_hover_text("Move it 2 m above the camera target").clicked() {
-                            l.position = self.camera.target + DVec3::Z * 2000.0;
-                        }
-                        if ui.small_button("To camera").clicked() {
-                            l.position = self.camera.eye;
-                            l.direction = (self.camera.target - self.camera.eye).normalize_or(DVec3::NEG_Z);
-                        }
-                        ui.end_row();
-                        if l.kind != LightKind::Point {
-                            ui.label("Aim");
-                            let mut d = l.direction;
-                            ui.add(egui::DragValue::new(&mut d.x).speed(0.02).range(-1.0..=1.0));
-                            ui.add(egui::DragValue::new(&mut d.y).speed(0.02).range(-1.0..=1.0));
-                            ui.add(egui::DragValue::new(&mut d.z).speed(0.02).range(-1.0..=1.0));
-                            if d != l.direction && d.length_squared() > 1e-6 {
-                                l.direction = d.normalize();
-                            }
-                            ui.end_row();
-                        }
-                        ui.label("Colour");
-                        ui.color_edit_button_rgb(&mut l.color);
-                        ui.label("Power");
-                        ui.add(egui::DragValue::new(&mut l.power).range(0.0..=100_000.0).speed(1.0).suffix(" W"));
-                        ui.end_row();
-                        match l.kind {
-                            LightKind::Point | LightKind::Spot => {
-                                ui.label("Radius");
-                                let mut r = l.radius as f64;
-                                if ui.add(len_drag(&mut r, unit)).changed() {
-                                    l.radius = r.max(0.0) as f32;
-                                }
-                                if l.kind == LightKind::Spot {
-                                    ui.add(egui::DragValue::new(&mut l.spot_angle).range(1.0..=179.0).suffix("°")).on_hover_text("Cone angle");
-                                    ui.add(egui::DragValue::new(&mut l.spot_blend).range(0.0..=1.0).speed(0.01)).on_hover_text("Soft edge");
-                                }
-                                ui.end_row();
-                            }
-                            LightKind::Area => {
-                                ui.label("Size");
-                                let (mut a, mut b) = (l.size[0] as f64, l.size[1] as f64);
-                                if ui.add(len_drag(&mut a, unit)).changed() | ui.add(len_drag(&mut b, unit)).changed() {
-                                    l.size = [a.max(1.0) as f32, b.max(1.0) as f32];
-                                }
-                                ui.end_row();
-                            }
-                        }
-                    });
+                    light_editor(ui, "render_light", l, unit, &self.camera);
                 }
             });
         });
-        self.render_window.selected = sel;
         if !open {
             self.render_window.open = false;
         }
@@ -334,6 +272,12 @@ impl VarstotasApp {
             self.doc.model.lights = lights;
             self.doc.model.render = settings;
             self.doc.model.environment = env;
+        }
+        if sel != sel_before {
+            match sel {
+                Some(i) => self.doc.select_light(i),
+                None => self.doc.clear_selection(),
+            }
         }
         self.finish_render_edit(ctx);
         if start {
@@ -362,33 +306,16 @@ impl VarstotasApp {
         }
     }
 
-    /// Light markers in the view while the Render window is open.
-    pub(crate) fn light_overlays(&self, o3: &mut varstotas_render::Overlay3d) {
-        if !self.render_window.open {
+    /// Change light `i` as part of the edit in progress (recorded by `finish_render_edit`).
+    pub(crate) fn edit_light(&mut self, i: usize, l: Light) {
+        let m = &self.doc.model;
+        if i >= m.lights.len() {
             return;
         }
-        for (i, l) in self.doc.model.lights.iter().enumerate() {
-            let sel = self.render_window.selected == Some(i);
-            let c = if !l.enabled {
-                [0.6, 0.6, 0.6, 1.0]
-            } else if sel {
-                varstotas_render::HIGHLIGHT_SELECTED
-            } else {
-                [0.95, 0.7, 0.1, 1.0]
-            };
-            o3.add_marker(l.position, varstotas_render::MarkShape::Dot, 12.0, c, true);
-            if l.kind != LightKind::Point {
-                let reach = 400.0;
-                o3.lines.push(varstotas_render::OverlayLine {
-                    a: l.position.as_vec3().to_array(),
-                    b: (l.position + l.direction * reach).as_vec3().to_array(),
-                    color: c,
-                    width_px: 1.5,
-                    dashed: true,
-                    on_top: true,
-                });
-            }
+        if self.render_window.orig.is_none() {
+            self.render_window.orig = Some((m.lights.clone(), m.render, m.environment));
         }
+        self.doc.model.lights[i] = l;
     }
 
     /// Record the edit in progress as one undo step once the pointer is up and nothing has focus.
@@ -409,6 +336,99 @@ impl VarstotasApp {
             });
         }
     }
+}
+
+/// The properties of a light (Render window, Entity Info): label | widgets rows, narrow enough
+/// for the tray.
+pub(crate) fn light_editor(ui: &mut egui::Ui, id: &str, l: &mut Light, unit: varstotas_kernel::LengthUnit, camera: &Camera) {
+    let small = |ui: &mut egui::Ui, w: egui::DragValue<'_>| ui.add_sized([58.0, 18.0], w);
+    egui::Grid::new(id).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+        ui.label("Name");
+        ui.add(egui::TextEdit::singleline(&mut l.name).desired_width(150.0));
+        ui.end_row();
+        ui.label("Type");
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt((id, "kind")).selected_text(l.kind.key()).width(70.0).show_ui(ui, |ui| {
+                for k in LightKind::ALL {
+                    ui.selectable_value(&mut l.kind, k, k.key());
+                }
+            });
+            ui.checkbox(&mut l.enabled, "On");
+        });
+        ui.end_row();
+    });
+    // Coordinates in full-width rows (three lengths do not fit beside a label in the tray).
+    let xyz = |ui: &mut egui::Ui, w: [egui::DragValue<'_>; 3]| {
+        ui.horizontal(|ui| {
+            let fw = ((ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0).clamp(50.0, 90.0);
+            for d in w {
+                ui.add_sized([fw, 18.0], d);
+            }
+        });
+    };
+    ui.label("Position");
+    let p = &mut l.position;
+    xyz(ui, [len_drag(&mut p.x, unit), len_drag(&mut p.y, unit), len_drag(&mut p.z, unit)]);
+    ui.horizontal_wrapped(|ui| {
+        if ui.small_button("To view centre").on_hover_text("Move it 2 m above the camera target").clicked() {
+            l.position = camera.target + DVec3::Z * 2000.0;
+        }
+        if ui.small_button("To camera").clicked() {
+            l.position = camera.eye;
+            l.direction = (camera.target - camera.eye).normalize_or(DVec3::NEG_Z);
+        }
+        if l.kind != LightKind::Point && ui.small_button("Aim at target").on_hover_text("Shine at the view's target").clicked() {
+            l.direction = (camera.target - l.position).normalize_or(l.direction);
+        }
+    });
+    if l.kind != LightKind::Point {
+        ui.label("Aim");
+        let mut d = l.direction;
+        xyz(ui, [&mut d.x, &mut d.y, &mut d.z].map(|v| egui::DragValue::new(v).speed(0.02).range(-1.0..=1.0).max_decimals(2)));
+        if d != l.direction && d.length_squared() > 1e-6 {
+            l.direction = d.normalize();
+        }
+    }
+    egui::Grid::new((id, "light")).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+        ui.label("Colour");
+        ui.horizontal(|ui| {
+            ui.color_edit_button_rgb(&mut l.color);
+            ui.label("Power");
+            ui.add(egui::DragValue::new(&mut l.power).range(0.0..=100_000.0).speed(1.0).suffix(" W"));
+        });
+        ui.end_row();
+        match l.kind {
+            LightKind::Point | LightKind::Spot => {
+                ui.label("Radius");
+                ui.horizontal(|ui| {
+                    let mut r = l.radius as f64;
+                    if small(ui, len_drag(&mut r, unit)).on_hover_text("Bulb size: softer shadows").changed() {
+                        l.radius = r.max(0.0) as f32;
+                    }
+                });
+                ui.end_row();
+                if l.kind == LightKind::Spot {
+                    ui.label("Cone");
+                    ui.horizontal(|ui| {
+                        small(ui, egui::DragValue::new(&mut l.spot_angle).range(1.0..=179.0).suffix("°")).on_hover_text("Cone angle");
+                        ui.label("Soft");
+                        small(ui, egui::DragValue::new(&mut l.spot_blend).range(0.0..=1.0).speed(0.01)).on_hover_text("Soft edge");
+                    });
+                    ui.end_row();
+                }
+            }
+            LightKind::Area => {
+                ui.label("Size");
+                ui.horizontal(|ui| {
+                    let (mut a, mut b) = (l.size[0] as f64, l.size[1] as f64);
+                    if small(ui, len_drag(&mut a, unit)).changed() | small(ui, len_drag(&mut b, unit)).changed() {
+                        l.size = [a.max(1.0) as f32, b.max(1.0) as f32];
+                    }
+                });
+                ui.end_row();
+            }
+        }
+    });
 }
 
 fn section(ui: &mut egui::Ui, title: &str, open: bool, body: impl FnOnce(&mut egui::Ui)) {

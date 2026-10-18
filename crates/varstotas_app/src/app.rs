@@ -2394,7 +2394,7 @@ impl VarstotasApp {
         tools::section::draw_sections(&view, &mut o3);
         tools::workplane::draw_work_planes(&view, &mut o3);
         self.section_cut_overlay(&mut o3);
-        self.light_overlays(&mut o3);
+        tools::light::draw_lights(&view, &mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
         o2.extend(self.tool.cursor_glyph());
         (o3, o2)

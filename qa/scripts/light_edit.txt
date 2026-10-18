@@ -1,0 +1,75 @@
+# Lights in the scene: pick a light's marker (Select), its properties in Entity Info, Move /
+# Rotate it with the tools (axis lock + VCB), aim it by its handle, Delete, undo.
+box 0 0 0 6000 4000 100
+box 2500 1500 100 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+action light_add spot 1000 1000 3000
+action light dir=1,0,-1 angle=50 power=400
+action light_add point 4500 3000 2500
+wait 3
+tool select
+# pick the spot by its marker (real mouse)
+rawp click 1000 1000 3000
+wait 5
+expect lightsel=(0 spot (1000,1000,3000) aim=(0.71,0.00,-0.71) 400W
+screenshot shots/light_selected.bmp
+dump picked
+# Move: start on the light, lock the red axis, type 1000
+tool move
+rawp click 1000 1000 3000
+wait 2
+raw key ArrowRight
+rawp move 1600 1000 3000
+wait 2
+raw text 1000
+raw key Enter
+wait 3
+expect lightsel=(0 spot (2000,1000,3000)
+expect undo=Some("Move")
+# Rotate 90° about the blue axis through the point under it
+tool rotate
+rawp move 2000 1000 100
+wait 2
+rawp click 2000 1000 100
+wait 2
+rawp click 3000 1000 100
+wait 2
+raw text 90
+raw key Enter
+wait 3
+dump rotated
+expect lightsel=(0 spot (2000,1000,3000) aim=(0.00,0.71,-0.71)
+undo
+undo
+wait 3
+expect lightsel=(0 spot (1000,1000,3000) aim=(0.71,0.00,-0.71)
+# Aim: drag the square handle onto the box's top
+tool select
+wait 3
+raw down 299 142
+rawp move 2000 1500 1100
+rawp move 3000 2000 1100
+wait 2
+rawp up 3000 2000 1100
+wait 3
+expect lightsel=(0 spot (1000,1000,3000) aim=(0.68,0.34,-0.65)
+expect undo=Some("Aim Light")
+screenshot shots/light_aimed.bmp
+# Entity Info: type a power (real mouse on the field)
+raw click 1310 315
+wait 2
+raw text 800
+raw key Enter
+wait 5
+expect aim=(0.68,0.34,-0.65) 800W
+expect undo=Some("Edit Lights")
+# Delete the selected light, undo
+raw key Delete
+wait 3
+expect lights=["point:
+expect lightsel=-
+undo
+wait 3
+expect lights=["spot:800W", "point:

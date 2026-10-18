@@ -50,11 +50,13 @@ pub struct Targets {
     pub dims: Vec<varstotas_kernel::DimId>,
     /// A section plane (index into `model.sections`).
     pub section: Option<usize>,
+    /// A light (index into `model.lights`).
+    pub light: Option<usize>,
 }
 
 impl Targets {
     pub fn is_empty(&self) -> bool {
-        self.ents.is_empty() && self.guides.is_empty() && self.dims.is_empty() && self.section.is_none()
+        self.ents.is_empty() && self.guides.is_empty() && self.dims.is_empty() && self.section.is_none() && self.light.is_none()
     }
     fn ents(ents: Vec<EntityRef>) -> Self {
         Self { ents, ..Default::default() }
@@ -87,8 +89,20 @@ fn run_transform(
     let path = ctx.doc.active_path.clone();
     let uid = ctx.doc.uid;
     let section = tg.section;
+    let light = tg.light;
     let r = ctx.doc.commit(label, |model| {
         let mut out = Targets::default();
+        if let Some(l) = light.and_then(|i| model.lights.get(i)).cloned() {
+            if copy {
+                for w in &world {
+                    model.lights.push(l.transformed(w));
+                }
+                out.light = Some(model.lights.len() - 1);
+            } else if let (Some(i), Some(w)) = (light, world.first()) {
+                model.lights[i] = l.transformed(w);
+                out.light = light;
+            }
+        }
         if let Some(s) = section.and_then(|i| model.sections.get(i)).cloned() {
             if copy {
                 for w in &world {
@@ -172,6 +186,9 @@ fn run_transform(
         if let Some(i) = r.section {
             ctx.doc.select_section(i);
         }
+        if let Some(i) = r.light {
+            ctx.doc.select_light(i);
+        }
     }
     Some(r)
 }
@@ -184,6 +201,7 @@ fn targets(ctx: &ToolContext, hover: &Option<Hover>, hover_guide: Option<GuideRe
             guides: ctx.doc.guide_sel.clone(),
             dims: ctx.doc.dim_sel.clone(),
             section: ctx.doc.section_sel,
+            light: ctx.doc.light_sel,
         };
     }
     Targets {
@@ -191,6 +209,7 @@ fn targets(ctx: &ToolContext, hover: &Option<Hover>, hover_guide: Option<GuideRe
         guides: hover_guide.into_iter().collect(),
         dims: Vec::new(),
         section: None,
+        light: None,
     }
 }
 
@@ -225,6 +244,9 @@ fn draw_preview(view: &OverlayView, tg: &Targets, t: &DMat4, out3d: &mut Overlay
     }
     if let Some(s) = tg.section.and_then(|i| view.doc.model.sections.get(i)) {
         super::section::draw_plane(&s.transformed(t), view.doc.model.bounds(), SELECT_BLUE, 1.5, out3d);
+    }
+    if let Some(l) = tg.light.and_then(|i| view.doc.model.lights.get(i)) {
+        super::light::draw_light(&l.transformed(t), true, view.camera, view.viewport, out3d);
     }
 }
 

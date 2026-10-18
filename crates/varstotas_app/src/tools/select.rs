@@ -17,6 +17,8 @@ const DRAG_THRESHOLD_PX: f32 = 4.0;
 pub struct SelectTool {
     press: Option<Pos2>,
     box_end: Option<Pos2>,
+    /// Aiming a light by its handle: the light and how it was before the drag.
+    aim: Option<(usize, varstotas_kernel::Light)>,
 }
 
 /// How a click / box combines with the current selection.
@@ -98,6 +100,15 @@ fn segment_hits_rect(a: Pos2, b: Pos2, r: Rect) -> bool {
 }
 
 impl SelectTool {
+    /// Put the light back as it was before an aim drag.
+    fn cancel_aim(&mut self, ctx: &mut ToolContext) {
+        if let Some((i, orig)) = self.aim.take()
+            && let Some(l) = ctx.doc.model.lights.get_mut(i)
+        {
+            *l = orig;
+        }
+    }
+
     fn pick(&self, ctx: &ToolContext) -> Option<Picked> {
         let active = ctx.doc.active_path.clone();
         let hit = ctx.pick();
@@ -166,6 +177,15 @@ impl SelectTool {
 
     fn click(&mut self, ctx: &mut ToolContext) {
         let op = sel_op(&ctx.pointer.modifiers);
+        // Light markers are drawn on top: they win.
+        if let Some(i) = super::light::pick_light(&ctx.doc.model.lights, ctx.camera, ctx.viewport, ctx.pointer.pos) {
+            match op {
+                SelOp::Remove => ctx.doc.clear_selection(),
+                SelOp::Toggle if ctx.doc.light_sel == Some(i) => ctx.doc.clear_selection(),
+                _ => ctx.doc.select_light(i),
+            }
+            return;
+        }
         let picked = self.pick(ctx);
         if let Some(i) = self.pick_section(ctx, &picked) {
             match op {
@@ -481,12 +501,22 @@ impl Tool for SelectTool {
         ToolId::Select
     }
 
-    fn deactivate(&mut self, _ctx: &mut ToolContext) {
+    fn deactivate(&mut self, ctx: &mut ToolContext) {
         self.press = None;
         self.box_end = None;
+        self.cancel_aim(ctx);
     }
 
     fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
+        // The selected light's aim handle: drag it onto what the light should shine at.
+        if ctx.pointer.button == Some(PointerButton::Primary)
+            && let Some(i) = ctx.doc.light_sel
+            && let Some(l) = ctx.doc.model.lights.get(i)
+            && super::light::on_aim_handle(l, ctx.camera, ctx.viewport, ctx.pointer.pos)
+        {
+            self.aim = Some((i, l.clone()));
+            return;
+        }
         if ctx.pointer.button == Some(PointerButton::Primary) {
             self.press = Some(ctx.pointer.pos);
             self.box_end = None;
@@ -494,6 +524,15 @@ impl Tool for SelectTool {
     }
 
     fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        if let Some((i, orig)) = &self.aim {
+            let target = ctx.point_under_pointer();
+            if let Some(d) = (target - orig.position).try_normalize()
+                && let Some(l) = ctx.doc.model.lights.get_mut(*i)
+            {
+                l.direction = d;
+            }
+            return;
+        }
         if let Some(p) = self.press {
             if !ctx.pointer.primary_down {
                 self.press = None;
@@ -506,6 +545,14 @@ impl Tool for SelectTool {
 
     fn on_pointer_up(&mut self, ctx: &mut ToolContext) {
         if ctx.pointer.button != Some(PointerButton::Primary) {
+            return;
+        }
+        if let Some((i, orig)) = self.aim.take() {
+            // One undo step from the light as it was before the drag.
+            let Some(now) = ctx.doc.model.lights.get_mut(i).map(|l| std::mem::replace(l, orig.clone())) else { return };
+            if now != orig {
+                ctx.commit("Aim Light", |m| m.lights[i] = now);
+            }
             return;
         }
         match (self.press.take(), self.box_end.take()) {
@@ -578,7 +625,9 @@ impl Tool for SelectTool {
         if !pressed || key != Key::Escape {
             return false;
         }
-        if self.press.is_some() {
+        if self.aim.is_some() {
+            self.cancel_aim(ctx);
+        } else if self.press.is_some() {
             self.press = None;
             self.box_end = None;
         } else if ctx.doc.has_selection() {
@@ -590,7 +639,9 @@ impl Tool for SelectTool {
     }
 
     fn status_text(&self) -> String {
-        if self.box_end.is_some() {
+        if self.aim.is_some() {
+            "Aim the light: drop the handle on what it should shine at. Esc = cancel.".into()
+        } else if self.box_end.is_some() {
             format!("Drag left→right for window selection, right→left for crossing selection. {SEL_MODS_HELP}.")
         } else {
             format!("Select objects. {SEL_MODS_HELP}. Drag to select multiple. Double-click a group to edit it.")
@@ -614,7 +665,7 @@ impl Tool for SelectTool {
     }
 
     fn is_busy(&self) -> bool {
-        self.press.is_some()
+        self.press.is_some() || self.aim.is_some()
     }
 }
 
