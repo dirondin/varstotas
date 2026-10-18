@@ -31,6 +31,12 @@ pub struct Definition {
     /// Attributions). Omitted when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<Attribution>,
+    /// Parameters of an ordinary component: this is the master (see [`crate::rig`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rig: Option<crate::rig::Rig>,
+    /// A posed variant of a rig master, or a painted copy of a part. Omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rigged: Option<crate::rig::Rigged>,
 }
 
 /// The origin of a downloaded model (3D Library): needed to credit CC-BY authors.
@@ -149,6 +155,9 @@ pub struct Scene {
     /// Played by View → Animation (the classic "Include in animation").
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub in_animation: bool,
+    /// Values of the components with parameters in this scene (`None`: left as they are).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rigs: Option<Vec<crate::rig::SceneRig>>,
 }
 
 fn yes() -> bool {
@@ -191,7 +200,7 @@ impl Default for SceneSettings {
 impl Scene {
     /// A camera-only scene (no saved style or tags), included in the animation.
     pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
-        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, environment: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true }
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, environment: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true, rigs: None }
     }
 }
 
@@ -285,7 +294,7 @@ impl Model {
     /// Empty model: a root definition, no materials/tags, millimetres.
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
         Self {
             defs,
             root,
@@ -630,7 +639,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -915,7 +924,7 @@ mod move_tests {
     use super::*;
 
     fn group(m: &mut Model, parent: &[InstanceId], name: &str, at: DVec3) -> (DefId, InstanceId) {
-        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None });
+        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
         m.defs[d].mesh.add_face(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]);
         let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false };
         let id = m.mesh_at_mut(parent).unwrap().instances.insert(inst);

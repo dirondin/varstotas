@@ -1,0 +1,88 @@
+# Components with parameters (rigs): a cabinet component with a Door part; Window →
+# Component Parameters (real mouse) adds an Opening parameter turning the door; values in
+# Entity Info, shared variants, scenes animating the value, edits inside a copy written back.
+action script let body = box(vec3(0, 0, 0), 600, 400, 800);\nlet door = box(vec3(0, -20, 0), 600, 20, 800);\ndoor.name = "Door";\nlet c = component([body, door], "Cabinet");\ncopy(c, vec3(1000, 0, 0));
+view iso
+zoom_extents
+wait 10
+screenshot shots/rig_1.bmp
+rawp click 300 200 800
+wait 5
+expect outliner={Cabinet[Group Door] *Cabinet[Group Door]}
+raw click 344 -106
+wait 5
+screenshot shots/rig_menu.bmp
+raw click 400 339
+wait 10
+expect rig=None ed=(true Some("Cabinet") p=1 f=0 j=0 None None)
+screenshot shots/rig_win.bmp
+# + Motion: the first part (Door) turned by `open`
+raw click 105 317
+wait 5
+expect rig=None ed=(true Some("Cabinet") p=1 f=0 j=1 None Some(([0.0, 0.0, 0.0], [0.0, 0.0, 1.0])))
+# Pick… the hinge axis in the model: from the top of the hinge down (turns the door outwards)
+action rig_pick 0
+wait 3
+rawp move 0 -20 800
+wait 3
+rawp click 0 -20 800
+wait 3
+rawp move 0 -20 0
+wait 3
+rawp click 0 -20 0
+wait 5
+expect j=1 None Some(([0.0, -20.0, 800.0], [0.0, 0.0, -1.0])))
+tool select
+wait 3
+screenshot shots/rig_win2.bmp
+raw click 121 476
+wait 10
+expect rig=Some("1 Cabinet [open=0°] joints=1 variants=1") ed=(true Some("Cabinet") p=1 f=0 j=1 None
+screenshot shots/rig_applied.bmp
+# close the window: Entity Info shows the Opening field
+raw click 802 57
+wait 5
+screenshot shots/rig_info.bmp
+# drag the Opening slider to the end: this copy gets its own variant
+raw drag 1213 251 1330 251 10
+wait 10
+expect rig=Some("1 Cabinet [open=90°] joints=1 variants=2")
+screenshot shots/rig_open.bmp
+# the other copy is still closed; type 45 into its field
+raw click 760 429
+wait 5
+expect rig=Some("1 Cabinet [open=0°] joints=1 variants=2")
+action scene_timing_0.5_0.2
+action add_scene
+wait 5
+# click the slider's end (raw y shifted by the scene tabs): 90°, as the first copy — one variant shared
+raw click 1303 222
+wait 10
+expect rig=Some("1 Cabinet [open=90°] joints=1 variants=1")
+action add_scene
+wait 5
+# back to scene 1: the value moves to 0 with the camera transition
+action prev_scene
+wait 60
+expect rig=Some("1 Cabinet [open=0°] joints=1 variants=2")
+action next_scene
+wait 60
+expect rig=Some("1 Cabinet [open=90°] joints=1 variants=1")
+screenshot shots/rig_scene2.bmp
+# open the selected copy (double click) and add a shelf inside: written back to the master, the
+# other copy (another variant) gets it too
+raw dblclick 760 449
+wait 5
+action script let s = box(vec3(10, 10, 400), 580, 380, 18);\ns.name = "Shelf";
+wait 5
+raw key Escape
+wait 5
+expect outliner={*Cabinet[Group Door Shelf] Cabinet[Group Door Shelf]}
+style wireframe
+wait 3
+screenshot shots/rig_shelf.bmp
+style shaded
+# undo: both without it
+action undo
+wait 5
+expect outliner={*Cabinet[Group Door] Cabinet[Group Door]}

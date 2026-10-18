@@ -7,6 +7,7 @@
 
 mod api;
 pub mod generator;
+pub mod rig;
 pub mod help;
 mod json;
 

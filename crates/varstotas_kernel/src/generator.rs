@@ -277,7 +277,7 @@ fn is_key(key: &str) -> bool {
     !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !key.starts_with(|c: char| c.is_ascii_digit())
 }
 
-fn parse_formula(s: &str) -> Result<GenFormula, String> {
+pub(crate) fn parse_formula(s: &str) -> Result<GenFormula, String> {
     let (decl, rhs) = s.split_once('=').ok_or_else(|| format!("@formula needs `name = expression`: {s}"))?;
     let (key, ty) = match decl.split_once(':') {
         Some((k, t)) => (k.trim(), Some(t.trim())),
@@ -312,7 +312,7 @@ fn parse_check(s: &str) -> Result<GenCheck, String> {
     Ok(GenCheck { expr, message })
 }
 
-fn parse_param(s: &str) -> Result<GenParam, String> {
+pub(crate) fn parse_param(s: &str) -> Result<GenParam, String> {
     let (decl, default) = s.split_once('=').ok_or_else(|| format!("@param needs `name = default`: {s}"))?;
     let decl = decl.trim();
     let (key, ty) = match decl.split_once(':') {
@@ -390,6 +390,20 @@ fn parse_param(s: &str) -> Result<GenParam, String> {
     };
     p.default = p.normalize(&raw)?;
     Ok(p)
+}
+
+impl GenParam {
+    /// A parameter from its `@param` header text: `key:type(min..max/step) = default "Label"`.
+    pub fn parse(s: &str) -> Result<GenParam, String> {
+        parse_param(s)
+    }
+}
+
+impl GenFormula {
+    /// A formula from its `@formula` header text: `key[:type] = expression "Label"`.
+    pub fn parse(s: &str) -> Result<GenFormula, String> {
+        parse_formula(s)
+    }
 }
 
 impl Generator {
@@ -582,6 +596,9 @@ impl Graft {
             p.base = self.def(src, dst, p.base);
             p.variant = p.variant.map(|v| self.def(src, dst, v));
         }
+        if let Some(r) = def.rigged.as_mut() {
+            r.master = self.def(src, dst, r.master);
+        }
         let nd = dst.defs.insert(def);
         self.defs.insert(d, nd);
         nd
@@ -592,7 +609,13 @@ impl Model {
     /// Definitions used inside `d` (nested, not `d` itself).
     fn nested_defs(&self, d: DefId, out: &mut HashSet<DefId>) {
         let Some(def) = self.defs.get(d) else { return };
-        let kids = def.mesh.instances.values().map(|i| i.def).chain(def.params.iter().flat_map(|p| [Some(p.base), p.variant]).flatten());
+        let kids = def
+            .mesh
+            .instances
+            .values()
+            .map(|i| i.def)
+            .chain(def.params.iter().flat_map(|p| [Some(p.base), p.variant]).flatten())
+            .chain(def.rigged.as_ref().map(|r| r.master));
         for k in kids.collect::<Vec<_>>() {
             if out.insert(k) {
                 self.nested_defs(k, out);

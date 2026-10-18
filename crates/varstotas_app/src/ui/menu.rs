@@ -395,6 +395,14 @@ impl VarstotasApp {
                     self.actions.push(Action::ModelInfo);
                     ui.close();
                 }
+                if ui
+                    .add(egui::Button::new("Component Parameters…").selected(self.rig_editor.open))
+                    .on_hover_text("Parameters of the selected component: values that turn, slide, show or paint its parts")
+                    .clicked()
+                {
+                    self.actions.push(Action::RigEditor);
+                    ui.close();
+                }
                 if ui.add(egui::Button::new("3D Library…").selected(self.models.open)).clicked() {
                     self.actions.push(Action::ModelLibrary);
                     ui.close();

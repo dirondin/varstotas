@@ -59,7 +59,7 @@ pub(crate) fn register_math(e: &mut rhai::Engine) {
 
 /// The engine for `@formula` / `@check` expressions: Rhai's standard functions plus
 /// [`register_math`].
-fn expr_engine() -> rhai::Engine {
+pub(crate) fn expr_engine() -> rhai::Engine {
     let mut e = rhai::Engine::new();
     e.set_max_operations(100_000);
     register_math(&mut e);
@@ -155,6 +155,8 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
         params: None,
         generated: Some(Generated { generator: name.to_string(), values }),
         source: None,
+        rig: None,
+        rigged: None,
     });
     model.graft_content(d, &built);
     Ok(d)

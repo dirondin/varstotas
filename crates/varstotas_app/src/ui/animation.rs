@@ -174,6 +174,10 @@ impl VarstotasApp {
                 self.go_to_scene(i);
             }
             self.cam_anim = None;
+            self.rig_anim = None;
+            if let Some((a, b, s)) = frame.rigs {
+                self.frame_rigs(a, b, s);
+            }
             self.camera = frame.camera;
             let path = frame_path(&run.dir, run.next);
             match run.spp {

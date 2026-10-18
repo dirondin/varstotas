@@ -71,6 +71,8 @@ impl Model {
             params: Some(Parametric::new(base)),
             generated: None,
             source: None,
+            rig: None,
+            rigged: None,
         });
         self.defs[pd].mesh.instances[inst].def = p;
         self.regenerate_params(p)?;
@@ -118,7 +120,7 @@ impl Model {
                 Some(v) => v,
                 None => {
                     let b = &self.defs[params.base];
-                    self.defs.insert(Definition { name: format!("{} (stretched)", b.name), is_group: true, params: None, generated: None, ..b.clone() })
+                    self.defs.insert(Definition { name: format!("{} (stretched)", b.name), is_group: true, params: None, generated: None, rig: None, rigged: None, ..b.clone() })
                 }
             };
             let mut def = self.defs[params.base].clone();
@@ -126,6 +128,8 @@ impl Model {
             def.is_group = true;
             def.params = None;
             def.generated = None;
+            def.rig = None;
+            def.rigged = None;
             self.defs[v] = def;
             for k in 0..3 {
                 if let Some(s) = params.size[k] {
@@ -218,6 +222,8 @@ impl Model {
 
     /// Definitions kept alive by parametric groups (their bases), besides instances.
     pub(crate) fn param_bases(&self) -> HashSet<DefId> {
-        self.defs.values().filter_map(|d| d.params.as_ref().map(|p| p.base)).collect()
+        let mut s: HashSet<DefId> = self.defs.values().filter_map(|d| d.params.as_ref().map(|p| p.base)).collect();
+        s.extend(self.rig_masters());
+        s
     }
 }

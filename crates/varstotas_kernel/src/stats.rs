@@ -87,6 +87,7 @@ impl Model {
                 stack.push(p.base);
                 stack.extend(p.variant);
             }
+            stack.extend(def.rigged.as_ref().map(|r| r.master));
         }
         seen
     }
@@ -155,7 +156,8 @@ impl Model {
         let mut s = ModelStats { scene: self.scene_counts(self.root, &mut HashMap::new(), 0), ..Default::default() };
         for (id, d) in &self.defs {
             s.stored.add(&self.own_counts(id));
-            if id == self.root {
+            // Variants and painted parts of rigs are counted with their masters.
+            if id == self.root || d.rigged.is_some() {
                 continue;
             }
             let u = used.contains(&id) as usize;
@@ -216,13 +218,16 @@ impl Model {
         if d == self.root || !self.defs.contains_key(d) {
             return Err(OpError::NotFound);
         }
+        // A component with parameters: its copies use its variants.
+        let mut gone: HashSet<DefId> = self.rig_variants(d).into_iter().map(|(v, _)| v).collect();
+        gone.insert(d);
         let mut removed = 0;
         for def in self.defs.values_mut() {
             let n = def.mesh.instances.len();
-            def.mesh.instances.retain(|_, i| i.def != d);
+            def.mesh.instances.retain(|_, i| !gone.contains(&i.def));
             removed += n - def.mesh.instances.len();
         }
-        self.remove_unused(HashSet::from([d]));
+        self.remove_unused(gone);
         Ok(removed)
     }
 }

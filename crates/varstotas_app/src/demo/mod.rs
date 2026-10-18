@@ -214,6 +214,8 @@ impl Builder {
             params: None,
             generated: None,
             source: None,
+            rig: None,
+            rigged: None,
         })
     }
 

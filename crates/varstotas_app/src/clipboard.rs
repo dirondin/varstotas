@@ -60,6 +60,10 @@ fn reachable_defs(model: &Model, d: DefId, out: &mut HashSet<DefId>) {
         if let Some(p) = &def.params {
             reachable_defs(model, p.base, out);
         }
+        // A component with parameters: its master (variants and painted parts are posed from it).
+        if let Some(r) = &def.rigged {
+            reachable_defs(model, r.master, out);
+        }
     }
 }
 
@@ -228,6 +232,8 @@ impl Clipboard {
         // A file holding just one component: place that one.
         let inst = match (ents.as_slice(), root.faces.is_empty() && root.edges.is_empty()) {
             ([EntityRef::Instance(i)], true) if model.defs.get(root.instances[*i].def).is_some_and(|d| !d.is_group && d.name == name) => *i,
+            // A component with parameters keeps them whatever the file is called.
+            ([EntityRef::Instance(i)], true) if model.instance_rigged(&[], *i).is_some() => *i,
             _ => model.make_component(&[], &ents, name)?,
         };
         model.guides.clear();
@@ -247,7 +253,10 @@ impl Clipboard {
         let root = m.root_mesh();
         if root.faces.is_empty() && root.edges.is_empty() && root.instances.len() == 1 {
             let i = root.instances.keys().next().expect("one instance");
-            m.explode(&[], i)?;
+            // A component with parameters stays one (its master and variants in the file).
+            if m.instance_rigged(&[], i).is_none() {
+                m.explode(&[], i)?;
+            }
         }
         m.purge_unused_defs();
         Ok(m)
@@ -340,11 +349,33 @@ impl Clipboard {
             maps.defs.insert(d, d);
             return Ok(d);
         }
+        // A variant of a component with parameters (or a painted part of one): the master comes
+        // along, equal values share the target's variant.
+        let mut rig_master = None;
+        if let Some(r) = &src.rigged {
+            let nm = self.copy_def(model, doc_uid, r.master, maps, false)?;
+            let found = model.defs.iter().find(|(_, t)| t.rigged.as_ref().is_some_and(|x| x.master == nm && x.paint == r.paint && x.values == r.values));
+            if !top && let Some((id, _)) = found {
+                maps.defs.insert(d, id);
+                return Ok(id);
+            }
+            rig_master = Some(nm);
+        }
+        // A component with parameters from the library placed again: its master (same name and
+        // parameters) is reused whatever the file is called.
+        if !top
+            && self.src_doc == LIBRARY_UID
+            && src.rig.is_some()
+            && let Some((id, _)) = model.defs.iter().find(|(_, t)| t.name == src.name && t.rig == src.rig)
+        {
+            maps.defs.insert(d, id);
+            return Ok(id);
+        }
         // A library component placed again: reuse its definition.
         if !top
             && !src.is_group
             && self.library.as_deref() == Some(src.name.as_str())
-            && let Some((id, _)) = model.defs.iter().find(|(_, t)| !t.is_group && t.name == src.name)
+            && let Some((id, _)) = model.defs.iter().find(|(_, t)| !t.is_group && t.name == src.name && t.rigged.is_none())
         {
             maps.defs.insert(d, id);
             return Ok(id);
@@ -366,6 +397,9 @@ impl Clipboard {
             }
         }
         let mut def = src.clone();
+        if let (Some(r), Some(nm)) = (def.rigged.as_mut(), rig_master) {
+            r.master = nm;
+        }
         let children: Vec<(InstanceId, DefId)> = def.mesh.instances.iter().map(|(i, x)| (i, x.def)).collect();
         for (i, cd) in children {
             let nd = self.copy_def(model, doc_uid, cd, maps, false)?;
@@ -490,6 +524,57 @@ mod tests {
         assert_eq!(m.root_mesh().instances.len(), 2);
         assert!(m.root_mesh().instances.values().all(|i| i.def == crates[0]));
         assert!((m.bounds().unwrap().max.x - 3000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rig_survives_the_library() {
+        use varstotas_kernel::{GenParam, GenValue, Joint, JointKind, Rig};
+        let mut doc = Document::new();
+        let src = "let body = box(vec3(0, 0, 0), 600, 400, 800);\nlet door = box(vec3(0, -20, 0), 600, 20, 800);\ndoor.name = \"Door\";\ncomponent([body, door], \"Cabinet\");";
+        doc.commit("cabinet", |m| assert!(varstotas_script::run(m, &Default::default(), src).error.is_none()));
+        let (i, d) = doc.model.root_mesh().instances.iter().map(|(i, x)| (i, x.def)).next().unwrap();
+        let rig = Rig {
+            params: vec![GenParam::parse("open:angle(0..90/1) = 0").unwrap()],
+            joints: vec![Joint { part: "Door".into(), kind: JointKind::Rotate { origin: DVec3::new(0.0, -20.0, 0.0), axis: DVec3::Z }, param: "open".into(), from: 0.0, to: -90.0, expr: String::new() }],
+            ..Default::default()
+        };
+        doc.try_commit("rig", |m| varstotas_script::rig::set_rig(m, d, Some(rig.clone())));
+        let open: varstotas_kernel::GenValues = [("open".to_string(), GenValue::Num(90.0))].into();
+        doc.try_commit("open", |m| varstotas_script::rig::set_values(m, &[], i, &open, false));
+        // Save to Library: the copy stays one component with its master, through a file.
+        doc.set_selection(vec![EntityRef::Instance(i)]);
+        let file = Clipboard::from_selection(&doc).unwrap().to_model(varstotas_kernel::LengthUnit::Millimeter).unwrap();
+        let file: Model = serde_json::from_str(&serde_json::to_string(&file).unwrap()).unwrap();
+        assert_eq!(file.root_mesh().instances.len(), 1);
+        // Placed twice into another document (the file named otherwise): one master with the
+        // parameters, both copies open and sharing one variant.
+        let mut target = Document::new();
+        let clip = Clipboard::from_library(file.clone(), "Kitchen cabinet").unwrap();
+        for x in [0.0, 2000.0] {
+            assert!(crate::tools::transform::paste_clipboard(&mut target, &clip, &DMat4::from_translation(DVec3::new(x, 0.0, 0.0))));
+        }
+        let m = &target.model;
+        let masters: Vec<_> = m.defs.iter().filter(|(_, x)| x.rig.is_some()).map(|(k, _)| k).collect();
+        assert_eq!(masters.len(), 1, "one master");
+        assert_eq!(m.defs[masters[0]].rig.as_ref(), Some(&rig));
+        let ids: Vec<InstanceId> = m.root_mesh().instances.keys().collect();
+        assert_eq!(ids.len(), 2);
+        let (v, r) = m.instance_rigged(&[], ids[0]).expect("a copy with parameters");
+        assert_eq!((r.master, r.values["open"].clone()), (masters[0], GenValue::Num(90.0)));
+        assert_eq!(m.instance_rigged(&[], ids[1]).unwrap().0, v);
+        // Its values still change there.
+        let close: varstotas_kernel::GenValues = [("open".to_string(), GenValue::Num(0.0))].into();
+        assert!(target.try_commit("close", |m| varstotas_script::rig::set_values(m, &[], ids[1], &close, false)).is_some());
+        assert_ne!(target.model.instance_rigged(&[], ids[1]).unwrap().0, v);
+        // A third copy from a fresh placement of the same file reuses the master.
+        let clip3 = Clipboard::from_library(file, "Kitchen cabinet").unwrap();
+        assert!(crate::tools::transform::paste_clipboard(&mut target, &clip3, &DMat4::from_translation(DVec3::new(4000.0, 0.0, 0.0))));
+        assert_eq!(target.model.defs.values().filter(|x| x.rig.is_some()).count(), 1);
+        // The master placed from the Document folder gets the variant for the defaults.
+        let clip4 = Clipboard::of_definition(&target.model, target.uid, masters[0]).unwrap();
+        assert!(crate::tools::transform::paste_clipboard(&mut target, &clip4, &DMat4::from_translation(DVec3::new(6000.0, 0.0, 0.0))));
+        let m = &target.model;
+        assert!(m.root_mesh().instances.keys().all(|i| m.instance_rigged(&[], i).is_some()), "every copy on a variant");
     }
 
     #[test]

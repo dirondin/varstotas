@@ -672,6 +672,7 @@ impl VarstotasApp {
             self.face_texture_info(ui, *fid);
         }
         if !self.generator_info(ui)
+            && !self.rig_info(ui)
             && let [EntityRef::Instance(id)] = sel.as_slice()
         {
             self.params_info(ui, *id);

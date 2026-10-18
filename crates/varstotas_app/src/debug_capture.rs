@@ -1598,6 +1598,93 @@ impl VarstotasApp {
             self.actions.push(Action::MakeUnique);
             return;
         }
+        // Components with parameters: `rig_edit` (Window → Component Parameters for the
+        // selection), editor rows `rig_param <@param text>`, `rig_formula <@formula text>`,
+        // `rig_joint part|motion(0 rotate,1 slide,2 show,3 paint)|param|from|to|ox oy oz|ax ay az|expr`,
+        // `rig_script <file>`, `rig_clear`, then `rig_apply`, `rig_remove`, `rig_pick <joint>`;
+        // values of the selected copies: `rig key=value …`, `rig_reset`.
+        if name == "rig_edit" {
+            self.actions.push(Action::RigEditor);
+            return;
+        }
+        if let Some(t) = name.strip_prefix("rig_param ") {
+            match varstotas_kernel::GenParam::parse(t) {
+                Ok(p) => self.rig_editor.params.push(crate::ui::rig_editor::ParamRow::of(&p)),
+                Err(e) => log::warn!("script: rig_param: {e}"),
+            }
+            return;
+        }
+        if let Some(t) = name.strip_prefix("rig_formula ") {
+            match varstotas_kernel::GenFormula::parse(t) {
+                Ok(f) => self.rig_editor.formulas.push(crate::ui::rig_editor::FormulaRow::of(&f)),
+                Err(e) => log::warn!("script: rig_formula: {e}"),
+            }
+            return;
+        }
+        if let Some(t) = name.strip_prefix("rig_joint ") {
+            let f: Vec<&str> = t.split('|').collect();
+            let num = |i: usize| f.get(i).and_then(|x| x.trim().parse::<f64>().ok()).unwrap_or(0.0);
+            let v3 = |i: usize, d: [f64; 3]| {
+                let n: Vec<f64> = f.get(i).map(|x| x.split_whitespace().filter_map(|s| s.parse().ok()).collect()).unwrap_or_default();
+                if n.len() == 3 { [n[0], n[1], n[2]] } else { d }
+            };
+            self.rig_editor.joints.push(crate::ui::rig_editor::JointRow {
+                part: f.first().map(|s| s.trim().to_string()).unwrap_or_default(),
+                motion: num(1) as usize,
+                param: f.get(2).map(|s| s.trim().to_string()).unwrap_or_default(),
+                from: num(3),
+                to: num(4),
+                origin: v3(5, [0.0; 3]),
+                axis: v3(6, [0.0, 0.0, 1.0]),
+                expr: f.get(7).map(|s| s.trim().to_string()).unwrap_or_default(),
+            });
+            return;
+        }
+        if let Some(p) = name.strip_prefix("rig_script ") {
+            match std::fs::read_to_string(p.trim()) {
+                Ok(s) => self.rig_editor.script = s,
+                Err(e) => log::warn!("script: rig_script {p}: {e}"),
+            }
+            return;
+        }
+        if name == "rig_clear" {
+            self.rig_editor.params.clear();
+            self.rig_editor.formulas.clear();
+            self.rig_editor.joints.clear();
+            self.rig_editor.script.clear();
+            return;
+        }
+        if name == "rig_apply" {
+            self.rig_apply();
+            return;
+        }
+        if name == "rig_remove" {
+            self.rig_remove();
+            return;
+        }
+        if let Some(j) = name.strip_prefix("rig_pick ") {
+            self.rig_pick(j.trim().parse().unwrap_or(0));
+            return;
+        }
+        if name == "rig_reset" {
+            self.actions.push(Action::SetRigValues(Default::default(), true));
+            return;
+        }
+        if let Some(args) = name.strip_prefix("rig ") {
+            let values = args
+                .split_whitespace()
+                .filter_map(|a| a.split_once('='))
+                .map(|(k, v)| {
+                    let v = match v {
+                        "true" | "false" => varstotas_kernel::GenValue::Bool(v == "true"),
+                        _ => varstotas_kernel::GenValue::Text(v.replace('_', " ")),
+                    };
+                    (k.to_string(), v)
+                })
+                .collect();
+            self.actions.push(Action::SetRigValues(values, false));
+            return;
+        }
         if name == "library_refresh" {
             self.refresh_library();
             return;
@@ -2083,7 +2170,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} online={} models={} credits={:?} pbr_more={:?} mat_delete={:?} current_mat={:?} previews={:?} stats={} def_delete={:?}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.online_dump(), self.models_dump(), m.attributions().iter().map(|a| a.title.clone()).collect::<Vec<_>>(), self.pbr_more_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.previews_dump(), self.stats_dump(), self.library.def_delete.and_then(|d| m.defs.get(d)).map(|d| d.name.clone()));
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} online={} models={} credits={:?} pbr_more={:?} mat_delete={:?} current_mat={:?} previews={:?} stats={} def_delete={:?} rig={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.online_dump(), self.models_dump(), m.attributions().iter().map(|a| a.title.clone()).collect::<Vec<_>>(), self.pbr_more_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.previews_dump(), self.stats_dump(), self.library.def_delete.and_then(|d| m.defs.get(d)).map(|d| d.name.clone()), self.rig_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",

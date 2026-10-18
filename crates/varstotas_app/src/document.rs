@@ -185,6 +185,7 @@ impl Document {
         let before = self.model.clone();
         match guarded(|| f(&mut self.model)) {
             Ok(r) => {
+                self.rig_hook();
                 self.history.push(label, before);
                 self.after_change();
                 self.last_commit_version = self.model_version;
@@ -227,6 +228,7 @@ impl Document {
                 Some(r)
             }
             Ok(Ok(r)) => {
+                self.rig_hook();
                 self.history.push(label, before);
                 self.after_change();
                 self.last_commit_version = self.model_version;
@@ -263,9 +265,19 @@ impl Document {
 
     /// Record an undo step for changes already made in place since `before`.
     pub fn record_step(&mut self, label: &str, before: Model) {
+        self.rig_hook();
         self.history.push(label, before);
         self.after_change();
         self.last_commit_version = self.model_version;
+    }
+
+    /// Components with parameters (rigs) after an edit: an edited variant goes back to its
+    /// master (the other copies follow), copies placed with a master get a variant.
+    fn rig_hook(&mut self) {
+        if let Err(e) = varstotas_script::rig::after_edit(&mut self.model, &self.active_path) {
+            log::warn!("parameters: {e}");
+            self.last_error = Some(format!("Parameters: {e}"));
+        }
     }
 
     fn after_change(&mut self) {

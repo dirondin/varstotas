@@ -357,7 +357,7 @@ impl VarstotasApp {
     /// Delete the document's component `d`: at once when nothing places it, else after the
     /// "Delete from the document?" question ([`Self::def_delete_dialog`]).
     pub(crate) fn ask_delete_definition(&mut self, d: varstotas_kernel::DefId) {
-        if self.doc.model.instance_count(d) == 0 {
+        if self.doc.model.placed_count(d) == 0 {
             self.delete_definition(d);
         } else {
             self.library.def_delete = Some(d);
@@ -380,7 +380,7 @@ impl VarstotasApp {
             self.library.def_delete = None;
             return;
         };
-        let (name, uses) = (def.name.clone(), self.doc.model.instance_count(d));
+        let (name, uses) = (def.name.clone(), self.doc.model.placed_count(d));
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("def_delete")).show(ctx, |ui| {
             ui.set_width(360.0);
@@ -424,7 +424,7 @@ impl VarstotasApp {
         let mut out: Vec<_> = m
             .defs
             .iter()
-            .filter(|(id, d)| *id != m.root && !d.is_group && d.generated.is_none() && !internal.contains(id))
+            .filter(|(id, d)| *id != m.root && !d.is_group && d.generated.is_none() && d.rigged.is_none() && !internal.contains(id))
             .map(|(id, d)| (id, if d.name.is_empty() { "Component".to_string() } else { d.name.clone() }))
             .collect();
         out.sort_by_key(|a| a.1.to_lowercase());
@@ -536,7 +536,8 @@ impl VarstotasApp {
 
     /// Select the instances of `d` placed at the top level of the model.
     fn select_definition(&mut self, d: varstotas_kernel::DefId) {
-        let ids: Vec<_> = self.doc.model.root_mesh().instances.iter().filter(|(_, i)| i.def == d).map(|(id, _)| varstotas_kernel::EntityRef::Instance(id)).collect();
+        let m = &self.doc.model;
+        let ids: Vec<_> = m.root_mesh().instances.iter().filter(|(_, i)| i.def == d || m.rig_master(i.def) == Some(d)).map(|(id, _)| varstotas_kernel::EntityRef::Instance(id)).collect();
         if ids.is_empty() {
             self.flash("No copies of this component at the top level of the model".to_string());
             return;
@@ -608,6 +609,7 @@ impl VarstotasApp {
         }
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
         let mut delete_def = None;
+        let mut rig_def = None;
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         let mut set_preview: Option<(PathBuf, bool)> = None;
@@ -671,6 +673,10 @@ impl VarstotasApp {
                                         delete_def = Some(d);
                                         ui.close();
                                     }
+                                    if ui.button("Parameters…").on_hover_text("Window → Component Parameters: values that move, show or paint its parts").clicked() {
+                                        rig_def = Some(d);
+                                        ui.close();
+                                    }
                                 });
                             }
                             Tile::Gen(i) => {
@@ -705,6 +711,9 @@ impl VarstotasApp {
         }
         if let Some(d) = select_def {
             self.select_definition(d);
+        }
+        if let Some(d) = rig_def {
+            self.open_rig_editor_for(d, None);
         }
         if let Some(d) = delete_def {
             self.ask_delete_definition(d);

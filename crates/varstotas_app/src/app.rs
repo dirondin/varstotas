@@ -168,6 +168,8 @@ pub enum Action {
     ModelLibrary,
     /// Window → Model Info.
     ModelInfo,
+    /// Window → Component Parameters (for the selected component).
+    RigEditor,
     /// Edit → Purge Unused: components, groups and materials nothing in the scene uses.
     PurgeUnused,
     /// File → Preview Image: from an image file, from the current view, remove.
@@ -303,6 +305,8 @@ pub enum Action {
     /// Entity Info: generator values for the selected generated components (true = reset to
     /// the defaults first).
     SetGenValues(varstotas_kernel::GenValues, bool),
+    /// Values of the selected components with parameters (over the current ones, or reset).
+    SetRigValues(varstotas_kernel::GenValues, bool),
     /// Give the selected component its own definition.
     MakeUnique,
 }
@@ -392,6 +396,8 @@ pub struct VarstotasApp {
     pub(crate) doc: Document,
     pub(crate) camera: Camera,
     pub(crate) cam_anim: Option<CameraAnimation>,
+    /// Values of components with parameters moving to a scene's.
+    pub(crate) rig_anim: Option<crate::ui::rig_editor::RigAnimation>,
     pub(crate) scene_player: Option<ScenePlayer>,
     pub(crate) viewport: Viewport,
     pub(crate) tool: Box<dyn Tool>,
@@ -457,6 +463,7 @@ pub struct VarstotasApp {
     pub(crate) models: crate::ui::model_library::ModelWindow,
     /// Window → Model Info.
     pub(crate) model_info: crate::ui::model_info::ModelInfoWindow,
+    pub(crate) rig_editor: crate::ui::rig_editor::RigEditor,
     /// File → Preview Image → Use Current View: the PNG being rendered for it.
     pub(crate) preview_shot: Option<PathBuf>,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
@@ -538,6 +545,7 @@ impl VarstotasApp {
             doc: Document::from_model(template.new_model(), None),
             camera: template.camera(nav::startup_camera()),
             cam_anim: None,
+            rig_anim: None,
             scene_player: None,
             viewport: Viewport::default(),
             tool: tools::make_tool(ToolId::Select),
@@ -586,6 +594,7 @@ impl VarstotasApp {
             models: Default::default(),
             preview_shot: None,
             model_info: Default::default(),
+            rig_editor: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -1147,6 +1156,7 @@ impl VarstotasApp {
             }
             Action::PreviewFromView => self.preview_from_view(),
             Action::ModelInfo => self.model_info.open = !self.model_info.open,
+            Action::RigEditor => self.open_rig_editor(),
             Action::PurgeUnused => self.purge_unused(true, true),
             Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
@@ -1421,6 +1431,7 @@ impl VarstotasApp {
             Action::GenEditorSave => self.gen_editor_save(),
             Action::GenEditorApply => self.gen_editor_apply(),
             Action::SetGenValues(v, reset) => self.set_gen_values(v, reset),
+            Action::SetRigValues(v, reset) => self.set_rig_values(v, reset),
             Action::MakeUnique => {
                 let path = self.doc.active_path.clone();
                 let [EntityRef::Instance(id)] = self.doc.selection.as_slice() else {
@@ -1852,6 +1863,8 @@ impl VarstotasApp {
         s.sections = Some(self.doc.model.scene_sections());
         s.shadows = Some(self.doc.model.shadows);
         s.environment = Some(self.doc.model.environment);
+        let rigs = self.doc.model.rig_instances();
+        s.rigs = (!rigs.is_empty()).then_some(rigs);
         s
     }
 
@@ -1916,6 +1929,7 @@ impl VarstotasApp {
         }
         let to = self.scene_camera(&s);
         let set = self.doc.model.scene_settings;
+        self.scene_rigs(&s, if set.transitions { set.transition_secs.max(0.0) } else { 0.0 });
         if set.transitions && set.transition_secs > 0.0 {
             self.cam_anim = Some(CameraAnimation::new(self.camera.clone(), to, set.transition_secs as f32));
         } else {
@@ -1954,7 +1968,7 @@ impl VarstotasApp {
     /// Advance the scene animation by `dt` seconds (after the camera transition finishes).
     fn step_player(&mut self, dt: f64) {
         let Some(p) = self.scene_player.as_mut() else { return };
-        if self.cam_anim.is_some() {
+        if self.cam_anim.is_some() || self.rig_anim.is_some() {
             return;
         }
         p.wait -= dt;
@@ -2556,6 +2570,10 @@ impl eframe::App for VarstotasApp {
                 }
                 ctx.request_repaint();
             }
+            if self.rig_anim.is_some() {
+                self.step_rig_anim(dt as f64);
+                ctx.request_repaint();
+            }
             if self.scene_player.is_some() {
                 self.step_player(dt as f64);
                 ctx.request_repaint();
@@ -2592,6 +2610,7 @@ impl eframe::App for VarstotasApp {
         self.console_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);
+        self.rig_editor_window(&ctx);
         self.shader_editor_window(&ctx);
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);

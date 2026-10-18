@@ -259,6 +259,9 @@ impl VarstotasApp {
 
     /// The `@pick` points were clicked.
     pub(crate) fn plugin_points(&mut self, pts: Vec<DVec3>) {
+        if self.rig_pick_done(&pts) {
+            return;
+        }
         if let Some((idx, mut vars)) = self.plugins.pending.take() {
             vars.insert("points".into(), Value::Array(pts.into_iter().map(vec_json).collect()));
             self.plugin_go(idx, vars);

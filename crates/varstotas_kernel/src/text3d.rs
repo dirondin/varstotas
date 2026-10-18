@@ -90,7 +90,7 @@ impl Model {
         if mesh.edges.is_empty() {
             return Err(OpError::Invalid("no outlines".into()));
         }
-        let def = self.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None });
+        let def = self.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
         let inst = Instance {
             def,
             transform: self.transform_at(path).inverse() * *xf,

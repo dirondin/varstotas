@@ -15,6 +15,9 @@ pub struct FrameSpec {
     /// Apply this scene (style, tags, environment, shadows…) before the frame: the first frame
     /// of a scene's hold and of the transition into it.
     pub scene: Option<usize>,
+    /// Values of components with parameters: (scene, next scene, 0..1 of the transition); a
+    /// hold is (scene, scene, 1).
+    pub rigs: Option<(usize, usize, f64)>,
 }
 
 /// The frames of the scenes in the animation at `fps`: a hold of `delay_secs` on each, a
@@ -49,18 +52,18 @@ pub fn scene_frames(scenes: &[Scene], set: &SceneSettings, fps: f64) -> Vec<Fram
         let time = f as f64 / fps;
         let seg = segs.iter().rev().find(|s| s.0 <= time + 1e-9).unwrap_or(&segs[0]);
         let (start, len, i, next) = *seg;
-        let (camera, scene) = match next {
-            None => (crate::layout::scene_camera(&scenes[i]), i),
+        let (camera, scene, rigs) = match next {
+            None => (crate::layout::scene_camera(&scenes[i]), i, (i, i, 1.0)),
             Some(j) => {
                 let mut cam = crate::layout::scene_camera(&scenes[i]);
                 let mut a = CameraAnimation::new(cam.clone(), crate::layout::scene_camera(&scenes[j]), len as f32);
                 a.step((time - start) as f32, &mut cam);
-                (cam, j)
+                (cam, j, (i, j, ((time - start) / len).clamp(0.0, 1.0)))
             }
         };
         let change = applied != Some(scene);
         applied = Some(scene);
-        out.push(FrameSpec { camera, scene: change.then_some(scene) });
+        out.push(FrameSpec { camera, scene: change.then_some(scene), rigs: Some(rigs) });
     }
     out
 }
@@ -75,7 +78,7 @@ pub fn orbit_frames(base: &Camera, seconds: f64, turns: f64, fps: f64) -> Vec<Fr
             let mut c = base.clone();
             c.eye = base.target + q * (base.eye - base.target);
             c.up = q * base.up;
-            FrameSpec { camera: c, scene: None }
+            FrameSpec { camera: c, scene: None, rigs: None }
         })
         .collect()
 }

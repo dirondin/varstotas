@@ -133,7 +133,7 @@ fn coplanar_overlap_with_group_imprints_boundary() {
     let gf = scratch.add_face(&[v(50., 50., 10.), v(150., 50., 10.), v(150., 150., 10.), v(50., 150., 10.)]).unwrap();
     let _ = gf;
     let r = model.root;
-    let def = model.defs.insert(Definition { name: "G".into(), mesh: scratch, is_group: true, guides: Default::default(), params: None, generated: None, source: None });
+    let def = model.defs.insert(Definition { name: "G".into(), mesh: scratch, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
     let g = model.defs[r].mesh.instances.insert(Instance {
         def,
         transform: DMat4::IDENTITY,

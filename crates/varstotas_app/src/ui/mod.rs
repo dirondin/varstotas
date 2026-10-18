@@ -16,6 +16,7 @@ pub mod model_library;
 pub mod online_mats;
 pub mod realistic;
 pub mod render;
+pub mod rig_editor;
 pub mod sheets;
 pub mod statusbar;
 pub mod theme;

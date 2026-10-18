@@ -442,23 +442,53 @@ impl VarstotasApp {
     /// are edited together), Reset and Make Unique. False when the selection is not that.
     pub(crate) fn generator_info(&mut self, ui: &mut Ui) -> bool {
         let Some((ids, g, values)) = self.selected_generated() else { return false };
+        ui.add_space(6.0);
+        let title = if ids.len() > 1 { format!("{} — {} components", g.name, ids.len()) } else { g.name.clone() };
+        ui.label(RichText::new(title).strong()).on_hover_text(&g.description);
+        let change = self.value_fields(ui, "entity_info_generator", &ids, &g, &values);
+        ui.horizontal(|ui| {
+            if ui.button("Reset").on_hover_text("Back to the generator's defaults").clicked() {
+                self.actions.push(Action::SetGenValues(GenValues::new(), true));
+            }
+            self.make_unique_button(ui, &ids);
+        });
+        ui.label(RichText::new(format!("Generator: {}", g.name)).small().color(theme::TEXT_DIM));
+        if let Some(change) = change {
+            self.actions.push(Action::SetGenValues(change, false));
+        }
+        true
+    }
+
+    /// Make Unique for one shared selected component.
+    pub(crate) fn make_unique_button(&mut self, ui: &mut Ui, ids: &[InstanceId]) {
+        let shared = ids.len() == 1
+            && self.doc.active_mesh().and_then(|m| m.instances.get(ids[0])).is_some_and(|i| self.doc.model.instance_count(i.def) > 1);
+        if ui
+            .add_enabled(shared, egui::Button::new("Make Unique"))
+            .on_hover_text("Give this component its own definition (instances with equal values share one)")
+            .clicked()
+        {
+            self.actions.push(Action::MakeUnique);
+        }
+    }
+
+    /// A field per parameter of `g` and the formula values, for the components `ids` with
+    /// `values` (several are edited together). The changed values, when there are.
+    pub(crate) fn value_fields(&mut self, ui: &mut Ui, salt: &str, ids: &[InstanceId], g: &Generator, values: &[GenValues]) -> Option<GenValues> {
         let unit = self.doc.model.unit;
         let cur = &values[0];
         let texts: BTreeMap<String, String> =
             g.params.iter().map(|p| (p.key.clone(), show_value(cur.get(&p.key).unwrap_or(&p.default), &p.kind, unit))).collect();
-        if self.tray.gen_text.as_ref().map(|t| &t.0) != Some(&ids) {
-            self.tray.gen_text = Some((ids.clone(), texts.clone()));
+        if self.tray.gen_text.as_ref().map(|t| t.0.as_slice()) != Some(ids) {
+            self.tray.gen_text = Some((ids.to_vec(), texts.clone()));
             self.tray.gen_drag = None;
         }
         let materials: Vec<String> = self.doc.model.materials.values().map(|m| m.name.clone()).collect();
         let mut change = GenValues::new();
         let mut bad = None;
-        ui.add_space(6.0);
-        let title = if ids.len() > 1 { format!("{} — {} components", g.name, ids.len()) } else { g.name.clone() };
-        ui.label(RichText::new(title).strong()).on_hover_text(&g.description);
         let mut bufs = self.tray.gen_text.take().map(|t| t.1).unwrap_or_default();
         let mut drag = self.tray.gen_drag.take();
-        egui::Grid::new("entity_info_generator").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+        egui::Grid::new(salt).num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
             for p in &g.params {
                 let v = cur.get(&p.key).unwrap_or(&p.default).clone();
                 let mixed = values.iter().any(|x| x.get(&p.key) != Some(&v));
@@ -476,33 +506,20 @@ impl VarstotasApp {
                 }
                 ui.end_row();
             }
-            formula_rows(ui, &g, cur, unit);
+            formula_rows(ui, g, cur, unit);
         });
-        self.tray.gen_text = Some((ids.clone(), bufs));
+        self.tray.gen_text = Some((ids.to_vec(), bufs));
         self.tray.gen_drag = drag;
-        ui.horizontal(|ui| {
-            if ui.button("Reset").on_hover_text("Back to the generator's defaults").clicked() {
-                self.actions.push(Action::SetGenValues(GenValues::new(), true));
-            }
-            let shared = ids.len() == 1
-                && self.doc.active_mesh().and_then(|m| m.instances.get(ids[0])).is_some_and(|i| self.doc.model.instance_count(i.def) > 1);
-            if ui
-                .add_enabled(shared, egui::Button::new("Make Unique"))
-                .on_hover_text("Give this component its own definition (instances with equal values share one)")
-                .clicked()
-            {
-                self.actions.push(Action::MakeUnique);
-            }
-        });
-        ui.label(RichText::new(format!("Generator: {}", g.name)).small().color(theme::TEXT_DIM));
         if let Some(e) = bad {
             self.tray.gen_text = None;
             self.flash_error(e);
+            None
         } else if !change.is_empty() {
             self.tray.gen_text = None;
-            self.actions.push(Action::SetGenValues(change, false));
+            Some(change)
+        } else {
+            None
         }
-        true
     }
 
     /// Apply generator values to every selected generated component (one undo step).

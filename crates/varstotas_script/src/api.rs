@@ -96,7 +96,7 @@ fn edit<T>(f: impl FnOnce(&mut State) -> R<T>) -> R<T> {
 // ---------------------------------------------------------------------------------------
 // Values
 
-fn num(d: &Dynamic) -> R<f64> {
+pub(crate) fn num(d: &Dynamic) -> R<f64> {
     if let Ok(f) = d.as_float() {
         return Ok(f);
     }
@@ -112,7 +112,7 @@ fn num(d: &Dynamic) -> R<f64> {
     err(format!("expected a number, got {}", d.type_name()))
 }
 
-fn pt(d: &Dynamic) -> R<DVec3> {
+pub(crate) fn pt(d: &Dynamic) -> R<DVec3> {
     if let Some(v) = d.clone().try_cast::<DVec3>() {
         return Ok(v);
     }
@@ -408,6 +408,8 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         params: None,
         generated: None,
         source: None,
+        rig: None,
+        rigged: None,
     });
     let m = mesh_mut(st, &path)?;
     let id = m.instances.insert(Instance {
@@ -542,7 +544,7 @@ pub fn engine(limit: Duration) -> Engine {
     e
 }
 
-fn register_vec(e: &mut Engine) {
+pub(crate) fn register_vec(e: &mut Engine) {
     e.register_type_with_name::<DVec3>("Vec3");
     e.register_fn("vec3", |x: Dynamic, y: Dynamic, z: Dynamic| -> R<DVec3> { Ok(DVec3::new(num(&x)?, num(&y)?, num(&z)?)) });
     e.register_fn("vec3", |x: Dynamic, y: Dynamic| -> R<DVec3> { Ok(DVec3::new(num(&x)?, num(&y)?, 0.0)) });

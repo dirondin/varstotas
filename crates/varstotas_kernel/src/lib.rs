@@ -38,6 +38,7 @@ pub mod params;
 pub mod lights;
 pub mod pbr;
 pub mod report;
+pub mod rig;
 pub mod section;
 pub mod shadows;
 pub mod stats;
@@ -62,6 +63,7 @@ pub use model::{
 };
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;
+pub use rig::{Joint, JointKind, PartOp, Rig, Rigged, SceneRig};
 pub use lights::{Light, LightKind, RENDER_PRESETS, RENDER_SIZES, RenderDof, RenderSettings};
 pub use pbr::{
     CustomShader, EFFECT_PRESETS, Effects, Environment, MAX_SHADER_PARAMS, PBR_MAPS, Pbr, ShaderParam, SkyKind, Stylize, Tonemap,
