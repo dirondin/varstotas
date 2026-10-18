@@ -151,6 +151,8 @@ pub enum Action {
     Sheets,
     WorkPlanes,
     InsertDemo,
+    /// File → Open Demo: Country House (a new, unsaved document).
+    OpenDemoHouse,
     Quit,
     Undo,
     Redo,
@@ -329,6 +331,7 @@ pub enum Pending {
     NewFrom(Template),
     Open,
     OpenPath(PathBuf),
+    DemoHouse,
     Quit,
 }
 
@@ -1073,6 +1076,7 @@ impl VarstotasApp {
             Action::Sheets => self.sheets.open = true,
             Action::WorkPlanes => self.planes_window.open = true,
             Action::InsertDemo => self.insert_demo(),
+            Action::OpenDemoHouse => self.guard_dirty(Pending::DemoHouse),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(format!("Undo {l}")),
                 None => self.flash("Nothing to undo"),
@@ -1869,6 +1873,11 @@ impl VarstotasApp {
                 }
             }
             Pending::OpenPath(path) => self.open_path(&path),
+            Pending::DemoHouse => {
+                self.replace_document(Document::from_model(crate::demo::country_house(), None));
+                self.go_to_scene(0);
+                self.flash("Demo: Country House — see the Scenes card and Window → Render…");
+            }
             Pending::Quit => {
                 self.allow_close = true;
                 self.tray.close_requested = true;

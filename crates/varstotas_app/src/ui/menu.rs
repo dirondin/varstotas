@@ -178,6 +178,7 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 self.item(ui, "Run Script…", None, true, Action::RunScript);
+                self.item(ui, "Open Demo: Country House", None, true, Action::OpenDemoHouse);
                 self.item(ui, "Insert Demo Geometry", None, true, Action::InsertDemo);
                 ui.separator();
                 self.item(ui, "Quit", Some(&cmd("Q")), true, Action::Quit);

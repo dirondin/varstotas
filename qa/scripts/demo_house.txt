@@ -1,0 +1,47 @@
+# File → Open Demo: Country House — the furnished demo model (procedural textures, PBR
+# materials, lights, scenes) in the Realistic style and path traced
+action demo_house
+wait 30
+expect scenes=["Exterior", "Terrace", "Living Room", "Kitchen", "Bedroom", "Bathroom", "Dusk", "Plan(-)"] scene=Some(0)
+expect style=realistic
+screenshot shots/demo_exterior.bmp
+# cuts between scenes (the demo's own transitions take 3 s)
+action scene_timing_0_1
+action scene_1
+wait 40
+screenshot shots/demo_terrace.bmp
+action scene_2
+wait 40
+screenshot shots/demo_living.bmp
+action scene_3
+wait 40
+screenshot shots/demo_kitchen.bmp
+action scene_4
+wait 40
+screenshot shots/demo_bedroom.bmp
+action scene_5
+wait 40
+screenshot shots/demo_bath.bmp
+action scene_6
+wait 40
+screenshot shots/demo_dusk.bmp
+action scene_7
+wait 40
+screenshot shots/demo_plan.bmp
+expect tags_hidden=1
+# path traced: the exterior by day and the living room
+action scene_0
+wait 40
+action render_set w=480 h=270 samples=48 match=off
+action render_start
+wait 3
+expect render=(480x270 48spp b6 dn job=Some("48sppSome([480, 270]),denoised")
+action render_save demo_r_exterior.png
+wait 3
+action scene_2
+wait 40
+action render_start
+wait 3
+action render_save demo_r_living.png
+wait 3
+quit

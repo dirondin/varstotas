@@ -11,6 +11,7 @@ mod bridge;
 mod bridge_ops;
 mod clipboard;
 mod debug_capture;
+mod demo;
 mod document;
 mod inference;
 mod layout;
