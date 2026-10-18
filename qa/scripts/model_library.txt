@@ -2,7 +2,9 @@
 # Model Folders source plugin (Source dropdown, Folder / Unit typed, Load) lists the fixture
 # models (an OBJ with its thumbnail, a PLY read by the PLY Import plugin), double-click
 # downloads and places one (credit kept), Download saves the other; File → Import with the
-# PLY importer; Export → Attributions. Needs the network only for the first catalogue.
+# PLY importer; Export → Attributions. Preview pictures: the Stool download keeps its
+# thumbnail (the Components tile shows it), Tetra gets one set, the document gets one from
+# the current view and loses it again. Needs the network only for the first catalogue.
 action tray_only Components
 action components
 wait 10
@@ -49,6 +51,7 @@ action online_wait
 wait 10
 expect last=Some("plugin-model_folders:
 expect Tetra.vrst faces=4")
+expect previews=(None, ["Stool"])
 screenshot shots/modlib_8.bmp
 action import_model ../../qa/fixtures/model_library/models/Shapes/Tetra.ply
 wait 5
@@ -58,3 +61,21 @@ wait 3
 raw click 783 56
 wait 5
 screenshot shots/modlib_9.bmp
+action library_preview Tetra|../../qa/fixtures/model_library/models/Furniture/Stool.png
+wait 5
+expect previews=(None, ["Stool", "Tetra"])
+action library_preview Tetra|clear
+wait 5
+expect previews=(None, ["Stool"])
+action preview_view
+wait 10
+expect previews=(Some([512,
+action preview_clear
+wait 5
+expect previews=(None, ["Stool"])
+screenshot shots/modlib_10.bmp
+raw rclick 1186 199
+wait 5
+screenshot shots/modlib_11.bmp
+raw key Escape
+wait 3

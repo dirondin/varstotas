@@ -259,6 +259,10 @@ pub struct Model {
     /// Generator sources by name (see [`crate::generator`]).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub generators: std::collections::BTreeMap<String, crate::generator::Generator>,
+    /// Preview picture of the file (PNG or JPEG), shown by the Components library instead of
+    /// the drawn edges; `None` = the library draws the model. See [`Model::set_preview`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<crate::texture::TextureImage>,
 }
 
 /// Result of a model-wide ray pick.
@@ -306,7 +310,13 @@ impl Model {
             work_planes: Vec::new(),
             active_plane: None,
             generators: Default::default(),
+            preview: None,
         }
+    }
+
+    /// Set (PNG / JPEG bytes) or clear the file's preview picture.
+    pub fn set_preview(&mut self, image: Option<Vec<u8>>) {
+        self.preview = image.map(|b| crate::texture::TextureImage::new(b, "preview", 0.0));
     }
     pub fn root_mesh(&self) -> &Mesh {
         &self.defs[self.root].mesh

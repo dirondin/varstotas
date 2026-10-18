@@ -166,6 +166,10 @@ pub enum Action {
     ImportModelPlugin(usize),
     /// Window → 3D Library.
     ModelLibrary,
+    /// File → Preview Image: from an image file, from the current view, remove.
+    PreviewFromFile,
+    PreviewFromView,
+    PreviewRemove,
     /// File → Export → 2D Drawing (SVG / PDF)…: the options dialog.
     ExportDrawing,
     /// Tools → Unfold…: the flat pattern window.
@@ -447,6 +451,8 @@ pub struct VarstotasApp {
     pub(crate) anim_window: crate::ui::animation::AnimWindow,
     pub(crate) online: crate::ui::online_mats::OnlineWindow,
     pub(crate) models: crate::ui::model_library::ModelWindow,
+    /// File → Preview Image → Use Current View: the PNG being rendered for it.
+    pub(crate) preview_shot: Option<PathBuf>,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -572,6 +578,7 @@ impl VarstotasApp {
             anim_window: Default::default(),
             online: Default::default(),
             models: Default::default(),
+            preview_shot: None,
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
@@ -1126,6 +1133,13 @@ impl VarstotasApp {
                 }
             }
             Action::ModelLibrary => self.models.open = !self.models.open,
+            Action::PreviewFromFile => {
+                if let Some(f) = rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() {
+                    self.preview_from_file(&f);
+                }
+            }
+            Action::PreviewFromView => self.preview_from_view(),
+            Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
             Action::Sheets => self.sheets.open = true,
@@ -2553,6 +2567,7 @@ impl eframe::App for VarstotasApp {
         let export_result = if self.anim_window.run.is_some() { None } else { self.viewport.export_result.take() };
         match export_result {
             Some(r) if self.bridge_shot_done(&r) => {}
+            Some(r) if self.preview_shot_done(&r) => {}
             Some(Ok(p)) => {
                 log::info!("exported {}", p.display());
                 self.flash(format!("Exported {}", p.display()));

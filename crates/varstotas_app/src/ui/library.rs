@@ -27,6 +27,23 @@ pub struct LibItem {
     thumb: Vec<(egui::Pos2, egui::Pos2)>,
     pub clip: Rc<Clipboard>,
     mtime: Option<SystemTime>,
+    /// The file's preview picture (shown instead of the edges), decoded on first draw.
+    pub preview: Option<std::sync::Arc<[u8]>>,
+    picture: std::cell::OnceCell<Option<egui::TextureHandle>>,
+}
+
+impl LibItem {
+    /// The preview picture as a texture (None without one or when it can't be read).
+    fn picture(&self, ctx: &egui::Context) -> Option<egui::TextureId> {
+        let bytes = self.preview.as_ref()?;
+        self.picture
+            .get_or_init(|| {
+                let ci = crate::textures::thumbnail(bytes, 2 * TILE as u32)?;
+                Some(ctx.load_texture(format!("libpreview:{}", self.path.display()), ci, egui::TextureOptions::LINEAR))
+            })
+            .as_ref()
+            .map(|t| t.id())
+    }
 }
 
 #[derive(Default)]
@@ -88,7 +105,8 @@ pub struct DefThumb {
 }
 
 fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
-    let model = crate::document::guarded(|| varstotas_kernel::io::load(path)).and_then(|r| r.map_err(|e| e.to_string()))?;
+    let mut model = crate::document::guarded(|| varstotas_kernel::io::load(path)).and_then(|r| r.map_err(|e| e.to_string()))?;
+    let preview = model.preview.take().map(|p| p.bytes);
     let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let clip = crate::document::guarded(|| Clipboard::from_library(model, &name)).and_then(|r| r.map_err(|e| e.to_string()))?;
     let folder = path
@@ -105,6 +123,8 @@ fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
         thumb: thumbnail(&edges),
         clip: Rc::new(clip),
         mtime: std::fs::metadata(path).and_then(|m| m.modified()).ok(),
+        preview,
+        picture: Default::default(),
     })
 }
 
@@ -367,7 +387,80 @@ impl VarstotasApp {
         let uses = m.defs.values().flat_map(|x| x.mesh.instances.values()).filter(|i| i.def == d).count();
         let t = &self.library.def_thumbs[&d];
         let note = format!("In this document: {uses} placed");
-        tile_ex(ui, &name, &t.thumb, t.size, m.unit, false, &note)
+        tile_ex(ui, &name, &t.thumb, None, t.size, m.unit, false, &note)
+    }
+
+    /// Set or remove the open document's preview picture (undoable; saved with the file).
+    pub(crate) fn set_doc_preview(&mut self, bytes: Option<Vec<u8>>) {
+        let set = bytes.is_some();
+        self.doc.commit(if set { "Set Preview Image" } else { "Remove Preview Image" }, |m| m.set_preview(bytes));
+        self.flash(if set { "Preview image set (saved with the file)" } else { "Preview image removed" });
+    }
+
+    /// The document's preview picture from an image file.
+    pub(crate) fn preview_from_file(&mut self, f: &Path) {
+        match std::fs::read(f).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b)) {
+            Ok(b) => self.set_doc_preview(Some(b)),
+            Err(e) => self.flash_error(format!("Preview image: {}: {e}", f.display())),
+        }
+    }
+
+    /// The document's preview picture from the current view (rendered like File → Export →
+    /// 2D Graphic, at most [`crate::textures::PREVIEW_SIDE`] pixels; finished by
+    /// [`Self::preview_shot_done`]).
+    pub(crate) fn preview_from_view(&mut self) {
+        let vp = self.viewport.size();
+        let side = crate::textures::PREVIEW_SIDE as f32;
+        let k = side / vp.x.max(vp.y).max(1.0);
+        let size = [(vp.x * k).round().max(1.0) as u32, (vp.y * k).round().max(1.0) as u32];
+        let path = std::env::temp_dir().join(format!("varstotas_preview_{}.png", std::process::id()));
+        let content = crate::app::ExportContent { transparent: false, axes: false, guides: false, dims: false };
+        self.preview_shot = Some(path.clone());
+        self.export_png_to(path, size, content);
+    }
+
+    /// True when `r` is the render of [`Self::preview_from_view`] (then it becomes the preview).
+    pub(crate) fn preview_shot_done(&mut self, r: &Result<PathBuf, String>) -> bool {
+        let Some(path) = self.preview_shot.take() else { return false };
+        match r {
+            Ok(p) if *p == path => {
+                let res = std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b));
+                let _ = std::fs::remove_file(p);
+                match res {
+                    Ok(b) => self.set_doc_preview(Some(b)),
+                    Err(e) => self.flash_error(format!("Preview image: {e}")),
+                }
+                true
+            }
+            Ok(_) => {
+                self.preview_shot = Some(path);
+                false
+            }
+            Err(e) => {
+                self.flash_error(format!("Preview image: {e}"));
+                true
+            }
+        }
+    }
+
+    /// Set (from the image file `image`) or remove the preview picture of library file `path`.
+    pub(crate) fn set_library_preview(&mut self, path: &Path, image: Option<&Path>) {
+        let res = (|| -> Result<(), String> {
+            let mut m = varstotas_kernel::io::load(path).map_err(|e| e.to_string())?;
+            let bytes = match image {
+                Some(f) => Some(crate::textures::preview_bytes(&std::fs::read(f).map_err(|e| format!("{}: {e}", f.display()))?)?),
+                None => None,
+            };
+            m.set_preview(bytes);
+            varstotas_kernel::io::save(&m, path).map_err(|e| e.to_string())
+        })();
+        match res {
+            Ok(()) => self.refresh_library(),
+            Err(e) => {
+                log::warn!("preview image of {}: {e}", path.display());
+                self.flash_error(format!("Preview image: {e}"));
+            }
+        }
     }
 
     /// Place one more instance of the document's component `d`.
@@ -457,6 +550,7 @@ impl VarstotasApp {
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
+        let mut set_preview: Option<(PathBuf, bool)> = None;
         self.library.shown_folders.clear();
         // The library folder itself: always a heading (its own items fold under it).
         let root_folded = self.folder_header(ui, "", lib_dir.as_deref());
@@ -483,6 +577,14 @@ impl VarstotasApp {
                                 resp.context_menu(|ui| {
                                     if ui.button("Place").clicked() {
                                         place = Some(i);
+                                        ui.close();
+                                    }
+                                    if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
+                                        set_preview = Some((it.path.clone(), true));
+                                        ui.close();
+                                    }
+                                    if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
+                                        set_preview = Some((it.path.clone(), false));
                                         ui.close();
                                     }
                                     if ui.button("Delete…").clicked() {
@@ -527,6 +629,12 @@ impl VarstotasApp {
         }
         if delete.is_some() {
             self.library.delete_ask = delete;
+        }
+        if let Some((path, set)) = set_preview {
+            let image = if set { rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
+            if !set || image.is_some() {
+                self.set_library_preview(&path, image.as_deref());
+            }
         }
         if let Some(d) = place_def {
             self.place_definition(d);
@@ -589,15 +697,18 @@ impl VarstotasApp {
 
 /// One library item.
 fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> egui::Response {
-    tile_ex(ui, &it.name, &it.thumb, it.size, unit, false, "")
+    let pic = it.picture(ui.ctx());
+    tile_ex(ui, &it.name, &it.thumb, pic, it.size, unit, false, "")
 }
 
-/// A library tile: thumbnail edges in the unit square, the name below; `gear` marks a
-/// generator (a gear in the top right corner). True when clicked.
+/// A library tile: the picture `image` (fitted) or else the thumbnail edges in the unit
+/// square, the name below; `gear` marks a generator (a gear in the top right corner).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn tile_ex(
     ui: &mut Ui,
     name: &str,
     thumb: &[(egui::Pos2, egui::Pos2)],
+    image: Option<egui::TextureId>,
     size: DVec3,
     unit: varstotas_kernel::LengthUnit,
     gear: bool,
@@ -610,11 +721,18 @@ pub(crate) fn tile_ex(
         let fill = if resp.hovered() { Color32::from_rgb(0xE6, 0xEE, 0xFA) } else { Color32::from_gray(248) };
         p.rect_filled(pic, 6.0, fill);
         p.rect_stroke(pic, 6.0, Stroke::new(1.0, Color32::from_gray(215)), egui::StrokeKind::Inside);
-        let inner = pic.shrink(8.0);
-        let to = |q: egui::Pos2| inner.min + vec2(q.x * inner.width(), q.y * inner.height());
-        let stroke = Stroke::new(0.8, Color32::from_gray(60));
-        for (a, b) in thumb {
-            p.line_segment([to(*a), to(*b)], stroke);
+        if let Some(id) = image {
+            let [w, h] = ui.ctx().tex_manager().read().meta(id).map_or([1, 1], |m| m.size);
+            let k = (pic.width() - 2.0) / w.max(h).max(1) as f32;
+            let r = Rect::from_center_size(pic.center(), vec2(w as f32 * k, h as f32 * k));
+            egui::Image::new((id, r.size())).corner_radius(5.0).paint_at(ui, r);
+        } else {
+            let inner = pic.shrink(8.0);
+            let to = |q: egui::Pos2| inner.min + vec2(q.x * inner.width(), q.y * inner.height());
+            let stroke = Stroke::new(0.8, Color32::from_gray(60));
+            for (a, b) in thumb {
+                p.line_segment([to(*a), to(*b)], stroke);
+            }
         }
         if gear {
             let c = pos2(pic.max.x - 10.0, pic.min.y + 10.0);

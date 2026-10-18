@@ -42,6 +42,25 @@ pub fn thumbnail(bytes: &[u8], side: u32) -> Option<egui::ColorImage> {
     Some(egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw()))
 }
 
+/// Longest side of a file's preview picture.
+pub const PREVIEW_SIDE: u32 = 512;
+
+/// An image (any readable format) as a file preview picture: at most [`PREVIEW_SIDE`]
+/// pixels, JPEG when opaque, PNG when it has transparency.
+pub fn preview_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
+    let img = if img.width().max(img.height()) > PREVIEW_SIDE { img.thumbnail(PREVIEW_SIDE, PREVIEW_SIDE) } else { img };
+    let rgba = img.to_rgba8();
+    let mut out = Vec::new();
+    if rgba.pixels().any(|p| p[3] < 255) {
+        rgba.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    } else {
+        let rgb = image::DynamicImage::ImageRgba8(rgba).to_rgb8();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 88).encode_image(&rgb).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
+}
+
 /// Read an image file into a texture `width_mm` wide (height from the aspect ratio); also
 /// returns the decoded image (to check it and for the average colour).
 pub fn load_file(path: &Path, width_mm: f64) -> Result<(TextureImage, Decoded), String> {

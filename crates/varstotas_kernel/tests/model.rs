@@ -281,6 +281,26 @@ fn save_load_round_trip() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The file's preview picture survives save / load; files without one don't write the key.
+#[test]
+fn preview_image_round_trip() {
+    let mut model = box_model();
+    let dir = tmpdir("preview");
+    let path = dir.join("p.vrst");
+    io::save(&model, &path).unwrap();
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("\"preview\""));
+    let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x03\x08\x06\0\0\0".to_vec();
+    model.set_preview(Some(png.clone()));
+    io::save(&model, &path).unwrap();
+    let back = io::load(&path).unwrap();
+    let p = back.preview.as_ref().unwrap();
+    assert_eq!((&p.bytes[..], p.pixels, p.extension()), (&png[..], [2, 3], "png"));
+    let mut back = back;
+    back.set_preview(None);
+    assert!(back.preview.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn load_rejects_foreign_json() {
     assert!(io::from_json("{\"format\":\"other\",\"version\":1,\"model\":{}}").is_err());

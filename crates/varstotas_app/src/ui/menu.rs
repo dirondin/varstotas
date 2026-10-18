@@ -152,6 +152,13 @@ impl VarstotasApp {
                 ui.separator();
                 self.item(ui, "Save", Some(&cmd("S")), true, Action::Save);
                 self.item(ui, "Save As…", Some(&cmd_shift("S")), true, Action::SaveAs);
+                ui.menu_button("Preview Image", |ui| {
+                    self.item(ui, "From Image File…", None, true, Action::PreviewFromFile);
+                    self.item(ui, "From Current View", None, true, Action::PreviewFromView);
+                    self.item(ui, "Remove", None, self.doc.model.preview.is_some(), Action::PreviewRemove);
+                })
+                .response
+                .on_hover_text("The picture the Components library shows for this file (else it draws the model)");
                 ui.separator();
                 ui.menu_button("Import", |ui| {
                     self.item(ui, "OBJ…", None, true, Action::ImportObj);

@@ -13,7 +13,11 @@
 //! { "meshes": [{ "name": "Box", "vertices": [[0,0,0], …], "faces": [[0,1,2,3], …],
 //!                "material": "Oak" }], "materials": [{ "name": "Oak", "color": "#c8a064" }] }
 //! + "unit": "m" | "cm" | "mm" | "in" | "ft"  (or "scale": 1000), "up": "y"
+//! + "preview": "preview.jpg" | "https://…/preview.png"  (else the asset's `thumb`)
 //! ```
+//!
+//! The saved file keeps the preview picture ([`Model::preview`]), which the Components card
+//! shows instead of the drawn model.
 
 use crate::mat_plugins::call;
 use crate::online_mats::{Msg, Online, PluginSource, cached, fetch, file_safe, unzip};
@@ -617,13 +621,38 @@ pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<
     let (m, xf) = model_from_spec(&spec, &dir, importers, 0)?;
     let faces = face_count(&m);
     let name = crate::ui::mat_library::safe_name(&asset.name);
-    let m = library_model(m, xf, &name, Some(asset.attribution()))?;
+    let mut m = library_model(m, xf, &name, Some(asset.attribution()))?;
+    m.set_preview(preview_of(asset, &spec, &dir));
     let path = lib.join(asset.source.folder()).join(format!("{name}.vrst"));
     if let Some(d) = path.parent() {
         let _ = std::fs::create_dir_all(d);
     }
     varstotas_kernel::io::save(&m, &path).map_err(|e| e.to_string())?;
     Ok((path, faces))
+}
+
+/// The preview picture of a download: the spec's `preview` (a file of `dir` or a URL), else
+/// the asset's thumbnail (Poly Haven's at 512 px), made by [`crate::textures::preview_bytes`].
+/// None when there is none or it can't be read (a download doesn't fail for it).
+fn preview_of(asset: &ModelAsset, spec: &Value, dir: &Path) -> Option<Vec<u8>> {
+    let read = |src: &str, cache: &str| -> Option<Vec<u8>> {
+        if src.starts_with("http://") || src.starts_with("https://") {
+            cached(src, cache, None).ok()
+        } else {
+            let p = Path::new(src.trim_start_matches("file://"));
+            std::fs::read(if p.is_absolute() { p.to_path_buf() } else { dir.join(p) }).ok()
+        }
+    };
+    let key = file_safe(&format!("model_{}", asset.key()));
+    let bytes = match spec.get("preview").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        Some(src) => read(src, &format!("previews/{key}.img"))?,
+        None if matches!(asset.source, ModelSource::PolyHaven) => {
+            read(&format!("https://cdn.polyhaven.com/asset_img/thumbs/{}.png?width=512&height=512", asset.id), &format!("previews/{key}.img"))?
+        }
+        None if !asset.thumb.is_empty() => read(&asset.thumb, &format!("thumbs/{key}.png"))?,
+        None => return None,
+    };
+    crate::textures::preview_bytes(&bytes).inspect_err(|e| log::warn!("preview of {}: {e}", asset.name)).ok()
 }
 
 /// A stable hash for file names.
@@ -789,6 +818,26 @@ mod tests {
         let lib = library_model(m, xf, "tetra", None).unwrap();
         let b = lib.bounds().unwrap();
         assert!((b.max.z - 1000.0).abs() < 1e-6, "metres by default: {b:?}");
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// A download's preview: the spec's file (relative to the download folder) first, then
+    /// the asset's local thumbnail; opaque pictures become JPEG, large ones shrink.
+    #[test]
+    fn preview_from_spec_or_thumb() {
+        let d = tmp("preview");
+        image::RgbImage::from_pixel(1024, 512, image::Rgb([200, 100, 50])).save(d.join("big.png")).unwrap();
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([0, 0, 0, 0])).save(d.join("clear.png")).unwrap();
+        let mut a = url_asset("https://a/chair.glb");
+        a.thumb = d.join("clear.png").to_string_lossy().to_string();
+        let p = preview_of(&a, &json!({ "preview": "big.png" }), &d).unwrap();
+        assert!(p.starts_with(&[0xFF, 0xD8]), "JPEG");
+        assert_eq!(varstotas_kernel::texture::image_dimensions(&p), Some([512, 256]));
+        let p = preview_of(&a, &json!({}), &d).unwrap();
+        assert!(p.starts_with(b"\x89PNG"), "transparent → PNG");
+        a.thumb.clear();
+        assert!(preview_of(&a, &json!({}), &d).is_none());
+        assert!(preview_of(&a, &json!({ "preview": "missing.png" }), &d).is_none());
         let _ = std::fs::remove_dir_all(d);
     }
 }
