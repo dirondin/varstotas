@@ -110,7 +110,7 @@ fn side_material(tri: u32, d: vec3<f32>) -> vec2<u32> {
 }
 
 fn is_glass(mat: u32) -> bool {
-    return mat > 0u && materials[(mat - 1u) * 6u].z > 0.5 && env.p3.x < 0.5;
+    return mat > 0u && materials[(mat - 1u) * 8u].z > 0.5 && env.p3.x < 0.5;
 }
 
 // ---- bvh traversal (pathtrace_rq.wgsl replaces it with ray queries) ----
@@ -277,6 +277,36 @@ fn sample_vndf(n: vec3<f32>, v: vec3<f32>, a: f32) -> vec3<f32> {
     return normalize(t * m.x + b * m.y + n * m.z);
 }
 
+/// Smith masking of direction `w` for an anisotropic GGX (`ax` along `t`, `ay` along `b`).
+fn smith_g1_aniso(w: vec3<f32>, n: vec3<f32>, t: vec3<f32>, b: vec3<f32>, ax: f32, ay: f32) -> f32 {
+    let wn = max(dot(w, n), 1e-4);
+    let wt = dot(w, t) * ax;
+    let wb = dot(w, b) * ay;
+    return 2.0 * wn / (wn + sqrt(wn * wn + wt * wt + wb * wb));
+}
+
+/// `sample_vndf` with separate roughness² along the tangent `t` (`ax`) and across it (`ay`).
+fn sample_vndf_aniso(n: vec3<f32>, t: vec3<f32>, v: vec3<f32>, ax: f32, ay: f32) -> vec3<f32> {
+    let b = cross(n, t);
+    let vl = vec3<f32>(dot(v, t), dot(v, b), dot(v, n));
+    let vh = normalize(vec3<f32>(ax * vl.x, ay * vl.y, vl.z));
+    let lensq = vh.x * vh.x + vh.y * vh.y;
+    var t1 = vec3<f32>(1.0, 0.0, 0.0);
+    if lensq > 0.0 {
+        t1 = vec3<f32>(-vh.y, vh.x, 0.0) / sqrt(lensq);
+    }
+    let t2 = cross(vh, t1);
+    let r = sqrt(rnd());
+    let phi = 6.2831853 * rnd();
+    let p1 = r * cos(phi);
+    var p2 = r * sin(phi);
+    let s = 0.5 * (1.0 + vh.z);
+    p2 = (1.0 - s) * sqrt(max(0.0, 1.0 - p1 * p1)) + s * p2;
+    let nh = p1 * t1 + p2 * t2 + sqrt(max(0.0, 1.0 - p1 * p1 - p2 * p2)) * vh;
+    let m = normalize(vec3<f32>(ax * nh.x, ay * nh.y, max(0.0, nh.z)));
+    return normalize(t * m.x + b * m.y + n * m.z);
+}
+
 fn smith_g1(nx: f32, a: f32) -> f32 {
     let a2 = a * a;
     return 2.0 * nx / (nx + sqrt(a2 + (1.0 - a2) * nx * nx));
@@ -311,7 +341,83 @@ struct Mat {
     ng: vec3<f32>,
     /// The ray comes from the side the face's front looks to (enters a glass volume).
     front: bool,
+    /// Clear coat (0..1), its roughness and normal (the surface before its normal map).
+    coat: f32,
+    coat_rough: f32,
+    nc: vec3<f32>,
+    /// Fabric sheen colour (strength and tint applied).
+    sheen: vec3<f32>,
+    /// Anisotropy (−1..1) along the tangent `t` (texture u).
+    aniso: f32,
+    t: vec3<f32>,
 };
+
+/// `sample_tiled` for the path tracer (the base level).
+fn sample_tiled_l(tex: texture_2d_array<f32>, li: i32, q: vec2<f32>, at: f32) -> vec4<f32> {
+    if at <= 0.0 {
+        return textureSampleLevel(tex, face_tex_sampler, q, li, 0.0);
+    }
+    let t = tile_mix(q, at);
+    let a = textureSampleLevel(tex, face_tex_sampler, q + t.a, li, 0.0);
+    let b = textureSampleLevel(tex, face_tex_sampler, q + t.b, li, 0.0);
+    return mix(a, b, t.w);
+}
+
+/// A shading normal turned away from the viewer (a bevel at a silhouette, a strong normal
+/// map) is tilted back until it faces `v` a little: otherwise that spot renders black.
+fn facing(n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
+    let nv = dot(n, v);
+    if nv >= 0.05 {
+        return n;
+    }
+    return normalize(n + v * (0.05 - nv));
+}
+
+/// Rounded edges (the "bevel" shader): near a convex edge within `r` of `p` the normal bends
+/// toward the face beyond it, reaching the bisector at the edge, like a fillet of radius `r`.
+/// Four probe rays (a random turn each sample) come back toward `p` from beside it, just
+/// under the surface: they hit the outside of a face beyond an edge.
+fn bevel_normal(p: vec3<f32>, ng: vec3<f32>, r: f32) -> vec3<f32> {
+    let t = tangent_of(ng);
+    let b = cross(ng, t);
+    let phi0 = 6.2831853 * rnd();
+    // The two strongest edges (a corner has two).
+    var w1 = 0.0;
+    var n1 = ng;
+    var w2 = 0.0;
+    var n2 = ng;
+    for (var k = 0u; k < 4u; k++) {
+        let phi = phi0 + f32(k) * 1.5707963;
+        let u = t * cos(phi) + b * sin(phi);
+        let h = intersect(p + u * r - ng * (0.3 * r), -u, r);
+        if h.tri == NO_HIT {
+            continue;
+        }
+        let nh = normalize(cross(tri_geo[3u * h.tri + 1u].xyz, tri_geo[3u * h.tri + 2u].xyz));
+        // Only the outside of a face that looks away from `p` (not the inside of the solid).
+        let across = nh - ng * dot(nh, ng);
+        let la = length(across);
+        if dot(nh, u) <= 0.05 || la < 0.2 {
+            continue;
+        }
+        let e = (r - h.t) * dot(u, across / la);
+        if e < 0.0 || e >= r {
+            continue;
+        }
+        let f = 1.0 - e / r;
+        let w = 0.5 * f * f;
+        if dot(nh, n1) > 0.95 || w1 == 0.0 {
+            if w > w1 {
+                w1 = w;
+                n1 = nh;
+            }
+        } else if (dot(nh, n2) > 0.95 || w2 == 0.0) && w > w2 {
+            w2 = w;
+            n2 = nh;
+        }
+    }
+    return normalize(ng + (n1 - ng) * w1 + (n2 - ng) * w2);
+}
 
 /// The surface of triangle `h.tri` hit by a ray along `d` at `p`.
 fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
@@ -348,11 +454,44 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
     let cs = unpack4x8unorm(cpack);
     var c = vec4<f32>(srgb_to_linear(cs.rgb), cs.a);
     let uv = a3.xy * w + a3.zw * h.u + a4.xy * h.v;
+    let clay = env.p3.x > 0.5;
+    let mb = (max(mat, 1u) - 1u) * 8u;
+    let pbr = mat > 0u && !clay;
+    var m6 = vec4<f32>(0.0, 0.05, 0.0, 0.5);
+    var m7 = vec4<f32>(0.0);
+    if pbr {
+        m6 = materials[mb + 6u];
+        m7 = materials[mb + 7u];
+    }
+    let at = m7.y;
     if layer > 0u {
         let li = i32(layer) - 1;
         let k = tex_info[li].xy;
-        c = vec4<f32>(textureSampleLevel(face_tex, face_tex_sampler, uv * k, li, 0.0).rgb, c.a);
+        c = vec4<f32>(sample_tiled_l(face_tex, li, uv * k, at).rgb, c.a);
     }
+    // Tangent of the triangle's planar coordinates (u direction).
+    var tg = tangent_of(n);
+    let du1 = a3.zw - a3.xy;
+    let du2 = a4.xy - a3.xy;
+    let det = du1.x * du2.y - du1.y * du2.x;
+    var bt = cross(n, tg);
+    if abs(det) > 1e-12 {
+        let t0 = (g1.xyz * du2.y - g2.xyz * du1.y) / det;
+        let b0 = (g2.xyz * du1.x - g1.xyz * du2.x) / det;
+        let t1 = t0 - n * dot(n, t0);
+        let b1 = b0 - n * dot(n, b0);
+        if dot(t1, t1) > 1e-20 && dot(b1, b1) > 1e-20 {
+            tg = normalize(t1);
+            bt = normalize(b1);
+        }
+    }
+    // Rounded edges bend the surface itself (the clear coat follows them).
+    let bevel = m7.z;
+    if bevel > 0.0 {
+        let nb = bevel_normal(p, ng, bevel);
+        n = normalize(n + nb - ng);
+    }
+    let n_coat = n;
     var m: Mat;
     m.albedo = c.rgb;
     m.alpha = c.a;
@@ -361,9 +500,8 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
     m.transmission = 0.0;
     m.ior = 1.5;
     m.emission = vec3<f32>(0.0);
-    let clay = env.p3.x > 0.5;
-    if mat > 0u && !clay {
-        let b = (mat - 1u) * 6u;
+    if pbr {
+        let b = mb;
         let m0 = materials[b];
         let m1 = materials[b + 1u];
         let m2 = materials[b + 2u];
@@ -377,7 +515,7 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
         let orm_layer = u32(m2.y + 0.5);
         if orm_layer > 0u {
             let li = i32(orm_layer) - 1;
-            let orm = textureSampleLevel(data_tex, face_tex_sampler, uv * data_info[li].xy, li, 0.0).rgb;
+            let orm = sample_tiled_l(data_tex, li, uv * data_info[li].xy, at).rgb;
             let mask = u32(m2.w + 0.5);
             if (mask & 2u) != 0u {
                 m.rough *= orm.g;
@@ -389,25 +527,15 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
         let em_layer = u32(m2.x + 0.5);
         if em_layer > 0u {
             let li = i32(em_layer) - 1;
-            m.emission *= textureSampleLevel(face_tex, face_tex_sampler, uv * tex_info[li].xy, li, 0.0).rgb;
+            m.emission *= sample_tiled_l(face_tex, li, uv * tex_info[li].xy, at).rgb;
         }
         let nl = u32(m2.z + 0.5);
         if nl > 0u {
-            // Tangent frame of the triangle's planar coordinates.
             let li = i32(nl) - 1;
-            let tn = textureSampleLevel(data_tex, face_tex_sampler, uv * data_info[li].xy, li, 0.0).rgb * 2.0 - 1.0;
-            let du1 = a3.zw - a3.xy;
-            let du2 = a4.xy - a3.xy;
-            let det = du1.x * du2.y - du1.y * du2.x;
-            if abs(det) > 1e-12 {
-                var t = (g1.xyz * du2.y - g2.xyz * du1.y) / det;
-                var bt = (g2.xyz * du1.x - g1.xyz * du2.x) / det;
-                t = normalize(t - n * dot(n, t));
-                bt = normalize(bt - n * dot(n, bt));
-                let pn = normalize(t * tn.x * m1.w + bt * tn.y * m1.w + n * max(tn.z, 1e-3));
-                if all(pn == pn) {
-                    n = pn;
-                }
+            let tn = sample_tiled_l(data_tex, li, uv * data_info[li].xy, at).rgb * 2.0 - 1.0;
+            let pn = normalize(tg * tn.x * m1.w + bt * tn.y * m1.w + n * max(tn.z, 1e-3));
+            if all(pn == pn) {
+                n = pn;
             }
         }
         let id = u32(materials[b + 3u].x + 0.5);
@@ -449,9 +577,17 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
     if dot(n, ng) < 0.05 {
         n = normalize(n + ng * (0.05 - dot(n, ng)));
     }
+    n = facing(n, -d);
     m.n = n;
     m.ng = ng;
     m.front = front;
+    m.coat = clamp(m6.x, 0.0, 1.0);
+    m.coat_rough = clamp(m6.y, 0.02, 1.0);
+    m.nc = facing(n_coat, -d);
+    let tint = m.albedo / max(max(m.albedo.r, max(m.albedo.g, m.albedo.b)), 1e-3);
+    m.sheen = clamp(m6.z, 0.0, 1.0) * mix(vec3<f32>(1.0), tint, clamp(m6.w, 0.0, 1.0)) * (1.0 - m.metallic);
+    m.aniso = clamp(m7.x, -1.0, 1.0);
+    m.t = normalize(tg - n * dot(n, tg));
     return m;
 }
 
@@ -459,20 +595,57 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
 fn eval_opaque(m: Mat, v: vec3<f32>, l: vec3<f32>) -> vec3<f32> {
     let nl = dot(m.n, l);
     let nv = max(dot(m.n, v), 1e-4);
-    if nl <= 0.0 || dot(m.ng, l) <= 0.0 {
+    if dot(m.ng, l) <= 0.0 {
         return vec3<f32>(0.0);
     }
-    let f0 = mix(vec3<f32>(0.04), m.albedo, m.metallic);
     let h = normalize(v + l);
-    let nh = max(dot(m.n, h), 0.0);
+    let vh = max(dot(v, h), 0.0);
+    var out = vec3<f32>(0.0);
+    // The clear coat reflects part of the light; the rest reaches the surface under it.
+    var base_k = 1.0;
+    if m.coat > 0.0 {
+        let nvc = max(dot(m.nc, v), 1e-4);
+        base_k = 1.0 - m.coat * (0.04 + 0.96 * pow(1.0 - nvc, 5.0));
+        let nlc = dot(m.nc, l);
+        if nlc > 0.0 {
+            let ac = m.coat_rough * m.coat_rough;
+            let ac2 = ac * ac;
+            let hc = max(dot(m.nc, h), 0.0);
+            let ddc = hc * hc * (ac2 - 1.0) + 1.0;
+            let fc = 0.04 + 0.96 * pow(1.0 - vh, 5.0);
+            let spec_c = ac2 / (PI * ddc * ddc) * smith_g1(nlc, ac) * smith_g1(nvc, ac) * fc / (4.0 * nvc * nlc);
+            out += vec3<f32>(m.coat * spec_c * nlc);
+        }
+    }
+    if nl <= 0.0 {
+        return out;
+    }
+    let f0 = mix(vec3<f32>(0.04), m.albedo, m.metallic);
     let a = m.rough * m.rough;
-    let a2 = a * a;
-    let dd = nh * nh * (a2 - 1.0) + 1.0;
-    let dist = a2 / (PI * dd * dd);
-    let f = fresnel(f0, dot(v, h));
-    let spec = dist * smith_g1(nl, a) * smith_g1(nv, a) * f / (4.0 * nv * nl);
+    var spec_dg = 0.0;
+    if m.aniso != 0.0 {
+        let t = m.t;
+        let b = cross(m.n, t);
+        let ax = max(a * (1.0 + m.aniso), 1e-3);
+        let ay = max(a * (1.0 - m.aniso), 1e-3);
+        let x = dot(t, h) / ax;
+        let y = dot(b, h) / ay;
+        let z = dot(m.n, h);
+        let dd = x * x + y * y + z * z;
+        let dist = 1.0 / (PI * ax * ay * dd * dd);
+        spec_dg = dist * smith_g1_aniso(l, m.n, t, b, ax, ay) * smith_g1_aniso(v, m.n, t, b, ax, ay);
+    } else {
+        let nh = max(dot(m.n, h), 0.0);
+        let a2 = a * a;
+        let dd = nh * nh * (a2 - 1.0) + 1.0;
+        spec_dg = a2 / (PI * dd * dd) * smith_g1(nl, a) * smith_g1(nv, a);
+    }
+    let f = fresnel(f0, vh);
+    let spec = spec_dg * f / (4.0 * nv * nl);
     let diff = m.albedo * (1.0 - m.metallic) * (1.0 - m.transmission) / PI * (vec3<f32>(1.0) - f);
-    return (diff + spec) * nl;
+    // Sheen (Burley): a rim at grazing angles, on top of the diffuse.
+    let sheen = m.sheen * pow(1.0 - vh, 5.0);
+    return out + ((diff + spec) * base_k + sheen) * nl;
 }
 
 /// Light arriving straight from the sun and the light objects at `p`, reflected toward `v`.
@@ -646,6 +819,12 @@ fn trace_path(px: vec2<f32>) -> vec3<f32> {
             m.n = vec3<f32>(0.0, 0.0, 1.0);
             m.ng = m.n;
             m.front = true;
+            m.coat = 0.0;
+            m.coat_rough = 1.0;
+            m.nc = m.n;
+            m.sheen = vec3<f32>(0.0);
+            m.aniso = 0.0;
+            m.t = vec3<f32>(1.0, 0.0, 0.0);
         }
         let p = o + d * t;
         if tg >= h.t {
@@ -704,30 +883,64 @@ fn trace_path(px: vec2<f32>) -> vec3<f32> {
         } else {
             let direct = thr * direct_light(m, p, v);
             col += select(clamp_lum(direct, pt.lens.w), direct, b == 0u);
-            // Next direction: the specular or the diffuse lobe.
+            // Next direction: the clear coat, the specular or the diffuse lobe.
             let nv = max(dot(m.n, v), 1e-4);
             let f0 = mix(vec3<f32>(0.04), m.albedo, m.metallic);
             let fv = fresnel(f0, nv);
             let diff = m.albedo * (1.0 - m.metallic) * (1.0 - m.transmission);
-            let ps = select(clamp(lum(fv) / (lum(fv) + lum(diff) * (1.0 - lum(fv)) + 1e-4), 0.1, 0.9), 1.0, lum(diff) < 1e-4);
-            if rnd() < ps {
-                let a = m.rough * m.rough;
-                let mn = sample_vndf(m.n, v, a);
+            let ps = select(clamp(lum(fv) / (lum(fv) + lum(diff + m.sheen) * (1.0 - lum(fv)) + 1e-4), 0.1, 0.9), 1.0, lum(diff + m.sheen) < 1e-4);
+            var fc = 0.0;
+            var pc = 0.0;
+            if m.coat > 0.0 {
+                fc = m.coat * (0.04 + 0.96 * pow(1.0 - max(dot(m.nc, v), 1e-4), 5.0));
+                pc = clamp(fc * 3.0 + 0.05, 0.05, 0.5);
+            }
+            if rnd() < pc {
+                let ac = m.coat_rough * m.coat_rough;
+                let mn = sample_vndf(m.nc, v, ac);
                 let l = reflect(d, mn);
-                let nl = dot(m.n, l);
+                let nl = dot(m.nc, l);
                 if nl <= 0.0 || dot(m.ng, l) <= 0.0 {
                     break;
                 }
-                thr *= fresnel(f0, dot(v, mn)) * smith_g1(nl, a) / ps;
+                thr *= m.coat * (0.04 + 0.96 * pow(1.0 - clamp(dot(v, mn), 0.0, 1.0), 5.0)) * smith_g1(nl, ac) / pc;
                 d = l;
             } else {
-                let l = sample_cosine(m.n);
-                if dot(m.ng, l) <= 0.0 {
-                    break;
+                thr *= (1.0 - fc) / (1.0 - pc);
+                if rnd() < ps {
+                    let a = m.rough * m.rough;
+                    var mn: vec3<f32>;
+                    var ax = a;
+                    var ay = a;
+                    let bt = cross(m.n, m.t);
+                    if m.aniso != 0.0 {
+                        ax = max(a * (1.0 + m.aniso), 1e-3);
+                        ay = max(a * (1.0 - m.aniso), 1e-3);
+                        mn = sample_vndf_aniso(m.n, m.t, v, ax, ay);
+                    } else {
+                        mn = sample_vndf(m.n, v, a);
+                    }
+                    let l = reflect(d, mn);
+                    let nl = dot(m.n, l);
+                    if nl <= 0.0 || dot(m.ng, l) <= 0.0 {
+                        break;
+                    }
+                    var g1 = smith_g1(nl, a);
+                    if m.aniso != 0.0 {
+                        g1 = smith_g1_aniso(l, m.n, m.t, bt, ax, ay);
+                    }
+                    thr *= fresnel(f0, dot(v, mn)) * g1 / ps;
+                    d = l;
+                } else {
+                    let l = sample_cosine(m.n);
+                    if dot(m.ng, l) <= 0.0 {
+                        break;
+                    }
+                    let lh = max(dot(l, normalize(v + l)), 0.0);
+                    thr *= (diff * (vec3<f32>(1.0) - fv) + m.sheen * pow(1.0 - lh, 5.0) * PI) / (1.0 - ps);
+                    d = l;
+                    blur = 0.35;
                 }
-                thr *= diff * (vec3<f32>(1.0) - fv) / (1.0 - ps);
-                d = l;
-                blur = 0.35;
             }
             o = p + m.ng * 0.5;
         }

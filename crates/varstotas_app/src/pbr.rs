@@ -105,6 +105,13 @@ pub fn material_table(model: &Model) -> Vec<PbrMaterial> {
                 normal_layer: layer(normal),
                 shader,
                 params,
+                clearcoat: p.clearcoat,
+                clearcoat_roughness: p.clearcoat_roughness,
+                sheen: p.sheen,
+                sheen_tint: p.sheen_tint,
+                anisotropy: p.anisotropy,
+                anti_tiling: p.anti_tiling,
+                bevel: p.bevel,
             }
         })
         .collect()

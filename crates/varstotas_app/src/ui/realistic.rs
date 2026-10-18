@@ -266,6 +266,27 @@ impl VarstotasApp {
                 });
                 ui.end_row();
             });
+            egui::CollapsingHeader::new("Coat, Sheen, Edges").id_salt("pbr_more").default_open(
+                p.clearcoat > 0.0 || p.sheen > 0.0 || p.anisotropy != 0.0 || p.anti_tiling > 0.0 || p.bevel > 0.0,
+            ).show(ui, |ui| {
+                egui::Grid::new("pbr_more_values").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                    ui.spacing_mut().slider_width = 120.0;
+                    let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, label: &str, tip: &str, log: bool| {
+                        ui.label(label).on_hover_text(tip);
+                        let resp = ui.add(egui::Slider::new(v, r).fixed_decimals(2).logarithmic(log));
+                        dragging |= resp.dragged();
+                        commit |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
+                        ui.end_row();
+                    };
+                    slider(ui, &mut p.clearcoat, 0.0..=1.0, "Clear coat", "A glossy varnish layer: lacquered wood, car paint, glazed tiles", false);
+                    slider(ui, &mut p.clearcoat_roughness, 0.0..=1.0, "Coat rough", "Roughness of the varnish (0 = glossy)", false);
+                    slider(ui, &mut p.sheen, 0.0..=1.0, "Sheen", "A soft glow at grazing angles: velvet, cloth, upholstery", false);
+                    slider(ui, &mut p.sheen_tint, 0.0..=1.0, "Sheen tint", "0 = white sheen, 1 = the colour of the material", false);
+                    slider(ui, &mut p.anisotropy, -1.0..=1.0, "Anisotropy", "Stretched highlights along the texture (+) or across it (−): brushed metal", false);
+                    slider(ui, &mut p.anti_tiling, 0.0..=1.0, "Anti-tiling", "Breaks up the visible repetition of the textures", false);
+                    slider(ui, &mut p.bevel, 0.0..=100.0, "Bevel, mm", "Rounds the edges of faces in the render (path tracing only)", true);
+                });
+            });
             ui.horizontal(|ui| {
                 ui.label("Shader").on_hover_text("A WGSL surface program (docs/SHADERS.md): procedural patterns, waves, glow");
                 let shown = match &p.shader {
@@ -442,6 +463,7 @@ impl VarstotasApp {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         format!("{:?}{:?}{:?}{:?}{}{}{}{}", cur.color, p.metallic, p.roughness, p.transmission, p.emission_strength, p.emission[0], p.emission[1], p.emission[2]).hash(&mut h);
+        format!("{:?}{:?}{:?}{:?}", p.clearcoat, p.clearcoat_roughness, p.sheen, p.sheen_tint).hash(&mut h);
         format!("{:?}", self.doc.model.environment).hash(&mut h);
         let key = h.finish();
         if let Some((k, t)) = &self.tray.pbr_preview
@@ -496,6 +518,8 @@ pub(crate) fn preview_sphere(color: [f32; 4], p: &Pbr, env: &Environment, side: 
     let rough = p.roughness.clamp(0.03, 1.0);
     let f0 = Vec3::splat(0.04).lerp(albedo, p.metallic);
     let diffuse = albedo * (1.0 - p.metallic) * (1.0 - p.transmission);
+    let tint = albedo / albedo.max_element().max(1e-3);
+    let sheen = Vec3::ONE.lerp(tint, p.sheen_tint) * p.sheen * (1.0 - p.metallic);
     let emission = Vec3::new(srgb_lin(p.emission[0]), srgb_lin(p.emission[1]), srgb_lin(p.emission[2])) * p.emission_strength;
     let light = Vec3::new(-0.5, 0.6, 0.62).normalize();
     let sun = env.sun.max(0.0);
@@ -548,6 +572,13 @@ pub(crate) fn preview_sphere(color: [f32; 4], p: &Pbr, env: &Environment, side: 
                 let vis = 1.0 / ((nv * (1.0 - k) + k) * (nl * (1.0 - k) + k));
                 let f = f0 + (Vec3::ONE - f0) * (1.0 - vh).powi(5);
                 col += (diffuse / std::f32::consts::PI * (Vec3::ONE - f) + d * vis * 0.25 * f) * sun * std::f32::consts::PI * nl;
+            }
+            // Sheen: a soft rim; the clear coat: a second, sharper reflection on top.
+            col += sheen * irr * env.intensity * (0.08 + 0.5 * (1.0 - nv).powi(4));
+            if p.clearcoat > 0.0 {
+                let fc = p.clearcoat * (0.04 + 0.96 * (1.0 - nv).powi(5));
+                let coat = sky(refl).lerp(Vec3::new(0.6, 0.62, 0.66), p.clearcoat_roughness.clamp(0.03, 1.0).sqrt());
+                col = col * (1.0 - fc) + coat * fc * env.intensity;
             }
             col += emission;
             let mut c = tm(col);

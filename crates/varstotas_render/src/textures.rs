@@ -16,7 +16,7 @@ pub(crate) struct FaceTextures {
     sampler: wgpu::Sampler,
     info: wgpu::Buffer,
     data_info: wgpu::Buffer,
-    /// PBR material table: 6 × vec4 per material (see `set_materials`).
+    /// PBR material table: 8 × vec4 per material (see `set_materials`).
     materials: wgpu::Buffer,
     color_view: wgpu::TextureView,
     data_view: wgpu::TextureView,
@@ -28,10 +28,10 @@ pub(crate) struct FaceTextures {
     pub glass: Vec<bool>,
 }
 
-/// Most PBR materials in the table (6 × 16 bytes each: a 24 KB uniform).
+/// Most PBR materials in the table (8 × 16 bytes each: a 32 KB uniform).
 pub const MAX_MATERIALS: usize = 256;
 /// vec4s per material in the table (`materials` in shader.wgsl).
-const MATERIAL_VEC4S: usize = 6;
+const MATERIAL_VEC4S: usize = 8;
 
 impl FaceTextures {
     pub fn new(device: &wgpu::Device) -> Self {
@@ -163,6 +163,8 @@ impl FaceTextures {
             v[k + 3] = [m.shader as f32, 0.0, 0.0, 0.0];
             v[k + 4] = [m.params[0], m.params[1], m.params[2], m.params[3]];
             v[k + 5] = [m.params[4], m.params[5], m.params[6], m.params[7]];
+            v[k + 6] = [m.clearcoat, m.clearcoat_roughness, m.sheen, m.sheen_tint];
+            v[k + 7] = [m.anisotropy, m.anti_tiling, m.bevel, 0.0];
         }
         queue.write_buffer(&self.materials, 0, bytemuck::cast_slice(&v));
     }

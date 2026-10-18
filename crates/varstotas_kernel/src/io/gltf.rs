@@ -571,6 +571,14 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 ao_map: tex(&m["occlusionTexture"]),
                 emission_map: tex(&m["emissiveTexture"]),
                 shader: None,
+                clearcoat: num(&ext["KHR_materials_clearcoat"]["clearcoatFactor"], 0.0),
+                clearcoat_roughness: num(&ext["KHR_materials_clearcoat"]["clearcoatRoughnessFactor"], 0.0),
+                // A coloured sheen: its brightest channel as the strength.
+                sheen: ext["KHR_materials_sheen"]["sheenColorFactor"].as_array().map_or(0.0, |a| a.iter().filter_map(|x| x.as_f64()).fold(0.0, f64::max) as f32),
+                sheen_tint: 0.0,
+                anisotropy: num(&ext["KHR_materials_anisotropy"]["anisotropyStrength"], 0.0),
+                anti_tiling: 0.0,
+                bevel: 0.0,
             };
             model.materials[id].pbr = Some(p.sanitized());
             Some(id)

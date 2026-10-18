@@ -64,6 +64,18 @@ pub struct PbrMaterial {
     pub shader: u16,
     /// Values of the custom surface's parameters.
     pub params: [f32; 8],
+    /// Varnish layer (0..1) and its roughness.
+    pub clearcoat: f32,
+    pub clearcoat_roughness: f32,
+    /// Fabric rim (0..1) and how much it takes the base colour (0 = white).
+    pub sheen: f32,
+    pub sheen_tint: f32,
+    /// −1..1: highlights stretched along (+) or across (−) the texture's u direction.
+    pub anisotropy: f32,
+    /// 0..1: variation that hides the repetition of the maps.
+    pub anti_tiling: f32,
+    /// Rounded-edge radius, mm (path tracer).
+    pub bevel: f32,
 }
 
 impl Default for PbrMaterial {
@@ -81,6 +93,13 @@ impl Default for PbrMaterial {
             normal_layer: 0,
             shader: 0,
             params: [0.0; 8],
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.05,
+            sheen: 0.0,
+            sheen_tint: 0.5,
+            anisotropy: 0.0,
+            anti_tiling: 0.0,
+            bevel: 0.0,
         }
     }
 }

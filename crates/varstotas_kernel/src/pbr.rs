@@ -38,6 +38,23 @@ pub struct Pbr {
     pub ior: f32,
     /// Strength of the normal map (1 = as authored).
     pub normal_scale: f32,
+    /// A clear varnish layer on top (car paint, lacquered wood): 0 = none, 1 = full.
+    pub clearcoat: f32,
+    /// Roughness of the varnish layer.
+    pub clearcoat_roughness: f32,
+    /// Soft rim of fabrics (velvet, cotton): 0 = none, 1 = strong.
+    pub sheen: f32,
+    /// 0 = a white sheen, 1 = the base colour's.
+    pub sheen_tint: f32,
+    /// Brushed metal: highlights stretched along the texture's u direction (+) or across it
+    /// (−); 0 = round highlights.
+    pub anisotropy: f32,
+    /// Hide the repetition of the maps (a shifted copy blended in by low-frequency noise):
+    /// 0 = plain tiling, 1 = strong variation.
+    pub anti_tiling: f32,
+    /// Rounded edges (mm): the shading normal bends near the model's edges within this radius
+    /// as if they were filleted (the path-traced render; 0 = sharp).
+    pub bevel: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub normal_map: Option<TextureImage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,6 +80,13 @@ impl Default for Pbr {
             transmission: 0.0,
             ior: 1.5,
             normal_scale: 1.0,
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.05,
+            sheen: 0.0,
+            sheen_tint: 0.5,
+            anisotropy: 0.0,
+            anti_tiling: 0.0,
+            bevel: 0.0,
             normal_map: None,
             roughness_map: None,
             metallic_map: None,
@@ -90,6 +114,13 @@ impl Pbr {
         self.transmission = c(self.transmission, 0.0, 1.0, 0.0);
         self.ior = c(self.ior, 1.0, 3.0, d.ior);
         self.normal_scale = c(self.normal_scale, 0.0, 4.0, 1.0);
+        self.clearcoat = c(self.clearcoat, 0.0, 1.0, 0.0);
+        self.clearcoat_roughness = c(self.clearcoat_roughness, 0.0, 1.0, d.clearcoat_roughness);
+        self.sheen = c(self.sheen, 0.0, 1.0, 0.0);
+        self.sheen_tint = c(self.sheen_tint, 0.0, 1.0, d.sheen_tint);
+        self.anisotropy = c(self.anisotropy, -1.0, 1.0, 0.0);
+        self.anti_tiling = c(self.anti_tiling, 0.0, 1.0, 0.0);
+        self.bevel = c(self.bevel, 0.0, 1000.0, 0.0);
         if let Some(sh) = &mut self.shader {
             sh.params.truncate(MAX_SHADER_PARAMS);
             sh.params.iter_mut().for_each(|v| *v = if v.is_finite() { *v } else { 0.0 });
@@ -485,6 +516,11 @@ mod tests {
         assert!(!json.contains("normal_map"));
         let back: Pbr = serde_json::from_str("{\"metallic\":1.0}").unwrap();
         assert_eq!((back.metallic, back.roughness), (1.0, 0.6));
+        // Layers and details: off by default (old files), clamped when out of range.
+        assert_eq!((back.clearcoat, back.clearcoat_roughness, back.sheen, back.sheen_tint), (0.0, 0.05, 0.0, 0.5));
+        assert_eq!((back.anisotropy, back.anti_tiling, back.bevel), (0.0, 0.0, 0.0));
+        let x = Pbr { clearcoat: 3.0, sheen: -1.0, anisotropy: -5.0, anti_tiling: f32::NAN, bevel: 1e6, ..Default::default() }.sanitized();
+        assert_eq!((x.clearcoat, x.sheen, x.anisotropy, x.anti_tiling, x.bevel), (1.0, 0.0, -1.0, 0.0, 1000.0));
     }
 
     #[test]

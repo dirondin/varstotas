@@ -570,11 +570,12 @@ struct FaceOut {
 // Data textures (linear: packed occlusion / roughness / metalness, normal maps), same scheme.
 @group(1) @binding(3) var data_tex: texture_2d_array<f32>;
 @group(1) @binding(4) var<uniform> data_info: array<vec4<f32>, 256>;
-// PBR materials (textures.rs `set_materials`), 6 vec4 each; material i + 1 in `mats`:
+// PBR materials (textures.rs `set_materials`), 8 vec4 each; material i + 1 in `mats`:
 // [metallic, roughness, transmission, ior], [emission rgb, normal scale],
 // [emission layer, orm layer, normal layer, orm mask], [custom shader + 1, 0, 0, 0],
-// custom shader parameters 0..3, 4..7.
-@group(1) @binding(5) var<uniform> materials: array<vec4<f32>, 1536>;
+// custom shader parameters 0..3, 4..7, [clearcoat, clearcoat roughness, sheen, sheen tint],
+// [anisotropy, anti-tiling, bevel mm, 0].
+@group(1) @binding(5) var<uniform> materials: array<vec4<f32>, 2048>;
 
 @vertex
 fn vs_face(v: FaceIn) -> FaceOut {
@@ -988,6 +989,54 @@ fn env_brdf(f0: vec3<f32>, rough: f32, nv: f32) -> vec3<f32> {
     return f0 * ab.x + ab.y;
 }
 
+/// Anti-tiling (after Quilez, "texture repetition", technique 3): the map is read twice, shifted
+/// by offsets that change from region to region of a low-frequency noise over the tile
+/// coordinates `q` (in repeats), and the two are blended. Offsets only (no rotation), so
+/// normal maps stay valid; every map of a material gets the same offsets (same `q`).
+/// `strength` 0..1 = the share of regions that are shifted.
+struct TileMix {
+    a: vec2<f32>,
+    b: vec2<f32>,
+    w: f32,
+};
+
+fn tile_mix(q: vec2<f32>, strength: f32) -> TileMix {
+    var t: TileMix;
+    t.a = vec2<f32>(0.0);
+    t.b = vec2<f32>(0.0);
+    t.w = 0.0;
+    if strength <= 0.0 {
+        return t;
+    }
+    let l = noise(vec3<f32>(q * 0.37, 0.5)) * 8.0;
+    let ia = floor(l);
+    let ib = ia + 1.0;
+    t.a = select(vec2<f32>(0.0), sin(vec2<f32>(3.0, 7.0) * ia), hash3(vec3<f32>(ia, 1.7, 3.1)) < strength);
+    t.b = select(vec2<f32>(0.0), sin(vec2<f32>(3.0, 7.0) * ib), hash3(vec3<f32>(ib, 1.7, 3.1)) < strength);
+    t.w = smoothstep(0.2, 0.8, l - ia);
+    return t;
+}
+
+/// A layer of `tex` at tile coordinates `q` with explicit gradients, through `tile_mix`.
+fn sample_tiled(tex: texture_2d_array<f32>, li: i32, q: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, at: f32) -> vec4<f32> {
+    if at <= 0.0 {
+        return textureSampleGrad(tex, face_tex_sampler, q, li, dx, dy);
+    }
+    let t = tile_mix(q, at);
+    let a = textureSampleGrad(tex, face_tex_sampler, q + t.a, li, dx, dy);
+    let b = textureSampleGrad(tex, face_tex_sampler, q + t.b, li, dx, dy);
+    return mix(a, b, t.w);
+}
+
+/// Anisotropic GGX distribution (Burley): `at` / `ab` = roughness² along `t` / `b`.
+fn d_ggx_aniso(n: vec3<f32>, t: vec3<f32>, b: vec3<f32>, h: vec3<f32>, at: f32, ab: f32) -> f32 {
+    let x = dot(t, h) / at;
+    let y = dot(b, h) / ab;
+    let z = dot(n, h);
+    let d = x * x + y * y + z * z;
+    return 1.0 / (PI * at * ab * d * d);
+}
+
 fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
     // Derivatives first (uniform control flow); maps are sampled with explicit gradients.
     let dp_dx = dpdx(in.lpos);
@@ -1009,10 +1058,21 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
         layer = in.layers.y;
         mat = in.mats.y;
     }
+    let clay = env.p3.x > 0.5;
+    let mi = (max(mat, 1u) - 1u) * 8u;
+    let pbr = mat > 0u && !clay;
+    // [clearcoat, coat roughness, sheen, sheen tint], [anisotropy, anti-tiling, bevel, 0].
+    var m6 = vec4<f32>(0.0, 0.05, 0.0, 0.5);
+    var m7 = vec4<f32>(0.0);
+    if pbr {
+        m6 = materials[mi + 6u];
+        m7 = materials[mi + 7u];
+    }
+    let at = m7.y;
     if layer > 0u {
         let li = i32(layer) - 1;
         let k = tex_info[li].xy;
-        let texel = textureSampleGrad(face_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k);
+        let texel = sample_tiled(face_tex, li, in.uv * k, duv_dx * k, duv_dy * k, at);
         if texel.a < 0.5 {
             discard;
         }
@@ -1023,12 +1083,20 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
     var transmission = 0.0;
     var emission = vec3<f32>(0.0);
     var ao = 1.0;
-    let clay = env.p3.x > 0.5;
-    if mat > 0u && !clay {
-        let m = (mat - 1u) * 6u;
-        let m0 = materials[m];
-        let m1 = materials[m + 1u];
-        let m2 = materials[m + 2u];
+    // The surface before the normal map (the clear coat lies on it) and the tangent frame of
+    // the planar coordinates (cotangent frame, no stored tangents): u along `tg`.
+    let n0 = n;
+    let dp2perp = cross(dp_dy, n);
+    let dp1perp = cross(n, dp_dx);
+    var tg = dp2perp * duv_dx.x + dp1perp * duv_dy.x;
+    var bt = dp2perp * duv_dx.y + dp1perp * duv_dy.y;
+    let inv = inverseSqrt(max(max(dot(tg, tg), dot(bt, bt)), 1e-20));
+    tg *= inv;
+    bt *= inv;
+    if pbr {
+        let m0 = materials[mi];
+        let m1 = materials[mi + 1u];
+        let m2 = materials[mi + 2u];
         metallic = m0.x;
         rough = m0.y;
         transmission = m0.z;
@@ -1037,7 +1105,7 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
         if orm_layer > 0u {
             let li = i32(orm_layer) - 1;
             let k = data_info[li].xy;
-            let orm = textureSampleGrad(data_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k).rgb;
+            let orm = sample_tiled(data_tex, li, in.uv * k, duv_dx * k, duv_dy * k, at).rgb;
             let mask = u32(m2.w + 0.5);
             if (mask & 1u) != 0u {
                 ao = orm.r;
@@ -1053,22 +1121,14 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
         if em_layer > 0u {
             let li = i32(em_layer) - 1;
             let k = tex_info[li].xy;
-            emission *= textureSampleGrad(face_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k).rgb;
+            emission *= sample_tiled(face_tex, li, in.uv * k, duv_dx * k, duv_dy * k, at).rgb;
         }
         let nl = u32(m2.z + 0.5);
         if nl > 0u {
-            // Tangent frame from the planar coordinates (cotangent frame, no stored tangents).
             let li = i32(nl) - 1;
             let k = data_info[li].xy;
-            let tn = textureSampleGrad(data_tex, face_tex_sampler, in.uv * k, li, duv_dx * k, duv_dy * k).rgb * 2.0 - 1.0;
-            let dp2perp = cross(dp_dy, n);
-            let dp1perp = cross(n, dp_dx);
-            var t = dp2perp * duv_dx.x + dp1perp * duv_dy.x;
-            var b = dp2perp * duv_dx.y + dp1perp * duv_dy.y;
-            let inv = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1e-20));
-            t *= inv;
-            b *= inv;
-            let pn = normalize(t * tn.x * m1.w + b * tn.y * m1.w + n * max(tn.z, 1e-3));
+            let tn = sample_tiled(data_tex, li, in.uv * k, duv_dx * k, duv_dy * k, at).rgb * 2.0 - 1.0;
+            let pn = normalize(tg * tn.x * m1.w + bt * tn.y * m1.w + n * max(tn.z, 1e-3));
             if all(pn == pn) {
                 n = pn;
             }
@@ -1079,9 +1139,8 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
     if g.eye_rel.w < 0.5 {
         v = normalize(g.eye_rel.xyz - (in.lpos - g.origin.xyz));
     }
-    if mat > 0u && !clay {
-        let m = (mat - 1u) * 6u;
-        let id = u32(materials[m + 3u].x + 0.5);
+    if pbr {
+        let id = u32(materials[mi + 3u].x + 0.5);
         if id > 0u {
             var s: Surface;
             s.base = c.rgb;
@@ -1095,7 +1154,7 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
             s.uv = in.uv;
             s.view = v;
             s.time = env.p2.w;
-            s = custom_surface(id, s, materials[m + 4u], materials[m + 5u]);
+            s = custom_surface(id, s, materials[mi + 4u], materials[mi + 5u]);
             c = vec4<f32>(max(s.base, vec3<f32>(0.0)), clamp(s.alpha, 0.0, 1.0));
             metallic = s.metallic;
             rough = s.roughness;
@@ -1119,11 +1178,40 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
     let nv = max(dot(n, v), 1e-4);
     let f0 = mix(vec3<f32>(0.04), albedo, metallic);
     let diffuse_col = albedo * (1.0 - metallic) * (1.0 - transmission);
-    // Image-based light.
-    let r = reflect(-v, n);
+    // Brushed (anisotropic) highlights: along the frame of the planar coordinates, re-made
+    // around the mapped normal.
+    let aniso = m7.x;
+    let ta = normalize(tg - n * dot(n, tg));
+    let ba = cross(n, ta);
+    // Clear coat: a smooth dielectric layer over the surface before its normal map.
+    let coat = clamp(m6.x, 0.0, 1.0);
+    let coat_rough = clamp(m6.y, 0.03, 1.0);
+    let nvc = max(dot(n0, v), 1e-4);
+    let fc = coat * (0.04 + 0.96 * pow(1.0 - nvc, 5.0));
+    let base_k = 1.0 - fc;
+    // Fabric sheen: a soft rim, white or tinted by the base colour.
+    let tint = albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 1e-3);
+    let sheen_col = clamp(m6.z, 0.0, 1.0) * mix(vec3<f32>(1.0), tint, clamp(m6.w, 0.0, 1.0)) * (1.0 - metallic);
+    // Image-based light (anisotropy bends the reflected direction, as in Filament).
+    var rn = n;
+    if aniso != 0.0 {
+        let dir = select(ta, ba, aniso >= 0.0);
+        let at_ = cross(dir, v);
+        let an = cross(at_, dir);
+        rn = normalize(mix(n, an, abs(aniso) * clamp(5.0 * rough, 0.0, 1.0)));
+    }
+    let r = reflect(-v, rn);
     let lod = env.p.z * (1.0 - pow(1.0 - rough, 2.0)) * 0.85;
     let spec_ibl = env_radiance(r, lod) * env_brdf(f0, rough, nv);
-    var col = (diffuse_col * env_irradiance(n) / PI) * ao + spec_ibl * ao;
+    let irr = env_irradiance(n);
+    var col = ((diffuse_col * irr / PI) * ao + spec_ibl * ao) * base_k;
+    col += sheen_col * irr * (0.08 + 0.5 * pow(1.0 - nv, 4.0)) * ao;
+    var coat_ibl = vec3<f32>(0.0);
+    if coat > 0.0 {
+        let lodc = env.p.z * (1.0 - pow(1.0 - coat_rough, 2.0)) * 0.85;
+        coat_ibl = env_radiance(reflect(-v, n0), lodc) * env_brdf(vec3<f32>(0.04), coat_rough, nvc) * coat * ao;
+        col += coat_ibl;
+    }
     // The sun.
     let l = g.light.xyz;
     let nl_ = dot(n, l);
@@ -1139,15 +1227,32 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
         let nh = max(dot(n, h), 0.0);
         let vh = max(dot(v, h), 0.0);
         let a = rough * rough;
-        let a2 = a * a;
-        let dd = nh * nh * (a2 - 1.0) + 1.0;
-        let d = a2 / (PI * dd * dd);
+        var d = 0.0;
+        if aniso != 0.0 {
+            d = d_ggx_aniso(n, ta, ba, h, max(a * (1.0 + aniso), 1e-3), max(a * (1.0 - aniso), 1e-3));
+        } else {
+            let a2 = a * a;
+            let dd = nh * nh * (a2 - 1.0) + 1.0;
+            d = a2 / (PI * dd * dd);
+        }
         let k = (rough + 1.0) * (rough + 1.0) / 8.0;
         let vis = 1.0 / ((nv * (1.0 - k) + k) * (nl_ * (1.0 - k) + k));
         let f = f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vh, 5.0);
         let spec = d * vis * 0.25 * f;
+        let sheen_l = sheen_col * pow(1.0 - vh, 5.0);
         // `sun` = irradiance in units of a white sky's (E = π·sun).
-        col += (diffuse_col / PI * (vec3<f32>(1.0) - f) + spec) * sun * PI * nl_;
+        col += ((diffuse_col / PI * (vec3<f32>(1.0) - f) + spec) * base_k + sheen_l) * sun * PI * nl_;
+        let nlc = dot(n0, l);
+        if coat > 0.0 && nlc > 0.0 {
+            let hc = max(dot(n0, h), 0.0);
+            let ac = coat_rough * coat_rough;
+            let ac2 = ac * ac;
+            let ddc = hc * hc * (ac2 - 1.0) + 1.0;
+            let kc = (coat_rough + 1.0) * (coat_rough + 1.0) / 8.0;
+            let visc = 1.0 / ((nvc * (1.0 - kc) + kc) * (nlc * (1.0 - kc) + kc));
+            let fcl = 0.04 + 0.96 * pow(1.0 - vh, 5.0);
+            col += vec3<f32>(coat * ac2 / (PI * ddc * ddc) * visc * 0.25 * fcl) * sun * PI * nlc;
+        }
     }
     col += emission;
     // Glass: reflections must survive alpha blending, so the opacity rises with the Fresnel
@@ -1156,7 +1261,8 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
     if a < 0.999 {
         let fr = env_brdf(f0, rough, nv).g + 0.04;
         let a2 = clamp(mix(a, 1.0, fr), a, 1.0);
-        col = (col - spec_ibl * ao) * (a / a2) + spec_ibl * ao / a2;
+        let refl = spec_ibl * ao * base_k + coat_ibl;
+        col = (col - refl) * (a / a2) + refl / a2;
         a = a2;
     }
     let mapped = highlight_face(vec4<f32>(tonemap(col), 1.0), in.state);
