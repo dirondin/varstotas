@@ -1655,6 +1655,7 @@ impl VarstotasApp {
             "prev_scene" => Action::PrevScene,
             "play_animation" | "toggle_animation" => Action::ToggleAnimation,
             "demo_house" => Action::OpenDemoHouse,
+            "demo_gallery" => Action::OpenDemoGallery,
             "scene_right" => Action::MoveScene(self.tray.selected_scene.unwrap_or(0), true),
             "reverse_faces" => Action::ReverseFaces,
             "orient_faces" => Action::OrientFaces,

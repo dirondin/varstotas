@@ -1,0 +1,68 @@
+# File → Open Demo: Material Gallery — 24 bevelled cubes in different materials (metals, glass,
+# emissive, textures, custom shaders) and scenes in different environments / render styles,
+# each shown in the viewport and path traced
+action demo_gallery
+wait 30
+expect scenes=["Studio", "Noon", "Sunset", "Neon Night", "Foggy Morning", "Clay", "Watercolor", "Plan(-)"] scene=Some(0)
+expect tags_hidden=0
+expect style=realistic
+action scene_timing_0_1
+action render_set w=640 h=360 samples=64 match=off
+action scene_0
+wait 40
+screenshot shots/gallery_studio.bmp
+action render_start
+wait 3
+action render_save gallery_r_studio.png
+wait 3
+action scene_1
+wait 40
+screenshot shots/gallery_noon.bmp
+expect tags_hidden=1
+action render_start
+wait 3
+action render_save gallery_r_noon.png
+wait 3
+action scene_2
+wait 40
+screenshot shots/gallery_sunset.bmp
+action render_start
+wait 3
+action render_save gallery_r_sunset.png
+wait 3
+action scene_3
+wait 40
+screenshot shots/gallery_night.bmp
+action render_start
+wait 3
+action render_save gallery_r_night.png
+wait 3
+action scene_4
+wait 40
+screenshot shots/gallery_fog.bmp
+action render_start
+wait 3
+action render_save gallery_r_fog.png
+wait 3
+action scene_5
+wait 40
+screenshot shots/gallery_clay.bmp
+action render_start
+wait 3
+action render_save gallery_r_clay.png
+wait 3
+action scene_6
+wait 40
+screenshot shots/gallery_water.bmp
+action render_start
+wait 3
+action render_save gallery_r_water.png
+wait 3
+action scene_7
+wait 40
+screenshot shots/gallery_plan.bmp
+action render_start
+wait 3
+action render_save gallery_r_plan.png
+wait 3
+quit

@@ -111,6 +111,7 @@ Tests: `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/gene
 | `templates.rs` | File → New templates |
 | `demo/mod.rs` | File → Open Demo: Country House — `country_house()` builds the furnished demo model in code (walls with openings via `prism`, gable roof, partitions, fireplace, windows / doors as components, furniture components, garden), its materials, lights, render settings and 8 scenes |
 | `demo/textures.rs` | procedural tileable textures for the demo (siding, stone, roof metal, oak floor, decking, tiles, marble, woods, fabrics, rug, grass, gravel, brick, plaster): colour + normal + roughness maps as PNG (`Tex`, `Maps`) |
+| `demo/gallery.rs` | File → Open Demo: Material Gallery — `material_gallery()`: 24 bevelled cubes (`bevelled_cube`) in different materials, a studio cove (tag Cove, hidden outdoors), 8 scenes with different environments / styles |
 | `debug_capture.rs` | `VARSTOTAS_SCRIPT` harness, including the `raw` and `rawp` real-input commands |
 | `tools/mod.rs` | `Tool` trait and tool registry |
 | `tools/common.rs` | inference wrapper, context transforms, `dim_after_transform` |

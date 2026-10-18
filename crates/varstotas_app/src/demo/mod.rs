@@ -3,7 +3,10 @@
 //! kitchen, a bedroom and a bathroom, a terrace and a garden. PBR materials with procedural
 //! textures (`textures`), lights, render settings and scenes (day, dusk, rooms, plan).
 
+mod gallery;
 mod textures;
+
+pub use gallery::material_gallery;
 
 use varstotas_kernel::glam::{DMat4, DQuat, DVec3};
 use varstotas_kernel::{
