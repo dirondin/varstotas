@@ -1,4 +1,4 @@
-//! The "Default Tray": Entity Info, Materials, Tags, Outliner, Scenes, Instructor.
+//! The side bar: Entity Info, Materials, Tags, Outliner, Scenes, Instructor.
 
 use super::icons::{Icon, paint_icon};
 use super::{color_f32, color32, fmt_area, fmt_len, fmt_volume, small_icon_button, swatch, theme};
@@ -105,7 +105,7 @@ pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
     [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0]
 }
 
-/// Default Tray cards in their order (Window menu checkboxes, `Prefs::tray_hidden`).
+/// Side bar cards in their order (Window menu checkboxes, `Prefs::tray_hidden`).
 pub(crate) const TRAY_CARDS: [&str; 10] =
     ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"];
 
@@ -131,6 +131,7 @@ fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_op
                 .show_header(ui, |ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     paint_icon(ui.painter(), rect, icon, false);
+                    super::tray_lib::spot(format!("card:{title}"), rect.center());
                     ui.label(RichText::new(title).strong());
                 })
                 .body(|ui| {
@@ -197,11 +198,6 @@ fn instance_label(model: &Model, mesh: &Mesh, id: InstanceId) -> (String, bool) 
 
 impl VarstotasApp {
     pub(crate) fn tray_ui(&mut self, ui: &mut Ui) {
-        super::tray_lib::clear_spots();
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Default Tray").strong().size(14.0));
-        });
-        ui.add_space(4.0);
         // The tray's width is the user's (drag the edge); content never widens it, so the
         // viewport doesn't jump with the selection. Content lives in a fixed-width, clipped
         // child (long values wrap) (`allocate_rect` reports exactly the available rect to the panel).
@@ -1251,9 +1247,9 @@ impl VarstotasApp {
         });
         let un_shown = !self.doc.model.untagged_hidden;
         ui.horizontal(|ui| {
-            if small_icon_button(ui, if un_shown { Icon::Eye } else { Icon::EyeOff }, "Toggle visibility of untagged top-level geometry, groups and components (their contents belong to them)")
-                .clicked()
-            {
+            let r = small_icon_button(ui, if un_shown { Icon::Eye } else { Icon::EyeOff }, "Toggle visibility of untagged top-level geometry, groups and components (their contents belong to them)");
+            super::tray_lib::spot("tag_eye:Untagged", r.rect.center());
+            if r.clicked() {
                 self.doc.mutate_untracked(|m| m.untagged_hidden = !m.untagged_hidden);
             }
             ui.add_space(14.0);
@@ -1301,7 +1297,9 @@ impl VarstotasApp {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if small_icon_button(ui, Icon::Trash, "Delete the tag (what it tags becomes Untagged)").clicked() {
+                    let r = small_icon_button(ui, Icon::Trash, "Delete the tag (what it tags becomes Untagged)");
+                    super::tray_lib::spot("tag_delete", r.rect.center());
+                    if r.clicked() {
                         delete = Some(id);
                     }
                 });

@@ -1,11 +1,11 @@
-//! Top toolbar with large vector-icon buttons.
+//! Top toolbar with large vector-icon buttons (standard views, projection and face styles are
+//! in the viewport's own controls, `view_hud.rs`).
 
 use super::icons::Icon;
 use super::{icon_button, theme};
-use crate::app::{Action, FaceStylePref, VarstotasApp};
+use crate::app::{Action, VarstotasApp};
 use crate::tools::ToolId;
 use egui::{RichText, Ui};
-use varstotas_render::StandardView;
 
 const BTN: f32 = 36.0;
 
@@ -52,19 +52,13 @@ impl VarstotasApp {
         }
     }
 
-    fn style_button(&mut self, ui: &mut Ui, icon: Icon, style: FaceStylePref, title: &str) {
-        let resp = icon_button(ui, icon, self.prefs.face_style == style, BTN);
-        if tip(resp, title, None, "Face style").clicked() {
-            self.prefs.face_style = style;
-        }
-    }
-
     /// The magnet: a click opens the Snapping menu. Crossed out when snapping is off, a dot
     /// when some inferences are off.
     fn snap_button(&mut self, ui: &mut Ui) {
         let snap = &self.prefs.snapping;
         let (on, partial) = (snap.enabled, snap.partial());
         let resp = icon_button(ui, Icon::Magnet, false, BTN);
+        super::tray_lib::spot("magnet", resp.rect.center());
         let p = ui.painter();
         let r = resp.rect.shrink(7.0);
         if !on {
@@ -84,6 +78,8 @@ impl VarstotasApp {
     }
 
     pub(crate) fn toolbar(&mut self, ui: &mut Ui) {
+        // the harness spots are collected from here on each frame (toolbar, then the side bar)
+        super::tray_lib::clear_spots();
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint] {
@@ -96,11 +92,16 @@ impl VarstotasApp {
                 self.tool_button(ui, id);
             }
             group_sep(ui);
+            // Shapes: solids in one operation
+            for id in crate::tools::SHAPES {
+                self.tool_button(ui, id);
+            }
+            group_sep(ui);
             for id in [
                 ToolId::Move,
-                ToolId::PushPull,
                 ToolId::Rotate,
                 ToolId::Scale,
+                ToolId::PushPull,
                 ToolId::Offset,
                 ToolId::FollowMe,
                 ToolId::Chamfer,
@@ -131,44 +132,7 @@ impl VarstotasApp {
                 Action::ZoomExtents,
             );
             group_sep(ui);
-            for (icon, v, name) in [
-                (Icon::ViewIso, StandardView::Iso, "Iso"),
-                (Icon::ViewTop, StandardView::Top, "Top"),
-                (Icon::ViewFront, StandardView::Front, "Front"),
-                (Icon::ViewRight, StandardView::Right, "Right"),
-            ] {
-                self.action_button(ui, icon, false, name, None, "Standard view", Action::View(v));
-            }
-            let ortho = self.camera.ortho;
-            self.action_button(
-                ui,
-                Icon::Perspective,
-                !ortho,
-                if ortho { "Parallel Projection" } else { "Perspective" },
-                None,
-                "Toggle perspective / parallel projection.",
-                Action::SetParallel(!ortho),
-            );
-            group_sep(ui);
             self.snap_button(ui);
-            group_sep(ui);
-            let xray = self.prefs.xray;
-            let resp = icon_button(ui, Icon::StyleXRay, xray, BTN);
-            if tip(resp, "X-Ray", None, "See through faces.").clicked() {
-                self.prefs.xray = !xray;
-            }
-            self.style_button(ui, Icon::StyleWireframe, FaceStylePref::Wireframe, "Wireframe");
-            self.style_button(ui, Icon::StyleHiddenLine, FaceStylePref::HiddenLine, "Hidden Line");
-            self.style_button(ui, Icon::StyleShaded, FaceStylePref::ShadedColor, "Shaded");
-            self.style_button(ui, Icon::StyleTextured, FaceStylePref::Shaded, "Shaded with Textures");
-            self.style_button(ui, Icon::StyleMonochrome, FaceStylePref::Monochrome, "Monochrome");
-            self.style_button(ui, Icon::StyleRealistic, FaceStylePref::Realistic, "Realistic");
-            group_sep(ui);
-            // Shapes: solids in one operation (after the styles, so the buttons before keep
-            // their places).
-            for id in crate::tools::SHAPES {
-                self.tool_button(ui, id);
-            }
         });
     }
 }

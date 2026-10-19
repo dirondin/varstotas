@@ -6,7 +6,7 @@ action components
 wait 40
 screenshot shots/gen_tray.bmp
 # the Shelf tile (Examples folder) of the Components card, real mouse
-raw click 1270 304
+raw click 1270 273
 wait 3
 rawp click 0 0 0
 wait 3

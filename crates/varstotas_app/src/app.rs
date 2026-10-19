@@ -109,7 +109,7 @@ pub struct Prefs {
     pub watch_downloads: bool,
     /// 3D Library → Other Sites: listen for the Send to Varstotas bookmarklet (127.0.0.1).
     pub send_to_varstotas: bool,
-    /// Default Tray cards turned off in the Window menu (by title, see `ui::tray::TRAY_CARDS`).
+    /// Side bar cards turned off in the Window menu (by title, see `ui::tray::TRAY_CARDS`).
     pub tray_hidden: Vec<String>,
     /// The Snapping menu: master switch and the inferences turned off.
     pub snapping: crate::inference::settings::SnapPrefs,

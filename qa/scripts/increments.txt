@@ -67,9 +67,9 @@ wait 3
 expect undo=Some("Rotate")
 screenshot shots/increments.bmp
 # the steps in the magnet menu (real click)
-raw move 1346 -66
+raw move 27 -25
 wait 2
-raw click 1346 -66
+raw click 27 -25
 wait 5
 screenshot shots/increments_menu.bmp
 raw key Escape

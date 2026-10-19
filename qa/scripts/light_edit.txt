@@ -58,7 +58,7 @@ expect lightsel=(0 spot (1000,1000,3000) aim=(0.68,0.34,-0.65)
 expect undo=Some("Aim Light")
 screenshot shots/light_aimed.bmp
 # Entity Info: type a power (real mouse on the field)
-raw click 1310 315
+raw click 1310 284
 wait 2
 raw text 800
 raw key Enter

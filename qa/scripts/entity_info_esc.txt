@@ -12,7 +12,7 @@ rawp click 1500 1500 0
 wait 5
 dump sel
 # Esc must revert, not apply
-raw click 1260 114
+raw click 1260 83
 raw mods cmd
 raw key A
 raw mods none

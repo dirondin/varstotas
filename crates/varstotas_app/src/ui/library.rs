@@ -1,4 +1,4 @@
-//! Components: a local library (the Default Tray card) of `.vrst` files and generators
+//! Components: a local library (the side bar card) of `.vrst` files and generators
 //! (`.rhai`, components with parameters — see `ui/generators.rs`), in one list. The library is
 //! `~/.varstotas/components` (or a folder chosen by the user); subfolders are categories, the
 //! bundled example generators show under "Examples". A click on an item places it as a

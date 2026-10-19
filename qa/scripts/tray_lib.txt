@@ -12,7 +12,7 @@ wait 20
 expect lib_tiles=Large mat_shown=["Grey", "Clear Glass"]
 screenshot shots/traylib_mat.bmp
 # search
-raw click 1200 288
+raw click 1200 257
 wait 3
 raw text gla
 wait 5
@@ -23,10 +23,10 @@ raw key Backspace
 wait 5
 expect mat_shown=["Grey", "Clear Glass"]
 # In Model → Grey → Rename… (one undo step; the paint material follows)
-raw rclick 1186 372
+raw rclick 1186 341
 wait 5
 screenshot shots/traylib_matmenu.bmp
-raw click 1220 419
+raw click 1220 388
 wait 5
 expect rename=Some("Grey")
 raw key Backspace
@@ -39,15 +39,15 @@ wait 10
 expect undo=Some("Rename Material Steel")
 expect mat_shown=["Steel", "Clear Glass"]
 # Steel → Save to Library: My Library shows it
-raw rclick 1186 372
+raw rclick 1186 341
 wait 5
-raw click 1220 443
+raw click 1220 412
 wait 10
 expect matlib=["Steel"]
 # the library file → Rename…: the file and the material in it
-raw rclick 1186 500
+raw rclick 1186 469
 wait 5
-raw click 1220 547
+raw click 1220 516
 wait 5
 expect rename=Some("Steel")
 raw key Backspace
@@ -60,26 +60,26 @@ raw key Enter
 wait 10
 expect matlib=["Sheet"]
 # … → List, then Small Tiles (shared with the Components card)
-raw click 1371 288
+raw click 1371 257
 wait 5
 screenshot shots/traylib_more.bmp
-raw click 1320 475
+raw click 1320 444
 wait 5
 expect lib_tiles=List
 screenshot shots/traylib_list.bmp
-raw click 1371 288
+raw click 1371 257
 wait 5
-raw click 1320 421
+raw click 1320 390
 wait 5
 expect lib_tiles=Small
 screenshot shots/traylib_small.bmp
 # Examples start folded; unfold, the first example → Save to Library
-raw click 1154 457
+raw click 1154 426
 wait 10
 expect mat_shown=["Steel", "Clear Glass", "Sheet", "Gold", "Copper",
-raw rclick 1165 491
+raw rclick 1165 460
 wait 5
-raw click 1200 538
+raw click 1200 507
 wait 10
 expect matlib=["Gold", "Sheet"]
 # the Components card: + → Save Selection to Library…, a name, Enter
@@ -88,21 +88,21 @@ action components
 wait 10
 select_all
 wait 3
-raw click 1323 87
+raw click 1323 56
 wait 5
 screenshot shots/traylib_plus.bmp
-raw click 1300 117
+raw click 1300 86
 wait 5
-raw click 1200 115
+raw click 1200 84
 wait 3
 raw key Enter
 wait 10
 expect library=1
 expect lib_names=["Component"]
 # … → Large Tiles again
-raw click 1371 87
+raw click 1371 56
 wait 5
-raw click 1320 274
+raw click 1320 243
 wait 5
 expect lib_tiles=Large
 screenshot shots/traylib_end.bmp

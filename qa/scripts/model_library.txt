@@ -8,7 +8,7 @@
 action tray_only Components
 action components
 wait 10
-raw click 1347 87
+raw click 1347 56
 wait 10
 action online_wait
 wait 60
@@ -74,7 +74,7 @@ action preview_clear
 wait 5
 expect previews=(None, ["Stool"], ["Stool"])
 screenshot shots/modlib_10.bmp
-raw rclick 1186 171
+raw rclick 1186 140
 wait 5
 screenshot shots/modlib_11.bmp
 raw key Escape

@@ -206,7 +206,7 @@ thread_local! {
     static SPOTS: std::cell::RefCell<Vec<(String, egui::Pos2)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Forget last frame's spots (start of the tray).
+/// Forget last frame's spots (start of the toolbar).
 pub fn clear_spots() {
     SPOTS.with(|s| s.borrow_mut().clear());
 }

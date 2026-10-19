@@ -13,7 +13,7 @@ raw click 515 257
 wait 5
 action components
 wait 40
-raw click 1185 176
+raw click 1185 145
 wait 5
 raw move 150 560
 wait 3
@@ -34,10 +34,10 @@ wait 10
 screenshot shots/mi_1.bmp
 expect stats=(12 24 0 2 | 1/1 0/0 1/1) None
 # In Model tile → right click → Delete from Document… (placed twice: asked)
-raw rclick 1185 171
+raw rclick 1185 140
 wait 5
 screenshot shots/mi_2.bmp
-raw click 1220 380
+raw click 1220 349
 wait 5
 expect def_delete=Some("Component#1")
 screenshot shots/mi_3.bmp

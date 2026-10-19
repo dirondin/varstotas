@@ -8,29 +8,29 @@ wait 10
 expect outliner={Studio[Floor Cove[Backdrop]] Cubes[Gold Clear_Glass Red_Car_Paint
 screenshot shots/outliner_start.bmp
 # right click Gold → Zoom To: selected inside Cubes, framed
-raw rclick 1253 438
+raw rclick 1253 407
 wait 5
 screenshot shots/outliner_menu.bmp
-raw click 1293 459
+raw click 1293 428
 wait 40
 expect Cubes[*Gold Clear_Glass
 expect ctx=1
 screenshot shots/outliner_zoom.bmp
 # double-click Floor
-raw click 1254 330
-raw click 1254 330
+raw click 1254 299
+raw click 1254 299
 wait 40
 expect Studio[*Floor Cove
 screenshot shots/outliner_dbl.bmp
 # drag Gold onto Studio
-raw down 1253 438
-raw move 1250 430
-raw move 1245 380
-raw move 1240 310
-raw move 1239 303
+raw down 1253 407
+raw move 1250 399
+raw move 1245 349
+raw move 1240 279
+raw move 1239 272
 wait 3
 screenshot shots/outliner_drag.bmp
-raw up 1239 303
+raw up 1239 272
 wait 5
 expect Studio[Floor Cove[Backdrop] *Gold] Cubes[Clear_Glass
 expect undo=Some("Move into Group")
@@ -39,21 +39,21 @@ action undo
 wait 5
 expect Studio[Floor Cove[Backdrop]] Cubes[Gold Clear_Glass
 # drag Clear Glass onto the document: top level
-raw down 1253 465
-raw move 1250 455
-raw move 1220 350
-raw move 1195 280
-raw move 1190 276
+raw down 1253 434
+raw move 1250 424
+raw move 1220 319
+raw move 1195 249
+raw move 1190 245
 wait 3
-raw up 1190 276
+raw up 1190 245
 wait 5
 expect Cubes[Gold Red_Car_Paint
 expect Subway_Tile] *Clear_Glass}
 expect undo=Some("Move Out of Group")
 # Delete from the menu (Red Car Paint), then undo
-raw rclick 1253 465
+raw rclick 1253 434
 wait 5
-raw click 1293 632
+raw click 1293 601
 wait 5
 expect Cubes[Gold Marble
 expect undo=Some("Delete")
@@ -61,9 +61,9 @@ action undo
 wait 5
 expect Cubes[Gold Red_Car_Paint Marble
 # Move Out of Group from the menu (Gold)
-raw rclick 1253 438
+raw rclick 1253 407
 wait 5
-raw click 1293 567
+raw click 1293 536
 wait 5
 expect Cubes[Red_Car_Paint
 expect *Gold} ctx=0

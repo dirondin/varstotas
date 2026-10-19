@@ -7,13 +7,13 @@ wait 40
 expect lib_folders=[("Kitchen", 1, false), ("Examples", 6, false)]
 screenshot shots/libf_start.bmp
 # fold Kitchen by its arrow (real mouse)
-raw click 1154 150
+raw click 1154 119
 wait 5
 expect lib_folders=[("Kitchen", 1, true), ("Examples", 6, false)]
 screenshot shots/libf_folded.bmp
 dump folded
 # Hide the examples (real mouse); the tray scrolls up as the card shrinks; the arrow brings Kitchen back
-raw click 1255 178
+raw click 1255 147
 wait 5
 expect lib_folders=[("Kitchen", 1, true)]
 raw click 1154 328

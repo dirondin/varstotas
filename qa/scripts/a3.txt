@@ -11,7 +11,7 @@ rawp click 1707 1707 0
 wait 3
 dump selarc
 screenshot shots/a3_01_entityinfo.bmp
-raw click 1251 114
+raw click 1251 83
 wait 3
 screenshot shots/a3_015_clicked.bmp
 raw mods cmd
@@ -24,7 +24,7 @@ raw key Enter
 wait 5
 dump radius500
 expect curves=["Arcr500.0s12a90"]
-raw click 1240 142
+raw click 1240 111
 raw mods cmd
 raw key A
 raw mods none

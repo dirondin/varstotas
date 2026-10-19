@@ -15,7 +15,7 @@ wait 40
 expect lib_folders=[("Document", 1, false), ("Examples", 6, false)]
 screenshot shots/libdoc_components.bmp
 # place a copy: click the tile, then a point of the model
-raw click 1185 204
+raw click 1185 173
 wait 5
 expect tool=Move
 raw move 150 560

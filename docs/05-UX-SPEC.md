@@ -4,10 +4,10 @@
 ```
 ┌ Меню: File Edit View Camera Draw Tools Window Help ───────────────────────┐
 │ Верхний тулбар: Select Eraser Paint | Line Arc Rect Circle Polygon |      │
-│   Move PushPull Rotate Scale Offset FollowMe | Tape Protractor | Orbit Pan│
-│   Zoom ZoomExtents | виды (Iso Top Front Right) | стили                   │
+│   3D-тела | Move Rotate Scale PushPull Offset FollowMe … | Tape … |       │
+│   Orbit Pan Zoom ZoomExtents | Snapping (виды и стили — во вьюпорте)     │
 ├──────────────────────────────────────────────────────────┬────────────────┤
-│                                                          │ Default Tray:  │
+│                                                          │ Side Bar:      │
 │                    3D-вид (небо/земля,                    │ ▸ Entity Info  │
 │                    оси RGB, человек-масштаб)              │ ▸ Materials    │
 │                                                          │ ▸ Tags         │

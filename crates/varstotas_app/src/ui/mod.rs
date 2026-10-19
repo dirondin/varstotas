@@ -1,4 +1,4 @@
-//! UI pieces: menu bar, toolbar, Default Tray, status bar with the Measurements box, dialogs.
+//! UI pieces: menu bar, toolbar, side bar, status bar with the Measurements box, dialogs.
 
 pub mod animation;
 pub mod code_editor;

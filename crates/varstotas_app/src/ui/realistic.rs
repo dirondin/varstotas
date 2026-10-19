@@ -212,7 +212,7 @@ impl VarstotasApp {
         };
         let mut commit = false;
         let mut dragging = false;
-        egui::CollapsingHeader::new("Physical (Realistic)").id_salt("pbr_editor").default_open(stored.is_some()).show(ui, |ui| {
+        let header = egui::CollapsingHeader::new("Physical (Realistic)").id_salt("pbr_editor").default_open(stored.is_some()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let tex = self.pbr_preview(ui.ctx(), &cur, &p);
                 let (rect, _) = ui.allocate_exact_size(vec2(84.0, 84.0), Sense::hover());
@@ -274,6 +274,7 @@ impl VarstotasApp {
                     let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, label: &str, tip: &str, log: bool| {
                         ui.label(label).on_hover_text(tip);
                         let resp = ui.add(egui::Slider::new(v, r).fixed_decimals(2).logarithmic(log));
+                        super::tray_lib::spot(format!("pbr:{label}"), resp.rect.left_center());
                         dragging |= resp.dragged();
                         commit |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
                         ui.end_row();
@@ -372,6 +373,7 @@ impl VarstotasApp {
                 self.tray.pbr_draft = None;
             }
         });
+        super::tray_lib::spot("pbr_editor", header.header_response.rect.center());
         if commit {
             self.tray.pbr_draft = None;
             if p != base {

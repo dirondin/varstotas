@@ -9,10 +9,10 @@ action components
 wait 40
 expect lib_names=["Box"]
 # right click on Box → Rename…
-raw rclick 1185 304
+raw rclick 1185 273
 wait 5
 screenshot shots/libr_menu.bmp
-raw click 1220 399
+raw click 1220 368
 wait 5
 expect rename=Some("Box")
 raw key Backspace
@@ -27,10 +27,10 @@ wait 20
 expect rename=None
 expect lib_names=["Crate"]
 # Cube (In Model, the first section) → Rename…
-raw rclick 1185 176
+raw rclick 1185 145
 wait 5
 screenshot shots/libr_docmenu.bmp
-raw click 1220 295
+raw click 1220 264
 wait 5
 expect rename=Some("Cube")
 raw key Backspace

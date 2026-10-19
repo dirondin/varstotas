@@ -388,7 +388,7 @@ impl VarstotasApp {
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
             egui::containers::menu::MenuButton::new("Window").config(keep).ui(ui, |ui| {
                 let mut open = self.prefs.tray_open;
-                if ui.checkbox(&mut open, "Default Tray").clicked() {
+                if ui.checkbox(&mut open, "Side Bar").clicked() {
                     self.actions.push(Action::ToggleTray);
                 }
                 // The tray's cards: a checkbox each (turning one on opens the tray).
@@ -514,7 +514,9 @@ impl VarstotasApp {
             ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
                 for &k in kinds {
                     let mut v = self.prefs.snapping.is_on(k);
-                    if ui.checkbox(&mut v, k.menu_label()).changed() {
+                    let r = ui.checkbox(&mut v, k.menu_label());
+                    super::tray_lib::spot(format!("snap:{}", k.menu_label()), r.rect.center());
+                    if r.changed() {
                         self.prefs.snapping.set(k, v);
                     }
                 }

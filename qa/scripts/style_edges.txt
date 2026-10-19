@@ -5,15 +5,19 @@ view iso
 zoom_extents
 wait 10
 expect style=shaded edges=true
-# Realistic (toolbar, real mouse): no edges
-raw click 255 -26
+# Realistic (the viewport's style drop-down, real mouse): no edges
+raw click 1017 22
+wait 5
+raw click 1062 187
 wait 5
 expect style=realistic edges=false
 screenshot shots/style_edges_realistic.bmp
 action add_scene
 wait 5
-# Shaded with Textures: edges back (scene tabs move the viewport down by 27)
-raw click 179 -53
+# Shaded with Textures: edges back
+raw click 1017 22
+wait 5
+raw click 1062 79
 wait 5
 expect style=shaded edges=true
 screenshot shots/style_edges_shaded.bmp
@@ -21,6 +25,8 @@ screenshot shots/style_edges_shaded.bmp
 action scene_0
 wait 40
 expect style=realistic edges=false
-raw click 179 -53
+raw click 1017 22
+wait 5
+raw click 1062 79
 wait 5
 expect style=shaded edges=true

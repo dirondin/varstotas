@@ -84,7 +84,7 @@ raw click 452 -23
 wait 3
 raw key Escape
 wait 3
-raw click 1137 58
+raw click 1137 27
 wait 5
 screenshot shots/realistic_env_card.bmp
 # a scene keeps the environment (scene tabs shift the viewport, so last); PNG export renders the Realistic style

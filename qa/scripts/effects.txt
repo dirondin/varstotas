@@ -127,6 +127,6 @@ wait 3
 raw key Escape
 wait 3
 action shader_editor_close
-raw click 1137 58
+raw click 1137 27
 wait 5
 screenshot shots/fx_env_card.bmp

@@ -12,7 +12,7 @@ wait 5
 expect current_mat=Some(("Blue Glow", Some((1.0, 0.0))))
 action tray_only Materials
 wait 10
-raw click 1347 288
+raw click 1347 257
 wait 10
 screenshot shots/matplug_1.bmp
 raw click 245 110
