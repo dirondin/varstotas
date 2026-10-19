@@ -35,6 +35,20 @@ pub(crate) fn icon_row(ui: &mut Ui, icon: Option<Icon>, label: &str, shortcut: O
 fn icon_check(ui: &mut Ui, on: &mut bool, icon: Icon, label: &str) -> Response {
     let id = ui.id().with(("check_icon", label));
     let r = ui.add(egui::Checkbox::new(on, (egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label)));
+    paint_after_box(ui, &r, icon);
+    r
+}
+
+/// A radio button with an icon between the circle and the label.
+fn icon_radio(ui: &mut Ui, on: bool, icon: Icon, label: &str) -> Response {
+    let id = ui.id().with(("radio_icon", label));
+    let r = ui.add(egui::RadioButton::new(on, (egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label)));
+    paint_after_box(ui, &r, icon);
+    r
+}
+
+/// The icon of a checkbox / radio row: right after the box.
+fn paint_after_box(ui: &Ui, r: &Response, icon: Icon) {
     let x = r.rect.left() + ui.spacing().icon_width + ui.spacing().icon_spacing;
     let rect = egui::Rect::from_min_size(egui::pos2(x, r.rect.center().y - MENU_ICON / 2.0), egui::vec2(MENU_ICON, MENU_ICON));
     let mut painter = ui.painter().clone();
@@ -42,7 +56,6 @@ fn icon_check(ui: &mut Ui, on: &mut bool, icon: Icon, label: &str) -> Response {
         painter.multiply_opacity(0.4);
     }
     paint_icon(&painter, rect, icon, false);
-    r
 }
 
 /// A submenu's row with an icon slot, like [`icon_row`].
@@ -259,46 +272,56 @@ impl VarstotasApp {
 
             ui.menu_button("View", |ui| {
                 ui.label(egui::RichText::new("Face Style").small().weak());
-                let fs = &mut self.prefs.face_style;
-                ui.radio_value(fs, FaceStylePref::ShadedColor, "Shaded");
-                ui.radio_value(fs, FaceStylePref::Shaded, "Shaded with Textures");
-                ui.radio_value(fs, FaceStylePref::Monochrome, "Monochrome");
-                ui.radio_value(fs, FaceStylePref::HiddenLine, "Hidden Line");
-                ui.radio_value(fs, FaceStylePref::Wireframe, "Wireframe");
-                ui.radio_value(fs, FaceStylePref::Realistic, "Realistic");
-                ui.checkbox(&mut self.prefs.xray, "X-Ray");
+                for (st, icon, label) in [
+                    (FaceStylePref::ShadedColor, Icon::StyleShaded, "Shaded"),
+                    (FaceStylePref::Shaded, Icon::StyleTextured, "Shaded with Textures"),
+                    (FaceStylePref::Monochrome, Icon::StyleMonochrome, "Monochrome"),
+                    (FaceStylePref::HiddenLine, Icon::StyleHiddenLine, "Hidden Line"),
+                    (FaceStylePref::Wireframe, Icon::StyleWireframe, "Wireframe"),
+                    (FaceStylePref::Realistic, Icon::StyleRealistic, "Realistic"),
+                ] {
+                    if icon_radio(ui, self.prefs.face_style == st, icon, label).clicked() {
+                        self.prefs.face_style = st;
+                    }
+                }
+                icon_check(ui, &mut self.prefs.xray, Icon::StyleXRay, "X-Ray");
                 ui.separator();
                 ui.label(egui::RichText::new("Edge Style").small().weak());
-                ui.checkbox(self.prefs.edges_mut(), "Edges").on_hover_text("Edges in this face style (Realistic has its own switch)");
-                ui.checkbox(&mut self.prefs.profiles, "Profiles");
+                icon_check(ui, self.prefs.edges_mut(), Icon::StyleEdges, "Edges").on_hover_text("Edges in this face style (Realistic has its own switch)");
+                icon_check(ui, &mut self.prefs.profiles, Icon::StyleProfiles, "Profiles");
                 ui.separator();
                 let mut guides = !self.doc.model.guides_hidden;
-                if ui.checkbox(&mut guides, "Guides").clicked() {
+                if icon_check(ui, &mut guides, Icon::Guides, "Guides").clicked() {
                     self.actions.push(Action::ToggleGuides);
                 }
-                ui.checkbox(&mut self.prefs.show_axes, "Axes");
-                ui.checkbox(&mut self.prefs.show_ground, "Ground");
-                ui.checkbox(&mut self.prefs.show_sky, "Sky").on_hover_text("The sky gradient behind the model; off = a plain light background");
+                icon_check(ui, &mut self.prefs.show_axes, Icon::Axes, "Axes");
+                icon_check(ui, &mut self.prefs.show_ground, Icon::Ground, "Ground");
+                icon_check(ui, &mut self.prefs.show_sky, Icon::Sky, "Sky").on_hover_text("The sky gradient behind the model; off = a plain light background");
                 let mut grid = self.prefs.grid.show;
-                if ui.checkbox(&mut grid, "Grid").clicked() {
+                if icon_check(ui, &mut grid, Icon::Grid, "Grid").clicked() {
                     self.actions.push(Action::ToggleGrid);
                 }
                 ui.separator();
                 let mut shadows = self.doc.model.shadows.enabled;
-                if ui.checkbox(&mut shadows, "Shadows").clicked() {
+                if icon_check(ui, &mut shadows, Icon::Shadows, "Shadows").clicked() {
                     self.actions.push(Action::ToggleShadows);
                 }
                 ui.separator();
                 let d = self.doc.model.section_display;
-                for (k, mut on, label) in [(0u8, d.planes, "Section Planes"), (1, d.cuts, "Section Cuts"), (2, d.fill, "Section Fill")] {
-                    if ui.checkbox(&mut on, label).clicked() {
+                for (k, mut on, icon, label) in [
+                    (0u8, d.planes, Icon::Section, "Section Planes"),
+                    (1, d.cuts, Icon::SectionCut, "Section Cuts"),
+                    (2, d.fill, Icon::SectionFill, "Section Fill"),
+                ] {
+                    if icon_check(ui, &mut on, icon, label).clicked() {
                         self.actions.push(Action::ToggleSectionDisplay(k));
                     }
                 }
                 ui.separator();
-                ui.menu_button("Viewports", |ui| {
+                let panes = [Icon::Panes1, Icon::Panes2, Icon::Panes2, Icon::Panes4, Icon::Panes4];
+                icon_menu(ui, Some(panes[self.pane_count.min(4)]), "Viewports", |ui| {
                     for (n, label) in [(1, "One"), (2, "Two (side by side)"), (4, "Four (2 × 2)")] {
-                        if ui.radio(self.pane_count == n, label).clicked() {
+                        if icon_radio(ui, self.pane_count == n, panes[n], label).clicked() {
                             self.actions.push(Action::SetPanes(n));
                             ui.close();
                         }
@@ -306,22 +329,22 @@ impl VarstotasApp {
                     ui.separator();
                     ui.label(egui::RichText::new("Presets").small().weak());
                     for (i, p) in crate::panes::PRESETS.iter().enumerate() {
-                        if ui.button(p.name).clicked() {
+                        if icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), p.name, None, true, false).clicked() {
                             self.actions.push(Action::ViewPreset(i));
                             ui.close();
                         }
                     }
                 });
                 ui.separator();
-                ui.menu_button("Animation", |ui| {
+                icon_menu(ui, Some(Icon::Film), "Animation", |ui| {
                     let has = !self.doc.model.scenes.is_empty();
-                    let play = if self.scene_player.is_some() { "Pause" } else { "Play" };
-                    self.item(ui, play, None, has, Action::ToggleAnimation);
+                    let (play, icon) = if self.scene_player.is_some() { ("Pause", Icon::Pause) } else { ("Play", Icon::Play) };
+                    self.icon_item(ui, Some(icon), play, None, has, Action::ToggleAnimation);
                     ui.separator();
-                    self.item(ui, "Next Scene", crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
-                    self.item(ui, "Previous Scene", crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
+                    self.icon_item(ui, Some(Icon::NextScene), "Next Scene", crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
+                    self.icon_item(ui, Some(Icon::PrevScene), "Previous Scene", crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
                     ui.separator();
-                    self.item(ui, "Add Scene", None, true, Action::AddScene);
+                    self.icon_item(ui, Some(Icon::AddScene), "Add Scene", None, true, Action::AddScene);
                 });
             });
 
@@ -413,71 +436,32 @@ impl VarstotasApp {
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
             egui::containers::menu::MenuButton::new("Window").config(keep).ui(ui, |ui| {
                 let mut open = self.prefs.tray_open;
-                if ui.checkbox(&mut open, "Side Bar").clicked() {
+                if icon_check(ui, &mut open, Icon::SideBar, "Side Bar").clicked() {
                     self.actions.push(Action::ToggleTray);
                 }
                 // The tray's cards: a checkbox each (turning one on opens the tray).
                 ui.indent("tray_cards", |ui| {
                     for c in crate::ui::tray::TRAY_CARDS {
-                        let mut shown = !self.prefs.tray_hidden.iter().any(|h| h == c);
-                        if ui.checkbox(&mut shown, c).clicked() {
-                            if shown {
-                                self.prefs.tray_hidden.retain(|h| h != c);
-                                if !self.prefs.tray_open {
-                                    self.actions.push(Action::ToggleTray);
-                                }
-                            } else {
-                                self.prefs.tray_hidden.push(c.to_string());
-                            }
+                        let mut shown = Cmd::Card(c).checked(self).unwrap_or(true);
+                        if icon_check(ui, &mut shown, Cmd::Card(c).icon(), c).clicked() {
+                            self.actions.push(Action::ToggleCard(c));
                         }
                     }
                 });
                 ui.separator();
-                if ui.add(egui::Button::new("Sheets…").selected(self.sheets.open)).clicked() {
-                    self.actions.push(Action::Sheets);
-                    ui.close();
-                }
-                if ui.add(egui::Button::new("Render…").selected(self.render_window.open)).clicked() {
-                    self.render_window.open = !self.render_window.open;
-                    ui.close();
-                }
-                if ui.add(egui::Button::new("Work Planes…").selected(self.planes_window.open)).clicked() {
-                    self.actions.push(Action::WorkPlanes);
-                    ui.close();
-                }
-                if ui.add(egui::Button::new("Model Info…").selected(self.model_info.open)).on_hover_text("Statistics of the document, Purge Unused").clicked() {
-                    self.actions.push(Action::ModelInfo);
-                    ui.close();
-                }
-                if ui
-                    .add(egui::Button::new("Component Parameters…").selected(self.rig_editor.open))
-                    .on_hover_text("Parameters of the selected component: values that turn, slide, show or paint its parts")
-                    .clicked()
-                {
-                    self.actions.push(Action::RigEditor);
-                    ui.close();
-                }
-                if ui.add(egui::Button::new("3D Library…").selected(self.models.open)).clicked() {
-                    self.actions.push(Action::ModelLibrary);
-                    ui.close();
-                }
-                if ui.add(egui::Button::new("Generator Editor…").selected(self.gen_editor.open)).clicked() {
-                    self.actions.push(Action::GeneratorEditor);
-                    ui.close();
-                }
-                let b = egui::Button::new("Script Console").selected(self.console.open);
-                if ui.add(b).clicked() {
-                    self.actions.push(Action::ToggleConsole);
-                    ui.close();
-                }
-                if ui.add(egui::Button::new("Log").selected(self.log_window.open)).on_hover_text("Errors and warnings from everywhere: scripts, import / export, libraries, downloads …").clicked() {
-                    self.toggle_log(!self.log_window.open);
-                    ui.close();
-                }
-                ui.separator();
-                if ui.button("Preferences…").clicked() {
-                    self.actions.push(Action::Preferences);
-                    ui.close();
+                use Cmd::*;
+                // None: a separator
+                for c in [Some(Sheets), Some(Render), Some(WorkPlanes), Some(ModelInfo), Some(ComponentParams), Some(Library3d), Some(GeneratorEditor), Some(Console), Some(Log), None, Some(Preferences)] {
+                    let Some(c) = c else {
+                        ui.separator();
+                        continue;
+                    };
+                    let label = if c == Sheets { "Sheets…" } else { c.menu_label() };
+                    let on = c.checked(self).unwrap_or(false);
+                    if icon_row(ui, Some(c.icon()), label, c.shortcut().as_deref(), true, on).on_hover_text(c.description()).clicked() {
+                        self.actions.push(c.action());
+                        ui.close();
+                    }
                 }
             });
 

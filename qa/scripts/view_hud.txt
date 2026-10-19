@@ -79,7 +79,7 @@ wait 3
 # four viewports: the new panes show the model from the top, front and right
 raw click 961 22
 wait 5
-raw click 1107 382
+raw click 1081 382
 wait 20
 expect panes=(4 0 [(Some(Top), true, Wireframe), (Some(Top), true, Wireframe), (Some(Front), true, Wireframe), (Some(Right), true, Wireframe)])
 # a click in the bottom-right pane makes it the active one; its style changes alone
@@ -101,7 +101,7 @@ expect panes=(4 0
 # one view again (the top-left pane's view menu)
 raw click 405 22
 wait 5
-raw click 495 382
+raw click 469 382
 wait 10
 expect panes=(1 0 [(Some(Top), true, Wireframe)])
 # presets (View → Viewports): Front, Left, Top parallel + Iso in perspective (the panes keep their

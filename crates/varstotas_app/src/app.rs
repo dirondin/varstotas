@@ -315,6 +315,10 @@ pub enum Action {
     ToggleSnapping,
     /// One inference on / off (a toolbar button).
     ToggleSnap(crate::inference::InferenceKind),
+    /// A side bar card shown / hidden (Window menu; showing one opens the side bar).
+    ToggleCard(&'static str),
+    ToggleRender,
+    ToggleLog,
     /// View → Viewports: 1, 2 or 4 panes.
     SetPanes(usize),
     /// A viewport preset (`panes::PRESETS`).
@@ -1405,6 +1409,16 @@ impl VarstotasApp {
                 self.animate_to(to);
             }
             Action::ToggleTray => self.prefs.tray_open = !self.prefs.tray_open,
+            Action::ToggleCard(c) => {
+                if self.prefs.tray_hidden.iter().any(|h| h == c) {
+                    self.prefs.tray_hidden.retain(|h| h != c);
+                    self.prefs.tray_open = true;
+                } else {
+                    self.prefs.tray_hidden.push(c.to_string());
+                }
+            }
+            Action::ToggleRender => self.render_window.open = !self.render_window.open,
+            Action::ToggleLog => self.toggle_log(!self.log_window.open),
             Action::SelectInstance(path, id) => {
                 self.doc.set_active_path(path);
                 self.doc.set_selection(vec![EntityRef::Instance(id)]);

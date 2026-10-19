@@ -72,24 +72,36 @@ impl Item {
         }
     }
 
-    /// The heading it comes under in the reserve (the tools and the first commands have none).
+    /// The heading it comes under in the reserve: the menu it lives in.
     pub fn group(self) -> Option<&'static str> {
+        use ToolId as T;
         match self {
-            Item::Cmd(c) if !matches!(c, Cmd::Text3d | Cmd::ZoomExtents) => Some(c.group()),
-            _ => None,
+            Item::Tool(T::Orbit | T::Pan | T::Zoom | T::PositionCamera | T::LookAround | T::Walk) => Some("Camera"),
+            Item::Tool(
+                T::Line | T::Arc | T::ArcCenter | T::Arc3 | T::Pie | T::Bezier | T::SmoothCurve | T::Freehand | T::Rectangle | T::RotatedRectangle | T::Circle | T::Polygon,
+            ) => Some("Draw"),
+            Item::Tool(id) if crate::tools::SHAPES.contains(&id) => Some("Draw"),
+            Item::Tool(_) => Some("Tools"),
+            Item::Cmd(Cmd::ZoomExtents) => Some("Camera"),
+            Item::Cmd(c) => Some(c.group()),
+            Item::Snapping => Some("Snapping"),
+            Item::Sep => None,
         }
     }
 
-    /// Every button there is (separators aside): the tools, then the commands in the menus' order
-    /// (3D Text, Zoom Extents and the magnet first, as before the commands came).
+    /// Every button there is (separators aside), by menu (`GROUPS`), in each the menu's order.
     pub fn all() -> Vec<Item> {
         let mut v: Vec<Item> = ToolId::ALL.iter().copied().filter(|t| t.implemented()).map(Item::Tool).collect();
-        let first = [Cmd::Text3d, Cmd::ZoomExtents];
-        v.extend([Item::Cmd(Cmd::Text3d), Item::Cmd(Cmd::ZoomExtents), Item::Snapping]);
-        v.extend(Cmd::all().into_iter().filter(|c| !first.contains(c)).map(Item::Cmd));
+        v.push(Item::Snapping);
+        v.extend(Cmd::all().into_iter().map(Item::Cmd));
+        // stable: the order inside a group stays
+        v.sort_by_key(|i| GROUPS.iter().position(|g| Some(*g) == i.group()).unwrap_or(GROUPS.len()));
         v
     }
 }
+
+/// The reserve's headings, in order.
+pub const GROUPS: [&str; 7] = ["Draw", "Tools", "Camera", "File", "Edit", "Snapping", "Window"];
 
 /// The toolbar out of the box. 3 Point Arc, Pie, Rotated Rectangle, Smooth Curve, Freehand,
 /// Protractor … wait in reserve (the toolbar stays short at the default window width).

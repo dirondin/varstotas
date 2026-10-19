@@ -19,7 +19,7 @@ raw click 353 187
 wait 5
 expect toolbar="Eraser Paint | Line
 # Smooth Curve from the reserve: the end of the toolbar
-raw click 465 295
+raw click 465 261
 wait 5
 expect ZoomExtents | Snapping SmoothCurve"
 # a separator after it

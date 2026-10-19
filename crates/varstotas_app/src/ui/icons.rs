@@ -134,6 +134,20 @@ pub enum Icon {
     Solids(u8),
     Unfold,
     Snap(crate::inference::InferenceKind),
+    // View and Window menus (`cmd.rs`)
+    SideBar,
+    Outliner,
+    Tag,
+    Render,
+    Console,
+    Log,
+    Gear,
+    Generator,
+    Play,
+    Pause,
+    NextScene,
+    PrevScene,
+    AddScene,
 }
 
 /// Palette used by icons.

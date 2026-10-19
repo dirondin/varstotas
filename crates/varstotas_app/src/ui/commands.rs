@@ -1,4 +1,4 @@
-//! Commands of the File, Edit, Tools and Snapping menus that are not tools: their names,
+//! Commands of the File, Edit, Tools, Snapping and Window menus that are not tools: their names,
 //! icons, shortcuts and when they apply. The menus draw their rows from here, and any of them
 //! can be put on the toolbar (Preferences → Toolbar).
 
@@ -77,6 +77,19 @@ pub enum Cmd {
     ShowGrid,
     /// One inference on / off.
     Snap(InferenceKind),
+    /// The side bar (tray) shown / hidden.
+    SideBar,
+    /// A card of the side bar shown / hidden (`tray::TRAY_CARDS`).
+    Card(&'static str),
+    Render,
+    WorkPlanes,
+    ModelInfo,
+    ComponentParams,
+    Library3d,
+    GeneratorEditor,
+    Console,
+    Log,
+    Preferences,
 }
 
 impl Cmd {
@@ -94,6 +107,9 @@ impl Cmd {
         v.extend(SolidOp::ALL.map(Solid));
         v.extend([Unfold, Text3d, ZoomExtents, Snapping, ShowGrid]);
         v.extend(crate::inference::settings::all_kinds().map(Snap));
+        v.push(SideBar);
+        v.extend(crate::ui::tray::TRAY_CARDS.map(Card));
+        v.extend([Render, WorkPlanes, ModelInfo, ComponentParams, Library3d, GeneratorEditor, Console, Log, Preferences]);
         v
     }
 
@@ -108,8 +124,10 @@ impl Cmd {
             "Edit"
         } else if i < at(Cmd::Snapping) {
             "Tools"
-        } else {
+        } else if i < at(Cmd::SideBar) {
             "Snapping"
+        } else {
+            "Window"
         }
     }
 
@@ -120,6 +138,7 @@ impl Cmd {
             Cmd::Solid(op) => format!("Solid:{op:?}"),
             // "Snapping" is the toolbar's magnet (the menu)
             Cmd::Snapping => "SnappingOnOff".into(),
+            Cmd::Card(n) => format!("Card:{n}"),
             _ => format!("{self:?}"),
         }
     }
@@ -158,6 +177,7 @@ impl Cmd {
             Cmd::FlipBlue => "Flip Along Blue".into(),
             Cmd::Solid(op) => format!("Solid {}", op.name()),
             Cmd::Snap(k) => format!("Snap: {}", k.menu_label()),
+            Cmd::Card(n) => format!("Side Bar: {n}"),
             _ => self.menu_label().trim_end_matches('…').into(),
         }
     }
@@ -226,6 +246,17 @@ impl Cmd {
             Cmd::Snapping => "Snapping",
             Cmd::ShowGrid => "Show Grid",
             Cmd::Snap(k) => k.menu_label(),
+            Cmd::SideBar => "Side Bar",
+            Cmd::Card(n) => n,
+            Cmd::Render => "Render…",
+            Cmd::WorkPlanes => "Work Planes…",
+            Cmd::ModelInfo => "Model Info…",
+            Cmd::ComponentParams => "Component Parameters…",
+            Cmd::Library3d => "3D Library…",
+            Cmd::GeneratorEditor => "Generator Editor…",
+            Cmd::Console => "Script Console",
+            Cmd::Log => "Log",
+            Cmd::Preferences => "Preferences…",
         }
     }
 
@@ -296,6 +327,28 @@ impl Cmd {
             Cmd::Snapping => Icon::Magnet,
             Cmd::ShowGrid => Icon::Grid,
             Cmd::Snap(k) => Icon::Snap(k),
+            Cmd::SideBar => Icon::SideBar,
+            Cmd::Card(n) => match n {
+                "Entity Info" => Icon::Info,
+                "Materials" => Icon::Paint,
+                "Components" => Icon::Component,
+                "Tags" => Icon::Tag,
+                "Outliner" => Icon::Outliner,
+                "Scenes" => Icon::AddScene,
+                "Shadows" => Icon::Shadows,
+                "Environment" => Icon::StyleRealistic,
+                "Soften Edges" => Icon::Arc,
+                _ => Icon::Select,
+            },
+            Cmd::Render => Icon::Render,
+            Cmd::WorkPlanes => Icon::GuidePlane,
+            Cmd::ModelInfo => Icon::Info,
+            Cmd::ComponentParams => Icon::Parametric,
+            Cmd::Library3d => Icon::Cloud,
+            Cmd::GeneratorEditor => Icon::Generator,
+            Cmd::Console => Icon::Console,
+            Cmd::Log => Icon::Log,
+            Cmd::Preferences => Icon::Gear,
         }
     }
 
@@ -378,6 +431,17 @@ impl Cmd {
             Cmd::Snapping => "Snapping on / off.".into(),
             Cmd::ShowGrid => "The grid on the ground on / off.".into(),
             Cmd::Snap(_) => "This snap on / off.".into(),
+            Cmd::SideBar => "The side bar with the cards (Entity Info, Materials …) shown or hidden.".into(),
+            Cmd::Card(n) => format!("The {n} card of the side bar shown or hidden."),
+            Cmd::Render => "Path-traced pictures of the model (Window → Render).".into(),
+            Cmd::WorkPlanes => "Saved drawing planes.".into(),
+            Cmd::ModelInfo => "Statistics of the document, Purge Unused.".into(),
+            Cmd::ComponentParams => "Parameters of the selected component: values that turn, slide, show or paint its parts.".into(),
+            Cmd::Library3d => "Free models from online libraries.".into(),
+            Cmd::GeneratorEditor => "Write and run generator scripts.".into(),
+            Cmd::Console => "Run Rhai commands on the model.".into(),
+            Cmd::Log => "Errors and warnings from everywhere: scripts, import / export, libraries, downloads …".into(),
+            Cmd::Preferences => "Settings of Varstotas.".into(),
             _ => format!("{}.", self.name()),
         }
     }
@@ -449,6 +513,17 @@ impl Cmd {
             Cmd::Snapping => Action::ToggleSnapping,
             Cmd::ShowGrid => Action::ToggleGrid,
             Cmd::Snap(k) => Action::ToggleSnap(k),
+            Cmd::SideBar => Action::ToggleTray,
+            Cmd::Card(n) => Action::ToggleCard(n),
+            Cmd::Render => Action::ToggleRender,
+            Cmd::WorkPlanes => Action::WorkPlanes,
+            Cmd::ModelInfo => Action::ModelInfo,
+            Cmd::ComponentParams => Action::RigEditor,
+            Cmd::Library3d => Action::ModelLibrary,
+            Cmd::GeneratorEditor => Action::GeneratorEditor,
+            Cmd::Console => Action::ToggleConsole,
+            Cmd::Log => Action::ToggleLog,
+            Cmd::Preferences => Action::Preferences,
         }
     }
 
@@ -458,6 +533,18 @@ impl Cmd {
             Cmd::Snapping => Some(app.prefs.snapping.enabled),
             Cmd::ShowGrid => Some(app.prefs.grid.show),
             Cmd::Snap(k) => Some(app.prefs.snapping.is_on(k)),
+            Cmd::SideBar => Some(app.prefs.tray_open),
+            Cmd::Card(n) => Some(!app.prefs.tray_hidden.iter().any(|h| h == n)),
+            Cmd::Sheets => Some(app.sheets.open),
+            Cmd::Render => Some(app.render_window.open),
+            Cmd::WorkPlanes => Some(app.planes_window.open),
+            Cmd::ModelInfo => Some(app.model_info.open),
+            Cmd::ComponentParams => Some(app.rig_editor.open),
+            Cmd::Library3d => Some(app.models.open),
+            Cmd::GeneratorEditor => Some(app.gen_editor.open),
+            Cmd::Console => Some(app.console.open),
+            Cmd::Log => Some(app.log_window.open),
+            Cmd::Preferences => Some(app.prefs_win.open),
             _ => None,
         }
     }

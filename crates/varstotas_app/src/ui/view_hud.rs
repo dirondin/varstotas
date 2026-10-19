@@ -162,7 +162,6 @@ impl VarstotasApp {
             }
             ui.separator();
             ui.horizontal(|ui| {
-                ui.add_space(ICON + 8.0);
                 ui.label("Viewports");
                 for (n, icon, tip) in [(1, Icon::Panes1, "One view"), (2, Icon::Panes2, "Two views side by side"), (4, Icon::Panes4, "Four views (2 × 2)")] {
                     if icon_button(ui, icon, self.pane_count == n, tip).clicked() {

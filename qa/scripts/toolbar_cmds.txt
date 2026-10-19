@@ -40,4 +40,17 @@ wait 5
 raw click 217 -25
 wait 5
 expect faces=0
+# Window commands: a side bar card and the Log window
+toolbar Select Card:Tags Log
+wait 10
+expect tray_hidden=[]
+raw click 65 -25
+wait 5
+expect tray_hidden=["Tags"]
+raw click 65 -25
+wait 5
+expect tray_hidden=[]
+raw click 103 -25
+wait 5
+expect log=(true
 quit

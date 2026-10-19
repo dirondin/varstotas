@@ -3,6 +3,7 @@
 use super::{CUBE_LEFT, CUBE_RIGHT, CUBE_TOP, Icon, Pen, pal};
 use crate::inference::InferenceKind;
 use egui::{Align2, Color32, FontId, Rect, Stroke};
+use std::f32::consts::PI;
 
 const ORANGE: Color32 = Color32::from_rgb(0xE8, 0x7A, 0x1E);
 const CYAN: Color32 = Color32::from_rgb(0x1F, 0xA9, 0xC4);
@@ -306,8 +307,89 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             }
         }
         Icon::Snap(k) => snap(pen, k),
+        Icon::SideBar => {
+            rect(pen, (2.5, 4.0), (21.5, 20.0), FILL, pen.stroke());
+            rect(pen, (14.5, 4.0), (21.5, 20.0), BLUE_SOFT, pen.stroke());
+            for y in [8.0, 11.5, 15.0] {
+                pen.line_c(&[(16.0, y), (20.0, y)], pen.thin());
+            }
+        }
+        Icon::Outliner => {
+            let st = pen.thin();
+            pen.line_c(&[(6.0, 7.0), (6.0, 18.0)], st);
+            pen.line_c(&[(6.0, 12.5), (11.0, 12.5)], st);
+            pen.line_c(&[(6.0, 18.0), (11.0, 18.0)], st);
+            rect(pen, (3.0, 3.5), (9.0, 8.5), BLUE_SOFT, pen.thin());
+            for (y, c) in [(12.5, SHADE), (18.0, SHADE)] {
+                rect(pen, (11.0, y - 2.3), (15.0, y + 2.3), c, pen.thin());
+                pen.line_c(&[(16.5, y), (21.5, y)], pen.stroke());
+            }
+            pen.line_c(&[(10.5, 6.0), (21.5, 6.0)], pen.stroke());
+        }
+        Icon::Tag => {
+            pen.poly(&[(3.0, 5.0), (12.0, 5.0), (21.0, 13.5), (13.5, 21.0), (3.0, 12.0)], YELLOW);
+            pen.painter.circle(pen.p(7.5, 9.5), 1.8 * pen.s, FILL, pen.thin());
+        }
+        Icon::Render => {
+            // a lit ball on its shadow and a sparkle: a realistic picture
+            pen.painter.add(egui::Shape::ellipse_filled(pen.p(11.0, 20.0), egui::vec2(7.0, 1.6) * pen.s, Color32::from_black_alpha(55)));
+            pen.circle((11.0, 12.5), 6.5, BLUE_SOFT);
+            pen.dot((8.8, 10.3), 1.6, Color32::WHITE);
+            let st = Stroke::new(1.5 * pen.s, ORANGE);
+            pen.line_c(&[(19.0, 1.5), (19.0, 8.5)], st);
+            pen.line_c(&[(15.5, 5.0), (22.5, 5.0)], st);
+        }
+        Icon::Console => {
+            rect(pen, (2.5, 4.0), (21.5, 20.0), Color32::from_rgb(0x2B, 0x30, 0x38), pen.stroke());
+            let st = Stroke::new(1.7 * pen.s, GREEN);
+            pen.line_c(&[(6.0, 9.0), (9.5, 12.0), (6.0, 15.0)], st);
+            pen.line_c(&[(11.5, 15.5), (17.0, 15.5)], Stroke::new(1.7 * pen.s, Color32::WHITE));
+        }
+        Icon::Log => {
+            rect(pen, (3.5, 2.5), (18.5, 21.5), FILL, pen.stroke());
+            for y in [7.0, 10.5, 14.0] {
+                pen.line_c(&[(6.5, y), (15.5, y)], pen.thin());
+            }
+            pen.dot((18.0, 18.0), 4.5, RED);
+            pen.line_c(&[(18.0, 15.5), (18.0, 18.6)], Stroke::new(1.6 * pen.s, Color32::WHITE));
+            pen.dot((18.0, 20.4), 0.9, Color32::WHITE);
+        }
+        Icon::Gear => gear(pen, (12.0, 12.0), 1.0),
+        Icon::Generator => {
+            mini_cube(pen, (10.0, 11.0), 0.62);
+            gear(pen, (17.5, 17.5), 0.5);
+        }
+        Icon::Play => pen.poly_c(&[(7.0, 4.0), (7.0, 20.0), (20.0, 12.0)], GREEN, pen.thin()),
+        Icon::Pause => {
+            rect(pen, (6.0, 4.5), (10.5, 19.5), pen.ink, Stroke::NONE);
+            rect(pen, (13.5, 4.5), (18.0, 19.5), pen.ink, Stroke::NONE);
+        }
+        Icon::NextScene | Icon::PrevScene => {
+            let f = |x: f32| if icon == Icon::PrevScene { 24.0 - x } else { x };
+            pen.poly_c(&[(f(5.0), 5.0), (f(5.0), 19.0), (f(16.0), 12.0)], BLUE, Stroke::NONE);
+            rect(pen, (f(16.5).min(f(19.5)), 5.0), (f(16.5).max(f(19.5)), 19.0), BLUE, Stroke::NONE);
+        }
+        Icon::AddScene => {
+            rect(pen, (2.5, 3.5), (18.5, 15.5), BLUE_SOFT, pen.stroke());
+            mini_cube(pen, (10.5, 9.5), 0.42);
+            pen.dot((17.5, 17.0), 5.0, GREEN);
+            let st = Stroke::new(1.8 * pen.s, Color32::WHITE);
+            pen.line_c(&[(17.5, 14.0), (17.5, 20.0)], st);
+            pen.line_c(&[(14.5, 17.0), (20.5, 17.0)], st);
+        }
         _ => {}
     }
+}
+
+/// A cog wheel of radius ~9·`k` at `c`.
+fn gear(pen: &Pen, c: (f32, f32), k: f32) {
+    let teeth = Stroke::new(3.2 * k * pen.s, pen.ink);
+    for i in 0..8 {
+        let a = i as f32 * PI / 4.0;
+        pen.line_c(&[(c.0 + 5.5 * k * a.cos(), c.1 + 5.5 * k * a.sin()), (c.0 + 9.5 * k * a.cos(), c.1 + 9.5 * k * a.sin())], teeth);
+    }
+    pen.painter.circle(pen.p(c.0, c.1), 6.8 * k * pen.s, pal::shade(), Stroke::new(1.4 * k * pen.s, pen.ink));
+    pen.painter.circle(pen.p(c.0, c.1), 2.6 * k * pen.s, pal::fill(), Stroke::new(1.2 * k * pen.s, pen.ink));
 }
 
 /// Two overlapping boxes (the first one bottom-left), what each solid tool keeps.
