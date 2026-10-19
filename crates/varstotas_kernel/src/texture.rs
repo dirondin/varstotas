@@ -55,6 +55,9 @@ impl Default for TexPlacement {
     }
 }
 
+/// Scale of a placement axis along which the texture does not change ([`TexPlacement::fit`]).
+const FLAT: f64 = 1e6;
+
 impl TexPlacement {
     pub fn is_identity(&self) -> bool {
         *self == Self::default()
@@ -94,6 +97,22 @@ impl TexPlacement {
         // a = diag(1/sx, 1/sy) · R(-θ); rows: (cos, sin)/sx and (-sin, cos)/sy.
         let row0 = DVec2::new(a.col(0).x, a.col(1).x);
         let row1 = DVec2::new(a.col(0).y, a.col(1).y);
+        // The texture doesn't change along an axis (palette models: one texel per triangle, or a
+        // stripe of a gradient): that axis gets a huge scale, centred on the points' mean.
+        let (l0, l1) = (row0.length(), row1.length());
+        let lmax = l0.max(l1);
+        if lmax < 1e-9 || a.determinant().abs() < 1e-9 * lmax * lmax {
+            let p = if lmax < 1e-9 {
+                Self { offset: [0.0; 2], angle_deg: 0.0, scale: [FLAT; 2] }
+            } else if l0 >= l1 {
+                Self { offset: [0.0; 2], angle_deg: row0.y.atan2(row0.x).to_degrees(), scale: [1.0 / l0, FLAT] }
+            } else {
+                Self { offset: [0.0; 2], angle_deg: (-row1.x).atan2(row1.y).to_degrees(), scale: [FLAT, 1.0 / l1] }
+            };
+            let offset = qm - p.to_planar(tm);
+            let p = Self { offset: offset.to_array(), ..p };
+            return p.is_finite().then_some(p);
+        }
         let theta = row0.y.atan2(row0.x);
         let (s, co) = theta.sin_cos();
         let inv_sy = row1.dot(DVec2::new(-s, co));
@@ -272,6 +291,24 @@ mod tests {
             }
         }
         assert!(TexPlacement::fit(&pts[..2], &[DVec2::ZERO; 2], n, [1.0; 2]).is_none());
+    }
+
+    #[test]
+    fn fit_palette_and_stripe_uvs() {
+        // Kenney-style palette models: every corner of a triangle on one texel, or a gradient
+        // stripe (u fixed, v varying). The fit keeps those texture coordinates on the face.
+        let n = DVec3::new(0.2, -1.0, 0.4).normalize();
+        let (u, v) = texture_axes(n);
+        let pts: Vec<DVec3> =
+            [(0.0, 0.0), (400.0, 30.0), (100.0, 300.0)].iter().map(|(a, b)| DVec3::new(5e3, -2e3, 700.0) + u * *a + v * *b).collect();
+        let tile = [1000.0, 1000.0];
+        for uvs in [vec![DVec2::new(0.71, -0.62); 3], vec![DVec2::new(0.3, -0.1), DVec2::new(0.3, -0.2), DVec2::new(0.3, -0.15)]] {
+            let got = TexPlacement::fit(&pts, &uvs, n, tile).expect("a placement");
+            for (p, want) in pts.iter().zip(&uvs) {
+                let t = face_uv_mm(*p, n, Some(&got)) / DVec2::from(tile);
+                assert!((t - *want).length() < 1e-4, "{t} vs {want} ({got:?})");
+            }
+        }
     }
 
     #[test]
