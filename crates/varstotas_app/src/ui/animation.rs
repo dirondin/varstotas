@@ -204,7 +204,7 @@ impl VarstotasApp {
         self.camera = run.orig.clone();
         let n = run.frames.len();
         match run.video {
-            Some(out) => match ffmpeg() {
+            Some(out) => match ffmpeg(self.prefs.ffmpeg_path.as_deref()) {
                 Some(bin) => {
                     let (tx, rx) = std::sync::mpsc::channel();
                     let (dir, fps) = (run.dir.clone(), run.fps);
@@ -234,7 +234,7 @@ impl VarstotasApp {
         if !self.anim_window.open {
             return;
         }
-        let has_ffmpeg = ffmpeg().is_some();
+        let has_ffmpeg = ffmpeg(self.prefs.ffmpeg_path.as_deref()).is_some();
         let has_scenes = self.doc.model.scenes.iter().any(|s| s.in_animation);
         let mut open = true;
         let mut export = false;

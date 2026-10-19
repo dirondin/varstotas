@@ -8,6 +8,8 @@ use crate::Model;
 pub struct History {
     undo: Vec<(String, Model)>,
     redo: Vec<(String, Model)>,
+    /// Most undo steps kept (0 = no limit); the oldest go first.
+    limit: usize,
 }
 
 impl History {
@@ -15,6 +17,26 @@ impl History {
     pub fn push(&mut self, label: &str, before: Model) {
         self.undo.push((label.to_string(), before));
         self.redo.clear();
+        self.trim();
+    }
+
+    /// Keep at most `n` undo steps (0 = no limit).
+    pub fn set_limit(&mut self, n: usize) {
+        if self.limit != n {
+            self.limit = n;
+            self.trim();
+        }
+    }
+
+    fn trim(&mut self) {
+        if self.limit > 0 && self.undo.len() > self.limit {
+            let extra = self.undo.len() - self.limit;
+            self.undo.drain(..extra);
+        }
+    }
+
+    pub fn undo_steps(&self) -> usize {
+        self.undo.len()
     }
     pub fn undo(&mut self, current: &mut Model) -> Option<String> {
         let (label, prev) = self.undo.pop()?;
@@ -37,5 +59,27 @@ impl History {
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn limit_drops_the_oldest_steps() {
+        let mut h = History::default();
+        let mut m = Model::default();
+        for i in 0..5 {
+            h.push(&format!("step {i}"), m.clone());
+        }
+        h.set_limit(3);
+        assert_eq!(h.undo_steps(), 3);
+        assert_eq!(h.undo(&mut m).as_deref(), Some("step 4"));
+        h.push("step 5", m.clone());
+        h.push("step 6", m.clone());
+        assert_eq!(h.undo_steps(), 3);
+        let labels: Vec<String> = std::iter::from_fn(|| h.undo(&mut m)).collect();
+        assert_eq!(labels, ["step 6", "step 5", "step 3"]);
     }
 }

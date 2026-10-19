@@ -24,10 +24,11 @@ pub enum Section {
     Navigation,
     Interface,
     Shortcuts,
+    Render,
 }
 
 impl Section {
-    pub const ALL: [Section; 8] = [
+    pub const ALL: [Section; 9] = [
         Section::General,
         Section::Interface,
         Section::Drawing,
@@ -36,6 +37,7 @@ impl Section {
         Section::View,
         Section::Navigation,
         Section::Shortcuts,
+        Section::Render,
     ];
 
     pub fn name(self) -> &'static str {
@@ -48,13 +50,15 @@ impl Section {
             Section::Navigation => "Navigation",
             Section::Interface => "Interface",
             Section::Shortcuts => "Shortcuts",
+            Section::Render => "Render",
         }
     }
 
     /// What the search finds a section by (besides its name): the labels of its settings.
     fn words(self) -> &'static str {
         match self {
-            Section::General => "auto-save autosave minutes template new document units",
+            Section::General => "auto-save autosave minutes template new document units undo steps history",
+            Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise",
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle",
             Section::Libraries => "components materials folder examples in model tiles small large list",
             Section::Downloads => "watch downloads folder send to varstotas bookmarklet browser",
@@ -156,6 +160,28 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
     });
 }
 
+/// A program / library row: the one in use (or why there is none), Choose…, Default.
+fn file_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, found: Option<PathBuf>, missing: &str) {
+    ui.label(label);
+    let text = match (&custom, &found) {
+        (Some(c), Some(f)) if c == f => c.display().to_string(),
+        (Some(c), _) => format!("{} (not usable)", c.display()),
+        (None, Some(f)) => format!("{} (found)", f.display()),
+        (None, None) => missing.to_string(),
+    };
+    ui.add(egui::Label::new(RichText::new(text).small().color(theme::text_dim())).truncate());
+    ui.horizontal(|ui| {
+        if ui.button("Choose…").clicked()
+            && let Some(f) = rfd::FileDialog::new().pick_file()
+        {
+            *custom = Some(f);
+        }
+        if ui.add_enabled(custom.is_some(), egui::Button::new("Default")).clicked() {
+            *custom = None;
+        }
+    });
+}
+
 fn note(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).small().color(theme::text_dim()));
 }
@@ -229,6 +255,7 @@ impl VarstotasApp {
                             Section::Navigation => self.prefs_navigation(ui),
                             Section::Interface => self.prefs_interface(ui),
                             Section::Shortcuts => self.prefs_shortcuts(ui),
+                            Section::Render => self.prefs_render(ui),
                         }
                     });
                 });
@@ -248,7 +275,13 @@ impl VarstotasApp {
         let d = crate::app::Prefs::default();
         let p = &mut self.prefs;
         match s {
+            Section::Render => {
+                p.new_render = d.new_render;
+                p.ffmpeg_path = None;
+                p.oidn_path = None;
+            }
             Section::General => {
+                p.undo_steps = d.undo_steps;
                 p.autosave = d.autosave;
                 p.autosave_minutes = d.autosave_minutes;
                 p.template = d.template;
@@ -303,6 +336,86 @@ impl VarstotasApp {
             self.prefs.template = Some(t);
         }
         note(ui, "The template of File → New (units and scale); its view is set in the View section.");
+        heading(ui, "Undo");
+        ui.horizontal(|ui| {
+            ui.label("Keep");
+            let r = ui.add(egui::DragValue::new(&mut self.prefs.undo_steps).range(10..=1000).speed(1.0));
+            super::tray_lib::spot("undo_steps", r.rect.center());
+            ui.label("undo steps per document");
+        });
+        note(ui, "Each step keeps a copy of the model: big models with many steps take more memory.");
+    }
+
+    fn prefs_render(&mut self, ui: &mut Ui) {
+        use varstotas_kernel::{RENDER_PRESETS, RENDER_SIZES};
+        heading(ui, "New documents");
+        let r = &mut self.prefs.new_render;
+        ui.horizontal(|ui| {
+            ui.label("Size");
+            let name = RENDER_SIZES
+                .iter()
+                .find(|s| s.1 == r.width && s.2 == r.height)
+                .map(|s| s.0.to_string())
+                .unwrap_or_else(|| format!("{} × {}", r.width, r.height));
+            egui::ComboBox::from_id_salt("new_render_size").selected_text(name).width(200.0).show_ui(ui, |ui| {
+                for (n, w, h) in RENDER_SIZES {
+                    if ui.selectable_label(r.width == w && r.height == h, n).clicked() {
+                        r.width = w;
+                        r.height = h;
+                    }
+                }
+            });
+            ui.checkbox(&mut r.match_view, "Match the view").on_hover_text("The height follows the viewport's shape");
+        });
+        ui.horizontal(|ui| {
+            ui.label("Quality");
+            for (n, samples, bounces, clamp) in RENDER_PRESETS {
+                let on = r.samples == samples && r.bounces == bounces;
+                let b = ui.add(egui::Button::selectable(on, n));
+                super::tray_lib::spot(format!("rq:{n}"), b.rect.center());
+                if b.clicked() {
+                    r.samples = samples;
+                    r.bounces = bounces;
+                    r.clamp = clamp;
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Samples");
+            ui.add(egui::DragValue::new(&mut r.samples).range(1..=65536));
+            ui.label("Bounces");
+            ui.add(egui::DragValue::new(&mut r.bounces).range(1..=32));
+            ui.label("Time limit");
+            ui.add(egui::DragValue::new(&mut r.time_limit).range(0.0..=3600.0).suffix(" s"));
+        });
+        ui.checkbox(&mut r.denoise, "Denoise when the render stops");
+        ui.add_enabled(r.denoise, egui::Checkbox::new(&mut r.ai_denoise, "With Open Image Denoise when installed"));
+        ui.horizontal(|ui| {
+            let b = ui.button("Use Current Document's").on_hover_text("Take the render settings of the open document");
+            super::tray_lib::spot("render_use", b.rect.center());
+            if b.clicked() {
+                self.prefs.new_render = self.doc.model.render;
+            }
+            let b = ui.button("Apply to Current Document").on_hover_text("The open document gets these settings (Undo puts them back)");
+            super::tray_lib::spot("render_apply", b.rect.center());
+            if b.clicked() {
+                let r = self.prefs.new_render;
+                self.doc.commit("Render Settings", |m| m.render = r);
+            }
+        });
+        note(ui, "File → New starts with these; Window → Render… changes the open document's.");
+
+        heading(ui, "Programs");
+        let ffmpeg = crate::animation::ffmpeg(self.prefs.ffmpeg_path.as_deref());
+        file_row(ui, "ffmpeg (videos of File → Export → Animation)", &mut self.prefs.ffmpeg_path, ffmpeg, "not found: install it (brew install ffmpeg) or choose the program");
+        let oidn = varstotas_render::oidn_library();
+        file_row(
+            ui,
+            "Open Image Denoise library (the render's denoiser)",
+            &mut self.prefs.oidn_path,
+            oidn,
+            "not found: the built-in filter denoises (brew install open-image-denoise, or choose the library)",
+        );
     }
 
     fn prefs_drawing(&mut self, ui: &mut Ui) {

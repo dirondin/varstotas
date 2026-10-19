@@ -1,0 +1,65 @@
+# Preferences → Render: render settings of new documents (a preset, Apply to Current
+# Document with Undo, File → New), Reset; General → Undo: the number of steps kept. Real mouse.
+wait 10
+action preferences
+wait 10
+expect new_render=(1280x720 256spp b6 dn=true match=true) undo_steps=(100 0)
+raw click 137 336
+wait 5
+expect prefs_win=(true Render)
+# Final → File → New renders with 512 samples, 8 bounces
+raw click 415 172
+wait 5
+expect new_render=(1280x720 512spp b8 dn=true match=true)
+expect render=(1280x720 256spp b6
+action new
+wait 10
+expect render=(1280x720 512spp b8
+expect dirty=false
+# Draft → Apply to Current Document (one undo step)
+raw click 296 172
+wait 5
+raw click 476 280
+wait 5
+expect render=(1280x720 32spp b3
+expect undo=Some("Render Settings")
+raw mods cmd
+raw key Z
+raw mods
+wait 5
+expect render=(1280x720 512spp b8
+# Reset: the defaults again
+raw click 649 92
+wait 5
+expect new_render=(1280x720 256spp b6 dn=true match=true)
+# General → Undo: keep 10 steps
+raw click 137 120
+wait 5
+expect prefs_win=(true General)
+raw click 280 282
+wait 5
+raw text 10
+raw key Enter
+wait 5
+expect undo_steps=(10
+box 0 0 0 100 100 100
+box 200 0 0 100 100 100
+box 400 0 0 100 100 100
+box 600 0 0 100 100 100
+box 800 0 0 100 100 100
+box 1000 0 0 100 100 100
+box 1200 0 0 100 100 100
+box 1400 0 0 100 100 100
+box 1600 0 0 100 100 100
+box 1800 0 0 100 100 100
+box 2000 0 0 100 100 100
+box 2200 0 0 100 100 100
+wait 5
+expect undo_steps=(10 10)
+raw click 649 92
+wait 5
+expect undo_steps=(100 10)
+raw click 137 336
+wait 5
+screenshot shots/prefs_render.bmp
+quit

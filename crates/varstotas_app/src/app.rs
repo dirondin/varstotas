@@ -137,6 +137,14 @@ pub struct Prefs {
     pub toolbar_icons: u32,
     /// Reassigned shortcuts (Preferences → Shortcuts): command id → keys, see `keymap`.
     pub shortcuts: std::collections::BTreeMap<String, String>,
+    /// Render settings of a new document (Preferences → Render).
+    pub new_render: varstotas_kernel::RenderSettings,
+    /// ffmpeg chosen by hand (None = found on the system).
+    pub ffmpeg_path: Option<PathBuf>,
+    /// Open Image Denoise library chosen by hand (None = found on the system).
+    pub oidn_path: Option<PathBuf>,
+    /// Undo steps kept per document.
+    pub undo_steps: u32,
 }
 
 impl Prefs {
@@ -190,6 +198,10 @@ impl Default for Prefs {
             ui_scale: 1.0,
             toolbar_icons: 36,
             shortcuts: Default::default(),
+            new_render: Default::default(),
+            ffmpeg_path: None,
+            oidn_path: None,
+            undo_steps: 100,
         }
     }
 }
@@ -2130,7 +2142,9 @@ impl VarstotasApp {
     }
 
     pub(crate) fn new_from_template(&mut self, t: Template) {
-        self.replace_document(Document::from_model(t.new_model(), None));
+        let mut model = t.new_model();
+        model.render = self.prefs.new_render;
+        self.replace_document(Document::from_model(model, None));
         self.camera = t.camera(nav::startup_camera());
         self.apply_view_defaults();
     }
@@ -2636,6 +2650,8 @@ impl eframe::App for VarstotasApp {
         crate::axes::sync(&self.doc.model);
         crate::nav::publish(&self.prefs.nav);
         crate::keymap::publish(&self.prefs.shortcuts);
+        varstotas_render::oidn_set_library(self.prefs.oidn_path.as_deref());
+        self.doc.history.set_limit(self.prefs.undo_steps as usize);
         self.apply_interface(&ctx);
         crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);

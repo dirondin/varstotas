@@ -88,8 +88,12 @@ pub fn frame_path(dir: &Path, i: usize) -> PathBuf {
     dir.join(format!("frame_{:05}.png", i + 1))
 }
 
-/// The ffmpeg executable, if installed (PATH, then the usual Homebrew / system places).
-pub fn ffmpeg() -> Option<PathBuf> {
+/// The ffmpeg executable: `custom` (Preferences → Render) when it is a file, else the one
+/// installed (PATH, then the usual Homebrew / system places).
+pub fn ffmpeg(custom: Option<&Path>) -> Option<PathBuf> {
+    if let Some(p) = custom.filter(|p| p.is_file()) {
+        return Some(p.to_path_buf());
+    }
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map(PathBuf::from));
     let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
