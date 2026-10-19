@@ -1,16 +1,16 @@
-# Draw → Bezier Curve with the real mouse: clicks make corners, press-drag pulls out handles,
-# Enter finishes an open curve (edges only), a click on the first point closes it into a face,
-# a double-click finishes, Undo. Handles / Smooth / Freehand: a tap of Option / Alt picks the
-# next one (shown in the status bar).
+# Curve tools with the real mouse. Bezier Curve (the toolbar button): clicks make corners,
+# press-drag pulls out handles; Smooth Curve: clicks only; Freehand: a stroke. Enter finishes an
+# open curve (edges only), a click on the first point closes it into a face, a double-click
+# finishes, Undo.
 wait 10
 view top
 parallel on
 zoom_extents
 wait 5
-tool bezier
+raw click 271 -65
+wait 3
 expect tool=Bezier
-expect bezier=Handles
-expect status="Handles · tap Option → Smooth. Click the first point
+expect status="Click the first point of the curve; press and drag
 # open curve: a corner, a smooth point (dragged handle), a corner, Enter → 12 + 12 edges
 rawp click 0 0 0
 rawp drag 1000 0 0 1500 600 0
@@ -44,12 +44,10 @@ expect active_mesh F=1 E=50
 raw scroll 500 400 -300
 wait 5
 # Smooth: three clicks, Enter → an open curve through them (2 spans × 12)
-raw mods alt
-wait 2
-raw mods
+tool smooth curve
 wait 3
-expect bezier=Smooth
-expect status="Smooth · tap Option → Freehand.
+expect tool=SmoothCurve
+expect undo=Some("Bezier Curve")
 rawp click 0 6000 0
 rawp click 1000 7000 0
 rawp click 2000 6000 0
@@ -57,6 +55,7 @@ wait 3
 screenshot shots/bezier_smooth.bmp
 raw key Enter
 wait 3
+expect undo=Some("Smooth Curve")
 expect active_mesh F=1 E=74
 # Smooth, closed on the first point: a face (3 spans × 12)
 rawp click 3000 5000 0
@@ -66,11 +65,9 @@ rawp click 3000 5000 0
 wait 3
 expect active_mesh F=2 E=110
 # Freehand: a stroke that ends at its start closes into a face (6 spans × 3)
-raw mods alt
-wait 2
-raw mods
+tool freehand
 wait 3
-expect bezier=Freehand
+expect tool=Freehand
 rawp down 6000 0 0
 rawp move 7000 500 0
 rawp move 7500 1500 0
@@ -81,6 +78,7 @@ rawp move 6000 50 0
 rawp up 6000 50 0
 wait 3
 expect active_mesh F=3 E=128
+expect undo=Some("Freehand")
 # Freehand: an open stroke stays a line
 rawp down 6000 5000 0
 rawp move 7000 5500 0
@@ -94,26 +92,6 @@ raw key Z
 raw mods
 wait 3
 expect active_mesh F=3 E=128
-# a tap of Option / Alt: the next method (Freehand → Handles)
-raw move 700 500
-raw mods alt
-wait 2
-raw mods
-wait 3
-expect bezier=Handles
-# Alt with a key is not a tap
-raw mods alt
-raw key Escape
-raw mods
-wait 3
-expect bezier=Handles
-# Alt held through a click is not a tap either
-raw mods alt
-raw click 700 500
-raw mods
-wait 3
-expect bezier=Handles
-raw key Escape
 zoom_extents
 wait 5
 screenshot shots/bezier.bmp

@@ -16,6 +16,8 @@ pub enum Icon {
     Arc3,
     Pie,
     Bezier,
+    SmoothCurve,
+    Freehand,
     Rectangle,
     RotatedRectangle,
     Circle,
@@ -317,6 +319,30 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dot((18.0, 21.0), 1.6, BLUE);
             pen.dot((3.0, 18.0), 2.0, RED);
             pen.dot((21.0, 6.0), 2.0, RED);
+        }
+        Icon::SmoothCurve => {
+            // a wave through the clicked points (no handles)
+            let curve: Vec<(f32, f32)> = (0..=24)
+                .map(|k| {
+                    let x = 3.0 + 18.0 * k as f32 / 24.0;
+                    (x, 12.0 - 6.0 * ((x - 3.0) / 18.0 * 2.0 * PI).sin())
+                })
+                .collect();
+            pen.line(&curve);
+            for c in [(3.0, 12.0), (7.5, 6.0), (16.5, 18.0), (21.0, 12.0)] {
+                pen.dot(c, 2.0, RED);
+            }
+        }
+        Icon::Freehand => {
+            // a looping hand-drawn stroke
+            let curve: Vec<(f32, f32)> = (0..=48)
+                .map(|k| {
+                    let t = PI * (0.5 + 2.5 * k as f32 / 48.0);
+                    (3.0 + 18.0 * (t - 0.5 * PI) / (2.5 * PI) - 3.4 * (t.sin() - 1.0), 12.0 - 6.0 * t.cos())
+                })
+                .collect();
+            pen.line(&curve);
+            pen.dot(curve[0], 2.0, RED);
         }
         Icon::Pie => {
             let mut pts = vec![pen.p(6.0, 18.0)];

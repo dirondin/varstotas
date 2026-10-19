@@ -336,7 +336,7 @@ impl VarstotasApp {
             ui.menu_button("Draw", |ui| {
                 self.tool_item(ui, ToolId::Line);
                 ui.separator();
-                for id in [ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie, ToolId::Bezier] {
+                for id in [ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie, ToolId::Bezier, ToolId::SmoothCurve, ToolId::Freehand] {
                     self.tool_item(ui, id);
                 }
                 ui.separator();

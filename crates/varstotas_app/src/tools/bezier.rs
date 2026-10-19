@@ -1,11 +1,10 @@
-//! Bezier Curve tool: anchors with handles (cubic spans), committed as one curve of edges.
-//! Three ways to place the anchors ([`Method`]): Handles — a click places a corner anchor,
-//! press and drag pulls out its handles (symmetric, the outgoing one under the cursor);
-//! Smooth — clicks only, the handles follow the neighbours (Catmull-Rom); Freehand — press
-//! and drag a stroke, smoothed on release. Enter / double-click finishes an open curve (edges
-//! only); a click on the first anchor (a stroke ended at its start) closes it into a face.
-//! Backspace takes back the last anchor, Escape drops it all. A tap of Option / Alt picks the
-//! next method; the status bar shows the current one.
+//! Curve tools: anchors with handles (cubic spans), committed as one curve of edges. Three
+//! tools, one per way to place the anchors ([`Method`]): Bezier Curve — a click places a
+//! corner anchor, press and drag pulls out its handles (symmetric, the outgoing one under the
+//! cursor); Smooth Curve — clicks only, the handles follow the neighbours (Catmull-Rom);
+//! Freehand — press and drag a stroke, smoothed on release. Enter / double-click finishes an
+//! open curve (edges only); a click on the first anchor (a stroke ended at its start) closes
+//! it into a face. Backspace takes back the last anchor, Escape drops it all.
 
 use super::common::*;
 use super::draw::{plane_point, shape_normal};
@@ -13,7 +12,6 @@ use super::{OverlayView, Tool, ToolContext, ToolId};
 use crate::inference::{self, InferenceEngine, InferenceResult};
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2};
-use std::cell::Cell;
 use varstotas_kernel::glam::DVec3;
 use varstotas_kernel::{Plane, TOL};
 use varstotas_render::Overlay3d;
@@ -27,14 +25,9 @@ const FREEHAND_PX: f32 = 12.0;
 const FREEHAND_SEGS: u32 = 3;
 /// Freehand: the stroke ends this close (points) to its start = closed (a face).
 const FREEHAND_CLOSE_PX: f32 = 16.0;
-#[cfg(target_os = "macos")]
-const TAP_KEY: &str = "Option";
-#[cfg(not(target_os = "macos"))]
-const TAP_KEY: &str = "Alt";
 const HANDLE: Color32 = Color32::from_rgb(0x20, 0x70, 0xE0);
 
-/// One anchor of the curve; handles are absolute points (None = a corner on that side).
-/// How the anchors are placed.
+/// How the anchors are placed (one tool each).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Method {
     #[default]
@@ -43,34 +36,7 @@ pub enum Method {
     Freehand,
 }
 
-impl Method {
-    pub const ALL: [Method; 3] = [Method::Handles, Method::Smooth, Method::Freehand];
-    pub fn name(self) -> &'static str {
-        match self {
-            Method::Handles => "Handles",
-            Method::Smooth => "Smooth",
-            Method::Freehand => "Freehand",
-        }
-    }
-    fn next(self) -> Method {
-        let i = Method::ALL.iter().position(|x| *x == self).unwrap_or(0);
-        Method::ALL[(i + 1) % Method::ALL.len()]
-    }
-}
-
-thread_local! {
-    /// The tool's mode (kept while other tools are used).
-    static MODE: Cell<Method> = const { Cell::new(Method::Handles) };
-}
-
-pub fn mode() -> Method {
-    MODE.with(|m| m.get())
-}
-
-pub fn set_mode(method: Method) {
-    MODE.with(|m| m.set(method));
-}
-
+/// One anchor of the curve; handles are absolute points (None = a corner on that side).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Anchor {
     pub p: DVec3,
@@ -139,7 +105,7 @@ pub struct BezierTool {
     engine: InferenceEngine,
     segs: Option<u32>,
     anchors: Vec<Anchor>,
-    /// The method the anchors were placed with (a change in the bar drops them).
+    /// How the anchors are placed (which of the three tools this is).
     method: Method,
     /// Normal of the curve's plane (fixed by the first anchor: a face or an arrow lock).
     normal: Option<DVec3>,
@@ -150,33 +116,19 @@ pub struct BezierTool {
     cur: Option<InferenceResult>,
     /// The cursor is on the first anchor (a click closes the curve).
     closing: bool,
-    /// A tap of Option / Alt: the next method.
-    tap_method: ModTap,
 }
 
 impl BezierTool {
+    pub fn new(method: Method) -> Self {
+        Self { method, ..Default::default() }
+    }
+
     fn segs(&self) -> u32 {
         self.segs.unwrap_or(BEZIER_SEGS)
     }
 
     fn plane_at(&self, p: DVec3) -> Plane {
         Plane::new(p, self.normal.unwrap_or_else(|| crate::axes::current().z))
-    }
-
-    /// A tap of Option / Alt: the next method (not in the middle of a freehand stroke).
-    fn taps(&mut self, ctx: &ToolContext) {
-        if self.tap_method.update(ctx.pointer.modifiers.alt) && self.stroke.is_empty() {
-            set_mode(mode().next());
-        }
-    }
-
-    /// Picks up a method change: the curve so far is dropped.
-    fn sync_mode(&mut self) {
-        let m = mode();
-        if m != self.method {
-            self.reset();
-            self.method = m;
-        }
     }
 
     fn update(&mut self, ctx: &ToolContext) {
@@ -250,7 +202,7 @@ impl BezierTool {
                 bezier_points(&anchors, closed, self.span_segs()).iter().map(|p| inv.transform_point3(*p)).collect();
             let closed = closed && pts.len() >= 3;
             if pts.len() >= 2 {
-                commit_mesh(ctx, "Bezier Curve", |m| m.add_polyline(&pts, closed, curved));
+                commit_mesh(ctx, self.id().name(), |m| m.add_polyline(&pts, closed, curved));
             }
         }
         self.reset();
@@ -299,11 +251,13 @@ impl BezierTool {
 
 impl Tool for BezierTool {
     fn id(&self) -> ToolId {
-        ToolId::Bezier
+        match self.method {
+            Method::Handles => ToolId::Bezier,
+            Method::Smooth => ToolId::SmoothCurve,
+            Method::Freehand => ToolId::Freehand,
+        }
     }
     fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
-        self.taps(ctx);
-        self.sync_mode();
         if !self.stroke.is_empty() {
             if ctx.pointer.primary_down {
                 self.extend_stroke(ctx);
@@ -320,8 +274,6 @@ impl Tool for BezierTool {
         if ctx.pointer.button != Some(PointerButton::Primary) {
             return;
         }
-        self.tap_method.cancel();
-        self.sync_mode();
         self.update(ctx);
         let Some(r) = self.cur.clone() else { return };
         if self.method == Method::Freehand {
@@ -418,11 +370,8 @@ impl Tool for BezierTool {
         }
     }
     fn status_text(&self) -> String {
-        // the method first (a tap of Option / Alt switches it)
-        let m = mode();
-        let head = format!("{} · tap {TAP_KEY} → {}.", m.name(), m.next().name());
         let end = "Enter or double-click finishes, a click on the first point closes it into a face";
-        let text = match m {
+        match self.method {
             Method::Freehand if self.stroke.is_empty() => "Press and drag to draw; end at the start to close it into a face.".into(),
             Method::Freehand => "Drag to draw; release to finish.".into(),
             Method::Smooth if self.anchors.is_empty() => "Click the first point of the curve.".into(),
@@ -430,8 +379,7 @@ impl Tool for BezierTool {
             Method::Handles if self.anchors.is_empty() => "Click the first point of the curve; press and drag to pull out handles.".into(),
             Method::Handles if self.drag.is_some() => "Drag to shape the curve through this point; release to place it.".into(),
             Method::Handles => format!("Click the next point (drag for handles); {end}. Backspace removes the last point."),
-        };
-        format!("{head} {text}")
+        }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         let pts = self.preview();

@@ -147,7 +147,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `tools/select.rs` | Select tool |
 | `tools/draw.rs` | Line, Rectangle, Circle, Polygon, 2 Point Arc |
 | `tools/arcs.rs` | Arc (centre), Pie, 3 Point Arc, Rotated Rectangle |
-| `tools/bezier.rs` | Bezier Curve: `Anchor` (point + handles), `bezier_points` (cubic spans), `smooth` (Catmull-Rom handles); `Method` Handles / Smooth / Freehand in `mode()` (thread_local), `ModTap` Alt tap = next method (shown first in `status_text`); closed (first point / stroke ends at start) → face via `add_polyline`, open → edges |
+| `tools/bezier.rs` | Curve tools: `Anchor` (point + handles), `bezier_points` (cubic spans), `smooth` (Catmull-Rom handles); `BezierTool::new(Method)` = Bezier Curve (Handles: click corner, drag handles) / Smooth Curve (clicks) / Freehand (stroke); closed (first point / stroke ends at start) → face via `add_polyline`, open → edges |
 | `tools/edit.rs` | Eraser, Paint Bucket, Push/Pull, Offset, Follow Me |
 | `tools/transform.rs` | Move, Rotate, Scale (copies, arrays) |
 | `tools/construct.rs` | Tape Measure, Protractor, Axes |

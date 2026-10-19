@@ -55,6 +55,8 @@ pub enum ToolId {
     Arc3,
     Pie,
     Bezier,
+    SmoothCurve,
+    Freehand,
     Rectangle,
     RotatedRectangle,
     Circle,
@@ -90,7 +92,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 42] = [
+    pub const ALL: [ToolId; 44] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -101,6 +103,8 @@ impl ToolId {
         ToolId::Arc3,
         ToolId::Pie,
         ToolId::Bezier,
+        ToolId::SmoothCurve,
+        ToolId::Freehand,
         ToolId::Rectangle,
         ToolId::RotatedRectangle,
         ToolId::Circle,
@@ -147,6 +151,8 @@ impl ToolId {
             ToolId::Arc3 => "3 Point Arc",
             ToolId::Pie => "Pie",
             ToolId::Bezier => "Bezier Curve",
+            ToolId::SmoothCurve => "Smooth Curve",
+            ToolId::Freehand => "Freehand",
             ToolId::Rectangle => "Rectangle",
             ToolId::RotatedRectangle => "Rotated Rectangle",
             ToolId::Circle => "Circle",
@@ -217,6 +223,8 @@ impl ToolId {
             | ToolId::Arc3
             | ToolId::Pie
             | ToolId::Bezier
+            | ToolId::SmoothCurve
+            | ToolId::Freehand
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
             | ToolId::Section
@@ -247,6 +255,8 @@ impl ToolId {
             ToolId::Arc3 => Icon::Arc3,
             ToolId::Pie => Icon::Pie,
             ToolId::Bezier => Icon::Bezier,
+            ToolId::SmoothCurve => Icon::SmoothCurve,
+            ToolId::Freehand => Icon::Freehand,
             ToolId::Rectangle => Icon::Rectangle,
             ToolId::RotatedRectangle => Icon::RotatedRectangle,
             ToolId::Circle => Icon::Circle,
@@ -294,7 +304,9 @@ impl ToolId {
             ToolId::ArcCenter => "Draw an arc from its center and two points.",
             ToolId::Arc3 => "Draw an arc through three points.",
             ToolId::Pie => "Draw a closed pie-shaped face from a center and two points.",
-            ToolId::Bezier => "Draw a smooth curve: with handles, smoothly through clicked points, or freehand; closed, it makes a face.",
+            ToolId::Bezier => "Draw a curve shaped by handles: click for a corner, press and drag for a smooth point.",
+            ToolId::SmoothCurve => "Draw a smooth curve through the points you click; closed, it makes a face.",
+            ToolId::Freehand => "Draw a curve freehand: press and drag; ended at its start, it makes a face.",
             ToolId::Rectangle => "Draw a rectangular face from two corners.",
             ToolId::RotatedRectangle => "Draw a rectangle at any angle from an edge and a width.",
             ToolId::Circle => "Draw a circle from center and radius.",
@@ -397,11 +409,18 @@ impl ToolId {
                  Type a length after the first click, an angle after the second."
             }
             ToolId::Bezier => {
-                "Three methods — Handles, Smooth and Freehand: tap Option / Alt for the next one; the status bar shows the current one.\n\
-                 Handles: click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
-                 Smooth: click points; the curve passes smoothly through them. Freehand: press and drag, release to finish.\n\
-                 Enter or a double-click finishes an open curve (edges only); a click on the first point (a stroke ended at its start) closes it into a face.\n\
+                "Click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
+                 Enter or a double-click finishes an open curve (edges only); a click on the first point closes it into a face.\n\
                  Backspace removes the last point. Type a length for the next point toward the cursor; `12s` sets segments per span."
+            }
+            ToolId::SmoothCurve => {
+                "Click points; the curve passes smoothly through them.\n\
+                 Enter or a double-click finishes an open curve (edges only); a click on the first point closes it into a face.\n\
+                 Backspace removes the last point. Type a length for the next point toward the cursor; `12s` sets segments per span."
+            }
+            ToolId::Freehand => {
+                "Press and drag to draw; release to finish. The stroke is smoothed.\n\
+                 A stroke that ends at its start closes into a face; otherwise it stays edges."
             }
             ToolId::Pie => {
                 "Click the center, click the start point (radius), then click the end to make a closed pie face.\n\
@@ -547,7 +566,9 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Arc => Box::new(draw::ArcTool::default()),
         ToolId::ArcCenter => Box::new(arcs::ArcCenterTool::new(false)),
         ToolId::Pie => Box::new(arcs::ArcCenterTool::new(true)),
-        ToolId::Bezier => Box::new(bezier::BezierTool::default()),
+        ToolId::Bezier => Box::new(bezier::BezierTool::new(bezier::Method::Handles)),
+        ToolId::SmoothCurve => Box::new(bezier::BezierTool::new(bezier::Method::Smooth)),
+        ToolId::Freehand => Box::new(bezier::BezierTool::new(bezier::Method::Freehand)),
         ToolId::Arc3 => Box::new(arcs::Arc3Tool::default()),
         ToolId::RotatedRectangle => Box::new(arcs::RotatedRectTool::default()),
         ToolId::Axes => Box::new(construct::AxesTool::default()),
