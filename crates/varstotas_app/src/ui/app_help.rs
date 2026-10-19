@@ -96,6 +96,12 @@ const NAVIGATION: &[B] = &[
     B::P("Camera → Standard Views (and the views toolbar): Iso, Top, Bottom, Front, Back, Left, Right. Camera → Parallel Projection / Perspective. `Shift+Z` — Zoom Extents: the whole model in view."),
     B::Tools(&[ToolId::Orbit, ToolId::Pan, ToolId::Zoom, ToolId::PositionCamera, ToolId::LookAround, ToolId::Walk]),
     B::P("Saved views are scenes — see Scenes, sheets, drawings."),
+    B::H("The viewport's own controls"),
+    B::P("Three drop-downs in the viewport's top-right corner hold everything about how it shows the model:"),
+    B::Row("View", "standard views, Perspective / Parallel Projection, Field of View, Zoom Extents"),
+    B::Row("Style", "Shaded … Realistic; X-Ray, Edges, Profiles"),
+    B::Row("Show (the eye)", "guides, axes, ground, grid, shadows, section planes / cuts / fill"),
+    B::P("Switches keep the menu open; a click outside closes it."),
 ];
 
 const SELECTING: &[B] = &[
@@ -209,7 +215,7 @@ const CONSTRUCTION: &[B] = &[
 ];
 
 const STYLES: &[B] = &[
-    B::H("View menu"),
+    B::H("View menu (and the viewport's Style drop-down)"),
     B::Row("Shaded, Shaded with Textures, Monochrome", "faces in material colours, with textures, in one colour"),
     B::Row("Hidden Line, Wireframe", "only the edges (hidden ones removed or not)"),
     B::Row("Realistic", "physical materials, lighting from the environment, sun, effects — the Environment card sets sky, HDRI, exposure and effects"),

@@ -61,6 +61,11 @@ pub enum Icon {
     Parallel,
     StyleEdges,
     StyleProfiles,
+    Guides,
+    Ground,
+    Grid,
+    SectionCut,
+    SectionFill,
     Undo,
     Redo,
     Eye,
@@ -677,6 +682,40 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         Icon::StyleProfiles => {
             cube(&pen, Color32::WHITE, FILL, FILL);
             pen.poly_c(&[(12.0, 3.0), (20.0, 7.5), (20.0, 16.5), (12.0, 21.0), (4.0, 16.5), (4.0, 7.5)], Color32::TRANSPARENT, Stroke::new(2.8 * pen.s, pen.ink));
+        }
+        Icon::Guides => {
+            // A dashed construction line across a tape measure's end point.
+            pen.dashed((2.5, 20.5), (21.5, 3.5), pen.stroke());
+            pen.dot((7.0, 16.5), 2.2, RED);
+            pen.dot((17.0, 7.6), 2.2, RED);
+        }
+        Icon::Ground => {
+            // A ground plane under the horizon, the sky above.
+            pen.poly_c(&[(2.0, 4.0), (22.0, 4.0), (22.0, 12.0), (2.0, 12.0)], BLUE_SOFT, Stroke::NONE);
+            pen.poly_c(&[(2.0, 12.0), (22.0, 12.0), (22.0, 20.0), (2.0, 20.0)], Color32::from_rgb(0xC9, 0xB8, 0x96), Stroke::NONE);
+            pen.line(&[(2.0, 12.0), (22.0, 12.0)]);
+        }
+        Icon::Grid => {
+            // A grid on the ground plane, seen at an angle.
+            let (a, b, c, d) = ((2.0, 15.0), (12.0, 9.0), (22.0, 15.0), (12.0, 21.0));
+            pen.poly_c(&[a, b, c, d], FILL, pen.stroke());
+            let lerp = |p: (f32, f32), q: (f32, f32), t: f32| (p.0 + (q.0 - p.0) * t, p.1 + (q.1 - p.1) * t);
+            for t in [1.0 / 3.0, 2.0 / 3.0] {
+                pen.line_c(&[lerp(a, b, t), lerp(d, c, t)], pen.thin());
+                pen.line_c(&[lerp(a, d, t), lerp(b, c, t)], pen.thin());
+            }
+        }
+        Icon::SectionCut => {
+            // A cube whose cut outline is drawn thick in orange.
+            cube(&pen, FILL, SHADE, SHADE_DARK);
+            let orange = Color32::from_rgb(0xE8, 0x7A, 0x1E);
+            pen.line_c(&[(4.0, 12.0), (12.0, 16.5), (20.0, 12.0)], Stroke::new(2.6 * pen.s, orange));
+        }
+        Icon::SectionFill => {
+            // A cube cut in half: the cut face filled dark.
+            pen.poly(&[(4.0, 12.0), (12.0, 16.5), (12.0, 21.0), (4.0, 16.5)], SHADE);
+            pen.poly(&[(12.0, 16.5), (20.0, 12.0), (20.0, 16.5), (12.0, 21.0)], SHADE_DARK);
+            pen.poly(&[(12.0, 7.5), (20.0, 12.0), (12.0, 16.5), (4.0, 12.0)], pen.ink);
         }
         Icon::Undo | Icon::Redo => {
             let flip = if icon == Icon::Redo { -1.0 } else { 1.0 };

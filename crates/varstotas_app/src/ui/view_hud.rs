@@ -1,6 +1,7 @@
 //! The viewport's own controls in its top-right corner: the view (a standard view or a free
-//! one, perspective / parallel) and the display style (Shaded … Realistic, X-Ray, edges,
-//! profiles) — each a small drop-down. Drawn in the viewport's layer (windows stay above it);
+//! one, perspective / parallel, field of view), the display style (Shaded … Realistic, X-Ray,
+//! edges, profiles) and what is shown (guides, axes, ground, grid, shadows, sections) — each a
+//! small drop-down. Drawn in the viewport's layer (windows stay above it);
 //! clicks on it do not reach the tools (`hud_rect`). One per viewport: a split view will draw
 //! one in each pane.
 
@@ -52,8 +53,12 @@ fn item(ui: &mut Ui, icon: Icon, text: &str, on: bool, shortcut: Option<&str>) -
 fn pill(ui: &mut Ui, icon: Icon, label: &str, content: impl FnOnce(&mut Ui)) -> Response {
     let id = ui.id().with(("hud_pill", label));
     // the icon's room is a little wider than the icon: a gap before the label
-    let b = egui::Button::new((egui::Atom::custom(id, vec2(ICON + 4.0, ICON)), format!("{label} ⏷"))).frame(false);
-    let (r, _) = egui::containers::menu::MenuButton::from_button(b).ui(ui, content);
+    let text = if label.is_empty() { "⏷".to_string() } else { format!("{label} ⏷") };
+    let b = egui::Button::new((egui::Atom::custom(id, vec2(ICON + 4.0, ICON)), text)).frame(false);
+    // a click inside does not close it: the switches and the field of view stay in the open
+    // menu, the choices close it themselves (`ui.close()`)
+    let config = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+    let (r, _) = egui::containers::menu::MenuButton::from_button(b).config(config).ui(ui, content);
     // the custom atom comes first: right after the button's padding
     let pad = ui.spacing().button_padding.x;
     let rect = Rect::from_center_size(egui::pos2(r.rect.left() + pad + ICON / 2.0, r.rect.center().y), vec2(ICON, ICON));
@@ -89,10 +94,15 @@ impl VarstotasApp {
                 .inner_margin(egui::Margin::symmetric(6, 2))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        // (right to left: the view ends up on the left)
+                        // (right to left: the view ends up on the left, Show on the right)
+                        let sep = |ui: &mut Ui| {
+                            let (r, _) = ui.allocate_exact_size(vec2(9.0, 16.0), egui::Sense::hover());
+                            ui.painter().vline(r.center().x, r.y_range(), Stroke::new(1.0, Color32::from_black_alpha(40)));
+                        };
+                        self.hud_show_menu(ui);
+                        sep(ui);
                         self.hud_style_menu(ui);
-                        let (r, _) = ui.allocate_exact_size(vec2(9.0, 16.0), egui::Sense::hover());
-                        ui.painter().vline(r.center().x, r.y_range(), Stroke::new(1.0, Color32::from_black_alpha(40)));
+                        sep(ui);
                         self.hud_view_menu(ui);
                     });
                 });
@@ -125,6 +135,15 @@ impl VarstotasApp {
                 self.actions.push(Action::SetParallel(true));
                 ui.close();
             }
+            ui.add_enabled_ui(!ortho, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(ICON + 8.0);
+                    ui.label("Field of View");
+                    ui.add(egui::DragValue::new(&mut self.camera.fov_y_deg).range(10.0..=120.0).speed(0.5).suffix("°").max_decimals(0));
+                })
+                .response
+                .on_hover_text("The vertical angle the perspective camera sees (also: type it in the Zoom tool)");
+            });
             ui.separator();
             if item(ui, Icon::ZoomExtents, "Zoom Extents", false, Some("Shift+Z")).clicked() {
                 self.actions.push(Action::ZoomExtents);
@@ -162,6 +181,45 @@ impl VarstotasApp {
             }
         })
         .on_hover_text("How faces and edges are drawn (also View → Face Style)");
+    }
+
+    /// What the Show drop-down switches: icon, name, on.
+    pub(crate) fn hud_show_items(&self) -> [(Icon, &'static str, bool); 8] {
+        let m = &self.doc.model;
+        let d = m.section_display;
+        [
+            (Icon::Guides, "Guides", !m.guides_hidden),
+            (Icon::Axes, "Axes", self.prefs.show_axes),
+            (Icon::Ground, "Ground", self.prefs.show_ground),
+            (Icon::Grid, "Grid", self.prefs.grid.show),
+            (Icon::Shadows, "Shadows", m.shadows.enabled),
+            (Icon::Section, "Section Planes", d.planes),
+            (Icon::SectionCut, "Section Cuts", d.cuts),
+            (Icon::SectionFill, "Section Fill", d.fill),
+        ]
+    }
+
+    fn hud_show_menu(&mut self, ui: &mut Ui) {
+        let items = self.hud_show_items();
+        pill(ui, Icon::Eye, "", |ui| {
+            // switches: a click toggles, the menu stays open
+            for (k, (icon, name, on)) in items.into_iter().enumerate() {
+                if matches!(k, 4 | 5) {
+                    ui.separator();
+                }
+                if item(ui, icon, name, on, None).clicked() {
+                    match k {
+                        0 => self.actions.push(Action::ToggleGuides),
+                        1 => self.prefs.show_axes = !on,
+                        2 => self.prefs.show_ground = !on,
+                        3 => self.actions.push(Action::ToggleGrid),
+                        4 => self.actions.push(Action::ToggleShadows),
+                        _ => self.actions.push(Action::ToggleSectionDisplay(k as u8 - 5)),
+                    }
+                }
+            }
+        })
+        .on_hover_text("Show: guides, axes, ground, grid, shadows, section planes / cuts / fill (also the View menu)");
     }
 }
 
