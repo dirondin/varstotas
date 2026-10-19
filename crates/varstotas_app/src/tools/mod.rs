@@ -294,7 +294,7 @@ impl ToolId {
             ToolId::ArcCenter => "Draw an arc from its center and two points.",
             ToolId::Arc3 => "Draw an arc through three points.",
             ToolId::Pie => "Draw a closed pie-shaped face from a center and two points.",
-            ToolId::Bezier => "Draw a smooth curve: with handles, smoothly through clicked points, or freehand; as a line or a filled area.",
+            ToolId::Bezier => "Draw a smooth curve: with handles, smoothly through clicked points, or freehand; closed, it makes a face.",
             ToolId::Rectangle => "Draw a rectangular face from two corners.",
             ToolId::RotatedRectangle => "Draw a rectangle at any angle from an edge and a width.",
             ToolId::Circle => "Draw a circle from center and radius.",
@@ -397,11 +397,10 @@ impl ToolId {
                  Type a length after the first click, an angle after the second."
             }
             ToolId::Bezier => {
-                "The bar at the top left of the view picks the method — Handles, Smooth or Freehand — and Line or Area;\n\
-                 or tap Option / Alt for the next method and Ctrl for Line / Area.\n\
+                "The bar at the top left of the view picks the method — Handles, Smooth or Freehand; or tap Option / Alt for the next one.\n\
                  Handles: click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
                  Smooth: click points; the curve passes smoothly through them. Freehand: press and drag, release to finish.\n\
-                 Enter or a double-click finishes; a click on the first point closes the curve (a Line loop makes no face, an Area is always closed with a face).\n\
+                 Enter or a double-click finishes an open curve (edges only); a click on the first point (a stroke ended at its start) closes it into a face.\n\
                  Backspace removes the last point. Type a length for the next point toward the cursor; `12s` sets segments per span."
             }
             ToolId::Pie => {

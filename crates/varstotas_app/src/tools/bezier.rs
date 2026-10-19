@@ -2,11 +2,10 @@
 //! Three ways to place the anchors ([`Method`]): Handles — a click places a corner anchor,
 //! press and drag pulls out its handles (symmetric, the outgoing one under the cursor);
 //! Smooth — clicks only, the handles follow the neighbours (Catmull-Rom); Freehand — press
-//! and drag a stroke, smoothed on release. The result ([`Fill`]) is a Line (edges only, a
-//! closed loop makes no face) or an Area (always closed, with a face). Enter / double-click
-//! finishes, a click on the first anchor closes the curve, Backspace takes back the last
-//! anchor, Escape drops it all. The mode is chosen in the bar over the viewport, or with a
-//! tap of Option / Alt (the next method) and of Ctrl (Line ↔ Area).
+//! and drag a stroke, smoothed on release. Enter / double-click finishes an open curve (edges
+//! only); a click on the first anchor (a stroke ended at its start) closes it into a face.
+//! Backspace takes back the last anchor, Escape drops it all. The method is chosen in the bar
+//! over the viewport, or with a tap of Option / Alt (the next method).
 
 use super::common::*;
 use super::draw::{plane_point, shape_normal};
@@ -26,12 +25,12 @@ const CLOSE_PX: f32 = 10.0;
 /// Freehand: screen distance between the kept points of a stroke, and edges per span.
 const FREEHAND_PX: f32 = 12.0;
 const FREEHAND_SEGS: u32 = 3;
-/// Freehand Line: the stroke ends this close (points) to its start = a closed loop.
+/// Freehand: the stroke ends this close (points) to its start = closed (a face).
 const FREEHAND_CLOSE_PX: f32 = 16.0;
 #[cfg(target_os = "macos")]
-const TAPS: &str = "Option = method, Ctrl = Line / Area.";
+const TAPS: &str = "Tap Option for the next method.";
 #[cfg(not(target_os = "macos"))]
-const TAPS: &str = "Alt = method, Ctrl = Line / Area.";
+const TAPS: &str = "Tap Alt for the next method.";
 const HANDLE: Color32 = Color32::from_rgb(0x20, 0x70, 0xE0);
 
 /// One anchor of the curve; handles are absolute points (None = a corner on that side).
@@ -42,16 +41,6 @@ pub enum Method {
     Handles,
     Smooth,
     Freehand,
-}
-
-/// What the curve makes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum Fill {
-    /// Edges only (a closed loop makes no face).
-    #[default]
-    Line,
-    /// Always closed, with a face.
-    Area,
 }
 
 impl Method {
@@ -72,38 +61,22 @@ impl Method {
     }
 }
 
-impl Fill {
-    pub const ALL: [Fill; 2] = [Fill::Line, Fill::Area];
-    pub fn name(self) -> &'static str {
-        match self {
-            Fill::Line => "Line",
-            Fill::Area => "Area",
-        }
-    }
-    fn tip(self) -> &'static str {
-        match self {
-            Fill::Line => "Edges only; a closed curve makes no face",
-            Fill::Area => "Always closed, with a face",
-        }
-    }
-}
-
 thread_local! {
     /// The tool's mode (kept while other tools are used).
-    static MODE: Cell<(Method, Fill)> = const { Cell::new((Method::Handles, Fill::Line)) };
+    static MODE: Cell<Method> = const { Cell::new(Method::Handles) };
 }
 
-pub fn mode() -> (Method, Fill) {
+pub fn mode() -> Method {
     MODE.with(|m| m.get())
 }
 
-pub fn set_mode(method: Method, fill: Fill) {
-    MODE.with(|m| m.set((method, fill)));
+pub fn set_mode(method: Method) {
+    MODE.with(|m| m.set(method));
 }
 
 /// The mode bar over the viewport (while the tool is active).
 pub fn options_ui(ui: &mut egui::Ui) {
-    let (mut method, mut fill) = mode();
+    let mut method = mode();
     let seg = |ui: &mut egui::Ui, on: bool, text: &str, tip: &str| {
         let r = ui.add(egui::Button::selectable(on, text)).on_hover_text(tip);
         crate::ui::tray_lib::spot(format!("bz:{text}"), r.rect.center());
@@ -114,14 +87,7 @@ pub fn options_ui(ui: &mut egui::Ui) {
             method = m;
         }
     }
-    let (r, _) = ui.allocate_exact_size(egui::vec2(9.0, 16.0), egui::Sense::hover());
-    ui.painter().vline(r.center().x, r.y_range(), egui::Stroke::new(1.0, Color32::from_black_alpha(40)));
-    for f in Fill::ALL {
-        if seg(ui, fill == f, f.name(), f.tip()) {
-            fill = f;
-        }
-    }
-    set_mode(method, fill);
+    set_mode(method);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -203,9 +169,8 @@ pub struct BezierTool {
     cur: Option<InferenceResult>,
     /// The cursor is on the first anchor (a click closes the curve).
     closing: bool,
-    /// Taps: Option / Alt = the next method, Ctrl = Line ↔ Area.
+    /// A tap of Option / Alt: the next method.
     tap_method: ModTap,
-    tap_fill: ModTap,
 }
 
 impl BezierTool {
@@ -217,25 +182,17 @@ impl BezierTool {
         Plane::new(p, self.normal.unwrap_or_else(|| crate::axes::current().z))
     }
 
-    /// Modifier taps switch the mode (not in the middle of a freehand stroke).
+    /// A tap of Option / Alt: the next method (not in the middle of a freehand stroke).
     fn taps(&mut self, ctx: &ToolContext) {
-        let m = ctx.pointer.modifiers;
-        let (method, fill) = mode();
-        let next_method = self.tap_method.update(m.alt) && self.stroke.is_empty();
-        let next_fill = self.tap_fill.update(m.ctrl) && self.stroke.is_empty();
-        if next_method {
-            let i = Method::ALL.iter().position(|x| *x == method).unwrap_or(0);
-            set_mode(Method::ALL[(i + 1) % Method::ALL.len()], fill);
-        }
-        if next_fill {
-            let (method, fill) = mode();
-            set_mode(method, if fill == Fill::Line { Fill::Area } else { Fill::Line });
+        if self.tap_method.update(ctx.pointer.modifiers.alt) && self.stroke.is_empty() {
+            let i = Method::ALL.iter().position(|x| *x == mode()).unwrap_or(0);
+            set_mode(Method::ALL[(i + 1) % Method::ALL.len()]);
         }
     }
 
     /// Picks up a mode change made in the bar: the curve so far is dropped.
     fn sync_mode(&mut self) {
-        let m = mode().0;
+        let m = mode();
         if m != self.method {
             self.reset();
             self.method = m;
@@ -276,6 +233,8 @@ impl BezierTool {
         let Some(t) = plane.intersect_ray(&ray).filter(|t| *t > 0.0) else { return };
         let p = ray.at(t);
         let pos = ctx.pointer.pos;
+        // back at the start: the stroke closes (into a face)
+        self.closing = self.stroke.len() >= 3 && (self.stroke[0].1 - pos).length() <= FREEHAND_CLOSE_PX;
         if p.is_finite() && self.stroke.last().is_some_and(|&(q, s)| (s - pos).length() >= FREEHAND_PX && q.distance(p) > TOL) {
             self.stroke.push((p, pos));
         }
@@ -301,10 +260,8 @@ impl BezierTool {
         if self.method == Method::Freehand { FREEHAND_SEGS } else { self.segs() }
     }
 
-    /// Commits the curve; `closed` = the first point was clicked (an Area always closes).
+    /// Commits the curve; `closed` = the first point was clicked: a loop with a face.
     fn finish(&mut self, ctx: &mut ToolContext, closed: bool) {
-        let fill = mode().1;
-        let closed = closed || fill == Fill::Area;
         if self.anchors.len() >= 2 {
             let anchors = self.shaped(&self.anchors, closed);
             let curved = anchors.iter().any(|a| a.h_in.is_some() || a.h_out.is_some());
@@ -313,10 +270,7 @@ impl BezierTool {
                 bezier_points(&anchors, closed, self.span_segs()).iter().map(|p| inv.transform_point3(*p)).collect();
             let closed = closed && pts.len() >= 3;
             if pts.len() >= 2 {
-                commit_mesh(ctx, "Bezier Curve", |m| match fill {
-                    Fill::Area if closed => m.add_polyline(&pts, true, curved),
-                    _ => m.add_polyline_lines(&pts, closed, curved),
-                });
+                commit_mesh(ctx, "Bezier Curve", |m| m.add_polyline(&pts, closed, curved));
             }
         }
         self.reset();
@@ -325,9 +279,8 @@ impl BezierTool {
     /// Freehand: the stroke becomes anchors and is committed.
     fn finish_stroke(&mut self, ctx: &mut ToolContext) {
         let mut stroke = std::mem::take(&mut self.stroke);
-        let closes = stroke.len() >= 3
-            && (stroke[0].1 - stroke[stroke.len() - 1].1).length() <= FREEHAND_CLOSE_PX;
-        if closes {
+        let closes = self.closing && stroke.len() >= 3;
+        if closes && (stroke[0].1 - stroke[stroke.len() - 1].1).length() <= FREEHAND_CLOSE_PX {
             stroke.pop();
         }
         self.anchors = stroke.iter().map(|&(p, _)| Anchor::corner(p)).collect();
@@ -355,7 +308,7 @@ impl BezierTool {
         {
             a.push(Anchor::corner(r.point));
         }
-        let closed = self.closing || (mode().1 == Fill::Area && a.len() >= 3);
+        let closed = self.closing;
         bezier_points(&self.shaped(&a, closed), closed, self.segs())
     }
 
@@ -388,7 +341,6 @@ impl Tool for BezierTool {
             return;
         }
         self.tap_method.cancel();
-        self.tap_fill.cancel();
         self.sync_mode();
         self.update(ctx);
         let Some(r) = self.cur.clone() else { return };
@@ -486,16 +438,11 @@ impl Tool for BezierTool {
         }
     }
     fn status_text(&self) -> String {
-        let fill = mode().1;
-        let end = match fill {
-            Fill::Line => "Enter or double-click finishes, the first point closes (no face)",
-            Fill::Area => "Enter or double-click closes it into a face",
-        };
+        let end = "Enter or double-click finishes, a click on the first point closes it into a face";
         match self.method {
-            Method::Freehand if self.stroke.is_empty() => match fill {
-                Fill::Line => format!("Press and drag to draw a line; end at the start to close it. {TAPS}"),
-                Fill::Area => format!("Press and drag to draw an area; it closes into a face on release. {TAPS}"),
-            },
+            Method::Freehand if self.stroke.is_empty() => {
+                format!("Press and drag to draw; end at the start to close it into a face. {TAPS}")
+            }
             Method::Freehand => "Drag to draw; release to finish.".into(),
             _ if self.anchors.is_empty() && self.method == Method::Smooth => format!("Click the first point of the curve. {TAPS}"),
             _ if self.anchors.is_empty() => format!("Click the first point of the curve; press and drag to pull out handles. {TAPS}"),
@@ -507,7 +454,7 @@ impl Tool for BezierTool {
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         let pts = self.preview();
         if pts.len() >= 2 {
-            let closed = self.method != Method::Freehand && (self.closing || (mode().1 == Fill::Area && pts.len() >= 3));
+            let closed = self.closing;
             polyline(out3d, &pts, closed, PREVIEW, 2.0);
         }
         for (i, a) in self.anchors.iter().enumerate() {

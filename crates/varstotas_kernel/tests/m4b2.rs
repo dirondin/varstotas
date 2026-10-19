@@ -660,15 +660,3 @@ fn soften_by_angle_follows_fold_angle() {
     assert_eq!(mesh.soften_by_angle(&side, 59.0, true, false), 0);
     assert_eq!(mesh.soften_by_angle(&side, 61.0, true, false), 6);
 }
-
-#[test]
-fn polyline_lines_close_a_loop_without_a_face() {
-    let mut m = Mesh::new();
-    let sq = [v(0., 0., 0.), v(10., 0., 0.), v(10., 10., 0.), v(0., 10., 0.)];
-    let es = m.add_polyline_lines(&sq, true, true);
-    assert_eq!(es.len(), 4);
-    assert_eq!(m.faces.len(), 0);
-    let mut f = Mesh::new();
-    f.add_polyline(&sq, true, true);
-    assert_eq!(f.faces.len(), 1);
-}
