@@ -112,10 +112,11 @@ Python: `m.add_generator(open("shelf.rhai").read())`, `g = m.generate("Shelf", v
     - Rotate — поворот вокруг оси (точка и направление; кнопка Pick… — два клика в модели);
     - Slide — сдвиг по направлению;
     - Show / hide — показ по флагу или числу ≠ 0;
-    - Paint — материал по имени («» — как нарисовано).
+    - Paint — материал по имени («» — как нарисовано);
+    - Set parameter — параметр самой детали, если он у неё есть. Это сгенерированный компонент (например, цилиндр из Draw → Shapes) или компонент со своими параметрами. Значение передаётся как есть: высота стола → высота ножки-цилиндра. Копии с равными значениями делят одно определение детали. Правки внутри копии возвращают мастеру его собственную деталь.
     Диапазон параметра (min..max) переводится в From..To (градусы или длина). Без диапазона, а также с выражением, значение и есть движение.
   - **Script** (необязательно): `fn update(p, parts) { … }` — выполняется после движений:
-    - функции `rotate(part, origin, axis, deg)`, `move(part, offset)` / `translate`, `scale(part, origin, f или vec3)`, `show(part, on)`, `hide(part)`, `paint(part, material)`;
+    - функции `rotate(part, origin, axis, deg)`, `move(part, offset)` / `translate`, `scale(part, origin, f или vec3)`, `show(part, on)`, `hide(part)`, `paint(part, material)`, `set_param(part, key, value)`;
     - `p` — значения и формулы;
     - `parts[имя]` — габариты детали в покое (`min`, `max`, `center`, `size`).
   - Скрипт хранится в компоненте.
@@ -127,7 +128,7 @@ Python: `m.add_generator(open("shelf.rhai").read())`, `g = m.generate("Shelf", v
 - **Устройство:** `varstotas_kernel::rig` (данные, позы, варианты, обратная запись), `varstotas_script::rig` (движения, выражения, скрипт `update`), `ui/rig_editor.rs`; хук в `Document::commit`.
 - **Харнесс:**
   - окно: `action rig_edit`;
-  - строки: `action rig_param <текст @param>`, `action rig_formula <текст @formula>`, `action rig_joint деталь|движение(0 поворот,1 сдвиг,2 показ,3 покраска)|параметр|from|to|ox oy oz|ax ay az|выражение`, `action rig_script <файл>`, `action rig_clear`;
+  - строки: `action rig_param <текст @param>`, `action rig_formula <текст @formula>`, `action rig_joint деталь|движение(0 поворот,1 сдвиг,2 показ,3 покраска,4 параметр детали)|параметр|from|to|ox oy oz|ax ay az|выражение|ключ`, `action rig_script <файл>`, `action rig_clear`;
   - применение: `action rig_apply`, `action rig_remove`, `action rig_pick <номер>`;
   - значения выделенных копий: `action rig key=value …`, `action rig_reset`;
   - дамп: `rig=Some("копий Имя [ключ=значение…] joints=N variants=N") ed=(открыто имя p f j ошибка ось_первого)`.

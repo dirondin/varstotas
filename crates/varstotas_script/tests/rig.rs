@@ -178,3 +178,77 @@ fn remove_rig_and_attach() {
     let g = m.root_mesh().instances.values().find(|i| m.defs[i.def].is_group).unwrap().def;
     assert!(rig::set_rig(&mut m, g, Some(door_rig())).is_err());
 }
+
+/// A table component whose part "Leg" is a generated cylinder (radius 500, height 1000 by
+/// default) and two copies of the table.
+fn table() -> (Model, DefId, InstanceId, InstanceId) {
+    use varstotas_kernel::glam::DMat4;
+    use varstotas_kernel::{Definition, Instance, Mesh};
+    let mut m = Model::new();
+    varstotas_script::generator::add(&mut m, include_str!("../../../examples/generators/primitives/cylinder.rhai")).unwrap();
+    let leg = varstotas_script::generator::def_for(&mut m, "Cylinder", &GenValues::new()).unwrap();
+    let mut mesh = Mesh::new();
+    let inst = |def, name: &str, x: f64| Instance { def, transform: DMat4::from_translation(DVec3::new(x, 0.0, 0.0)), name: name.into(), material: None, tag: None, hidden: false, locked: false };
+    mesh.instances.insert(inst(leg, "Leg", 0.0));
+    let t = m.defs.insert(Definition { name: "Table".into(), mesh, is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
+    let a = m.root_mesh_mut().instances.insert(inst(t, "", 0.0));
+    let b = m.root_mesh_mut().instances.insert(inst(t, "", 3000.0));
+    (m, t, a, b)
+}
+
+fn height_rig(key: &str) -> Rig {
+    Rig {
+        params: vec![GenParam::parse("h:length(100..2000) = 700 \"Height\"").unwrap()],
+        formulas: Vec::new(),
+        joints: vec![Joint { part: "Leg".into(), kind: JointKind::Param { key: key.into() }, param: "h".into(), from: 0.0, to: 0.0, expr: String::new() }],
+        script: String::new(),
+    }
+}
+
+fn leg_def(m: &Model, d: DefId) -> DefId {
+    m.defs[d].mesh.instances.values().find(|i| i.name == "Leg").expect("the leg").def
+}
+
+fn leg_height(m: &Model, d: DefId) -> f64 {
+    m.def_bounds(leg_def(m, d)).unwrap().max.z
+}
+
+#[test]
+fn params_reach_nested_components() {
+    let (mut m, t, a, b) = table();
+    // A parameter the part doesn't have is refused; the part's own ones are offered.
+    assert!(rig::set_rig(&mut m, t, Some(height_rig("depth"))).unwrap_err().contains("no parameter `depth`"));
+    let g = rig::part_generator(&m, t, "Leg").unwrap();
+    assert_eq!(g.params.iter().map(|p| p.key.as_str()).collect::<Vec<_>>(), ["radius", "height", "segments"]);
+    rig::set_rig(&mut m, t, Some(height_rig("height"))).unwrap();
+    // The default (700) reaches the leg of both copies; the master keeps its leg as drawn.
+    let v0 = def_of(&m, a);
+    assert_eq!(def_of(&m, b), v0);
+    assert!((leg_height(&m, v0) - 700.0).abs() < 1e-6);
+    assert!((leg_height(&m, t) - 1000.0).abs() < 1e-6);
+    let gd = m.defs[leg_def(&m, v0)].generated.as_ref().unwrap();
+    assert_eq!((gd.values["height"].clone(), gd.values["radius"].clone()), (GenValue::Num(700.0), GenValue::Num(500.0)));
+    // One copy taller: its own leg definition; equal values share it.
+    rig::set_values(&mut m, &[], a, &vals(&[("h", GenValue::Num(1500.0))]), false).unwrap();
+    let v1 = def_of(&m, a);
+    assert!((leg_height(&m, v1) - 1500.0).abs() < 1e-6);
+    assert!((leg_height(&m, def_of(&m, b)) - 700.0).abs() < 1e-6);
+    rig::set_values(&mut m, &[], b, &vals(&[("h", GenValue::Num(1500.0))]), false).unwrap();
+    assert_eq!(def_of(&m, b), v1);
+    // Unused leg definitions go: the master's (1000) and the shared one (1500) stay.
+    assert_eq!(m.defs.values().filter(|d| d.generated.is_some()).count(), 2);
+    // An edit inside a copy goes back to the master with the master's own leg.
+    rig::after_edit(&mut m, &[a]).unwrap();
+    assert!((leg_height(&m, t) - 1000.0).abs() < 1e-6);
+    assert!((leg_height(&m, def_of(&m, a)) - 1500.0).abs() < 1e-6);
+    // The script sets parameters of parts too.
+    let mut r = height_rig("height");
+    r.script = "fn update(p, parts) { set_param(\"Leg\", \"radius\", p.h / 10); }".into();
+    rig::set_rig(&mut m, t, Some(r)).unwrap();
+    let gd = m.defs[leg_def(&m, def_of(&m, a))].generated.as_ref().unwrap();
+    assert_eq!(gd.values["radius"], GenValue::Num(150.0));
+    // A part without parameters: a warning in the editor.
+    let mut r = height_rig("height");
+    r.joints[0].part = "Nothing".into();
+    assert_eq!(rig::warnings(&m, t, &r), vec!["no part `Nothing` in the component".to_string()]);
+}

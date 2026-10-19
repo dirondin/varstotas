@@ -10,6 +10,10 @@
 //! generated components do. Edits made inside a variant are written back to the master (the
 //! poses undone) and the other variants posed again.
 //!
+//! A part that is itself a component with parameters (generated, or with a rig of its own) can
+//! have them driven too ([`JointKind::Param`]): the variant then uses that part's definition for
+//! the new values ([`PartOp::Swap`], resolved by `varstotas_script::rig`).
+//!
 //! A painted part is a copy of the part's definition with its faces in the material (also
 //! [`Rigged`], with `paint`), shared by all variants painting it the same.
 
@@ -69,6 +73,9 @@ pub enum JointKind {
     Visible,
     /// Painted with the material named by the value ("" = as drawn).
     Material,
+    /// Sets parameter `key` of the part — a generated component or one with parameters — to the
+    /// value (passed as is: a length in mm, a number, a flag, a choice or material name).
+    Param { key: String },
 }
 
 impl JointKind {
@@ -78,6 +85,7 @@ impl JointKind {
             JointKind::Slide { .. } => "slide",
             JointKind::Visible => "visible",
             JointKind::Material => "material",
+            JointKind::Param { .. } => "param",
         }
     }
 }
@@ -90,6 +98,11 @@ pub enum PartOp {
     Visible(String, bool),
     /// Material name ("" = as drawn).
     Paint(String, String),
+    /// Parameter values of a part that has parameters (over its own in the master).
+    Values(String, GenValues),
+    /// The part uses this definition instead (its definition for the values of a
+    /// [`PartOp::Values`]; applied before painting).
+    Swap(String, DefId),
 }
 
 /// On a variant (the master's content posed for `values`) or, with `paint`, on a painted copy
@@ -116,6 +129,7 @@ struct Effect {
     m: Option<DMat4>,
     hidden: Option<bool>,
     paint: Option<String>,
+    swap: Option<DefId>,
 }
 
 /// A part's name: the instance's, else its definition's.
@@ -231,7 +245,7 @@ impl Model {
         let mut out: HashMap<InstanceId, Effect> = HashMap::new();
         for op in ops {
             let part = match op {
-                PartOp::Transform(p, _) | PartOp::Visible(p, _) | PartOp::Paint(p, _) => p,
+                PartOp::Transform(p, _) | PartOp::Visible(p, _) | PartOp::Paint(p, _) | PartOp::Values(p, _) | PartOp::Swap(p, _) => p,
             };
             for (id, _) in names.iter().filter(|(_, n)| n == part) {
                 let e = out.entry(*id).or_default();
@@ -239,6 +253,8 @@ impl Model {
                     PartOp::Transform(_, m) => e.m = Some(*m * e.m.unwrap_or(DMat4::IDENTITY)),
                     PartOp::Visible(_, v) => e.hidden = Some(!v),
                     PartOp::Paint(_, name) => e.paint = (!name.is_empty()).then(|| name.clone()),
+                    PartOp::Values(..) => {}
+                    PartOp::Swap(_, d) => e.swap = Some(*d),
                 }
             }
         }
@@ -279,6 +295,9 @@ impl Model {
             }
             if let Some(h) = e.hidden {
                 i.hidden = h;
+            }
+            if let Some(d) = e.swap.filter(|d| self.defs.contains_key(*d)) {
+                i.def = d;
             }
             if let Some(p) = e.paint {
                 let d = i.def;
@@ -333,6 +352,11 @@ impl Model {
             }
             if e.hidden.is_some() {
                 i.hidden = old.instances.get(id).is_some_and(|o| o.hidden);
+            }
+            if e.swap.is_some()
+                && let Some(o) = old.instances.get(id)
+            {
+                i.def = o.def;
             }
         }
         self.defs[master].mesh = mesh;

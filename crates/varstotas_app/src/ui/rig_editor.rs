@@ -13,7 +13,7 @@ use varstotas_kernel::{DefId, EntityRef, GenFormula, GenKind, GenParam, GenValue
 
 const KINDS: [&str; 8] = ["length", "angle", "number", "int", "percent", "bool", "choice", "material"];
 const FORMULA_KINDS: [&str; 7] = ["length", "angle", "number", "int", "percent", "bool", "text"];
-const MOTIONS: [&str; 4] = ["Rotate", "Slide", "Show / hide", "Paint"];
+const MOTIONS: [&str; 5] = ["Rotate", "Slide", "Show / hide", "Paint", "Set parameter"];
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ParamRow {
@@ -49,11 +49,13 @@ pub struct JointRow {
     pub origin: [f64; 3],
     /// Rotate: the axis; slide: the direction.
     pub axis: [f64; 3],
+    /// Set parameter: the part's parameter.
+    pub key: String,
 }
 
 impl Default for JointRow {
     fn default() -> Self {
-        Self { part: String::new(), motion: 0, param: String::new(), from: 0.0, to: 90.0, expr: String::new(), origin: [0.0; 3], axis: [0.0, 0.0, 1.0] }
+        Self { part: String::new(), motion: 0, param: String::new(), from: 0.0, to: 90.0, expr: String::new(), origin: [0.0; 3], axis: [0.0, 0.0, 1.0], key: String::new() }
     }
 }
 
@@ -172,8 +174,10 @@ impl JointRow {
             JointKind::Slide { dir } => (1, DVec3::ZERO, *dir),
             JointKind::Visible => (2, DVec3::ZERO, DVec3::Z),
             JointKind::Material => (3, DVec3::ZERO, DVec3::Z),
+            JointKind::Param { .. } => (4, DVec3::ZERO, DVec3::Z),
         };
-        Self { part: j.part.clone(), motion, param: j.param.clone(), from: j.from, to: j.to, expr: j.expr.clone(), origin: origin.to_array(), axis: axis.to_array() }
+        let key = if let JointKind::Param { key } = &j.kind { key.clone() } else { String::new() };
+        Self { part: j.part.clone(), motion, param: j.param.clone(), from: j.from, to: j.to, expr: j.expr.clone(), origin: origin.to_array(), axis: axis.to_array(), key }
     }
 
     fn joint(&self) -> Joint {
@@ -181,7 +185,8 @@ impl JointRow {
             0 => JointKind::Rotate { origin: DVec3::from_array(self.origin), axis: DVec3::from_array(self.axis) },
             1 => JointKind::Slide { dir: DVec3::from_array(self.axis) },
             2 => JointKind::Visible,
-            _ => JointKind::Material,
+            3 => JointKind::Material,
+            _ => JointKind::Param { key: self.key.trim().to_string() },
         };
         let param = if self.expr.trim().is_empty() { self.param.clone() } else { String::new() };
         Joint { part: self.part.clone(), kind, param, from: self.from, to: self.to, expr: self.expr.trim().to_string() }
@@ -441,6 +446,19 @@ impl VarstotasApp {
         let has_rig = def.and_then(|d| model.defs.get(d)).is_some_and(|d| d.rig.is_some());
         let parts: Vec<String> = def.map(|d| model.rig_parts(d).into_iter().map(|(_, n)| n).collect()).unwrap_or_default();
         let materials: Vec<String> = model.materials.values().map(|m| m.name.clone()).collect();
+        // Parameters of the parts that have them (generated components, components with
+        // parameters): part → (key, label).
+        let part_params: std::collections::HashMap<String, Vec<(String, String)>> = def
+            .map(|d| {
+                parts
+                    .iter()
+                    .filter_map(|p| {
+                        let g = varstotas_script::rig::part_generator(model, d, p)?;
+                        Some((p.clone(), g.params.iter().map(|x| (x.key.clone(), x.label.clone())).collect()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         let warnings = match (def, self.rig_editor.rig()) {
             (Some(d), Ok(r)) => varstotas_script::rig::warnings(model, d, &r),
             _ => Vec::new(),
@@ -551,7 +569,7 @@ impl VarstotasApp {
                 // Motions of the parts.
                 ui.add_space(6.0);
                 ui.label(RichText::new("Motions").strong()).on_hover_text(
-                    "A part (a group / component directly inside) turned, slid, shown or painted by a parameter. Turn / slide: the parameter's range maps onto From..To (degrees / length); without a range, or with an expression, the value is the motion itself",
+                    "A part (a group / component directly inside) turned, slid, shown, painted or given a parameter value (Set parameter: a part that has parameters itself — a generated component such as a Draw → Shapes cylinder, or a component with parameters) by a parameter. Turn / slide: the parameter's range maps onto From..To (degrees / length); without a range, or with an expression, the value is the motion itself",
                 );
                 let keys: Vec<String> = ed.params.iter().map(|r| r.key.clone()).chain(ed.formulas.iter().map(|r| r.key.clone())).collect();
                 let mut del = None;
@@ -568,6 +586,19 @@ impl VarstotasApp {
                                     ui.selectable_value(&mut r.motion, k, *n);
                                 }
                             });
+                            if r.motion == 4 {
+                                let own = part_params.get(&r.part).cloned().unwrap_or_default();
+                                let shown = own.iter().find(|(k, _)| *k == r.key).map(|(k, l)| if l.is_empty() { k.clone() } else { l.clone() }).unwrap_or_else(|| if r.key.is_empty() { "(parameter)".into() } else { r.key.clone() });
+                                let combo = egui::ComboBox::from_id_salt(("rig_pkey", i)).width(90.0).selected_text(shown).show_ui(ui, |ui| {
+                                    if own.is_empty() {
+                                        ui.label(RichText::new("The part has no parameters").small().color(theme::TEXT_DIM));
+                                    }
+                                    for (k, l) in &own {
+                                        ui.selectable_value(&mut r.key, k.clone(), if l.is_empty() { k.as_str() } else { l.as_str() });
+                                    }
+                                });
+                                combo.response.on_hover_text("The part's own parameter set to the value");
+                            }
                             ui.label("by");
                             let shown = if r.param.is_empty() { "(expression)" } else { r.param.as_str() };
                             egui::ComboBox::from_id_salt(("rig_jp", i)).width(90.0).selected_text(shown).show_ui(ui, |ui| {
@@ -625,7 +656,7 @@ impl VarstotasApp {
                 // Script.
                 ui.add_space(6.0);
                 ui.label(RichText::new("Script").strong()).on_hover_text(
-                    "Optional Rhai code run after the motions: fn update(p, parts) { … } with rotate(part, origin, axis, deg), move(part, offset), scale(part, origin, f), show(part, on), hide(part), paint(part, material); p — the values and formulas, parts[name] — min / max / center / size",
+                    "Optional Rhai code run after the motions: fn update(p, parts) { … } with rotate(part, origin, axis, deg), move(part, offset), scale(part, origin, f), show(part, on), hide(part), paint(part, material), set_param(part, key, value); p — the values and formulas, parts[name] — min / max / center / size",
                 );
                 if ed.script.is_empty() && ui.button("+ Script").clicked() {
                     ed.script = "fn update(p, parts) {\n    // let d = parts[\"Door\"];\n    // rotate(\"Door\", d.min, vec3(0, 0, 1), -p.open);\n}\n".into();

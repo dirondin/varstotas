@@ -33,7 +33,7 @@ pub fn values_map(g: &Generator, values: &GenValues) -> rhai::Map {
 }
 
 /// A Rhai value as a generator value (numbers, flags, texts).
-fn to_value(d: &rhai::Dynamic) -> Option<GenValue> {
+pub(crate) fn to_value(d: &rhai::Dynamic) -> Option<GenValue> {
     if let Ok(x) = d.as_float() {
         Some(GenValue::Num(x))
     } else if let Ok(i) = d.as_int() {

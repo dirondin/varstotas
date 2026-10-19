@@ -1,0 +1,43 @@
+# The `generate` call uses the defaults (radius 500, height 1000): `#` starts a comment here.
+# Parameters of a component driving a nested generated component (track У 6): a cylinder drawn
+# with Draw → Shapes → Cylinder (real mouse) adds the generator; a Table component has a
+# generated leg; Window → Component Parameters: "Set parameter" passes the table's Height to the
+# leg's height; values per copy, shared leg definitions, undo.
+wait 10
+view iso
+tool cylinder
+rawp click 0 0 0
+wait 2
+rawp click 300 0 0
+wait 2
+vcb 1000
+wait 3
+expect gens=["Cylinder"]
+tool select
+action script let leg = generate("Cylinder", vec3(2000, 0, 0));\nleg.name = "Leg";\nlet top = box(vec3(1300, -700, 1000), 1400, 1400, 30);\nlet t = component([leg, top], "Table");\ncopy(t, vec3(1500, 0, 0));
+zoom_extents
+wait 10
+expect gen_defs=2
+rawp click 2000 0 1030
+wait 5
+expect sel F=0 E=0 I=1
+action rig_edit
+wait 5
+action rig_clear
+action rig_param h:length(100..2000) = 700 "Height"
+action rig_joint Leg|4|h|0|0||||height
+wait 5
+screenshot shots/rig_nested_win.bmp
+action rig_apply
+wait 10
+expect rig=Some("1 Table [h=700 mm] joints=1 variants=1")
+expect gen_defs=3
+action rig h=1500
+wait 10
+expect rig=Some("1 Table [h=1500 mm] joints=1 variants=2")
+expect gen_defs=4
+screenshot shots/rig_nested_1500.bmp
+action undo
+wait 5
+expect rig=Some("1 Table [h=700 mm] joints=1 variants=1")
+expect gen_defs=3

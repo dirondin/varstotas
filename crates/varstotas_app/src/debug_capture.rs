@@ -1600,7 +1600,7 @@ impl VarstotasApp {
         }
         // Components with parameters: `rig_edit` (Window → Component Parameters for the
         // selection), editor rows `rig_param <@param text>`, `rig_formula <@formula text>`,
-        // `rig_joint part|motion(0 rotate,1 slide,2 show,3 paint)|param|from|to|ox oy oz|ax ay az|expr`,
+        // `rig_joint part|motion(0 rotate,1 slide,2 show,3 paint,4 set parameter)|param|from|to|ox oy oz|ax ay az|expr|key`,
         // `rig_script <file>`, `rig_clear`, then `rig_apply`, `rig_remove`, `rig_pick <joint>`;
         // values of the selected copies: `rig key=value …`, `rig_reset`.
         if name == "rig_edit" {
@@ -1637,6 +1637,7 @@ impl VarstotasApp {
                 origin: v3(5, [0.0; 3]),
                 axis: v3(6, [0.0, 0.0, 1.0]),
                 expr: f.get(7).map(|s| s.trim().to_string()).unwrap_or_default(),
+                key: f.get(8).map(|s| s.trim().to_string()).unwrap_or_default(),
             });
             return;
         }
