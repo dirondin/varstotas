@@ -11,6 +11,7 @@
 
 pub mod common;
 mod arcs;
+mod bezier;
 mod camera_tools;
 pub(crate) mod construct;
 mod dims;
@@ -53,6 +54,7 @@ pub enum ToolId {
     ArcCenter,
     Arc3,
     Pie,
+    Bezier,
     Rectangle,
     RotatedRectangle,
     Circle,
@@ -88,7 +90,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 41] = [
+    pub const ALL: [ToolId; 42] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -98,6 +100,7 @@ impl ToolId {
         ToolId::ArcCenter,
         ToolId::Arc3,
         ToolId::Pie,
+        ToolId::Bezier,
         ToolId::Rectangle,
         ToolId::RotatedRectangle,
         ToolId::Circle,
@@ -143,6 +146,7 @@ impl ToolId {
             ToolId::ArcCenter => "Arc",
             ToolId::Arc3 => "3 Point Arc",
             ToolId::Pie => "Pie",
+            ToolId::Bezier => "Bezier Curve",
             ToolId::Rectangle => "Rectangle",
             ToolId::RotatedRectangle => "Rotated Rectangle",
             ToolId::Circle => "Circle",
@@ -212,6 +216,7 @@ impl ToolId {
             | ToolId::ArcCenter
             | ToolId::Arc3
             | ToolId::Pie
+            | ToolId::Bezier
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
             | ToolId::Section
@@ -241,6 +246,7 @@ impl ToolId {
             ToolId::ArcCenter => Icon::ArcCenter,
             ToolId::Arc3 => Icon::Arc3,
             ToolId::Pie => Icon::Pie,
+            ToolId::Bezier => Icon::Bezier,
             ToolId::Rectangle => Icon::Rectangle,
             ToolId::RotatedRectangle => Icon::RotatedRectangle,
             ToolId::Circle => Icon::Circle,
@@ -288,6 +294,7 @@ impl ToolId {
             ToolId::ArcCenter => "Draw an arc from its center and two points.",
             ToolId::Arc3 => "Draw an arc through three points.",
             ToolId::Pie => "Draw a closed pie-shaped face from a center and two points.",
+            ToolId::Bezier => "Draw a smooth curve through points, shaped by handles.",
             ToolId::Rectangle => "Draw a rectangular face from two corners.",
             ToolId::RotatedRectangle => "Draw a rectangle at any angle from an edge and a width.",
             ToolId::Circle => "Draw a circle from center and radius.",
@@ -388,6 +395,11 @@ impl ToolId {
             ToolId::Arc3 => {
                 "Click the start point, click a point the arc passes through, then click the end.\n\
                  Type a length after the first click, an angle after the second."
+            }
+            ToolId::Bezier => {
+                "Click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
+                 Enter or a double-click finishes, a click on the first point closes the curve; Backspace removes the last point.\n\
+                 Type a length for the next point toward the cursor; `12s` sets segments per span."
             }
             ToolId::Pie => {
                 "Click the center, click the start point (radius), then click the end to make a closed pie face.\n\
@@ -533,6 +545,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Arc => Box::new(draw::ArcTool::default()),
         ToolId::ArcCenter => Box::new(arcs::ArcCenterTool::new(false)),
         ToolId::Pie => Box::new(arcs::ArcCenterTool::new(true)),
+        ToolId::Bezier => Box::new(bezier::BezierTool::default()),
         ToolId::Arc3 => Box::new(arcs::Arc3Tool::default()),
         ToolId::RotatedRectangle => Box::new(arcs::RotatedRectTool::default()),
         ToolId::Axes => Box::new(construct::AxesTool::default()),

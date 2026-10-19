@@ -1,0 +1,47 @@
+# Draw → Bezier Curve with the real mouse: clicks make corners, press-drag pulls out handles,
+# Enter finishes, a click on the first point closes (a face), a double-click finishes, Undo.
+wait 10
+view top
+parallel on
+zoom_extents
+wait 5
+tool bezier
+expect tool=Bezier
+# open curve: a corner, a smooth point (dragged handle), a corner, Enter → 12 + 12 edges
+rawp click 0 0 0
+rawp drag 1000 0 0 1500 600 0
+rawp click 2000 0 0
+wait 3
+screenshot shots/bezier_open.bmp
+raw key Enter
+wait 3
+expect undo=Some("Bezier Curve")
+expect active_mesh F=0 E=24
+# closed curve: back on the first point → a face (12 + 12 + 1 edges)
+rawp click 0 2000 0
+rawp drag 1000 3000 0 1000 3700 0
+rawp click 0 4000 0
+rawp click 0 2000 0
+wait 3
+expect active_mesh F=1 E=49
+# two corners and a double-click: one straight edge
+rawp click 3000 0 0
+rawp dblclick 4000 0 0
+wait 3
+expect active_mesh F=1 E=50
+# Backspace takes back a point, Escape drops the curve
+rawp click 3000 1000 0
+rawp click 4000 1000 0
+raw key Backspace
+raw key Escape
+wait 3
+expect active_mesh F=1 E=50
+raw mods cmd
+raw key Z
+raw mods
+wait 3
+expect active_mesh F=1 E=49
+zoom_extents
+wait 5
+screenshot shots/bezier.bmp
+quit

@@ -15,6 +15,7 @@ pub enum Icon {
     ArcCenter,
     Arc3,
     Pie,
+    Bezier,
     Rectangle,
     RotatedRectangle,
     Circle,
@@ -295,6 +296,27 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dot((3.0, 17.0), 2.0, RED);
             pen.dot((18.4, 10.6), 2.0, RED);
             pen.dot((21.0, 17.0), 2.0, RED);
+        }
+        Icon::Bezier => {
+            let curve: Vec<(f32, f32)> = (0..=16)
+                .map(|k| {
+                    let t = k as f32 / 16.0;
+                    let u = 1.0 - t;
+                    let (x0, y0, x1, y1, x2, y2, x3, y3) = (3.0, 18.0, 6.0, 3.0, 18.0, 21.0, 21.0, 6.0);
+                    (
+                        u * u * u * x0 + 3.0 * u * u * t * x1 + 3.0 * u * t * t * x2 + t * t * t * x3,
+                        u * u * u * y0 + 3.0 * u * u * t * y1 + 3.0 * u * t * t * y2 + t * t * t * y3,
+                    )
+                })
+                .collect();
+            let thin = Stroke::new(1.0 * pen.s, BLUE);
+            pen.line_c(&[(3.0, 18.0), (6.0, 3.0)], thin);
+            pen.line_c(&[(21.0, 6.0), (18.0, 21.0)], thin);
+            pen.line(&curve);
+            pen.dot((6.0, 3.0), 1.6, BLUE);
+            pen.dot((18.0, 21.0), 1.6, BLUE);
+            pen.dot((3.0, 18.0), 2.0, RED);
+            pen.dot((21.0, 6.0), 2.0, RED);
         }
         Icon::Pie => {
             let mut pts = vec![pen.p(6.0, 18.0)];

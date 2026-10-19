@@ -118,7 +118,7 @@ const SELECTING: &[B] = &[
 const DRAWING: &[B] = &[
     B::P("Drawing tools work on the face under the cursor, or on the ground / the active work plane. Closed loops of edges become faces; a line across a face splits it."),
     B::P("While a tool runs you can type a value at any time (no need to click the Measurements box) and press Enter — see Measurements box."),
-    B::Tools(&[ToolId::Line, ToolId::Rectangle, ToolId::RotatedRectangle, ToolId::Circle, ToolId::Polygon, ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie]),
+    B::Tools(&[ToolId::Line, ToolId::Rectangle, ToolId::RotatedRectangle, ToolId::Circle, ToolId::Polygon, ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie, ToolId::Bezier]),
 ];
 
 const SHAPES: &[B] = &[

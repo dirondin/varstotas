@@ -146,6 +146,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `tools/select.rs` | Select tool |
 | `tools/draw.rs` | Line, Rectangle, Circle, Polygon, 2 Point Arc |
 | `tools/arcs.rs` | Arc (centre), Pie, 3 Point Arc, Rotated Rectangle |
+| `tools/bezier.rs` | Bezier Curve: `Anchor` (point + handles), `bezier_points` (cubic spans), click = corner, drag = handles, Enter / double-click / first point closes → `add_polyline` as one curve |
 | `tools/edit.rs` | Eraser, Paint Bucket, Push/Pull, Offset, Follow Me |
 | `tools/transform.rs` | Move, Rotate, Scale (copies, arrays) |
 | `tools/construct.rs` | Tape Measure, Protractor, Axes |
