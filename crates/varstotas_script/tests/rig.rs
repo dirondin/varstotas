@@ -243,7 +243,7 @@ fn params_reach_nested_components() {
     assert!((leg_height(&m, def_of(&m, a)) - 1500.0).abs() < 1e-6);
     // The script sets parameters of parts too.
     let mut r = height_rig("height");
-    r.script = "fn update(p, parts) { set_param(\"Leg\", \"radius\", p.h / 10); }".into();
+    r.script = "fn update(p) { set_params(child(\"Leg\"), #{radius: p.h / 10}); }".into();
     rig::set_rig(&mut m, t, Some(r)).unwrap();
     let gd = m.defs[leg_def(&m, def_of(&m, a))].generated.as_ref().unwrap();
     assert_eq!(gd.values["radius"], GenValue::Num(150.0));
@@ -251,4 +251,74 @@ fn params_reach_nested_components() {
     let mut r = height_rig("height");
     r.joints[0].part = "Nothing".into();
     assert_eq!(rig::warnings(&m, t, &r), vec!["no part `Nothing` in the component".to_string()]);
+}
+
+/// The update script with the whole script API: parts found by name (also deep), moved inside a
+/// part (the variant gets its own copy of the part), hidden, objects made by the script; edits in
+/// a copy go back to the master without the script's doing.
+#[test]
+fn script_uses_the_whole_api() {
+    let mut m = Model::new();
+    let src = r#"
+        let body = box(vec3(0, 0, 0), 600, 400, 800);
+        let panel = box(vec3(0, -20, 0), 600, 20, 800);
+        let knob = box(vec3(500, -60, 400), 40, 40, 40);
+        knob.name = "Knob";
+        let door = group([panel, knob]);
+        door.name = "Door";
+        let c = component([body, door], "Cabinet");
+        copy(c, vec3(1000, 0, 0));
+    "#;
+    let r = run(&mut m, &ScriptCtx::default(), src);
+    assert!(r.error.is_none(), "{:?}", r.error);
+    let ids: Vec<InstanceId> = m.root_mesh().instances.keys().collect();
+    let (d, a, b) = (m.root_mesh().instances[ids[0]].def, ids[0], ids[1]);
+    let knob_z = |m: &Model, v: DefId| {
+        let door = m.defs[v].mesh.instances.values().find(|i| i.name == "Door").unwrap();
+        let k = m.defs[door.def].mesh.instances.values().find(|i| i.name == "Knob").unwrap();
+        (k.transform.w_axis.z, k.hidden)
+    };
+    let mut rg = door_rig();
+    rg.joints.clear();
+    rg.script = r#"
+        fn update(p) {
+            let door = child("Door");
+            rotate(door, vec3(0, -20, 0), vec3(0, 0, 1), -p.open);
+            move(child(door, "Knob"), vec3(0, 0, p.open));
+            if !p.handle { hide(child("Knob", true)); }
+            let lid = box(vec3(0, 0, 800), 600, 400, door.size.z / 80);
+            lid.name = "Lid";
+        }
+    "#
+    .into();
+    rig::set_rig(&mut m, d, Some(rg)).unwrap();
+    // Defaults: the lid is made (10 thick), the door closed.
+    let v0 = def_of(&m, a);
+    assert!(close(part_bounds(&m, v0, "Lid").max, DVec3::new(600.0, 400.0, 810.0)));
+    assert!(m.rig_parts(d).iter().all(|(_, n)| n != "Lid"));
+    // Open: the door turned, its knob moved up inside the variant's own copy of the door.
+    rig::set_values(&mut m, &[], a, &vals(&[("open", GenValue::Num(90.0)), ("handle", GenValue::Bool(false))]), false).unwrap();
+    let v1 = def_of(&m, a);
+    let bb = part_bounds(&m, v1, "Door");
+    // (the knob sticks out 40: turned, it is at x = -40)
+    assert!(close(bb.min, DVec3::new(-40.0, -620.0, 0.0)), "{bb:?}");
+    assert_eq!(knob_z(&m, v1), (490.0, true));
+    let door_copy = m.defs[v1].mesh.instances.values().find(|i| i.name == "Door").unwrap().def;
+    assert!(m.defs[door_copy].rigged.as_ref().is_some_and(|r| r.paint.as_deref() == Some("")));
+    // The master's door and the other copy are as drawn (closed copy shares the original door).
+    assert_eq!(knob_z(&m, d), (400.0, false));
+    assert_eq!(knob_z(&m, def_of(&m, b)), (400.0, false));
+    // A shelf added inside the open copy: the master gets it, not the lid, the door closed.
+    let r = run(&mut m, &ScriptCtx { path: vec![a], ..Default::default() }, "let s = box(vec3(10, 10, 400), 580, 380, 18); s.name = \"Shelf\";");
+    assert!(r.error.is_none(), "{:?}", r.error);
+    rig::after_edit(&mut m, &[a]).unwrap();
+    let names: Vec<String> = m.rig_parts(d).into_iter().map(|(_, n)| n).collect();
+    assert_eq!(names, ["Door", "Group", "Shelf"]);
+    assert!(close(part_bounds(&m, d, "Door").min, DVec3::new(0.0, -60.0, 0.0)));
+    assert_eq!(knob_z(&m, d), (400.0, false));
+    let md = m.defs[d].mesh.instances.values().find(|i| i.name == "Door").unwrap().def;
+    assert!(m.defs[md].rigged.is_none());
+    // Both copies posed again with the shelf, the lid and their own door poses.
+    assert!(m.rig_parts(def_of(&m, b)).iter().any(|(_, n)| n == "Shelf") && m.rig_parts(def_of(&m, b)).iter().any(|(_, n)| n == "Lid"));
+    assert_eq!(knob_z(&m, def_of(&m, a)), (490.0, true));
 }

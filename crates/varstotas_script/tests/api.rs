@@ -294,3 +294,32 @@ print(file_exists("{dir}/none"));"#
     assert!(run(&mut m, &ScriptCtx::default(), "parse_json(\"{oops\")").error.is_some());
     let _ = std::fs::remove_dir_all(d);
 }
+
+#[test]
+fn children_by_name_and_object_fields() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r#"
+        let a = box(vec3(0, 0, 0), 100, 200, 300);
+        a.name = "Leg";
+        let b = box(vec3(500, 0, 0), 10, 10, 10);
+        let t = group([a, b]);
+        t.name = "Table";
+        let out = [];
+        out.push(child("Leg") == ());
+        out.push(child("Leg", true).size);
+        out.push(child(t, "Leg").min);
+        out.push(children(t).len());
+        out.push(children(true).len());
+        hide("Table");
+        out.push(child("Table").hidden);
+        show(child("Table"), true);
+        out.push(t.hidden);
+        out.push(child(t, "Nothing", true) == ());
+        out
+        "#,
+    );
+    assert!(r.error.is_none(), "{:?}", r.error);
+    assert_eq!(r.output.trim(), "[true, vec3(100, 200, 300), vec3(0, 0, 0), 2, 3, true, false, true]");
+}

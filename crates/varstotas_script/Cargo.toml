@@ -8,6 +8,7 @@ description = "Rhai scripting API over the Varstotas kernel (console, script fil
 [dependencies]
 varstotas_kernel = { workspace = true }
 rhai = { version = "1.26", default-features = false, features = ["std", "only_i64", "no_custom_syntax", "no_module"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 slotmap = { workspace = true }
 

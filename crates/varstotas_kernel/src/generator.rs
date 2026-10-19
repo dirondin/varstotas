@@ -638,6 +638,14 @@ impl Model {
         self.remove_unused(old);
     }
 
+    /// `mesh` of `src` with its ids mapped into this model: definitions in `pre` map as given,
+    /// the others reachable from it are copied. Returns the mesh and the definitions' mapping.
+    pub fn graft_mesh_with(&mut self, src: &Model, mesh: Mesh, pre: HashMap<DefId, DefId>) -> (Mesh, HashMap<DefId, DefId>) {
+        let mut g = Graft { defs: pre, ..Default::default() };
+        let mesh = g.mesh(src, self, mesh);
+        (mesh, g.defs)
+    }
+
     /// Remove the definitions of `cands` that nothing uses (repeatedly: their children too).
     pub fn remove_unused(&mut self, mut cands: HashSet<DefId>) {
         loop {

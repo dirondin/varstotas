@@ -1,0 +1,30 @@
+# A component parameter script with the ordinary API (no special functions): the Door is found
+# with child("Door"), turned about its own min corner; the Knob inside it — child("Knob", true)
+# — is hidden past 45°. The cabinet is picked with the real mouse; the values per copy.
+action script let body = box(vec3(0, 0, 0), 600, 400, 800);\nlet door = box(vec3(0, -20, 0), 600, 20, 800);\nlet knob = box(vec3(540, -60, 380), 20, 40, 40);\nknob.name = "Knob";\nlet d = group([door, knob]);\nd.name = "Door";\nlet c = component([body, d], "Cabinet");\ncopy(c, vec3(1000, 0, 0));
+view iso
+zoom_extents
+wait 10
+rawp click 300 200 800
+wait 5
+expect sel F=0 E=0 I=1
+action rig_edit
+wait 5
+action rig_clear
+action rig_param open:angle(0..90) = 0 "Opening"
+action rig_script ../../qa/fixtures/rig_script/update.rhai
+action rig_apply
+wait 10
+expect rig=Some("1 Cabinet [open=0°] joints=0 variants=1")
+action script let c = selection()[0];\nprint([child(c, "Knob", true).hidden, c.size.y.round()]);
+wait 3
+expect "[false, 460.0]"))
+action rig open=90
+wait 10
+expect rig=Some("1 Cabinet [open=90°] joints=0 variants=2")
+action script let c = selection()[0];\nprint([child(c, "Knob", true).hidden, c.size.y.round()]);
+wait 3
+expect "[true, 1060.0]"))
+action undo
+wait 5
+expect rig=Some("1 Cabinet [open=0°] joints=0 variants=1")

@@ -1,27 +1,24 @@
 //! Rigs (parameters of ordinary components, see `varstotas_kernel::rig`): the values turned into
-//! part operations — the joints, then the rig's script `update(p, parts)` — and the variants
-//! built, shared, posed again and written back.
+//! part operations — the joints — and the variants built, shared, posed again and written back.
 //!
-//! Script functions (in `update`): `rotate(part, origin, axis, degrees)`,
-//! `move(part, offset)` / `translate`, `scale(part, origin, factor or vec3)`,
-//! `show(part, flag)`, `hide(part)`, `paint(part, material)`, `set_param(part, key, value)` (a
-//! parameter of a part that has parameters: a generated component or one with its own rig).
-//! `p` holds the values and formulas, `parts` each part's rest-pose bounds by name (`min`,
-//! `max`, `center`, `size`).
+//! The rig's script `fn update(p) { … }` runs after the joints with the whole script API (as a
+//! generator's `build`): the current context is the component's content in the pose of the
+//! joints, `p` holds the values and formulas; parts are found with `child(name)` /
+//! `child(parent, name, deep)` and changed with the usual functions (`rotate`, `move`, `scale`,
+//! `hide`, `paint`, `set_params` …; a part's name also works in place of the part). It runs on
+//! a copy of the document: definitions it changes become copies used by the variant, new
+//! generated components and components with parameters are the document's for their values.
+//! `update(p, parts)` of older documents still runs (`parts`: rest-pose bounds by name).
 //!
 //! Parameters of parts ([`PartOp::Values`]) are resolved into [`PartOp::Swap`]s: the part's
 //! definition for its values in the master with these over them (built when new).
 
-use crate::generator::{derive, expr_engine, register_math, to_value};
+use crate::generator::{derive, expr_engine, to_value};
+use crate::ScriptCtx;
 use varstotas_kernel::glam::{DMat4, DVec3};
-use varstotas_kernel::{DefId, GenKind, GenValues, Generator, InstanceId, JointKind, Model, PartOp, Rig};
-use std::cell::RefCell;
+use varstotas_kernel::{DefId, GenKind, GenValues, Generator, InstanceId, JointKind, Mesh, Model, PartOp, Rig, Rigged};
 use std::collections::{HashMap, HashSet};
-
-thread_local! {
-    /// Operations collected by the running `update` script.
-    static OPS: RefCell<Vec<PartOp>> = const { RefCell::new(Vec::new()) };
-}
+use std::time::Duration;
 
 /// The rig as a generator (for normalizing values, formulas and Entity Info's fields).
 pub fn generator_of(name: &str, rig: &Rig) -> Generator {
@@ -54,78 +51,8 @@ fn flag(d: &rhai::Dynamic) -> Option<bool> {
     d.as_bool().ok().or_else(|| number(d).map(|x| x.abs() > 1e-12))
 }
 
-type R<T> = Result<T, Box<rhai::EvalAltResult>>;
-
-fn push(op: PartOp) {
-    OPS.with(|o| o.borrow_mut().push(op));
-}
-
-/// The engine of `update` scripts: math, vectors and the part functions.
-fn script_engine() -> rhai::Engine {
-    use crate::api::{num, pt};
-    use rhai::Dynamic;
-    let mut e = rhai::Engine::new();
-    e.set_max_operations(2_000_000);
-    e.set_max_call_levels(64);
-    register_math(&mut e);
-    crate::api::register_vec(&mut e);
-    e.register_fn("rotate", |part: &str, origin: Dynamic, axis: Dynamic, deg: Dynamic| -> R<()> {
-        push(PartOp::Transform(part.to_string(), rotation(pt(&origin)?, pt(&axis)?, num(&deg)?)));
-        Ok(())
-    });
-    for name in ["move", "translate"] {
-        e.register_fn(name, |part: &str, off: Dynamic| -> R<()> {
-            push(PartOp::Transform(part.to_string(), DMat4::from_translation(pt(&off)?)));
-            Ok(())
-        });
-    }
-    e.register_fn("scale", |part: &str, origin: Dynamic, f: Dynamic| -> R<()> {
-        let o = pt(&origin)?;
-        let k = if f.is::<DVec3>() || f.is_array() { pt(&f)? } else { DVec3::splat(num(&f)?) };
-        push(PartOp::Transform(part.to_string(), DMat4::from_translation(o) * DMat4::from_scale(k) * DMat4::from_translation(-o)));
-        Ok(())
-    });
-    e.register_fn("show", |part: &str, on: bool| push(PartOp::Visible(part.to_string(), on)));
-    e.register_fn("show", |part: &str| push(PartOp::Visible(part.to_string(), true)));
-    e.register_fn("hide", |part: &str| push(PartOp::Visible(part.to_string(), false)));
-    e.register_fn("paint", |part: &str, mat: &str| push(PartOp::Paint(part.to_string(), mat.to_string())));
-    e.register_fn("set_param", |part: &str, key: &str, v: Dynamic| -> R<()> {
-        let v = to_value(&v).ok_or_else(|| format!("set_param({part}, {key}): the value is not a number, flag or text"))?;
-        push(PartOp::Values(part.to_string(), GenValues::from([(key.to_string(), v)])));
-        Ok(())
-    });
-    e
-}
-
-/// The parts of `master` for the script: name → rest-pose bounds.
-fn parts_map(model: &Model, master: DefId) -> rhai::Map {
-    let mut m = rhai::Map::new();
-    for (name, b) in model.rig_part_bounds(master) {
-        let mut x = rhai::Map::new();
-        x.insert("min".into(), rhai::Dynamic::from(b.min));
-        x.insert("max".into(), rhai::Dynamic::from(b.max));
-        x.insert("center".into(), rhai::Dynamic::from(b.center()));
-        x.insert("size".into(), rhai::Dynamic::from(b.size()));
-        m.insert(name.as_str().into(), rhai::Dynamic::from_map(x));
-    }
-    m
-}
-
-/// Run `update(p, parts)` of `script`: its operations.
-fn run_script(script: &str, p: rhai::Map, parts: rhai::Map) -> Result<Vec<PartOp>, String> {
-    let engine = script_engine();
-    let ast = engine.compile(script).map_err(|e| format!("script: {e}"))?;
-    if !ast.iter_functions().any(|f| f.name == "update" && f.params.len() == 2) {
-        return Err("script: needs `fn update(p, parts) { ... }`".into());
-    }
-    OPS.with(|o| o.borrow_mut().clear());
-    let r = engine.call_fn::<rhai::Dynamic>(&mut rhai::Scope::new(), &ast, "update", (rhai::Dynamic::from_map(p), rhai::Dynamic::from_map(parts)));
-    let ops = OPS.with(|o| std::mem::take(&mut *o.borrow_mut()));
-    let _ = r.map_err(|e| format!("script: {e}"))?;
-    Ok(ops)
-}
-
-/// The part operations of rig `rig` (of master `master`) for `values` (normalized).
+/// The joints' part operations of rig `rig` (of master `master`) for `values` (normalized);
+/// the script runs separately ([`script_pose`]).
 pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> Result<Vec<PartOp>, String> {
     let name = model.defs.get(master).map(|d| d.name.clone()).unwrap_or_default();
     let g = generator_of(&name, rig);
@@ -175,9 +102,6 @@ pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> R
                 }
             }
         }
-    }
-    if !rig.script.trim().is_empty() {
-        ops.extend(run_script(&rig.script, p, parts_map(model, master))?);
     }
     Ok(ops)
 }
@@ -259,6 +183,193 @@ fn resolve(model: &mut Model, master: DefId, ops: Vec<PartOp>) -> Result<Vec<Par
     Ok(swaps)
 }
 
+/// Hash of serialized `v` (telling what a script changed).
+fn hash_of(v: &impl serde::Serialize) -> u64 {
+    use std::hash::Hasher;
+    struct W(std::collections::hash_map::DefaultHasher);
+    impl std::io::Write for W {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.write(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut w = W(Default::default());
+    let _ = serde_json::to_writer(&mut w, v);
+    w.0.finish()
+}
+
+/// The own geometry of a mesh (not its groups / components).
+fn geometry_hash(m: &Mesh) -> u64 {
+    hash_of(&(&m.vertices, &m.edges, &m.faces, &m.curves))
+}
+
+/// Run the rig's script on a copy of `model` whose top level is `content` (the variant posed by
+/// the joints): the copy afterwards.
+fn sandbox(model: &Model, content: &Mesh, script: &str, p: rhai::Map) -> Result<Model, String> {
+    let mut sb = model.clone();
+    let root = sb.root;
+    sb.defs[root].mesh = content.clone();
+    // `update(p, parts)` of older documents: the parts' bounds by name.
+    let legacy = rhai::Engine::new().compile(script).map_err(|e| format!("script: {e}"))?.iter_functions().find(|f| f.name == "update").map(|f| f.params.len());
+    let mut vars = vec![("p".to_string(), rhai::Dynamic::from_map(p))];
+    let call = match legacy {
+        Some(1) => "update(p);",
+        Some(2) => {
+            let mut parts = rhai::Map::new();
+            for i in content.instances.values() {
+                let name = if i.name.is_empty() { sb.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default() } else { i.name.clone() };
+                if let Some(b) = sb.def_bounds(i.def).map(|b| b.transformed(&i.transform)) {
+                    let mut x = rhai::Map::new();
+                    x.insert("min".into(), rhai::Dynamic::from(b.min));
+                    x.insert("max".into(), rhai::Dynamic::from(b.max));
+                    x.insert("center".into(), rhai::Dynamic::from(b.center()));
+                    x.insert("size".into(), rhai::Dynamic::from(b.size()));
+                    parts.insert(name.as_str().into(), rhai::Dynamic::from_map(x));
+                }
+            }
+            vars.push(("parts".to_string(), rhai::Dynamic::from_map(parts)));
+            "update(p, parts);"
+        }
+        _ => return Err("script: needs `fn update(p) { ... }`".into()),
+    };
+    let ctx = ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(Duration::from_secs(10)) };
+    let (run, _) = crate::run_with(&mut sb, &ctx, &format!("{script}\n{call}\n"), vars, |_| ());
+    match run.error {
+        Some(e) => Err(format!("script: {e}")),
+        None => Ok(sb),
+    }
+}
+
+/// Definitions used inside `d` of `model` (nested, `d` itself not).
+fn nested(model: &Model, d: DefId, out: &mut HashSet<DefId>) {
+    let Some(def) = model.defs.get(d) else { return };
+    for i in def.mesh.instances.values() {
+        if out.insert(i.def) {
+            nested(model, i.def, out);
+        }
+    }
+}
+
+/// The script of `master`'s rig run on variant `target` (posed by the joints for `values`):
+/// the variant takes the result. Definitions the script left alone stay shared, changed ones are
+/// copied for the variant (posed copies, written back to their originals), new generated
+/// components and components with parameters are the document's for their values.
+fn script_pose(model: &mut Model, target: DefId, master: DefId, values: &GenValues) -> Result<(), String> {
+    let Some(rig) = model.defs.get(master).and_then(|d| d.rig.clone()).filter(|r| !r.script.trim().is_empty()) else { return Ok(()) };
+    let name = model.defs[master].name.clone();
+    let p = derive(&generator_of(&name, &rig), values)?;
+    let sb = sandbox(model, &model.defs[target].mesh, &rig.script, p)?;
+    // Reachable from the result; unchanged = same content, nested ones unchanged too.
+    let mut reach = HashSet::new();
+    nested(&sb, sb.root, &mut reach);
+    let orig: HashSet<DefId> = model.defs.keys().collect();
+    fn same(sb: &Model, model: &Model, orig: &HashSet<DefId>, d: DefId, memo: &mut HashMap<DefId, bool>) -> bool {
+        if let Some(x) = memo.get(&d) {
+            return *x;
+        }
+        memo.insert(d, false);
+        let ok = orig.contains(&d)
+            && hash_of(&sb.defs[d]) == hash_of(&model.defs[d])
+            && sb.defs[d].mesh.instances.values().all(|i| same(sb, model, orig, i.def, memo));
+        memo.insert(d, ok);
+        ok
+    }
+    let mut memo = HashMap::new();
+    let mut pre: HashMap<DefId, DefId> = HashMap::new();
+    let mut resolve: Vec<DefId> = Vec::new();
+    for d in &reach {
+        if same(&sb, model, &orig, *d, &mut memo) {
+            pre.insert(*d, *d);
+        } else {
+            resolve.push(*d);
+        }
+    }
+    for (n, g) in &sb.generators {
+        if !model.generators.contains_key(n) {
+            model.add_generator(g.clone());
+        }
+    }
+    for d in resolve {
+        let def = &sb.defs[d];
+        let found = if let Some(g) = &def.generated {
+            Some(crate::generator::def_for(model, &g.generator, &g.values)?)
+        } else if let Some(r) = def.rigged.as_ref().filter(|r| r.paint.is_none() && orig.contains(&r.master)) {
+            Some(variant_for(model, r.master, &r.values)?)
+        } else {
+            None
+        };
+        if let Some(x) = found {
+            pre.insert(d, x);
+        }
+    }
+    let mut old = HashSet::new();
+    nested(model, target, &mut old);
+    let (mesh, map) = model.graft_mesh_with(&sb, sb.root_mesh().clone(), pre.clone());
+    for (src, dst) in map {
+        if orig.contains(&src) && !pre.contains_key(&src) && let Some(def) = model.defs.get_mut(dst) {
+            def.rig = None;
+            def.rigged = Some(Rigged { master: src, values: GenValues::new(), paint: Some(String::new()) });
+        }
+    }
+    model.defs[target].mesh = mesh;
+    model.remove_unused(old);
+    Ok(())
+}
+
+/// Pose `target` as `master` for `values` (normalized): the joints, then the script.
+fn pose(model: &mut Model, target: DefId, master: DefId, values: &GenValues) -> Result<(), String> {
+    let ops = ops(model, master, values)?;
+    model.pose_rig(target, master, &ops);
+    script_pose(model, target, master, values)
+}
+
+/// Undo the script's pose in the edited variant `v` (values `values`): parts the script made go,
+/// its moves, visibility, materials and definitions are reverted. The master's own geometry
+/// stays when the script changes it (edits of it in a scripted pose are not kept).
+fn unscript(model: &mut Model, v: DefId, master: DefId, values: &GenValues) -> Result<(), String> {
+    let Some(rig) = model.defs.get(master).and_then(|d| d.rig.clone()).filter(|r| !r.script.trim().is_empty()) else { return Ok(()) };
+    let p = derive(&generator_of(&model.defs[master].name, &rig), values)?;
+    // The joints' pose (J) and the script's (P), in a copy.
+    let mut tmp = model.clone();
+    let t = tmp.new_rig_variant(master, values.clone(), &[]).ok_or("no such component")?;
+    let o = ops(&mut tmp, master, values)?;
+    tmp.pose_rig(t, master, &o);
+    let j = tmp.defs[t].mesh.clone();
+    let sb = sandbox(&tmp, &j, &rig.script, p)?;
+    let pm = sb.root_mesh();
+    let mut e = model.defs[v].mesh.clone();
+    let made: Vec<InstanceId> = pm.instances.keys().filter(|k| !j.instances.contains_key(*k)).collect();
+    for k in made {
+        e.instances.remove(k);
+    }
+    for (k, ji) in &j.instances {
+        let (Some(pi), Some(ei)) = (pm.instances.get(k), e.instances.get_mut(k)) else { continue };
+        if pi.transform != ji.transform {
+            ei.transform = ji.transform * pi.transform.inverse() * ei.transform;
+        }
+        if pi.hidden != ji.hidden {
+            ei.hidden = ji.hidden;
+        }
+        if pi.material != ji.material {
+            ei.material = ji.material;
+        }
+        if pi.def != ji.def
+            && let Some(mi) = model.defs[master].mesh.instances.get(k)
+        {
+            ei.def = mi.def;
+        }
+    }
+    if geometry_hash(pm) != geometry_hash(&j) {
+        let m = &model.defs[master].mesh;
+        (e.vertices, e.edges, e.faces, e.curves) = (m.vertices.clone(), m.edges.clone(), m.faces.clone(), m.curves.clone());
+    }
+    model.defs[v].mesh = e;
+    Ok(())
+}
+
 /// Values over the rig's defaults, normalized.
 pub fn normalize(model: &Model, master: DefId, values: &GenValues) -> Result<GenValues, String> {
     generator(model, master).ok_or("not a component with parameters")?.normalize(values)
@@ -270,8 +381,9 @@ pub fn variant_for(model: &mut Model, master: DefId, values: &GenValues) -> Resu
     if let Some(v) = model.rig_variant(master, &values) {
         return Ok(v);
     }
-    let ops = ops(model, master, &values)?;
-    model.new_rig_variant(master, values, &ops).ok_or_else(|| "no such component".into())
+    let v = model.new_rig_variant(master, values.clone(), &[]).ok_or("no such component")?;
+    pose(model, v, master, &values)?;
+    Ok(v)
 }
 
 /// Change the values of the rigged instance `inst` (over its current ones, or over the defaults
@@ -288,8 +400,7 @@ pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, valu
     let target = match model.rig_variant(cur.master, &values) {
         Some(d) => d,
         None if model.instance_count(old) == 1 => {
-            let ops = ops(model, cur.master, &values)?;
-            model.pose_rig(old, cur.master, &ops);
+            pose(model, old, cur.master, &values)?;
             if let Some(r) = model.defs[old].rigged.as_mut() {
                 r.values = values;
             }
@@ -317,8 +428,7 @@ pub fn rebuild_all(model: &mut Model, master: DefId) -> Result<(), String> {
             merged.insert(v, *k);
             continue;
         }
-        let ops = ops(model, master, &values)?;
-        model.pose_rig(v, master, &ops);
+        pose(model, v, master, &values)?;
         if let Some(r) = model.defs[v].rigged.as_mut() {
             r.values = values.clone();
         }
@@ -382,6 +492,7 @@ pub fn after_edit(model: &mut Model, path: &[InstanceId]) -> Result<(), String> 
     let r = match edited_variant(model, path) {
         Some(v) => {
             let r = model.defs[v].rigged.clone().expect("a variant");
+            unscript(model, v, r.master, &r.values)?;
             // Swaps only need to be marked to be undone: no definitions built.
             let ops: Vec<PartOp> = raw_ops(model, r.master, &r.values)?
                 .into_iter()
@@ -422,6 +533,15 @@ pub fn set_rig(model: &mut Model, d: DefId, rig: Option<Rig>) -> Result<DefId, S
             let g = generator_of(&name, &rig);
             let defaults = rig_ops(model, master, &rig, &g.defaults())?;
             check_part_params(model, master, &defaults)?;
+            // The script must run for the defaults (tried on a copy: placing copies doesn't
+            // report errors).
+            if !rig.script.trim().is_empty() {
+                let mut t = model.clone();
+                t.defs[master].rig = Some(rig.clone());
+                let values = g.defaults();
+                let v = t.new_rig_variant(master, values.clone(), &[]).ok_or("no such component")?;
+                pose(&mut t, v, master, &values)?;
+            }
             model.defs[master].rig = Some(rig);
             rebuild_all(model, master)?;
             attach(model);

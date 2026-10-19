@@ -84,6 +84,9 @@ Varstotas встраивает язык [Rhai](https://rhai.rs/book/) — про
 |---|---|
 | `faces()`, `edges()`, `groups()`, `all()` | сущности текущего контекста |
 | `entities(g)` | всё внутри группы |
+| `child("Door")`, `child("Knob", true)`, `child(g, "Knob")`, `child(g, "Knob", true)` | группа / компонент с этим именем в текущем контексте (или внутри `g`); `true` — искать и во вложенных (в ширину, ближайшее); нет — `()`. Имя — своё имя копии, иначе имя определения |
+| `children()`, `children(true)`, `children(g)`, `children(g, true)` | группы / компоненты контекста (или `g`); `true` — со вложенными |
+| `show(x)`, `show(x, on)`, `hide(x)` | показать / скрыть |
 | `enter(g)`, `exit()` | войти в группу / выйти (для построения внутри) |
 | `selection()`, `select(x)`, `select(())` | выделение (в контексте запуска) |
 | `bounds(x)` | `#{ min, max, size, center }` в мировых координатах |
@@ -95,7 +98,9 @@ Varstotas встраивает язык [Rhai](https://rhai.rs/book/) — про
 | `parse_json(text)` | JSON → map / массив / числа / строки |
 | `fetch_text(url)`, `fetch_file(url, path)` | загрузка по сети (системный curl): текст / в файл |
 
-Свойства сущности: `e.kind` (`"face"`, `"edge"`, `"vertex"`, `"group"`, `"component"`, `"parametric"`), `e.valid`, `e.area` (грань, мм²), `e.length` (ребро), `e.normal` (грань), `e.center`, `e.vertices` (точки), `e.edges` (рёбра грани), `e.faces` (грани ребра / соседи грани), `e.name` (группа, можно присваивать), `e.definition`, `e.material`, `e.tag`, `e.soft`.
+Свойства сущности: `e.kind` (`"face"`, `"edge"`, `"vertex"`, `"group"`, `"component"`, `"parametric"`), `e.valid`, `e.area` (грань, мм²), `e.length` (ребро), `e.normal` (грань), `e.center`, `e.vertices` (точки), `e.edges` (рёбра грани), `e.faces` (грани ребра / соседи грани), `e.name` (группа, можно присваивать), `e.definition`, `e.material`, `e.tag`, `e.soft`, `e.hidden` (можно присваивать), габарит в мировых координатах: `e.bounds` (`#{ min, max, size, center }`), `e.size`, `e.min`, `e.max`.
+
+Вместо сущности везде можно передать строку — имя дочерней группы / компонента текущего контекста: `move("Door", vec3(0, 10, 0))`.
 
 ## Пример
 ```rhai

@@ -1,7 +1,7 @@
 //! Parameters of ordinary components (rigs, see `varstotas_kernel::rig`): the values of selected
 //! copies in Entity Info, and Window → Component Parameters — the parameters, formulas, the
 //! parts' joints (turn / slide / show / paint, driven by a parameter or an expression) and the
-//! script `update(p, parts)` of a component.
+//! script `update(p)` of a component.
 
 use super::code_editor::ScriptEditor;
 use super::generators::show_value;
@@ -656,10 +656,10 @@ impl VarstotasApp {
                 // Script.
                 ui.add_space(6.0);
                 ui.label(RichText::new("Script").strong()).on_hover_text(
-                    "Optional Rhai code run after the motions: fn update(p, parts) { … } with rotate(part, origin, axis, deg), move(part, offset), scale(part, origin, f), show(part, on), hide(part), paint(part, material), set_param(part, key, value); p — the values and formulas, parts[name] — min / max / center / size",
+                    "Optional Rhai code run after the motions inside the component: fn update(p) { … } with the whole script API (rotate, move, paint, show / hide, set_params, box…); child(name) / child(name, true) finds a part by name (deeply), part.min / max / size / bounds — its extents; p — the values and formulas",
                 );
                 if ed.script.is_empty() && ui.button("+ Script").clicked() {
-                    ed.script = "fn update(p, parts) {\n    // let d = parts[\"Door\"];\n    // rotate(\"Door\", d.min, vec3(0, 0, 1), -p.open);\n}\n".into();
+                    ed.script = "fn update(p) {\n    // let door = child(\"Door\", true);\n    // rotate(door, door.min, vec3(0, 0, 1), -p.open);\n}\n".into();
                 }
                 if !ed.script.is_empty() {
                     ed.editor.show(ui, &mut ed.script, 140.0);

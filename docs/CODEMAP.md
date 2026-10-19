@@ -73,11 +73,11 @@ Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in
 | File | Contents |
 |---|---|
 | `lib.rs` | `run(model, ctx, src) -> ScriptRun` (works on a copy; output, error, selection), `ScriptCtx`, `Entity` |
-| `api.rs` | the Rhai API: `Vec3` type, `Entity` properties, geometry / operations / context functions (reference: `docs/SCRIPTING.md`) |
+| `api.rs` | the Rhai API: `Vec3` type, `Entity` properties (also `hidden`, `bounds` / `size` / `min` / `max`), `child` / `children` by name (deep), a string as a child entity, geometry / operations / context functions (reference: `docs/SCRIPTING.md`) |
 | `json.rs` | `eval_json` (JSON variables in, last value out), `entity_id` / `parse_entity_id` (for the bridge) |
 | `generator.rs` | running generators: `build` (`build(p)` in an empty model with the document's materials; nested runs keep the outer script state), `def_for`, `place`, `set_values` (shared / in place / new definition), `scale` (Scale → size values), `add`, `rebuild_all`, `values_map`, `derive` / `formula_values` (`@formula` / `@check`), `register_math` (`min` / `max` / `clamp` / `ceil`, also in the API) |
 
-Also `rig.rs`: components with parameters — `rig_ops` (joints: range → from..to or the value / an expression; then the script `update(p, parts)` with `rotate` / `move` / `scale` / `show` / `hide` / `paint`), `variant_for`, `set_values` (shared / in place / new), `rebuild_all` (equal variants merged), `attach` (copies placed with a master → default variant), `after_edit` (write back + re-pose, called by `Document` on every commit), `set_rig` (add / change / remove), `warnings`.
+Also `rig.rs`: components with parameters — `rig_ops` (joints: range → from..to or the value / an expression; then `script_pose`: the script `update(p)` runs with the whole API in a sandbox clone whose root is the variant content; changed parts are copied into the variant, `unscript` removes the script's work before write-back), `variant_for`, `set_values` (shared / in place / new), `rebuild_all` (equal variants merged), `attach` (copies placed with a master → default variant), `after_edit` (write back + re-pose, called by `Document` on every commit), `set_rig` (add / change / remove), `warnings`.
 
 Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility / paint, remove and attach), `tests/api.rs` (also runs `examples/scripts/bookshelf.rhai`), `tests/generator.rs` (runs every `examples/generators/*.rhai`, formulas and checks).
 

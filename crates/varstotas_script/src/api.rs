@@ -21,7 +21,7 @@ pub const NAMES: &[&str] = &[
     "make_parametric", "set_params", "params", "dimension", "note", "enter", "exit", "faces", "edges", "groups", "all",
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
-    "parse_json", "fetch_text", "fetch_file",
+    "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide",
 ];
 
 /// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
@@ -133,10 +133,17 @@ fn pts(d: &Dynamic) -> R<Vec<DVec3>> {
     }
 }
 
-/// One entity or an array (nested arrays are flattened).
+/// One entity or an array (nested arrays are flattened). A text names a group / component in
+/// the current context ([`find_child`]).
 fn ents(d: &Dynamic) -> R<Vec<Entity>> {
     if let Some(e) = d.clone().try_cast::<Entity>() {
         return Ok(vec![e]);
+    }
+    if let Some(name) = d.clone().try_cast::<ImmutableString>() {
+        return with(|st| {
+            let path = st.path.clone();
+            find_child(st, &path, &name, false).map(|e| vec![e]).ok_or_else(|| format!("no group / component named `{name}` here").into())
+        });
     }
     if let Some(a) = d.clone().try_cast::<Array>() {
         let mut out = Vec::new();
@@ -149,6 +156,68 @@ fn ents(d: &Dynamic) -> R<Vec<Entity>> {
         return err("expected an entity, got () (did the operation fail?)");
     }
     err(format!("expected an entity or an array of entities, got {}", d.type_name()))
+}
+
+/// The name of instance `i` as found by [`find_child`]: its own, else its definition's.
+fn inst_name(st: &State, i: &varstotas_kernel::Instance) -> String {
+    if i.name.is_empty() { st.model.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default() } else { i.name.clone() }
+}
+
+/// The first group / component named `name` (its own name, else its definition's) in the
+/// context `path`; with `deep` also inside the groups and components there, nearer ones first.
+fn find_child(st: &State, path: &ContextPath, name: &str, deep: bool) -> Option<Entity> {
+    let mut level = vec![path.clone()];
+    for _ in 0..32 {
+        let mut next = Vec::new();
+        for p in &level {
+            let Ok(m) = mesh(st, p) else { continue };
+            let mut ids: Vec<InstanceId> = m.instances.keys().collect();
+            ids.sort();
+            if let Some(id) = ids.iter().find(|id| inst_name(st, &m.instances[**id]) == name) {
+                return Some(Entity { path: p.clone(), r: EntityRef::Instance(*id) });
+            }
+            next.extend(ids.into_iter().map(|id| {
+                let mut q = p.clone();
+                q.push(id);
+                q
+            }));
+        }
+        if !deep || next.is_empty() {
+            return None;
+        }
+        level = next;
+    }
+    None
+}
+
+/// The context inside group / component `x` (the current one for `()`).
+fn inside(x: &Dynamic) -> R<ContextPath> {
+    if x.is_unit() {
+        return with(|st| Ok(st.path.clone()));
+    }
+    let g = one(x)?;
+    with(|st| {
+        let i = inst_id(st, &g)?;
+        let mut p = g.path.clone();
+        p.push(i);
+        Ok(p)
+    })
+}
+
+/// The groups / components of the context `path` (with `deep` also those inside them).
+fn children_of(st: &State, path: &ContextPath, deep: bool, out: &mut Array, depth: usize) -> R<()> {
+    let m = mesh(st, path)?;
+    let mut ids: Vec<InstanceId> = m.instances.keys().collect();
+    ids.sort();
+    for id in ids {
+        out.push(dyn_ent(path, EntityRef::Instance(id)));
+        if deep && depth < 32 {
+            let mut q = path.clone();
+            q.push(id);
+            children_of(st, &q, true, out, depth + 1)?;
+        }
+    }
+    Ok(())
 }
 
 fn one(d: &Dynamic) -> R<Entity> {
@@ -614,6 +683,28 @@ fn register_entity(e: &mut Engine) {
     e.register_get("center", |x: &mut Entity| -> R<DVec3> {
         with(|st| Ok(ent_bounds(st, std::slice::from_ref(x))?.map_or(DVec3::ZERO, |b| (b.min + b.max) * 0.5)))
     });
+    e.register_get("bounds", |x: &mut Entity| -> R<Dynamic> { with(|st| Ok(bounds_map(ent_bounds(st, std::slice::from_ref(x))?))) });
+    e.register_get("size", |x: &mut Entity| -> R<DVec3> {
+        with(|st| Ok(ent_bounds(st, std::slice::from_ref(x))?.map_or(DVec3::ZERO, |b| b.max - b.min)))
+    });
+    e.register_get("min", |x: &mut Entity| -> R<DVec3> { with(|st| Ok(ent_bounds(st, std::slice::from_ref(x))?.map_or(DVec3::ZERO, |b| b.min))) });
+    e.register_get("max", |x: &mut Entity| -> R<DVec3> { with(|st| Ok(ent_bounds(st, std::slice::from_ref(x))?.map_or(DVec3::ZERO, |b| b.max))) });
+    e.register_get_set(
+        "hidden",
+        |x: &mut Entity| -> R<bool> {
+            with(|st| {
+                let i = inst_id(st, x)?;
+                Ok(mesh(st, &x.path)?.instances[i].hidden)
+            })
+        },
+        |x: &mut Entity, h: bool| -> R<()> {
+            edit(|st| {
+                let i = inst_id(st, x)?;
+                mesh_mut(st, &x.path)?.instances[i].hidden = h;
+                Ok(())
+            })
+        },
+    );
     e.register_get("vertices", |x: &mut Entity| -> R<Array> {
         with(|st| Ok(ent_points(st, x)?.into_iter().map(Dynamic::from).collect()))
     });
@@ -1021,6 +1112,28 @@ fn register_ops(e: &mut Engine) {
             Ok(name.clone())
         })
     });
+    fn set_hidden(x: &Dynamic, hidden: bool) -> R<()> {
+        let es = ents(x)?;
+        edit(|st| {
+            for (path, refs) in by_path(es) {
+                let m = mesh_mut(st, &path)?;
+                for r in refs {
+                    match r {
+                        EntityRef::Instance(i) => {
+                            if let Some(i) = m.instances.get_mut(i) {
+                                i.hidden = hidden;
+                            }
+                        }
+                        _ => return err("show / hide: groups and components only"),
+                    }
+                }
+            }
+            Ok(())
+        })
+    }
+    e.register_fn("show", |x: Dynamic| set_hidden(&x, false));
+    e.register_fn("show", |x: Dynamic, on: bool| set_hidden(&x, !on));
+    e.register_fn("hide", |x: Dynamic| set_hidden(&x, true));
     e.register_fn("paint", |x: Dynamic, name: Dynamic| -> R<()> {
         let es = ents(&x)?;
         let name = if name.is_unit() { None } else { Some(name.into_immutable_string().map_err(|t| format!("paint: expected a material name, got {t}"))?) };
@@ -1096,18 +1209,28 @@ fn register_ops(e: &mut Engine) {
                     None => Dynamic::UNIT,
                 });
             }
+            if let Some((_, rg)) = st.model.instance_rigged(&g.path, i) {
+                return Ok(match crate::rig::generator(&st.model, rg.master) {
+                    Some(x) => Dynamic::from_map(crate::generator::values_map(&x, &rg.values)),
+                    None => Dynamic::UNIT,
+                });
+            }
             Ok(st.model.instance_params(&g.path, i).map_or(Dynamic::UNIT, |p| Dynamic::from_map(params_map(p))))
         })
     });
     e.register_fn("set_params", |x: Dynamic, m: Map| -> R<()> {
         let g = one(&x)?;
-        let generated = with(|st| {
+        let (generated, rigged) = with(|st| {
             let i = inst_id(st, &g)?;
-            Ok(st.model.instance_generated(&g.path, i).is_some().then_some(i))
+            Ok((st.model.instance_generated(&g.path, i).is_some().then_some(i), st.model.instance_rigged(&g.path, i).is_some().then_some(i)))
         })?;
         if let Some(i) = generated {
             let values = gen_values(&m)?;
             return with_model(|m| crate::generator::set_values(m, &g.path, i, &values, false));
+        }
+        if let Some(i) = rigged {
+            let values = gen_values(&m)?;
+            return with_model(|m| crate::rig::set_values(m, &g.path, i, &values, false));
         }
         edit(|st| {
             let i = inst_id(st, &g)?;
@@ -1239,6 +1362,28 @@ fn register_context(e: &mut Engine) {
         p.push(i);
         list(3, Some(p))
     });
+    // Groups / components by name: in the current context or inside `parent`; `deep` searches
+    // nested ones too (nearer first). () when there is none.
+    fn child(parent: &Dynamic, name: &str, deep: bool) -> R<Dynamic> {
+        let path = inside(parent)?;
+        with(|st| Ok(find_child(st, &path, name, deep).map_or(Dynamic::UNIT, Dynamic::from)))
+    }
+    e.register_fn("child", |name: ImmutableString| child(&Dynamic::UNIT, &name, false));
+    e.register_fn("child", |name: ImmutableString, deep: bool| child(&Dynamic::UNIT, &name, deep));
+    e.register_fn("child", |parent: Dynamic, name: ImmutableString| child(&parent, &name, false));
+    e.register_fn("child", |parent: Dynamic, name: ImmutableString, deep: bool| child(&parent, &name, deep));
+    fn children(parent: &Dynamic, deep: bool) -> R<Array> {
+        let path = inside(parent)?;
+        with(|st| {
+            let mut out = Array::new();
+            children_of(st, &path, deep, &mut out, 0)?;
+            Ok(out)
+        })
+    }
+    e.register_fn("children", || children(&Dynamic::UNIT, false));
+    e.register_fn("children", |deep: bool| children(&Dynamic::UNIT, deep));
+    e.register_fn("children", |parent: Dynamic| children(&parent, false));
+    e.register_fn("children", |parent: Dynamic, deep: bool| children(&parent, deep));
     e.register_fn("selection", || -> R<Array> {
         with(|st| Ok(st.selection.iter().filter(|x| alive(st, x)).cloned().map(Dynamic::from).collect()))
     });
