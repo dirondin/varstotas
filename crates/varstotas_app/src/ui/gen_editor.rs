@@ -181,7 +181,7 @@ impl VarstotasApp {
         self.gen_editor.reparse();
         self.rebuild_gen_preview(ctx);
         let mut open = true;
-        let pos = self.viewport.rect.min + vec2(40.0, 30.0);
+        let pos = self.viewport.view_rect.min + vec2(40.0, 30.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(Color32::WHITE);
         let mut win = egui::Window::new("Generator Editor").open(&mut open).default_pos(pos);
         if self.debug.script_active() {

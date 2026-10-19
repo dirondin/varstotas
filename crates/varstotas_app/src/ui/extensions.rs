@@ -330,7 +330,7 @@ impl VarstotasApp {
     pub(crate) fn plugin_dialog(&mut self, ctx: &Context) {
         let Some(mut d) = self.plugins.dialog.take() else { return };
         let Some(p) = self.plugin_at(d.idx).cloned() else { return };
-        let pos = self.viewport.rect.min + egui::vec2(40.0, 40.0);
+        let pos = self.viewport.view_rect.min + egui::vec2(40.0, 40.0);
         let mut open = true;
         let (mut run, mut cancel) = (false, false);
         let mut win = egui::Window::new(&p.name).id(egui::Id::new("plugin_dialog")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);

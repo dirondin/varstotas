@@ -1,15 +1,16 @@
-# The view / style / show controls in the viewport's top-right corner (real mouse).
+# The view / style / show controls in the viewport's top-right corner (icons only; real mouse),
+# then 2 × 2 viewports: a click picks the pane the settings apply to.
 wait 10
 action script box(vec3(0, 0, 0), 1000, 600, 750);
 zoom_extents
 wait 20
-expect hud=(None false Shaded false) hud_show=["Guides", "Axes", "Ground", "Section Planes", "Section Cuts", "Section Fill"]
+expect hud=(None false Shaded false) hud_show=["Axes", "Ground", "Guides", "Section Planes", "Section Cuts", "Section Fill"] panes=(1 0
 screenshot shots/hud_start.bmp
-# the view drop-down: field of view 60°, then Top
-raw click 870 23
+# the view drop-down: field of view 60°, then Top, then Parallel
+raw click 961 22
 wait 5
 screenshot shots/hud_viewmenu.bmp
-raw click 948 306
+raw click 1076 306
 wait 3
 raw key Backspace
 raw key Backspace
@@ -21,55 +22,83 @@ wait 5
 expect fov=60
 raw key Escape
 wait 3
-raw click 870 23
+raw click 961 22
 wait 5
-raw click 856 79
+raw click 985 79
 wait 40
 expect hud=(Some(Top) false Shaded false)
-raw click 855 23
+raw click 961 22
 wait 5
-screenshot shots/hud_viewmenu2.bmp
-raw click 860 279
+raw click 1025 279
 wait 10
 expect hud=(Some(Top) true Shaded false)
-# the style drop-down → Wireframe, then X-Ray (a check box: the menu stays open)
-raw click 990 23
+# the style drop-down → Wireframe, then X-Ray
+raw click 1017 22
 wait 5
 screenshot shots/hud_stylemenu.bmp
-raw click 1005 160
+raw click 1062 160
 wait 5
 expect hud=(Some(Top) true Wireframe false)
-raw click 990 23
+raw click 1017 22
 wait 5
-raw click 990 225
+raw click 1047 225
 wait 5
 expect hud=(Some(Top) true Wireframe true)
 raw key Escape
 wait 3
-screenshot shots/hud_wire.bmp
-# the show drop-down: Grid and Shadows on (switches: the menu stays open), Axes off
-raw click 1080 23
+# the show drop-down: Grid and Shadows on, Axes off — switches, the menu stays open
+raw click 1075 22
 wait 5
-raw click 1100 133
+raw click 1101 106
 wait 3
-raw click 1110 171
+raw click 1115 186
 wait 3
-raw click 1100 79
+raw click 1103 52
 wait 5
-expect hud_show=["Guides", "Ground", "Grid", "Shadows", "Section Planes", "Section Cuts", "Section Fill"]
+expect hud_show=["Ground", "Grid", "Guides", "Shadows", "Section Planes", "Section Cuts", "Section Fill"]
 screenshot shots/hud_showmenu.bmp
 raw key Escape
 wait 3
-# clicks on the controls do not reach the tool: Line, two clicks on the drop-down, one in the
+# clicks on the controls do not reach the tool: Line, two clicks on a drop-down, one in the
 # model — no edge is drawn
 raw key L
 wait 3
-raw click 990 23
+raw click 1017 22
 wait 5
-raw click 990 23
+raw click 1017 22
 wait 5
 raw click 500 400
 wait 5
 raw key Escape
 wait 5
 expect undo=Some("Script")
+tool select
+wait 3
+# four viewports: the new panes show the model from the top, front and right
+raw click 961 22
+wait 5
+raw click 1107 382
+wait 20
+expect panes=(4 0 [(Some(Top), true, Wireframe), (Some(Top), true, Wireframe), (Some(Front), true, Wireframe), (Some(Right), true, Wireframe)])
+# a click in the bottom-right pane makes it the active one; its style changes alone
+raw click 800 650
+wait 5
+expect panes=(4 3
+raw click 1017 396
+wait 5
+raw click 1050 426
+wait 10
+expect hud=(Some(Right) true ShadedColor true)
+expect panes=(4 3 [(Some(Top), true, Wireframe), (Some(Top), true, Wireframe), (Some(Front), true, Wireframe), (Some(Right), true, ShadedColor)])
+screenshot shots/hud_panes.bmp
+# back in the top-left pane: its own settings
+raw click 200 300
+wait 5
+expect hud=(Some(Top) true Wireframe true)
+expect panes=(4 0
+# one view again (the top-left pane's view menu)
+raw click 405 22
+wait 5
+raw click 495 382
+wait 10
+expect panes=(1 0 [(Some(Top), true, Wireframe)])

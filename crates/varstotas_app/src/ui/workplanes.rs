@@ -38,7 +38,7 @@ impl VarstotasApp {
         let unit = m.unit;
         let mut remove: Option<usize> = None;
         let mut open = true;
-        let pos = self.viewport.rect.right_top() + vec2(-380.0, 40.0);
+        let pos = self.viewport.view_rect.right_top() + vec2(-380.0, 40.0);
         let mut win = egui::Window::new("Work Planes")
             .id(egui::Id::new("work_planes_window"))
             .open(&mut open)

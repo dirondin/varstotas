@@ -25,6 +25,7 @@ mod pbr;
 mod shader_help;
 mod shaders;
 mod overlay;
+mod panes;
 mod plugins;
 mod scene_builder;
 mod templates;

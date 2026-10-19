@@ -20,9 +20,10 @@ const MAX_RECENT: usize = 8;
 /// How long transient status messages stay visible.
 const FLASH_SECS: f64 = 3.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FaceStylePref {
     /// Shaded with Textures.
+    #[default]
     Shaded,
     /// Shaded: material colours, textures off.
     ShadedColor,
@@ -251,6 +252,8 @@ pub enum Action {
     ToggleGuides,
     /// Snapping → Snapping on/off (Shift+S).
     ToggleSnapping,
+    /// View → Viewports: 1, 2 or 4 panes.
+    SetPanes(usize),
     /// View → Grid (show / hide).
     ToggleGrid,
     /// File → Export → 2D Graphic… (opens the export dialog).
@@ -485,6 +488,13 @@ pub struct VarstotasApp {
     pub(crate) preview_shot: Option<(PathBuf, crate::ui::library::PreviewTarget)>,
     /// Where the viewport's view / style controls are (`ui/view_hud.rs`): clicks there are theirs.
     pub(crate) hud_rect: egui::Rect,
+    /// Split view (`panes.rs`): 1, 2 or 4 panes shown, the active one (its settings are the
+    /// app's own), the others' settings (the active slot holds nothing of use).
+    pub(crate) pane_count: usize,
+    /// The HUD drop-down open this frame: (the active pane then, which) — for the harness.
+    pub(crate) hud_open: Option<(usize, &'static str)>,
+    pub(crate) active_pane: usize,
+    pub(crate) panes: Vec<crate::panes::PaneView>,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -616,6 +626,10 @@ impl VarstotasApp {
             models: Default::default(),
             preview_shot: None,
             hud_rect: egui::Rect::NOTHING,
+            pane_count: 1,
+            hud_open: None,
+            active_pane: 0,
+            panes: (0..4).map(|_| Default::default()).collect(),
             model_info: Default::default(),
             thumbs: Default::default(),
             rig_editor: Default::default(),
@@ -1450,6 +1464,7 @@ impl VarstotasApp {
                     self.flash("There are no guides");
                 }
             }
+            Action::SetPanes(n) => self.set_pane_count(n),
             Action::ToggleSnapping => {
                 self.prefs.snapping.enabled = !self.prefs.snapping.enabled;
                 crate::inference::settings::publish(&self.prefs.snapping);
@@ -2614,7 +2629,13 @@ impl eframe::App for VarstotasApp {
         }
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
-            let response = self.viewport.allocate(ui);
+            self.viewport.view_rect = ui.available_rect_before_wrap();
+            let rects = crate::panes::pane_rects(self.viewport.view_rect, self.pane_count);
+            self.hud_open = None;
+            self.init_panes(&rects);
+            self.click_activate(ui, &rects);
+            let active = self.active_pane;
+            let response = self.viewport.allocate(ui, rects[active]);
             self.handle_viewport_input(&ctx, &response);
             if self.tool.animating() {
                 // Scripts get a fixed step so runs are repeatable.
@@ -2639,18 +2660,40 @@ impl eframe::App for VarstotasApp {
                 ctx.request_repaint();
             }
             let (o3, o2) = self.tool_overlays();
-            let style = self.render_style();
-            if style.face_style == varstotas_render::FaceStyle::Realistic && crate::pbr::animated(&self.doc.model) {
-                ctx.request_repaint();
-            }
-            self.viewport.show_textures = matches!(self.prefs.face_style, FaceStylePref::Shaded | FaceStylePref::Realistic);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())
             });
-            self.viewport.paint(ui, frame, &self.doc, &self.camera, &style, &o3, &o2, cursor);
-            let vr = self.viewport.rect;
-            self.view_hud(ui, vr);
+            for (k, &rect) in rects.iter().enumerate() {
+                let is_active = k == active;
+                if !is_active {
+                    // its own settings in, for the frame
+                    self.exchange(k);
+                    if let Some(anim) = self.cam_anim.as_mut() {
+                        if !anim.step(dt, &mut self.camera) {
+                            self.cam_anim = None;
+                        }
+                        ctx.request_repaint();
+                    }
+                }
+                let style = self.render_style();
+                if style.face_style == varstotas_render::FaceStyle::Realistic && crate::pbr::animated(&self.doc.model) {
+                    ctx.request_repaint();
+                }
+                self.viewport.show_textures = matches!(self.prefs.face_style, FaceStylePref::Shaded | FaceStylePref::Realistic);
+                // the tool's markers and the cursor belong to the active pane; its 3D preview shows everywhere
+                let (markers, cur) = if is_active { (&o2[..], cursor) } else { (&[][..], None) };
+                self.viewport.paint(ui, frame, k, rect, is_active, &self.doc, &self.camera, &style, &o3, markers, cur);
+                ui.push_id(("pane", k), |ui| self.view_hud(ui, rect));
+                if !is_active {
+                    self.exchange(k);
+                }
+            }
+            if rects.len() > 1 {
+                // the active pane: the one the settings and the tools apply to
+                let accent = egui::Color32::from_rgb(0x2F, 0x7D, 0xE1);
+                ui.painter().rect_stroke(rects[active], 0.0, egui::Stroke::new(3.0, accent), egui::StrokeKind::Inside);
+            }
         });
         // Animation frames collect their own results (anim_tick).
         let export_result = if self.anim_window.run.is_some() { None } else { self.viewport.export_result.take() };

@@ -66,6 +66,9 @@ pub enum Icon {
     Grid,
     SectionCut,
     SectionFill,
+    Panes1,
+    Panes2,
+    Panes4,
     Undo,
     Redo,
     Eye,
@@ -716,6 +719,16 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.poly(&[(4.0, 12.0), (12.0, 16.5), (12.0, 21.0), (4.0, 16.5)], SHADE);
             pen.poly(&[(12.0, 16.5), (20.0, 12.0), (20.0, 16.5), (12.0, 21.0)], SHADE_DARK);
             pen.poly(&[(12.0, 7.5), (20.0, 12.0), (12.0, 16.5), (4.0, 12.0)], pen.ink);
+        }
+        Icon::Panes1 | Icon::Panes2 | Icon::Panes4 => {
+            // The view's frame split into its panes.
+            pen.poly_c(&[(3.0, 5.0), (21.0, 5.0), (21.0, 19.0), (3.0, 19.0)], BLUE_SOFT, pen.stroke());
+            if icon != Icon::Panes1 {
+                pen.line(&[(12.0, 5.0), (12.0, 19.0)]);
+            }
+            if icon == Icon::Panes4 {
+                pen.line(&[(3.0, 12.0), (21.0, 12.0)]);
+            }
         }
         Icon::Undo | Icon::Redo => {
             let flip = if icon == Icon::Redo { -1.0 } else { 1.0 };

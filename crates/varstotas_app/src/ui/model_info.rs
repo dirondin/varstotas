@@ -128,7 +128,7 @@ impl VarstotasApp {
         let label = tex.map(|(_, s)| self.doc_preview_label(s));
         let mut open = true;
         let mut action = None;
-        let pos = self.viewport.rect.left_top() + vec2(60.0, 60.0);
+        let pos = self.viewport.view_rect.left_top() + vec2(60.0, 60.0);
         let mut win = egui::Window::new("Preview Image").id(egui::Id::new("doc_preview_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
@@ -186,7 +186,7 @@ impl VarstotasApp {
         let lib_materials = self.mat_library.items.iter().filter(|i| i.path.is_some()).count();
         let mut open = true;
         let mut purge = false;
-        let pos = self.viewport.rect.left_top() + vec2(40.0, 40.0);
+        let pos = self.viewport.view_rect.left_top() + vec2(40.0, 40.0);
         let mut win = egui::Window::new("Model Info").id(egui::Id::new("model_info_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);

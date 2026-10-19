@@ -2,6 +2,10 @@
 //! image, paints 2D overlays on top. GPU geometry is rebuilt only when the model or face style
 //! changes; selection / editing-context changes only push highlight states
 //! (`Renderer::update_highlight`) computed from the cached tessellation.
+//!
+//! A split view (1 / 2 / 4 panes) has a renderer per pane (`Gpu`: its own geometry for the
+//! pane's face style, its own image); the tessellation is shared. The path traced render lives
+//! in pane 0's renderer, a PNG export runs in the active pane's.
 
 use crate::document::{Document, guarded};
 use crate::nav::NavController;
@@ -26,15 +30,33 @@ struct HighlightKey {
     active_path: ContextPath,
 }
 
-pub struct Viewport {
+/// The GPU side of one pane.
+#[derive(Default)]
+struct Gpu {
     renderer: Option<Renderer>,
     renderer_error: Option<String>,
     built: Option<GeometryKey>,
     highlighted: Option<HighlightKey>,
-    /// Tessellation of the uploaded geometry (highlight ids index into it).
+    /// Material textures uploaded to the renderer.
+    textures: crate::textures::TextureSync,
+    /// Data textures and the HDRI of the Realistic style uploaded to the renderer.
+    data_textures: crate::pbr::DataSync,
+    hdri: crate::pbr::EnvSync,
+    /// Render origin of the uploaded geometry (kept stable between rebuilds).
+    origin: Option<varstotas_kernel::glam::DVec3>,
+}
+
+pub struct Viewport {
+    /// One per pane (made as panes are first painted).
+    gpus: Vec<Gpu>,
+    /// Tessellation of the model (highlight ids index into it) and the model version it is of.
     tess: Tessellation,
+    tess_version: Option<u64>,
     pub nav: NavController,
+    /// The active pane.
     pub rect: Rect,
+    /// The whole view area (all panes): where windows open, the harness's raw origin.
+    pub view_rect: Rect,
     /// Geometry stats for the HUD.
     pub tri_count: usize,
     /// Number of scene geometry rebuilds so far (perf diagnostics).
@@ -49,15 +71,8 @@ pub struct Viewport {
     pub last_highlight_ms: f64,
     /// Draw material textures (set by the app from the face style before `paint`).
     pub show_textures: bool,
-    /// Material textures uploaded to the renderer.
-    textures: crate::textures::TextureSync,
-    /// Data textures and the HDRI of the Realistic style uploaded to the renderer.
-    data_textures: crate::pbr::DataSync,
-    hdri: crate::pbr::EnvSync,
     /// Custom surface shaders that do not compile: (source, message).
     pub shader_errors: Vec<(String, String)>,
-    /// Render origin of the uploaded geometry (kept stable between rebuilds).
-    origin: Option<varstotas_kernel::glam::DVec3>,
     /// PNG export to run at the next paint (needs the GPU renderer).
     pub export: Option<crate::app::ExportJob>,
     /// Outcome of the last export (path written or error), taken by the app.
@@ -125,25 +140,20 @@ impl PtJob {
 impl Default for Viewport {
     fn default() -> Self {
         Self {
-            renderer: None,
-            renderer_error: None,
-            built: None,
-            highlighted: None,
+            gpus: Vec::new(),
             tess: Tessellation::default(),
+            tess_version: None,
             nav: NavController::default(),
             rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
+            view_rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
             tri_count: 0,
             rebuild_count: 0,
             last_rebuild_ms: 0.0,
             last_rebuild_parts: [0.0; 3],
             highlight_count: 0,
             last_highlight_ms: 0.0,
-            textures: Default::default(),
-            data_textures: Default::default(),
-            hdri: Default::default(),
             shader_errors: Vec::new(),
             show_textures: true,
-            origin: None,
             export: None,
             export_result: None,
             pt: None,
@@ -152,9 +162,8 @@ impl Default for Viewport {
 }
 
 impl Viewport {
-    /// Allocate the remaining space for the 3D view and return its interaction response.
-    pub fn allocate(&mut self, ui: &mut Ui) -> Response {
-        let rect = ui.available_rect_before_wrap();
+    /// Allocate `rect` for the active pane and return its interaction response.
+    pub fn allocate(&mut self, ui: &mut Ui, rect: Rect) -> Response {
         self.rect = rect;
         ui.allocate_rect(rect, Sense::click_and_drag())
     }
@@ -165,21 +174,28 @@ impl Viewport {
 
     /// The path traced image and its size.
     pub fn pt_texture(&self) -> Option<(egui::TextureId, [u32; 2])> {
-        self.renderer.as_ref()?.pt_texture()
+        self.gpus.first()?.renderer.as_ref()?.pt_texture()
     }
 
     /// Force a geometry rebuild on the next paint (e.g. after loading a file).
     pub fn invalidate(&mut self) {
-        self.built = None;
-        self.highlighted = None;
-        self.origin = None;
+        self.tess_version = None;
+        for g in &mut self.gpus {
+            g.built = None;
+            g.highlighted = None;
+            g.origin = None;
+        }
     }
 
+    /// Draw pane `pane` into `rect`; the `active` one also runs a pending PNG export.
     #[allow(clippy::too_many_arguments)]
     pub fn paint(
         &mut self,
         ui: &Ui,
         frame: &eframe::Frame,
+        pane: usize,
+        rect: Rect,
+        active: bool,
         doc: &Document,
         camera: &Camera,
         style: &RenderStyle,
@@ -187,32 +203,38 @@ impl Viewport {
         markers: &[Marker2d],
         cursor: Option<Pos2>,
     ) {
-        let rect = self.rect;
         let painter = ui.painter_at(rect);
         let ppp = ui.ctx().pixels_per_point();
+        while self.gpus.len() <= pane {
+            self.gpus.push(Gpu::default());
+        }
 
         let mut drew = false;
         if let Some(rs) = frame.wgpu_render_state() {
-            if self.renderer.is_none() && self.renderer_error.is_none() {
+            let g = &mut self.gpus[pane];
+            if g.renderer.is_none() && g.renderer_error.is_none() {
                 match guarded(|| Renderer::new(rs)) {
-                    Ok(r) => self.renderer = Some(r),
+                    Ok(r) => g.renderer = Some(r),
                     Err(e) => {
                         log::warn!("renderer unavailable: {e}");
-                        self.renderer_error = Some(e);
+                        g.renderer_error = Some(e);
                     }
                 }
             }
-            if let Some(renderer) = self.renderer.as_mut() {
+            if let Some(renderer) = g.renderer.as_mut() {
                 let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures };
-                if self.built != Some(key) {
+                if g.built != Some(key) {
                     let t0 = std::time::Instant::now();
-                    let old = std::mem::replace(&mut self.tess, scene_builder::tessellate_model(&doc.model));
-                    // Freeing 100k+ tessellated faces takes milliseconds: do it off the UI thread.
-                    if old.faces.len() + old.edges.len() > 10_000 {
-                        std::thread::spawn(move || drop(old));
+                    if self.tess_version != Some(doc.model_version) {
+                        let old = std::mem::replace(&mut self.tess, scene_builder::tessellate_model(&doc.model));
+                        self.tess_version = Some(doc.model_version);
+                        // Freeing 100k+ tessellated faces takes milliseconds: do it off the UI thread.
+                        if old.faces.len() + old.edges.len() > 10_000 {
+                            std::thread::spawn(move || drop(old));
+                        }
                     }
                     let t1 = std::time::Instant::now();
-                    let params = BuildParams { face_style: style.face_style, textures: self.show_textures, prev_origin: self.origin };
+                    let params = BuildParams { face_style: style.face_style, textures: self.show_textures, prev_origin: g.origin };
                     let geo = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params))
                         .unwrap_or_else(|e| {
                             log::warn!("scene build failed: {e}");
@@ -220,16 +242,16 @@ impl Viewport {
                             varstotas_render::SceneGeometry { radius: 10_000.0, ..Default::default() }
                         });
                     self.tri_count = geo.tris.len() / 3;
-                    self.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
+                    g.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
                     let t2 = std::time::Instant::now();
-                    if let Some(images) = self.textures.changed(&doc.model)
+                    if let Some(images) = g.textures.changed(&doc.model)
                         && let Err(e) = guarded(|| renderer.set_textures(rs, &images))
                     {
                         log::warn!("set_textures failed: {e}");
                     }
                     if style.face_style == FaceStyle::Realistic {
-                        if let Some(images) = self.data_textures.changed(&doc.model)
+                        if let Some(images) = g.data_textures.changed(&doc.model)
                             && let Err(e) = guarded(|| renderer.set_data_textures(rs, &images))
                         {
                             log::warn!("set_data_textures failed: {e}");
@@ -255,18 +277,18 @@ impl Viewport {
                     }
                     let ms = |a: std::time::Instant, b: std::time::Instant| (b - a).as_secs_f64() * 1e3;
                     self.last_rebuild_parts = [ms(t0, t1), ms(t1, t2), ms(t2, std::time::Instant::now())];
-                    self.built = Some(key);
+                    g.built = Some(key);
                     // set_geometry resets all highlight states.
-                    self.highlighted = None;
+                    g.highlighted = None;
                     self.last_rebuild_ms = t0.elapsed().as_secs_f64() * 1e3;
                 }
                 if style.face_style == FaceStyle::Realistic
-                    && let Some(img) = self.hdri.changed(&doc.model)
+                    && let Some(img) = g.hdri.changed(&doc.model)
                 {
                     renderer.set_environment(img);
                 }
                 let hkey = HighlightKey { selection: doc.selection_version, active_path: doc.active_path.clone() };
-                if self.highlighted.as_ref() != Some(&hkey) {
+                if g.highlighted.as_ref() != Some(&hkey) {
                     let t0 = std::time::Instant::now();
                     let (faces, edges) = scene_builder::highlight(
                         &self.tess,
@@ -277,7 +299,7 @@ impl Viewport {
                     {
                         log::warn!("update_highlight failed: {e}");
                     }
-                    self.highlighted = Some(hkey);
+                    g.highlighted = Some(hkey);
                     self.highlight_count += 1;
                     self.last_highlight_ms = t0.elapsed().as_secs_f64() * 1e3;
                 }
@@ -290,24 +312,24 @@ impl Viewport {
                     ((rect.width() * ppp).round() as u32).max(1),
                     ((rect.height() * ppp).round() as u32).max(1),
                 ];
-                if let Some(job) = &mut self.pt {
+                if let Some(job) = self.pt.as_mut().filter(|_| pane == 0) {
                     if job.restart {
                         job.restart = false;
                         // The Realistic resources may be stale when the view shows another style.
-                        if let Some(images) = self.textures.changed(&doc.model) {
+                        if let Some(images) = g.textures.changed(&doc.model) {
                             let _ = guarded(|| renderer.set_textures(rs, &images));
                         }
-                        if let Some(images) = self.data_textures.changed(&doc.model) {
+                        if let Some(images) = g.data_textures.changed(&doc.model) {
                             let _ = guarded(|| renderer.set_data_textures(rs, &images));
                         }
-                        if let Some(img) = self.hdri.changed(&doc.model) {
+                        if let Some(img) = g.hdri.changed(&doc.model) {
                             renderer.set_environment(img);
                         }
                         let customs = crate::pbr::custom_surfaces(&doc.model);
                         let _ = guarded(|| renderer.set_custom_shaders(rs, &customs));
                         let table = crate::pbr::material_table(&doc.model);
                         let _ = guarded(|| renderer.set_materials(rs, &table));
-                        let params = BuildParams { face_style: FaceStyle::Realistic, textures: true, prev_origin: self.origin };
+                        let params = BuildParams { face_style: FaceStyle::Realistic, textures: true, prev_origin: g.origin };
                         let r = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params)).and_then(|geo| {
                             guarded(|| renderer.pt_start(rs, &geo, &job.lights, &job.camera, &job.style, &job.settings))
                         });
@@ -375,7 +397,7 @@ impl Viewport {
                         job.saved = Some(r.map(|_| path));
                     }
                 }
-                if let Some(job) = self.export.take() {
+                if let Some(job) = self.export.take_if(|_| active) {
                     let opts = ExportOptions {
                         transparent_background: job.transparent,
                         line_scale: job.line_scale,
@@ -396,18 +418,18 @@ impl Viewport {
                     }
                     Err(e) => {
                         log::warn!("render failed: {e}");
-                        self.renderer = None;
-                        self.renderer_error = Some(e);
+                        g.renderer = None;
+                        g.renderer_error = Some(e);
                     }
                 }
             }
         }
         if !drew {
-            if self.export.take().is_some() {
+            if self.export.take_if(|_| active).is_some() {
                 self.export_result = Some(Err("the 3D renderer is not available".into()));
             }
             paint_fallback_background(&painter, rect);
-            let msg = match &self.renderer_error {
+            let msg = match self.gpus.get(pane).and_then(|g| g.renderer_error.as_ref()) {
                 Some(e) => format!("3D renderer not available yet ({e})"),
                 None => "3D renderer not available (wgpu backend required)".to_string(),
             };
@@ -446,15 +468,6 @@ impl Viewport {
             let r = Rect::from_min_size(rect.min + vec2(10.0, 10.0), galley.size() + vec2(16.0, 8.0));
             painter.rect_filled(r, 6.0, Color32::from_rgba_unmultiplied(255, 255, 255, 210));
             painter.galley(r.min + vec2(8.0, 4.0), galley, Color32::BLACK);
-        }
-        if camera.ortho {
-            hud_text(
-                &painter,
-                rect.right_top() + vec2(-10.0, 10.0),
-                Align2::RIGHT_TOP,
-                "Parallel Projection",
-                Color32::from_gray(70),
-            );
         }
     }
 }

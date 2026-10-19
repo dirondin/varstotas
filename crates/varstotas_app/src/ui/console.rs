@@ -103,7 +103,7 @@ impl VarstotasApp {
         let mut run: Option<String> = None;
         // The reference to open (and the word to look up).
         let mut help: Option<Option<String>> = None;
-        let pos = self.viewport.rect.min + egui::vec2(16.0, 16.0);
+        let pos = self.viewport.view_rect.min + egui::vec2(16.0, 16.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(Color32::WHITE);
         let mut win = egui::Window::new("Script Console").open(&mut open).default_pos(pos);
         if self.debug.script_active() {

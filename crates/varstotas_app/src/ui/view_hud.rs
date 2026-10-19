@@ -1,9 +1,9 @@
 //! The viewport's own controls in its top-right corner: the view (a standard view or a free
-//! one, perspective / parallel, field of view), the display style (Shaded … Realistic, X-Ray,
-//! edges, profiles) and what is shown (guides, axes, ground, grid, shadows, sections) — each a
-//! small drop-down. Drawn in the viewport's layer (windows stay above it);
-//! clicks on it do not reach the tools (`hud_rect`). One per viewport: a split view will draw
-//! one in each pane.
+//! one, perspective / parallel, field of view, 1 / 2 / 4 viewports), the display style
+//! (Shaded … Realistic, X-Ray, edges, profiles) and what is shown (axes, ground, grid; the
+//! model's guides, shadows, sections) — each a small drop-down. Drawn in the viewport's layer
+//! (windows stay above it); clicks on it do not reach the tools (`hud_rect`). One per pane of
+//! a split view (`panes.rs`).
 
 use super::icons::{Icon, paint_icon};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
@@ -49,12 +49,22 @@ fn item(ui: &mut Ui, icon: Icon, text: &str, on: bool, shortcut: Option<&str>) -
     r.response
 }
 
-/// A drop-down button of the bar: its icon, then the label.
-fn pill(ui: &mut Ui, icon: Icon, label: &str, content: impl FnOnce(&mut Ui)) -> Response {
-    let id = ui.id().with(("hud_pill", label));
-    // the icon's room is a little wider than the icon: a gap before the label
-    let text = if label.is_empty() { "⏷".to_string() } else { format!("{label} ⏷") };
-    let b = egui::Button::new((egui::Atom::custom(id, vec2(ICON + 4.0, ICON)), text)).frame(false);
+/// A small selectable button with only an icon.
+fn icon_button(ui: &mut Ui, icon: Icon, on: bool, tip: &str) -> Response {
+    let id = ui.id().with(("hud_icon_button", tip));
+    let r = egui::Button::selectable(on, egui::Atom::custom(id, vec2(ICON, ICON))).atom_ui(ui);
+    if let Some(rect) = r.rect(id) {
+        paint_icon(ui.painter(), rect, icon, false);
+    }
+    r.response.on_hover_text(tip)
+}
+
+/// A drop-down button of the bar: only its icon and the arrow; `name` identifies it, the
+/// caller's hover text says what it shows.
+fn pill(ui: &mut Ui, icon: Icon, name: &str, content: impl FnOnce(&mut Ui)) -> Response {
+    let id = ui.id().with(("hud_pill", name));
+    // the icon's room is a little wider than the icon: a gap before the arrow
+    let b = egui::Button::new((egui::Atom::custom(id, vec2(ICON + 3.0, ICON)), "⏷")).frame(false);
     // a click inside does not close it: the switches and the field of view stay in the open
     // menu, the choices close it themselves (`ui.close()`)
     let config = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
@@ -119,7 +129,8 @@ impl VarstotasApp {
             None if ortho => Icon::Parallel,
             None => Icon::Perspective,
         };
-        pill(ui, icon, &view_label(view, ortho), |ui| {
+        pill(ui, icon, "view", |ui| {
+            self.hud_open = Some((self.active_pane, "view"));
             for v in StandardView::ALL {
                 if item(ui, view_icon(v), v.name(), view == Some(v), None).clicked() {
                     self.actions.push(Action::View(v));
@@ -149,8 +160,19 @@ impl VarstotasApp {
                 self.actions.push(Action::ZoomExtents);
                 ui.close();
             }
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.add_space(ICON + 8.0);
+                ui.label("Viewports");
+                for (n, icon, tip) in [(1, Icon::Panes1, "One view"), (2, Icon::Panes2, "Two views side by side"), (4, Icon::Panes4, "Four views (2 × 2)")] {
+                    if icon_button(ui, icon, self.pane_count == n, tip).clicked() {
+                        self.actions.push(Action::SetPanes(n));
+                        ui.close();
+                    }
+                }
+            });
         })
-        .on_hover_text("The view: standard views, perspective or parallel projection");
+        .on_hover_text(format!("View: {} — standard views, perspective or parallel projection, field of view, viewports", view_label(view, ortho)));
     }
 
     fn hud_style_menu(&mut self, ui: &mut Ui) {
@@ -160,7 +182,8 @@ impl VarstotasApp {
             label.push_str(" · X-Ray");
         }
         let icon = STYLES.iter().find(|x| x.0 == style).map(|x| x.3).unwrap_or(Icon::StyleShaded);
-        pill(ui, icon, &label, |ui| {
+        pill(ui, icon, "style", |ui| {
+            self.hud_open = Some((self.active_pane, "style"));
             for (s, _, name, icon) in STYLES {
                 if item(ui, icon, name, style == s, None).clicked() {
                     self.prefs.face_style = s;
@@ -180,18 +203,19 @@ impl VarstotasApp {
                 self.prefs.profiles = !self.prefs.profiles;
             }
         })
-        .on_hover_text("How faces and edges are drawn (also View → Face Style)");
+        .on_hover_text(format!("Style: {label} — how faces and edges are drawn (also View → Face Style)"));
     }
 
-    /// What the Show drop-down switches: icon, name, on.
+    /// What the Show drop-down switches: icon, name, on. The first three are the view's own,
+    /// the rest the model's (every view).
     pub(crate) fn hud_show_items(&self) -> [(Icon, &'static str, bool); 8] {
         let m = &self.doc.model;
         let d = m.section_display;
         [
-            (Icon::Guides, "Guides", !m.guides_hidden),
             (Icon::Axes, "Axes", self.prefs.show_axes),
             (Icon::Ground, "Ground", self.prefs.show_ground),
             (Icon::Grid, "Grid", self.prefs.grid.show),
+            (Icon::Guides, "Guides", !m.guides_hidden),
             (Icon::Shadows, "Shadows", m.shadows.enabled),
             (Icon::Section, "Section Planes", d.planes),
             (Icon::SectionCut, "Section Cuts", d.cuts),
@@ -201,25 +225,30 @@ impl VarstotasApp {
 
     fn hud_show_menu(&mut self, ui: &mut Ui) {
         let items = self.hud_show_items();
-        pill(ui, Icon::Eye, "", |ui| {
+        pill(ui, Icon::Eye, "show", |ui| {
+            self.hud_open = Some((self.active_pane, "show"));
             // switches: a click toggles, the menu stays open
             for (k, (icon, name, on)) in items.into_iter().enumerate() {
-                if matches!(k, 4 | 5) {
+                if k == 3 {
+                    ui.separator();
+                    ui.label(egui::RichText::new("The model (every view)").small().weak());
+                }
+                if k == 5 {
                     ui.separator();
                 }
                 if item(ui, icon, name, on, None).clicked() {
                     match k {
-                        0 => self.actions.push(Action::ToggleGuides),
-                        1 => self.prefs.show_axes = !on,
-                        2 => self.prefs.show_ground = !on,
-                        3 => self.actions.push(Action::ToggleGrid),
+                        0 => self.prefs.show_axes = !on,
+                        1 => self.prefs.show_ground = !on,
+                        2 => self.actions.push(Action::ToggleGrid),
+                        3 => self.actions.push(Action::ToggleGuides),
                         4 => self.actions.push(Action::ToggleShadows),
                         _ => self.actions.push(Action::ToggleSectionDisplay(k as u8 - 5)),
                     }
                 }
             }
         })
-        .on_hover_text("Show: guides, axes, ground, grid, shadows, section planes / cuts / fill (also the View menu)");
+        .on_hover_text("Show: axes, ground, grid in this view; guides, shadows, section planes / cuts / fill in every view (also the View menu)");
     }
 }
 

@@ -211,7 +211,7 @@ impl VarstotasApp {
             return;
         }
         let mut open = true;
-        let pos = self.viewport.rect.right_top() + egui::vec2(-660.0, 30.0);
+        let pos = self.viewport.view_rect.right_top() + egui::vec2(-660.0, 30.0);
         let mut win = egui::Window::new("Script Reference").id(egui::Id::new("script_help")).open(&mut open).default_pos(pos).default_size([620.0, 520.0]).resizable(true);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);

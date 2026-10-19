@@ -208,7 +208,7 @@ impl VarstotasApp {
         let u = self.unfolding();
         let pages = self.unfold_drawings();
         self.unfold.page = self.unfold.page.min(pages.len().saturating_sub(1));
-        let pos = self.viewport.rect.min + vec2(40.0, 40.0);
+        let pos = self.viewport.view_rect.min + vec2(40.0, 40.0);
         let mut open = true;
         let mut save: Option<&str> = None;
         let mut win = egui::Window::new("Unfold").id(egui::Id::new("unfold_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);

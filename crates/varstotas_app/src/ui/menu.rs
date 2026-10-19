@@ -270,6 +270,15 @@ impl VarstotasApp {
                     }
                 }
                 ui.separator();
+                ui.menu_button("Viewports", |ui| {
+                    for (n, label) in [(1, "One"), (2, "Two (side by side)"), (4, "Four (2 × 2)")] {
+                        if ui.radio(self.pane_count == n, label).clicked() {
+                            self.actions.push(Action::SetPanes(n));
+                            ui.close();
+                        }
+                    }
+                });
+                ui.separator();
                 ui.menu_button("Animation", |ui| {
                     let has = !self.doc.model.scenes.is_empty();
                     let play = if self.scene_player.is_some() { "Pause" } else { "Play" };

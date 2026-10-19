@@ -66,7 +66,7 @@ impl VarstotasApp {
             self.log_window.cache = applog::snapshot();
         }
         let mut open = true;
-        let pos = self.viewport.rect.left_bottom() + egui::vec2(20.0, -340.0);
+        let pos = self.viewport.view_rect.left_bottom() + egui::vec2(20.0, -340.0);
         let mut win = egui::Window::new("Log").id(egui::Id::new("log_window")).open(&mut open).default_pos(pos).default_size([640.0, 300.0]).resizable(true);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);

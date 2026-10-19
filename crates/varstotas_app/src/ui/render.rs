@@ -142,7 +142,7 @@ impl VarstotasApp {
         let mut save: Option<&'static str> = None;
         let mut all = false;
         let has_scenes = !m.scenes.is_empty();
-        let pos = self.viewport.rect.left_top() + vec2(40.0, 30.0);
+        let pos = self.viewport.view_rect.left_top() + vec2(40.0, 30.0);
         let mut win = egui::Window::new("Render")
             .id(egui::Id::new("render_window"))
             .open(&mut open)

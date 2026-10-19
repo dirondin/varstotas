@@ -277,7 +277,7 @@ impl VarstotasApp {
         let scenes: Vec<(String, bool)> = self.doc.model.scenes.iter().map(|s| (s.name.clone(), s.ortho)).collect();
         let current_view = self.current_view_scene("View");
         let new_vp = sheet.as_ref().map(|s| self.new_viewport(s));
-        let pos = self.viewport.rect.min + vec2(20.0, 20.0);
+        let pos = self.viewport.view_rect.min + vec2(20.0, 20.0);
         let mut open = true;
         let (mut add, mut delete, mut duplicate, mut goto, mut save) = (false, false, false, None, None);
         let mut win = egui::Window::new("Sheets").id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);

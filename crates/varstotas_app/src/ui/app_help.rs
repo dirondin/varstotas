@@ -97,11 +97,13 @@ const NAVIGATION: &[B] = &[
     B::Tools(&[ToolId::Orbit, ToolId::Pan, ToolId::Zoom, ToolId::PositionCamera, ToolId::LookAround, ToolId::Walk]),
     B::P("Saved views are scenes — see Scenes, sheets, drawings."),
     B::H("The viewport's own controls"),
-    B::P("Three drop-downs in the viewport's top-right corner hold everything about how it shows the model:"),
-    B::Row("View", "standard views, Perspective / Parallel Projection, Field of View, Zoom Extents"),
+    B::P("Three icon drop-downs in the viewport's top-right corner hold everything about how it shows the model (hover one to see what it is set to):"),
+    B::Row("View", "standard views, Perspective / Parallel Projection, Field of View, Zoom Extents, Viewports 1 / 2 / 4"),
     B::Row("Style", "Shaded … Realistic; X-Ray, Edges, Profiles"),
-    B::Row("Show (the eye)", "guides, axes, ground, grid, shadows, section planes / cuts / fill"),
+    B::Row("Show (the eye)", "axes, ground, grid of this view; guides, shadows, section planes / cuts / fill of the model (every view)"),
     B::P("Switches keep the menu open; a click outside closes it."),
+    B::H("Several viewports"),
+    B::P("View → Viewports (or the view drop-down) shows 1, 2 (side by side) or 4 (2 × 2) views of the model. Each has its own camera, style and view switches; new ones start from the top, the front and the right, in parallel projection. A click in a view makes it the active one (blue frame): menus, toolbars and tools act on it, and the click itself already works there."),
 ];
 
 const SELECTING: &[B] = &[
@@ -516,7 +518,7 @@ impl VarstotasApp {
         }
         let mut open = true;
         let mut ask = None;
-        let pos = self.viewport.rect.left_top() + egui::vec2(60.0, 30.0);
+        let pos = self.viewport.view_rect.left_top() + egui::vec2(60.0, 30.0);
         let mut win = egui::Window::new("User Guide").id(egui::Id::new("app_help")).open(&mut open).default_pos(pos).default_size([700.0, 640.0]).resizable(true);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);

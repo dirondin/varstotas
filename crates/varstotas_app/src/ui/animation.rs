@@ -239,7 +239,7 @@ impl VarstotasApp {
         let mut open = true;
         let mut export = false;
         let mut cancel = false;
-        let pos = self.viewport.rect.left_top() + vec2(60.0, 40.0);
+        let pos = self.viewport.view_rect.left_top() + vec2(60.0, 40.0);
         let mut win = egui::Window::new("Export Animation")
             .id(egui::Id::new("animation_window"))
             .open(&mut open)

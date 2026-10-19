@@ -86,7 +86,8 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 |---|---|
 | `app.rs` | `VarstotasApp`: layout, actions, input routing, files |
 | `document.rs` | open document: model, history, selection, editing context |
-| `viewport.rs` | 3D view widget: input, renderer, overlays; `PtJob` (path traced render advanced each paint, save PNG / EXR) |
+| `viewport.rs` | 3D view widget: input, renderer, overlays; a `Gpu` (renderer + geometry) per pane, shared tessellation, `rect` = active pane, `view_rect` = all panes (window positions, harness raw origin); `PtJob` (path traced render in pane 0's renderer, save PNG / EXR) |
+| `panes.rs` | Split view 1 / 2 / 4: `PaneView` (camera, cam_anim, style, X-Ray, edges, profiles, axes, ground, grid), `pane_rects`, `exchange` (the active pane's settings are the app's own), `activate_pane` / `click_activate`, `init_panes` (Top / Front / Right), `panes_dump` |
 | `scene_builder.rs` | model → `SceneGeometry` (incl. `TexVertex` layers), highlight ids |
 | `applog.rs` | the application log behind Window → Log: `push` / `error` (a repeat within 5 s counts up), `snapshot`, `unseen` / `mark_seen` (the status bar count), `clear`, `clock`; `init` installs a `log::Log` in front of env_logger that keeps errors of any crate and warnings of `varstotas*`; `flash_error` logs too (`flash_error_quiet` when the console already did) |
 | `thumbs.rs` | `Thumbs`: rendered thumbnails of components without a picture (second `Renderer`, Shaded with Textures, iso, transparent, 160 px, ≤2 per frame — `get` / `process`); library files cached in `~/.varstotas/cache/thumbs` (`disk_path`); paused while a harness screenshot is pending (`DebugCapture::screenshot_pending`) |

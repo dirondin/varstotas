@@ -392,7 +392,7 @@ impl VarstotasApp {
         egui::Window::new(format!("Shader — {}", ed.material))
             .id(egui::Id::new("shader_editor"))
             .open(&mut open)
-            .default_pos(self.viewport.rect.min + vec2(60.0, 40.0))
+            .default_pos(self.viewport.view_rect.min + vec2(60.0, 40.0))
             .default_size(vec2(760.0, 480.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {

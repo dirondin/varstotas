@@ -13,6 +13,7 @@
 | Zoom Window | зум в рамку | P2 | ⬜ |
 | Стандартные виды (Top/Front/Right/Back/Left/Bottom/Iso) | | P0 | ✅ |
 | Perspective / Parallel projection | переключение; также выпадающий список вида в правом верхнем углу вьюпорта (вместе со стилем отображения и меню Show: направляющие, оси, земля, сетка, тени, сечения; там же Field of View) | P0 | ✅ |
+| Несколько вьюпортов 1 / 2 / 4 (как в 3D-редакторах) | View → Viewports или виджет вида; у каждой панели свои камера и стиль, активная — по клику | P2 | ✅ |
 | Field of view, Walk/Look Around/Position Camera | | P2 | ✅ |
 | Previous/Next view | | P2 | ⬜ |
 
