@@ -215,14 +215,15 @@ impl VarstotasApp {
         .on_hover_text(format!("Style: {label} — how faces and edges are drawn (also View → Face Style)"));
     }
 
-    /// What the Show drop-down switches: icon, name, on. The first three are the view's own,
+    /// What the Show drop-down switches: icon, name, on. The first four are the view's own,
     /// the rest the model's (every view).
-    pub(crate) fn hud_show_items(&self) -> [(Icon, &'static str, bool); 8] {
+    pub(crate) fn hud_show_items(&self) -> [(Icon, &'static str, bool); 9] {
         let m = &self.doc.model;
         let d = m.section_display;
         [
             (Icon::Axes, "Axes", self.prefs.show_axes),
             (Icon::Ground, "Ground", self.prefs.show_ground),
+            (Icon::Sky, "Sky", self.prefs.show_sky),
             (Icon::Grid, "Grid", self.prefs.grid.show),
             (Icon::Guides, "Guides", !m.guides_hidden),
             (Icon::Shadows, "Shadows", m.shadows.enabled),
@@ -238,26 +239,27 @@ impl VarstotasApp {
             self.hud_open = Some((self.active_pane, "show"));
             // switches: a click toggles, the menu stays open
             for (k, (icon, name, on)) in items.into_iter().enumerate() {
-                if k == 3 {
+                if k == 4 {
                     ui.separator();
                     ui.label(egui::RichText::new("The model (every view)").small().weak());
                 }
-                if k == 5 {
+                if k == 6 {
                     ui.separator();
                 }
                 if item(ui, icon, name, on, None).clicked() {
                     match k {
                         0 => self.prefs.show_axes = !on,
                         1 => self.prefs.show_ground = !on,
-                        2 => self.actions.push(Action::ToggleGrid),
-                        3 => self.actions.push(Action::ToggleGuides),
-                        4 => self.actions.push(Action::ToggleShadows),
-                        _ => self.actions.push(Action::ToggleSectionDisplay(k as u8 - 5)),
+                        2 => self.prefs.show_sky = !on,
+                        3 => self.actions.push(Action::ToggleGrid),
+                        4 => self.actions.push(Action::ToggleGuides),
+                        5 => self.actions.push(Action::ToggleShadows),
+                        _ => self.actions.push(Action::ToggleSectionDisplay(k as u8 - 6)),
                     }
                 }
             }
         })
-        .on_hover_text("Show: axes, ground, grid in this view; guides, shadows, section planes / cuts / fill in every view (also the View menu)");
+        .on_hover_text("Show: axes, ground, sky, grid in this view; guides, shadows, section planes / cuts / fill in every view (also the View menu)");
     }
 }
 

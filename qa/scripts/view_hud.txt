@@ -4,7 +4,7 @@ wait 10
 action script box(vec3(0, 0, 0), 1000, 600, 750);
 zoom_extents
 wait 20
-expect hud=(None false Shaded false) hud_show=["Axes", "Ground", "Guides", "Section Planes", "Section Cuts", "Section Fill"] panes=(1 0
+expect hud=(None false Shaded false) hud_show=["Axes", "Ground", "Sky", "Guides", "Section Planes", "Section Cuts", "Section Fill"] panes=(1 0
 screenshot shots/hud_start.bmp
 # the view drop-down: field of view 60°, then Top, then Parallel
 raw click 961 22
@@ -46,12 +46,14 @@ wait 5
 expect hud=(Some(Top) true Wireframe true)
 raw key Escape
 wait 3
-# the show drop-down: Grid and Shadows on, Axes off — switches, the menu stays open
+# the show drop-down: Grid and Shadows on, Axes and Sky off — switches, the menu stays open
 raw click 1075 22
 wait 5
-raw click 1101 106
+raw click 1101 133
 wait 3
-raw click 1115 186
+raw click 1115 213
+wait 3
+raw click 1101 106
 wait 3
 raw click 1103 52
 wait 5
@@ -106,16 +108,16 @@ expect panes=(1 0 [(Some(Top), true, Wireframe)])
 # styles); then Front + Iso
 raw click 88 -105
 wait 5
-raw click 110 469
+raw click 110 496
 wait 5
-raw click 270 657
+raw click 270 684
 wait 20
 expect panes=(4 0 [(Some(Front), true, Wireframe), (Some(Left), true, Wireframe), (Some(Top), true, Wireframe), (Some(Iso), false, ShadedColor)])
 screenshot shots/hud_preset4.bmp
 raw click 88 -105
 wait 5
-raw click 110 469
+raw click 110 496
 wait 5
-raw click 270 576
+raw click 270 603
 wait 20
 expect panes=(2 0 [(Some(Front), true, Wireframe), (Some(Iso), false, Wireframe)])

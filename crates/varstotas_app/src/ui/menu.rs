@@ -253,6 +253,7 @@ impl VarstotasApp {
                 }
                 ui.checkbox(&mut self.prefs.show_axes, "Axes");
                 ui.checkbox(&mut self.prefs.show_ground, "Ground");
+                ui.checkbox(&mut self.prefs.show_sky, "Sky").on_hover_text("The sky gradient behind the model; off = a plain light background");
                 let mut grid = self.prefs.grid.show;
                 if ui.checkbox(&mut grid, "Grid").clicked() {
                     self.actions.push(Action::ToggleGrid);

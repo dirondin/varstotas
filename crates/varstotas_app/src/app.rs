@@ -80,6 +80,8 @@ pub struct Prefs {
     pub profiles: bool,
     pub show_axes: bool,
     pub show_ground: bool,
+    /// The sky gradient behind the model; off = a plain light background.
+    pub show_sky: bool,
     pub recent: Vec<PathBuf>,
     /// Autosave every `autosave_minutes` while the document has unsaved changes.
     pub autosave: bool,
@@ -131,6 +133,7 @@ impl Default for Prefs {
             profiles: true,
             show_axes: true,
             show_ground: true,
+            show_sky: true,
             recent: Vec::new(),
             autosave: true,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
@@ -524,6 +527,9 @@ pub(crate) struct AutosaveState {
     pub(crate) recoveries: Vec<crate::autosave::Recovery>,
 }
 
+/// The background with the sky off (View → Sky): a neutral off-white.
+const NO_SKY: [f32; 4] = [0xF4 as f32 / 255.0, 0xF4 as f32 / 255.0, 0xF2 as f32 / 255.0, 1.0];
+
 fn fallback_style() -> RenderStyle {
     RenderStyle {
         face_style: FaceStyle::Shaded,
@@ -662,6 +668,10 @@ impl VarstotasApp {
         s.profiles = self.prefs.profiles;
         s.show_axes = self.prefs.show_axes;
         s.show_ground = self.prefs.show_ground;
+        if !self.prefs.show_sky {
+            s.sky_top = NO_SKY;
+            s.sky_horizon = NO_SKY;
+        }
         s.grid = self.prefs.grid.style();
         let sh = &self.doc.model.shadows;
         s.shadows = sh.enabled.then(|| varstotas_render::ShadowStyle {

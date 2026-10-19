@@ -63,6 +63,7 @@ pub enum Icon {
     StyleProfiles,
     Guides,
     Ground,
+    Sky,
     Grid,
     SectionCut,
     SectionFill,
@@ -697,6 +698,12 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.poly_c(&[(2.0, 4.0), (22.0, 4.0), (22.0, 12.0), (2.0, 12.0)], BLUE_SOFT, Stroke::NONE);
             pen.poly_c(&[(2.0, 12.0), (22.0, 12.0), (22.0, 20.0), (2.0, 20.0)], Color32::from_rgb(0xC9, 0xB8, 0x96), Stroke::NONE);
             pen.line(&[(2.0, 12.0), (22.0, 12.0)]);
+        }
+        Icon::Sky => {
+            // The sky over the horizon, with the sun.
+            pen.poly_c(&[(2.0, 4.0), (22.0, 4.0), (22.0, 18.0), (2.0, 18.0)], BLUE_SOFT, Stroke::NONE);
+            pen.circle((15.0, 10.0), 3.2, Color32::from_rgb(0xF2, 0xC2, 0x3A));
+            pen.line(&[(2.0, 18.0), (22.0, 18.0)]);
         }
         Icon::Grid => {
             // A grid on the ground plane, seen at an angle.

@@ -1,5 +1,5 @@
 //! Split view: 1, 2 (side by side) or 4 (2×2) panes over the same model, each with its own
-//! camera and view settings (style, X-Ray, edges, profiles, axes, ground, grid).
+//! camera and view settings (style, X-Ray, edges, profiles, axes, ground, sky, grid).
 //!
 //! The active pane's settings are the app's own (`camera`, `cam_anim`, `prefs.face_style` …),
 //! so the tools, menus and toolbars work on it unchanged; the others wait in `panes`. Painting
@@ -28,6 +28,7 @@ pub struct PaneView {
     profiles: bool,
     show_axes: bool,
     show_ground: bool,
+    show_sky: bool,
     grid: bool,
     hud_rect: Rect,
 }
@@ -45,6 +46,7 @@ impl Default for PaneView {
             profiles: false,
             show_axes: true,
             show_ground: true,
+            show_sky: true,
             grid: false,
             hud_rect: Rect::NOTHING,
         }
@@ -117,6 +119,7 @@ impl VarstotasApp {
         swap(&mut p.profiles, &mut prefs.profiles);
         swap(&mut p.show_axes, &mut prefs.show_axes);
         swap(&mut p.show_ground, &mut prefs.show_ground);
+        swap(&mut p.show_sky, &mut prefs.show_sky);
         swap(&mut p.grid, &mut prefs.grid.show);
         swap(&mut p.hud_rect, &mut self.hud_rect);
     }
@@ -191,6 +194,7 @@ impl VarstotasApp {
                 profiles: prefs.profiles,
                 show_axes: prefs.show_axes,
                 show_ground: prefs.show_ground,
+                show_sky: prefs.show_sky,
                 grid: prefs.grid.show,
                 hud_rect: Rect::NOTHING,
             };
