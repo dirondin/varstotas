@@ -49,6 +49,7 @@ pub enum Icon {
     ViewRight,
     ViewBack,
     ViewLeft,
+    ViewBottom,
     StyleXRay,
     StyleWireframe,
     StyleHiddenLine,
@@ -57,6 +58,9 @@ pub enum Icon {
     StyleMonochrome,
     StyleRealistic,
     Perspective,
+    Parallel,
+    StyleEdges,
+    StyleProfiles,
     Undo,
     Redo,
     Eye,
@@ -494,6 +498,15 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             let st = Stroke::new(1.0 * pen.s, SHADE_DARK);
             pen.dashed((12.0, 3.0), (12.0, 12.0), st);
         }
+        Icon::ViewBottom => {
+            // The hidden bottom face, tinted, with its hidden edges dashed.
+            cube(&pen, FILL, FILL, FILL);
+            let st = Stroke::new(1.0 * pen.s, BLUE);
+            pen.poly_c(&[(12.0, 12.0), (20.0, 16.5), (12.0, 21.0), (4.0, 16.5)], Color32::from_rgba_unmultiplied(0x3A, 0x7B, 0xD5, 70), Stroke::NONE);
+            pen.dashed((12.0, 12.0), (20.0, 16.5), st);
+            pen.dashed((12.0, 12.0), (4.0, 16.5), st);
+            pen.line_c(&[(4.0, 16.5), (12.0, 21.0), (20.0, 16.5)], Stroke::new(1.6 * pen.s, BLUE));
+        }
         Icon::StyleShaded => cube(&pen, Color32::from_rgb(0xF6, 0xE0, 0xA8), Color32::from_rgb(0xE4, 0xB8, 0x6A), Color32::from_rgb(0xC8, 0x92, 0x48)),
         Icon::Text => {
             // A boxed "A" with a leader to a dot.
@@ -648,6 +661,22 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.poly(&[(8.0, 6.0), (16.0, 6.0), (21.0, 19.0), (3.0, 19.0)], FILL);
             pen.line_c(&[(12.0, 6.0), (12.0, 19.0)], pen.thin());
             pen.line_c(&[(6.0, 12.0), (18.0, 12.0)], pen.thin());
+        }
+        Icon::Parallel => {
+            // Like Perspective, but the sides stay parallel.
+            pen.poly(&[(4.0, 6.0), (20.0, 6.0), (20.0, 19.0), (4.0, 19.0)], FILL);
+            pen.line_c(&[(12.0, 6.0), (12.0, 19.0)], pen.thin());
+            pen.line_c(&[(4.0, 12.5), (20.0, 12.5)], pen.thin());
+        }
+        Icon::StyleEdges => {
+            cube(&pen, Color32::WHITE, FILL, FILL);
+            let st = Stroke::new(1.8 * pen.s, BLUE);
+            pen.line_c(&[(4.0, 7.5), (12.0, 12.0), (20.0, 7.5)], st);
+            pen.line_c(&[(12.0, 12.0), (12.0, 21.0)], st);
+        }
+        Icon::StyleProfiles => {
+            cube(&pen, Color32::WHITE, FILL, FILL);
+            pen.poly_c(&[(12.0, 3.0), (20.0, 7.5), (20.0, 16.5), (12.0, 21.0), (4.0, 16.5), (4.0, 7.5)], Color32::TRANSPARENT, Stroke::new(2.8 * pen.s, pen.ink));
         }
         Icon::Undo | Icon::Redo => {
             let flip = if icon == Icon::Redo { -1.0 } else { 1.0 };

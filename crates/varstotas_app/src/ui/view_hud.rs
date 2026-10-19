@@ -4,19 +4,62 @@
 //! clicks on it do not reach the tools (`hud_rect`). One per viewport: a split view will draw
 //! one in each pane.
 
+use super::icons::{Icon, paint_icon};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
-use egui::{Align, Color32, Layout, Rect, RichText, Stroke, Ui, UiBuilder, vec2};
+use egui::{Align, Color32, Layout, Rect, Response, Stroke, Ui, UiBuilder, vec2};
 use varstotas_render::StandardView;
 
-/// The display styles in the order of the View menu, with a short label for the button.
-pub const STYLES: [(FaceStylePref, &str, &str); 6] = [
-    (FaceStylePref::ShadedColor, "Shaded", "Shaded"),
-    (FaceStylePref::Shaded, "Textured", "Shaded with Textures"),
-    (FaceStylePref::Monochrome, "Monochrome", "Monochrome"),
-    (FaceStylePref::HiddenLine, "Hidden Line", "Hidden Line"),
-    (FaceStylePref::Wireframe, "Wireframe", "Wireframe"),
-    (FaceStylePref::Realistic, "Realistic", "Realistic"),
+/// The display styles in the order of the View menu: a short label for the button, the
+/// menu's name and the toolbar's icon.
+pub const STYLES: [(FaceStylePref, &str, &str, Icon); 6] = [
+    (FaceStylePref::ShadedColor, "Shaded", "Shaded", Icon::StyleShaded),
+    (FaceStylePref::Shaded, "Textured", "Shaded with Textures", Icon::StyleTextured),
+    (FaceStylePref::Monochrome, "Monochrome", "Monochrome", Icon::StyleMonochrome),
+    (FaceStylePref::HiddenLine, "Hidden Line", "Hidden Line", Icon::StyleHiddenLine),
+    (FaceStylePref::Wireframe, "Wireframe", "Wireframe", Icon::StyleWireframe),
+    (FaceStylePref::Realistic, "Realistic", "Realistic", Icon::StyleRealistic),
 ];
+
+pub fn view_icon(v: StandardView) -> Icon {
+    match v {
+        StandardView::Iso => Icon::ViewIso,
+        StandardView::Top => Icon::ViewTop,
+        StandardView::Bottom => Icon::ViewBottom,
+        StandardView::Front => Icon::ViewFront,
+        StandardView::Back => Icon::ViewBack,
+        StandardView::Left => Icon::ViewLeft,
+        StandardView::Right => Icon::ViewRight,
+    }
+}
+
+const ICON: f32 = 18.0;
+
+/// A menu row: the icon, the text (highlighted when `on`), an optional shortcut.
+fn item(ui: &mut Ui, icon: Icon, text: &str, on: bool, shortcut: Option<&str>) -> Response {
+    let id = ui.id().with(("hud_icon", text));
+    let mut b = egui::Button::selectable(on, (egui::Atom::custom(id, vec2(ICON, ICON)), text));
+    if let Some(k) = shortcut {
+        b = b.shortcut_text(k);
+    }
+    let r = b.atom_ui(ui);
+    if let Some(rect) = r.rect(id) {
+        paint_icon(ui.painter(), rect, icon, false);
+    }
+    r.response
+}
+
+/// A drop-down button of the bar: its icon, then the label.
+fn pill(ui: &mut Ui, icon: Icon, label: &str, content: impl FnOnce(&mut Ui)) -> Response {
+    let id = ui.id().with(("hud_pill", label));
+    // the icon's room is a little wider than the icon: a gap before the label
+    let b = egui::Button::new((egui::Atom::custom(id, vec2(ICON + 4.0, ICON)), format!("{label} ⏷"))).frame(false);
+    let (r, _) = egui::containers::menu::MenuButton::from_button(b).ui(ui, content);
+    // the custom atom comes first: right after the button's padding
+    let pad = ui.spacing().button_padding.x;
+    let rect = Rect::from_center_size(egui::pos2(r.rect.left() + pad + ICON / 2.0, r.rect.center().y), vec2(ICON, ICON));
+    paint_icon(ui.painter(), rect, icon, false);
+    r
+}
 
 /// The short name of a style.
 pub fn style_label(s: FaceStylePref) -> &'static str {
@@ -46,7 +89,6 @@ impl VarstotasApp {
                 .inner_margin(egui::Margin::symmetric(6, 2))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
                         // (right to left: the view ends up on the left)
                         self.hud_style_menu(ui);
                         let (r, _) = ui.allocate_exact_size(vec2(9.0, 16.0), egui::Sense::hover());
@@ -61,54 +103,64 @@ impl VarstotasApp {
 
     fn hud_view_menu(&mut self, ui: &mut Ui) {
         let view = self.camera.standard_view();
-        let label = format!("{} ⏷", view_label(view, self.camera.ortho));
-        let b = egui::Button::new(RichText::new(label)).frame(false);
-        egui::containers::menu::MenuButton::from_button(b).ui(ui, |ui| {
+        let ortho = self.camera.ortho;
+        let icon = match view {
+            Some(v) => view_icon(v),
+            None if ortho => Icon::Parallel,
+            None => Icon::Perspective,
+        };
+        pill(ui, icon, &view_label(view, ortho), |ui| {
             for v in StandardView::ALL {
-                if ui.add(egui::Button::selectable(view == Some(v), v.name())).clicked() {
+                if item(ui, view_icon(v), v.name(), view == Some(v), None).clicked() {
                     self.actions.push(Action::View(v));
                     ui.close();
                 }
             }
             ui.separator();
-            let ortho = self.camera.ortho;
-            if ui.radio(!ortho, "Perspective").clicked() {
+            if item(ui, Icon::Perspective, "Perspective", !ortho, None).clicked() {
                 self.actions.push(Action::SetParallel(false));
                 ui.close();
             }
-            if ui.radio(ortho, "Parallel Projection").clicked() {
+            if item(ui, Icon::Parallel, "Parallel Projection", ortho, None).clicked() {
                 self.actions.push(Action::SetParallel(true));
                 ui.close();
             }
             ui.separator();
-            if ui.add(egui::Button::new("Zoom Extents").shortcut_text("Shift+Z")).clicked() {
+            if item(ui, Icon::ZoomExtents, "Zoom Extents", false, Some("Shift+Z")).clicked() {
                 self.actions.push(Action::ZoomExtents);
                 ui.close();
             }
         })
-        .0
         .on_hover_text("The view: standard views, perspective or parallel projection");
     }
 
     fn hud_style_menu(&mut self, ui: &mut Ui) {
-        let mut label = style_label(self.prefs.face_style).to_string();
+        let style = self.prefs.face_style;
+        let mut label = style_label(style).to_string();
         if self.prefs.xray {
             label.push_str(" · X-Ray");
         }
-        let b = egui::Button::new(RichText::new(format!("{label} ⏷"))).frame(false);
-        egui::containers::menu::MenuButton::from_button(b).ui(ui, |ui| {
-            for (s, _, name) in STYLES {
-                if ui.radio(self.prefs.face_style == s, name).clicked() {
+        let icon = STYLES.iter().find(|x| x.0 == style).map(|x| x.3).unwrap_or(Icon::StyleShaded);
+        pill(ui, icon, &label, |ui| {
+            for (s, _, name, icon) in STYLES {
+                if item(ui, icon, name, style == s, None).clicked() {
                     self.prefs.face_style = s;
                     ui.close();
                 }
             }
             ui.separator();
-            ui.checkbox(&mut self.prefs.xray, "X-Ray");
-            ui.checkbox(self.prefs.edges_mut(), "Edges");
-            ui.checkbox(&mut self.prefs.profiles, "Profiles");
+            // switches: a click toggles, the menu stays open
+            if item(ui, Icon::StyleXRay, "X-Ray", self.prefs.xray, None).clicked() {
+                self.prefs.xray = !self.prefs.xray;
+            }
+            let edges = *self.prefs.edges_mut();
+            if item(ui, Icon::StyleEdges, "Edges", edges, None).clicked() {
+                *self.prefs.edges_mut() = !edges;
+            }
+            if item(ui, Icon::StyleProfiles, "Profiles", self.prefs.profiles, None).clicked() {
+                self.prefs.profiles = !self.prefs.profiles;
+            }
         })
-        .0
         .on_hover_text("How faces and edges are drawn (also View → Face Style)");
     }
 }
