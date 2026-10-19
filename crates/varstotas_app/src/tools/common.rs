@@ -52,6 +52,42 @@ pub fn copy_mod(m: &egui::Modifiers) -> bool {
     m.ctrl || m.alt || m.command
 }
 
+static KEYS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A key was pressed (any key, anywhere in the app).
+pub fn note_key() {
+    KEYS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn keys() -> u64 {
+    KEYS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// A modifier tapped on its own: pressed and released with no key or click in between
+/// (so Ctrl+Z, Alt+drag … are not taps).
+#[derive(Default, Clone, Copy, Debug)]
+pub struct ModTap {
+    held: bool,
+    armed: bool,
+    keys: u64,
+}
+impl ModTap {
+    /// The modifier's state now; true on the release that ends a tap.
+    pub fn update(&mut self, held: bool) -> bool {
+        let tapped = !held && self.held && self.armed && self.keys == keys();
+        if held && !self.held {
+            self.armed = true;
+            self.keys = keys();
+        }
+        self.held = held;
+        tapped
+    }
+    /// A click while held: not a tap.
+    pub fn cancel(&mut self) {
+        self.armed = false;
+    }
+}
+
 /// Tracks a toggling modifier (Ctrl/Option = toggle copy): flips on each rising edge.
 #[derive(Default, Clone, Copy, Debug)]
 pub struct ModToggle {
@@ -1112,6 +1148,22 @@ pub fn draw_dim_moved(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_modifier_alone_is_a_tap() {
+        let mut t = ModTap::default();
+        assert!(!t.update(true));
+        assert!(!t.update(true));
+        assert!(t.update(false));
+        // with a key in between: not a tap
+        t.update(true);
+        note_key();
+        assert!(!t.update(false));
+        // with a click in between: not a tap
+        t.update(true);
+        t.cancel();
+        assert!(!t.update(false));
+    }
 
     #[test]
     fn moving_an_anchored_dimension_drags_its_offset() {

@@ -1,6 +1,7 @@
 # Draw → Bezier Curve with the real mouse: clicks make corners, press-drag pulls out handles,
 # Enter finishes, a click on the first point closes, a double-click finishes, Undo.
-# The bar over the view: Handles / Smooth / Freehand, Line (no face) / Area (a face).
+# The bar over the view: Handles / Smooth / Freehand, Line (no face) / Area (a face);
+# a tap of Option / Alt or Ctrl switches them.
 wait 10
 view top
 parallel on
@@ -93,8 +94,33 @@ raw key Z
 raw mods
 wait 3
 expect active_mesh F=2 E=92
+# taps: Option / Alt = the next method, Ctrl = Line ↔ Area
+raw move 700 500
+raw mods alt
+wait 2
+raw mods
+wait 3
+expect bezier=(Handles, Line)
+raw mods ctrl
+wait 2
+raw mods
+wait 3
+expect bezier=(Handles, Area)
+# Ctrl with a key is not a tap
+raw mods ctrl
+raw key Escape
+raw mods
+wait 3
+expect bezier=(Handles, Area)
+# Alt held through a click is not a tap either
+raw mods alt
+raw click 700 500
+raw mods
+wait 3
+expect bezier=(Handles, Area)
+raw key Escape
 # back to the defaults for the other scripts
-raw click 46 23
+raw click 263 23
 wait 3
 expect bezier=(Handles, Line)
 zoom_extents

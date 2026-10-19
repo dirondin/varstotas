@@ -5,7 +5,8 @@
 //! and drag a stroke, smoothed on release. The result ([`Fill`]) is a Line (edges only, a
 //! closed loop makes no face) or an Area (always closed, with a face). Enter / double-click
 //! finishes, a click on the first anchor closes the curve, Backspace takes back the last
-//! anchor, Escape drops it all. The mode is chosen in the bar over the viewport.
+//! anchor, Escape drops it all. The mode is chosen in the bar over the viewport, or with a
+//! tap of Option / Alt (the next method) and of Ctrl (Line ↔ Area).
 
 use super::common::*;
 use super::draw::{plane_point, shape_normal};
@@ -27,6 +28,10 @@ const FREEHAND_PX: f32 = 12.0;
 const FREEHAND_SEGS: u32 = 3;
 /// Freehand Line: the stroke ends this close (points) to its start = a closed loop.
 const FREEHAND_CLOSE_PX: f32 = 16.0;
+#[cfg(target_os = "macos")]
+const TAPS: &str = "Option = method, Ctrl = Line / Area.";
+#[cfg(not(target_os = "macos"))]
+const TAPS: &str = "Alt = method, Ctrl = Line / Area.";
 const HANDLE: Color32 = Color32::from_rgb(0x20, 0x70, 0xE0);
 
 /// One anchor of the curve; handles are absolute points (None = a corner on that side).
@@ -198,6 +203,9 @@ pub struct BezierTool {
     cur: Option<InferenceResult>,
     /// The cursor is on the first anchor (a click closes the curve).
     closing: bool,
+    /// Taps: Option / Alt = the next method, Ctrl = Line ↔ Area.
+    tap_method: ModTap,
+    tap_fill: ModTap,
 }
 
 impl BezierTool {
@@ -207,6 +215,22 @@ impl BezierTool {
 
     fn plane_at(&self, p: DVec3) -> Plane {
         Plane::new(p, self.normal.unwrap_or_else(|| crate::axes::current().z))
+    }
+
+    /// Modifier taps switch the mode (not in the middle of a freehand stroke).
+    fn taps(&mut self, ctx: &ToolContext) {
+        let m = ctx.pointer.modifiers;
+        let (method, fill) = mode();
+        let next_method = self.tap_method.update(m.alt) && self.stroke.is_empty();
+        let next_fill = self.tap_fill.update(m.ctrl) && self.stroke.is_empty();
+        if next_method {
+            let i = Method::ALL.iter().position(|x| *x == method).unwrap_or(0);
+            set_mode(Method::ALL[(i + 1) % Method::ALL.len()], fill);
+        }
+        if next_fill {
+            let (method, fill) = mode();
+            set_mode(method, if fill == Fill::Line { Fill::Area } else { Fill::Line });
+        }
     }
 
     /// Picks up a mode change made in the bar: the curve so far is dropped.
@@ -345,6 +369,7 @@ impl Tool for BezierTool {
         ToolId::Bezier
     }
     fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        self.taps(ctx);
         self.sync_mode();
         if !self.stroke.is_empty() {
             if ctx.pointer.primary_down {
@@ -362,6 +387,8 @@ impl Tool for BezierTool {
         if ctx.pointer.button != Some(PointerButton::Primary) {
             return;
         }
+        self.tap_method.cancel();
+        self.tap_fill.cancel();
         self.sync_mode();
         self.update(ctx);
         let Some(r) = self.cur.clone() else { return };
@@ -466,12 +493,12 @@ impl Tool for BezierTool {
         };
         match self.method {
             Method::Freehand if self.stroke.is_empty() => match fill {
-                Fill::Line => "Press and drag to draw a line; end at the start to close it.".into(),
-                Fill::Area => "Press and drag to draw an area; it closes into a face on release.".into(),
+                Fill::Line => format!("Press and drag to draw a line; end at the start to close it. {TAPS}"),
+                Fill::Area => format!("Press and drag to draw an area; it closes into a face on release. {TAPS}"),
             },
             Method::Freehand => "Drag to draw; release to finish.".into(),
-            _ if self.anchors.is_empty() && self.method == Method::Smooth => "Click the first point of the curve.".into(),
-            _ if self.anchors.is_empty() => "Click the first point of the curve; press and drag to pull out handles.".into(),
+            _ if self.anchors.is_empty() && self.method == Method::Smooth => format!("Click the first point of the curve. {TAPS}"),
+            _ if self.anchors.is_empty() => format!("Click the first point of the curve; press and drag to pull out handles. {TAPS}"),
             _ if self.drag.is_some() => "Drag to shape the curve through this point; release to place it.".into(),
             Method::Smooth => format!("Click the next point; {end}. Backspace removes the last point."),
             _ => format!("Click the next point (drag for handles); {end}. Backspace removes the last point."),

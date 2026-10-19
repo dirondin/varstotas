@@ -397,7 +397,8 @@ impl ToolId {
                  Type a length after the first click, an angle after the second."
             }
             ToolId::Bezier => {
-                "The bar at the top left of the view picks the method — Handles, Smooth or Freehand — and Line or Area.\n\
+                "The bar at the top left of the view picks the method — Handles, Smooth or Freehand — and Line or Area;\n\
+                 or tap Option / Alt for the next method and Ctrl for Line / Area.\n\
                  Handles: click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
                  Smooth: click points; the curve passes smoothly through them. Freehand: press and drag, release to finish.\n\
                  Enter or a double-click finishes; a click on the first point closes the curve (a Line loop makes no face, an Area is always closed with a face).\n\

@@ -885,6 +885,10 @@ impl VarstotasApp {
     // ---- keyboard ---------------------------------------------------------
 
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
+        // a key while a modifier is held: that modifier is not a tap (`ModTap`)
+        if ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, .. }))) {
+            crate::tools::common::note_key();
+        }
         // Scripted runs inject keys, VCB text and modifiers themselves (`key`, `vcb`, `mods`);
         // real OS keyboard events (including modifier state carried by key events) must not
         // leak in and change tool behaviour.
