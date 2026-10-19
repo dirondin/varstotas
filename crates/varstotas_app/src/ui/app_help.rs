@@ -140,7 +140,7 @@ const INFERENCE: &[B] = &[
     B::H("Locking"),
     B::P("Hold `Shift` to lock the direction found; the arrow keys lock an axis: → red, ← green, ↑ blue, ↓ parallel / perpendicular to the last edge."),
     B::H("Snapping menu"),
-    B::P("The magnet button (and View → Snapping) turns each inference on or off; `Shift+S` turns snapping off and on altogether. Increments round free moves (10 mm), angles (15°) and scale factors — snapping to geometry and typed values win over them."),
+    B::P("The magnet button (and the Snapping menu) turns each inference on or off; `Shift+S` turns snapping off and on altogether. Increments round free moves (10 mm), angles (15°) and scale factors — snapping to geometry and typed values win over them."),
     B::P("View → Grid shows a grid with its own snapping; the step is in Window → Preferences, and with Select active typing a length sets it."),
     B::H("Work planes"),
     B::P("The Guide Plane tool (Tools menu) and Window → Work Planes… make a plane to draw on in the air: points in empty space land on it, the axes and the grid follow it."),

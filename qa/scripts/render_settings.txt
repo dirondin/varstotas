@@ -19,9 +19,9 @@ action toggle_shadows
 action env sky=physical turbidity=3 sun=3
 action render_set w=480 h=300 samples=24 bounces=4 denoise=on match=off
 # Window → Render… (real mouse)
-raw click 344 -106
+raw click 408 -106
 wait 3
-raw click 355 258
+raw click 419 258
 wait 5
 expect window=true) q=None clamp=20 ai=true dof=As view/f2.8 focus=0 transparent=false grade=neutral
 # Quality: Draft (real mouse)

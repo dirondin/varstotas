@@ -258,8 +258,6 @@ impl VarstotasApp {
                     self.actions.push(Action::ToggleGrid);
                 }
                 ui.separator();
-                ui.menu_button("Snapping", |ui| self.snapping_menu(ui));
-                ui.separator();
                 let mut shadows = self.doc.model.shadows.enabled;
                 if ui.checkbox(&mut shadows, "Shadows").clicked() {
                     self.actions.push(Action::ToggleShadows);
@@ -363,6 +361,8 @@ impl VarstotasApp {
                 }
                 self.item(ui, "3D Text…", None, true, Action::Text3d);
             });
+
+            ui.menu_button("Snapping", |ui| self.snapping_menu(ui));
 
             ui.menu_button("Extensions", |ui| self.extensions_menu(ui));
 

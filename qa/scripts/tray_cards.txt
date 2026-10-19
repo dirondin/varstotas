@@ -1,14 +1,14 @@
 # Window menu: a checkbox per Default Tray card hides / shows it (Prefs::tray_hidden). Real mouse.
 wait 10
 expect tray_hidden=[]
-raw click 344 -106
+raw click 408 -106
 wait 5
 screenshot shots/traycards_menu.bmp
-raw click 388 -23
+raw click 452 -23
 wait 5
 expect tray_hidden=["Materials"]
 screenshot shots/traycards_off.bmp
-raw click 388 -23
+raw click 452 -23
 wait 5
 expect tray_hidden=[]
 raw key Escape

@@ -2,13 +2,13 @@
 # File → Preview Image → Show… opens the Preview Image window with the picture set from the
 # current view (menus clicked with the real mouse; the menu bar is above the viewport: y < 0).
 wait 10
-raw click 392 -105
+raw click 456 -105
 wait 5
 raw move 405 -76
 wait 10
 raw move 500 -76
 wait 5
-raw click 528 -33
+raw click 592 -33
 wait 30
 expect defs=30 model_faces=660
 screenshot shots/prevdemo_1.bmp

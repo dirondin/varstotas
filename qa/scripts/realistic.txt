@@ -64,23 +64,23 @@ wait 10
 screenshot shots/realistic_nobg.bmp
 # the tray with only Materials (the physical properties editor) and Environment (real mouse)
 action env sky=hdri background=on exposure=0 tonemap=aces sun=3 rotation=0
-raw click 344 -106
+raw click 408 -106
 wait 3
-raw click 388 -50
-raw click 388 4
-raw click 388 31
-raw click 388 58
-raw click 388 85
-raw click 388 112
+raw click 452 -50
+raw click 452 4
+raw click 452 31
+raw click 452 58
+raw click 452 85
+raw click 452 112
 wait 3
 raw key Escape
 wait 5
 expect tray_hidden=["Entity Info", "Components", "Tags", "Outliner", "Scenes", "Shadows"]
 screenshot shots/realistic_tray.bmp
 # hide Materials too and open the Environment card by its arrow
-raw click 344 -106
+raw click 408 -106
 wait 3
-raw click 388 -23
+raw click 452 -23
 wait 3
 raw key Escape
 wait 3

@@ -40,9 +40,9 @@ action toggle_shadows
 action env sky=physical turbidity=3 sun=3
 action render_set w=480 h=300 samples=48 bounces=5 denoise=on match=off
 # Window → Render… (real mouse)
-raw click 344 -106
+raw click 408 -106
 wait 3
-raw click 355 258
+raw click 419 258
 wait 5
 expect render=(480x300 48spp b5 dn job=None lights=[] window=true)
 action render_start

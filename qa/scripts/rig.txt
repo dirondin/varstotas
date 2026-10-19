@@ -9,10 +9,10 @@ screenshot shots/rig_1.bmp
 rawp click 300 200 800
 wait 5
 expect outliner={Cabinet[Group Door] *Cabinet[Group Door]}
-raw click 344 -106
+raw click 408 -106
 wait 5
 screenshot shots/rig_menu.bmp
-raw click 400 339
+raw click 464 339
 wait 10
 expect rig=None ed=(true Some("Cabinet") p=1 f=0 j=0 None None)
 screenshot shots/rig_win.bmp

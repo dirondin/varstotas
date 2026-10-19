@@ -107,22 +107,22 @@ expect ("Brick", "custom", [300.0])
 screenshot shots/fx_editor_ok.bmp
 # the tray: Materials (Shader row and its sliders) and Environment (Effects) only, real mouse
 material Brick
-raw click 344 -106
+raw click 408 -106
 wait 3
-raw click 388 -50
-raw click 388 4
-raw click 388 31
-raw click 388 58
-raw click 388 85
-raw click 388 112
+raw click 452 -50
+raw click 452 4
+raw click 452 31
+raw click 452 58
+raw click 452 85
+raw click 452 112
 wait 3
 raw key Escape
 wait 5
 screenshot shots/fx_tray.bmp
 # hide Materials too, close the editor and open the Environment card (its Effects section is open)
-raw click 344 -106
+raw click 408 -106
 wait 3
-raw click 388 -23
+raw click 452 -23
 wait 3
 raw key Escape
 wait 3

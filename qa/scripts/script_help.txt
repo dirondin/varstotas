@@ -1,9 +1,9 @@
 # Help → Script Reference (real mouse), F1 in the Script Console editor looks up the function
 # the cursor is in; a script error goes to Window → Log: the red count in the status bar opens it.
 wait 10
-raw click 392 -105
+raw click 456 -105
 wait 5
-raw click 435 -22
+raw click 499 -22
 wait 5
 expect help=(true Basics "")
 screenshot shots/help_basics.bmp

@@ -102,7 +102,7 @@ pub struct Prefs {
     pub send_to_varstotas: bool,
     /// Default Tray cards turned off in the Window menu (by title, see `ui::tray::TRAY_CARDS`).
     pub tray_hidden: Vec<String>,
-    /// View → Snapping: master switch and the inferences turned off.
+    /// The Snapping menu: master switch and the inferences turned off.
     pub snapping: crate::inference::settings::SnapPrefs,
     /// View → Grid.
     pub grid: crate::inference::settings::GridPrefs,
@@ -249,7 +249,7 @@ pub enum Action {
     DeleteGuides,
     /// View → Guides (show / hide).
     ToggleGuides,
-    /// View → Snapping → Snapping on/off (Shift+S).
+    /// Snapping → Snapping on/off (Shift+S).
     ToggleSnapping,
     /// View → Grid (show / hide).
     ToggleGrid,
