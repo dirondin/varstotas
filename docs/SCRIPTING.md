@@ -47,6 +47,10 @@ Varstotas встраивает язык [Rhai](https://rhai.rs/book/) — про
 | `arc(center, start_point, degrees)`, `…, segments)`, `…, segments, normal)` | рёбра дуги |
 | `box(origin, sx, sy, sz)` | новая **группа**-параллелепипед (минимальный угол — `origin`; отрицательные размеры откладываются в другую сторону) |
 | `cylinder(center, r, h)`, `cylinder(center, r, h, segments)` | новая группа-цилиндр (низ в `center`) |
+| `cone(center, r, h)`, `cone(center, r, h, segments)` | новая группа-конус (основание в `center`, вершина на `h` выше) |
+| `pyramid(origin, w, d, h)` | новая группа-пирамида: основание `w × d` от `origin`, вершина на `h` над его серединой |
+| `sphere(center, r)`, `sphere(center, r, segments)` | новая группа-сфера с центром `center` |
+| `torus(center, r, tube)`, `torus(center, r, tube, segments, sides)` | новая группа-тор: `r` — до середины трубки, `tube` — радиус трубки |
 | `dimension(a, b, offset)` | линейный размер между точками, вынос — вектор `offset` |
 | `note(at, offset, "text")` | текстовая выноска |
 

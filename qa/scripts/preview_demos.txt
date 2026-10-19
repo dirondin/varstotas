@@ -1,0 +1,37 @@
+# Track У: Help → Demos (the demos in one submenu) opens Material Gallery as a new document;
+# File → Preview Image → Show… opens the Preview Image window with the picture set from the
+# current view (menus clicked with the real mouse; the menu bar is above the viewport: y < 0).
+wait 10
+raw click 392 -105
+wait 5
+raw move 405 -76
+wait 10
+raw move 500 -76
+wait 5
+raw click 528 -33
+wait 30
+expect defs=30 model_faces=660
+screenshot shots/prevdemo_1.bmp
+action new
+wait 10
+view iso
+tool box
+rawp click 0 0 0
+wait 2
+rawp click 1000 600 0
+wait 2
+vcb 800
+wait 3
+action preview_view
+wait 5
+expect previews=(Some([
+raw click 20 -105
+wait 5
+raw move 60 97
+wait 10
+raw move 200 97
+wait 5
+raw click 200 97
+wait 10
+expect preview_win=true
+screenshot shots/prevdemo_2.bmp

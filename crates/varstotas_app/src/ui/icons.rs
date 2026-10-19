@@ -68,6 +68,12 @@ pub enum Icon {
     Group,
     Magnet,
     GuidePlane,
+    Box3d,
+    Cylinder,
+    Cone,
+    Pyramid,
+    Sphere,
+    Torus,
 }
 
 /// Palette used by icons.
@@ -135,6 +141,16 @@ impl Pen<'_> {
             .map(|i| {
                 let a = (a0 + (a1 - a0) * i as f32 / n as f32) * PI / 180.0;
                 self.p(c.0 + r * a.cos(), c.1 + r * a.sin())
+            })
+            .collect()
+    }
+    /// Points of an ellipse arc (degrees, 0 = +x, clockwise on screen).
+    fn ell(&self, c: (f32, f32), rx: f32, ry: f32, a0: f32, a1: f32) -> Vec<(f32, f32)> {
+        let n = ((a1 - a0).abs() / 10.0).ceil().max(2.0) as usize;
+        (0..=n)
+            .map(|i| {
+                let a = (a0 + (a1 - a0) * i as f32 / n as f32) * PI / 180.0;
+                (c.0 + rx * a.cos(), c.1 + ry * a.sin())
             })
             .collect()
     }
@@ -280,6 +296,41 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.head((20.5, 12.0), (1.0, 0.0), 3.0, pen.ink);
             pen.painter.rect_filled(Rect::from_min_max(pen.p(8.0, 4.5), pen.p(16.0, 9.5)), 1.0 * pen.s, YELLOW);
             pen.line_c(&[(3.0, 20.0), (21.0, 20.0)], pen.stroke());
+        }
+        Icon::Box3d => {
+            pen.poly(&[(3.0, 10.0), (13.0, 10.0), (13.0, 21.0), (3.0, 21.0)], SHADE);
+            pen.poly(&[(13.0, 10.0), (21.0, 5.0), (21.0, 16.0), (13.0, 21.0)], SHADE_DARK);
+            pen.poly(&[(3.0, 10.0), (11.0, 5.0), (21.0, 5.0), (13.0, 10.0)], BLUE_SOFT);
+        }
+        Icon::Cylinder => {
+            let mut side = pen.ell((12.0, 18.0), 8.0, 3.0, 0.0, 180.0);
+            side.extend([(4.0, 6.0), (20.0, 6.0)]);
+            pen.poly(&side, SHADE);
+            pen.poly(&pen.ell((12.0, 6.0), 8.0, 3.0, 0.0, 360.0), BLUE_SOFT);
+        }
+        Icon::Cone => {
+            let mut side = pen.ell((12.0, 18.0), 8.0, 3.0, 0.0, 180.0);
+            side.push((12.0, 3.0));
+            pen.poly(&side, SHADE);
+            pen.line_c(&pen.ell((12.0, 18.0), 8.0, 3.0, 180.0, 360.0), pen.thin());
+            pen.dot((12.0, 3.0), 1.6, RED);
+        }
+        Icon::Pyramid => {
+            pen.poly(&[(12.0, 3.0), (3.0, 17.0), (12.0, 21.0)], SHADE);
+            pen.poly(&[(12.0, 3.0), (12.0, 21.0), (21.0, 16.0)], SHADE_DARK);
+            pen.dot((12.0, 3.0), 1.6, RED);
+        }
+        Icon::Sphere => {
+            pen.circle((12.0, 12.0), 8.5, BLUE_SOFT);
+            pen.line_c(&pen.ell((12.0, 12.0), 8.5, 3.0, 0.0, 180.0), pen.thin());
+            pen.line_c(&pen.ell((12.0, 12.0), 3.0, 8.5, 270.0, 450.0), pen.thin());
+        }
+        Icon::Torus => {
+            let outer = pen.ell((12.0, 12.0), 9.5, 6.0, 0.0, 360.0);
+            let inner = pen.ell((12.0, 11.0), 4.0, 2.0, 0.0, 360.0);
+            pen.line_c(&pen.ell((12.0, 11.5), 6.75, 4.0, 0.0, 360.0), Stroke::new(5.0 * pen.s, BLUE_SOFT));
+            pen.line_c(&outer, pen.stroke());
+            pen.line_c(&inner, pen.thin());
         }
         Icon::Polygon => {
             let pts: Vec<(f32, f32)> = (0..6)

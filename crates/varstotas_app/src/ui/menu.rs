@@ -153,6 +153,8 @@ impl VarstotasApp {
                 self.item(ui, "Save", Some(&cmd("S")), true, Action::Save);
                 self.item(ui, "Save As…", Some(&cmd_shift("S")), true, Action::SaveAs);
                 ui.menu_button("Preview Image", |ui| {
+                    self.item(ui, "Show…", None, true, Action::PreviewShow);
+                    ui.separator();
                     self.item(ui, "From Image File…", None, true, Action::PreviewFromFile);
                     self.item(ui, "From Current View", None, true, Action::PreviewFromView);
                     self.item(ui, "Remove", None, self.doc.model.preview.is_some(), Action::PreviewRemove);
@@ -194,9 +196,6 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 self.item(ui, "Run Script…", None, true, Action::RunScript);
-                self.item(ui, "Open Demo: Country House", None, true, Action::OpenDemoHouse);
-                self.item(ui, "Open Demo: Material Gallery", None, true, Action::OpenDemoGallery);
-                self.item(ui, "Insert Demo Geometry", None, true, Action::InsertDemo);
                 ui.separator();
                 self.item(ui, "Quit", Some(&cmd("Q")), true, Action::Quit);
             });
@@ -328,6 +327,11 @@ impl VarstotasApp {
                 for id in [ToolId::Rectangle, ToolId::RotatedRectangle, ToolId::Circle, ToolId::Polygon] {
                     self.tool_item(ui, id);
                 }
+                ui.separator();
+                ui.label(egui::RichText::new("Shapes").small().weak());
+                for id in crate::tools::SHAPES {
+                    self.tool_item(ui, id);
+                }
             });
 
             ui.menu_button("Tools", |ui| {
@@ -431,6 +435,17 @@ impl VarstotasApp {
             });
 
             ui.menu_button("Help", |ui| {
+                ui.menu_button("Demos", |ui| {
+                    ui.label(egui::RichText::new("Open as a new document").small().weak());
+                    self.item(ui, "Country House", None, true, Action::OpenDemoHouse);
+                    self.item(ui, "Material Gallery", None, true, Action::OpenDemoGallery);
+                    ui.separator();
+                    ui.label(egui::RichText::new("Add to this document").small().weak());
+                    self.item(ui, "Demo Geometry", None, true, Action::InsertDemo);
+                })
+                .response
+                .on_hover_text("Demo models: furnished house and material gallery with scenes for Window → Render…, test geometry");
+                ui.separator();
                 self.item(ui, "About Varstotas", None, true, Action::About);
             });
         });

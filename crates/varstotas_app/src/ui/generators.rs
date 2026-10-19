@@ -329,7 +329,7 @@ impl VarstotasApp {
             }
         }
         for g in self.doc.model.generators.values() {
-            if !out.iter().any(|x| x.name == g.name) {
+            if !out.iter().any(|x| x.name == g.name)  {
                 out.push(GenItem {
                     name: g.name.clone(),
                     description: g.description.clone(),
@@ -373,7 +373,20 @@ impl VarstotasApp {
                 (&[][..], DVec3::ZERO)
             }
         };
-        let resp = crate::ui::library::tile_ex(ui, &it.name, thumb, None, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
+        // Rendered with textures (default values), keyed by the source.
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            it.source.hash(&mut h);
+            format!("gen:{:x}", h.finish())
+        };
+        let model = &self.doc.model;
+        let pic = if size == DVec3::ZERO {
+            None
+        } else {
+            self.thumbs.get(ui.ctx(), &key, || None, || build_preview(model, &it.source, &GenValues::new()).ok().and_then(|(_, c)| c.to_model(unit).ok()))
+        };
+        let resp = crate::ui::library::tile_ex(ui, &it.name, thumb, pic, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
         let (mut place, mut edit, mut delete) = (resp.clicked(), false, false);
         resp.context_menu(|ui| {
             if ui.button("Edit Generator…").clicked() {

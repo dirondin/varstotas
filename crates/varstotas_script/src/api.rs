@@ -3,6 +3,7 @@
 use crate::{Entity, STATE, State};
 use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
 use varstotas_kernel::model::Definition;
+use varstotas_kernel::primitives::Primitive;
 use varstotas_kernel::tessellate::triangulate_face;
 use varstotas_kernel::{
     Aabb, ContextPath, CurveInfo, EdgeId, EntityRef, FaceId, Instance, InstanceId, Mesh, OpError, SolidOp, units,
@@ -819,6 +820,33 @@ fn register_geometry(e: &mut Engine) {
     }
     e.register_fn("cylinder", |c: Dynamic, r: Dynamic, h: Dynamic| cylinder(&c, &r, &h, 24));
     e.register_fn("cylinder", |c: Dynamic, r: Dynamic, h: Dynamic, s: i64| cylinder(&c, &r, &h, s));
+    /// A [`Primitive`] (in its own axes) as a group moved to `at`.
+    fn primitive(p: Primitive, at: DVec3, what: &str) -> R<Dynamic> {
+        let m = p.mesh().ok_or_else(|| format!("{what}: sizes must be positive (a torus tube thinner than its radius), segments 3..1000"))?;
+        edit(|st| insert_group(st, m, DMat4::from_translation(at)))
+    }
+    fn segs(s: i64) -> u32 {
+        s.clamp(0, 100_000) as u32
+    }
+    e.register_fn("cone", |c: Dynamic, r: Dynamic, h: Dynamic| -> R<Dynamic> {
+        primitive(Primitive::Cone { r: num(&r)?, h: num(&h)?, segs: 24 }, pt(&c)?, "cone")
+    });
+    e.register_fn("cone", |c: Dynamic, r: Dynamic, h: Dynamic, s: i64| -> R<Dynamic> {
+        primitive(Primitive::Cone { r: num(&r)?, h: num(&h)?, segs: segs(s) }, pt(&c)?, "cone")
+    });
+    e.register_fn("pyramid", |o: Dynamic, w: Dynamic, d: Dynamic, h: Dynamic| -> R<Dynamic> {
+        primitive(Primitive::Pyramid { w: num(&w)?, d: num(&d)?, h: num(&h)? }, pt(&o)?, "pyramid")
+    });
+    e.register_fn("sphere", |c: Dynamic, r: Dynamic| -> R<Dynamic> { primitive(Primitive::Sphere { r: num(&r)?, segs: 24 }, pt(&c)?, "sphere") });
+    e.register_fn("sphere", |c: Dynamic, r: Dynamic, s: i64| -> R<Dynamic> {
+        primitive(Primitive::Sphere { r: num(&r)?, segs: segs(s) }, pt(&c)?, "sphere")
+    });
+    e.register_fn("torus", |c: Dynamic, r: Dynamic, t: Dynamic| -> R<Dynamic> {
+        primitive(Primitive::Torus { r: num(&r)?, tube: num(&t)?, segs: 24, sides: 12 }, pt(&c)?, "torus")
+    });
+    e.register_fn("torus", |c: Dynamic, r: Dynamic, t: Dynamic, s: i64, sides: i64| -> R<Dynamic> {
+        primitive(Primitive::Torus { r: num(&r)?, tube: num(&t)?, segs: segs(s), sides: segs(sides) }, pt(&c)?, "torus")
+    });
     e.register_fn("dimension", |a: Dynamic, b: Dynamic, off: Dynamic| -> R<()> {
         let (a, b, off) = (pt(&a)?, pt(&b)?, pt(&off)?);
         edit(|st| {

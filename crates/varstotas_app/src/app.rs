@@ -184,6 +184,7 @@ pub enum Action {
     /// Edit → Purge Unused: components, groups and materials nothing in the scene uses.
     PurgeUnused,
     /// File → Preview Image: from an image file, from the current view, remove.
+    PreviewShow,
     PreviewFromFile,
     PreviewFromView,
     PreviewRemove,
@@ -474,6 +475,8 @@ pub struct VarstotasApp {
     pub(crate) models: crate::ui::model_library::ModelWindow,
     /// Window → Model Info.
     pub(crate) model_info: crate::ui::model_info::ModelInfoWindow,
+    /// Rendered thumbnails of the Components card.
+    pub(crate) thumbs: crate::thumbs::Thumbs,
     pub(crate) rig_editor: crate::ui::rig_editor::RigEditor,
     /// File → Preview Image → Use Current View: the PNG being rendered for it.
     pub(crate) preview_shot: Option<PathBuf>,
@@ -605,6 +608,7 @@ impl VarstotasApp {
             models: Default::default(),
             preview_shot: None,
             model_info: Default::default(),
+            thumbs: Default::default(),
             rig_editor: Default::default(),
             gen_editor: Default::default(),
             text3d_last: Default::default(),
@@ -1176,6 +1180,7 @@ impl VarstotasApp {
                 }
             }
             Action::PreviewFromView => self.preview_from_view(),
+            Action::PreviewShow => self.model_info.preview_open = !self.model_info.preview_open,
             Action::ModelInfo => self.model_info.open = !self.model_info.open,
             Action::RigEditor => self.open_rig_editor(),
             Action::PurgeUnused => self.purge_unused(true, true),
@@ -2644,6 +2649,7 @@ impl eframe::App for VarstotasApp {
         self.console_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);
+        self.doc_preview_window(&ctx);
         self.rig_editor_window(&ctx);
         self.shader_editor_window(&ctx);
         self.plugin_dialog(&ctx);
@@ -2655,6 +2661,7 @@ impl eframe::App for VarstotasApp {
         self.online_window(&ctx);
         self.models_window(&ctx);
         self.downloads_tick(&ctx);
+        self.thumbs.process(&ctx, frame);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

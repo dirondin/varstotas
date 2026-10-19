@@ -29,6 +29,7 @@ mod scene_builder;
 mod templates;
 mod text3d;
 mod textures;
+mod thumbs;
 mod vector_export;
 mod tools;
 mod ui;

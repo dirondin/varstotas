@@ -33,6 +33,10 @@ pub const FNS: &[FnDoc] = &[
     ),
     f("box", &["box(origin, sx, sy, sz)"], "A new box group (origin = min corner)."),
     f("cylinder", &["cylinder(center, r, h)", "cylinder(center, r, h, segments)"], "A new cylinder group (bottom at center)."),
+    f("cone", &["cone(center, r, h)", "cone(center, r, h, segments)"], "A new cone group (base at center, apex h above it)."),
+    f("pyramid", &["pyramid(origin, w, d, h)"], "A new pyramid group: a w × d base from origin, the apex h above its middle."),
+    f("sphere", &["sphere(center, r)", "sphere(center, r, segments)"], "A new sphere group around center."),
+    f("torus", &["torus(center, r, tube)", "torus(center, r, tube, segments, sides)"], "A new torus group around center: r to the middle of the tube, tube = its radius."),
     f("pushpull", &["pushpull(face, distance)"], "Push / pull a face; returns the cap face."),
     f("offset", &["offset(face, distance)"], "Offset a face's loop (d < 0 inward); returns the new face."),
     f("follow_me", &["follow_me(face, edges)"], "Sweep a profile face along a path."),
@@ -210,7 +214,7 @@ pub const MEMBERS: &[Member] = &[
 fn fn_ty(name: &str) -> Ty {
     match name {
         "face" | "rect" | "circle" | "polygon" | "pushpull" | "offset" => Face,
-        "box" | "cylinder" | "group" | "component" | "union" | "subtract" | "intersect" | "trim" | "outer_shell" => Group,
+        "box" | "cylinder" | "cone" | "pyramid" | "sphere" | "torus" | "group" | "component" | "union" | "subtract" | "intersect" | "trim" | "outer_shell" => Group,
         "line" | "arc" | "edges" => Edges,
         "faces" | "all_faces" => Faces,
         "groups" | "split" => Groups,

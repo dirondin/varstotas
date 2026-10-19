@@ -135,3 +135,4 @@ Python: `m.add_generator(open("shelf.rhai").read())`, `g = m.generate("Shelf", v
 ## Партии
 - Партия 1 ✅ — механизм.
 - Партия 2 ✅ — лестница, шкаф, ограждение, стол; формулы и проверки; редактор с превью; генераторы и компоненты — один каталог и один список.
+- Примитивы (трек У) ✅ — `examples/generators/primitives/` (box, cylinder, cone, pyramid, sphere, torus): их ставят инструменты Draw → Shapes; во вкладке Components они не показываются.

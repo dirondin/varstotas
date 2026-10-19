@@ -17,6 +17,7 @@ mod dims;
 mod draw;
 mod edit;
 mod nav_tools;
+pub(crate) mod primitives;
 pub mod plugin_pick;
 pub mod plugin_select;
 pub(crate) mod light;
@@ -56,6 +57,12 @@ pub enum ToolId {
     RotatedRectangle,
     Circle,
     Polygon,
+    Box,
+    Cylinder,
+    Cone,
+    Pyramid,
+    Sphere,
+    Torus,
     PushPull,
     Move,
     Rotate,
@@ -81,7 +88,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 35] = [
+    pub const ALL: [ToolId; 41] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -95,6 +102,12 @@ impl ToolId {
         ToolId::RotatedRectangle,
         ToolId::Circle,
         ToolId::Polygon,
+        ToolId::Box,
+        ToolId::Cylinder,
+        ToolId::Cone,
+        ToolId::Pyramid,
+        ToolId::Sphere,
+        ToolId::Torus,
         ToolId::PushPull,
         ToolId::Move,
         ToolId::Rotate,
@@ -134,6 +147,12 @@ impl ToolId {
             ToolId::RotatedRectangle => "Rotated Rectangle",
             ToolId::Circle => "Circle",
             ToolId::Polygon => "Polygon",
+            ToolId::Box => "Box",
+            ToolId::Cylinder => "Cylinder",
+            ToolId::Cone => "Cone",
+            ToolId::Pyramid => "Pyramid",
+            ToolId::Sphere => "Sphere",
+            ToolId::Torus => "Torus",
             ToolId::PushPull => "Push/Pull",
             ToolId::Move => "Move",
             ToolId::Rotate => "Rotate",
@@ -179,6 +198,12 @@ impl ToolId {
             ToolId::Pan => Key::H,
             ToolId::Zoom => Key::Z,
             ToolId::Polygon
+            | ToolId::Box
+            | ToolId::Cylinder
+            | ToolId::Cone
+            | ToolId::Pyramid
+            | ToolId::Sphere
+            | ToolId::Torus
             | ToolId::FollowMe
             | ToolId::Chamfer
             | ToolId::Fillet
@@ -220,6 +245,12 @@ impl ToolId {
             ToolId::RotatedRectangle => Icon::RotatedRectangle,
             ToolId::Circle => Icon::Circle,
             ToolId::Polygon => Icon::Polygon,
+            ToolId::Box => Icon::Box3d,
+            ToolId::Cylinder => Icon::Cylinder,
+            ToolId::Cone => Icon::Cone,
+            ToolId::Pyramid => Icon::Pyramid,
+            ToolId::Sphere => Icon::Sphere,
+            ToolId::Torus => Icon::Torus,
             ToolId::PushPull => Icon::PushPull,
             ToolId::Move => Icon::Move,
             ToolId::Rotate => Icon::Rotate,
@@ -261,6 +292,12 @@ impl ToolId {
             ToolId::RotatedRectangle => "Draw a rectangle at any angle from an edge and a width.",
             ToolId::Circle => "Draw a circle from center and radius.",
             ToolId::Polygon => "Draw a regular polygon.",
+            ToolId::Box => "Draw a box: base corners, then the height. Its sizes stay editable.",
+            ToolId::Cylinder => "Draw a cylinder: centre, radius, height. Its sizes stay editable.",
+            ToolId::Cone => "Draw a cone: centre, radius, height. Its sizes stay editable.",
+            ToolId::Pyramid => "Draw a pyramid: base corners, then the height. Its sizes stay editable.",
+            ToolId::Sphere => "Draw a sphere resting on a face: centre, radius. Its sizes stay editable.",
+            ToolId::Torus => "Draw a torus lying on a face: centre, radius, tube. Its sizes stay editable.",
             ToolId::PushPull => "Push or pull a face to add or remove volume.",
             ToolId::Move => "Move, stretch or copy entities.",
             ToolId::Rotate => "Rotate, stretch or copy entities about an axis.",
@@ -363,6 +400,26 @@ impl ToolId {
             }
             ToolId::Circle => "Click the center, then move and click to set the radius. Type `24s` before clicking to set segments.",
             ToolId::Polygon => "Click the center, then the radius. Type `6s` to set the number of sides.",
+            ToolId::Box | ToolId::Pyramid => {
+                "Click the first corner of the base, click the opposite corner, then move up or down and click to set the height.\n\
+                 • A face under the cursor carries the base; arrows after the first click set its plane.\n\
+                 • Type `width, depth`, then the height — or `width, depth, height` at once.\n\
+                 • The result is a component: change its sizes in Entity Info; Explode it for plain geometry."
+            }
+            ToolId::Cylinder | ToolId::Cone => {
+                "Click the centre of the base, click the radius, then move up or down and click to set the height.\n\
+                 • Type the radius, then the height — or `radius, height` at once; `32s` sets segments.\n\
+                 • The result is a component: change its sizes in Entity Info; Explode it for plain geometry."
+            }
+            ToolId::Sphere => {
+                "Click where the sphere rests, then move and click to set the radius (or type it).\n\
+                 • `32s` sets segments. The result is a component: change its sizes in Entity Info."
+            }
+            ToolId::Torus => {
+                "Click the centre, click the radius (to the middle of the tube), then move and click to set the tube.\n\
+                 • Type `radius, tube` at once; `32s` sets segments.\n\
+                 • The result is a component: change its sizes in Entity Info."
+            }
             ToolId::PushPull => {
                 "Hover a face, click, move to set the distance, click again.\n\
                  Ctrl/Option keeps the original face. Double-click repeats the last distance."
@@ -453,6 +510,9 @@ impl ToolId {
     }
 }
 
+/// Draw → Shapes: the solid primitives (`primitives.rs`).
+pub const SHAPES: [ToolId; 6] = [ToolId::Box, ToolId::Cylinder, ToolId::Cone, ToolId::Pyramid, ToolId::Sphere, ToolId::Torus];
+
 /// Create a fresh instance of a tool.
 pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
     match id {
@@ -467,6 +527,9 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Rectangle => Box::new(draw::RectangleTool::default()),
         ToolId::Circle => Box::new(draw::CircleTool::new(false)),
         ToolId::Polygon => Box::new(draw::CircleTool::new(true)),
+        ToolId::Box | ToolId::Cylinder | ToolId::Cone | ToolId::Pyramid | ToolId::Sphere | ToolId::Torus => {
+            Box::new(primitives::PrimitiveTool::new(id))
+        }
         ToolId::Arc => Box::new(draw::ArcTool::default()),
         ToolId::ArcCenter => Box::new(arcs::ArcCenterTool::new(false)),
         ToolId::Pie => Box::new(arcs::ArcCenterTool::new(true)),

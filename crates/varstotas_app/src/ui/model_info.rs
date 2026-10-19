@@ -1,6 +1,7 @@
 //! Window → Model Info…: statistics of the document — what the scene shows (every placed copy
 //! counted) and what the file stores (definitions, materials, textures …), the libraries — and
-//! Purge Unused: remove the components and materials nothing in the scene uses.
+//! Purge Unused: remove the components and materials nothing in the scene uses. Also File →
+//! Preview Image → Show…: the document's preview picture in a window of its own.
 
 use crate::app::VarstotasApp;
 use egui::{Color32, Context, RichText, vec2};
@@ -15,11 +16,15 @@ pub struct ModelInfoWindow {
     pub purge_mats: bool,
     /// The last purge's report (for the window and the harness).
     pub last: Option<String>,
+    /// File → Preview Image → Show… window.
+    pub preview_open: bool,
+    /// The preview picture as a texture, for its bytes (pointer) — (key, texture, pixel size).
+    preview_tex: Option<(usize, egui::TextureHandle, [usize; 2])>,
 }
 
 impl Default for ModelInfoWindow {
     fn default() -> Self {
-        Self { open: false, cache: None, purge_defs: true, purge_mats: true, last: None }
+        Self { open: false, cache: None, purge_defs: true, purge_mats: true, last: None, preview_open: false, preview_tex: None }
     }
 }
 
@@ -89,6 +94,78 @@ impl VarstotasApp {
         self.model_info.last = Some(msg);
     }
 
+    /// The document's preview picture as a texture (decoded again when it changes) and its
+    /// pixel size; None without one or when it can't be read.
+    fn doc_preview_texture(&mut self, ctx: &Context) -> Option<(egui::TextureId, [usize; 2])> {
+        let Some(img) = self.doc.model.preview.as_ref() else {
+            self.model_info.preview_tex = None;
+            return None;
+        };
+        let key = std::sync::Arc::as_ptr(&img.bytes) as *const u8 as usize;
+        if self.model_info.preview_tex.as_ref().is_none_or(|t| t.0 != key) {
+            let ci = crate::textures::thumbnail(&img.bytes, crate::textures::PREVIEW_SIDE)?;
+            let size = ci.size;
+            let tex = ctx.load_texture("doc_preview", ci, egui::TextureOptions::LINEAR);
+            self.model_info.preview_tex = Some((key, tex, size));
+        }
+        self.model_info.preview_tex.as_ref().map(|t| (t.1.id(), t.2))
+    }
+
+    /// "512 × 384 JPEG, 41 KB" for the document's preview picture.
+    fn doc_preview_label(&self, size: [usize; 2]) -> String {
+        let b = self.doc.model.preview.as_ref().map(|i| &i.bytes[..]).unwrap_or_default();
+        let kind = if b.starts_with(b"\x89PNG") { "PNG" } else { "JPEG" };
+        format!("{} × {} {kind}, {}", size[0], size[1], bytes(b.len() as u64))
+    }
+
+    /// File → Preview Image → Show…: the picture the Components library shows for this file,
+    /// with the buttons that set or remove it.
+    pub(crate) fn doc_preview_window(&mut self, ctx: &Context) {
+        if !self.model_info.preview_open {
+            return;
+        }
+        let tex = self.doc_preview_texture(ctx);
+        let label = tex.map(|(_, s)| self.doc_preview_label(s));
+        let mut open = true;
+        let mut action = None;
+        let pos = self.viewport.rect.left_top() + vec2(60.0, 60.0);
+        let mut win = egui::Window::new("Preview Image").id(egui::Id::new("doc_preview_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        if self.debug.script_active() {
+            win = win.fixed_pos(pos);
+        }
+        win.show(ctx, |ui| {
+            ui.set_width(360.0);
+            match tex {
+                Some((id, size)) => {
+                    let k = (360.0 / size[0].max(size[1]) as f32).min(1.0);
+                    ui.vertical_centered(|ui| ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k))));
+                    ui.label(RichText::new(label.unwrap_or_default()).weak());
+                }
+                None => {
+                    let (r, _) = ui.allocate_exact_size(vec2(360.0, 160.0), egui::Sense::hover());
+                    ui.painter().rect_filled(r, 4.0, ui.visuals().faint_bg_color);
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "No preview image — the Components library draws the model", egui::FontId::proportional(12.0), ui.visuals().weak_text_color());
+                }
+            }
+            ui.label(RichText::new("Saved with the file; the Components library shows it for this file.").weak().small());
+            ui.horizontal(|ui| {
+                if ui.button("From Image File…").clicked() {
+                    action = Some(crate::app::Action::PreviewFromFile);
+                }
+                if ui.button("From Current View").clicked() {
+                    action = Some(crate::app::Action::PreviewFromView);
+                }
+                if ui.add_enabled(tex.is_some(), egui::Button::new("Remove")).clicked() {
+                    action = Some(crate::app::Action::PreviewRemove);
+                }
+            });
+        });
+        self.actions.extend(action);
+        if !open {
+            self.model_info.preview_open = false;
+        }
+    }
+
     pub(crate) fn model_info_window(&mut self, ctx: &Context) {
         if !self.model_info.open {
             return;
@@ -101,6 +178,9 @@ impl VarstotasApp {
             self.refresh_materials();
         }
         let s = self.model_stats().clone();
+        let preview = self.doc_preview_texture(ctx);
+        let preview_label = preview.map(|(_, sz)| self.doc_preview_label(sz));
+        let mut show_preview = false;
         let file_size = self.doc.path.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len());
         let lib_components = self.library.items.len();
         let lib_materials = self.mat_library.items.iter().filter(|i| i.path.is_some()).count();
@@ -154,6 +234,18 @@ impl VarstotasApp {
                 if let Some(b) = file_size {
                     row(ui, "File size (saved)", RichText::new(bytes(b)));
                 }
+                ui.label("Preview image");
+                ui.horizontal(|ui| {
+                    if let Some((id, size)) = preview {
+                        let k = 48.0 / size[0].max(size[1]) as f32;
+                        ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
+                        ui.label(RichText::new(preview_label.unwrap_or_default()).weak());
+                    } else {
+                        ui.label(RichText::new("none").weak());
+                    }
+                    show_preview = ui.link("Show…").on_hover_text("File → Preview Image → Show…").clicked();
+                });
+                ui.end_row();
             });
             ui.add_space(6.0);
             ui.label(RichText::new("Libraries").strong());
@@ -180,6 +272,9 @@ impl VarstotasApp {
                 }
             });
         });
+        if show_preview {
+            self.model_info.preview_open = true;
+        }
         if purge {
             self.purge_unused(self.model_info.purge_defs, self.model_info.purge_mats);
         }

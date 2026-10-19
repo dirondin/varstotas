@@ -104,6 +104,9 @@ pub struct DefThumb {
     version: u64,
     thumb: Vec<(egui::Pos2, egui::Pos2)>,
     size: DVec3,
+    /// Rendered picture ([`crate::thumbs`]) and its key.
+    pic: Option<egui::TextureId>,
+    pic_key: String,
 }
 
 fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
@@ -440,13 +443,27 @@ impl VarstotasApp {
             let edges = crate::clipboard::def_edges(m, d, THUMB_EDGES);
             let pts = edges.iter().flat_map(|(a, b)| [*a, *b]);
             let size = varstotas_kernel::Aabb::from_points(pts).map_or(DVec3::ZERO, |b| b.max - b.min);
-            self.library.def_thumbs.insert(d, DefThumb { version, thumb: thumbnail(&edges), size });
+            // The rendered picture of the previous version stays until the new one is there.
+            let (pic, pic_key) = self.library.def_thumbs.remove(&d).map(|t| (t.pic, t.pic_key)).unwrap_or_default();
+            self.library.def_thumbs.insert(d, DefThumb { version, thumb: thumbnail(&edges), size, pic, pic_key });
+        }
+        let key = format!("def:{}:{d:?}:{version}", self.doc.uid);
+        let (uid, unit) = (self.doc.uid, m.unit);
+        if let Some(id) = self.thumbs.get(ui.ctx(), &key, || None, || Clipboard::of_definition(m, uid, d).and_then(|c| c.to_model(unit)).ok()) {
+            let t = self.library.def_thumbs.get_mut(&d).expect("thumb");
+            if t.pic_key != key {
+                if !t.pic_key.is_empty() {
+                    self.thumbs.remove(&t.pic_key);
+                }
+                t.pic = Some(id);
+                t.pic_key = key;
+            }
         }
         let name = m.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
         let uses = m.defs.values().flat_map(|x| x.mesh.instances.values()).filter(|i| i.def == d).count();
         let t = &self.library.def_thumbs[&d];
         let note = format!("In this document: {uses} placed");
-        tile_ex(ui, &name, &t.thumb, None, t.size, m.unit, false, &note)
+        tile_ex(ui, &name, &t.thumb, t.pic, t.size, m.unit, false, &note)
     }
 
     /// Set or remove the open document's preview picture (undoable; saved with the file).
@@ -585,6 +602,8 @@ impl VarstotasApp {
         let gens = self.generator_items();
         let doc_defs = if self.prefs.hide_document { Vec::new() } else { self.document_components() };
         let is_doc = |g: &super::generators::GenItem| g.file.is_none() && !g.bundled && g.folder == super::generators::DOCUMENT_FOLDER;
+        // The Draw → Shapes generators (box, cylinder …) are tools, not components to list.
+        let shape = |g: &super::generators::GenItem| is_doc(g) && crate::tools::primitives::SOURCES.iter().any(|(_, _, s)| *s == g.source);
         let mut shown: Vec<(String, String, Tile)> = self
             .library
             .items
@@ -592,7 +611,7 @@ impl VarstotasApp {
             .enumerate()
             .filter(|(_, it)| found(&it.name))
             .map(|(i, it)| (it.folder.clone(), it.name.to_lowercase(), Tile::Comp(i)))
-            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples) && !(is_doc(g) && self.prefs.hide_document)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
+            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples) && !(is_doc(g) && self.prefs.hide_document) && !shape(g)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
             .chain(doc_defs.iter().filter(|(_, n)| found(n)).map(|(d, n)| (super::generators::DOCUMENT_FOLDER.to_string(), n.to_lowercase(), Tile::Def(*d))))
             .collect();
         // Library folders first, then Document, then Examples.
@@ -632,7 +651,12 @@ impl VarstotasApp {
                         match *t {
                             Tile::Comp(i) => {
                                 let it = &self.library.items[i];
-                                let resp = tile(ui, it, unit);
+                                // The file's picture, else a rendered thumbnail.
+                                let pic = it.picture(ui.ctx()).or_else(|| {
+                                    let key = format!("lib:{}|{:?}", it.path.display(), it.mtime);
+                                    self.thumbs.get(ui.ctx(), &key, || crate::thumbs::disk_path(&it.path), || it.clip.to_model(unit).ok())
+                                });
+                                let resp = tile_ex(ui, &it.name, &it.thumb, pic, it.size, unit, false, "");
                                 if resp.clicked() {
                                     place = Some(i);
                                 }
@@ -769,12 +793,6 @@ impl VarstotasApp {
             self.actions.push(Action::PlaceComponent(i));
         }
     }
-}
-
-/// One library item.
-fn tile(ui: &mut Ui, it: &LibItem, unit: varstotas_kernel::LengthUnit) -> egui::Response {
-    let pic = it.picture(ui.ctx());
-    tile_ex(ui, &it.name, &it.thumb, pic, it.size, unit, false, "")
 }
 
 /// A library tile: the picture `image` (fitted) or else the thumbnail edges in the unit

@@ -163,6 +163,12 @@ impl VarstotasApp {
             self.style_button(ui, Icon::StyleTextured, FaceStylePref::Shaded, "Shaded with Textures");
             self.style_button(ui, Icon::StyleMonochrome, FaceStylePref::Monochrome, "Monochrome");
             self.style_button(ui, Icon::StyleRealistic, FaceStylePref::Realistic, "Realistic");
+            group_sep(ui);
+            // Shapes: solids in one operation (after the styles, so the buttons before keep
+            // their places).
+            for id in crate::tools::SHAPES {
+                self.tool_button(ui, id);
+            }
         });
     }
 }

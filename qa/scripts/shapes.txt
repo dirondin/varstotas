@@ -1,0 +1,75 @@
+# Draw → Shapes (track У): Box, Cylinder, Cone, Pyramid, Sphere, Torus with the real mouse and the
+# Measurements box; each is a generated component (sizes in Entity Info), one undo step.
+wait 10
+view iso
+tool box
+rawp click 0 0 0
+wait 2
+rawp move 1000 600 0
+wait 2
+rawp click 1000 600 0
+wait 2
+rawp move 500 300 700
+wait 2
+screenshot shots/shapes_box_height.bmp
+vcb 800
+wait 3
+expect undo=Some("Box")
+expect gen=Box{width=1000,depth=600,height=800}@1000x600x800
+tool cylinder
+rawp click 3000 0 0
+wait 2
+rawp move 3400 0 0
+wait 2
+rawp click 3400 0 0
+wait 2
+vcb 1000
+wait 3
+expect gen=Cylinder{radius=400,height=1000,segments=24}@800x800x1000
+tool cone
+vcb 12s
+rawp click 3000 2500 0
+wait 2
+rawp move 3300 2500 0
+wait 2
+vcb 500,1200
+wait 3
+expect gen=Cone{radius=500,height=1200,segments=12}
+tool pyramid
+rawp click 0 2500 0
+wait 2
+rawp move 1000 3500 0
+wait 2
+rawp click 1000 3500 0
+wait 2
+vcb 1500
+wait 3
+expect height=1500}@1000x1000x1500
+tool sphere
+rawp click -2000 0 0
+wait 2
+rawp move -1600 0 0
+wait 2
+vcb 500
+wait 3
+expect gen=Sphere{radius=500,segments=24}@1000x1000x1000
+tool torus
+rawp click -2000 3000 0
+wait 2
+rawp move -1500 3000 0
+wait 2
+vcb 600,150
+wait 3
+expect gen=Torus{radius=600,tube=150,segments=24,sides=12}@1500x1500x300
+expect gen_defs=6
+zoom_extents
+wait 3
+tool select
+screenshot shots/shapes_all.bmp
+# Entity Info: the torus' tube from the parameters
+action gen tube=250
+wait 3
+expect gen=Torus{radius=600,tube=250,segments=24,sides=12}@1700x1700x500
+action undo
+wait 3
+expect tube=150
