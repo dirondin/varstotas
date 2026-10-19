@@ -75,7 +75,7 @@ impl VarstotasApp {
             }
             Ok(_) => self.run_script_source(src, "Script"),
             Err(e) => {
-                self.console.log.push(LogLine::Error(format!("header: {e}")));
+                self.console.push(LogLine::Error(format!("header: {e}")));
                 self.console.last = Some((false, e));
             }
         }
@@ -104,7 +104,7 @@ impl VarstotasApp {
             let n = self.plugins.errors.len();
             if ui.button(format!("{n} plugin(s) failed to load…")).on_hover_text(self.plugins.errors.join("\n")).clicked() {
                 for e in self.plugins.errors.clone() {
-                    self.console.log.push(LogLine::Error(e));
+                    self.console.push(LogLine::Error(e));
                 }
                 self.console.open = true;
                 ui.close();
@@ -294,25 +294,27 @@ impl VarstotasApp {
         };
         let ctx = varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None };
         let what = if idx == CONSOLE { "script" } else { "plugin" };
-        self.console.log.push(LogLine::Input(format!("{what} {}", p.name)));
+        self.console.push(LogLine::Input(format!("{what} {}", p.name)));
         let r = self.doc.try_commit_if(&p.name, |m| Ok::<_, String>(varstotas_script::eval_json(m, &ctx, &src, &vars)), |r| r.run.changed);
         let Some(r) = r else {
             let e = self.doc.last_error.take().unwrap_or_else(|| "plugin failed".into());
+            crate::applog::error(&p.name, &e);
             self.console.log.push(LogLine::Error(e.clone()));
             self.console.last = Some((false, e.clone()));
-            return self.flash_error(e);
+            return self.flash_error_quiet(e);
         };
         for l in r.run.output.lines() {
-            self.console.log.push(LogLine::Output(l.to_string()));
+            self.console.push(LogLine::Output(l.to_string()));
         }
         if let Some(sel) = r.run.selection {
             self.doc.set_selection(sel);
         }
         match r.run.error {
             Some(e) => {
+                crate::applog::error(&p.name, &e);
                 self.console.log.push(LogLine::Error(e.clone()));
                 self.console.last = Some((false, e.clone()));
-                self.flash_error(format!("{}: {e}", p.name));
+                self.flash_error_quiet(format!("{}: {e}", p.name));
             }
             None => {
                 let out = r.run.output.trim_end().to_string();

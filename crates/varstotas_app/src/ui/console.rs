@@ -29,6 +29,16 @@ pub struct ConsoleState {
     pub code_h: f32,
 }
 
+impl ConsoleState {
+    /// Add a line to the output; errors go to Window → Log too.
+    pub fn push(&mut self, line: LogLine) {
+        if let LogLine::Error(e) = &line {
+            crate::applog::error("Script Console", e);
+        }
+        self.log.push(line);
+    }
+}
+
 impl VarstotasApp {
     /// Run Rhai source against the document (one undo step when it changed the model).
     pub(crate) fn run_script_source(&mut self, src: &str, label: &str) {
@@ -39,7 +49,7 @@ impl VarstotasApp {
         };
         let first = src.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().trim().to_string();
         let more = src.lines().filter(|l| !l.trim().is_empty()).count() > 1;
-        self.console.log.push(LogLine::Input(if more { format!("{first} …") } else { first }));
+        self.console.push(LogLine::Input(if more { format!("{first} …") } else { first }));
         let run = self.doc.try_commit_if(
             label,
             |m| Ok::<_, String>(varstotas_script::run(m, &ctx, src)),
@@ -47,20 +57,20 @@ impl VarstotasApp {
         );
         let Some(run) = run else {
             let e = self.doc.last_error.take().unwrap_or_else(|| "script failed".into());
-            self.console.log.push(LogLine::Error(e.clone()));
+            self.console.push(LogLine::Error(e.clone()));
             self.console.last = Some((false, e));
             return;
         };
         for l in run.output.lines() {
-            self.console.log.push(LogLine::Output(l.to_string()));
+            self.console.push(LogLine::Output(l.to_string()));
         }
         if let Some(sel) = run.selection {
             self.doc.set_selection(sel);
         }
         match run.error {
             Some(e) => {
-                self.console.log.push(LogLine::Error(e.clone()));
-                self.flash_error(format!("Script error: {e}"));
+                self.console.push(LogLine::Error(e.clone()));
+                self.flash_error_quiet(format!("Script error: {e}"));
                 self.console.last = Some((false, e));
             }
             None => self.console.last = Some((true, run.output.trim_end().to_string())),
@@ -91,6 +101,8 @@ impl VarstotasApp {
         }
         let mut open = true;
         let mut run: Option<String> = None;
+        // The reference to open (and the word to look up).
+        let mut help: Option<Option<String>> = None;
         let pos = self.viewport.rect.min + egui::vec2(16.0, 16.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(Color32::WHITE);
         let mut win = egui::Window::new("Script Console").open(&mut open).default_pos(pos);
@@ -155,6 +167,9 @@ impl VarstotasApp {
                     self.prefs.console_code = self.console.history[pos].clone();
                 }
             }
+            if let Some(w) = self.console.editor.f1(ui, &self.prefs.console_code) {
+                help = Some(Some(w));
+            }
             self.console.editor.show(ui, &mut self.prefs.console_code, code_h);
             ui.horizontal(|ui| {
                 if ui.button("Run").on_hover_text("Cmd+Enter").clicked() {
@@ -165,14 +180,14 @@ impl VarstotasApp {
                 {
                     match std::fs::read_to_string(&p) {
                         Ok(s) => self.prefs.console_code = s,
-                        Err(e) => self.console.log.push(LogLine::Error(format!("{}: {e}", p.display()))),
+                        Err(e) => self.console.push(LogLine::Error(format!("{}: {e}", p.display()))),
                     }
                 }
                 if ui.button("Save…").clicked()
                     && let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).set_file_name("script.rhai").save_file()
                     && let Err(e) = std::fs::write(&p, &self.prefs.console_code)
                 {
-                    self.console.log.push(LogLine::Error(format!("{}: {e}", p.display())));
+                    self.console.push(LogLine::Error(format!("{}: {e}", p.display())));
                 }
                 if self.bridge.python.is_some() && ui.button("Stop Python").clicked() {
                     self.stop_python();
@@ -180,13 +195,18 @@ impl VarstotasApp {
                 if ui.button("Clear Output").clicked() {
                     self.console.log.clear();
                 }
-                ui.label(RichText::new("API: docs/SCRIPTING.md").color(theme::TEXT_DIM));
+                if super::script_help::help_button(ui) {
+                    help = Some(None);
+                }
                 if let Some(b) = &self.bridge.server {
                     ui.label(RichText::new(format!("Python / MCP bridge: 127.0.0.1:{}", b.port)).color(theme::TEXT_DIM))
                         .on_hover_text("import varstotas; m = varstotas.connect()  — see ~/.varstotas/python");
                 }
             });
         });
+        if let Some(w) = help {
+            self.open_script_help(super::script_help::Topic::Console, w);
+        }
         if let Some(src) = run
             && !src.trim().is_empty()
         {

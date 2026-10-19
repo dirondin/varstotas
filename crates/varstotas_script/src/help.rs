@@ -118,6 +118,23 @@ pub const FNS: &[FnDoc] = &[
     f("ceil", &["ceil(x)"], "Round up to a whole number (as a float)."),
 ];
 
+/// Sections of the in-app reference: a title and the [`FNS`] names in it (every function is
+/// in one).
+pub const GROUPS: &[(&str, &[&str])] = &[
+    ("Points and vectors", &["vec3", "length", "units"]),
+    ("Drawing", &["line", "polyline", "face", "rect", "circle", "polygon", "arc"]),
+    ("Solids", &["box", "cylinder", "cone", "pyramid", "sphere", "torus"]),
+    ("Editing", &["pushpull", "offset", "follow_me", "erase", "move", "copy", "rotate", "scale", "reverse", "soften"]),
+    ("Groups and components", &["group", "component", "explode", "make_unique", "enter", "exit"]),
+    ("Finding objects", &["child", "children", "faces", "edges", "groups", "all", "entities", "all_faces", "selection", "select", "bounds", "model_bounds"]),
+    ("Visibility, materials, tags", &["show", "hide", "material", "paint", "materials", "tag"]),
+    ("Solid tools", &["union", "subtract", "intersect", "trim", "split", "outer_shell"]),
+    ("Parameters and generators", &["make_parametric", "set_params", "params", "reset_params", "generators", "add_generator", "generate"]),
+    ("Dimensions and notes", &["dimension", "note"]),
+    ("Files and network", &["read_text", "write_text", "file_exists", "list_files", "list_dirs", "parse_json", "fetch_text", "fetch_file", "url_encode"]),
+    ("Output and numbers", &["print", "len", "range", "min", "max", "clamp", "ceil"]),
+];
+
 /// What a script expression is, as far as the editor can tell (for completion after a dot).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ty {
@@ -654,6 +671,19 @@ pub fn call_context(src: &str, cursor: usize) -> Option<(String, usize, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_function_is_in_one_group() {
+        for d in FNS {
+            let n = GROUPS.iter().filter(|(_, names)| names.contains(&d.name)).count();
+            assert_eq!(n, 1, "{} is in {n} groups", d.name);
+        }
+        for (_, names) in GROUPS {
+            for n in *names {
+                assert!(fn_doc(n).is_some(), "{n} is not documented");
+            }
+        }
+    }
 
     #[test]
     fn every_api_function_is_documented() {

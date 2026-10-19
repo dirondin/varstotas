@@ -1,0 +1,53 @@
+# Help → Script Reference (real mouse), F1 in the Script Console editor looks up the function
+# the cursor is in; a script error goes to Window → Log: the red count in the status bar opens it.
+wait 10
+raw click 392 -105
+wait 5
+raw click 435 -48
+wait 5
+expect help=(true Basics "")
+screenshot shots/help_basics.bmp
+action console
+wait 30
+raw click 300 350
+wait 2
+raw text box(ORIGIN, 10, 10, 10);
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key ArrowLeft
+raw key F1
+wait 10
+expect help=(true Console "box")
+screenshot shots/help_f1.bmp
+# the Functions topic (the search is cleared)
+raw click 492 227
+wait 5
+expect help=(true Functions "")
+screenshot shots/help_functions.bmp
+# an error: one entry, the status bar count opens the log
+action log_clear
+action script nonexistent_fn(1)
+wait 5
+expect log=(false 1 1)
+screenshot shots/log_badge.bmp
+raw click 1073 761
+wait 5
+expect log=(true 1 0)
+screenshot shots/log_window.bmp

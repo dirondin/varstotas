@@ -471,7 +471,7 @@ impl VarstotasApp {
             Ok(c) => c,
             Err(e) => {
                 self.flash_error(format!("Cannot start {py}: {e}"));
-                self.console.log.push(LogLine::Error(format!("cannot start {py}: {e} (set VARSTOTAS_PYTHON)")));
+                self.console.push(LogLine::Error(format!("cannot start {py}: {e} (set VARSTOTAS_PYTHON)")));
                 self.console.open = true;
                 return;
             }
@@ -491,7 +491,7 @@ impl VarstotasApp {
             pipe(Box::new(e), true, tx);
         }
         self.console.open = true;
-        self.console.log.push(LogLine::Input(format!("python {name}")));
+        self.console.push(LogLine::Input(format!("python {name}")));
         self.bridge.python = Some(PythonRun { child, out: rx, name, text: String::new() });
     }
 
@@ -507,7 +507,7 @@ impl VarstotasApp {
         for (err, l) in p.out.try_iter() {
             p.text.push_str(&l);
             p.text.push('\n');
-            self.console.log.push(if err { LogLine::Error(l) } else { LogLine::Output(l) });
+            self.console.push(if err { LogLine::Error(l) } else { LogLine::Output(l) });
         }
         let Ok(Some(status)) = p.child.try_wait() else { return };
         // Output still in the pipes arrives after the exit: collect it.
@@ -515,7 +515,7 @@ impl VarstotasApp {
         for (err, l) in p.out.try_iter() {
             p.text.push_str(&l);
             p.text.push('\n');
-            self.console.log.push(if err { LogLine::Error(l) } else { LogLine::Output(l) });
+            self.console.push(if err { LogLine::Error(l) } else { LogLine::Output(l) });
         }
         let p = self.bridge.python.take().expect("python run");
         if status.success() {
@@ -523,7 +523,7 @@ impl VarstotasApp {
             self.flash(format!("{} finished", p.name));
         } else {
             let msg = format!("{} exited with {status}", p.name);
-            self.console.log.push(LogLine::Error(msg.clone()));
+            self.console.push(LogLine::Error(msg.clone()));
             self.console.last = Some((false, p.text.trim_end().to_string()));
             self.flash_error(msg);
         }

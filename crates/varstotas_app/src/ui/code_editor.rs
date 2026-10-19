@@ -142,6 +142,28 @@ impl ScriptEditor {
         chars[start..end].iter().collect()
     }
 
+    /// The identifier at (or just before) the cursor last frame — for F1 in the reference.
+    pub fn word_at_cursor(&self, code: &str) -> Option<String> {
+        let c = self.cursor?;
+        let chars: Vec<char> = code.chars().collect();
+        let c = c.min(chars.len());
+        let ident = |x: &char| x.is_alphanumeric() || *x == '_';
+        let start = chars[..c].iter().rposition(|x| !ident(x)).map_or(0, |p| p + 1);
+        let end = chars[c..].iter().position(|x| !ident(x)).map_or(chars.len(), |p| c + p);
+        (start < end).then(|| chars[start..end].iter().collect())
+    }
+
+    /// F1 pressed while the editor has focus: the word at the cursor (or "" when none).
+    pub fn f1(&self, ui: &Ui, code: &str) -> Option<String> {
+        if !self.has_focus(ui) || !ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1)) {
+            return None;
+        }
+        let word = self.word_at_cursor(code).filter(|w| help::fn_doc(w).is_some() || help::MEMBERS.iter().any(|m| m.name == w.as_str()));
+        // Else the function whose call the cursor is in.
+        let call = || help::call_context(code, self.cursor?).map(|c| c.0);
+        Some(word.or_else(call).unwrap_or_default())
+    }
+
     /// Names in the member list now open (for the harness).
     pub fn member_names(&self) -> Vec<String> {
         self.members.as_ref().map(|p| p.items.iter().map(|i| i.name.clone()).collect()).unwrap_or_default()

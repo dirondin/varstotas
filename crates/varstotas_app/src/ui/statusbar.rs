@@ -15,6 +15,8 @@ impl VarstotasApp {
                 let label = if self.grid_vcb() { "Grid Step" } else { self.tool.vcb_label() };
                 ui.label(RichText::new(label).color(theme::TEXT_DIM));
                 ui.add_space(12.0);
+                self.log_badge(ui);
+                ui.add_space(6.0);
                 ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
                     paint_icon(ui.painter(), rect, Icon::Info, false);

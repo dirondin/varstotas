@@ -1936,6 +1936,7 @@ dependencies = [
  "flate2",
  "glam",
  "image",
+ "libc",
  "log",
  "varstotas_kernel",
  "varstotas_render",

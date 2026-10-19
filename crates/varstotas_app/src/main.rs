@@ -5,6 +5,7 @@
 
 mod animation;
 mod app;
+mod applog;
 mod autosave;
 mod axes;
 mod bridge;
@@ -36,7 +37,7 @@ mod ui;
 mod viewport;
 
 fn main() -> eframe::Result<()> {
-    env_logger::init();
+    applog::init();
     let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
     if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
         // Ray queries (hardware / driver ray tracing) for the path tracer, where there are any.

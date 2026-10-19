@@ -427,6 +427,10 @@ impl VarstotasApp {
                     self.actions.push(Action::ToggleConsole);
                     ui.close();
                 }
+                if ui.add(egui::Button::new("Log").selected(self.log_window.open)).on_hover_text("Errors and warnings from everywhere: scripts, import / export, libraries, downloads …").clicked() {
+                    self.toggle_log(!self.log_window.open);
+                    ui.close();
+                }
                 ui.separator();
                 if ui.button("Preferences…").clicked() {
                     self.actions.push(Action::Preferences);
@@ -445,6 +449,10 @@ impl VarstotasApp {
                 })
                 .response
                 .on_hover_text("Demo models: furnished house and material gallery with scenes for Window → Render…, test geometry");
+                if ui.add(egui::Button::new("Script Reference").selected(self.script_help.open)).on_hover_text("Scripts, generators and component scripts: functions, properties, examples").clicked() {
+                    self.open_script_help(crate::ui::script_help::Topic::Basics, None);
+                    ui.close();
+                }
                 ui.separator();
                 self.item(ui, "About Varstotas", None, true, Action::About);
             });

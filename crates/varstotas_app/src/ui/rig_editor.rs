@@ -357,6 +357,7 @@ impl VarstotasApp {
         let rig = match self.rig_editor.rig() {
             Ok(r) => r,
             Err(e) => {
+                crate::applog::error("Component Parameters", &e);
                 self.rig_editor.error = Some(e);
                 return;
             }
@@ -372,7 +373,10 @@ impl VarstotasApp {
                 self.tray.gen_text = None;
                 self.flash("Parameters applied".to_string());
             }
-            None => self.rig_editor.error = self.doc.last_error.take(),
+            None => {
+                self.rig_editor.error = self.doc.last_error.take();
+                crate::applog::error("Component Parameters", self.rig_editor.error.as_deref().unwrap_or_default());
+            }
         }
     }
 
@@ -389,6 +393,7 @@ impl VarstotasApp {
             self.flash("Parameters removed".to_string());
         } else {
             self.rig_editor.error = self.doc.last_error.take();
+            crate::applog::error("Component Parameters", self.rig_editor.error.as_deref().unwrap_or_default());
         }
     }
 
@@ -466,6 +471,7 @@ impl VarstotasApp {
         let mut open = true;
         let mut act: Option<&str> = None;
         let mut pick = None;
+        let mut help: Option<Option<String>> = None;
         let pos = self.viewport.rect.left_top() + vec2(60.0, 40.0);
         let mut win = egui::Window::new("Component Parameters").id(egui::Id::new("rig_editor_window")).open(&mut open).collapsible(false).resizable(true).default_pos(pos).default_width(760.0);
         if self.debug.script_active() {
@@ -655,14 +661,23 @@ impl VarstotasApp {
                 }
                 // Script.
                 ui.add_space(6.0);
-                ui.label(RichText::new("Script").strong()).on_hover_text(
-                    "Optional Rhai code run after the motions inside the component: fn update(p) { … } with the whole script API (rotate, move, paint, show / hide, set_params, box…); child(name) / child(name, true) finds a part by name (deeply), part.min / max / size / bounds — its extents; p — the values and formulas",
-                );
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Script").strong()).on_hover_text(
+                        "Optional Rhai code run after the motions inside the component: fn update(p) { … } with the whole script API (rotate, move, paint, show / hide, set_params, box…); child(name) / child(name, true) finds a part by name (deeply), part.min / max / size / bounds — its extents; p — the values and formulas",
+                    );
+                    if super::script_help::help_button(ui) {
+                        help = Some(None);
+                    }
+                });
                 if ed.script.is_empty() && ui.button("+ Script").clicked() {
                     ed.script = "fn update(p) {\n    // let door = child(\"Door\", true);\n    // rotate(door, door.min, vec3(0, 0, 1), -p.open);\n}\n".into();
                 }
                 if !ed.script.is_empty() {
+                    let f1 = ed.editor.f1(ui, &ed.script);
                     ed.editor.show(ui, &mut ed.script, 140.0);
+                    if let Some(w) = f1 {
+                        help = Some(Some(w));
+                    }
                 }
             });
             ui.separator();
@@ -695,6 +710,9 @@ impl VarstotasApp {
             }
             Some("remove") => self.rig_remove(),
             _ => {}
+        }
+        if let Some(w) = help {
+            self.open_script_help(super::script_help::Topic::Component, w);
         }
         if let Some(j) = pick {
             self.rig_pick(j);

@@ -421,6 +421,8 @@ pub struct VarstotasApp {
     pub(crate) confirm: Option<Pending>,
     pub(crate) show_about: bool,
     pub(crate) console: crate::ui::console::ConsoleState,
+    pub(crate) script_help: crate::ui::script_help::ScriptHelp,
+    pub(crate) log_window: crate::ui::log_window::LogWindow,
     /// Local server for Python scripts and AI agents.
     pub(crate) bridge: crate::bridge_ops::BridgeState,
     pub(crate) plugins: crate::ui::extensions::PluginState,
@@ -571,6 +573,8 @@ impl VarstotasApp {
             confirm: None,
             show_about: false,
             console: Default::default(),
+            script_help: Default::default(),
+            log_window: Default::default(),
             bridge: Default::default(),
             plugins: Default::default(),
             library: Default::default(),
@@ -659,7 +663,18 @@ impl VarstotasApp {
         self.flash = Some((msg.into(), self.now + FLASH_SECS, false));
     }
 
+    /// An error in the status bar, kept in Window → Log too.
     pub(crate) fn flash_error(&mut self, msg: impl Into<String>) {
+        let msg = msg.into();
+        // (the same error still on screen — shown again by another path — is logged once)
+        if !self.flash.as_ref().is_some_and(|f| f.2 && f.0 == msg && f.1 > self.now) {
+            crate::applog::error("", &msg);
+        }
+        self.flash = Some((msg, self.now + FLASH_SECS, true));
+    }
+
+    /// An error in the status bar that is already in Window → Log (the console logged it).
+    pub(crate) fn flash_error_quiet(&mut self, msg: impl Into<String>) {
         self.flash = Some((msg.into(), self.now + FLASH_SECS, true));
     }
 
@@ -2647,6 +2662,8 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.console_window(&ctx);
+        self.script_help_window(&ctx);
+        self.log_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);
         self.doc_preview_window(&ctx);

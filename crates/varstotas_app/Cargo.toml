@@ -36,6 +36,10 @@ toml = "1"
 [target.'cfg(target_os = "macos")'.dependencies]
 winit = { version = "0.30", default-features = false }
 
+# The log window's local time (localtime_r).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Windows-only: embeds icon + version info into varstotas.exe (see build.rs).
 [build-dependencies]
 winresource = "0.1"

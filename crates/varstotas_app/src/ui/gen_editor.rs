@@ -250,6 +250,11 @@ impl VarstotasApp {
             if ui.add_enabled(ok, egui::Button::new("Place")).on_hover_text("Place a component with the preview values").clicked() {
                 self.actions.push(Action::PlaceGenerator(self.gen_editor.source.clone(), self.gen_editor.values.clone()));
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if super::script_help::help_button(ui) {
+                    self.open_script_help(super::script_help::Topic::Generators, None);
+                }
+            });
         });
         ui.separator();
         // The editor fills the window (it grows when the window is resized).
@@ -264,7 +269,11 @@ impl VarstotasApp {
                 ui.vertical(|ui| {
                     ui.set_width((w * 0.56).max(260.0));
                     let ed = &mut self.gen_editor;
+                    let f1 = ed.editor.f1(ui, &ed.source);
                     edited = ed.editor.show(ui, &mut ed.source, h).response.changed();
+                    if let Some(w) = f1 {
+                        self.open_script_help(super::script_help::Topic::Generators, Some(w));
+                    }
                 });
                 ui.separator();
                 ui.vertical(|ui| self.gen_editor_side(ui, unit, h));
@@ -383,7 +392,11 @@ impl VarstotasApp {
         let r = self.doc.try_commit(&format!("Update Generator {name}"), |m| varstotas_script::generator::add(m, &src));
         self.gen_editor.status = match r {
             Some(_) => format!("{name}: applied to the document"),
-            None => self.doc.last_error.take().unwrap_or_default(),
+            None => {
+                let e = self.doc.last_error.take().unwrap_or_default();
+                crate::applog::error("Generator Editor", &e);
+                e
+            }
         };
         self.library.gens.thumbs.clear();
     }
