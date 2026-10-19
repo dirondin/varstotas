@@ -105,6 +105,14 @@ pub struct Prefs {
     pub mat_library_dir: Option<PathBuf>,
     /// Materials list: the bundled example materials hidden.
     pub hide_mat_examples: bool,
+    /// Favourites of the Components list ("c:" + library file, "g:" + bundled generator).
+    pub lib_favourites: Vec<String>,
+    /// Components placed last from the library (same keys), most recent first.
+    pub lib_recent: Vec<String>,
+    /// Favourites of the Materials list ("m:" + library file, "x:" + example name).
+    pub mat_favourites: Vec<String>,
+    /// Library materials used last (same keys), most recent first.
+    pub mat_recent: Vec<String>,
     /// 3D Library → Other Sites: offer new model files of the Downloads folder for import.
     pub watch_downloads: bool,
     /// 3D Library → Other Sites: listen for the Send to Varstotas bookmarklet (127.0.0.1).
@@ -152,6 +160,10 @@ impl Default for Prefs {
             lib_tiles: Default::default(),
             mat_library_dir: None,
             hide_mat_examples: false,
+            lib_favourites: Vec::new(),
+            lib_recent: Vec::new(),
+            mat_favourites: Vec::new(),
+            mat_recent: Vec::new(),
             watch_downloads: false,
             send_to_varstotas: false,
             tray_hidden: Vec::new(),
@@ -446,6 +458,8 @@ pub struct VarstotasApp {
     pub(crate) plugins: crate::ui::extensions::PluginState,
     pub(crate) library: crate::ui::library::LibraryState,
     pub(crate) mat_library: crate::ui::mat_library::MatLibraryState,
+    /// A Components / Materials tile being dragged into the viewport.
+    pub(crate) tray_drag: Option<crate::ui::tray_lib::TrayDrag>,
     /// Transient status message (text, expiry time).
     /// Transient message (text, expiry time, is_error), shown next to the tool hint.
     pub(crate) flash: Option<(String, f64, bool)>,
@@ -610,6 +624,7 @@ impl VarstotasApp {
             plugins: Default::default(),
             library: Default::default(),
             mat_library: Default::default(),
+            tray_drag: None,
             flash: None,
             tray: TrayState::default(),
             debug,
@@ -2659,6 +2674,7 @@ impl eframe::App for VarstotasApp {
             let active = self.active_pane;
             let response = self.viewport.allocate(ui, rects[active]);
             self.handle_viewport_input(&ctx, &response);
+            self.tray_drag_frame(&ctx, &response);
             if self.tool.animating() {
                 // Scripts get a fixed step so runs are repeatable.
                 let step = if self.debug.script_active() { 1.0 / 60.0 } else { dt as f64 };

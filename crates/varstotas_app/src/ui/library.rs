@@ -5,6 +5,7 @@
 //! component (one definition per document, however often it is placed); "Save Selection"
 //! writes the selection to the library.
 
+use super::tray_lib::{DragItem, FolderAct, FolderAsk, LibMenuAct, TrayDrag, file_key};
 use crate::app::{Action, VarstotasApp};
 use crate::clipboard::Clipboard;
 use egui::{Color32, RichText, Stroke, Ui, pos2, vec2};
@@ -16,6 +17,9 @@ use std::time::SystemTime;
 /// Edges kept for a thumbnail.
 pub(crate) const THUMB_EDGES: usize = 4000;
 const TILE: f32 = super::tray_lib::LARGE;
+/// Section ids of the favourites and recents (not folder names: a folder can't start with \u{1}).
+pub const FAVOURITES: &str = "\u{1}Favourites";
+pub const RECENT: &str = "\u{1}Recent";
 
 pub struct LibItem {
     pub path: PathBuf,
@@ -71,6 +75,10 @@ pub struct LibraryState {
     pub rename: Option<(RenameTarget, String)>,
     /// Thumbnails of the document's components (Document folder).
     pub def_thumbs: std::collections::HashMap<varstotas_kernel::DefId, DefThumb>,
+    /// Subfolders of the library folder (empty ones too).
+    pub dirs: Vec<String>,
+    /// The New Folder / Rename Folder dialog (either library card).
+    pub folder_ask: Option<FolderAsk>,
 }
 
 /// Whose preview picture a view render becomes (File → Preview Image, a tile's menu).
@@ -240,6 +248,7 @@ impl VarstotasApp {
         }
         self.library.items = items;
         self.library.errors = errors;
+        self.library.dirs = super::tray_lib::subfolders(&dir);
         self.library.scanned = Some(dir);
         self.refresh_generators();
     }
@@ -311,20 +320,24 @@ impl VarstotasApp {
     }
 
     /// A section heading of the Components list: In Model (the document's components and
-    /// generators; Hide), the library folder ("" — My Library) and its subfolders (the title
-    /// shows the folder in the Finder), Examples (bundled; Hide). True when folded.
-    fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>, count: usize) -> bool {
+    /// generators; Hide), Favourites, Recent, the library folder ("" — My Library) and its
+    /// subfolders (the title shows the folder in the Finder; New / Rename / Delete Folder in
+    /// its context menu), Examples (bundled; Hide). True when folded.
+    fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>, count: usize, act: &mut Option<FolderAct>) -> bool {
         use super::generators::{DOCUMENT_FOLDER, EXAMPLES_FOLDER};
-        let dir = root.map(|r| if folder.is_empty() { r.to_path_buf() } else { r.join(folder) });
+        let special = matches!(folder, DOCUMENT_FOLDER | EXAMPLES_FOLDER | FAVOURITES | RECENT);
+        let dir = root.filter(|_| !special).map(|r| if folder.is_empty() { r.to_path_buf() } else { r.join(folder) });
         let shown = |d: &Option<PathBuf>| d.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default();
         let (title, tip, link) = match folder {
             EXAMPLES_FOLDER => (folder.to_string(), "Generators bundled with Varstotas (not files)".to_string(), false),
             DOCUMENT_FOLDER => ("In Model".to_string(), "Components and generators of the open document (Save to Library makes a file)".to_string(), false),
+            FAVOURITES => ("Favourites".to_string(), "Right-click a library tile → Add to Favourites".to_string(), false),
+            RECENT => ("Recent".to_string(), "Library components placed last".to_string(), false),
             "" => ("My Library".to_string(), shown(&dir), dir.is_some()),
             f => (f.to_string(), shown(&dir), dir.is_some()),
         };
         let mut hide = None;
-        let (folded, clicked) = super::tray_lib::section(ui, &mut self.prefs.library_collapsed, folder, &title, &tip, link, false, Some(count), |ui| {
+        let (folded, clicked, title) = super::tray_lib::section(ui, &mut self.prefs.library_collapsed, folder, &title, &tip, link, false, Some(count), |ui| {
             if folder == EXAMPLES_FOLDER || folder == DOCUMENT_FOLDER {
                 let tip = if folder == EXAMPLES_FOLDER { "Hide the bundled examples (… → Show Examples brings them back)" } else { "Hide the document's components (… → Show In Model brings them back)" };
                 let r = ui.small_button("Hide").on_hover_text(tip);
@@ -334,6 +347,7 @@ impl VarstotasApp {
                 }
             }
         });
+        super::tray_lib::folder_menu(&title, folder, dir.as_deref(), act);
         match hide {
             Some(true) => self.prefs.hide_examples = true,
             Some(false) => self.prefs.hide_document = true,
@@ -343,6 +357,106 @@ impl VarstotasApp {
             crate::ui::extensions::reveal(&d);
         }
         folded
+    }
+
+    /// A folder heading's menu: New Folder… / Rename Folder… open the folder dialog, Delete
+    /// Folder removes an empty one (`materials`: of the materials library).
+    pub(crate) fn folder_act(&mut self, materials: bool, act: FolderAct) {
+        match act {
+            FolderAct::New => self.library.folder_ask = Some(FolderAsk { materials, rename: None, name: String::new() }),
+            FolderAct::Rename(f) => {
+                let name = f.rsplit('/').next().unwrap_or(&f).to_string();
+                self.library.folder_ask = Some(FolderAsk { materials, rename: Some(f), name });
+            }
+            FolderAct::Delete(dir) => {
+                match std::fs::remove_dir(&dir) {
+                    Ok(()) => self.flash(format!("Deleted folder {}", dir.display())),
+                    Err(e) => self.flash_error(format!("Delete Folder: {e}")),
+                }
+                self.refresh_library_of(materials);
+            }
+        }
+    }
+
+    fn refresh_library_of(&mut self, materials: bool) {
+        if materials {
+            self.refresh_materials();
+        } else {
+            self.refresh_library();
+        }
+    }
+
+    /// The New Folder / Rename Folder dialog (`LibraryState::folder_ask`).
+    pub(crate) fn folder_dialog(&mut self, ctx: &egui::Context) {
+        let Some(ask) = self.library.folder_ask.as_mut() else { return };
+        let mut choice = None;
+        let heading = if ask.rename.is_some() { "Rename Folder" } else { "New Folder" };
+        let resp = egui::Modal::new(egui::Id::new("library_folder")).show(ctx, |ui| {
+            ui.set_width(320.0);
+            ui.heading(heading);
+            ui.add_space(4.0);
+            let r = ui.add(egui::TextEdit::singleline(&mut ask.name).hint_text("Folder name").desired_width(f32::INFINITY));
+            super::tray_lib::spot("folder_name", r.rect.center());
+            if !r.has_focus() && !r.lost_focus() {
+                r.request_focus();
+            }
+            let ok = super::tray_lib::folder_name_ok(&ask.name);
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && ok {
+                choice = Some(true);
+            }
+            ui.add_space(8.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.add_enabled(ok, egui::Button::new(if ask.rename.is_some() { "Rename" } else { "Create" })).clicked() {
+                    choice = Some(true);
+                }
+                if ui.button("Cancel").clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+        if resp.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        let Some(ok) = choice else { return };
+        let ask = self.library.folder_ask.take().expect("checked above");
+        if !ok {
+            return;
+        }
+        let root = if ask.materials { self.material_library_dir() } else { self.library_dir() };
+        let Some(root) = root else { return };
+        let name = ask.name.trim().to_string();
+        let r = match &ask.rename {
+            None => std::fs::create_dir_all(root.join(&name)).map_err(|e| e.to_string()),
+            Some(old) => {
+                let from = root.join(old);
+                let to = from.parent().unwrap_or(&root).join(&name);
+                if to.exists() {
+                    Err(format!("{} already exists", to.display()))
+                } else {
+                    std::fs::rename(&from, &to).map_err(|e| e.to_string()).map(|()| {
+                        let (prefix, lists) = if ask.materials {
+                            ("m:", [&mut self.prefs.mat_favourites, &mut self.prefs.mat_recent])
+                        } else {
+                            ("c:", [&mut self.prefs.lib_favourites, &mut self.prefs.lib_recent])
+                        };
+                        super::tray_lib::rekey(lists, prefix, &from, &to);
+                        // the fold state follows
+                        let new_rel = to.strip_prefix(&root).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or(name.clone());
+                        let tag = if ask.materials { "mat:" } else { "" };
+                        for k in self.prefs.library_collapsed.iter_mut() {
+                            if *k == format!("{tag}{old}") {
+                                *k = format!("{tag}{new_rel}");
+                            }
+                        }
+                    })
+                }
+            }
+        };
+        match r {
+            Ok(()) => self.flash(format!("{heading}: {name}")),
+            Err(e) => self.flash_error(format!("{heading}: {e}")),
+        }
+        self.refresh_library_of(ask.materials);
     }
 
     /// "Delete from the library?" for the file chosen in a tile's context menu.
@@ -797,32 +911,58 @@ impl VarstotasApp {
         self.save_name_row(ui);
         let filter = self.library.filter.trim().to_lowercase();
         let found = |name: &str| super::tray_lib::found(&filter, name);
+        use super::generators::{DOCUMENT_FOLDER, EXAMPLES_FOLDER};
         // Components and generators in one list: by folder, then name.
         let gens = self.generator_items();
         let doc_defs = if self.prefs.hide_document { Vec::new() } else { self.document_components() };
-        let is_doc = |g: &super::generators::GenItem| g.file.is_none() && !g.bundled && g.folder == super::generators::DOCUMENT_FOLDER;
+        let is_doc = |g: &super::generators::GenItem| g.file.is_none() && !g.bundled && g.folder == DOCUMENT_FOLDER;
         // The Draw → Shapes generators (box, cylinder …) are tools, not components to list.
         let shape = |g: &super::generators::GenItem| is_doc(g) && crate::tools::primitives::SOURCES.iter().any(|(_, _, s)| *s == g.source);
-        let mut shown: Vec<(String, String, Tile)> = self
+        let mut all: Vec<(String, String, Tile)> = self
             .library
             .items
             .iter()
             .enumerate()
             .filter(|(_, it)| found(&it.name))
             .map(|(i, it)| (it.folder.clone(), it.name.to_lowercase(), Tile::Comp(i)))
-            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples) && !(is_doc(g) && self.prefs.hide_document) && !shape(g)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
-            .chain(doc_defs.iter().filter(|(_, n)| found(n)).map(|(d, n)| (super::generators::DOCUMENT_FOLDER.to_string(), n.to_lowercase(), Tile::Def(*d))))
+            .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(is_doc(g) && self.prefs.hide_document) && !shape(g)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
+            .chain(doc_defs.iter().filter(|(_, n)| found(n)).map(|(d, n)| (DOCUMENT_FOLDER.to_string(), n.to_lowercase(), Tile::Def(*d))))
             .collect();
-        // In Model first, then the library folders, then Examples.
-        let rank = |f: &str| match f {
-            super::generators::DOCUMENT_FOLDER => 0,
-            super::generators::EXAMPLES_FOLDER => 2,
-            _ => 1,
+        all.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+        // Favourites / recents key: a library file, or a bundled example generator by name.
+        let key_of = |t: Tile| -> Option<String> {
+            match t {
+                Tile::Comp(i) => Some(file_key("c:", &self.library.items[i].path)),
+                Tile::Gen(i) => match (&gens[i].file, gens[i].bundled) {
+                    (Some(f), _) => Some(file_key("c:", f)),
+                    (None, true) => Some(format!("g:{}", gens[i].name)),
+                    _ => None,
+                },
+                Tile::Def(_) => None,
+            }
         };
-        shown.sort_by(|a, b| rank(&a.0).cmp(&rank(&b.0)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
-        if self.library.items.is_empty() && gens.is_empty() && doc_defs.is_empty() {
+        let keyed: Vec<(Option<String>, Tile)> = all.iter().map(|t| (key_of(t.2), t.2)).collect();
+        let by_keys = |keys: &[String]| -> Vec<Tile> { keys.iter().filter_map(|k| keyed.iter().find(|(x, _)| x.as_deref() == Some(k.as_str())).map(|t| t.1)).collect() };
+        let in_folder = |f: &str| -> Vec<Tile> { all.iter().filter(|t| t.0 == f).map(|t| t.2).collect() };
+        let mut dirs = self.library.dirs.clone();
+        dirs.extend(all.iter().map(|t| t.0.clone()).filter(|f| !f.is_empty() && f != DOCUMENT_FOLDER && f != EXAMPLES_FOLDER));
+        dirs.sort_by_key(|a| a.to_lowercase());
+        dirs.dedup();
+        // In Model, Favourites, Recent, My Library, its subfolders, Examples: (folder, tiles,
+        // listed for the harness)
+        let mut secs: Vec<(String, Vec<Tile>, bool)> = vec![
+            (DOCUMENT_FOLDER.to_string(), in_folder(DOCUMENT_FOLDER), true),
+            (FAVOURITES.to_string(), by_keys(&self.prefs.lib_favourites), false),
+            (RECENT.to_string(), by_keys(&self.prefs.lib_recent), false),
+            (String::new(), in_folder(""), true),
+        ];
+        secs.extend(dirs.iter().map(|f| (f.clone(), in_folder(f), true)));
+        if !self.prefs.hide_examples {
+            secs.push((EXAMPLES_FOLDER.to_string(), in_folder(EXAMPLES_FOLDER), true));
+        }
+        if all.is_empty() && filter.is_empty() {
             ui.label(RichText::new("No components yet: select something and use + → Save Selection to Library.").weak());
-        } else if shown.is_empty() {
+        } else if all.is_empty() {
             ui.label(RichText::new("Nothing found").weak());
         }
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
@@ -830,134 +970,186 @@ impl VarstotasApp {
         let mut rig_def = None;
         let mut save_def = None;
         let mut rename = None;
+        let mut recent = None;
+        let mut drag: Option<TrayDrag> = None;
+        let mut lib_act: Option<(String, Option<PathBuf>, LibMenuAct)> = None;
+        let mut folder_act: Option<FolderAct> = None;
         let lib_dir = self.library_dir();
         let mut set_preview: Option<(PreviewTarget, bool)> = None;
         let mut preview_view: Option<PreviewTarget> = None;
         let size = self.prefs.lib_tiles;
+        let favs = self.prefs.lib_favourites.clone();
         self.library.shown_folders.clear();
-        let root_count = shown.iter().filter(|t| t.0.is_empty()).count();
-        let mut root_folded = None;
-        let mut k = 0;
-        loop {
-            // The library folder's heading: always there, after In Model (its own items fold
-            // under it).
-            if root_folded.is_none() && (k == shown.len() || rank(&shown[k].0) >= 1) {
-                root_folded = Some(self.folder_header(ui, "", lib_dir.as_deref(), root_count));
-            }
-            if k >= shown.len() {
-                break;
-            }
-            let folder = shown[k].0.clone();
-            let end = shown[k..].iter().position(|t| t.0 != folder).map_or(shown.len(), |n| k + n);
-            let folded = if folder.is_empty() { root_folded.unwrap_or(false) } else { self.folder_header(ui, &folder, lib_dir.as_deref(), end - k) };
-            self.library.shown_folders.push((folder.clone(), end - k, folded));
-            if folded {
-                k = end;
+        for (folder, group, listed) in secs {
+            let fixed = folder.is_empty() || dirs.contains(&folder);
+            if group.is_empty() && !(fixed && (filter.is_empty() || folder.is_empty())) {
                 continue;
             }
-            let group: Vec<Tile> = shown[k..end].iter().map(|t| t.2).collect();
-            super::tray_lib::tiles(ui, size, group.len(), |ui, j| match group[j] {
-                Tile::Comp(i) => {
-                    let it = &self.library.items[i];
-                    // The file's picture, else a rendered thumbnail.
-                    let pic = it.picture(ui.ctx()).or_else(|| {
-                        let key = format!("lib:{}|{:?}", it.path.display(), it.mtime);
-                        self.thumbs.get(ui.ctx(), &key, || crate::thumbs::disk_path(&it.path), || it.clip.to_model(unit).ok())
-                    });
-                    let resp = tile_ex(ui, size, &it.name, &it.thumb, pic, it.size, unit, false, "");
-                    if resp.clicked() {
-                        place = Some(i);
-                    }
-                    resp.context_menu(|ui| {
-                        if ui.button("Place").clicked() {
+            let folded = self.folder_header(ui, &folder, lib_dir.as_deref(), group.len(), &mut folder_act);
+            if listed && !group.is_empty() {
+                self.library.shown_folders.push((folder.clone(), group.len(), folded));
+            }
+            if folded {
+                continue;
+            }
+            super::tray_lib::tiles(ui, size, group.len(), |ui, j| {
+                let key = keyed.iter().find(|t| matches!((t.1, group[j]), (Tile::Comp(a), Tile::Comp(b)) | (Tile::Gen(a), Tile::Gen(b)) if a == b)).and_then(|t| t.0.clone());
+                let fav = key.as_ref().is_some_and(|k| favs.contains(k));
+                match group[j] {
+                    Tile::Comp(i) => {
+                        let it = &self.library.items[i];
+                        // The file's picture, else a rendered thumbnail.
+                        let pic = it.picture(ui.ctx()).or_else(|| {
+                            let key = format!("lib:{}|{:?}", it.path.display(), it.mtime);
+                            self.thumbs.get(ui.ctx(), &key, || crate::thumbs::disk_path(&it.path), || it.clip.to_model(unit).ok())
+                        });
+                        let resp = tile_ex(ui, size, &it.name, &it.thumb, pic, it.size, unit, false, "");
+                        if fav {
+                            super::tray_lib::mark_favourite(ui, size, &resp);
+                        }
+                        if resp.clicked() {
                             place = Some(i);
-                            ui.close();
+                            recent = key.clone();
                         }
-                        if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the picture (saved in the file): frame the model first").clicked() {
-                            preview_view = Some(PreviewTarget::File(it.path.clone()));
-                            ui.close();
+                        if resp.drag_started() {
+                            drag = Some(TrayDrag { item: DragItem::Comp(it.path.clone()), name: it.name.clone(), recent: key.clone().map(|k| (false, k)), entered: false });
                         }
-                        if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
-                            set_preview = Some((PreviewTarget::File(it.path.clone()), true));
-                            ui.close();
-                        }
-                        if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
-                            set_preview = Some((PreviewTarget::File(it.path.clone()), false));
-                            ui.close();
-                        }
-                        if ui.button("Rename…").clicked() {
-                            rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
-                            ui.close();
-                        }
-                        if ui.button("Show in Finder").clicked() {
-                            crate::ui::extensions::reveal(&it.path);
-                            ui.close();
-                        }
-                        if ui.button("Delete…").clicked() {
-                            delete = Some((Some(it.path.clone()), it.name.clone()));
-                            ui.close();
-                        }
-                    });
-                }
-                Tile::Def(d) => {
-                    let resp = self.def_tile(ui, size, d);
-                    if resp.clicked() {
-                        place_def = Some(d);
+                        resp.context_menu(|ui| {
+                            if ui.button("Place").clicked() {
+                                place = Some(i);
+                                recent = key.clone();
+                                ui.close();
+                            }
+                            if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the picture (saved in the file): frame the model first").clicked() {
+                                preview_view = Some(PreviewTarget::File(it.path.clone()));
+                                ui.close();
+                            }
+                            if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
+                                set_preview = Some((PreviewTarget::File(it.path.clone()), true));
+                                ui.close();
+                            }
+                            if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
+                                set_preview = Some((PreviewTarget::File(it.path.clone()), false));
+                                ui.close();
+                            }
+                            if ui.button("Rename…").clicked() {
+                                rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
+                                ui.close();
+                            }
+                            if ui.button("Show in Finder").clicked() {
+                                crate::ui::extensions::reveal(&it.path);
+                                ui.close();
+                            }
+                            let mut a = None;
+                            super::tray_lib::lib_menu(ui, Some(fav), Some((dirs.as_slice(), it.folder.as_str())), &mut a);
+                            if let (Some(a), Some(k)) = (a, &key) {
+                                lib_act = Some((k.clone(), Some(it.path.clone()), a));
+                            }
+                            if ui.button("Delete…").clicked() {
+                                delete = Some((Some(it.path.clone()), it.name.clone()));
+                                ui.close();
+                            }
+                        });
                     }
-                    resp.context_menu(|ui| {
-                        if ui.button("Place").clicked() {
+                    Tile::Def(d) => {
+                        let resp = self.def_tile(ui, size, d);
+                        if resp.clicked() {
                             place_def = Some(d);
-                            ui.close();
                         }
-                        if ui.button("Select Instances").clicked() {
-                            select_def = Some(d);
-                            ui.close();
-                        }
-                        if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the tile's picture (saved with the document): frame the component first").clicked() {
-                            preview_view = Some(PreviewTarget::Def(d));
-                            ui.close();
-                        }
-                        if ui.button("Set Preview Image…").on_hover_text("A picture shown on the tile instead of the rendered model").clicked() {
-                            set_preview = Some((PreviewTarget::Def(d), true));
-                            ui.close();
-                        }
-                        if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button("Remove Preview Image").clicked() {
-                            set_preview = Some((PreviewTarget::Def(d), false));
-                            ui.close();
-                        }
-                        if ui.button("Rename…").clicked() {
+                        if resp.drag_started() {
                             let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
-                            rename = Some((RenameTarget::Def(d), name));
-                            ui.close();
+                            drag = Some(TrayDrag { item: DragItem::Def(d), name, recent: None, entered: false });
                         }
-                        if ui.button("Save to Library").on_hover_text("Write it to the library folder, for any document").clicked() {
-                            save_def = Some(d);
-                            ui.close();
-                        }
-                        if ui.button("Parameters…").on_hover_text("Window → Component Parameters: values that move, show or paint its parts").clicked() {
-                            rig_def = Some(d);
-                            ui.close();
-                        }
-                        if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
-                            delete_def = Some(d);
-                            ui.close();
-                        }
-                    });
-                }
-                Tile::Gen(i) => {
-                    let (p, e, d) = self.generator_tile(ui, size, &gens[i]);
-                    if d {
-                        delete = Some((gens[i].file.clone(), gens[i].name.clone()));
+                        resp.context_menu(|ui| {
+                            if ui.button("Place").clicked() {
+                                place_def = Some(d);
+                                ui.close();
+                            }
+                            if ui.button("Select Instances").clicked() {
+                                select_def = Some(d);
+                                ui.close();
+                            }
+                            if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the tile's picture (saved with the document): frame the component first").clicked() {
+                                preview_view = Some(PreviewTarget::Def(d));
+                                ui.close();
+                            }
+                            if ui.button("Set Preview Image…").on_hover_text("A picture shown on the tile instead of the rendered model").clicked() {
+                                set_preview = Some((PreviewTarget::Def(d), true));
+                                ui.close();
+                            }
+                            if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button("Remove Preview Image").clicked() {
+                                set_preview = Some((PreviewTarget::Def(d), false));
+                                ui.close();
+                            }
+                            if ui.button("Rename…").clicked() {
+                                let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+                                rename = Some((RenameTarget::Def(d), name));
+                                ui.close();
+                            }
+                            if ui.button("Save to Library").on_hover_text("Write it to the library folder, for any document").clicked() {
+                                save_def = Some(d);
+                                ui.close();
+                            }
+                            if ui.button("Parameters…").on_hover_text("Window → Component Parameters: values that move, show or paint its parts").clicked() {
+                                rig_def = Some(d);
+                                ui.close();
+                            }
+                            if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
+                                delete_def = Some(d);
+                                ui.close();
+                            }
+                        });
                     }
-                    if p {
-                        place_gen = Some(gens[i].source.clone());
-                    }
-                    if e {
-                        edit = Some(i);
+                    Tile::Gen(i) => {
+                        let g = &gens[i];
+                        let folders = g.file.as_ref().map(|_| (dirs.as_slice(), g.folder.as_str()));
+                        let t = self.generator_tile(ui, size, g, key.as_ref().map(|_| fav), folders);
+                        if fav {
+                            super::tray_lib::mark_favourite(ui, size, &t.resp);
+                        }
+                        if t.delete {
+                            delete = Some((g.file.clone(), g.name.clone()));
+                        }
+                        if t.place {
+                            place_gen = Some(g.source.clone());
+                            recent = key.clone();
+                        }
+                        if t.edit {
+                            edit = Some(i);
+                        }
+                        if t.resp.drag_started() {
+                            drag = Some(TrayDrag { item: DragItem::Gen(g.source.clone()), name: g.name.clone(), recent: key.clone().map(|k| (false, k)), entered: false });
+                        }
+                        if let (Some(a), Some(k)) = (t.lib, &key) {
+                            lib_act = Some((k.clone(), g.file.clone(), a));
+                        }
                     }
                 }
             });
-            k = end;
+        }
+        if let Some(k) = recent {
+            super::tray_lib::note_recent(&mut self.prefs.lib_recent, &k);
+        }
+        if drag.is_some() {
+            self.tray_drag = drag;
+        }
+        if let Some(a) = folder_act {
+            self.folder_act(false, a);
+        }
+        match lib_act {
+            Some((k, _, LibMenuAct::Favourite)) => super::tray_lib::toggle(&mut self.prefs.lib_favourites, &k),
+            Some((_, Some(file), LibMenuAct::Move(f))) => {
+                if let Some(root) = self.library_dir() {
+                    match super::tray_lib::move_file(&file, &root, &f) {
+                        Ok(to) => {
+                            super::tray_lib::rekey([&mut self.prefs.lib_favourites, &mut self.prefs.lib_recent], "c:", &file, &to);
+                            self.refresh_library();
+                        }
+                        Err(e) => self.flash_error(format!("Move to Folder: {e}")),
+                    }
+                }
+            }
+            _ => {}
         }
         if delete.is_some() {
             self.library.delete_ask = delete;
@@ -1070,4 +1262,71 @@ pub(crate) fn tile_ex(
     let f = |v: f64| varstotas_kernel::units::format_length(v, unit);
     let note = if note.is_empty() { String::new() } else { format!("{note}\n") };
     resp.on_hover_text(format!("{name}\n{note}{} × {} × {}\nClick to place", f(size.x), f(size.y), f(size.z)))
+}
+
+impl VarstotasApp {
+    /// A tile dragged from a library card (`tray_drag`, after the viewport's input). Over the
+    /// viewport its tool takes over — placing the component (it follows the cursor) or Paint
+    /// with the material — and the release clicks there: the component is put down, the face
+    /// or object under the cursor painted (a library material joins the model with that
+    /// paint). Released elsewhere nothing happens (a placement the drag started is cancelled).
+    pub(crate) fn tray_drag_frame(&mut self, ctx: &egui::Context, view: &egui::Response) {
+        use crate::tools::ToolId;
+        let Some(mut d) = self.tray_drag.take() else { return };
+        let pos = ctx.input(|i| i.pointer.latest_pos());
+        let hud = self.hud_rect.expand(2.0);
+        let over = view.contains_pointer() && pos.is_some_and(|p| view.rect.contains(p) && !hud.contains(p));
+        if over && !d.entered {
+            d.entered = true;
+            match &d.item {
+                DragItem::Comp(p) => {
+                    if let Some(i) = self.library.items.iter().position(|x| &x.path == p) {
+                        self.place_component(i);
+                    }
+                }
+                DragItem::Def(def) => self.place_definition(*def),
+                DragItem::Gen(src) => self.place_generator(src, &Default::default()),
+                DragItem::Mat(m, library) => {
+                    self.doc.current_material = Some(if *library { self.palette_for(m) } else { crate::document::PaletteMaterial::of(m) });
+                    if self.tool_id() != ToolId::Paint {
+                        self.set_tool(ToolId::Paint);
+                    }
+                }
+            }
+        }
+        let released = ctx.input(|i| i.pointer.primary_released() || !i.pointer.primary_down());
+        if !released {
+            if !over && let Some(p) = pos {
+                // the name at the cursor until the viewport takes over
+                egui::Area::new(egui::Id::new("tray_drag_label"))
+                    .order(egui::Order::Tooltip)
+                    .interactable(false)
+                    .fixed_pos(p + vec2(14.0, 10.0))
+                    .show(ctx, |ui| {
+                        egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(&d.name));
+                    });
+                ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
+            }
+            self.tray_drag = Some(d);
+            return;
+        }
+        let is_mat = matches!(d.item, DragItem::Mat(..));
+        if over && d.entered && let Some(p) = pos {
+            let local = (p - self.viewport.rect.min).to_pos2();
+            self.last_pointer = Some(local);
+            let pi = self.pointer_info(local, egui::Vec2::ZERO, None, false);
+            self.with_tool(pi, |t, c| t.on_pointer_move(c));
+            let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(egui::PointerButton::Primary), true);
+            self.with_tool(pi, |t, c| t.on_pointer_down(c));
+            let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(egui::PointerButton::Primary), false);
+            self.with_tool(pi, |t, c| t.on_pointer_up(c));
+            match d.recent {
+                Some((true, k)) => super::tray_lib::note_recent(&mut self.prefs.mat_recent, &k),
+                Some((false, k)) => super::tray_lib::note_recent(&mut self.prefs.lib_recent, &k),
+                None => {}
+            }
+        } else if d.entered && !is_mat {
+            self.set_tool(ToolId::Select);
+        }
+    }
 }

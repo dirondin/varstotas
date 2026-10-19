@@ -1,7 +1,7 @@
 //! Document statistics (Window → Model Info) and cleaning: what the scene shows (every placed
 //! copy counted) next to what the file stores (each definition once), definitions and
 //! materials nothing in the scene uses, [`Model::purge_unused`],
-//! [`Model::delete_definition`] and [`Model::rename_definition`].
+//! [`Model::delete_definition`], [`Model::rename_definition`] and [`Model::delete_material`].
 
 use crate::model::Model;
 use crate::{DefId, MaterialId, OpError, OpResult};
@@ -229,6 +229,33 @@ impl Model {
         }
         self.remove_unused(gone);
         Ok(removed)
+    }
+
+    /// Remove material `m` from the document: faces and groups / components painted with it
+    /// get the default material. Returns how many faces and objects used it.
+    pub fn delete_material(&mut self, m: MaterialId) -> OpResult<usize> {
+        if self.materials.remove(m).is_none() {
+            return Err(OpError::NotFound);
+        }
+        let mut uses = 0;
+        let clear = |slot: &mut Option<MaterialId>| {
+            if *slot == Some(m) {
+                *slot = None;
+                1
+            } else {
+                0
+            }
+        };
+        for def in self.defs.values_mut() {
+            for f in def.mesh.faces.values_mut() {
+                let n = clear(&mut f.front) + clear(&mut f.back);
+                uses += n.min(1);
+            }
+            for i in def.mesh.instances.values_mut() {
+                uses += clear(&mut i.material);
+            }
+        }
+        Ok(uses)
     }
 
     /// Rename component `d` (a variant of a component with parameters renames its master);

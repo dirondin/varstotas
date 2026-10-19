@@ -75,3 +75,17 @@ fn rename_definition_with_its_variants() {
     assert!(m.rename_definition(boxdef, "  ").is_err());
     assert!(m.rename_definition(m.root, "X").is_err());
 }
+
+#[test]
+fn delete_material_clears_its_uses() {
+    let (mut m, boxdef, _) = model();
+    let red = m.materials.iter().find(|(_, x)| x.name == "Red").map(|(id, _)| id).unwrap();
+    // a copy of Box painted red too
+    let i = m.root_mesh().instances.keys().next().unwrap();
+    m.root_mesh_mut().instances[i].material = Some(red);
+    assert_eq!(m.delete_material(red).unwrap(), 2);
+    assert!(!m.materials.contains_key(red));
+    assert!(m.defs[boxdef].mesh.faces.values().all(|f| f.front.is_none()));
+    assert!(m.root_mesh().instances.values().all(|i| i.material.is_none()));
+    assert!(m.delete_material(red).is_err());
+}

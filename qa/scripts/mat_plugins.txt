@@ -41,10 +41,11 @@ wait 10
 expect last=Some("plugin-texture_folders:
 expect matlib=["Texture Folders/Green Tiles"]
 expect current_mat=Some(("Green Tiles"
-expect ("Green Tiles", 0.0, 1.0, 0.0, ["normal", "roughness"])
 screenshot shots/matplug_5.bmp
 raw click 743 76
 wait 5
 rawp click 500 0 500
 wait 5
 expect mats={"-": 5, "Green Tiles": 1}
+# a library material joins the model with the first paint, maps and all
+expect ("Green Tiles", 0.0, 1.0, 0.0, ["normal", "roughness"])

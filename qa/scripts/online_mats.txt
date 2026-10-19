@@ -25,7 +25,6 @@ wait 10
 expect ok Red Brick.vrstmat
 expect matlib=["Poly Haven/Red Brick"]
 expect current_mat=Some(("Red Brick"
-expect ("Red Brick", 0.0, 1.0, 0.0, ["normal", "roughness", "ao"])
 expect tool=Paint
 screenshot shots/online_ph.bmp
 # close the window, paint the front face
@@ -35,6 +34,8 @@ expect online=(false
 rawp click 500 0 500
 wait 5
 expect mats={"-": 5, "Red Brick": 1}
+# a library material joins the model with the first paint, maps and all
+expect ("Red Brick", 0.0, 1.0, 0.0, ["normal", "roughness", "ao"])
 # ambientCG (Source dropdown): same search, double-click the first tile (the cloud button stays: In Model is below it)
 raw click 1347 257
 wait 5

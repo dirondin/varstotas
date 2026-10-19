@@ -35,6 +35,15 @@ pub struct GenItem {
     pub bundled: bool,
 }
 
+/// What a generator's tile asked for ([`VarstotasApp::generator_tile`]).
+pub struct GenTile {
+    pub place: bool,
+    pub edit: bool,
+    pub delete: bool,
+    pub lib: Option<crate::ui::tray_lib::LibMenuAct>,
+    pub resp: egui::Response,
+}
+
 #[derive(Default)]
 pub struct GenLibrary {
     /// Generators of the components folder (`.rhai` files), sorted by name.
@@ -346,7 +355,9 @@ impl VarstotasApp {
 
     /// A generator tile: thumbnail with the defaults (built once per source), a gear; click
     /// places, the context menu edits or deletes a library file. Returns (place, edit, delete).
-    pub(crate) fn generator_tile(&mut self, ui: &mut Ui, tiles: crate::ui::tray_lib::TileSize, it: &GenItem) -> (bool, bool, bool) {
+    /// A generator's tile in the Components list; `favourite` / `folders` add the library
+    /// entries of its menu (`tray_lib::lib_menu`).
+    pub(crate) fn generator_tile(&mut self, ui: &mut Ui, tiles: crate::ui::tray_lib::TileSize, it: &GenItem, favourite: Option<bool>, folders: Option<(&[String], &str)>) -> GenTile {
         let unit = self.doc.model.unit;
         if !self.library.gens.thumbs.contains_key(&it.source) {
             let t = build_preview(&self.doc.model, &it.source, &GenValues::new()).map(|(_, c)| {
@@ -387,7 +398,7 @@ impl VarstotasApp {
             self.thumbs.get(ui.ctx(), &key, || None, || build_preview(model, &it.source, &GenValues::new()).ok().and_then(|(_, c)| c.to_model(unit).ok()))
         };
         let resp = crate::ui::library::tile_ex(ui, tiles, &it.name, thumb, pic, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
-        let (mut place, mut edit, mut delete) = (resp.clicked(), false, false);
+        let (mut place, mut edit, mut delete, mut lib) = (resp.clicked(), false, false, None);
         resp.context_menu(|ui| {
             if ui.button("Edit Generator…").clicked() {
                 edit = true;
@@ -403,13 +414,14 @@ impl VarstotasApp {
                 crate::ui::extensions::reveal(f);
                 ui.close();
             }
+            crate::ui::tray_lib::lib_menu(ui, favourite, folders, &mut lib);
             let only_doc = it.file.is_none() && !it.bundled && it.folder == DOCUMENT_FOLDER;
             if (it.file.is_some() || only_doc) && ui.button("Delete…").clicked() {
                 delete = true;
                 ui.close();
             }
         });
-        (place, edit, delete)
+        GenTile { place, edit, delete, lib, resp }
     }
 
     /// Start placing a component of generator `src` with its default values (the generator is

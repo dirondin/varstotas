@@ -1,11 +1,14 @@
 //! Materials library: `.vrstmat` files (one material each — colour, texture, PBR parameters,
 //! maps, shader) in `~/.varstotas/materials`, shared between documents and sessions like the
 //! components library; subfolders are categories, the demo gallery's materials show under
-//! "Examples". In the Materials card: a click on a library swatch adds the material to the
-//! document and paints with it; a model material's context menu saves it to the library or
-//! exports it to a file; Import… adds a material file to the document.
+//! "Examples". In the Materials card: a click on a library swatch paints with the material (it
+//! is added to the document by the first paint, `pick_material`); a model material's context
+//! menu saves it to the library, exports it to a file or deletes it from the document;
+//! Import… adds a material file to the document. Favourites, Recent and folders as in
+//! `tray_lib`.
 
 use crate::app::{Action, VarstotasApp};
+use super::tray_lib::{DragItem, FolderAct, LibMenuAct, TrayDrag, file_key};
 use crate::document::PaletteMaterial;
 use egui::{Color32, RichText, Ui};
 use varstotas_kernel::io::MATERIAL_EXT;
@@ -38,18 +41,27 @@ pub struct MatLibraryState {
     examples: Option<Vec<MatItem>>,
     /// Library file to delete once confirmed.
     pub delete_ask: Option<PathBuf>,
+    /// Subfolders of the library folder (empty ones too).
+    pub dirs: Vec<String>,
 }
 
 /// What a click or a tile's menu asked for (applied after the list is drawn).
 enum MatAct {
     /// A model material: paint with it.
     Paint(Material),
-    /// A library or example material: add it to the document, then paint.
-    Use(Material),
+    /// A library or example material (its favourites / recents key): paint with it (added to
+    /// the document by the first paint).
+    Use(Material, String),
     Rename(super::library::RenameTarget, String),
     Save(Material),
     Export(MaterialId),
     Delete(PathBuf),
+    /// A model material: remove it from the document.
+    DeleteModel(MaterialId),
+    /// Toggle the favourite of this key.
+    Favourite(String),
+    /// Move a library file to a subfolder.
+    Move(PathBuf, String),
 }
 
 /// A material tile's look (`material_look`), painted into any rect.
@@ -172,6 +184,7 @@ impl VarstotasApp {
         }
         self.mat_library.items = items;
         self.mat_library.errors = errors;
+        self.mat_library.dirs = super::tray_lib::subfolders(&dir);
         self.mat_library.scanned = Some(dir);
     }
 
@@ -398,12 +411,14 @@ impl VarstotasApp {
         let ctx = ui.ctx().clone();
         let cur = self.doc.current_material.as_ref().map(|c| c.name.clone());
         let mut act: Option<MatAct> = None;
+        let mut drag: Option<TrayDrag> = None;
+        let mut folder_act: Option<FolderAct> = None;
         let root = self.material_library_dir();
 
         self.mat_library.shown.clear();
         // In Model
         let model: Vec<(MaterialId, Material)> = self.doc.model.materials.iter().filter(|(_, m)| found(m)).map(|(id, m)| (id, m.clone())).collect();
-        let (folded, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", "In Model", "The materials of the open document", false, false, Some(model.len()), |_| {});
+        let (folded, _, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", "In Model", "The materials of the open document", false, false, Some(model.len()), |_| {});
         if !folded {
             self.mat_library.shown.extend(model.iter().map(|(_, m)| m.name.clone()));
             tiles(ui, size, model.len(), |ui, k| {
@@ -412,6 +427,9 @@ impl VarstotasApp {
                 let r = super::tray_lib::tile(ui, size, &m.name, cur.as_deref() == Some(m.name.as_str()), |p, r| look.paint(p, r)).on_hover_text(describe(m));
                 if r.clicked() {
                     act = Some(MatAct::Paint(m.clone()));
+                }
+                if r.drag_started() {
+                    drag = Some(TrayDrag { item: DragItem::Mat(Box::new(m.clone()), false), name: m.name.clone(), recent: None, entered: false });
                 }
                 r.context_menu(|ui| {
                     if ui.button("Use").clicked() {
@@ -430,67 +448,143 @@ impl VarstotasApp {
                         act = Some(MatAct::Export(*id));
                         ui.close();
                     }
+                    if ui.button("Delete").on_hover_text("Remove it from the model: what it paints gets the default material (Undo brings it back)").clicked() {
+                        act = Some(MatAct::DeleteModel(*id));
+                        ui.close();
+                    }
                 });
             });
         }
 
-        // My Library, its subfolders, Examples
-        let mut folders: Vec<String> = self.mat_library.items.iter().map(|i| i.folder.clone()).collect();
-        folders.push(String::new());
-        folders.sort();
-        folders.dedup();
-        if !self.prefs.hide_mat_examples {
-            folders.push(EXAMPLES.into());
+        // Favourites, Recent, My Library, its subfolders, Examples
+        if !self.prefs.hide_mat_examples || self.prefs.mat_favourites.iter().chain(&self.prefs.mat_recent).any(|k| k.starts_with("x:")) {
+            self.ensure_examples();
         }
-        for folder in folders {
-            let examples = folder == EXAMPLES;
-            if examples {
-                self.ensure_examples();
-            }
-            let list: Vec<(Option<PathBuf>, Material)> = if examples {
-                self.mat_library.examples.iter().flatten().filter(|i| found(&i.mat)).map(|i| (None, i.mat.clone())).collect()
+        let examples: Vec<&MatItem> = self.mat_library.examples.iter().flatten().collect();
+        let entry = |i: &MatItem| (i.path.clone(), i.folder.clone(), i.mat.clone());
+        let by_key = |key: &str| -> Option<(Option<PathBuf>, String, Material)> {
+            if let Some(name) = key.strip_prefix("x:") {
+                examples.iter().find(|i| i.mat.name == name).map(|i| entry(i))
             } else {
-                self.mat_library.items.iter().filter(|i| i.folder == folder && found(&i.mat)).map(|i| (i.path.clone(), i.mat.clone())).collect()
-            };
-            let dir = root.as_ref().filter(|_| !examples).map(|r| if folder.is_empty() { r.clone() } else { r.join(&folder) });
-            let (title, tip) = match (examples, folder.is_empty()) {
-                (true, _) => (folder.clone(), "Materials bundled with Varstotas (the Material Gallery demo)".to_string()),
-                (_, true) => ("My Library".to_string(), dir.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default()),
-                _ => (folder.clone(), dir.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default()),
-            };
+                self.mat_library.items.iter().find(|i| i.path.as_ref().is_some_and(|p| file_key("m:", p) == key)).map(entry)
+            }
+        };
+        let mut dirs = self.mat_library.dirs.clone();
+        dirs.extend(self.mat_library.items.iter().map(|i| i.folder.clone()).filter(|f| !f.is_empty()));
+        dirs.sort_by_key(|a| a.to_lowercase());
+        dirs.dedup();
+        struct Sec {
+            key: String,
+            title: String,
+            tip: String,
+            dir: Option<PathBuf>,
+            /// "" root, a subfolder, None for the others
+            folder: Option<String>,
+            fold_default: bool,
+            examples: bool,
+            list: Vec<(Option<PathBuf>, String, Material)>,
+        }
+        let shown_in = |d: &Option<PathBuf>| d.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default();
+        let mut secs = vec![
+            Sec {
+                key: "mat:\u{1}Favourites".into(),
+                title: "Favourites".into(),
+                tip: "Right-click a library material → Add to Favourites".into(),
+                dir: None,
+                folder: None,
+                fold_default: false,
+                examples: false,
+                list: self.prefs.mat_favourites.iter().filter_map(|k| by_key(k)).filter(|e| found(&e.2)).collect(),
+            },
+            Sec {
+                key: "mat:\u{1}Recent".into(),
+                title: "Recent".into(),
+                tip: "Library materials used last".into(),
+                dir: None,
+                folder: None,
+                fold_default: false,
+                examples: false,
+                list: self.prefs.mat_recent.iter().filter_map(|k| by_key(k)).filter(|e| found(&e.2)).collect(),
+            },
+        ];
+        for f in std::iter::once(String::new()).chain(dirs.iter().cloned()) {
+            let dir = root.as_ref().map(|r| if f.is_empty() { r.clone() } else { r.join(&f) });
+            secs.push(Sec {
+                key: format!("mat:{f}"),
+                title: if f.is_empty() { "My Library".into() } else { f.clone() },
+                tip: shown_in(&dir),
+                dir,
+                folder: Some(f.clone()),
+                fold_default: false,
+                examples: false,
+                list: self.mat_library.items.iter().filter(|i| i.folder == f && found(&i.mat)).map(entry).collect(),
+            });
+        }
+        if !self.prefs.hide_mat_examples {
+            secs.push(Sec {
+                key: format!("mat:{EXAMPLES}"),
+                title: EXAMPLES.into(),
+                tip: "Materials bundled with Varstotas (the Material Gallery demo)".into(),
+                dir: None,
+                folder: None,
+                // the examples start folded (many large tiles)
+                fold_default: true,
+                examples: true,
+                list: examples.iter().filter(|i| found(&i.mat)).map(|i| entry(i)).collect(),
+            });
+        }
+        let favs = self.prefs.mat_favourites.clone();
+        for sec in secs {
+            let special = sec.folder.is_none() && !sec.examples;
+            if special && sec.list.is_empty() {
+                continue;
+            }
             let mut hide = false;
-            let key = format!("mat:{folder}");
-            // the examples start folded (many large tiles)
-            let (folded, clicked) = section(ui, &mut self.prefs.library_collapsed, &key, &title, &tip, dir.is_some(), examples, Some(list.len()), |ui| {
-                if examples {
+            let (folded, clicked, title) = section(ui, &mut self.prefs.library_collapsed, &sec.key, &sec.title, &sec.tip, sec.dir.is_some(), sec.fold_default, Some(sec.list.len()), |ui| {
+                if sec.examples {
                     let r = ui.small_button("Hide").on_hover_text("Hide the bundled examples (… → Show Examples brings them back)");
                     super::tray_lib::spot("hide:mat:Examples", r.rect.center());
                     hide = r.clicked();
                 }
             });
+            if let Some(f) = &sec.folder {
+                super::tray_lib::folder_menu(&title, f, sec.dir.as_deref(), &mut folder_act);
+            }
             if hide {
                 self.prefs.hide_mat_examples = true;
             }
-            if clicked && let Some(d) = &dir {
+            if clicked && let Some(d) = &sec.dir {
                 crate::ui::extensions::reveal(d);
             }
-            if folder.is_empty() && self.mat_library.items.is_empty() && !folded {
+            if sec.folder.as_deref() == Some("") && self.mat_library.items.is_empty() && !folded {
                 ui.label(RichText::new("Empty: right-click a model material → Save to Library").small().weak());
             }
             if folded {
                 continue;
             }
-            self.mat_library.shown.extend(list.iter().map(|(_, m)| m.name.clone()));
+            self.mat_library.shown.extend(sec.list.iter().map(|(_, _, m)| m.name.clone()));
+            let list = &sec.list;
             tiles(ui, size, list.len(), |ui, k| {
-                let (path, m) = &list[k];
+                let (path, folder, m) = &list[k];
+                let key = match path {
+                    Some(p) => file_key("m:", p),
+                    None => format!("x:{}", m.name),
+                };
+                let fav = favs.contains(&key);
                 let look = self.material_look(&ctx, m);
                 let r = super::tray_lib::tile(ui, size, &m.name, cur.as_deref() == Some(m.name.as_str()), |p, r| look.paint(p, r)).on_hover_text(describe(m));
+                if fav {
+                    super::tray_lib::mark_favourite(ui, size, &r);
+                }
                 if r.clicked() {
-                    act = Some(MatAct::Use(m.clone()));
+                    act = Some(MatAct::Use(m.clone(), key.clone()));
+                }
+                if r.drag_started() {
+                    drag = Some(TrayDrag { item: DragItem::Mat(Box::new(m.clone()), true), name: m.name.clone(), recent: Some((true, key.clone())), entered: false });
                 }
                 r.context_menu(|ui| {
-                    if ui.button("Use").on_hover_text("Add it to the model and paint with it").clicked() {
-                        act = Some(MatAct::Use(m.clone()));
+                    if ui.button("Use").on_hover_text("Paint with it (it is added to the model when something is painted)").clicked() {
+                        act = Some(MatAct::Use(m.clone(), key.clone()));
                         ui.close();
                     }
                     match path {
@@ -503,10 +597,6 @@ impl VarstotasApp {
                                 crate::ui::extensions::reveal(p);
                                 ui.close();
                             }
-                            if ui.button("Delete…").clicked() {
-                                act = Some(MatAct::Delete(p.clone()));
-                                ui.close();
-                            }
                         }
                         None => {
                             if ui.button("Save to Library").on_hover_text("Copy it to your materials library").clicked() {
@@ -515,12 +605,31 @@ impl VarstotasApp {
                             }
                         }
                     }
+                    let mut lib = None;
+                    super::tray_lib::lib_menu(ui, Some(fav), path.as_ref().map(|_| (dirs.as_slice(), folder.as_str())), &mut lib);
+                    match lib {
+                        Some(LibMenuAct::Favourite) => act = Some(MatAct::Favourite(key.clone())),
+                        Some(LibMenuAct::Move(f)) => act = path.clone().map(|p| MatAct::Move(p, f)),
+                        None => {}
+                    }
+                    if let Some(p) = path
+                        && ui.button("Delete…").clicked()
+                    {
+                        act = Some(MatAct::Delete(p.clone()));
+                        ui.close();
+                    }
                 });
             });
         }
         if !self.mat_library.errors.is_empty() {
             ui.label(RichText::new(format!("{} file(s) could not be read", self.mat_library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.mat_library.errors.join("\n"));
+        }
+        if drag.is_some() {
+            self.tray_drag = drag;
+        }
+        if let Some(a) = folder_act {
+            self.folder_act(true, a);
         }
         match act {
             Some(MatAct::Paint(m)) => {
@@ -529,14 +638,69 @@ impl VarstotasApp {
                     self.actions.push(Action::SetTool(crate::tools::ToolId::Paint));
                 }
             }
-            Some(MatAct::Use(m)) => {
-                self.use_material(&m);
+            Some(MatAct::Use(m, key)) => {
+                self.pick_material(&m);
+                super::tray_lib::note_recent(&mut self.prefs.mat_recent, &key);
             }
             Some(MatAct::Rename(t, name)) => self.library.rename = Some((t, name)),
             Some(MatAct::Save(m)) => self.save_material_value(&m),
             Some(MatAct::Export(id)) => self.export_material(id),
             Some(MatAct::Delete(p)) => self.mat_library.delete_ask = Some(p),
+            Some(MatAct::DeleteModel(id)) => self.delete_model_material(id),
+            Some(MatAct::Favourite(key)) => super::tray_lib::toggle(&mut self.prefs.mat_favourites, &key),
+            Some(MatAct::Move(p, folder)) => {
+                if let Some(root) = self.material_library_dir() {
+                    match super::tray_lib::move_file(&p, &root, &folder) {
+                        Ok(to) => {
+                            super::tray_lib::rekey([&mut self.prefs.mat_favourites, &mut self.prefs.mat_recent], "m:", &p, &to);
+                            self.refresh_materials();
+                        }
+                        Err(e) => self.flash_error(format!("Move to Folder: {e}")),
+                    }
+                }
+            }
             None => {}
+        }
+    }
+
+    /// Take `mat` (a library, example or downloaded material) to paint with. It is added to
+    /// the document only when something is painted with it (`PaletteMaterial::ensure_in`, in
+    /// the Paint step); the same material in the model is used as it is, another one of that
+    /// name makes this one get a new name.
+    pub(crate) fn pick_material(&mut self, mat: &Material) {
+        self.doc.current_material = Some(self.palette_for(mat));
+        if self.tool_id() != crate::tools::ToolId::Paint {
+            self.actions.push(Action::SetTool(crate::tools::ToolId::Paint));
+        }
+    }
+
+    /// The paint entry of a library material (see [`Self::pick_material`]).
+    pub(crate) fn palette_for(&self, mat: &Material) -> PaletteMaterial {
+        let m = &self.doc.model;
+        let mut pal = PaletteMaterial::of(mat);
+        if m.materials.values().any(|x| x.name == mat.name && !same_material(x, mat)) {
+            let mut k = 2;
+            while m.materials.values().any(|x| x.name == pal.name) {
+                pal.name = format!("{} {k}", mat.name);
+                k += 1;
+            }
+        }
+        pal
+    }
+
+    /// In Model → Delete: remove model material `id` (one undo step); what it painted gets the
+    /// default material.
+    pub(crate) fn delete_model_material(&mut self, id: MaterialId) {
+        let Some(name) = self.doc.model.materials.get(id).map(|m| m.name.clone()) else { return };
+        match self.doc.commit(&format!("Delete Material {name}"), |m| m.delete_material(id)) {
+            Some(Ok(n)) => {
+                if self.doc.current_material.as_ref().is_some_and(|c| c.name == name) {
+                    self.doc.current_material = None;
+                }
+                let uses = if n > 0 { format!(", {n} use(s) back to the default") } else { String::new() };
+                self.flash(format!("Deleted material {name}{uses} (Undo brings it back)"));
+            }
+            _ => self.flash_error(format!("Can't delete material {name}")),
         }
     }
 

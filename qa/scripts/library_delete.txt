@@ -10,7 +10,7 @@ screenshot shots/libd_start.bmp
 raw rclick 1185 145
 wait 5
 screenshot shots/libd_menu.bmp
-raw click 1220 288
+raw click 1220 350
 wait 5
 expect lib_delete=Some("Box")
 screenshot shots/libd_ask.bmp
@@ -31,7 +31,7 @@ expect lib_folders=[("", 1, false), ("Kitchen", 1, false)
 raw rclick 1185 273
 wait 5
 screenshot shots/libd_genmenu.bmp
-raw click 1220 368
+raw click 1220 416
 wait 5
 expect lib_delete=Some("Counter")
 raw click 852 389
@@ -41,7 +41,7 @@ expect lib_folders=[("", 1, false), ("Examples", 6, false)]
 # and Box
 raw rclick 1185 145
 wait 5
-raw click 1220 288
+raw click 1220 350
 wait 5
 raw click 852 389
 wait 10

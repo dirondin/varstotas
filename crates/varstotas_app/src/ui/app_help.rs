@@ -183,7 +183,11 @@ const GROUPS: &[B] = &[
 ];
 
 const LIBRARY: &[B] = &[
-    B::P("The Components and Materials cards look the same: a top row (Search, Refresh, + to add, the cloud button for the online library, … for the library folder, what to show and the tile size: Small / Large / List), then the sections In Model (the open document), My Library with its folders, and Examples. A section folds with its arrow; a folder's name opens it in the Finder."),
+    B::P("The Components and Materials cards look the same: a top row (Search, Refresh, + to add, the cloud button for the online library, … for the library folder, what to show and the tile size: Small / Large / List), then the sections In Model (the open document), Favourites, Recent, My Library with its folders, and Examples. A section folds with its arrow; a folder's name opens it in the Finder."),
+    B::Row("Right-click a tile → Add to Favourites", "the ☆ tile also shows in Favourites at the top (Remove from Favourites takes it out); Recent lists what you placed or picked to paint with lately"),
+    B::Row("Right-click a folder name", "New Folder…; for a subfolder also Rename Folder… and Delete Folder (only when it is empty)"),
+    B::Row("Right-click a tile → Move to Folder", "move the file into another folder of the library (favourites follow it)"),
+    B::Row("Drag a tile into the viewport", "a component is placed where you drop it; a material paints the face under the cursor"),
     B::P("Components lists your library (`~/.varstotas/components`, or a folder you choose with …), the generators, the bundled Examples and the components of the open document."),
     B::Row("Click a tile", "place it: the copy follows the cursor, click to put it down"),
     B::Row("+ → Save Selection to Library…", "write the selection as a new `.vrst` file"),
@@ -196,7 +200,7 @@ const LIBRARY: &[B] = &[
 
 const MATERIALS: &[B] = &[
     B::Tools(&[ToolId::Paint, ToolId::TexturePosition]),
-    B::P("The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen)."),
+    B::P("The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Picking a library material only arms the Paint Bucket: the material joins the model (In Model) with the first face painted. Delete on an In Model tile removes the material from the model, its faces go back to the default (Edit → Undo brings it back). Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen)."),
     B::Row("Save to Library / Export… / + → Import…", "share a material between documents (`.vrstmat`)"),
     B::Row("Cloud button (Materials card)", "download PBR scans from Poly Haven and ambientCG, or from plugin sources"),
     B::Row("Shader", "a material can have its own WGSL shader with parameters (the shader editor has its own reference)"),

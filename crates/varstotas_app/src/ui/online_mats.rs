@@ -216,7 +216,7 @@ impl VarstotasApp {
                             self.online.last = Some(format!("{key} ok {}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
                             self.refresh_materials();
                             if use_it {
-                                self.use_material(&mat);
+                                self.pick_material(&mat);
                             }
                             self.flash(format!("Downloaded {} to the materials library", mat.name));
                         }
@@ -325,8 +325,8 @@ impl VarstotasApp {
                                     ui.spinner();
                                     ui.label("Downloading…");
                                 } else if let Some(m) = &in_lib {
-                                    if ui.button("Use").on_hover_text("Already in the library: add it to the model and paint").clicked() {
-                                        self.use_material(m);
+                                    if ui.button("Use").on_hover_text("Already in the library: paint with it").clicked() {
+                                        self.pick_material(m);
                                     }
                                     if ui.button("Download Again").clicked() {
                                         self.online_download(&key, false, ctx);
@@ -418,7 +418,7 @@ impl VarstotasApp {
                 let in_lib = self.online.asset(&key).cloned().and_then(|a| self.online_in_library(&a));
                 match in_lib {
                     Some(m) => {
-                        self.use_material(&m);
+                        self.pick_material(&m);
                     }
                     None => self.online_download(&key, true, ctx),
                 }
