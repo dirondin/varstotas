@@ -135,6 +135,9 @@ pub struct Prefs {
     pub ui_scale: f32,
     /// Side of a toolbar button, points.
     pub toolbar_icons: u32,
+    /// The toolbar's buttons in order (Preferences → Toolbar; `toolbar::Item::key`, "|" = a
+    /// separator); empty = the default.
+    pub toolbar: Vec<String>,
     /// Reassigned shortcuts (Preferences → Shortcuts): command id → keys, see `keymap`.
     pub shortcuts: std::collections::BTreeMap<String, String>,
     /// Render settings of a new document (Preferences → Render).
@@ -197,6 +200,7 @@ impl Default for Prefs {
             theme: Default::default(),
             ui_scale: 1.0,
             toolbar_icons: 36,
+            toolbar: Vec::new(),
             shortcuts: Default::default(),
             new_render: Default::default(),
             ffmpeg_path: None,

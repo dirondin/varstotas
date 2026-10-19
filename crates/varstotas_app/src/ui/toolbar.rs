@@ -22,6 +22,97 @@ pub fn set_button_side(side: u32) {
     BTN_SIDE.store(side.clamp(20, 64), std::sync::atomic::Ordering::Relaxed);
 }
 
+/// One button of the toolbar (Preferences → Toolbar orders them; the rest wait in reserve).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Item {
+    Tool(ToolId),
+    Text3d,
+    ZoomExtents,
+    Snapping,
+    /// A line between groups.
+    Sep,
+}
+
+impl Item {
+    /// The id kept in the preferences.
+    pub fn key(self) -> String {
+        match self {
+            Item::Tool(id) => format!("{id:?}"),
+            Item::Text3d => "Text3d".into(),
+            Item::ZoomExtents => "ZoomExtents".into(),
+            Item::Snapping => "Snapping".into(),
+            Item::Sep => "|".into(),
+        }
+    }
+
+    pub fn from_key(k: &str) -> Option<Item> {
+        match k {
+            "Text3d" => Some(Item::Text3d),
+            "ZoomExtents" => Some(Item::ZoomExtents),
+            "Snapping" => Some(Item::Snapping),
+            "|" => Some(Item::Sep),
+            _ => ToolId::ALL.iter().copied().find(|t| format!("{t:?}") == k).map(Item::Tool),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Item::Tool(id) => id.name(),
+            Item::Text3d => "3D Text",
+            Item::ZoomExtents => "Zoom Extents",
+            Item::Snapping => "Snapping",
+            Item::Sep => "Separator",
+        }
+    }
+
+    pub fn icon(self) -> Option<Icon> {
+        match self {
+            Item::Tool(id) => Some(id.icon()),
+            Item::Text3d => Some(Icon::Text3d),
+            Item::ZoomExtents => Some(Icon::ZoomExtents),
+            Item::Snapping => Some(Icon::Magnet),
+            Item::Sep => None,
+        }
+    }
+
+    /// Every button there is (separators aside), in the menus' order.
+    pub fn all() -> Vec<Item> {
+        let mut v: Vec<Item> = ToolId::ALL.iter().copied().filter(|t| t.implemented()).map(Item::Tool).collect();
+        v.extend([Item::Text3d, Item::ZoomExtents, Item::Snapping]);
+        v
+    }
+}
+
+/// The toolbar out of the box. 3 Point Arc, Pie, Rotated Rectangle, Smooth Curve, Freehand,
+/// Protractor … wait in reserve (the toolbar stays short at the default window width).
+pub fn default_layout() -> Vec<Item> {
+    use Item::{Sep, Tool};
+    use ToolId as T;
+    let mut v = vec![Tool(T::Select), Tool(T::Eraser), Tool(T::Paint), Sep];
+    v.extend([T::Line, T::Arc, T::ArcCenter, T::Bezier, T::Rectangle, T::Circle, T::Polygon].map(Tool));
+    v.push(Sep);
+    v.extend(crate::tools::SHAPES.map(Tool));
+    v.push(Sep);
+    v.extend([T::Move, T::Rotate, T::Scale, T::PushPull, T::Offset, T::FollowMe, T::Chamfer, T::Fillet].map(Tool));
+    v.push(Sep);
+    v.extend([Tool(T::Tape), Tool(T::Dimension), Tool(T::Text), Item::Text3d, Tool(T::Axes), Tool(T::Section), Tool(T::GuidePlane), Sep]);
+    v.extend([Tool(T::Orbit), Tool(T::Pan), Tool(T::Zoom), Item::ZoomExtents, Sep, Item::Snapping]);
+    v
+}
+
+/// The toolbar as saved (`Prefs::toolbar`, empty = the default); unknown ids are skipped.
+pub fn layout(keys: &[String]) -> Vec<Item> {
+    if keys.is_empty() {
+        return default_layout();
+    }
+    keys.iter().filter_map(|k| Item::from_key(k)).collect()
+}
+
+/// The buttons not on the toolbar.
+pub fn reserve(on: &[Item]) -> Vec<Item> {
+    Item::all().into_iter().filter(|i| !on.contains(i)).collect()
+}
+
 fn group_sep(ui: &mut Ui) {
     ui.add_space(4.0);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, BTN() - 8.0), egui::Sense::hover());
@@ -93,59 +184,45 @@ impl VarstotasApp {
     pub(crate) fn toolbar(&mut self, ui: &mut Ui) {
         // the harness spots are collected from here on each frame (toolbar, then the side bar)
         super::tray_lib::clear_spots();
+        let items = layout(&self.prefs.toolbar);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint] {
-                self.tool_button(ui, id);
+            for item in items {
+                match item {
+                    Item::Tool(id) => self.tool_button(ui, id),
+                    Item::Text3d => self.action_button(ui, Icon::Text3d, false, "3D Text", None, "Add text as 3D geometry (a group).", Action::Text3d),
+                    Item::ZoomExtents => self.action_button(
+                        ui,
+                        Icon::ZoomExtents,
+                        false,
+                        "Zoom Extents",
+                        crate::keymap::label(crate::keymap::KeyCmd::ZoomExtents).as_deref(),
+                        "Fit the whole model in the view.",
+                        Action::ZoomExtents,
+                    ),
+                    Item::Snapping => self.snap_button(ui),
+                    Item::Sep => group_sep(ui),
+                }
             }
-            group_sep(ui);
-            // 3 Point Arc, Pie and Rotated Rectangle live in the Draw menu (keeps the toolbar
-            // on one row at the default window width).
-            for id in [ToolId::Line, ToolId::Arc, ToolId::ArcCenter, ToolId::Bezier, ToolId::Rectangle, ToolId::Circle, ToolId::Polygon] {
-                self.tool_button(ui, id);
-            }
-            group_sep(ui);
-            // Shapes: solids in one operation
-            for id in crate::tools::SHAPES {
-                self.tool_button(ui, id);
-            }
-            group_sep(ui);
-            for id in [
-                ToolId::Move,
-                ToolId::Rotate,
-                ToolId::Scale,
-                ToolId::PushPull,
-                ToolId::Offset,
-                ToolId::FollowMe,
-                ToolId::Chamfer,
-                ToolId::Fillet,
-            ] {
-                self.tool_button(ui, id);
-            }
-            group_sep(ui);
-            // Protractor lives in the Tools menu (keeps the toolbar on one row).
-            for id in [ToolId::Tape, ToolId::Dimension, ToolId::Text] {
-                self.tool_button(ui, id);
-            }
-            self.action_button(ui, Icon::Text3d, false, "3D Text", None, "Add text as 3D geometry (a group).", Action::Text3d);
-            for id in [ToolId::Axes, ToolId::Section, ToolId::GuidePlane] {
-                self.tool_button(ui, id);
-            }
-            group_sep(ui);
-            for id in [ToolId::Orbit, ToolId::Pan, ToolId::Zoom] {
-                self.tool_button(ui, id);
-            }
-            self.action_button(
-                ui,
-                Icon::ZoomExtents,
-                false,
-                "Zoom Extents",
-                Some("Shift+Z"),
-                "Fit the whole model in the view.",
-                Action::ZoomExtents,
-            );
-            group_sep(ui);
-            self.snap_button(ui);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_round_trips_and_skips_unknown_ids() {
+        let d = default_layout();
+        assert_eq!(layout(&[]), d);
+        let keys: Vec<String> = d.iter().map(|i| i.key()).collect();
+        assert_eq!(layout(&keys), d);
+        let custom = layout(&["Line".into(), "|".into(), "Nope".into(), "Snapping".into()]);
+        assert_eq!(custom, [Item::Tool(ToolId::Line), Item::Sep, Item::Snapping]);
+        // the reserve: everything else, no separators
+        let r = reserve(&custom);
+        assert!(!r.contains(&Item::Tool(ToolId::Line)) && !r.contains(&Item::Sep) && r.contains(&Item::ZoomExtents));
+        assert_eq!(r.len() + 2, Item::all().len());
     }
 }

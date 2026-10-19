@@ -4,7 +4,8 @@ use crate::app::{Action, FaceStylePref, VarstotasApp};
 use crate::templates::Template;
 use varstotas_kernel::{EntityRef, IntersectScope};
 use crate::tools::ToolId;
-use egui::{Button, Ui};
+use super::icons::{Icon, paint_icon};
+use egui::{Button, Response, Ui};
 use varstotas_render::StandardView;
 
 fn cmd(key: &str) -> String {
@@ -15,24 +16,42 @@ fn cmd_shift(key: &str) -> String {
     if cfg!(target_os = "macos") { format!("⇧⌘{key}") } else { format!("Ctrl+Shift+{key}") }
 }
 
+/// Side of a menu row's icon (not taller than the text: the rows keep their height).
+const MENU_ICON: f32 = 15.0;
+
+/// A menu row with room for an icon on the left (empty when `icon` is None, so the labels of
+/// a menu line up).
+fn icon_row(ui: &mut Ui, icon: Option<Icon>, label: &str, shortcut: Option<&str>, enabled: bool, selected: bool) -> Response {
+    let id = ui.id().with(("menu_icon", label));
+    let mut b = Button::new((egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label)).selected(selected);
+    if let Some(s) = shortcut {
+        b = b.shortcut_text(s);
+    }
+    let r = ui.add_enabled_ui(enabled, |ui| b.atom_ui(ui)).inner;
+    if let (Some(icon), Some(rect)) = (icon, r.rect(id)) {
+        let mut painter = ui.painter().clone();
+        if !enabled {
+            painter.multiply_opacity(0.4);
+        }
+        paint_icon(&painter, rect, icon, false);
+    }
+    r.response
+}
+
 impl VarstotasApp {
     fn item(&mut self, ui: &mut Ui, label: &str, shortcut: Option<&str>, enabled: bool, action: Action) {
-        let mut b = Button::new(label);
-        if let Some(s) = shortcut {
-            b = b.shortcut_text(s);
-        }
-        if ui.add_enabled(enabled, b).clicked() {
+        self.icon_item(ui, None, label, shortcut, enabled, action);
+    }
+
+    fn icon_item(&mut self, ui: &mut Ui, icon: Option<Icon>, label: &str, shortcut: Option<&str>, enabled: bool, action: Action) {
+        if icon_row(ui, icon, label, shortcut, enabled, false).clicked() {
             self.actions.push(action);
         }
     }
 
     fn tool_item(&mut self, ui: &mut Ui, id: ToolId) {
         let sel = self.tool_id() == id;
-        let mut b = Button::new(id.name()).selected(sel);
-        if let Some(s) = id.shortcut_label() {
-            b = b.shortcut_text(s);
-        }
-        if ui.add(b).clicked() {
+        if icon_row(ui, Some(id.icon()), id.name(), id.shortcut_label().as_deref(), true, sel).clicked() {
             self.actions.push(Action::SetTool(id));
         }
     }
@@ -83,7 +102,7 @@ impl VarstotasApp {
         self.item(ui, "Erase", Some("Delete"), has_sel, Action::Delete);
         ui.separator();
         self.item(ui, "Hide", None, !self.doc.selection.is_empty(), Action::HideSelected);
-        self.item(ui, "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
+        self.icon_item(ui, Some(Icon::Group), "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
         self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
         let has_inst = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Instance(_)));
         let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
@@ -203,13 +222,13 @@ impl VarstotasApp {
             ui.menu_button("Edit", |ui| {
                 let undo = self.doc.history.undo_label().map(|l| format!("Undo {l}"));
                 let redo = self.doc.history.redo_label().map(|l| format!("Redo {l}"));
-                self.item(ui, undo.as_deref().unwrap_or("Undo"), crate::keymap::label(crate::keymap::KeyCmd::Undo).as_deref(), undo.is_some(), Action::Undo);
-                self.item(ui, redo.as_deref().unwrap_or("Redo"), crate::keymap::label(crate::keymap::KeyCmd::Redo).as_deref(), redo.is_some(), Action::Redo);
+                self.icon_item(ui, Some(Icon::Undo), undo.as_deref().unwrap_or("Undo"), crate::keymap::label(crate::keymap::KeyCmd::Undo).as_deref(), undo.is_some(), Action::Undo);
+                self.icon_item(ui, Some(Icon::Redo), redo.as_deref().unwrap_or("Redo"), crate::keymap::label(crate::keymap::KeyCmd::Redo).as_deref(), redo.is_some(), Action::Redo);
                 ui.separator();
                 let any_sel = self.doc.has_selection();
                 let has_sel = !self.doc.selection.is_empty();
                 self.clipboard_items(ui);
-                self.item(ui, "Delete", Some("Delete"), any_sel, Action::Delete);
+                self.icon_item(ui, Some(Icon::Trash), "Delete", Some("Delete"), any_sel, Action::Delete);
                 self.item(ui, "Purge Unused", None, true, Action::PurgeUnused);
                 let has_guides = self.doc.model.has_any_guides();
                 self.item(ui, "Delete Guides", None, has_guides, Action::DeleteGuides);
@@ -220,7 +239,7 @@ impl VarstotasApp {
                 self.item(ui, "Hide", None, has_sel, Action::HideSelected);
                 self.item(ui, "Unhide All", None, true, Action::UnhideAll);
                 ui.separator();
-                self.item(ui, "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
+                self.icon_item(ui, Some(Icon::Group), "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
                 self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
                 let has_inst = self.doc.selection.iter().any(|e| matches!(e, varstotas_kernel::EntityRef::Instance(_)));
                 let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
@@ -311,7 +330,7 @@ impl VarstotasApp {
                         ("Left", StandardView::Left),
                         ("Right", StandardView::Right),
                     ] {
-                        self.item(ui, name, None, true, Action::View(v));
+                        self.icon_item(ui, Some(super::view_hud::view_icon(v)), name, None, true, Action::View(v));
                     }
                 });
                 ui.separator();
@@ -326,7 +345,7 @@ impl VarstotasApp {
                 self.tool_item(ui, ToolId::Orbit);
                 self.tool_item(ui, ToolId::Pan);
                 self.tool_item(ui, ToolId::Zoom);
-                self.item(ui, "Zoom Extents", crate::keymap::label(crate::keymap::KeyCmd::ZoomExtents).as_deref(), true, Action::ZoomExtents);
+                self.icon_item(ui, Some(Icon::ZoomExtents), "Zoom Extents", crate::keymap::label(crate::keymap::KeyCmd::ZoomExtents).as_deref(), true, Action::ZoomExtents);
                 ui.separator();
                 self.tool_item(ui, ToolId::PositionCamera);
                 self.tool_item(ui, ToolId::LookAround);
@@ -377,7 +396,7 @@ impl VarstotasApp {
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);
                 }
-                self.item(ui, "3D Text…", None, true, Action::Text3d);
+                self.icon_item(ui, Some(Icon::Text3d), "3D Text…", None, true, Action::Text3d);
             });
 
             ui.menu_button("Snapping", |ui| self.snapping_menu(ui));

@@ -24,11 +24,12 @@ pub enum Section {
     Navigation,
     Interface,
     Shortcuts,
+    Toolbar,
     Render,
 }
 
 impl Section {
-    pub const ALL: [Section; 9] = [
+    pub const ALL: [Section; 10] = [
         Section::General,
         Section::Interface,
         Section::Drawing,
@@ -38,6 +39,7 @@ impl Section {
         Section::Navigation,
         Section::Shortcuts,
         Section::Render,
+        Section::Toolbar,
     ];
 
     pub fn name(self) -> &'static str {
@@ -50,6 +52,7 @@ impl Section {
             Section::Navigation => "Navigation",
             Section::Interface => "Interface",
             Section::Shortcuts => "Shortcuts",
+            Section::Toolbar => "Toolbar",
             Section::Render => "Render",
         }
     }
@@ -65,6 +68,7 @@ impl Section {
             Section::Interface => "theme light dark system appearance scale size zoom toolbar icons",
             Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
             Section::Shortcuts => "keyboard shortcuts hotkeys keys",
+            Section::Toolbar => "toolbar buttons order reserve separator customize tools",
             Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera",
         }
     }
@@ -255,6 +259,7 @@ impl VarstotasApp {
                             Section::Navigation => self.prefs_navigation(ui),
                             Section::Interface => self.prefs_interface(ui),
                             Section::Shortcuts => self.prefs_shortcuts(ui),
+                            Section::Toolbar => self.prefs_toolbar(ui),
                             Section::Render => self.prefs_render(ui),
                         }
                     });
@@ -307,6 +312,7 @@ impl VarstotasApp {
             Section::View => p.new_view = ViewDefaults::default(),
             Section::Navigation => p.nav = Default::default(),
             Section::Shortcuts => p.shortcuts.clear(),
+            Section::Toolbar => p.toolbar.clear(),
             Section::Interface => {
                 p.theme = d.theme;
                 p.ui_scale = d.ui_scale;
@@ -490,6 +496,83 @@ impl VarstotasApp {
             ui.colored_label(egui::Color32::from_rgb(200, 60, 40), RichText::new(e).small());
         }
         note(ui, "Also in Window → 3D Library… → Other Sites.");
+    }
+
+    /// The toolbar's buttons in order (↑ ↓, → to the reserve) and the reserve (← back).
+    fn prefs_toolbar(&mut self, ui: &mut Ui) {
+        use super::toolbar::{Item, layout, reserve};
+        let mut items = layout(&self.prefs.toolbar);
+        let spare = reserve(&items);
+        // (index on the toolbar, -1 up / 1 down / 0 to the reserve) or an item to add
+        let mut op: Option<(usize, i32)> = None;
+        let mut add: Option<Item> = None;
+        note(ui, "The buttons of the toolbar, in order; the others wait in reserve (they stay in the menus).");
+        // a row: the icon (a line for a separator) and the name
+        let label = |ui: &mut Ui, it: Item| {
+            let (r, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+            match it.icon() {
+                Some(icon) => super::icons::paint_icon(ui.painter(), r, icon, false),
+                None => {
+                    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, theme::text_dim()));
+                }
+            }
+            let text = RichText::new(it.name());
+            ui.label(if it == Item::Sep { text.color(theme::text_dim()) } else { text });
+        };
+        ui.columns(2, |cols| {
+            heading(&mut cols[0], "On the toolbar");
+            egui::ScrollArea::vertical().id_salt("tb_on").max_height(330.0).show(&mut cols[0], |ui| {
+                let n = items.len();
+                for (i, &it) in items.iter().enumerate() {
+                    // separators are told apart by their place
+                    let key = if it == Item::Sep { format!("|{i}") } else { it.key() };
+                    ui.horizontal(|ui| {
+                        label(ui, it);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            for (glyph, d, tip, ok) in [("→", 0, "To the reserve", true), ("⏷", 1, "Down", i + 1 < n), ("⏶", -1, "Up", i > 0)] {
+                                let r = ui.add_enabled(ok, egui::Button::new(glyph).small()).on_hover_text(tip);
+                                let name = match d {
+                                    0 => "out",
+                                    1 => "down",
+                                    _ => "up",
+                                };
+                                super::tray_lib::spot(format!("tb_{name}:{key}"), r.rect.center());
+                                if r.clicked() {
+                                    op = Some((i, d));
+                                }
+                            }
+                        });
+                    });
+                }
+            });
+            heading(&mut cols[1], "Reserve");
+            egui::ScrollArea::vertical().id_salt("tb_off").max_height(330.0).show(&mut cols[1], |ui| {
+                for it in std::iter::once(Item::Sep).chain(spare) {
+                    ui.horizontal(|ui| {
+                        let r = ui.add(egui::Button::new("←").small()).on_hover_text("To the end of the toolbar");
+                        super::tray_lib::spot(format!("tb_in:{}", it.key()), r.rect.center());
+                        if r.clicked() {
+                            add = Some(it);
+                        }
+                        label(ui, it);
+                    });
+                }
+            });
+        });
+        let changed = op.is_some() || add.is_some();
+        match op {
+            Some((i, 0)) => {
+                items.remove(i);
+            }
+            Some((i, d)) => items.swap(i, (i as i32 + d) as usize),
+            None => {}
+        }
+        if let Some(it) = add {
+            items.push(it);
+        }
+        if changed {
+            self.prefs.toolbar = items.iter().map(|i| i.key()).collect();
+        }
     }
 
     fn prefs_interface(&mut self, ui: &mut Ui) {
