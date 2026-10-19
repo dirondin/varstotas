@@ -92,6 +92,7 @@ const NAVIGATION: &[B] = &[
     B::Row("Trackpad: two-finger swipe", "orbit; with Shift — pan"),
     B::Row("Trackpad: pinch, or ⌘ / Ctrl + swipe", "zoom"),
     B::P("These work in every tool, so you never need to leave a drawing operation to look around."),
+    B::P("Window → Preferences → Navigation changes them: orbit and zoom speed, an inverted wheel, zoom toward the middle of the view instead of the cursor, the middle button panning (Shift orbits), two fingers panning or zooming."),
     B::H("Views"),
     B::P("Camera → Standard Views (and the view drop-down in the viewport's corner): Iso, Top, Bottom, Front, Back, Left, Right. Camera → Parallel Projection / Perspective. `Shift+Z` — Zoom Extents: the whole model in view."),
     B::Tools(&[ToolId::Orbit, ToolId::Pan, ToolId::Zoom, ToolId::PositionCamera, ToolId::LookAround, ToolId::Walk]),
@@ -244,7 +245,7 @@ const SCENES: &[B] = &[
 
 const FILES: &[B] = &[
     B::P("Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval."),
-    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
+    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas), Navigation (mouse and trackpad) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
     B::P("Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it."),
     B::Row("Import", "OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window"),
     B::Row("Export", "OBJ, STL, DXF, glTF (GLB), 3MF, PLY, faces as JSON, PNG, SVG / PDF drawings, sheets, unfold patterns, animation, report, attributions"),

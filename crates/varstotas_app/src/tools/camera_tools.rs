@@ -161,7 +161,7 @@ impl Tool for LookAroundTool {
     fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
         if self.dragging && ctx.pointer.primary_down {
             let eye = ctx.camera.eye;
-            ctx.camera.orbit(dvec2(ctx.pointer.delta), eye);
+            ctx.camera.orbit(crate::nav::prefs().orbit_delta(dvec2(ctx.pointer.delta)), eye);
             ctx.camera.eye = eye;
         }
         self.eye_z = ctx.camera.eye.z;

@@ -24,7 +24,7 @@ impl Tool for OrbitTool {
             if ctx.pointer.modifiers.shift {
                 ctx.camera.pan(dvec2(ctx.pointer.delta), p, ctx.viewport_d());
             } else {
-                ctx.camera.orbit(dvec2(ctx.pointer.delta), p);
+                ctx.camera.orbit(crate::nav::prefs().orbit_delta(dvec2(ctx.pointer.delta)), p);
             }
         }
     }
@@ -91,7 +91,7 @@ impl Tool for ZoomTool {
         if let (Some(p), true) = (self.toward, ctx.pointer.primary_down) {
             let dy = ctx.pointer.delta.y as f64;
             if dy != 0.0 {
-                ctx.camera.zoom((-dy * 0.01).exp(), p);
+                ctx.camera.zoom(crate::nav::prefs().zoom_factor((-dy * 0.01).exp()), p);
             }
         }
         self.fov = ctx.camera.fov_y_deg;

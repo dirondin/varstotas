@@ -20,10 +20,11 @@ pub enum Section {
     Libraries,
     Downloads,
     View,
+    Navigation,
 }
 
 impl Section {
-    pub const ALL: [Section; 5] = [Section::General, Section::Drawing, Section::Libraries, Section::Downloads, Section::View];
+    pub const ALL: [Section; 6] = [Section::General, Section::Drawing, Section::Libraries, Section::Downloads, Section::View, Section::Navigation];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -32,6 +33,7 @@ impl Section {
             Section::Libraries => "Libraries",
             Section::Downloads => "Downloads",
             Section::View => "View",
+            Section::Navigation => "Navigation",
         }
     }
 
@@ -42,6 +44,7 @@ impl Section {
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle",
             Section::Libraries => "components materials folder examples in model tiles small large list",
             Section::Downloads => "watch downloads folder send to varstotas bookmarklet browser",
+            Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
             Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera",
         }
     }
@@ -194,6 +197,7 @@ impl VarstotasApp {
                             Section::Libraries => self.prefs_libraries(ui),
                             Section::Downloads => self.prefs_downloads(ui),
                             Section::View => self.prefs_view(ui),
+                            Section::Navigation => self.prefs_navigation(ui),
                         }
                     });
                 });
@@ -232,6 +236,7 @@ impl VarstotasApp {
                 p.send_to_varstotas = d.send_to_varstotas;
             }
             Section::View => p.new_view = ViewDefaults::default(),
+            Section::Navigation => p.nav = Default::default(),
         }
         self.flash(format!("Preferences → {}: defaults", s.name()));
     }
@@ -330,6 +335,45 @@ impl VarstotasApp {
             ui.colored_label(egui::Color32::from_rgb(200, 60, 40), RichText::new(e).small());
         }
         note(ui, "Also in Window → 3D Library… → Other Sites.");
+    }
+
+    fn prefs_navigation(&mut self, ui: &mut Ui) {
+        use crate::nav::NavGesture;
+        let n = &mut self.prefs.nav;
+        heading(ui, "Speed");
+        egui::Grid::new("nav_speed").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
+            ui.label("Orbit");
+            let r = ui.add(egui::Slider::new(&mut n.orbit_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
+            super::tray_lib::spot("nav:orbit", r.rect.center());
+            ui.end_row();
+            ui.label("Zoom");
+            let r = ui.add(egui::Slider::new(&mut n.zoom_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
+            super::tray_lib::spot("nav:zoom", r.rect.center());
+            ui.end_row();
+        });
+        heading(ui, "Zoom");
+        let r = ui.checkbox(&mut n.invert_zoom, "Invert the wheel").on_hover_text("Wheel away from you zooms out");
+        super::tray_lib::spot("nav:invert", r.rect.center());
+        let r = ui.checkbox(&mut n.zoom_to_cursor, "Zoom toward the cursor").on_hover_text("Off: toward the middle of the view");
+        super::tray_lib::spot("nav:cursor", r.rect.center());
+        heading(ui, "Mouse");
+        ui.horizontal(|ui| {
+            ui.label("Middle button drag:");
+            ui.radio_value(&mut n.middle, NavGesture::Orbit, "Orbit");
+            let r = ui.radio_value(&mut n.middle, NavGesture::Pan, "Pan");
+            super::tray_lib::spot("nav:middle_pan", r.rect.center());
+        });
+        note(ui, "Shift gives the other one.");
+        heading(ui, "Trackpad");
+        ui.horizontal(|ui| {
+            ui.label("Two fingers:");
+            ui.radio_value(&mut n.two_finger, NavGesture::Orbit, "Orbit");
+            let r = ui.radio_value(&mut n.two_finger, NavGesture::Pan, "Pan");
+            super::tray_lib::spot("nav:two_pan", r.rect.center());
+            let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, "Zoom");
+            super::tray_lib::spot("nav:two_zoom", r.rect.center());
+        });
+        note(ui, "Shift: Pan (Orbit when two fingers pan). Pinch and ⌘ + two fingers always zoom.");
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {

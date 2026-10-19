@@ -6,6 +6,71 @@ use egui::{Event, MouseWheelUnit, PointerButton, Pos2, Rect, Response, Vec2};
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{Aabb, Model, Ray};
 use varstotas_render::{Camera, StandardView};
+use serde::{Deserialize, Serialize};
+
+/// What a gesture does (the other one comes with Shift).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NavGesture {
+    #[default]
+    Orbit,
+    Pan,
+    /// Trackpad only: two fingers zoom (Shift = pan).
+    Zoom,
+}
+
+/// Mouse and trackpad navigation (Preferences → Navigation).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NavPrefs {
+    /// Orbit speed, × the standard one.
+    pub orbit_speed: f64,
+    /// Zoom speed of the wheel and ⌘-scroll, × the standard one.
+    pub zoom_speed: f64,
+    /// Wheel away from you zooms out (else in).
+    pub invert_zoom: bool,
+    /// Zoom toward the point under the cursor (else toward the middle of the view).
+    pub zoom_to_cursor: bool,
+    /// Middle-button drag: Orbit or Pan (Shift gives the other).
+    pub middle: NavGesture,
+    /// Two-finger scroll on a trackpad: Orbit, Pan or Zoom (Shift: Pan, or Orbit when it pans).
+    pub two_finger: NavGesture,
+}
+
+impl Default for NavPrefs {
+    fn default() -> Self {
+        Self { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: NavGesture::Orbit, two_finger: NavGesture::Orbit }
+    }
+}
+
+thread_local! {
+    static NAV: std::cell::RefCell<NavPrefs> = std::cell::RefCell::new(NavPrefs::default());
+}
+
+/// Make `p` the settings the navigation tools (Orbit, Zoom, Look Around) read this frame.
+pub fn publish(p: &NavPrefs) {
+    NAV.with(|n| {
+        if *n.borrow() != *p {
+            *n.borrow_mut() = p.clone();
+        }
+    });
+}
+
+/// The published navigation settings.
+pub fn prefs() -> NavPrefs {
+    NAV.with(|n| n.borrow().clone())
+}
+
+impl NavPrefs {
+    /// A zoom factor `f` (> 1 = in) with the speed and the inversion applied.
+    pub fn zoom_factor(&self, f: f64) -> f64 {
+        let k = f.ln() * self.zoom_speed.clamp(0.1, 10.0);
+        (if self.invert_zoom { -k } else { k }).exp()
+    }
+
+    pub fn orbit_delta(&self, d: DVec2) -> DVec2 {
+        d * self.orbit_speed.clamp(0.1, 10.0)
+    }
+}
 
 pub fn dvec2(v: Vec2) -> DVec2 {
     DVec2::new(v.x as f64, v.y as f64)
@@ -77,12 +142,21 @@ impl NavController {
 
     /// Handle middle-button drags and wheel/trackpad gestures over the viewport.
     /// Returns true if the camera changed.
-    pub fn handle(&mut self, response: &Response, rect: Rect, model: &Model, camera: &mut Camera) -> bool {
+    pub fn handle(&mut self, response: &Response, rect: Rect, model: &Model, camera: &mut Camera, prefs: &NavPrefs) -> bool {
         let ctx = response.ctx.clone();
         let viewport = rect.size();
         let mut changed = false;
         let (shift, pointer) = ctx.input(|i| (i.modifiers.shift, i.pointer.hover_pos()));
         let local = pointer.map(|p| (p - rect.min).to_pos2());
+        // the point a zoom goes toward
+        let zoom_at = |l: Pos2, camera: &Camera| {
+            let l = if prefs.zoom_to_cursor { l } else { (viewport * 0.5).to_pos2() };
+            point_under(model, camera, l, viewport)
+        };
+        let middle = |shift: bool| match (prefs.middle == NavGesture::Pan) != shift {
+            true => NavDrag::Pan,
+            false => NavDrag::Orbit,
+        };
 
         // ---- middle-button drag ------------------------------------------------
         if response.drag_started_by(PointerButton::Middle) {
@@ -94,11 +168,11 @@ impl NavController {
             let p = point_under(model, camera, press, viewport);
             self.pivot = p;
             self.pan_point = p;
-            self.drag = Some(if shift { NavDrag::Pan } else { NavDrag::Orbit });
+            self.drag = Some(middle(shift));
         }
         if self.drag.is_some() && response.dragged_by(PointerButton::Middle) {
             // Shift can be pressed/released mid-drag.
-            let want = if shift { NavDrag::Pan } else { NavDrag::Orbit };
+            let want = middle(shift);
             if Some(want) != self.drag {
                 if let Some(l) = local {
                     let p = point_under(model, camera, l, viewport);
@@ -110,7 +184,7 @@ impl NavController {
             let d = response.drag_delta();
             if d != Vec2::ZERO {
                 match self.drag {
-                    Some(NavDrag::Orbit) => camera.orbit(dvec2(d), self.pivot),
+                    Some(NavDrag::Orbit) => camera.orbit(prefs.orbit_delta(dvec2(d)), self.pivot),
                     Some(NavDrag::Pan) => camera.pan(dvec2(d), self.pan_point, dvec2(viewport)),
                     None => {}
                 }
@@ -133,15 +207,16 @@ impl NavController {
                                 // Classic mouse wheel: zoom toward cursor.
                                 let steps = if unit == MouseWheelUnit::Page { delta.y * 3.0 } else { delta.y };
                                 if steps != 0.0 {
-                                    let target = point_under(model, camera, l, viewport);
-                                    camera.zoom(1.18f64.powf(steps as f64), target);
+                                    let target = zoom_at(l, camera);
+                                    camera.zoom(prefs.zoom_factor(1.18f64.powf(steps as f64)), target);
                                     changed = true;
                                 }
                             }
                             MouseWheelUnit::Point => {
-                                if modifiers.command || modifiers.ctrl {
-                                    let target = point_under(model, camera, l, viewport);
-                                    camera.zoom((delta.y as f64 * 0.01).exp(), target);
+                                let zoom = prefs.two_finger == NavGesture::Zoom && !modifiers.shift;
+                                if modifiers.command || modifiers.ctrl || zoom {
+                                    let target = zoom_at(l, camera);
+                                    camera.zoom(prefs.zoom_factor((delta.y as f64 * 0.01).exp()), target);
                                     changed = true;
                                     continue;
                                 }
@@ -150,10 +225,15 @@ impl NavController {
                                     _ => point_under(model, camera, l, viewport),
                                 };
                                 self.scroll_anchor = Some((anchor, now));
-                                if modifiers.shift {
+                                // Orbit (Shift: Pan), Pan (Shift: Orbit), Zoom (Shift: Pan)
+                                let pan = match prefs.two_finger {
+                                    NavGesture::Pan => !modifiers.shift,
+                                    _ => modifiers.shift,
+                                };
+                                if pan {
                                     camera.pan(dvec2(delta), anchor, dvec2(viewport));
                                 } else {
-                                    camera.orbit(dvec2(delta), anchor);
+                                    camera.orbit(prefs.orbit_delta(dvec2(delta)), anchor);
                                 }
                                 changed = true;
                             }
@@ -161,7 +241,7 @@ impl NavController {
                     }
                     Event::Zoom(f) if f != 1.0 => {
                         if let Some(l) = local {
-                            let target = point_under(model, camera, l, viewport);
+                            let target = zoom_at(l, camera);
                             camera.zoom(f as f64, target);
                             changed = true;
                         }
@@ -271,6 +351,19 @@ pub fn standard_view_camera(model: &Model, camera: &Camera, v: StandardView, asp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nav_prefs_scale_zoom_and_orbit() {
+        let mut p = NavPrefs::default();
+        assert!((p.zoom_factor(1.5) - 1.5).abs() < 1e-12);
+        p.invert_zoom = true;
+        assert!((p.zoom_factor(1.5) - 1.0 / 1.5).abs() < 1e-12);
+        p.invert_zoom = false;
+        p.zoom_speed = 2.0;
+        assert!((p.zoom_factor(1.5) - 2.25).abs() < 1e-12);
+        p.orbit_speed = 0.5;
+        assert_eq!(p.orbit_delta(DVec2::new(10.0, -4.0)), DVec2::new(5.0, -2.0));
+    }
 
     fn model_with_face(z: f64) -> Model {
         let mut m = Model::new();

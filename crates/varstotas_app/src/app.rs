@@ -127,6 +127,8 @@ pub struct Prefs {
     pub downloads_watch_dir: Option<PathBuf>,
     /// How a new document looks (Preferences → View).
     pub new_view: crate::ui::preferences::ViewDefaults,
+    /// Mouse and trackpad (Preferences → Navigation).
+    pub nav: crate::nav::NavPrefs,
 }
 
 impl Prefs {
@@ -175,6 +177,7 @@ impl Default for Prefs {
             grid: Default::default(),
             downloads_watch_dir: None,
             new_view: Default::default(),
+            nav: Default::default(),
         }
     }
 }
@@ -1008,7 +1011,7 @@ impl VarstotasApp {
             self.press_local = None;
             return;
         }
-        let user_nav = self.viewport.nav.handle(response, rect, &self.doc.model, &mut self.camera);
+        let user_nav = self.viewport.nav.handle(response, rect, &self.doc.model, &mut self.camera, &self.prefs.nav);
         if user_nav {
             self.cam_anim = None;
             self.scene_player = None;
@@ -2638,6 +2641,7 @@ impl eframe::App for VarstotasApp {
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
 
         crate::axes::sync(&self.doc.model);
+        crate::nav::publish(&self.prefs.nav);
         crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);
         self.handle_close_request(&ctx);

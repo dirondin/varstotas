@@ -66,4 +66,30 @@ expect snapping=(true, ["midpoint"])
 raw click 649 92
 wait 5
 expect snapping=(true, [])
+# Navigation: two fingers zoom (a trackpad scroll in the view zooms instead of orbiting)
+raw click 137 255
+wait 5
+expect prefs_win=(true Navigation)
+raw click 427 372
+wait 3
+expect two_finger: Zoom
+# a new document (perspective again after the View Reset); scroll up = closer
+action new
+wait 10
+expect cam_dist=12369
+raw scroll 900 600 100
+wait 5
+expect cam_dist=4550
+expect hud=(None false Shaded false)
+# Invert the wheel: the same scroll goes back out
+raw click 281 224
+wait 3
+expect invert_zoom: true
+raw scroll 900 600 100
+wait 5
+expect cam_dist=12369
+# Reset: Orbit, no inversion
+raw click 649 92
+wait 5
+expect nav=NavPrefs { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: Orbit, two_finger: Orbit }
 quit
