@@ -2661,7 +2661,10 @@ impl eframe::App for VarstotasApp {
         self.online_window(&ctx);
         self.models_window(&ctx);
         self.downloads_tick(&ctx);
-        self.thumbs.process(&ctx, frame);
+        // Not while a harness screenshot is pending: rendering a thumbnail then loses the capture.
+        if !self.debug.screenshot_pending() {
+            self.thumbs.process(&ctx, frame);
+        }
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

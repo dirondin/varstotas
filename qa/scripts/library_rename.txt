@@ -1,0 +1,51 @@
+# Components list: Rename… in a tile's context menu — a library file (the file and the component
+# inside it are renamed) and a component of the document (one undo step). Real mouse and keys.
+# Fixture: qa/fixtures/library_rename/components/Box.vrst.
+wait 10
+action script let c = component([box(vec3(0, 0, 0), 500, 500, 500)], "Cube");\ncopy(c, vec3(800, 0, 0));
+view iso
+zoom_extents
+action components
+wait 40
+expect lib_names=["Box"]
+# right click on Box → Rename…
+raw rclick 1185 174
+wait 5
+screenshot shots/libr_menu.bmp
+raw click 1220 245
+wait 5
+expect rename=Some("Box")
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw text Crate
+wait 3
+expect rename=Some("Crate")
+screenshot shots/libr_dialog.bmp
+raw key Enter
+wait 20
+expect rename=None
+expect lib_names=["Crate"]
+# fold the library folder: the Document folder moves up
+raw click 1152 120
+wait 5
+expect lib_folders=[("", 1, true), ("Document", 1, false)
+raw rclick 1185 204
+wait 5
+screenshot shots/libr_docmenu.bmp
+raw click 1220 275
+wait 5
+expect rename=Some("Cube")
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw text Block
+raw key Enter
+wait 10
+expect rename=None
+expect outliner={Block[Group] Block[Group]}
+expect undo=Some("Rename Component Block")
+action undo
+wait 5
+expect outliner={Cube[Group] Cube[Group]}

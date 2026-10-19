@@ -63,3 +63,15 @@ fn delete_definition_removes_all_copies() {
     assert!(m.delete_definition(m.root).is_err());
     assert!(m.delete_definition(boxdef).is_err());
 }
+
+#[test]
+fn rename_definition_with_its_variants() {
+    let (mut m, boxdef, _) = model();
+    let mut v = m.defs[boxdef].clone();
+    v.rigged = Some(rig::Rigged { master: boxdef, values: Default::default(), paint: None });
+    let v = m.defs.insert(v);
+    m.rename_definition(v, " Crate ").unwrap();
+    assert_eq!((m.defs[boxdef].name.as_str(), m.defs[v].name.as_str()), ("Crate", "Crate"));
+    assert!(m.rename_definition(boxdef, "  ").is_err());
+    assert!(m.rename_definition(m.root, "X").is_err());
+}

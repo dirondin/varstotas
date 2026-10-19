@@ -1,7 +1,7 @@
 //! Document statistics (Window → Model Info) and cleaning: what the scene shows (every placed
 //! copy counted) next to what the file stores (each definition once), definitions and
-//! materials nothing in the scene uses, [`Model::purge_unused`] and
-//! [`Model::delete_definition`].
+//! materials nothing in the scene uses, [`Model::purge_unused`],
+//! [`Model::delete_definition`] and [`Model::rename_definition`].
 
 use crate::model::Model;
 use crate::{DefId, MaterialId, OpError, OpResult};
@@ -229,5 +229,22 @@ impl Model {
         }
         self.remove_unused(gone);
         Ok(removed)
+    }
+
+    /// Rename component `d` (a variant of a component with parameters renames its master);
+    /// the variants of a master take the name too. Groups and the root can't be renamed.
+    pub fn rename_definition(&mut self, d: DefId, name: &str) -> OpResult<()> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(OpError::Invalid("an empty name".into()));
+        }
+        let d = self.defs.get(d).and_then(|x| x.rigged.as_ref()).filter(|r| r.paint.is_none()).map_or(d, |r| r.master);
+        if d == self.root || self.defs.get(d).is_none_or(|x| x.is_group) {
+            return Err(OpError::NotFound);
+        }
+        for v in std::iter::once(d).chain(self.rig_variants(d).into_iter().map(|(v, _)| v)) {
+            self.defs[v].name = name.to_string();
+        }
+        Ok(())
     }
 }

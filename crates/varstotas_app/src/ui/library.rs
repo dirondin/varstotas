@@ -64,8 +64,17 @@ pub struct LibraryState {
     pub delete_ask: Option<(Option<PathBuf>, String)>,
     /// A document's component to delete once confirmed (it has placed copies).
     pub def_delete: Option<varstotas_kernel::DefId>,
+    /// The Rename dialog: the component (document's or a library file) and the name typed.
+    pub rename: Option<(RenameTarget, String)>,
     /// Thumbnails of the document's components (Document folder).
     pub def_thumbs: std::collections::HashMap<varstotas_kernel::DefId, DefThumb>,
+}
+
+/// What the Rename dialog renames.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RenameTarget {
+    Def(varstotas_kernel::DefId),
+    File(PathBuf),
 }
 
 /// `~/.varstotas/components`.
@@ -169,6 +178,34 @@ fn safe_name(s: &str) -> String {
     let n: String = s.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
     let n = n.trim().trim_matches('.').to_string();
     if n.is_empty() { "Component".into() } else { n }
+}
+
+/// Rename the library file `path` to `<name>.vrst` in its folder; a file holding one
+/// component (or a component with parameters) named after the file gets the new name too.
+/// Returns the new path.
+fn rename_library_file(path: &Path, name: &str) -> Result<PathBuf, String> {
+    let to = path.with_file_name(format!("{}.vrst", safe_name(name)));
+    if to == path {
+        return Ok(to);
+    }
+    if to.exists() && !to.to_string_lossy().eq_ignore_ascii_case(&path.to_string_lossy()) {
+        return Err(format!("{} already exists", to.display()));
+    }
+    let old = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let mut model = crate::document::guarded(|| varstotas_kernel::io::load(path)).and_then(|r| r.map_err(|e| e.to_string()))?;
+    let root = model.root_mesh();
+    if root.faces.is_empty() && root.edges.is_empty() && root.instances.len() == 1 {
+        let d = root.instances.values().next().expect("one instance").def;
+        let rigged = model.defs.get(d).is_some_and(|x| x.rigged.is_some());
+        if rigged || model.defs.get(d).is_some_and(|x| !x.is_group && x.name == old) {
+            model.rename_definition(d, name).map_err(|e| e.to_string())?;
+        }
+    }
+    varstotas_kernel::io::save(&model, &to).map_err(|e| e.to_string())?;
+    if !to.to_string_lossy().eq_ignore_ascii_case(&path.to_string_lossy()) {
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    Ok(to)
 }
 
 impl VarstotasApp {
@@ -414,6 +451,70 @@ impl VarstotasApp {
         }
     }
 
+    /// The Rename dialog of a component tile ([`LibraryState::rename`]).
+    pub(crate) fn component_rename_dialog(&mut self, ctx: &egui::Context) {
+        let Some((target, mut text)) = self.library.rename.clone() else { return };
+        let mut choice = None;
+        let resp = egui::Modal::new(egui::Id::new("component_rename")).show(ctx, |ui| {
+            ui.set_width(340.0);
+            ui.heading("Rename Component");
+            ui.add_space(4.0);
+            if let RenameTarget::File(path) = &target {
+                let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                ui.label(RichText::new(format!("The library file {file} is renamed too.")).small().weak()).on_hover_text(path.display().to_string());
+            }
+            let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(f32::INFINITY));
+            if !r.has_focus() && !r.lost_focus() {
+                r.request_focus();
+            }
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                choice = Some(true);
+            }
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add_enabled(!text.trim().is_empty(), egui::Button::new(RichText::new("Rename").strong())).clicked() {
+                        choice = Some(true);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+        });
+        if resp.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        match choice {
+            Some(true) if !text.trim().is_empty() => {
+                self.library.rename = None;
+                self.rename_component(&target, text.trim());
+            }
+            Some(_) => self.library.rename = None,
+            None => self.library.rename = Some((target, text)),
+        }
+    }
+
+    /// Rename a document's component (with its variants, one undo step) or a library file
+    /// (the file and the component inside it).
+    pub(crate) fn rename_component(&mut self, target: &RenameTarget, name: &str) {
+        match target {
+            RenameTarget::Def(d) => {
+                let d = *d;
+                if self.doc.try_commit(&format!("Rename Component {name}"), |m| m.rename_definition(d, name)).is_some() {
+                    self.flash(format!("Renamed to {name}"));
+                }
+            }
+            RenameTarget::File(path) => match rename_library_file(path, name) {
+                Ok(to) => {
+                    self.flash(format!("Renamed to {}", to.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
+                    self.refresh_library();
+                }
+                Err(e) => self.flash_error(format!("Rename {}: {e}", path.display())),
+            },
+        }
+    }
+
     pub(crate) fn library_open_requested(&mut self) -> bool {
         std::mem::take(&mut self.library.open_card)
     }
@@ -629,6 +730,7 @@ impl VarstotasApp {
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
         let mut delete_def = None;
         let mut rig_def = None;
+        let mut rename = None;
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         let mut set_preview: Option<(PathBuf, bool)> = None;
@@ -673,6 +775,10 @@ impl VarstotasApp {
                                         set_preview = Some((it.path.clone(), false));
                                         ui.close();
                                     }
+                                    if ui.button("Rename…").clicked() {
+                                        rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
+                                        ui.close();
+                                    }
                                     if ui.button("Delete…").clicked() {
                                         delete = Some((Some(it.path.clone()), it.name.clone()));
                                         ui.close();
@@ -691,6 +797,11 @@ impl VarstotasApp {
                                     }
                                     if ui.button("Select Instances").clicked() {
                                         select_def = Some(d);
+                                        ui.close();
+                                    }
+                                    if ui.button("Rename…").clicked() {
+                                        let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+                                        rename = Some((RenameTarget::Def(d), name));
                                         ui.close();
                                     }
                                     if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
@@ -723,6 +834,9 @@ impl VarstotasApp {
         }
         if delete.is_some() {
             self.library.delete_ask = delete;
+        }
+        if rename.is_some() {
+            self.library.rename = rename;
         }
         if let Some((path, set)) = set_preview {
             let image = if set { rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
