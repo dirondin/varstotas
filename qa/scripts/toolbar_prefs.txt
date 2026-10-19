@@ -8,14 +8,14 @@ wait 5
 expect prefs_win=(true Toolbar)
 expect toolbar="Select Eraser Paint | Line Arc ArcCenter Bezier Rectangle Circle Polygon | Box Cylinder Cone Pyramid Sphere Torus | Move Rotate Scale PushPull Offset FollowMe Chamfer Fillet | Tape Dimension Text Text3d Axes Section GuidePlane | Orbit Pan Zoom ZoomExtents | Snapping"
 # Select → the reserve
-raw click 433 160
+raw click 419 160
 wait 5
 expect toolbar="Eraser Paint | Line
 # Eraser down, then up again
-raw click 401 160
+raw click 387 160
 wait 5
 expect toolbar="Paint Eraser | Line
-raw click 367 187
+raw click 353 187
 wait 5
 expect toolbar="Eraser Paint | Line
 # Smooth Curve from the reserve: the end of the toolbar

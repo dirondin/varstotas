@@ -519,9 +519,11 @@ impl VarstotasApp {
             let text = RichText::new(it.name());
             ui.label(if it == Item::Sep { text.color(theme::text_dim()) } else { text });
         };
+        // the lists down to the bottom of the window (less the column headings)
+        let list_h = (ui.clip_rect().bottom() - ui.cursor().top() - 40.0).max(160.0);
         ui.columns(2, |cols| {
             heading(&mut cols[0], "On the toolbar");
-            egui::ScrollArea::vertical().id_salt("tb_on").max_height(330.0).show(&mut cols[0], |ui| {
+            egui::ScrollArea::vertical().id_salt("tb_on").max_height(list_h).auto_shrink([false, true]).show(&mut cols[0], |ui| {
                 let n = items.len();
                 for (i, &it) in items.iter().enumerate() {
                     // separators are told apart by their place
@@ -529,6 +531,8 @@ impl VarstotasApp {
                     ui.horizontal(|ui| {
                         label(ui, it);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            // room for the scroll bar
+                            ui.add_space(14.0);
                             for (glyph, d, tip, ok) in [("→", 0, "To the reserve", true), ("⏷", 1, "Down", i + 1 < n), ("⏶", -1, "Up", i > 0)] {
                                 let r = ui.add_enabled(ok, egui::Button::new(glyph).small()).on_hover_text(tip);
                                 let name = match d {
@@ -546,7 +550,7 @@ impl VarstotasApp {
                 }
             });
             heading(&mut cols[1], "Reserve");
-            egui::ScrollArea::vertical().id_salt("tb_off").max_height(330.0).show(&mut cols[1], |ui| {
+            egui::ScrollArea::vertical().id_salt("tb_off").max_height(list_h).auto_shrink([false, true]).show(&mut cols[1], |ui| {
                 for it in std::iter::once(Item::Sep).chain(spare) {
                     ui.horizontal(|ui| {
                         let r = ui.add(egui::Button::new("←").small()).on_hover_text("To the end of the toolbar");
