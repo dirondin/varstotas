@@ -1,0 +1,480 @@
+//! Icons of the menu commands (File, Edit, Solid Tools, Snapping), same 24×24 grid and style.
+
+use super::{CUBE_LEFT, CUBE_RIGHT, CUBE_TOP, Icon, Pen, pal};
+use crate::inference::InferenceKind;
+use egui::{Align2, Color32, FontId, Rect, Stroke};
+
+const ORANGE: Color32 = Color32::from_rgb(0xE8, 0x7A, 0x1E);
+const CYAN: Color32 = Color32::from_rgb(0x1F, 0xA9, 0xC4);
+const MAGENTA: Color32 = Color32::from_rgb(0xC8, 0x3C, 0xC0);
+const PURPLE: Color32 = Color32::from_rgb(0x9B, 0x59, 0xD0);
+const BACK: Color32 = Color32::from_rgb(0x9D, 0xB0, 0xC9);
+
+fn rect(pen: &Pen, (x0, y0): (f32, f32), (x1, y1): (f32, f32), fill: Color32, stroke: Stroke) {
+    pen.poly_c(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)], fill, stroke);
+}
+
+fn rounded(pen: &Pen, a: (f32, f32), b: (f32, f32), stroke: Stroke) {
+    pen.painter.rect_stroke(Rect::from_min_max(pen.p(a.0, a.1), pen.p(b.0, b.1)), 2.0 * pen.s, stroke, egui::StrokeKind::Middle);
+}
+
+fn dashed_rect(pen: &Pen, (x0, y0): (f32, f32), (x1, y1): (f32, f32), stroke: Stroke) {
+    for (a, b) in [((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))] {
+        pen.dashed(a, b, stroke);
+    }
+}
+
+/// A sheet of paper with its top-right corner folded.
+fn page(pen: &Pen, (x0, y0): (f32, f32), (x1, y1): (f32, f32), fold: f32) {
+    pen.poly(&[(x0, y0), (x1 - fold, y0), (x1, y0 + fold), (x1, y1), (x0, y1)], pal::fill());
+    pen.line_c(&[(x1 - fold, y0), (x1 - fold, y0 + fold), (x1, y0 + fold)], pen.thin());
+}
+
+/// The isometric cube scaled by `k` about (12, 12) and moved to `c`.
+fn mini_cube(pen: &Pen, c: (f32, f32), k: f32) {
+    let t = |pts: &[(f32, f32); 4]| pts.map(|(x, y)| (c.0 + (x - 12.0) * k, c.1 + (y - 12.0) * k));
+    let st = pen.thin();
+    pen.poly_c(&t(&CUBE_TOP), pal::fill(), st);
+    pen.poly_c(&t(&CUBE_LEFT), pal::shade(), st);
+    pen.poly_c(&t(&CUBE_RIGHT), pal::shade_dark(), st);
+}
+
+/// A red cross on a light disc (remove / delete marks).
+fn red_x(pen: &Pen, c: (f32, f32), r: f32) {
+    pen.painter.circle(pen.p(c.0, c.1), r * pen.s, pal::fill(), pen.thin());
+    let d = r * 0.45;
+    let st = Stroke::new(1.6 * pen.s, pal::RED);
+    pen.line_c(&[(c.0 - d, c.1 - d), (c.0 + d, c.1 + d)], st);
+    pen.line_c(&[(c.0 - d, c.1 + d), (c.0 + d, c.1 - d)], st);
+}
+
+fn floppy(pen: &Pen, o: (f32, f32), k: f32) {
+    let t = |x: f32, y: f32| (o.0 + x * k, o.1 + y * k);
+    pen.poly(&[t(3.0, 3.0), t(17.0, 3.0), t(21.0, 7.0), t(21.0, 21.0), t(3.0, 21.0)], pal::BLUE);
+    rect(pen, t(7.0, 3.0), t(16.0, 9.0), pal::fill(), pen.thin());
+    rect(pen, t(12.5, 4.3), t(14.5, 7.7), pal::BLUE, Stroke::NONE);
+    rect(pen, t(6.5, 13.0), t(17.5, 21.0), pal::fill(), pen.thin());
+}
+
+/// Text inside an icon, only where it is big enough to read (the toolbar, not the menus).
+fn tag(pen: &Pen, c: (f32, f32), size: f32, text: &str, color: Color32) {
+    if pen.s >= 0.9 {
+        pen.painter.text(pen.p(c.0, c.1), Align2::CENTER_CENTER, text, FontId::proportional(size * pen.s), color);
+    }
+}
+
+/// A tray with an arrow going into it (import) or out of it (export).
+fn file_io(pen: &Pen, tag_text: &str, import: bool) {
+    let big = pen.s >= 0.9;
+    let top = if big { 12.0 } else { 13.0 };
+    rect(pen, (2.5, top), (21.5, 21.5), pal::fill(), pen.stroke());
+    let col = if import { pal::GREEN } else { pal::BLUE };
+    let st = Stroke::new(2.2 * pen.s, col);
+    if import {
+        pen.line_c(&[(12.0, 1.5), (12.0, top - 2.0)], st);
+        pen.head((12.0, top + 1.5), (0.0, 1.0), 4.5, col);
+    } else {
+        pen.line_c(&[(12.0, top + 2.0), (12.0, 5.0)], st);
+        pen.head((12.0, 1.5), (0.0, -1.0), 4.5, col);
+    }
+    if big {
+        tag(pen, (12.0, 17.2), 7.2, tag_text, pal::ink());
+    } else {
+        pen.line_c(&[(7.0, 17.5), (17.0, 17.5)], pen.thin());
+    }
+}
+
+pub(super) fn paint(pen: &Pen, icon: Icon) {
+    use pal::*;
+    #[allow(non_snake_case)]
+    let (FILL, SHADE, SHADE_DARK) = (pal::fill(), pal::shade(), pal::shade_dark());
+    match icon {
+        Icon::FileNew => {
+            page(pen, (4.0, 2.0), (18.0, 21.0), 5.0);
+            pen.dot((17.0, 17.0), 5.0, GREEN);
+            let st = Stroke::new(1.8 * pen.s, Color32::WHITE);
+            pen.line_c(&[(17.0, 14.0), (17.0, 20.0)], st);
+            pen.line_c(&[(14.0, 17.0), (20.0, 17.0)], st);
+        }
+        Icon::FileOpen => {
+            pen.poly(&[(2.0, 5.0), (9.0, 5.0), (11.0, 7.5), (20.0, 7.5), (20.0, 19.0), (2.0, 19.0)], SHADE);
+            pen.poly(&[(5.5, 10.5), (22.5, 10.5), (19.5, 19.0), (2.0, 19.0)], YELLOW);
+        }
+        Icon::FileSave => floppy(pen, (0.0, 0.0), 1.0),
+        Icon::FileSaveAs => {
+            floppy(pen, (-0.5, -0.5), 0.82);
+            pen.line_c(&[(14.5, 19.5), (21.0, 13.0)], Stroke::new(3.6 * pen.s, ORANGE));
+            pen.poly_c(&[(11.8, 22.2), (13.0, 18.3), (15.7, 21.0)], pen.ink, Stroke::NONE);
+        }
+        Icon::Picture(v) => {
+            let (o, w) = if v == 0 { ((3.0, 5.0), 18.0) } else { ((2.0, 3.0), 17.0) };
+            let (a, b) = (o, (o.0 + w, o.1 + w * 0.75));
+            rect(pen, a, b, BLUE_SOFT, Stroke::NONE);
+            pen.poly_c(&[(a.0, b.1), (a.0 + w * 0.33, a.1 + w * 0.3), (a.0 + w * 0.66, b.1)], GREEN, Stroke::NONE);
+            pen.poly_c(&[(a.0 + w * 0.45, b.1), (a.0 + w * 0.72, a.1 + w * 0.45), (b.0, b.1)], Color32::from_rgb(0x2E, 0x84, 0x4A), Stroke::NONE);
+            pen.dot((a.0 + w * 0.72, a.1 + w * 0.22), 1.8 * w / 18.0, YELLOW);
+            rect(pen, a, b, Color32::TRANSPARENT, pen.stroke());
+            match v {
+                1 => {
+                    // a folder: the image comes from a file
+                    pen.poly_c(&[(13.0, 14.5), (16.5, 14.5), (17.5, 15.8), (22.5, 15.8), (22.5, 22.0), (13.0, 22.0)], YELLOW, pen.thin());
+                }
+                2 => {
+                    // a camera: the image comes from the view
+                    pen.poly_c(&[(15.5, 14.0), (19.5, 14.0), (20.5, 15.5), (15.0, 15.5)], pen.ink, Stroke::NONE);
+                    rect(pen, (12.5, 15.5), (22.5, 22.0), pen.ink, Stroke::NONE);
+                    pen.painter.circle(pen.p(17.5, 18.7), 2.3 * pen.s, BLUE_SOFT, Stroke::new(1.0 * pen.s, Color32::WHITE));
+                }
+                3 => red_x(pen, (18.0, 18.0), 4.8),
+                _ => {}
+            }
+        }
+        Icon::Import(t) => file_io(pen, t, true),
+        Icon::Export(t) => file_io(pen, t, false),
+        Icon::Film => {
+            rect(pen, (2.0, 5.0), (22.0, 19.0), pen.ink, Stroke::NONE);
+            for x in [4.5, 8.5, 12.5, 16.5, 20.5] {
+                rect(pen, (x - 1.0, 6.2), (x + 0.6, 7.9), FILL, Stroke::NONE);
+                rect(pen, (x - 1.0, 16.1), (x + 0.6, 17.8), FILL, Stroke::NONE);
+            }
+            rect(pen, (3.5, 9.3), (11.3, 14.7), BLUE_SOFT, Stroke::NONE);
+            rect(pen, (12.7, 9.3), (20.5, 14.7), BLUE_SOFT, Stroke::NONE);
+        }
+        Icon::Drawing => {
+            rect(pen, (3.0, 2.0), (21.0, 22.0), FILL, pen.stroke());
+            pen.line_c(&[(7.0, 15.0), (7.0, 10.0), (12.0, 6.0), (17.0, 10.0), (17.0, 15.0), (7.0, 15.0)], Stroke::new(1.3 * pen.s, BLUE));
+            let st = Stroke::new(1.0 * pen.s, RED);
+            pen.line_c(&[(7.0, 18.5), (17.0, 18.5)], st);
+            pen.line_c(&[(7.0, 17.0), (7.0, 20.0)], st);
+            pen.line_c(&[(17.0, 17.0), (17.0, 20.0)], st);
+        }
+        Icon::Sheets => {
+            rect(pen, (7.5, 2.0), (21.5, 17.0), SHADE, pen.stroke());
+            rect(pen, (2.5, 6.0), (16.5, 22.0), FILL, pen.stroke());
+            rect(pen, (4.5, 8.0), (14.5, 20.0), Color32::TRANSPARENT, pen.thin());
+            rect(pen, (9.5, 17.0), (14.5, 20.0), BLUE_SOFT, pen.thin());
+        }
+        Icon::Report => {
+            rect(pen, (3.0, 4.0), (21.0, 20.0), FILL, pen.stroke());
+            rect(pen, (3.0, 4.0), (21.0, 8.5), SHADE, pen.stroke());
+            for y in [12.3, 16.2] {
+                pen.line_c(&[(3.0, y), (21.0, y)], pen.thin());
+            }
+            pen.line_c(&[(10.0, 4.0), (10.0, 20.0)], pen.thin());
+            pen.line_c(&[(12.5, 10.4), (18.5, 10.4)], Stroke::new(1.4 * pen.s, GREEN));
+        }
+        Icon::Json => {
+            let l = [(9.0, 3.0), (7.2, 3.3), (6.6, 5.0), (6.6, 10.0), (4.5, 12.0), (6.6, 14.0), (6.6, 19.0), (7.2, 20.7), (9.0, 21.0)];
+            pen.line(&l);
+            pen.line(&l.map(|(x, y)| (24.0 - x, y)));
+            for x in [9.5, 12.0, 14.5] {
+                pen.dot((x, 12.0), 1.2, BLUE);
+            }
+        }
+        Icon::Credits => {
+            pen.circle((9.5, 7.5), 3.6, SKIN);
+            let pts = pen.ell((9.5, 20.0), 7.0, 6.5, 180.0, 360.0);
+            pen.poly(&pts, BLUE_SOFT);
+            pen.circle((18.0, 17.0), 4.5, YELLOW);
+            pen.arc((18.0, 17.0), 2.1, 45.0, 315.0, pen.thin());
+        }
+        Icon::Script => {
+            page(pen, (4.0, 2.0), (20.0, 22.0), 5.0);
+            pen.poly_c(&[(9.0, 9.0), (9.0, 18.0), (16.5, 13.5)], GREEN, Stroke::NONE);
+        }
+        Icon::Quit => {
+            let st = Stroke::new(2.2 * pen.s, RED);
+            pen.arc((12.0, 13.0), 7.5, -55.0, 235.0, st);
+            pen.line_c(&[(12.0, 3.0), (12.0, 12.0)], st);
+        }
+        Icon::Cut => {
+            pen.line(&[(9.0, 14.5), (16.5, 2.5)]);
+            pen.line(&[(15.0, 14.5), (7.5, 2.5)]);
+            let ring = Stroke::new(1.9 * pen.s, RED);
+            pen.painter.circle(pen.p(7.0, 18.0), 3.3 * pen.s, FILL, ring);
+            pen.painter.circle(pen.p(17.0, 18.0), 3.3 * pen.s, FILL, ring);
+        }
+        Icon::Copy => {
+            rect(pen, (8.5, 2.5), (20.5, 16.0), FILL, pen.stroke());
+            rect(pen, (3.5, 8.0), (15.5, 21.5), FILL, pen.stroke());
+            for (y, x1) in [(12.5, 12.5), (15.5, 12.5), (18.5, 10.0)] {
+                pen.line_c(&[(6.5, y), (x1, y)], pen.thin());
+            }
+        }
+        Icon::Paste | Icon::PasteInPlace => {
+            rect(pen, (4.0, 4.0), (20.0, 22.0), Color32::from_rgb(0xC8, 0x9A, 0x5E), pen.stroke());
+            rect(pen, (7.0, 8.0), (17.0, 20.0), FILL, pen.thin());
+            rect(pen, (8.5, 2.5), (15.5, 6.0), SHADE_DARK, pen.stroke());
+            if icon == Icon::PasteInPlace {
+                let st = Stroke::new(1.2 * pen.s, RED);
+                pen.painter.circle_stroke(pen.p(12.0, 14.0), 3.0 * pen.s, st);
+                pen.line_c(&[(12.0, 9.5), (12.0, 18.5)], st);
+                pen.line_c(&[(7.5, 14.0), (16.5, 14.0)], st);
+            } else {
+                for y in [11.5, 14.5, 17.5] {
+                    pen.line_c(&[(9.0, y), (15.0, y)], pen.thin());
+                }
+            }
+        }
+        Icon::Purge => {
+            pen.line_c(&[(20.0, 2.0), (13.0, 11.5)], Stroke::new(2.2 * pen.s, Color32::from_rgb(0x9A, 0x6B, 0x3C)));
+            pen.poly(&[(10.0, 10.0), (16.0, 13.5), (12.5, 21.5), (3.5, 17.0)], YELLOW);
+            pen.line_c(&[(10.5, 14.0), (8.0, 19.5)], pen.thin());
+            pen.line_c(&[(13.0, 15.0), (11.0, 20.5)], pen.thin());
+            pen.dot((20.0, 18.0), 1.2, BLUE);
+            pen.dot((18.0, 21.5), 0.9, BLUE);
+        }
+        Icon::DeleteGuides => {
+            pen.dashed((2.5, 20.5), (21.5, 3.5), pen.stroke());
+            pen.dot((6.5, 16.9), 2.2, RED);
+            pen.dot((14.5, 9.8), 2.2, RED);
+            red_x(pen, (17.5, 17.5), 4.8);
+        }
+        Icon::SelectAll | Icon::SelectNone => {
+            let all = icon == Icon::SelectAll;
+            let col = if all { BLUE } else { SHADE_DARK };
+            dashed_rect(pen, (3.0, 3.0), (21.0, 21.0), Stroke::new(1.3 * pen.s, if all { BLUE } else { pen.ink }));
+            let fill = if all { BLUE_SOFT } else { Color32::TRANSPARENT };
+            rect(pen, (6.5, 6.5), (12.5, 12.5), fill, Stroke::new(1.3 * pen.s, col));
+            pen.painter.circle(pen.p(15.5, 15.5), 3.2 * pen.s, fill, Stroke::new(1.3 * pen.s, col));
+        }
+        Icon::Component => {
+            rounded(pen, (2.5, 2.5), (21.5, 21.5), Stroke::new(1.3 * pen.s, PURPLE));
+            mini_cube(pen, (12.0, 12.0), 0.62);
+        }
+        Icon::Parametric => {
+            mini_cube(pen, (12.0, 9.0), 0.55);
+            pen.line_c(&[(3.5, 20.0), (20.5, 20.0)], pen.stroke());
+            pen.painter.circle(pen.p(14.5, 20.0), 2.5 * pen.s, BLUE, pen.thin());
+        }
+        Icon::Explode => {
+            mini_cube(pen, (12.0, 12.0), 0.45);
+            let st = Stroke::new(1.5 * pen.s, BLUE);
+            for (dx, dy) in [(1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0)] {
+                pen.line_c(&[(12.0 + 5.5 * dx, 12.0 + 5.5 * dy), (12.0 + 8.0 * dx, 12.0 + 8.0 * dy)], st);
+                pen.head((12.0 + 10.5 * dx, 12.0 + 10.5 * dy), (dx, dy), 3.4, BLUE);
+            }
+        }
+        Icon::CloseGroup => {
+            rounded(pen, (2.5, 4.0), (14.5, 20.0), Stroke::new(1.3 * pen.s, BLUE));
+            rect(pen, (5.0, 8.5), (10.5, 15.5), BLUE_SOFT, pen.thin());
+            pen.line(&[(9.0, 12.0), (19.5, 12.0)]);
+            pen.head((22.5, 12.0), (1.0, 0.0), 4.0, pen.ink);
+        }
+        Icon::Intersect(v) => {
+            pen.poly(&[(2.0, 15.0), (12.0, 10.5), (22.0, 14.5), (12.0, 19.5)], FILL);
+            pen.poly(&[(9.0, 3.5), (15.0, 6.0), (15.0, 19.0), (9.0, 16.5)], BLUE_SOFT);
+            pen.line_c(&[(9.0, 13.0), (15.0, 15.5)], Stroke::new(2.0 * pen.s, RED));
+            match v {
+                1 => dashed_rect(pen, (0.8, 1.0), (23.2, 23.0), Stroke::new(1.0 * pen.s, BLUE)),
+                2 => rounded(pen, (0.8, 1.0), (23.2, 23.0), Stroke::new(1.0 * pen.s, PURPLE)),
+                _ => {}
+            }
+        }
+        Icon::ReverseFaces => {
+            pen.poly(&[(4.0, 4.0), (20.0, 4.0), (4.0, 20.0)], FILL);
+            pen.poly(&[(20.0, 4.0), (20.0, 20.0), (4.0, 20.0)], BACK);
+            pen.line(&[(9.5, 14.5), (14.5, 9.5)]);
+            pen.head((17.0, 7.0), (1.0, -1.0), 4.0, pen.ink);
+            pen.head((7.0, 17.0), (-1.0, 1.0), 4.0, pen.ink);
+        }
+        Icon::OrientFaces => {
+            rect(pen, (2.5, 12.0), (10.5, 21.0), FILL, pen.stroke());
+            rect(pen, (13.5, 12.0), (21.5, 21.0), FILL, pen.stroke());
+            let st = Stroke::new(1.6 * pen.s, BLUE);
+            for x in [6.5, 17.5] {
+                pen.line_c(&[(x, 16.5), (x, 6.0)], st);
+                pen.head((x, 3.0), (0.0, -1.0), 3.8, BLUE);
+            }
+        }
+        Icon::Flip(axis) => {
+            let c = [RED, GREEN, BLUE][axis.min(2) as usize];
+            pen.dashed((12.0, 2.0), (12.0, 22.0), Stroke::new(1.4 * pen.s, c));
+            pen.poly(&[(3.0, 16.0), (10.0, 16.0), (10.0, 5.0)], SHADE);
+            pen.closed(&[(21.0, 16.0), (14.0, 16.0), (14.0, 5.0)]);
+            let st = Stroke::new(1.5 * pen.s, c);
+            pen.line_c(&[(6.5, 20.0), (17.5, 20.0)], st);
+            pen.head((20.5, 20.0), (1.0, 0.0), 3.6, c);
+            pen.head((3.5, 20.0), (-1.0, 0.0), 3.6, c);
+        }
+        Icon::Solids(op) => solid(pen, op),
+        Icon::Unfold => {
+            let cells = [(9.5, 2.0), (9.5, 7.0), (9.5, 12.0), (9.5, 17.0), (4.5, 7.0), (14.5, 7.0)];
+            for (i, (x, y)) in cells.into_iter().enumerate() {
+                let fill = if i == 1 { BLUE_SOFT } else { FILL };
+                rect(pen, (x, y), (x + 5.0, y + 5.0), fill, pen.thin());
+            }
+        }
+        Icon::Snap(k) => snap(pen, k),
+        _ => {}
+    }
+}
+
+/// Two overlapping boxes (the first one bottom-left), what each solid tool keeps.
+/// `op` indexes `SolidOp::ALL`: Outer Shell, Intersect, Union, Subtract, Trim, Split.
+fn solid(pen: &Pen, op: u8) {
+    let (a0, a1, b0, b1, o0, o1) = ((3.0, 9.0), (15.0, 21.0), (9.0, 3.0), (21.0, 15.0), (9.0, 9.0), (15.0, 15.0));
+    let none = Stroke::NONE;
+    let thin = pen.thin();
+    let union_outline = [(3.0, 9.0), (9.0, 9.0), (9.0, 3.0), (21.0, 3.0), (21.0, 15.0), (15.0, 15.0), (15.0, 21.0), (3.0, 21.0)];
+    // the first box without the shared part (an L)
+    let a_rest = |c: Color32| {
+        rect(pen, (3.0, 15.0), (15.0, 21.0), c, none);
+        rect(pen, (3.0, 9.0), (9.0, 15.0), c, none);
+    };
+    let b_rest = |c: Color32| {
+        rect(pen, (9.0, 3.0), (21.0, 9.0), c, none);
+        rect(pen, (15.0, 9.0), (21.0, 15.0), c, none);
+    };
+    let dash = Stroke::new(1.0 * pen.s, pal::shade_dark());
+    match op {
+        0 => {
+            rect(pen, a0, a1, pal::shade(), none);
+            rect(pen, b0, b1, pal::shade(), none);
+            pen.painter.add(egui::Shape::closed_line(pen.pts(&union_outline), Stroke::new(2.4 * pen.s, pen.ink)));
+        }
+        1 => {
+            rect(pen, o0, o1, pal::BLUE, none);
+            rect(pen, a0, a1, Color32::TRANSPARENT, dash);
+            rect(pen, b0, b1, Color32::TRANSPARENT, dash);
+            rect(pen, o0, o1, Color32::TRANSPARENT, pen.stroke());
+        }
+        2 => {
+            rect(pen, a0, a1, pal::BLUE_SOFT, none);
+            rect(pen, b0, b1, pal::BLUE_SOFT, none);
+            pen.closed(&union_outline);
+            pen.dashed((9.0, 9.0), (9.0, 15.0), dash);
+            pen.dashed((9.0, 15.0), (15.0, 15.0), dash);
+        }
+        3 | 4 => {
+            if op == 4 {
+                rect(pen, b0, b1, pal::shade(), thin);
+            } else {
+                rect(pen, b0, b1, Color32::TRANSPARENT, dash);
+            }
+            a_rest(pal::BLUE_SOFT);
+            pen.closed(&[(3.0, 9.0), (9.0, 9.0), (9.0, 15.0), (15.0, 15.0), (15.0, 21.0), (3.0, 21.0)]);
+        }
+        _ => {
+            a_rest(pal::BLUE_SOFT);
+            b_rest(pal::shade());
+            rect(pen, o0, o1, pal::BLUE, none);
+            rect(pen, a0, a1, Color32::TRANSPARENT, thin);
+            rect(pen, b0, b1, Color32::TRANSPARENT, thin);
+        }
+    }
+}
+
+/// Each inference: a little scene and its marker in the colours the view uses.
+fn snap(pen: &Pen, k: InferenceKind) {
+    use pal::*;
+    use InferenceKind as K;
+    #[allow(non_snake_case)]
+    let FILL = pal::fill();
+    let thin = pen.thin();
+    let ring = |c: (f32, f32), col: Color32| pen.painter.circle(pen.p(c.0, c.1), 3.0 * pen.s, col, Stroke::new(1.0 * pen.s, pen.ink));
+    let grid = |hi: bool| {
+        let st = Stroke::new(0.9 * pen.s, pal::shade_dark());
+        for v in [4.0, 10.0, 16.0, 22.0] {
+            pen.line_c(&[(v - 2.0, 2.0), (v - 2.0, 22.0)], st);
+            pen.line_c(&[(2.0, v - 2.0), (22.0, v - 2.0)], st);
+        }
+        if hi {
+            pen.line_c(&[(2.0, 14.0), (22.0, 14.0)], Stroke::new(2.2 * pen.s, ORANGE));
+        }
+    };
+    match k {
+        K::Endpoint => {
+            pen.line(&[(4.0, 20.0), (17.0, 7.0)]);
+            ring((17.0, 7.0), GREEN);
+        }
+        K::Midpoint => {
+            pen.line(&[(3.0, 21.0), (21.0, 3.0)]);
+            ring((12.0, 12.0), CYAN);
+        }
+        K::Center => {
+            pen.circle((12.0, 12.0), 8.0, Color32::TRANSPARENT);
+            ring((12.0, 12.0), BLUE);
+        }
+        K::Intersection => {
+            pen.line(&[(3.0, 20.0), (21.0, 4.0)]);
+            pen.line(&[(3.0, 4.0), (21.0, 20.0)]);
+            let st = Stroke::new(2.0 * pen.s, RED);
+            pen.line_c(&[(9.5, 9.0), (14.5, 15.0)], st);
+            pen.line_c(&[(9.5, 15.0), (14.5, 9.0)], st);
+        }
+        K::Origin => {
+            let o = (8.0, 16.0);
+            pen.line_c(&[o, (22.0, 16.0)], Stroke::new(1.6 * pen.s, RED));
+            pen.line_c(&[o, (16.0, 9.0)], Stroke::new(1.6 * pen.s, GREEN));
+            pen.line_c(&[o, (8.0, 2.0)], Stroke::new(1.6 * pen.s, BLUE));
+            ring(o, YELLOW);
+        }
+        K::OnEdge => {
+            pen.line(&[(3.0, 18.0), (21.0, 8.0)]);
+            rect(pen, (9.8, 10.8), (14.2, 15.2), RED, Stroke::new(1.0 * pen.s, pen.ink));
+        }
+        K::OnFace => {
+            pen.poly(&[(2.0, 14.0), (12.0, 7.0), (22.0, 11.0), (12.0, 19.0)], FILL);
+            pen.poly_c(&[(12.0, 9.5), (15.0, 12.8), (12.0, 16.0), (9.0, 12.8)], BLUE, Stroke::new(1.0 * pen.s, pen.ink));
+        }
+        K::OnGuide => {
+            pen.dashed((2.5, 20.5), (21.5, 3.5), pen.stroke());
+            ring((12.0, 12.0), pen.ink);
+        }
+        K::GuidePoint => {
+            pen.dashed((2.5, 20.5), (14.0, 10.2), pen.stroke());
+            let st = Stroke::new(1.8 * pen.s, pen.ink);
+            pen.line_c(&[(17.0, 3.0), (17.0, 13.0)], st);
+            pen.line_c(&[(12.0, 8.0), (22.0, 8.0)], st);
+        }
+        K::OnRedAxis | K::OnGreenAxis | K::OnBlueAxis => {
+            let c = match k {
+                K::OnRedAxis => RED,
+                K::OnGreenAxis => GREEN,
+                _ => BLUE,
+            };
+            pen.dashed((3.0, 20.0), (21.0, 4.0), Stroke::new(2.4 * pen.s, c));
+            ring((15.0, 9.3), c);
+        }
+        K::ParallelToEdge => {
+            pen.line(&[(3.0, 15.0), (14.0, 4.0)]);
+            pen.line_c(&[(10.0, 21.0), (21.0, 10.0)], Stroke::new(2.0 * pen.s, MAGENTA));
+        }
+        K::PerpendicularToEdge => {
+            pen.line(&[(3.0, 19.0), (21.0, 19.0)]);
+            pen.line_c(&[(10.0, 19.0), (10.0, 3.0)], Stroke::new(2.0 * pen.s, MAGENTA));
+            pen.line_c(&[(10.0, 15.0), (14.0, 15.0), (14.0, 19.0)], thin);
+        }
+        K::FromPoint => {
+            ring((5.0, 19.0), pen.ink);
+            pen.dashed((7.5, 16.5), (19.0, 5.0), Stroke::new(1.4 * pen.s, MAGENTA));
+            pen.dot((19.5, 4.5), 1.8, MAGENTA);
+        }
+        K::Tangent => {
+            pen.circle((11.0, 14.0), 7.0, Color32::TRANSPARENT);
+            pen.line_c(&[(2.0, 7.0), (22.0, 7.0)], Stroke::new(2.0 * pen.s, MAGENTA));
+            pen.dot((11.0, 7.0), 2.0, pen.ink);
+        }
+        K::Square => {
+            rect(pen, (4.0, 4.0), (20.0, 20.0), FILL, pen.stroke());
+            pen.dashed((4.0, 20.0), (20.0, 4.0), Stroke::new(1.4 * pen.s, MAGENTA));
+        }
+        K::GoldenSection => {
+            rect(pen, (2.5, 6.5), (21.5, 18.2), FILL, pen.stroke());
+            pen.line_c(&[(14.2, 6.5), (14.2, 18.2)], thin);
+            pen.arc((14.2, 18.2), 11.7, 180.0, 270.0, Stroke::new(1.4 * pen.s, MAGENTA));
+        }
+        K::HalfCircle => {
+            pen.arc((12.0, 16.0), 9.0, 180.0, 360.0, pen.stroke());
+            pen.line_c(&[(3.0, 16.0), (21.0, 16.0)], Stroke::new(1.4 * pen.s, MAGENTA));
+            pen.dot((12.0, 16.0), 1.6, MAGENTA);
+        }
+        K::GridPoint => {
+            grid(false);
+            ring((14.0, 14.0), ORANGE);
+        }
+        K::OnGridLine => grid(true),
+        K::Free => pen.dot((12.0, 12.0), 2.0, pen.ink),
+    }
+}

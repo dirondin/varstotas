@@ -517,7 +517,9 @@ impl VarstotasApp {
                 }
             }
             let text = RichText::new(it.name());
-            ui.label(if it == Item::Sep { text.color(theme::text_dim()) } else { text });
+            // long names (Export Attributions …) are cut, the window keeps its width
+            let text = if it == Item::Sep { text.color(theme::text_dim()) } else { text };
+            ui.add(egui::Label::new(text).truncate()).on_hover_text(it.name());
         };
         // the lists down to the bottom of the window (less the column headings)
         let list_h = (ui.clip_rect().bottom() - ui.cursor().top() - 40.0).max(160.0);
@@ -551,7 +553,13 @@ impl VarstotasApp {
             });
             heading(&mut cols[1], "Reserve");
             egui::ScrollArea::vertical().id_salt("tb_off").max_height(list_h).auto_shrink([false, true]).show(&mut cols[1], |ui| {
+                let mut group = None;
                 for it in std::iter::once(Item::Sep).chain(spare) {
+                    if it.group().is_some() && it.group() != group {
+                        group = it.group();
+                        ui.add_space(4.0);
+                        ui.label(RichText::new(group.unwrap_or_default()).small().color(theme::text_dim()));
+                    }
                     ui.horizontal(|ui| {
                         let r = ui.add(egui::Button::new("←").small()).on_hover_text("To the end of the toolbar");
                         super::tray_lib::spot(format!("tb_in:{}", it.key()), r.rect.center());

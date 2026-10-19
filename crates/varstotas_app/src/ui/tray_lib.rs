@@ -360,7 +360,7 @@ pub enum FolderAct {
 }
 
 /// The context menu of a library folder's heading (`title`): New Folder… on My Library
-/// (`folder` ""), Rename Folder… and Delete Folder (when empty) on a subfolder.
+/// (`folder` ""), Rename Folder… and Delete Folder… (asks first) on a subfolder.
 pub fn folder_menu(title: &Response, folder: &str, dir: Option<&Path>, act: &mut Option<FolderAct>) {
     let Some(dir) = dir else { return };
     title.context_menu(|ui| {
@@ -380,7 +380,7 @@ pub fn folder_menu(title: &Response, folder: &str, dir: Option<&Path>, act: &mut
             ui.close();
         }
         let empty = std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none());
-        let r = ui.add_enabled(empty, egui::Button::new("Delete Folder")).on_disabled_hover_text("Only an empty folder (move or delete what is in it first)");
+        let r = ui.button(if empty { "Delete Folder…" } else { "Delete Folder and Its Files…" });
         spot("menu:delete_folder", r.rect.center());
         if r.clicked() {
             *act = Some(FolderAct::Delete(dir.to_path_buf()));

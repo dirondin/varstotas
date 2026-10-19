@@ -13,6 +13,7 @@ impl VarstotasApp {
         self.component_rename_dialog(ctx);
         self.material_delete_dialog(ctx);
         self.folder_dialog(ctx);
+        self.folder_delete_dialog(ctx);
         if let Some(pending) = self.confirm.clone() {
             let mut choice: Option<u8> = None;
             let resp = Modal::new(Id::new("confirm_save")).show(ctx, |ui| {

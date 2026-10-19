@@ -1,6 +1,7 @@
 //! Top toolbar with large vector-icon buttons (standard views, projection and face styles are
 //! in the viewport's own controls, `view_hud.rs`).
 
+use super::commands::Cmd;
 use super::icons::Icon;
 use super::{icon_button, theme};
 use crate::app::{Action, VarstotasApp};
@@ -26,8 +27,9 @@ pub fn set_button_side(side: u32) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item {
     Tool(ToolId),
-    Text3d,
-    ZoomExtents,
+    /// A menu command (File, Edit, Solid Tools, a snap …).
+    Cmd(Cmd),
+    /// The magnet: opens the Snapping menu.
     Snapping,
     /// A line between groups.
     Sep,
@@ -38,8 +40,7 @@ impl Item {
     pub fn key(self) -> String {
         match self {
             Item::Tool(id) => format!("{id:?}"),
-            Item::Text3d => "Text3d".into(),
-            Item::ZoomExtents => "ZoomExtents".into(),
+            Item::Cmd(c) => c.key(),
             Item::Snapping => "Snapping".into(),
             Item::Sep => "|".into(),
         }
@@ -47,38 +48,45 @@ impl Item {
 
     pub fn from_key(k: &str) -> Option<Item> {
         match k {
-            "Text3d" => Some(Item::Text3d),
-            "ZoomExtents" => Some(Item::ZoomExtents),
             "Snapping" => Some(Item::Snapping),
             "|" => Some(Item::Sep),
-            _ => ToolId::ALL.iter().copied().find(|t| format!("{t:?}") == k).map(Item::Tool),
+            _ => ToolId::ALL.iter().copied().find(|t| format!("{t:?}") == k).map(Item::Tool).or_else(|| Cmd::from_key(k).map(Item::Cmd)),
         }
     }
 
-    pub fn name(self) -> &'static str {
+    pub fn name(self) -> String {
         match self {
-            Item::Tool(id) => id.name(),
-            Item::Text3d => "3D Text",
-            Item::ZoomExtents => "Zoom Extents",
-            Item::Snapping => "Snapping",
-            Item::Sep => "Separator",
+            Item::Tool(id) => id.name().into(),
+            Item::Cmd(c) => c.name(),
+            Item::Snapping => "Snapping Menu".into(),
+            Item::Sep => "Separator".into(),
         }
     }
 
     pub fn icon(self) -> Option<Icon> {
         match self {
             Item::Tool(id) => Some(id.icon()),
-            Item::Text3d => Some(Icon::Text3d),
-            Item::ZoomExtents => Some(Icon::ZoomExtents),
+            Item::Cmd(c) => Some(c.icon()),
             Item::Snapping => Some(Icon::Magnet),
             Item::Sep => None,
         }
     }
 
-    /// Every button there is (separators aside), in the menus' order.
+    /// The heading it comes under in the reserve (the tools and the first commands have none).
+    pub fn group(self) -> Option<&'static str> {
+        match self {
+            Item::Cmd(c) if !matches!(c, Cmd::Text3d | Cmd::ZoomExtents) => Some(c.group()),
+            _ => None,
+        }
+    }
+
+    /// Every button there is (separators aside): the tools, then the commands in the menus' order
+    /// (3D Text, Zoom Extents and the magnet first, as before the commands came).
     pub fn all() -> Vec<Item> {
         let mut v: Vec<Item> = ToolId::ALL.iter().copied().filter(|t| t.implemented()).map(Item::Tool).collect();
-        v.extend([Item::Text3d, Item::ZoomExtents, Item::Snapping]);
+        let first = [Cmd::Text3d, Cmd::ZoomExtents];
+        v.extend([Item::Cmd(Cmd::Text3d), Item::Cmd(Cmd::ZoomExtents), Item::Snapping]);
+        v.extend(Cmd::all().into_iter().filter(|c| !first.contains(c)).map(Item::Cmd));
         v
     }
 }
@@ -95,8 +103,8 @@ pub fn default_layout() -> Vec<Item> {
     v.push(Sep);
     v.extend([T::Move, T::Rotate, T::Scale, T::PushPull, T::Offset, T::FollowMe, T::Chamfer, T::Fillet].map(Tool));
     v.push(Sep);
-    v.extend([Tool(T::Tape), Tool(T::Dimension), Tool(T::Text), Item::Text3d, Tool(T::Axes), Tool(T::Section), Tool(T::GuidePlane), Sep]);
-    v.extend([Tool(T::Orbit), Tool(T::Pan), Tool(T::Zoom), Item::ZoomExtents, Sep, Item::Snapping]);
+    v.extend([Tool(T::Tape), Tool(T::Dimension), Tool(T::Text), Item::Cmd(Cmd::Text3d), Tool(T::Axes), Tool(T::Section), Tool(T::GuidePlane), Sep]);
+    v.extend([Tool(T::Orbit), Tool(T::Pan), Tool(T::Zoom), Item::Cmd(Cmd::ZoomExtents), Sep, Item::Snapping]);
     v
 }
 
@@ -148,11 +156,19 @@ impl VarstotasApp {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn action_button(&mut self, ui: &mut Ui, icon: Icon, selected: bool, title: &str, sc: Option<&str>, desc: &str, action: Action) {
-        let resp = icon_button(ui, icon, selected, BTN());
-        if tip(resp, title, sc, desc).clicked() {
-            self.actions.push(action);
+    /// A menu command: greyed out where it does not apply, pressed when a switch is on.
+    fn cmd_button(&mut self, ui: &mut Ui, c: Cmd) {
+        let enabled = c.enabled(self);
+        let on = c.checked(self).unwrap_or(false);
+        // no child ui here: a scope would not wrap to the next row
+        let r = icon_button(ui, c.icon(), on, BTN());
+        if !enabled {
+            // icon_button paints at full strength: veil it
+            ui.painter().rect_filled(r.rect, 7.0, theme::toolbar_bg().gamma_multiply(0.6));
+        }
+        super::tray_lib::spot(format!("tb:{}", c.key()), r.rect.center());
+        if tip(r, &c.name(), c.shortcut().as_deref(), &c.description()).clicked() && enabled {
+            self.actions.push(c.action());
         }
     }
 
@@ -190,16 +206,7 @@ impl VarstotasApp {
             for item in items {
                 match item {
                     Item::Tool(id) => self.tool_button(ui, id),
-                    Item::Text3d => self.action_button(ui, Icon::Text3d, false, "3D Text", None, "Add text as 3D geometry (a group).", Action::Text3d),
-                    Item::ZoomExtents => self.action_button(
-                        ui,
-                        Icon::ZoomExtents,
-                        false,
-                        "Zoom Extents",
-                        crate::keymap::label(crate::keymap::KeyCmd::ZoomExtents).as_deref(),
-                        "Fit the whole model in the view.",
-                        Action::ZoomExtents,
-                    ),
+                    Item::Cmd(c) => self.cmd_button(ui, c),
                     Item::Snapping => self.snap_button(ui),
                     Item::Sep => group_sep(ui),
                 }
@@ -222,7 +229,12 @@ mod tests {
         assert_eq!(custom, [Item::Tool(ToolId::Line), Item::Sep, Item::Snapping]);
         // the reserve: everything else, no separators
         let r = reserve(&custom);
-        assert!(!r.contains(&Item::Tool(ToolId::Line)) && !r.contains(&Item::Sep) && r.contains(&Item::ZoomExtents));
+        assert!(!r.contains(&Item::Tool(ToolId::Line)) && !r.contains(&Item::Sep) && r.contains(&Item::Cmd(Cmd::ZoomExtents)));
+        // every command can go on the toolbar, and comes back from its id
+        assert!(r.contains(&Item::Cmd(Cmd::Solid(varstotas_kernel::SolidOp::Union))));
+        for i in Item::all() {
+            assert_eq!(Item::from_key(&i.key()), Some(i));
+        }
         assert_eq!(r.len() + 2, Item::all().len());
     }
 }

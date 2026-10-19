@@ -4,6 +4,8 @@
 use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, vec2};
 use std::f32::consts::PI;
 
+mod cmd;
+
 #[allow(dead_code)] // full icon set; some are only used by later tools
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Icon {
@@ -92,6 +94,46 @@ pub enum Icon {
     Pyramid,
     Sphere,
     Torus,
+    // menu commands (`cmd.rs`)
+    FileNew,
+    FileOpen,
+    FileSave,
+    FileSaveAs,
+    /// The document's preview: 0 show, 1 from a file, 2 from the view, 3 remove.
+    Picture(u8),
+    /// A format's import / export (the format is written in where there is room).
+    Import(&'static str),
+    Export(&'static str),
+    Film,
+    Drawing,
+    Sheets,
+    Report,
+    Json,
+    Credits,
+    Script,
+    Quit,
+    Cut,
+    Copy,
+    Paste,
+    PasteInPlace,
+    Purge,
+    DeleteGuides,
+    SelectAll,
+    SelectNone,
+    Component,
+    Parametric,
+    Explode,
+    CloseGroup,
+    /// Intersect Faces: 0 with the model, 1 with the selection, 2 with the context.
+    Intersect(u8),
+    ReverseFaces,
+    OrientFaces,
+    /// Flip Along: 0 red, 1 green, 2 blue.
+    Flip(u8),
+    /// A solid tool, by its index in `SolidOp::ALL`.
+    Solids(u8),
+    Unfold,
+    Snap(crate::inference::InferenceKind),
 }
 
 /// Palette used by icons.
@@ -870,5 +912,6 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.poly(&[(7.0, 9.0), (13.0, 9.0), (13.0, 17.0), (7.0, 17.0)], BLUE_SOFT);
             pen.poly(&[(13.0, 9.0), (17.0, 7.0), (17.0, 15.0), (13.0, 17.0)], SHADE);
         }
+        _ => cmd::paint(&pen, icon),
     }
 }

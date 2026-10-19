@@ -8,6 +8,7 @@
 use crate::app::{Action, VarstotasApp};
 use crate::plugins::{Lang, ParamKind, Plugin};
 use crate::ui::console::LogLine;
+use crate::ui::icons::Icon;
 use egui::{Context, Key, RichText, Ui};
 use varstotas_kernel::glam::DVec3;
 use serde_json::{Map, Value, json};
@@ -163,8 +164,9 @@ impl VarstotasApp {
             return;
         }
         ui.separator();
+        let icon = if export { Icon::Export("") } else { Icon::Import("") };
         for (i, label) in items {
-            if ui.button(label).clicked() {
+            if super::menu::icon_row(ui, Some(icon), &label, None, true, false).clicked() {
                 self.actions.push(if export { Action::PluginExport(i) } else { Action::PluginImport(i) });
                 ui.close();
             }
@@ -186,7 +188,7 @@ impl VarstotasApp {
         }
         ui.separator();
         for (i, label) in items {
-            if ui.button(label).clicked() {
+            if super::menu::icon_row(ui, Some(Icon::Import("")), &label, None, true, false).clicked() {
                 self.actions.push(Action::ImportModelPlugin(i));
                 ui.close();
             }

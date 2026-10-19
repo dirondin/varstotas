@@ -2,26 +2,19 @@
 
 use crate::app::{Action, FaceStylePref, VarstotasApp};
 use crate::templates::Template;
-use varstotas_kernel::{EntityRef, IntersectScope};
+use varstotas_kernel::EntityRef;
 use crate::tools::ToolId;
+use super::commands::Cmd;
 use super::icons::{Icon, paint_icon};
 use egui::{Button, Response, Ui};
 use varstotas_render::StandardView;
-
-fn cmd(key: &str) -> String {
-    if cfg!(target_os = "macos") { format!("⌘{key}") } else { format!("Ctrl+{key}") }
-}
-
-fn cmd_shift(key: &str) -> String {
-    if cfg!(target_os = "macos") { format!("⇧⌘{key}") } else { format!("Ctrl+Shift+{key}") }
-}
 
 /// Side of a menu row's icon (not taller than the text: the rows keep their height).
 const MENU_ICON: f32 = 15.0;
 
 /// A menu row with room for an icon on the left (empty when `icon` is None, so the labels of
 /// a menu line up).
-fn icon_row(ui: &mut Ui, icon: Option<Icon>, label: &str, shortcut: Option<&str>, enabled: bool, selected: bool) -> Response {
+pub(crate) fn icon_row(ui: &mut Ui, icon: Option<Icon>, label: &str, shortcut: Option<&str>, enabled: bool, selected: bool) -> Response {
     let id = ui.id().with(("menu_icon", label));
     let mut b = Button::new((egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label)).selected(selected);
     if let Some(s) = shortcut {
@@ -38,7 +31,48 @@ fn icon_row(ui: &mut Ui, icon: Option<Icon>, label: &str, shortcut: Option<&str>
     r.response
 }
 
+/// A checkbox with an icon between the box and the label.
+fn icon_check(ui: &mut Ui, on: &mut bool, icon: Icon, label: &str) -> Response {
+    let id = ui.id().with(("check_icon", label));
+    let r = ui.add(egui::Checkbox::new(on, (egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label)));
+    let x = r.rect.left() + ui.spacing().icon_width + ui.spacing().icon_spacing;
+    let rect = egui::Rect::from_min_size(egui::pos2(x, r.rect.center().y - MENU_ICON / 2.0), egui::vec2(MENU_ICON, MENU_ICON));
+    let mut painter = ui.painter().clone();
+    if !ui.is_enabled() {
+        painter.multiply_opacity(0.4);
+    }
+    paint_icon(&painter, rect, icon, false);
+    r
+}
+
+/// A submenu's row with an icon slot, like [`icon_row`].
+fn icon_menu<R>(ui: &mut Ui, icon: Option<Icon>, label: &str, add_contents: impl FnOnce(&mut Ui) -> R) -> Response {
+    let id = ui.id().with(("menu_icon", label));
+    let r = ui.menu_button((egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label), add_contents).response;
+    if let Some(icon) = icon {
+        let x = r.rect.left() + ui.spacing().button_padding.x;
+        let rect = egui::Rect::from_min_size(egui::pos2(x, r.rect.center().y - MENU_ICON / 2.0), egui::vec2(MENU_ICON, MENU_ICON));
+        let mut painter = ui.painter().clone();
+        if !ui.is_enabled() {
+            painter.multiply_opacity(0.4);
+        }
+        paint_icon(&painter, rect, icon, false);
+    }
+    r
+}
+
 impl VarstotasApp {
+    /// A command's row: its icon, name, shortcut and state.
+    fn cmd_item(&mut self, ui: &mut Ui, c: Cmd) {
+        self.cmd_item_as(ui, c, c.menu_label());
+    }
+
+    fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
+        if icon_row(ui, Some(c.icon()), label, c.shortcut().as_deref(), c.enabled(self), false).clicked() {
+            self.actions.push(c.action());
+        }
+    }
+
     fn item(&mut self, ui: &mut Ui, label: &str, shortcut: Option<&str>, enabled: bool, action: Action) {
         self.icon_item(ui, None, label, shortcut, enabled, action);
     }
@@ -58,35 +92,28 @@ impl VarstotasApp {
 
     /// Intersect / Reverse / Orient / Flip entries (Edit menu and the viewport context menu).
     fn face_ops_items(&mut self, ui: &mut Ui) {
-        let sel = &self.doc.selection;
-        let has_sel = !sel.is_empty();
-        let has_faces = sel.iter().any(|e| matches!(e, EntityRef::Face(_)));
-        let can_intersect = sel.iter().any(|e| matches!(e, EntityRef::Face(_) | EntityRef::Instance(_)));
-        ui.add_enabled_ui(can_intersect, |ui| {
-            ui.menu_button("Intersect Faces", |ui| {
-                self.item(ui, "With Model", None, true, Action::IntersectFaces(IntersectScope::Model));
-                self.item(ui, "With Selection", None, true, Action::IntersectFaces(IntersectScope::Selection));
-                self.item(ui, "With Context", None, true, Action::IntersectFaces(IntersectScope::Context));
+        ui.add_enabled_ui(Cmd::IntersectModel.enabled(self), |ui| {
+            icon_menu(ui, Some(Icon::Intersect(0)), "Intersect Faces", |ui| {
+                for c in [Cmd::IntersectModel, Cmd::IntersectSelection, Cmd::IntersectContext] {
+                    self.cmd_item(ui, c);
+                }
             });
         });
-        self.item(ui, "Reverse Faces", None, has_faces, Action::ReverseFaces);
-        self.item(ui, "Orient Faces", None, has_faces, Action::OrientFaces);
-        ui.add_enabled_ui(has_sel, |ui| {
-            ui.menu_button("Flip Along", |ui| {
-                self.item(ui, "Red Direction", None, true, Action::FlipAlong(0));
-                self.item(ui, "Green Direction", None, true, Action::FlipAlong(1));
-                self.item(ui, "Blue Direction", None, true, Action::FlipAlong(2));
+        self.cmd_item(ui, Cmd::ReverseFaces);
+        self.cmd_item(ui, Cmd::OrientFaces);
+        ui.add_enabled_ui(Cmd::FlipRed.enabled(self), |ui| {
+            icon_menu(ui, Some(Icon::Flip(0)), "Flip Along", |ui| {
+                for c in [Cmd::FlipRed, Cmd::FlipGreen, Cmd::FlipBlue] {
+                    self.cmd_item(ui, c);
+                }
             });
         });
     }
 
     fn clipboard_items(&mut self, ui: &mut Ui) {
-        let has_sel = self.doc.has_selection();
-        let has_clip = self.clipboard.is_some();
-        self.item(ui, "Cut", Some(&cmd("X")), has_sel, Action::Cut);
-        self.item(ui, "Copy", Some(&cmd("C")), has_sel, Action::Copy);
-        self.item(ui, "Paste", Some(&cmd("V")), has_clip, Action::Paste);
-        self.item(ui, "Paste in Place", Some(&cmd_shift("V")), has_clip, Action::PasteInPlace);
+        for c in [Cmd::Cut, Cmd::Copy, Cmd::Paste, Cmd::PasteInPlace] {
+            self.cmd_item(ui, c);
+        }
     }
 
     /// Right-click menu of the 3D view.
@@ -97,18 +124,12 @@ impl VarstotasApp {
             self.item(ui, "Reset", None, self.doc.model.axes.is_some(), Action::ResetAxes);
             return;
         }
-        let has_sel = self.doc.has_selection();
         self.clipboard_items(ui);
-        self.item(ui, "Erase", Some("Delete"), has_sel, Action::Delete);
+        self.cmd_item_as(ui, Cmd::Delete, "Erase");
         ui.separator();
-        self.item(ui, "Hide", None, !self.doc.selection.is_empty(), Action::HideSelected);
-        self.icon_item(ui, Some(Icon::Group), "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
-        self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
-        let has_inst = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Instance(_)));
-        let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
-            if self.doc.model.instance_params(&self.doc.active_path, *i).is_none());
-        self.item(ui, "Make Parametric", None, one_plain, Action::MakeParametric);
-        self.item(ui, "Explode", None, has_inst, Action::Explode);
+        for c in [Cmd::Hide, Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode] {
+            self.cmd_item(ui, c);
+        }
         ui.separator();
         if let Some(i) = self.doc.section_sel {
             let on = self.doc.model.sections.get(i).is_some_and(|s| s.active);
@@ -123,7 +144,9 @@ impl VarstotasApp {
         }
         self.face_ops_items(ui);
         let can_unfold = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Face(_) | EntityRef::Instance(_)));
-        self.item(ui, "Unfold…", None, can_unfold, Action::Unfold);
+        if icon_row(ui, Some(Icon::Unfold), "Unfold…", None, can_unfold, false).clicked() {
+            self.actions.push(Action::Unfold);
+        }
         if self.selected_textured_face() {
             ui.menu_button("Texture", |ui| {
                 self.item(ui, "Position", None, true, Action::SetTool(ToolId::TexturePosition));
@@ -131,7 +154,7 @@ impl VarstotasApp {
         }
         if !self.doc.active_path.is_empty() {
             ui.separator();
-            self.item(ui, "Close Group", Some("Esc"), true, Action::ExitContext);
+            self.cmd_item(ui, Cmd::CloseGroup);
         }
     }
 
@@ -147,8 +170,8 @@ impl VarstotasApp {
     pub(crate) fn menu_bar(&mut self, ui: &mut Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
-                self.item(ui, "New", crate::keymap::label(crate::keymap::KeyCmd::New).as_deref(), true, Action::New);
-                ui.menu_button("New from Template", |ui| {
+                self.cmd_item(ui, Cmd::New);
+                icon_menu(ui, None, "New from Template", |ui| {
                     for t in Template::ALL {
                         let b = Button::new(t.name()).selected(self.prefs.template == Some(t));
                         if ui.add(b).on_hover_text(t.description()).clicked() {
@@ -156,10 +179,10 @@ impl VarstotasApp {
                         }
                     }
                 });
-                self.item(ui, "Open…", crate::keymap::label(crate::keymap::KeyCmd::Open).as_deref(), true, Action::Open);
+                self.cmd_item(ui, Cmd::Open);
                 let recent = self.prefs.recent.clone();
                 ui.add_enabled_ui(!recent.is_empty(), |ui| {
-                    ui.menu_button("Open Recent", |ui| {
+                    icon_menu(ui, None, "Open Recent", |ui| {
                         for p in recent {
                             let name = p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
                             if ui.button(name).on_hover_text(p.display().to_string()).clicked() {
@@ -169,84 +192,67 @@ impl VarstotasApp {
                     });
                 });
                 ui.separator();
-                self.item(ui, "Save", crate::keymap::label(crate::keymap::KeyCmd::Save).as_deref(), true, Action::Save);
-                self.item(ui, "Save As…", crate::keymap::label(crate::keymap::KeyCmd::SaveAs).as_deref(), true, Action::SaveAs);
-                ui.menu_button("Preview Image", |ui| {
-                    self.item(ui, "Show…", None, true, Action::PreviewShow);
+                self.cmd_item(ui, Cmd::Save);
+                self.cmd_item(ui, Cmd::SaveAs);
+                icon_menu(ui, Some(Icon::Picture(0)), "Preview Image", |ui| {
+                    self.cmd_item(ui, Cmd::PreviewShow);
                     ui.separator();
-                    self.item(ui, "From Image File…", None, true, Action::PreviewFromFile);
-                    self.item(ui, "From Current View", None, true, Action::PreviewFromView);
-                    self.item(ui, "Remove", None, self.doc.model.preview.is_some(), Action::PreviewRemove);
+                    for c in [Cmd::PreviewFromFile, Cmd::PreviewFromView, Cmd::PreviewRemove] {
+                        self.cmd_item(ui, c);
+                    }
                 })
-                .response
                 .on_hover_text("The picture the Components library shows for this file (else it draws the model)");
                 ui.separator();
-                ui.menu_button("Import", |ui| {
-                    self.item(ui, "OBJ…", None, true, Action::ImportObj);
-                    self.item(ui, "STL…", None, true, Action::ImportStl);
-                    self.item(ui, "DXF…", None, true, Action::ImportDxf);
-                    self.item(ui, "glTF / GLB…", None, true, Action::ImportGltf);
-                    self.item(ui, "3MF…", None, true, Action::ImportAs("3mf"));
-                    self.item(ui, "COLLADA (DAE)…", None, true, Action::ImportAs("dae"));
-                    self.item(ui, "FBX…", None, true, Action::ImportAs("fbx"));
-                    self.item(ui, "PLY…", None, true, Action::ImportAs("ply"));
-                    self.item(ui, "Points (CSV)…", None, true, Action::ImportAs("csv"));
+                icon_menu(ui, Some(Icon::Import("")), "Import", |ui| {
+                    use Cmd::*;
+                    for c in [ImportObj, ImportStl, ImportDxf, ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv] {
+                        self.cmd_item(ui, c);
+                    }
                     self.plugin_file_items(ui, false);
                     self.model_import_items(ui);
                 });
-                ui.menu_button("Export", |ui| {
-                    self.item(ui, "2D Graphic (PNG)…", None, true, Action::ExportImage);
-                    self.item(ui, "Animation (Video / PNG)…", None, true, Action::ExportAnimation);
+                icon_menu(ui, Some(Icon::Export("")), "Export", |ui| {
+                    use Cmd::*;
+                    self.cmd_item(ui, ExportImage);
+                    self.cmd_item(ui, ExportAnimation);
                     ui.separator();
-                    self.item(ui, "OBJ…", None, true, Action::ExportObj);
-                    self.item(ui, "STL…", None, true, Action::ExportStl);
-                    self.item(ui, "DXF…", None, true, Action::ExportDxf);
-                    self.item(ui, "glTF (GLB)…", None, true, Action::ExportGlb);
-                    self.item(ui, "3MF (3D printing)…", None, true, Action::Export3mf);
-                    self.item(ui, "PLY…", None, true, Action::ExportPly);
-                    self.item(ui, "2D Drawing (SVG / PDF)…", None, true, Action::ExportDrawing);
-                    self.item(ui, "Unfold (SVG / PDF / DXF)…", None, true, Action::Unfold);
-                    self.item(ui, "Sheets (PDF / SVG)…", None, true, Action::Sheets);
+                    for c in [ExportObj, ExportStl, ExportDxf, ExportGlb, Export3mf, ExportPly, ExportDrawing] {
+                        self.cmd_item(ui, c);
+                    }
+                    self.cmd_item_as(ui, Unfold, "Unfold (SVG / PDF / DXF)…");
+                    self.cmd_item(ui, Sheets);
                     ui.separator();
-                    self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
-                    self.item(ui, "Faces (JSON)…", None, true, Action::ExportFacesJson);
-                    self.item(ui, "Attributions (credits of downloaded models)…", None, true, Action::ExportAttributions);
+                    for c in [ExportReport, ExportFacesJson, ExportAttributions] {
+                        self.cmd_item(ui, c);
+                    }
                     self.plugin_file_items(ui, true);
                 });
                 ui.separator();
-                self.item(ui, "Run Script…", None, true, Action::RunScript);
+                self.cmd_item(ui, Cmd::RunScript);
                 ui.separator();
-                self.item(ui, "Quit", crate::keymap::label(crate::keymap::KeyCmd::Quit).as_deref(), true, Action::Quit);
+                self.cmd_item(ui, Cmd::Quit);
             });
 
             ui.menu_button("Edit", |ui| {
                 let undo = self.doc.history.undo_label().map(|l| format!("Undo {l}"));
                 let redo = self.doc.history.redo_label().map(|l| format!("Redo {l}"));
-                self.icon_item(ui, Some(Icon::Undo), undo.as_deref().unwrap_or("Undo"), crate::keymap::label(crate::keymap::KeyCmd::Undo).as_deref(), undo.is_some(), Action::Undo);
-                self.icon_item(ui, Some(Icon::Redo), redo.as_deref().unwrap_or("Redo"), crate::keymap::label(crate::keymap::KeyCmd::Redo).as_deref(), redo.is_some(), Action::Redo);
+                self.cmd_item_as(ui, Cmd::Undo, undo.as_deref().unwrap_or("Undo"));
+                self.cmd_item_as(ui, Cmd::Redo, redo.as_deref().unwrap_or("Redo"));
                 ui.separator();
-                let any_sel = self.doc.has_selection();
-                let has_sel = !self.doc.selection.is_empty();
                 self.clipboard_items(ui);
-                self.icon_item(ui, Some(Icon::Trash), "Delete", Some("Delete"), any_sel, Action::Delete);
-                self.item(ui, "Purge Unused", None, true, Action::PurgeUnused);
-                let has_guides = self.doc.model.has_any_guides();
-                self.item(ui, "Delete Guides", None, has_guides, Action::DeleteGuides);
+                for c in [Cmd::Delete, Cmd::PurgeUnused, Cmd::DeleteGuides] {
+                    self.cmd_item(ui, c);
+                }
                 ui.separator();
-                self.item(ui, "Select All", crate::keymap::label(crate::keymap::KeyCmd::SelectAll).as_deref(), true, Action::SelectAll);
-                self.item(ui, "Select None", crate::keymap::label(crate::keymap::KeyCmd::SelectNone).as_deref(), any_sel, Action::SelectNone);
+                self.cmd_item(ui, Cmd::SelectAll);
+                self.cmd_item(ui, Cmd::SelectNone);
                 ui.separator();
-                self.item(ui, "Hide", None, has_sel, Action::HideSelected);
-                self.item(ui, "Unhide All", None, true, Action::UnhideAll);
+                self.cmd_item(ui, Cmd::Hide);
+                self.cmd_item(ui, Cmd::UnhideAll);
                 ui.separator();
-                self.icon_item(ui, Some(Icon::Group), "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
-                self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
-                let has_inst = self.doc.selection.iter().any(|e| matches!(e, varstotas_kernel::EntityRef::Instance(_)));
-                let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
-                    if self.doc.model.instance_params(&self.doc.active_path, *i).is_none());
-                self.item(ui, "Make Parametric", None, one_plain, Action::MakeParametric);
-                self.item(ui, "Explode", None, has_inst, Action::Explode);
-                self.item(ui, "Close Group", Some("Esc"), !self.doc.active_path.is_empty(), Action::ExitContext);
+                for c in [Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode, Cmd::CloseGroup] {
+                    self.cmd_item(ui, c);
+                }
                 ui.separator();
                 self.face_ops_items(ui);
             });
@@ -345,7 +351,7 @@ impl VarstotasApp {
                 self.tool_item(ui, ToolId::Orbit);
                 self.tool_item(ui, ToolId::Pan);
                 self.tool_item(ui, ToolId::Zoom);
-                self.icon_item(ui, Some(Icon::ZoomExtents), "Zoom Extents", crate::keymap::label(crate::keymap::KeyCmd::ZoomExtents).as_deref(), true, Action::ZoomExtents);
+                self.cmd_item(ui, Cmd::ZoomExtents);
                 ui.separator();
                 self.tool_item(ui, ToolId::PositionCamera);
                 self.tool_item(ui, ToolId::LookAround);
@@ -386,17 +392,17 @@ impl VarstotasApp {
                 ] {
                     self.tool_item(ui, id);
                 }
-                ui.menu_button("Solid Tools", |ui| {
+                icon_menu(ui, Some(Icon::Solids(2)), "Solid Tools", |ui| {
                     for op in varstotas_kernel::SolidOp::ALL {
-                        self.item(ui, op.name(), None, true, Action::SolidTool(op));
+                        self.cmd_item(ui, Cmd::Solid(op));
                     }
                 });
-                self.item(ui, "Unfold…", None, true, Action::Unfold);
+                self.cmd_item(ui, Cmd::Unfold);
                 ui.separator();
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);
                 }
-                self.icon_item(ui, Some(Icon::Text3d), "3D Text…", None, true, Action::Text3d);
+                self.cmd_item(ui, Cmd::Text3d);
             });
 
             ui.menu_button("Snapping", |ui| self.snapping_menu(ui));
@@ -508,7 +514,7 @@ impl VarstotasApp {
     pub(crate) fn snapping_menu(&mut self, ui: &mut Ui) {
         use crate::inference::settings::GROUPS;
         let mut on = self.prefs.snapping.enabled;
-        if ui.add(egui::Checkbox::new(&mut on, "Snapping")).on_hover_text(crate::keymap::label(crate::keymap::KeyCmd::ToggleSnapping).unwrap_or_default()).clicked() {
+        if icon_check(ui, &mut on, Icon::Magnet, "Snapping").on_hover_text(crate::keymap::label(crate::keymap::KeyCmd::ToggleSnapping).unwrap_or_default()).clicked() {
             self.actions.push(Action::ToggleSnapping);
         }
         ui.horizontal(|ui| {
@@ -526,14 +532,14 @@ impl VarstotasApp {
             ui.label(egui::RichText::new(group).small().weak());
             if group == "Grid" {
                 let mut grid = self.prefs.grid.show;
-                if ui.checkbox(&mut grid, "Show Grid").clicked() {
+                if icon_check(ui, &mut grid, Icon::Grid, "Show Grid").clicked() {
                     self.actions.push(Action::ToggleGrid);
                 }
             }
             ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
                 for &k in kinds {
                     let mut v = self.prefs.snapping.is_on(k);
-                    let r = ui.checkbox(&mut v, k.menu_label());
+                    let r = icon_check(ui, &mut v, Icon::Snap(k), k.menu_label());
                     super::tray_lib::spot(format!("snap:{}", k.menu_label()), r.rect.center());
                     if r.changed() {
                         self.prefs.snapping.set(k, v);

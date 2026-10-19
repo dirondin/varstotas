@@ -79,6 +79,48 @@ pub struct LibraryState {
     pub dirs: Vec<String>,
     /// The New Folder / Rename Folder dialog (either library card).
     pub folder_ask: Option<FolderAsk>,
+    /// Delete Folder, waiting for the user's yes (either library card).
+    pub folder_delete: Option<FolderDelete>,
+}
+
+/// A library subfolder to delete once confirmed, and what is in it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FolderDelete {
+    pub materials: bool,
+    pub dir: PathBuf,
+    /// Files and subfolders inside (all levels).
+    pub files: usize,
+    pub dirs: usize,
+    /// The first few files' names (relative to the folder).
+    pub sample: Vec<String>,
+}
+
+impl FolderDelete {
+    pub fn new(materials: bool, dir: PathBuf) -> Self {
+        let (mut files, mut dirs, mut sample) = (0, 0, Vec::new());
+        let mut stack = vec![dir.clone()];
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    dirs += 1;
+                    stack.push(p);
+                } else {
+                    files += 1;
+                    if sample.len() < 6 {
+                        sample.push(p.strip_prefix(&dir).unwrap_or(&p).display().to_string());
+                    }
+                }
+            }
+        }
+        sample.sort();
+        FolderDelete { materials, dir, files, dirs, sample }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.files + self.dirs == 0
+    }
 }
 
 /// Whose preview picture a view render becomes (File → Preview Image, a tile's menu).
@@ -360,7 +402,7 @@ impl VarstotasApp {
     }
 
     /// A folder heading's menu: New Folder… / Rename Folder… open the folder dialog, Delete
-    /// Folder removes an empty one (`materials`: of the materials library).
+    /// Folder asks first ([`Self::folder_delete_dialog`]; `materials`: of the materials library).
     pub(crate) fn folder_act(&mut self, materials: bool, act: FolderAct) {
         match act {
             FolderAct::New => self.library.folder_ask = Some(FolderAsk { materials, rename: None, name: String::new() }),
@@ -368,13 +410,7 @@ impl VarstotasApp {
                 let name = f.rsplit('/').next().unwrap_or(&f).to_string();
                 self.library.folder_ask = Some(FolderAsk { materials, rename: Some(f), name });
             }
-            FolderAct::Delete(dir) => {
-                match std::fs::remove_dir(&dir) {
-                    Ok(()) => self.flash(format!("Deleted folder {}", dir.display())),
-                    Err(e) => self.flash_error(format!("Delete Folder: {e}")),
-                }
-                self.refresh_library_of(materials);
-            }
+            FolderAct::Delete(dir) => self.library.folder_delete = Some(FolderDelete::new(materials, dir)),
         }
     }
 
@@ -384,6 +420,88 @@ impl VarstotasApp {
         } else {
             self.refresh_library();
         }
+    }
+
+    /// "Delete Folder?" (`LibraryState::folder_delete`): where it is and, in a warning, what is
+    /// in it when it is not empty; Delete removes the folder with everything inside.
+    pub(crate) fn folder_delete_dialog(&mut self, ctx: &egui::Context) {
+        let Some(del) = self.library.folder_delete.clone() else { return };
+        let name = del.dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let mut choice = None;
+        let resp = egui::Modal::new(egui::Id::new("library_folder_delete")).show(ctx, |ui| {
+            ui.set_width(380.0);
+            ui.heading("Delete Folder?");
+            ui.add_space(4.0);
+            let lib = if del.materials { "materials" } else { "components" };
+            ui.label(format!("The folder “{name}” will be deleted from the {lib} library:"));
+            ui.label(RichText::new(del.dir.display().to_string()).small().weak());
+            ui.add_space(6.0);
+            if del.is_empty() {
+                ui.label("The folder is empty.");
+            } else {
+                let warn = Color32::from_rgb(200, 50, 40);
+                egui::Frame::new()
+                    .fill(warn.gamma_multiply(0.12))
+                    .stroke(egui::Stroke::new(1.0, warn))
+                    .corner_radius(6.0)
+                    .inner_margin(8.0)
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        let mut what = format!("{} file(s)", del.files);
+                        if del.dirs > 0 {
+                            what.push_str(&format!(" in {} subfolder(s)", del.dirs));
+                        }
+                        ui.label(RichText::new(format!("⚠ The folder is not empty: {what} will be deleted with it.")).strong().color(warn));
+                        for f in &del.sample {
+                            ui.label(RichText::new(format!("• {f}")).small());
+                        }
+                        if del.files > del.sample.len() {
+                            ui.label(RichText::new(format!("… and {} more", del.files - del.sample.len())).small().weak());
+                        }
+                    });
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new("This cannot be undone. Copies already placed in documents stay.").weak());
+            ui.add_space(10.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = if del.is_empty() { "Delete".to_string() } else { format!("Delete with {} file(s)", del.files) };
+                let r = ui.add(egui::Button::new(RichText::new(label).strong().color(Color32::from_rgb(200, 50, 40))));
+                super::tray_lib::spot("folder_delete:ok", r.rect.center());
+                if r.clicked() {
+                    choice = Some(true);
+                }
+                let r = ui.button("Cancel");
+                super::tray_lib::spot("folder_delete:cancel", r.rect.center());
+                if r.clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+        if resp.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        let Some(ok) = choice else { return };
+        self.library.folder_delete = None;
+        if !ok {
+            return;
+        }
+        match std::fs::remove_dir_all(&del.dir) {
+            Ok(()) => {
+                // favourites and recents of what was inside go too
+                let (prefix, lists) = if del.materials {
+                    ("m:", [&mut self.prefs.mat_favourites, &mut self.prefs.mat_recent])
+                } else {
+                    ("c:", [&mut self.prefs.lib_favourites, &mut self.prefs.lib_recent])
+                };
+                let key = super::tray_lib::file_key(prefix, &del.dir);
+                for list in lists {
+                    list.retain(|k| !k.strip_prefix(&key).is_some_and(|r| r.starts_with(std::path::MAIN_SEPARATOR)));
+                }
+                self.flash(if del.is_empty() { format!("Deleted folder {name}") } else { format!("Deleted folder {name} and {} file(s)", del.files) });
+            }
+            Err(e) => self.flash_error(format!("Delete Folder: {e}")),
+        }
+        self.refresh_library_of(del.materials);
     }
 
     /// The New Folder / Rename Folder dialog (`LibraryState::folder_ask`).

@@ -116,7 +116,32 @@ raw rclick 1176 596
 wait 5
 raw click 1235 668
 wait 10
+# Delete Folder asks first, also for an empty folder
+expect folder_delete=Some(("Bits", 0, 0))
+raw click 863 397
+wait 10
+expect folder_delete=None
 # (Bits is gone: Kitchen moved up into its place)
 expect ("§Kitchen", 1187, 596)
 expect lib_folders=[("Document", 1, false), ("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
+# Kitchen holds a file: the question warns; Cancel keeps it
+raw rclick 1176 596
+wait 5
+raw click 1235 668
+wait 10
+expect folder_delete=Some(("Kitchen", 1, 0))
+screenshot shots/folder_delete.bmp
+raw click 728 414
+wait 10
+expect folder_delete=None
+expect lib_folders=[("Document", 1, false), ("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
+# again, Delete with 1 file: the folder goes with its file
+raw rclick 1176 596
+wait 5
+raw click 1235 668
+wait 10
+raw click 826 414
+wait 10
+expect folder_delete=None
+expect lib_folders=[("Document", 1, false), ("", 1, false), ("Examples", 6, false)]
 quit

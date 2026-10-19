@@ -313,6 +313,8 @@ pub enum Action {
     ToggleGuides,
     /// Snapping → Snapping on/off (Shift+S).
     ToggleSnapping,
+    /// One inference on / off (a toolbar button).
+    ToggleSnap(crate::inference::InferenceKind),
     /// View → Viewports: 1, 2 or 4 panes.
     SetPanes(usize),
     /// A viewport preset (`panes::PRESETS`).
@@ -1525,6 +1527,11 @@ impl VarstotasApp {
         crate::inference::settings::publish_grid(&self.prefs.grid);
                 self.flash(if self.prefs.snapping.enabled { "Snapping on" } else { "Snapping off" });
             }
+            Action::ToggleSnap(k) => {
+                let on = !self.prefs.snapping.is_on(k);
+                self.prefs.snapping.set(k, on);
+                crate::inference::settings::publish(&self.prefs.snapping);
+            }
             Action::ToggleGrid => {
                 self.prefs.grid.show = !self.prefs.grid.show;
                 crate::inference::settings::publish_grid(&self.prefs.grid);
@@ -2667,7 +2674,9 @@ impl eframe::App for VarstotasApp {
         egui::Panel::top("menu_bar")
             .frame(crate::ui::theme::bar_frame(&ctx))
             .show(ui, |ui| self.menu_bar(ui));
+        // not resizable: the panel fits its rows (buttons added in Preferences → Toolbar)
         egui::Panel::top("toolbar")
+            .resizable(false)
             .frame(crate::ui::theme::toolbar_frame(&ctx))
             .show(ui, |ui| self.toolbar(ui));
         // The Snapping menus may have changed the switches before the viewport runs the tool.

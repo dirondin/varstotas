@@ -2,6 +2,7 @@
 
 pub mod animation;
 pub mod code_editor;
+pub mod commands;
 pub mod console;
 pub mod dialogs;
 pub mod downloads;

@@ -1,0 +1,43 @@
+# Menu commands on the toolbar (Preferences → Toolbar can add any of them): switches show
+# their state and toggle, commands run, ones that do not apply stay inert. Real mouse.
+box 0 0 0 400 300 200
+wait 5
+toolbar Select SnappingOnOff Snap:endpoint ShowGrid SelectAll Cut Solid:Union
+wait 10
+expect toolbar="Select SnappingOnOff Snap:endpoint ShowGrid SelectAll Cut Solid:Union"
+expect snapping=(true, [])
+# the endpoint snap off and on again
+raw click 103 -25
+wait 5
+expect snapping=(true, ["endpoint"])
+raw click 103 -25
+wait 5
+expect snapping=(true, [])
+# snapping off: the single snaps are inert
+raw click 65 -25
+wait 5
+expect snapping=(false, [])
+raw click 103 -25
+wait 5
+expect snapping=(false, [])
+raw click 65 -25
+wait 5
+expect snapping=(true, [])
+# the grid
+raw click 141 -25
+wait 5
+expect grid=(true,
+screenshot shots/toolbar_cmds.bmp
+raw click 141 -25
+wait 5
+expect grid=(false,
+# Cut does nothing without a selection; Select All, then Cut takes the box away
+raw click 217 -25
+wait 5
+expect faces=6
+raw click 179 -25
+wait 5
+raw click 217 -25
+wait 5
+expect faces=0
+quit
