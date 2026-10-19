@@ -68,6 +68,31 @@ pub fn pane_rects(full: Rect, count: usize) -> Vec<Rect> {
     }
 }
 
+/// A viewport preset: its name and each pane's view and projection (`true` = parallel), in
+/// pane order (2: left, right; 4: rows top-left, top-right / bottom-left, bottom-right).
+pub struct Preset {
+    pub name: &'static str,
+    pub panes: &'static [(StandardView, bool)],
+}
+
+pub const PRESETS: &[Preset] = &[
+    Preset { name: "Front + Iso", panes: &[(StandardView::Front, true), (StandardView::Iso, false)] },
+    Preset { name: "Top + Iso", panes: &[(StandardView::Top, true), (StandardView::Iso, false)] },
+    Preset { name: "Front + Right", panes: &[(StandardView::Front, true), (StandardView::Right, true)] },
+    Preset {
+        name: "Front, Left, Top + Iso",
+        panes: &[(StandardView::Front, true), (StandardView::Left, true), (StandardView::Top, true), (StandardView::Iso, false)],
+    },
+    Preset {
+        name: "Top, Front, Right + Iso",
+        panes: &[(StandardView::Top, true), (StandardView::Front, true), (StandardView::Right, true), (StandardView::Iso, false)],
+    },
+    Preset {
+        name: "Front, Back, Left, Right",
+        panes: &[(StandardView::Front, true), (StandardView::Back, true), (StandardView::Left, true), (StandardView::Right, true)],
+    },
+];
+
 /// The view a pane opens with the first time: the model from the top, front, right.
 fn first_view(k: usize) -> StandardView {
     match k {
@@ -118,6 +143,29 @@ impl VarstotasApp {
             self.activate_pane(0);
         }
         self.pane_count = n;
+    }
+
+    /// Show the panes of `PRESETS[i]`, each framed in its view; the panes keep their styles
+    /// (new ones take the active pane's). The top-left pane becomes the active one.
+    pub(crate) fn apply_preset(&mut self, i: usize) {
+        let Some(p) = PRESETS.get(i) else { return };
+        self.activate_pane(0);
+        self.set_pane_count(p.panes.len());
+        let rects = pane_rects(self.viewport.view_rect, self.pane_count);
+        self.init_panes(&rects);
+        for (k, (&(v, ortho), r)) in p.panes.iter().zip(&rects).enumerate() {
+            let aspect = (r.width() / r.height().max(1.0)) as f64;
+            let mut cam = self.camera.clone();
+            cam.set_ortho(ortho);
+            let cam = nav::standard_view_camera(&self.doc.model, &cam, v, aspect);
+            if k == self.active_pane {
+                self.cam_anim = None;
+                self.camera = cam;
+            } else {
+                self.panes[k].cam_anim = None;
+                self.panes[k].camera = cam;
+            }
+        }
     }
 
     /// Panes shown for the first time: framed in their standard view, parallel, in the

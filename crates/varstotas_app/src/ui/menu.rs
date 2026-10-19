@@ -277,6 +277,14 @@ impl VarstotasApp {
                             ui.close();
                         }
                     }
+                    ui.separator();
+                    ui.label(egui::RichText::new("Presets").small().weak());
+                    for (i, p) in crate::panes::PRESETS.iter().enumerate() {
+                        if ui.button(p.name).clicked() {
+                            self.actions.push(Action::ViewPreset(i));
+                            ui.close();
+                        }
+                    }
                 });
                 ui.separator();
                 ui.menu_button("Animation", |ui| {

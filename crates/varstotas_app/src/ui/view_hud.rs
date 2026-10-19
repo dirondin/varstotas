@@ -171,6 +171,15 @@ impl VarstotasApp {
                     }
                 }
             });
+            ui.menu_button("Viewport Presets", |ui| {
+                for (i, p) in crate::panes::PRESETS.iter().enumerate() {
+                    let icon = if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 };
+                    if item(ui, icon, p.name, false, None).clicked() {
+                        self.actions.push(Action::ViewPreset(i));
+                        ui.close();
+                    }
+                }
+            });
         })
         .on_hover_text(format!("View: {} — standard views, perspective or parallel projection, field of view, viewports", view_label(view, ortho)));
     }

@@ -104,6 +104,7 @@ const NAVIGATION: &[B] = &[
     B::P("Switches keep the menu open; a click outside closes it."),
     B::H("Several viewports"),
     B::P("View → Viewports (or the view drop-down) shows 1, 2 (side by side) or 4 (2 × 2) views of the model. Each has its own camera, style and view switches; new ones start from the top, the front and the right, in parallel projection. A click in a view makes it the active one (blue frame): menus, toolbars and tools act on it, and the click itself already works there."),
+    B::P("Presets (View → Viewports, or Viewport Presets in the view drop-down) set up common layouts at once, e.g. Front + Iso or Front, Left, Top + Iso: the flat views in parallel projection, the iso view in perspective."),
 ];
 
 const SELECTING: &[B] = &[

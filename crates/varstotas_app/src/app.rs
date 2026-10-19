@@ -254,6 +254,8 @@ pub enum Action {
     ToggleSnapping,
     /// View → Viewports: 1, 2 or 4 panes.
     SetPanes(usize),
+    /// A viewport preset (`panes::PRESETS`).
+    ViewPreset(usize),
     /// View → Grid (show / hide).
     ToggleGrid,
     /// File → Export → 2D Graphic… (opens the export dialog).
@@ -1465,6 +1467,7 @@ impl VarstotasApp {
                 }
             }
             Action::SetPanes(n) => self.set_pane_count(n),
+            Action::ViewPreset(i) => self.apply_preset(i),
             Action::ToggleSnapping => {
                 self.prefs.snapping.enabled = !self.prefs.snapping.enabled;
                 crate::inference::settings::publish(&self.prefs.snapping);
@@ -2691,8 +2694,10 @@ impl eframe::App for VarstotasApp {
             }
             if rects.len() > 1 {
                 // the active pane: the one the settings and the tools apply to
-                let accent = egui::Color32::from_rgb(0x2F, 0x7D, 0xE1);
-                ui.painter().rect_stroke(rects[active], 0.0, egui::Stroke::new(3.0, accent), egui::StrokeKind::Inside);
+                // the soft selection colour, a little stronger
+                use crate::ui::theme::{ACCENT, ACCENT_SOFT};
+                let frame = ACCENT_SOFT.lerp_to_gamma(ACCENT, 0.4);
+                ui.painter().rect_stroke(rects[active], 0.0, egui::Stroke::new(2.5, frame), egui::StrokeKind::Inside);
             }
         });
         // Animation frames collect their own results (anim_tick).
