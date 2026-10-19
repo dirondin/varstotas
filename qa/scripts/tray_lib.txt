@@ -1,0 +1,108 @@
+# Track У 2а: the Components and Materials cards in one frame — the top row (search, Refresh, +,
+# online, …), sections In Model / My Library / Examples, tile sizes (… menu, shared by both),
+# the tiles' menus (Use, Rename…, Save to Library). Real mouse and keys.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+action mat_pbr Grey metallic=1 roughness=0.1
+action mat_use Clear Glass
+action tray_only Materials
+wait 20
+expect lib_tiles=Large mat_shown=["Grey", "Clear Glass"]
+screenshot shots/traylib_mat.bmp
+# search
+raw click 1200 288
+wait 3
+raw text gla
+wait 5
+expect mat_shown=["Clear Glass"]
+raw key Backspace
+raw key Backspace
+raw key Backspace
+wait 5
+expect mat_shown=["Grey", "Clear Glass"]
+# In Model → Grey → Rename… (one undo step; the paint material follows)
+raw rclick 1186 372
+wait 5
+screenshot shots/traylib_matmenu.bmp
+raw click 1220 419
+wait 5
+expect rename=Some("Grey")
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw text Steel
+raw key Enter
+wait 10
+expect undo=Some("Rename Material Steel")
+expect mat_shown=["Steel", "Clear Glass"]
+# Steel → Save to Library: My Library shows it
+raw rclick 1186 372
+wait 5
+raw click 1220 443
+wait 10
+expect matlib=["Steel"]
+# the library file → Rename…: the file and the material in it
+raw rclick 1186 500
+wait 5
+raw click 1220 547
+wait 5
+expect rename=Some("Steel")
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw text Sheet
+raw key Enter
+wait 10
+expect matlib=["Sheet"]
+# … → List, then Small Tiles (shared with the Components card)
+raw click 1371 288
+wait 5
+screenshot shots/traylib_more.bmp
+raw click 1320 475
+wait 5
+expect lib_tiles=List
+screenshot shots/traylib_list.bmp
+raw click 1371 288
+wait 5
+raw click 1320 421
+wait 5
+expect lib_tiles=Small
+screenshot shots/traylib_small.bmp
+# Examples start folded; unfold, the first example → Save to Library
+raw click 1154 457
+wait 10
+expect mat_shown=["Steel", "Clear Glass", "Sheet", "Gold", "Copper",
+raw rclick 1165 491
+wait 5
+raw click 1200 538
+wait 10
+expect matlib=["Gold", "Sheet"]
+# the Components card: + → Save Selection to Library…, a name, Enter
+action tray_only Components
+action components
+wait 10
+select_all
+wait 3
+raw click 1323 87
+wait 5
+screenshot shots/traylib_plus.bmp
+raw click 1300 117
+wait 5
+raw click 1200 115
+wait 3
+raw key Enter
+wait 10
+expect library=1
+expect lib_names=["Component"]
+# … → Large Tiles again
+raw click 1371 87
+wait 5
+raw click 1320 274
+wait 5
+expect lib_tiles=Large
+screenshot shots/traylib_end.bmp

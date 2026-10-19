@@ -28,12 +28,50 @@ pub struct MatItem {
 #[derive(Default)]
 pub struct MatLibraryState {
     pub items: Vec<MatItem>,
+    /// The search field.
+    pub filter: String,
+    /// Names of the tiles drawn last (In Model, library, examples unless folded), for the harness.
+    pub shown: Vec<String>,
     pub errors: Vec<String>,
     pub scanned: Option<PathBuf>,
     /// The bundled examples, built on first use.
     examples: Option<Vec<MatItem>>,
     /// Library file to delete once confirmed.
     pub delete_ask: Option<PathBuf>,
+}
+
+/// What a click or a tile's menu asked for (applied after the list is drawn).
+enum MatAct {
+    /// A model material: paint with it.
+    Paint(Material),
+    /// A library or example material: add it to the document, then paint.
+    Use(Material),
+    Rename(super::library::RenameTarget, String),
+    Save(Material),
+    Export(MaterialId),
+    Delete(PathBuf),
+}
+
+/// A material tile's look (`material_look`), painted into any rect.
+pub(crate) struct MatLook {
+    color: Color32,
+    tex: Option<egui::TextureId>,
+    mark: Option<Color32>,
+}
+
+impl MatLook {
+    pub(crate) fn paint(&self, p: &egui::Painter, r: egui::Rect) {
+        p.rect_filled(r.shrink(1.0), 4.0, self.color);
+        if let Some(t) = self.tex {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            p.image(t, r.shrink(3.0), uv, Color32::WHITE);
+        }
+        if let Some(c) = self.mark {
+            let a = r.right_top();
+            let tri = vec![a + egui::vec2(-9.0, 2.0), a + egui::vec2(-2.0, 2.0), a + egui::vec2(-2.0, 9.0)];
+            p.add(egui::Shape::convex_polygon(tri, c, egui::Stroke::new(0.5, Color32::from_black_alpha(90))));
+        }
+    }
 }
 
 /// `~/.varstotas/materials`.
@@ -122,7 +160,7 @@ pub(crate) fn describe(m: &Material) -> String {
 
 impl VarstotasApp {
     pub(crate) fn material_library_dir(&self) -> Option<PathBuf> {
-        default_dir()
+        self.prefs.mat_library_dir.clone().or_else(default_dir)
     }
 
     pub(crate) fn refresh_materials(&mut self) {
@@ -193,10 +231,17 @@ impl VarstotasApp {
     /// Write model material `id` to `<library>/<name>.vrstmat` (replacing a file of that
     /// name: saving again updates it).
     pub(crate) fn save_material_to_library(&mut self, id: MaterialId) {
-        let (Some(dir), Some(mat)) = (self.material_library_dir(), self.doc.model.materials.get(id).cloned()) else { return };
+        if let Some(mat) = self.doc.model.materials.get(id).cloned() {
+            self.save_material_value(&mat);
+        }
+    }
+
+    /// Write `mat` to `<library>/<name>.vrstmat` (a model material or an example).
+    pub(crate) fn save_material_value(&mut self, mat: &Material) {
+        let Some(dir) = self.material_library_dir() else { return };
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name)));
-        match varstotas_kernel::io::save_material(&mat, &path) {
+        match varstotas_kernel::io::save_material(mat, &path) {
             Ok(()) => {
                 self.flash(format!("Saved to the materials library: {}", mat.name));
                 self.refresh_materials();
@@ -278,112 +323,226 @@ impl VarstotasApp {
         }
     }
 
-    /// The context menu of a model material's swatch.
-    pub(crate) fn model_material_menu(&mut self, ui: &mut Ui, id: MaterialId) {
-        if ui.button("Save to Library").on_hover_text("Write it to ~/.varstotas/materials, for any document").clicked() {
-            self.save_material_to_library(id);
-            ui.close();
-        }
-        if ui.button("Export…").clicked() {
-            self.export_material(id);
-            ui.close();
-        }
-    }
-
-    /// The Library part of the Materials card: folders of swatches.
+    /// The library part of the Materials card, framed like the Components list: the top row
+    /// (search, Refresh, + New from Texture / Import, Online Materials, …), then the sections
+    /// In Model, My Library (and its subfolders), Examples. A click on a model material paints
+    /// with it, on a library one adds it to the document first.
     pub(crate) fn material_library_ui(&mut self, ui: &mut Ui) {
+        use super::tray_lib::{TopRow, section, tiles, top_row};
         if self.mat_library.scanned != self.material_library_dir() {
             self.refresh_materials();
         }
         ui.add_space(4.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Library").small().color(super::theme::TEXT_DIM));
-            if let Some(dir) = self.material_library_dir()
-                && ui.small_button("Folder").on_hover_text(format!("{}\nShow in the Finder", dir.display())).clicked()
-            {
-                crate::ui::extensions::reveal(&dir);
-            }
-            if ui.small_button("Import…").on_hover_text("Add material files (.vrstmat) to the document").clicked() {
-                self.import_materials();
-            }
-            if ui.small_button("Online…").on_hover_text("Download free PBR materials (Poly Haven, ambientCG)").clicked() {
-                self.online.open = true;
-            }
-            if ui.small_button("⟳").on_hover_text("Rescan the library folder").clicked() {
-                self.refresh_materials();
-            }
-        });
-        let mut folders: Vec<String> = self.mat_library.items.iter().map(|i| i.folder.clone()).collect();
-        folders.dedup();
-        folders.sort();
-        folders.dedup();
-        if self.mat_library.items.is_empty() {
-            ui.label(RichText::new("Right-click a model material → Save to Library").small().weak());
+        let custom = self.prefs.mat_library_dir.is_some();
+        let (mut texture, mut import, mut choose, mut default_dir, mut reveal_root) = (false, false, false, false, false);
+        let mut show_ex = !self.prefs.hide_mat_examples;
+        let top: TopRow = top_row(
+            ui,
+            "m:",
+            &mut self.mat_library.filter,
+            &mut self.prefs.lib_tiles,
+            "New material from an image, import material files",
+            "Online Materials: free PBR materials (Poly Haven, ambientCG, plugins)",
+            |ui| {
+                if ui.button("New from Texture…").on_hover_text("A material from an image file (PNG, JPEG)").clicked() {
+                    texture = true;
+                    ui.close();
+                }
+                if ui.button("Import…").on_hover_text("Add material files (.vrstmat, plugin formats) to the document").clicked() {
+                    import = true;
+                    ui.close();
+                }
+            },
+            |ui| {
+                if ui.button("Choose Folder…").clicked() {
+                    choose = true;
+                    ui.close();
+                }
+                if custom && ui.button("Default Folder").on_hover_text("Back to ~/.varstotas/materials").clicked() {
+                    default_dir = true;
+                    ui.close();
+                }
+                if ui.button("Show in Finder").clicked() {
+                    reveal_root = true;
+                    ui.close();
+                }
+                ui.separator();
+                ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The materials bundled with Varstotas (the Material Gallery demo)");
+            },
+        );
+        self.prefs.hide_mat_examples = !show_ex;
+        if top.refresh {
+            self.refresh_materials();
         }
-        folders.push(EXAMPLES.into());
+        if top.online {
+            self.online.open = true;
+        }
+        if texture {
+            self.actions.push(Action::ImportTexture);
+        }
+        if import {
+            self.import_materials();
+        }
+        if choose && let Some(d) = rfd::FileDialog::new().pick_folder() {
+            self.prefs.mat_library_dir = Some(d);
+        }
+        if default_dir {
+            self.prefs.mat_library_dir = None;
+        }
+        if reveal_root && let Some(d) = self.material_library_dir() {
+            crate::ui::extensions::reveal(&d);
+        }
+        let filter = self.mat_library.filter.trim().to_lowercase();
+        let found = |m: &Material| super::tray_lib::found(&filter, &m.name);
+        let size = self.prefs.lib_tiles;
         let ctx = ui.ctx().clone();
         let cur = self.doc.current_material.as_ref().map(|c| c.name.clone());
-        let mut pick: Option<Material> = None;
-        let mut delete: Option<PathBuf> = None;
-        for folder in folders {
-            let title = if folder.is_empty() { "My Materials".to_string() } else { folder.clone() };
-            let examples = folder == EXAMPLES;
-            let resp = egui::CollapsingHeader::new(RichText::new(title).small()).id_salt(("matlib", &folder)).default_open(!examples).show(ui, |ui| {
-                if examples {
-                    self.ensure_examples();
+        let mut act: Option<MatAct> = None;
+        let root = self.material_library_dir();
+
+        self.mat_library.shown.clear();
+        // In Model
+        let model: Vec<(MaterialId, Material)> = self.doc.model.materials.iter().filter(|(_, m)| found(m)).map(|(id, m)| (id, m.clone())).collect();
+        let (folded, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", "In Model", "The materials of the open document", false, false, Some(model.len()), |_| {});
+        if !folded {
+            self.mat_library.shown.extend(model.iter().map(|(_, m)| m.name.clone()));
+            tiles(ui, size, model.len(), |ui, k| {
+                let (id, m) = &model[k];
+                let look = self.material_look(&ctx, m);
+                let r = super::tray_lib::tile(ui, size, &m.name, cur.as_deref() == Some(m.name.as_str()), |p, r| look.paint(p, r)).on_hover_text(describe(m));
+                if r.clicked() {
+                    act = Some(MatAct::Paint(m.clone()));
                 }
-                let list: Vec<(Option<PathBuf>, Material)> = if examples {
-                    self.mat_library.examples.iter().flatten().map(|i| (None, i.mat.clone())).collect()
-                } else {
-                    self.mat_library.items.iter().filter(|i| i.folder == folder).map(|i| (i.path.clone(), i.mat.clone())).collect()
-                };
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-                    for (path, m) in &list {
-                        let r = self.material_swatch(ui, &ctx, m, 22.0, cur.as_deref() == Some(m.name.as_str())).on_hover_text(describe(m));
-                        if r.clicked() {
-                            pick = Some(m.clone());
-                        }
-                        r.context_menu(|ui| {
-                            if ui.button("Add to Model").clicked() {
-                                pick = Some(m.clone());
-                                ui.close();
-                            }
-                            if let Some(p) = path {
-                                if ui.button("Show in Finder").clicked() {
-                                    crate::ui::extensions::reveal(p);
-                                    ui.close();
-                                }
-                                if ui.button("Delete…").clicked() {
-                                    delete = Some(p.clone());
-                                    ui.close();
-                                }
-                            }
-                        });
+                r.context_menu(|ui| {
+                    if ui.button("Use").clicked() {
+                        act = Some(MatAct::Paint(m.clone()));
+                        ui.close();
+                    }
+                    if ui.button("Rename…").clicked() {
+                        act = Some(MatAct::Rename(super::library::RenameTarget::Mat(*id), m.name.clone()));
+                        ui.close();
+                    }
+                    if ui.button("Save to Library").on_hover_text("Write it to the materials library folder, for any document").clicked() {
+                        act = Some(MatAct::Save(m.clone()));
+                        ui.close();
+                    }
+                    if ui.button("Export…").clicked() {
+                        act = Some(MatAct::Export(*id));
+                        ui.close();
                     }
                 });
             });
+        }
+
+        // My Library, its subfolders, Examples
+        let mut folders: Vec<String> = self.mat_library.items.iter().map(|i| i.folder.clone()).collect();
+        folders.push(String::new());
+        folders.sort();
+        folders.dedup();
+        if !self.prefs.hide_mat_examples {
+            folders.push(EXAMPLES.into());
+        }
+        for folder in folders {
+            let examples = folder == EXAMPLES;
             if examples {
-                resp.header_response.on_hover_text("Materials bundled with Varstotas (the Material Gallery demo)");
+                self.ensure_examples();
             }
+            let list: Vec<(Option<PathBuf>, Material)> = if examples {
+                self.mat_library.examples.iter().flatten().filter(|i| found(&i.mat)).map(|i| (None, i.mat.clone())).collect()
+            } else {
+                self.mat_library.items.iter().filter(|i| i.folder == folder && found(&i.mat)).map(|i| (i.path.clone(), i.mat.clone())).collect()
+            };
+            let dir = root.as_ref().filter(|_| !examples).map(|r| if folder.is_empty() { r.clone() } else { r.join(&folder) });
+            let (title, tip) = match (examples, folder.is_empty()) {
+                (true, _) => (folder.clone(), "Materials bundled with Varstotas (the Material Gallery demo)".to_string()),
+                (_, true) => ("My Library".to_string(), dir.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default()),
+                _ => (folder.clone(), dir.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default()),
+            };
+            let mut hide = false;
+            let key = format!("mat:{folder}");
+            // the examples start folded (many large tiles)
+            let (folded, clicked) = section(ui, &mut self.prefs.library_collapsed, &key, &title, &tip, dir.is_some(), examples, Some(list.len()), |ui| {
+                if examples {
+                    let r = ui.small_button("Hide").on_hover_text("Hide the bundled examples (… → Show Examples brings them back)");
+                    super::tray_lib::spot("hide:mat:Examples", r.rect.center());
+                    hide = r.clicked();
+                }
+            });
+            if hide {
+                self.prefs.hide_mat_examples = true;
+            }
+            if clicked && let Some(d) = &dir {
+                crate::ui::extensions::reveal(d);
+            }
+            if folder.is_empty() && self.mat_library.items.is_empty() && !folded {
+                ui.label(RichText::new("Empty: right-click a model material → Save to Library").small().weak());
+            }
+            if folded {
+                continue;
+            }
+            self.mat_library.shown.extend(list.iter().map(|(_, m)| m.name.clone()));
+            tiles(ui, size, list.len(), |ui, k| {
+                let (path, m) = &list[k];
+                let look = self.material_look(&ctx, m);
+                let r = super::tray_lib::tile(ui, size, &m.name, cur.as_deref() == Some(m.name.as_str()), |p, r| look.paint(p, r)).on_hover_text(describe(m));
+                if r.clicked() {
+                    act = Some(MatAct::Use(m.clone()));
+                }
+                r.context_menu(|ui| {
+                    if ui.button("Use").on_hover_text("Add it to the model and paint with it").clicked() {
+                        act = Some(MatAct::Use(m.clone()));
+                        ui.close();
+                    }
+                    match path {
+                        Some(p) => {
+                            if ui.button("Rename…").clicked() {
+                                act = Some(MatAct::Rename(super::library::RenameTarget::MatFile(p.clone()), m.name.clone()));
+                                ui.close();
+                            }
+                            if ui.button("Show in Finder").clicked() {
+                                crate::ui::extensions::reveal(p);
+                                ui.close();
+                            }
+                            if ui.button("Delete…").clicked() {
+                                act = Some(MatAct::Delete(p.clone()));
+                                ui.close();
+                            }
+                        }
+                        None => {
+                            if ui.button("Save to Library").on_hover_text("Copy it to your materials library").clicked() {
+                                act = Some(MatAct::Save(m.clone()));
+                                ui.close();
+                            }
+                        }
+                    }
+                });
+            });
         }
-        if let Some(m) = pick {
-            self.use_material(&m);
+        if !self.mat_library.errors.is_empty() {
+            ui.label(RichText::new(format!("{} file(s) could not be read", self.mat_library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
+                .on_hover_text(self.mat_library.errors.join("\n"));
         }
-        if delete.is_some() {
-            self.mat_library.delete_ask = delete;
+        match act {
+            Some(MatAct::Paint(m)) => {
+                self.doc.current_material = Some(PaletteMaterial::of(&m));
+                if self.tool_id() != crate::tools::ToolId::Paint {
+                    self.actions.push(Action::SetTool(crate::tools::ToolId::Paint));
+                }
+            }
+            Some(MatAct::Use(m)) => {
+                self.use_material(&m);
+            }
+            Some(MatAct::Rename(t, name)) => self.library.rename = Some((t, name)),
+            Some(MatAct::Save(m)) => self.save_material_value(&m),
+            Some(MatAct::Export(id)) => self.export_material(id),
+            Some(MatAct::Delete(p)) => self.mat_library.delete_ask = Some(p),
+            None => {}
         }
     }
 
-    /// A material swatch: its colour, the texture's thumbnail on top.
-    pub(crate) fn material_swatch(&mut self, ui: &mut Ui, ctx: &egui::Context, m: &Material, size: f32, selected: bool) -> egui::Response {
-        let r = super::swatch(ui, super::color32(m.color), size, selected);
-        if let Some(img) = &m.image
-            && let Some(t) = self.thumbnail(ctx, img)
-        {
-            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-            ui.painter().image(t, r.rect.shrink(3.0), uv, Color32::WHITE);
-        }
+    /// How a material tile looks: its colour, the texture's thumbnail, a corner mark.
+    pub(crate) fn material_look(&mut self, ctx: &egui::Context, m: &Material) -> MatLook {
+        let tex = m.image.as_ref().and_then(|img| self.thumbnail(ctx, img));
         let p = m.pbr_or_default();
         // A corner mark: metal (light), glass (blue), emissive (warm).
         let mark = if p.emission_strength > 0.0 && p.emission.iter().any(|c| *c > 0.0) {
@@ -395,12 +554,44 @@ impl VarstotasApp {
         } else {
             None
         };
-        if let Some(c) = mark {
-            let a = r.rect.right_top();
-            let tri = vec![a + egui::vec2(-9.0, 2.0), a + egui::vec2(-2.0, 2.0), a + egui::vec2(-2.0, 9.0)];
-            ui.painter().add(egui::Shape::convex_polygon(tri, c, egui::Stroke::new(0.5, Color32::from_black_alpha(90))));
+        MatLook { color: super::color32(m.color), tex, mark }
+    }
+
+    /// Rename model material `id` (one undo step; the paint material follows).
+    pub(crate) fn rename_material(&mut self, id: MaterialId, name: &str) {
+        let Some(old) = self.doc.model.materials.get(id).map(|m| m.name.clone()) else { return };
+        if self.doc.model.materials.iter().any(|(i, m)| i != id && m.name == name) {
+            return self.flash_error(format!("There is a material “{name}” already"));
         }
-        r
+        self.doc.commit(&format!("Rename Material {name}"), |m| m.materials[id].name = name.to_string());
+        if let Some(c) = self.doc.current_material.as_mut().filter(|c| c.name == old) {
+            c.name = name.to_string();
+        }
+        self.flash(format!("Renamed to {name}"));
+    }
+
+    /// Rename a library material: the material in the file and the file itself.
+    pub(crate) fn rename_material_file(&mut self, path: &Path, name: &str) {
+        let r = (|| -> Result<PathBuf, String> {
+            let mut mat = varstotas_kernel::io::load_material(path).map_err(|e| e.to_string())?;
+            mat.name = name.to_string();
+            let to = path.with_file_name(format!("{}.{MATERIAL_EXT}", safe_name(name)));
+            if to != path && to.exists() {
+                return Err(format!("{} exists already", to.display()));
+            }
+            varstotas_kernel::io::save_material(&mat, &to).map_err(|e| e.to_string())?;
+            if to != path {
+                std::fs::remove_file(path).map_err(|e| e.to_string())?;
+            }
+            Ok(to)
+        })();
+        match r {
+            Ok(_) => {
+                self.flash(format!("Renamed to {name}"));
+                self.refresh_materials();
+            }
+            Err(e) => self.flash_error(format!("Rename {}: {e}", path.display())),
+        }
     }
 
     /// "Delete from the materials library?"

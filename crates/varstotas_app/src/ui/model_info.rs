@@ -264,7 +264,9 @@ impl VarstotasApp {
             });
             ui.horizontal(|ui| {
                 let can = (self.model_info.purge_defs && unused_defs > 0) || (self.model_info.purge_mats && unused_mats > 0);
-                if ui.add_enabled(can, egui::Button::new("Purge Unused")).clicked() {
+                let r = ui.add_enabled(can, egui::Button::new("Purge Unused"));
+                crate::ui::tray_lib::spot("purge", r.rect.center());
+                if r.clicked() {
                     purge = true;
                 }
                 if let Some(l) = &self.model_info.last {

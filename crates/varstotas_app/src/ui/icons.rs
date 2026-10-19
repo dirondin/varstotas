@@ -75,6 +75,8 @@ pub enum Icon {
     Eye,
     EyeOff,
     Plus,
+    Cloud,
+    More,
     Trash,
     Refresh,
     Info,
@@ -758,6 +760,21 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                 pen.dot((12.0, 12.0), 3.0, pen.ink);
             } else {
                 pen.line_c(&[(4.0, 20.0), (20.0, 4.0)], pen.stroke());
+            }
+        }
+        Icon::Cloud => {
+            // A cloud with an arrow down: the online library.
+            pen.arc((8.5, 13.0), 4.0, 90.0, 270.0, pen.stroke());
+            pen.arc((12.5, 10.0), 5.0, 180.0, 340.0, pen.stroke());
+            pen.arc((16.5, 13.5), 3.5, -90.0, 90.0, pen.stroke());
+            pen.line(&[(8.5, 17.0), (10.0, 17.0)]);
+            pen.line(&[(14.0, 17.0), (16.5, 17.0)]);
+            pen.line(&[(12.0, 12.0), (12.0, 21.0)]);
+            pen.line(&[(9.5, 18.5), (12.0, 21.0), (14.5, 18.5)]);
+        }
+        Icon::More => {
+            for x in [6.0, 12.0, 18.0] {
+                pen.dot((x, 12.0), 1.7, pen.ink);
             }
         }
         Icon::Plus => {

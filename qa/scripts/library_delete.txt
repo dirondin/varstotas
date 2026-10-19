@@ -7,10 +7,10 @@ wait 40
 expect lib_folders=[("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
 screenshot shots/libd_start.bmp
 # right click on Box → context menu
-raw rclick 1185 174
+raw rclick 1185 176
 wait 5
 screenshot shots/libd_menu.bmp
-raw click 1220 293
+raw click 1220 319
 wait 5
 expect lib_delete=Some("Box")
 screenshot shots/libd_ask.bmp
@@ -27,11 +27,11 @@ screenshot shots/libd_rootfold.bmp
 raw click 1152 120
 wait 5
 expect lib_folders=[("", 1, false), ("Kitchen", 1, false)
-# the Counter generator (Kitchen/counter.rhai): Edit Generator… / Place / Delete…
-raw rclick 1185 301
+# the Counter generator (Kitchen/counter.rhai): Edit Generator… / Place / Show in Finder / Delete…
+raw rclick 1185 304
 wait 5
 screenshot shots/libd_genmenu.bmp
-raw click 1220 371
+raw click 1220 399
 wait 5
 expect lib_delete=Some("Counter")
 raw click 852 389
@@ -39,9 +39,9 @@ wait 10
 expect lib_delete=None
 expect lib_folders=[("", 1, false), ("Examples", 6, false)]
 # and Box
-raw rclick 1185 174
+raw rclick 1185 176
 wait 5
-raw click 1220 293
+raw click 1220 319
 wait 5
 raw click 852 389
 wait 10

@@ -27,6 +27,7 @@ pub mod statusbar;
 pub mod theme;
 pub mod toolbar;
 pub mod tray;
+pub mod tray_lib;
 pub mod unfold;
 pub mod workplanes;
 

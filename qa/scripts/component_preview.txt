@@ -10,28 +10,26 @@ action components
 wait 40
 expect previews=(None, [], [])
 # Box (library) → Set Preview from View
-raw rclick 1185 174
+raw rclick 1185 304
 wait 5
 screenshot shots/cprev_libmenu.bmp
-raw click 1220 221
+raw click 1220 351
 wait 30
 expect previews=(None, ["Box"], [])
-# fold the library folder: the Document folder moves up; Cube → Set Preview from View
-raw click 1152 120
-wait 5
-raw rclick 1185 204
+# Cube (In Model, the first section) → Set Preview from View
+raw rclick 1185 176
 wait 5
 screenshot shots/cprev_docmenu.bmp
-raw click 1220 275
+raw click 1220 247
 wait 30
 expect previews=(None, ["Box"], ["Cube"])
 expect undo=Some("Set Component Preview")
 screenshot shots/cprev_doctile.bmp
 # Cube → Remove Preview Image (below Set Preview Image… now)
-raw rclick 1185 204
+raw rclick 1185 176
 wait 5
 screenshot shots/cprev_docmenu2.bmp
-raw click 1220 323
+raw click 1220 295
 wait 10
 expect previews=(None, ["Box"], [])
 expect undo=Some("Remove Component Preview")
@@ -39,11 +37,9 @@ action undo
 wait 10
 expect previews=(None, ["Box"], ["Cube"])
 # Box → Remove Preview Image
-raw click 1152 120
+raw rclick 1185 304
 wait 5
-raw rclick 1185 174
-wait 5
-raw click 1220 269
+raw click 1220 399
 wait 20
 expect previews=(None, [], ["Cube"])
 screenshot shots/cprev_end.bmp

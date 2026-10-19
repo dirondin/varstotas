@@ -1,4 +1,4 @@
-# 3D Library (Components card → 3D Library…): the Poly Haven catalogue opens first; the
+# 3D Library (Components card → the cloud button): the Poly Haven catalogue opens first; the
 # Model Folders source plugin (Source dropdown, Folder / Unit typed, Load) lists the fixture
 # models (an OBJ with its thumbnail, a PLY read by the PLY Import plugin), double-click
 # downloads and places one (credit kept), Download saves the other; File → Import with the
@@ -8,7 +8,7 @@
 action tray_only Components
 action components
 wait 10
-raw click 1190 506
+raw click 1347 87
 wait 10
 action online_wait
 wait 60
@@ -74,7 +74,7 @@ action preview_clear
 wait 5
 expect previews=(None, ["Stool"], ["Stool"])
 screenshot shots/modlib_10.bmp
-raw rclick 1186 199
+raw rclick 1186 171
 wait 5
 screenshot shots/modlib_11.bmp
 raw key Escape

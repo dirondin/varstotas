@@ -97,8 +97,14 @@ pub struct Prefs {
     /// Components list: the document's own generators (the Document folder) hidden.
     #[serde(default)]
     pub hide_document: bool,
-    /// Components list: collapsed folders.
+    /// Components list: collapsed folders (the Materials card's sections: "mat:" + folder).
     pub library_collapsed: Vec<String>,
+    /// Tile size of the Components and Materials lists.
+    pub lib_tiles: crate::ui::tray_lib::TileSize,
+    /// Materials library folder (None = ~/.varstotas/materials).
+    pub mat_library_dir: Option<PathBuf>,
+    /// Materials list: the bundled example materials hidden.
+    pub hide_mat_examples: bool,
     /// 3D Library → Other Sites: offer new model files of the Downloads folder for import.
     pub watch_downloads: bool,
     /// 3D Library → Other Sites: listen for the Send to Varstotas bookmarklet (127.0.0.1).
@@ -143,6 +149,9 @@ impl Default for Prefs {
             hide_examples: false,
             hide_document: false,
             library_collapsed: Vec::new(),
+            lib_tiles: Default::default(),
+            mat_library_dir: None,
+            hide_mat_examples: false,
             watch_downloads: false,
             send_to_varstotas: false,
             tray_hidden: Vec::new(),
@@ -238,7 +247,7 @@ pub enum Action {
     MoveScene(usize, bool),
     /// View → Animation → Play / Pause.
     ToggleAnimation,
-    /// Materials → Texture…: new material from an image file.
+    /// Materials → + → New from Texture…: new material from an image file.
     ImportTexture,
     NextScene,
     PrevScene,

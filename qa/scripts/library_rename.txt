@@ -9,10 +9,10 @@ action components
 wait 40
 expect lib_names=["Box"]
 # right click on Box → Rename…
-raw rclick 1185 174
+raw rclick 1185 304
 wait 5
 screenshot shots/libr_menu.bmp
-raw click 1220 269
+raw click 1220 399
 wait 5
 expect rename=Some("Box")
 raw key Backspace
@@ -26,14 +26,11 @@ raw key Enter
 wait 20
 expect rename=None
 expect lib_names=["Crate"]
-# fold the library folder: the Document folder moves up
-raw click 1152 120
-wait 5
-expect lib_folders=[("", 1, true), ("Document", 1, false)
-raw rclick 1185 204
+# Cube (In Model, the first section) → Rename…
+raw rclick 1185 176
 wait 5
 screenshot shots/libr_docmenu.bmp
-raw click 1220 323
+raw click 1220 295
 wait 5
 expect rename=Some("Cube")
 raw key Backspace

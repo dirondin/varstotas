@@ -346,7 +346,7 @@ impl VarstotasApp {
 
     /// A generator tile: thumbnail with the defaults (built once per source), a gear; click
     /// places, the context menu edits or deletes a library file. Returns (place, edit, delete).
-    pub(crate) fn generator_tile(&mut self, ui: &mut Ui, it: &GenItem) -> (bool, bool, bool) {
+    pub(crate) fn generator_tile(&mut self, ui: &mut Ui, tiles: crate::ui::tray_lib::TileSize, it: &GenItem) -> (bool, bool, bool) {
         let unit = self.doc.model.unit;
         if !self.library.gens.thumbs.contains_key(&it.source) {
             let t = build_preview(&self.doc.model, &it.source, &GenValues::new()).map(|(_, c)| {
@@ -386,7 +386,7 @@ impl VarstotasApp {
         } else {
             self.thumbs.get(ui.ctx(), &key, || None, || build_preview(model, &it.source, &GenValues::new()).ok().and_then(|(_, c)| c.to_model(unit).ok()))
         };
-        let resp = crate::ui::library::tile_ex(ui, &it.name, thumb, pic, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
+        let resp = crate::ui::library::tile_ex(ui, tiles, &it.name, thumb, pic, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
         let (mut place, mut edit, mut delete) = (resp.clicked(), false, false);
         resp.context_menu(|ui| {
             if ui.button("Edit Generator…").clicked() {
@@ -395,6 +395,12 @@ impl VarstotasApp {
             }
             if ui.button("Place").clicked() {
                 place = true;
+                ui.close();
+            }
+            if let Some(f) = &it.file
+                && ui.button("Show in Finder").clicked()
+            {
+                crate::ui::extensions::reveal(f);
                 ui.close();
             }
             let only_doc = it.file.is_none() && !it.bundled && it.folder == DOCUMENT_FOLDER;
@@ -460,7 +466,9 @@ impl VarstotasApp {
         ui.label(RichText::new(title).strong()).on_hover_text(&g.description);
         let change = self.value_fields(ui, "entity_info_generator", &ids, &g, &values);
         ui.horizontal(|ui| {
-            if ui.button("Reset").on_hover_text("Back to the generator's defaults").clicked() {
+            let r = ui.button("Reset").on_hover_text("Back to the generator's defaults");
+            crate::ui::tray_lib::spot("gen_reset", r.rect.center());
+            if r.clicked() {
                 self.actions.push(Action::SetGenValues(GenValues::new(), true));
             }
             self.make_unique_button(ui, &ids);

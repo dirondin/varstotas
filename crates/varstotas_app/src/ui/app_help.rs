@@ -183,22 +183,22 @@ const GROUPS: &[B] = &[
 ];
 
 const LIBRARY: &[B] = &[
-    B::P("The Components card lists the components of your library (`~/.varstotas/components`, or a folder you choose with …), the generators, the bundled Examples and the components of the open document (the Document folder)."),
+    B::P("The Components and Materials cards look the same: a top row (Search, Refresh, + to add, the cloud button for the online library, … for the library folder, what to show and the tile size: Small / Large / List), then the sections In Model (the open document), My Library with its folders, and Examples. A section folds with its arrow; a folder's name opens it in the Finder."),
+    B::P("Components lists your library (`~/.varstotas/components`, or a folder you choose with …), the generators, the bundled Examples and the components of the open document."),
     B::Row("Click a tile", "place it: the copy follows the cursor, click to put it down"),
-    B::Row("Save Selection to Library…", "the button under the tiles: write the selection as a new `.vrst` file"),
-    B::Row("Search", "filters by name"),
-    B::Row("Right-click a tile", "Place, Set Preview from View, Set Preview Image…, Remove Preview Image, Rename…, Delete…; for a document component also Select Instances, Delete from Document…, Parameters…"),
+    B::Row("+ → Save Selection to Library…", "write the selection as a new `.vrst` file"),
+    B::Row("Right-click a tile", "Place, Set Preview from View, Set Preview Image…, Remove Preview Image, Rename…, Show in Finder, Delete…; for a document component also Select Instances, Save to Library, Parameters…, Delete from Document…"),
     B::H("Pictures"),
     B::P("A tile shows the file's picture when it has one, else a rendered thumbnail. Set Preview from View takes the viewport as it is now — frame the component first. A component placed from the library takes the file's picture with it; File → Preview Image sets the picture of the open document."),
     B::H("3D Library"),
-    B::P("Window → 3D Library… (or the button in the card) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Entity Info → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads."),
+    B::P("The cloud button in the Components card (or Window → 3D Library…) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Entity Info → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads."),
 ];
 
 const MATERIALS: &[B] = &[
     B::Tools(&[ToolId::Paint, ToolId::TexturePosition]),
-    B::P("The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`) and examples. Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen)."),
-    B::Row("Save to Library / Export… / Import…", "share a material between documents (`.vrstmat`)"),
-    B::Row("Library → Online…", "download PBR scans from Poly Haven and ambientCG, or from plugin sources"),
+    B::P("The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen)."),
+    B::Row("Save to Library / Export… / + → Import…", "share a material between documents (`.vrstmat`)"),
+    B::Row("Cloud button (Materials card)", "download PBR scans from Poly Haven and ambientCG, or from plugin sources"),
     B::Row("Shader", "a material can have its own WGSL shader with parameters (the shader editor has its own reference)"),
     B::P("Faces have a front (white) and a back (grey-blue) side; painting a group paints the faces inside it that have no material of their own."),
 ];

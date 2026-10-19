@@ -1,4 +1,4 @@
-# Online Materials (Materials card → Library → Online…): the Poly Haven catalogue, search,
+# Online Materials (Materials card → the cloud button): the Poly Haven catalogue, search,
 # a tile selected, Download & Use → a .vrstmat in <library>/Poly Haven with its PBR maps,
 # painted on a face; ambientCG: a double-click downloads (zip) and paints. Needs the network.
 box 0 0 0 1000 1000 1000
@@ -6,7 +6,7 @@ view iso
 zoom_extents
 action tray_only Materials
 wait 10
-raw click 1348 288
+raw click 1347 288
 wait 5
 action online_wait
 wait 5
@@ -35,8 +35,8 @@ expect online=(false
 rawp click 500 0 500
 wait 5
 expect mats={"-": 5, "Red Brick": 1}
-# ambientCG (Source dropdown): same search, double-click the first tile (Online… lower: the In Model row)
-raw click 1348 335
+# ambientCG (Source dropdown): same search, double-click the first tile (the cloud button stays: In Model is below it)
+raw click 1347 288
 wait 5
 raw click 245 110
 wait 5
@@ -60,7 +60,7 @@ rawp click 1000 500 500
 wait 5
 expect mats={"-": 4,
 # A source plugin in Python (example: ambientCG search "metal"): its catalogue, a download.
-raw click 1348 335
+raw click 1347 288
 wait 5
 raw click 245 110
 wait 5

@@ -6,7 +6,7 @@ action components
 wait 40
 screenshot shots/gen_tray.bmp
 # the Shelf tile (Examples folder) of the Components card, real mouse
-raw click 1280 343
+raw click 1270 304
 wait 3
 rawp click 0 0 0
 wait 3
@@ -57,7 +57,7 @@ expect back=false,finish=Walnut
 # (still scrolled to Components: Reset is lower)
 action tray_only Entity Info,Components
 wait 5
-raw click 1170 300
+raw click 1171 359
 wait 3
 expect undo=Some("Reset Parameters")
 expect gen_defs=1

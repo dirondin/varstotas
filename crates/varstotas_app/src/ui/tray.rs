@@ -197,6 +197,7 @@ fn instance_label(model: &Model, mesh: &Mesh, id: InstanceId) -> (String, bool) 
 
 impl VarstotasApp {
     pub(crate) fn tray_ui(&mut self, ui: &mut Ui) {
+        super::tray_lib::clear_spots();
         ui.horizontal(|ui| {
             ui.label(RichText::new("Default Tray").strong().size(14.0));
         });
@@ -1207,33 +1208,12 @@ impl VarstotasApp {
             if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::OnlyBlend).changed() {
                 self.tray.custom_color = Some(c);
             }
-            if ui.button("Texture…").on_hover_text("New material from an image file (PNG, JPEG)").clicked() {
-                self.actions.push(Action::ImportTexture);
-            }
             if ui.button("Use").clicked() {
                 let [r, g, b, _] = c.to_srgba_unmultiplied();
                 picked = Some(Some(PaletteMaterial::color(format!("Color #{r:02X}{g:02X}{b:02X}"), color_f32(c))));
             }
         });
 
-        // Materials in model
-        if !self.doc.model.materials.is_empty() {
-            ui.add_space(4.0);
-            ui.label(RichText::new("In Model").small().color(theme::TEXT_DIM));
-            let mats: Vec<(varstotas_kernel::MaterialId, varstotas_kernel::Material)> = self.doc.model.materials.iter().map(|(id, m)| (id, m.clone())).collect();
-            let ctx = ui.ctx().clone();
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-                for (id, m) in &mats {
-                    let sel = cur.as_ref().is_some_and(|c| c.name == m.name);
-                    let r = self.material_swatch(ui, &ctx, m, 22.0, sel).on_hover_text(crate::ui::mat_library::describe(m));
-                    if r.clicked() {
-                        picked = Some(Some(PaletteMaterial::of(m)));
-                    }
-                    r.context_menu(|ui| self.model_material_menu(ui, *id));
-                }
-            });
-        }
         self.material_library_ui(ui);
         self.texture_size_editor(ui);
         self.pbr_editor(ui);

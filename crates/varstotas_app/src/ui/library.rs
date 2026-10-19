@@ -7,7 +7,7 @@
 
 use crate::app::{Action, VarstotasApp};
 use crate::clipboard::Clipboard;
-use egui::{Color32, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Color32, RichText, Stroke, Ui, pos2, vec2};
 use varstotas_kernel::glam::DVec3;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -15,7 +15,7 @@ use std::time::SystemTime;
 
 /// Edges kept for a thumbnail.
 pub(crate) const THUMB_EDGES: usize = 4000;
-const TILE: f32 = 78.0;
+const TILE: f32 = super::tray_lib::LARGE;
 
 pub struct LibItem {
     pub path: PathBuf,
@@ -88,6 +88,10 @@ pub enum PreviewTarget {
 pub enum RenameTarget {
     Def(varstotas_kernel::DefId),
     File(PathBuf),
+    /// A material of the document.
+    Mat(varstotas_kernel::MaterialId),
+    /// A materials library file.
+    MatFile(PathBuf),
 }
 
 /// `~/.varstotas/components`.
@@ -271,9 +275,21 @@ impl VarstotasApp {
 
     /// Write the selection to `<library>/<name>.vrst` (a new name when it exists).
     pub(crate) fn save_to_library(&mut self, name: &str) {
-        let Some(dir) = self.library_dir() else { return };
         let r = Clipboard::from_selection(&self.doc).and_then(|c| c.to_model(self.doc.model.unit));
-        let model = match r {
+        self.write_to_library(name, r);
+    }
+
+    /// A document's component → `<library>/<its name>.vrst` (In Model → Save to Library).
+    pub(crate) fn save_definition_to_library(&mut self, d: varstotas_kernel::DefId) {
+        let m = &self.doc.model;
+        let name = m.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+        let r = Clipboard::of_definition(m, self.doc.uid, d).and_then(|c| c.to_model(m.unit));
+        self.write_to_library(&name, r);
+    }
+
+    fn write_to_library(&mut self, name: &str, model: varstotas_kernel::OpResult<varstotas_kernel::Model>) {
+        let Some(dir) = self.library_dir() else { return };
+        let model = match model {
             Ok(m) => m,
             Err(e) => return self.flash_error(format!("Save to Library: {e}")),
         };
@@ -294,52 +310,38 @@ impl VarstotasApp {
         }
     }
 
-    /// A folder heading of the Components list ("" = the library folder itself): a fold arrow
-    /// and the name, a link showing the folder in the Finder (the bundled Examples and the Document folder: Hide instead). True
-    /// when folded.
-    fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>) -> bool {
-        let folded = self.prefs.library_collapsed.iter().any(|f| f == folder);
-        let examples = folder == super::generators::EXAMPLES_FOLDER;
-        let document = folder == super::generators::DOCUMENT_FOLDER;
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            let arrow = ui
-                .add_sized([14.0, 18.0], egui::Button::new(if folded { "⏵" } else { "⏷" }).frame(false))
-                .on_hover_text(if folded { "Show the folder" } else { "Fold the folder" });
-            if arrow.clicked() {
-                if folded {
-                    self.prefs.library_collapsed.retain(|f| f != folder);
-                } else {
-                    self.prefs.library_collapsed.push(folder.to_string());
+    /// A section heading of the Components list: In Model (the document's components and
+    /// generators; Hide), the library folder ("" — My Library) and its subfolders (the title
+    /// shows the folder in the Finder), Examples (bundled; Hide). True when folded.
+    fn folder_header(&mut self, ui: &mut Ui, folder: &str, root: Option<&Path>, count: usize) -> bool {
+        use super::generators::{DOCUMENT_FOLDER, EXAMPLES_FOLDER};
+        let dir = root.map(|r| if folder.is_empty() { r.to_path_buf() } else { r.join(folder) });
+        let shown = |d: &Option<PathBuf>| d.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default();
+        let (title, tip, link) = match folder {
+            EXAMPLES_FOLDER => (folder.to_string(), "Generators bundled with Varstotas (not files)".to_string(), false),
+            DOCUMENT_FOLDER => ("In Model".to_string(), "Components and generators of the open document (Save to Library makes a file)".to_string(), false),
+            "" => ("My Library".to_string(), shown(&dir), dir.is_some()),
+            f => (f.to_string(), shown(&dir), dir.is_some()),
+        };
+        let mut hide = None;
+        let (folded, clicked) = super::tray_lib::section(ui, &mut self.prefs.library_collapsed, folder, &title, &tip, link, false, Some(count), |ui| {
+            if folder == EXAMPLES_FOLDER || folder == DOCUMENT_FOLDER {
+                let tip = if folder == EXAMPLES_FOLDER { "Hide the bundled examples (… → Show Examples brings them back)" } else { "Hide the document's components (… → Show In Model brings them back)" };
+                let r = ui.small_button("Hide").on_hover_text(tip);
+                super::tray_lib::spot(format!("hide:{folder}"), r.rect.center());
+                if r.clicked() {
+                    hide = Some(folder == EXAMPLES_FOLDER);
                 }
-            }
-            if examples {
-                ui.label(folder).on_hover_text("Generators bundled with Varstotas (not files)");
-                if ui.small_button("Hide").on_hover_text("Hide the bundled examples (… → Show Examples brings them back)").clicked() {
-                    self.prefs.hide_examples = true;
-                }
-            } else if document {
-                ui.label(folder).on_hover_text("Generators found only in the open document (Edit → Save to Library makes a file)");
-                if ui.small_button("Hide").on_hover_text("Hide the document's generators (… → Show Document brings them back)").clicked() {
-                    self.prefs.hide_document = true;
-                }
-            } else if folder.is_empty() {
-                // The library folder: its name, a link; Default when the user chose another one.
-                if let Some(dir) = root {
-                    let name = dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                    if ui.link(name).on_hover_text(format!("{}\nClick to show in the Finder", dir.display())).clicked() {
-                        crate::ui::extensions::reveal(dir);
-                    }
-                }
-                if self.prefs.library_dir.is_some() && ui.small_button("Default").on_hover_text("Back to ~/.varstotas/components").clicked() {
-                    self.prefs.library_dir = None;
-                }
-            } else if let Some(dir) = root.map(|r| r.join(folder))
-                && ui.link(folder).on_hover_text(format!("{}\nClick to show in the Finder", dir.display())).clicked()
-            {
-                crate::ui::extensions::reveal(&dir);
             }
         });
+        match hide {
+            Some(true) => self.prefs.hide_examples = true,
+            Some(false) => self.prefs.hide_document = true,
+            None => {}
+        }
+        if clicked && let Some(d) = dir {
+            crate::ui::extensions::reveal(&d);
+        }
         folded
     }
 
@@ -470,9 +472,9 @@ impl VarstotasApp {
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("component_rename")).show(ctx, |ui| {
             ui.set_width(340.0);
-            ui.heading("Rename Component");
+            ui.heading(if matches!(target, RenameTarget::Mat(_) | RenameTarget::MatFile(_)) { "Rename Material" } else { "Rename Component" });
             ui.add_space(4.0);
-            if let RenameTarget::File(path) = &target {
+            if let RenameTarget::File(path) | RenameTarget::MatFile(path) = &target {
                 let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 ui.label(RichText::new(format!("The library file {file} is renamed too.")).small().weak()).on_hover_text(path.display().to_string());
             }
@@ -525,6 +527,8 @@ impl VarstotasApp {
                 }
                 Err(e) => self.flash_error(format!("Rename {}: {e}", path.display())),
             },
+            RenameTarget::Mat(id) => self.rename_material(*id, name),
+            RenameTarget::MatFile(path) => self.rename_material_file(path, name),
         }
     }
 
@@ -549,7 +553,7 @@ impl VarstotasApp {
     }
 
     /// A tile of a document's component (thumbnail rebuilt when the model changes).
-    fn def_tile(&mut self, ui: &mut Ui, d: varstotas_kernel::DefId) -> egui::Response {
+    fn def_tile(&mut self, ui: &mut Ui, tiles: super::tray_lib::TileSize, d: varstotas_kernel::DefId) -> egui::Response {
         let version = self.doc.model_version;
         let m = &self.doc.model;
         let fresh = self.library.def_thumbs.get(&d).is_some_and(|t| t.version == version);
@@ -594,7 +598,7 @@ impl VarstotasApp {
         let uses = m.defs.values().flat_map(|x| x.mesh.instances.values()).filter(|i| i.def == d).count();
         let t = &self.library.def_thumbs[&d];
         let note = format!("In this document: {uses} placed");
-        tile_ex(ui, &name, &t.thumb, own.or(t.pic), t.size, m.unit, false, &note)
+        tile_ex(ui, tiles, &name, &t.thumb, own.or(t.pic), t.size, m.unit, false, &note)
     }
 
     /// Set or remove the open document's preview picture (undoable; saved with the file).
@@ -727,35 +731,72 @@ impl VarstotasApp {
             self.refresh_library();
         }
         let unit = self.doc.model.unit;
-        ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut self.library.filter).hint_text("Search").desired_width(ui.available_width() - 100.0));
-            if ui.button("⟳").on_hover_text("Refresh").clicked() {
-                self.refresh_library();
-            }
-            if ui.button("+").on_hover_text("New generator: a component built by a script with parameters (Window → Generator Editor)").clicked() {
-                self.gen_editor.new_generator();
-            }
-            ui.menu_button("…", |ui| {
-                if ui.button("Choose Folder…").clicked() {
+        // The top row: search, Refresh, + (save the selection, new generator), 3D Library, …
+        let can_save = !self.doc.selection.is_empty();
+        let custom = self.prefs.library_dir.is_some();
+        let (mut save, mut new_gen, mut choose, mut default_dir, mut reveal_root) = (false, false, false, false, false);
+        let (mut show_ex, mut show_doc) = (!self.prefs.hide_examples, !self.prefs.hide_document);
+        let top = super::tray_lib::top_row(
+            ui,
+            "",
+            &mut self.library.filter,
+            &mut self.prefs.lib_tiles,
+            "Save the selection to the library, new generator",
+            "3D Library: free models from the web (Poly Haven, Smithsonian, NASA, Kenney, plugins)",
+            |ui| {
+                if ui.add_enabled(can_save, egui::Button::new("Save Selection to Library…")).on_disabled_hover_text("Select something first").clicked() {
+                    save = true;
                     ui.close();
-                    if let Some(d) = rfd::FileDialog::new().pick_folder() {
-                        self.prefs.library_dir = Some(d);
-                    }
                 }
-                let mut show = !self.prefs.hide_examples;
-                if ui.checkbox(&mut show, "Show Examples").on_hover_text("The bundled example generators").changed() {
-                    self.prefs.hide_examples = !show;
+                if ui.button("New Generator…").on_hover_text("A component built by a script with parameters (Window → Generator Editor)").clicked() {
+                    new_gen = true;
+                    ui.close();
                 }
-                let mut show = !self.prefs.hide_document;
-                if ui.checkbox(&mut show, "Show Document").on_hover_text("Generators found only in the open document").changed() {
-                    self.prefs.hide_document = !show;
+            },
+            |ui| {
+                if ui.button("Choose Folder…").clicked() {
+                    choose = true;
+                    ui.close();
                 }
-            })
-            .response
-            .on_hover_text("Library folder, examples");
-        });
+                if custom && ui.button("Default Folder").on_hover_text("Back to ~/.varstotas/components").clicked() {
+                    default_dir = true;
+                    ui.close();
+                }
+                if ui.button("Show in Finder").clicked() {
+                    reveal_root = true;
+                    ui.close();
+                }
+                ui.separator();
+                ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The bundled example generators");
+                ui.checkbox(&mut show_doc, "Show In Model").on_hover_text("The open document's components and generators");
+            },
+        );
+        self.prefs.hide_examples = !show_ex;
+        self.prefs.hide_document = !show_doc;
+        if top.refresh {
+            self.refresh_library();
+        }
+        if top.online {
+            self.models.open = true;
+        }
+        if save {
+            self.library.save_name = Some(self.selection_name());
+        }
+        if new_gen {
+            self.gen_editor.new_generator();
+        }
+        if choose && let Some(d) = rfd::FileDialog::new().pick_folder() {
+            self.prefs.library_dir = Some(d);
+        }
+        if default_dir {
+            self.prefs.library_dir = None;
+        }
+        if reveal_root && let Some(d) = self.library_dir() {
+            crate::ui::extensions::reveal(&d);
+        }
+        self.save_name_row(ui);
         let filter = self.library.filter.trim().to_lowercase();
-        let found = |name: &str| filter.is_empty() || name.to_lowercase().contains(&filter);
+        let found = |name: &str| super::tray_lib::found(&filter, name);
         // Components and generators in one list: by folder, then name.
         let gens = self.generator_items();
         let doc_defs = if self.prefs.hide_document { Vec::new() } else { self.document_components() };
@@ -772,138 +813,150 @@ impl VarstotasApp {
             .chain(gens.iter().enumerate().filter(|(_, g)| found(&g.name) && !(g.bundled && self.prefs.hide_examples) && !(is_doc(g) && self.prefs.hide_document) && !shape(g)).map(|(i, g)| (g.folder.clone(), g.name.to_lowercase(), Tile::Gen(i))))
             .chain(doc_defs.iter().filter(|(_, n)| found(n)).map(|(d, n)| (super::generators::DOCUMENT_FOLDER.to_string(), n.to_lowercase(), Tile::Def(*d))))
             .collect();
-        // Library folders first, then Document, then Examples.
+        // In Model first, then the library folders, then Examples.
         let rank = |f: &str| match f {
-            super::generators::DOCUMENT_FOLDER => 1,
+            super::generators::DOCUMENT_FOLDER => 0,
             super::generators::EXAMPLES_FOLDER => 2,
-            _ => 0,
+            _ => 1,
         };
         shown.sort_by(|a, b| rank(&a.0).cmp(&rank(&b.0)).then_with(|| (&a.0, &a.1).cmp(&(&b.0, &b.1))));
         if self.library.items.is_empty() && gens.is_empty() && doc_defs.is_empty() {
-            ui.label(RichText::new("No components yet: select something and use Save Selection.").weak());
+            ui.label(RichText::new("No components yet: select something and use + → Save Selection to Library.").weak());
         } else if shown.is_empty() {
             ui.label(RichText::new("Nothing found").weak());
         }
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
         let mut delete_def = None;
         let mut rig_def = None;
+        let mut save_def = None;
         let mut rename = None;
-        let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
         let mut set_preview: Option<(PreviewTarget, bool)> = None;
         let mut preview_view: Option<PreviewTarget> = None;
+        let size = self.prefs.lib_tiles;
         self.library.shown_folders.clear();
-        // The library folder itself: always a heading (its own items fold under it).
-        let root_folded = self.folder_header(ui, "", lib_dir.as_deref());
+        let root_count = shown.iter().filter(|t| t.0.is_empty()).count();
+        let mut root_folded = None;
         let mut k = 0;
-        while k < shown.len() {
+        loop {
+            // The library folder's heading: always there, after In Model (its own items fold
+            // under it).
+            if root_folded.is_none() && (k == shown.len() || rank(&shown[k].0) >= 1) {
+                root_folded = Some(self.folder_header(ui, "", lib_dir.as_deref(), root_count));
+            }
+            if k >= shown.len() {
+                break;
+            }
             let folder = shown[k].0.clone();
             let end = shown[k..].iter().position(|t| t.0 != folder).map_or(shown.len(), |n| k + n);
-            let folded = if folder.is_empty() { root_folded } else { self.folder_header(ui, &folder, lib_dir.as_deref()) };
+            let folded = if folder.is_empty() { root_folded.unwrap_or(false) } else { self.folder_header(ui, &folder, lib_dir.as_deref(), end - k) };
             self.library.shown_folders.push((folder.clone(), end - k, folded));
             if folded {
                 k = end;
                 continue;
             }
-            for row in shown[k..end].chunks(cols) {
-                ui.horizontal(|ui| {
-                    for (_, _, t) in row {
-                        match *t {
-                            Tile::Comp(i) => {
-                                let it = &self.library.items[i];
-                                // The file's picture, else a rendered thumbnail.
-                                let pic = it.picture(ui.ctx()).or_else(|| {
-                                    let key = format!("lib:{}|{:?}", it.path.display(), it.mtime);
-                                    self.thumbs.get(ui.ctx(), &key, || crate::thumbs::disk_path(&it.path), || it.clip.to_model(unit).ok())
-                                });
-                                let resp = tile_ex(ui, &it.name, &it.thumb, pic, it.size, unit, false, "");
-                                if resp.clicked() {
-                                    place = Some(i);
-                                }
-                                resp.context_menu(|ui| {
-                                    if ui.button("Place").clicked() {
-                                        place = Some(i);
-                                        ui.close();
-                                    }
-                                    if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the picture (saved in the file): frame the model first").clicked() {
-                                        preview_view = Some(PreviewTarget::File(it.path.clone()));
-                                        ui.close();
-                                    }
-                                    if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
-                                        set_preview = Some((PreviewTarget::File(it.path.clone()), true));
-                                        ui.close();
-                                    }
-                                    if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
-                                        set_preview = Some((PreviewTarget::File(it.path.clone()), false));
-                                        ui.close();
-                                    }
-                                    if ui.button("Rename…").clicked() {
-                                        rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
-                                        ui.close();
-                                    }
-                                    if ui.button("Delete…").clicked() {
-                                        delete = Some((Some(it.path.clone()), it.name.clone()));
-                                        ui.close();
-                                    }
-                                });
-                            }
-                            Tile::Def(d) => {
-                                let resp = self.def_tile(ui, d);
-                                if resp.clicked() {
-                                    place_def = Some(d);
-                                }
-                                resp.context_menu(|ui| {
-                                    if ui.button("Place").clicked() {
-                                        place_def = Some(d);
-                                        ui.close();
-                                    }
-                                    if ui.button("Select Instances").clicked() {
-                                        select_def = Some(d);
-                                        ui.close();
-                                    }
-                                    if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the tile's picture (saved with the document): frame the component first").clicked() {
-                                        preview_view = Some(PreviewTarget::Def(d));
-                                        ui.close();
-                                    }
-                                    if ui.button("Set Preview Image…").on_hover_text("A picture shown on the tile instead of the rendered model").clicked() {
-                                        set_preview = Some((PreviewTarget::Def(d), true));
-                                        ui.close();
-                                    }
-                                    if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button("Remove Preview Image").clicked() {
-                                        set_preview = Some((PreviewTarget::Def(d), false));
-                                        ui.close();
-                                    }
-                                    if ui.button("Rename…").clicked() {
-                                        let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
-                                        rename = Some((RenameTarget::Def(d), name));
-                                        ui.close();
-                                    }
-                                    if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
-                                        delete_def = Some(d);
-                                        ui.close();
-                                    }
-                                    if ui.button("Parameters…").on_hover_text("Window → Component Parameters: values that move, show or paint its parts").clicked() {
-                                        rig_def = Some(d);
-                                        ui.close();
-                                    }
-                                });
-                            }
-                            Tile::Gen(i) => {
-                                let (p, e, d) = self.generator_tile(ui, &gens[i]);
-                                if d {
-                                    delete = Some((gens[i].file.clone(), gens[i].name.clone()));
-                                }
-                                if p {
-                                    place_gen = Some(gens[i].source.clone());
-                                }
-                                if e {
-                                    edit = Some(i);
-                                }
-                            }
-                        }
+            let group: Vec<Tile> = shown[k..end].iter().map(|t| t.2).collect();
+            super::tray_lib::tiles(ui, size, group.len(), |ui, j| match group[j] {
+                Tile::Comp(i) => {
+                    let it = &self.library.items[i];
+                    // The file's picture, else a rendered thumbnail.
+                    let pic = it.picture(ui.ctx()).or_else(|| {
+                        let key = format!("lib:{}|{:?}", it.path.display(), it.mtime);
+                        self.thumbs.get(ui.ctx(), &key, || crate::thumbs::disk_path(&it.path), || it.clip.to_model(unit).ok())
+                    });
+                    let resp = tile_ex(ui, size, &it.name, &it.thumb, pic, it.size, unit, false, "");
+                    if resp.clicked() {
+                        place = Some(i);
                     }
-                });
-            }
+                    resp.context_menu(|ui| {
+                        if ui.button("Place").clicked() {
+                            place = Some(i);
+                            ui.close();
+                        }
+                        if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the picture (saved in the file): frame the model first").clicked() {
+                            preview_view = Some(PreviewTarget::File(it.path.clone()));
+                            ui.close();
+                        }
+                        if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
+                            set_preview = Some((PreviewTarget::File(it.path.clone()), true));
+                            ui.close();
+                        }
+                        if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
+                            set_preview = Some((PreviewTarget::File(it.path.clone()), false));
+                            ui.close();
+                        }
+                        if ui.button("Rename…").clicked() {
+                            rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
+                            ui.close();
+                        }
+                        if ui.button("Show in Finder").clicked() {
+                            crate::ui::extensions::reveal(&it.path);
+                            ui.close();
+                        }
+                        if ui.button("Delete…").clicked() {
+                            delete = Some((Some(it.path.clone()), it.name.clone()));
+                            ui.close();
+                        }
+                    });
+                }
+                Tile::Def(d) => {
+                    let resp = self.def_tile(ui, size, d);
+                    if resp.clicked() {
+                        place_def = Some(d);
+                    }
+                    resp.context_menu(|ui| {
+                        if ui.button("Place").clicked() {
+                            place_def = Some(d);
+                            ui.close();
+                        }
+                        if ui.button("Select Instances").clicked() {
+                            select_def = Some(d);
+                            ui.close();
+                        }
+                        if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the tile's picture (saved with the document): frame the component first").clicked() {
+                            preview_view = Some(PreviewTarget::Def(d));
+                            ui.close();
+                        }
+                        if ui.button("Set Preview Image…").on_hover_text("A picture shown on the tile instead of the rendered model").clicked() {
+                            set_preview = Some((PreviewTarget::Def(d), true));
+                            ui.close();
+                        }
+                        if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button("Remove Preview Image").clicked() {
+                            set_preview = Some((PreviewTarget::Def(d), false));
+                            ui.close();
+                        }
+                        if ui.button("Rename…").clicked() {
+                            let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+                            rename = Some((RenameTarget::Def(d), name));
+                            ui.close();
+                        }
+                        if ui.button("Save to Library").on_hover_text("Write it to the library folder, for any document").clicked() {
+                            save_def = Some(d);
+                            ui.close();
+                        }
+                        if ui.button("Parameters…").on_hover_text("Window → Component Parameters: values that move, show or paint its parts").clicked() {
+                            rig_def = Some(d);
+                            ui.close();
+                        }
+                        if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
+                            delete_def = Some(d);
+                            ui.close();
+                        }
+                    });
+                }
+                Tile::Gen(i) => {
+                    let (p, e, d) = self.generator_tile(ui, size, &gens[i]);
+                    if d {
+                        delete = Some((gens[i].file.clone(), gens[i].name.clone()));
+                    }
+                    if p {
+                        place_gen = Some(gens[i].source.clone());
+                    }
+                    if e {
+                        edit = Some(i);
+                    }
+                }
+            });
             k = end;
         }
         if delete.is_some() {
@@ -927,6 +980,9 @@ impl VarstotasApp {
         if let Some(d) = select_def {
             self.select_definition(d);
         }
+        if let Some(d) = save_def {
+            self.save_definition_to_library(d);
+        }
         if let Some(d) = rig_def {
             self.open_rig_editor_for(d, None);
         }
@@ -947,50 +1003,42 @@ impl VarstotasApp {
             ui.label(RichText::new(format!("{} generator(s) could not be read", self.library.gens.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.library.gens.errors.join("\n"));
         }
-        ui.add_space(4.0);
-        match self.library.save_name.as_mut() {
-            None => {
-                let can = !self.doc.selection.is_empty();
-                if ui.add_enabled(can, egui::Button::new("Save Selection to Library…")).clicked() {
-                    self.library.save_name = Some(self.selection_name());
-                }
-                if ui.button("3D Library…").on_hover_text("Free models from the web (Poly Haven, Smithsonian, NASA, plugins)").clicked() {
-                    self.models.open = true;
-                }
-            }
-            Some(name) => {
-                let mut done = None;
-                ui.horizontal(|ui| {
-                    let r = ui.add(egui::TextEdit::singleline(name).desired_width(ui.available_width() - 110.0));
-                    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        done = Some(true);
-                    }
-                    if ui.button("Save").clicked() {
-                        done = Some(true);
-                    }
-                    if ui.button("Cancel").clicked() {
-                        done = Some(false);
-                    }
-                });
-                if let Some(ok) = done {
-                    let n = self.library.save_name.take().unwrap_or_default();
-                    if ok {
-                        self.actions.push(Action::SaveToLibrary(n));
-                    }
-                }
-            }
-        }
         if let Some(i) = place {
             self.actions.push(Action::PlaceComponent(i));
         }
     }
+
+    /// The name typed for + → Save Selection to Library (Enter or Save writes it).
+    fn save_name_row(&mut self, ui: &mut Ui) {
+        let Some(name) = self.library.save_name.as_mut() else { return };
+        let mut done = None;
+        ui.horizontal(|ui| {
+            let r = ui.add(egui::TextEdit::singleline(name).hint_text("Name").desired_width(ui.available_width() - 110.0));
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                done = Some(true);
+            }
+            if ui.button("Save").clicked() {
+                done = Some(true);
+            }
+            if ui.button("Cancel").clicked() {
+                done = Some(false);
+            }
+        });
+        if let Some(ok) = done {
+            let n = self.library.save_name.take().unwrap_or_default();
+            if ok {
+                self.actions.push(Action::SaveToLibrary(n));
+            }
+        }
+    }
 }
 
-/// A library tile: the picture `image` (fitted) or else the thumbnail edges in the unit
-/// square, the name below; `gear` marks a generator (a gear in the top right corner).
+/// A library tile (`tray_lib::tile`): the picture `image` (fitted) or else the thumbnail edges
+/// in the unit square; `gear` marks a generator (a gear in the top right corner).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn tile_ex(
     ui: &mut Ui,
+    tiles: super::tray_lib::TileSize,
     name: &str,
     thumb: &[(egui::Pos2, egui::Pos2)],
     image: Option<egui::TextureId>,
@@ -999,40 +1047,26 @@ pub(crate) fn tile_ex(
     gear: bool,
     note: &str,
 ) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(TILE, TILE + 16.0), Sense::click());
-    if ui.is_rect_visible(rect) {
-        let p = ui.painter();
-        let pic = Rect::from_min_size(rect.min, vec2(TILE, TILE));
-        let fill = if resp.hovered() { Color32::from_rgb(0xE6, 0xEE, 0xFA) } else { Color32::from_gray(248) };
-        p.rect_filled(pic, 6.0, fill);
-        p.rect_stroke(pic, 6.0, Stroke::new(1.0, Color32::from_gray(215)), egui::StrokeKind::Inside);
+    let ctx = ui.ctx().clone();
+    let large = tiles == super::tray_lib::TileSize::Large;
+    let resp = super::tray_lib::tile(ui, tiles, name, false, |p, pic| {
         if let Some(id) = image {
-            let [w, h] = ui.ctx().tex_manager().read().meta(id).map_or([1, 1], |m| m.size);
-            let k = (pic.width() - 2.0) / w.max(h).max(1) as f32;
-            let r = Rect::from_center_size(pic.center(), vec2(w as f32 * k, h as f32 * k));
-            egui::Image::new((id, r.size())).corner_radius(5.0).paint_at(ui, r);
+            super::tray_lib::paint_picture(&ctx, p, pic, id);
         } else {
-            let inner = pic.shrink(8.0);
+            let inner = pic.shrink(if large { 8.0 } else { 3.0 });
             let to = |q: egui::Pos2| inner.min + vec2(q.x * inner.width(), q.y * inner.height());
-            let stroke = Stroke::new(0.8, Color32::from_gray(60));
+            let stroke = Stroke::new(if large { 0.8 } else { 0.6 }, Color32::from_gray(60));
             for (a, b) in thumb {
                 p.line_segment([to(*a), to(*b)], stroke);
             }
         }
         if gear {
-            let c = pos2(pic.max.x - 10.0, pic.min.y + 10.0);
-            p.circle_filled(c, 8.0, Color32::from_rgb(0x3B, 0x6E, 0xC4));
-            p.text(c, egui::Align2::CENTER_CENTER, "⚙", egui::FontId::proportional(12.0), Color32::WHITE);
+            let r = if large { 8.0 } else { 5.0 };
+            let c = pos2(pic.max.x - r - 2.0, pic.min.y + r + 2.0);
+            p.circle_filled(c, r, Color32::from_rgb(0x3B, 0x6E, 0xC4));
+            p.text(c, egui::Align2::CENTER_CENTER, "⚙", egui::FontId::proportional(1.5 * r), Color32::WHITE);
         }
-        let label = if name.chars().count() > 12 { format!("{}…", name.chars().take(11).collect::<String>()) } else { name.to_string() };
-        p.text(
-            pos2(rect.center().x, rect.max.y - 7.0),
-            egui::Align2::CENTER_CENTER,
-            label,
-            egui::FontId::proportional(11.0),
-            ui.visuals().text_color(),
-        );
-    }
+    });
     let f = |v: f64| varstotas_kernel::units::format_length(v, unit);
     let note = if note.is_empty() { String::new() } else { format!("{note}\n") };
     resp.on_hover_text(format!("{name}\n{note}{} × {} × {}\nClick to place", f(size.x), f(size.y), f(size.z)))

@@ -1,4 +1,4 @@
-//! Online Materials window (Materials card → Library → Online…): browse the Poly Haven and
+//! Online Materials window (the cloud button of the Materials card): browse the Poly Haven and
 //! ambientCG catalogues, download a material's 1K maps into the materials library
 //! (`<library>/Poly Haven/…`) and paint with it. Material source plugins (`@material_source`)
 //! join the Source dropdown, their parameters above the grid. See `crate::online_mats`,
