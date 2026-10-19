@@ -4,8 +4,8 @@
 //! Smooth — clicks only, the handles follow the neighbours (Catmull-Rom); Freehand — press
 //! and drag a stroke, smoothed on release. Enter / double-click finishes an open curve (edges
 //! only); a click on the first anchor (a stroke ended at its start) closes it into a face.
-//! Backspace takes back the last anchor, Escape drops it all. The method is chosen in the bar
-//! over the viewport, or with a tap of Option / Alt (the next method).
+//! Backspace takes back the last anchor, Escape drops it all. A tap of Option / Alt picks the
+//! next method; the status bar shows the current one.
 
 use super::common::*;
 use super::draw::{plane_point, shape_normal};
@@ -28,9 +28,9 @@ const FREEHAND_SEGS: u32 = 3;
 /// Freehand: the stroke ends this close (points) to its start = closed (a face).
 const FREEHAND_CLOSE_PX: f32 = 16.0;
 #[cfg(target_os = "macos")]
-const TAPS: &str = "Tap Option for the next method.";
+const TAP_KEY: &str = "Option";
 #[cfg(not(target_os = "macos"))]
-const TAPS: &str = "Tap Alt for the next method.";
+const TAP_KEY: &str = "Alt";
 const HANDLE: Color32 = Color32::from_rgb(0x20, 0x70, 0xE0);
 
 /// One anchor of the curve; handles are absolute points (None = a corner on that side).
@@ -52,12 +52,9 @@ impl Method {
             Method::Freehand => "Freehand",
         }
     }
-    fn tip(self) -> &'static str {
-        match self {
-            Method::Handles => "Click corner points; press and drag pulls out handles",
-            Method::Smooth => "Click points; the curve passes smoothly through them",
-            Method::Freehand => "Press and drag to draw; the stroke is smoothed on release",
-        }
+    fn next(self) -> Method {
+        let i = Method::ALL.iter().position(|x| *x == self).unwrap_or(0);
+        Method::ALL[(i + 1) % Method::ALL.len()]
     }
 }
 
@@ -72,22 +69,6 @@ pub fn mode() -> Method {
 
 pub fn set_mode(method: Method) {
     MODE.with(|m| m.set(method));
-}
-
-/// The mode bar over the viewport (while the tool is active).
-pub fn options_ui(ui: &mut egui::Ui) {
-    let mut method = mode();
-    let seg = |ui: &mut egui::Ui, on: bool, text: &str, tip: &str| {
-        let r = ui.add(egui::Button::selectable(on, text)).on_hover_text(tip);
-        crate::ui::tray_lib::spot(format!("bz:{text}"), r.rect.center());
-        r.clicked()
-    };
-    for m in Method::ALL {
-        if seg(ui, method == m, m.name(), m.tip()) {
-            method = m;
-        }
-    }
-    set_mode(method);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -185,12 +166,11 @@ impl BezierTool {
     /// A tap of Option / Alt: the next method (not in the middle of a freehand stroke).
     fn taps(&mut self, ctx: &ToolContext) {
         if self.tap_method.update(ctx.pointer.modifiers.alt) && self.stroke.is_empty() {
-            let i = Method::ALL.iter().position(|x| *x == mode()).unwrap_or(0);
-            set_mode(Method::ALL[(i + 1) % Method::ALL.len()]);
+            set_mode(mode().next());
         }
     }
 
-    /// Picks up a mode change made in the bar: the curve so far is dropped.
+    /// Picks up a method change: the curve so far is dropped.
     fn sync_mode(&mut self) {
         let m = mode();
         if m != self.method {
@@ -438,18 +418,20 @@ impl Tool for BezierTool {
         }
     }
     fn status_text(&self) -> String {
+        // the method first (a tap of Option / Alt switches it)
+        let m = mode();
+        let head = format!("{} · tap {TAP_KEY} → {}.", m.name(), m.next().name());
         let end = "Enter or double-click finishes, a click on the first point closes it into a face";
-        match self.method {
-            Method::Freehand if self.stroke.is_empty() => {
-                format!("Press and drag to draw; end at the start to close it into a face. {TAPS}")
-            }
+        let text = match m {
+            Method::Freehand if self.stroke.is_empty() => "Press and drag to draw; end at the start to close it into a face.".into(),
             Method::Freehand => "Drag to draw; release to finish.".into(),
-            _ if self.anchors.is_empty() && self.method == Method::Smooth => format!("Click the first point of the curve. {TAPS}"),
-            _ if self.anchors.is_empty() => format!("Click the first point of the curve; press and drag to pull out handles. {TAPS}"),
-            _ if self.drag.is_some() => "Drag to shape the curve through this point; release to place it.".into(),
+            Method::Smooth if self.anchors.is_empty() => "Click the first point of the curve.".into(),
             Method::Smooth => format!("Click the next point; {end}. Backspace removes the last point."),
-            _ => format!("Click the next point (drag for handles); {end}. Backspace removes the last point."),
-        }
+            Method::Handles if self.anchors.is_empty() => "Click the first point of the curve; press and drag to pull out handles.".into(),
+            Method::Handles if self.drag.is_some() => "Drag to shape the curve through this point; release to place it.".into(),
+            Method::Handles => format!("Click the next point (drag for handles); {end}. Backspace removes the last point."),
+        };
+        format!("{head} {text}")
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         let pts = self.preview();

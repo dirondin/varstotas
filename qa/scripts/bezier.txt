@@ -1,7 +1,7 @@
 # Draw → Bezier Curve with the real mouse: clicks make corners, press-drag pulls out handles,
 # Enter finishes an open curve (edges only), a click on the first point closes it into a face,
-# a double-click finishes, Undo. The bar over the view: Handles / Smooth / Freehand; a tap of
-# Option / Alt picks the next one.
+# a double-click finishes, Undo. Handles / Smooth / Freehand: a tap of Option / Alt picks the
+# next one (shown in the status bar).
 wait 10
 view top
 parallel on
@@ -10,6 +10,7 @@ wait 5
 tool bezier
 expect tool=Bezier
 expect bezier=Handles
+expect status="Handles · tap Option → Smooth. Click the first point
 # open curve: a corner, a smooth point (dragged handle), a corner, Enter → 12 + 12 edges
 rawp click 0 0 0
 rawp drag 1000 0 0 1500 600 0
@@ -43,9 +44,12 @@ expect active_mesh F=1 E=50
 raw scroll 500 400 -300
 wait 5
 # Smooth: three clicks, Enter → an open curve through them (2 spans × 12)
-raw click 114 23
+raw mods alt
+wait 2
+raw mods
 wait 3
 expect bezier=Smooth
+expect status="Smooth · tap Option → Freehand.
 rawp click 0 6000 0
 rawp click 1000 7000 0
 rawp click 2000 6000 0
@@ -62,7 +66,9 @@ rawp click 3000 5000 0
 wait 3
 expect active_mesh F=2 E=110
 # Freehand: a stroke that ends at its start closes into a face (6 spans × 3)
-raw click 186 23
+raw mods alt
+wait 2
+raw mods
 wait 3
 expect bezier=Freehand
 rawp down 6000 0 0

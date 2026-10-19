@@ -2747,7 +2747,7 @@ impl eframe::App for VarstotasApp {
                 // the tool's markers and the cursor belong to the active pane; its 3D preview shows everywhere
                 let (markers, cur) = if is_active { (&o2[..], cursor) } else { (&[][..], None) };
                 self.viewport.paint(ui, frame, k, rect, is_active, &self.doc, &self.camera, &style, &o3, markers, cur);
-                ui.push_id(("pane", k), |ui| self.view_hud(ui, rect, is_active));
+                ui.push_id(("pane", k), |ui| self.view_hud(ui, rect));
                 if !is_active {
                     self.exchange(k);
                 }
