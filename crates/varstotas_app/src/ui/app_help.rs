@@ -150,7 +150,7 @@ const INFERENCE: &[B] = &[
     B::P("Hold `Shift` to lock the direction found; the arrow keys lock an axis: → red, ← green, ↑ blue, ↓ parallel / perpendicular to the last edge."),
     B::H("Snapping menu"),
     B::P("The magnet button (and the Snapping menu) turns each inference on or off; `Shift+S` turns snapping off and on altogether. Increments round free moves (10 mm), angles (15°) and scale factors — snapping to geometry and typed values win over them."),
-    B::P("View → Grid shows a grid with its own snapping; the step is in Window → Preferences, and with Select active typing a length sets it."),
+    B::P("View → Grid shows a grid with its own snapping; the step is in Window → Preferences → Drawing, and with Select active typing a length sets it."),
     B::H("Work planes"),
     B::P("The Guide Plane tool (Tools menu) and Window → Work Planes… make a plane to draw on in the air: points in empty space land on it, the axes and the grid follow it."),
 ];
@@ -244,6 +244,7 @@ const SCENES: &[B] = &[
 
 const FILES: &[B] = &[
     B::P("Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval."),
+    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
     B::P("Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it."),
     B::Row("Import", "OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window"),
     B::Row("Export", "OBJ, STL, DXF, glTF (GLB), 3MF, PLY, faces as JSON, PNG, SVG / PDF drawings, sheets, unfold patterns, animation, report, attributions"),

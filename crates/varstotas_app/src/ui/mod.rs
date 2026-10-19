@@ -14,6 +14,7 @@ pub mod log_window;
 pub mod mat_library;
 pub mod menu;
 pub mod model_info;
+pub mod preferences;
 pub mod model_library;
 pub mod online_mats;
 pub mod realistic;

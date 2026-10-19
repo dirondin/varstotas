@@ -1,0 +1,69 @@
+# Edit → Preferences…: a window with sections and a search. View sets how File → New looks;
+# Libraries shows the tile size of the cards; Reset puts a section back. Real mouse.
+action tray_only Materials
+wait 10
+action preferences
+wait 10
+expect prefs_win=(true General)
+# View: Wireframe, no axes, parallel → File → New looks like that
+raw click 137 228
+wait 5
+expect prefs_win=(true View)
+raw click 325 171
+wait 5
+raw click 325 308
+wait 5
+raw click 395 198
+wait 3
+raw click 378 275
+wait 5
+expect new_view=ViewDefaults { face_style: Wireframe, edges: true, profiles: true, axes: false
+expect perspective: false
+# the current view is not touched
+expect hud=(None false Shaded false)
+expect hud_show=["Axes",
+action new
+wait 10
+expect hud=(None true Wireframe false)
+expect hud_show=["Ground", "Sky",
+# Search "fov" -> only View is listed; then "tiles" -> Libraries
+raw click 137 90
+raw text fov
+wait 5
+expect prefs_win=(true View)
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw text tiles
+wait 5
+expect prefs_win=(true Libraries)
+# Libraries -> List: the Materials card's tiles follow
+raw click 414 426
+wait 5
+expect lib_tiles=List
+# clear the search; View -> Reset: the defaults again
+raw click 137 90
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+wait 5
+raw click 137 228
+wait 5
+expect prefs_win=(true View)
+raw click 649 92
+wait 5
+expect new_view=ViewDefaults { face_style: Shaded, edges: true, profiles: true, axes: true, ground: true, sky: true, grid: false, shadows: false, perspective: true, fov: 35.0 }
+raw click 137 147
+wait 5
+expect prefs_win=(true Drawing)
+# Drawing: the Snapping menu's switches — Midpoints off, the same value as the menu
+raw click 263 336
+wait 5
+expect snapping=(true, ["midpoint"])
+# Reset: all snapping back on
+raw click 649 92
+wait 5
+expect snapping=(true, [])
+quit

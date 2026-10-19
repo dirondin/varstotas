@@ -88,7 +88,7 @@ impl VarstotasApp {
     /// dropped files, the Import Download window.
     pub(crate) fn downloads_tick(&mut self, ctx: &egui::Context) {
         let want = self.prefs.watch_downloads || !self.models.dl.expects.is_empty();
-        let dir = self.models.dl.dir.clone().or_else(crate::downloads::downloads_folder);
+        let dir = self.models.dl.dir.clone().or_else(|| self.prefs.downloads_watch_dir.clone()).or_else(crate::downloads::downloads_folder);
         match (&self.models.dl.watcher, want, dir) {
             (Some(w), true, Some(d)) if w.dir == d => {}
             (_, true, Some(d)) if d.is_dir() => self.models.dl.watcher = Some(Watcher::start(d, ctx.clone())),

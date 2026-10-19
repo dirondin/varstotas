@@ -123,6 +123,10 @@ pub struct Prefs {
     pub snapping: crate::inference::settings::SnapPrefs,
     /// View → Grid.
     pub grid: crate::inference::settings::GridPrefs,
+    /// The folder Watch Downloads watches (None = the system's Downloads folder).
+    pub downloads_watch_dir: Option<PathBuf>,
+    /// How a new document looks (Preferences → View).
+    pub new_view: crate::ui::preferences::ViewDefaults,
 }
 
 impl Prefs {
@@ -169,6 +173,8 @@ impl Default for Prefs {
             tray_hidden: Vec::new(),
             snapping: Default::default(),
             grid: Default::default(),
+            downloads_watch_dir: None,
+            new_view: Default::default(),
         }
     }
 }
@@ -483,7 +489,7 @@ pub struct VarstotasApp {
     /// Active section cut lines and fill, keyed by (model version, plane).
     pub(crate) section_cut: std::cell::RefCell<Option<SectionCut>>,
     now: f64,
-    pub(crate) show_prefs: bool,
+    pub(crate) prefs_win: crate::ui::preferences::PrefsWindow,
     pub(crate) autosave: AutosaveState,
     /// Copied entities (Edit → Copy / Cut).
     pub(crate) clipboard: Option<Rc<crate::clipboard::Clipboard>>,
@@ -639,7 +645,7 @@ impl VarstotasApp {
             sel_boxes: Default::default(),
             section_cut: Default::default(),
             now: 0.0,
-            show_prefs: false,
+            prefs_win: Default::default(),
             clipboard: None,
             resize_confirm: None,
             text_prompt: None,
@@ -988,7 +994,6 @@ impl VarstotasApp {
             || self.vector_dialog.is_some()
             || self.text3d_dialog.is_some()
             || self.show_templates
-            || self.show_prefs
             || self.show_about
     }
 
@@ -1485,7 +1490,7 @@ impl VarstotasApp {
                 }
             }
             Action::About => self.show_about = true,
-            Action::Preferences => self.show_prefs = true,
+            Action::Preferences => self.prefs_win.open = true,
             Action::Copy => {
                 self.copy(ctx);
             }
@@ -2131,6 +2136,7 @@ impl VarstotasApp {
     pub(crate) fn new_from_template(&mut self, t: Template) {
         self.replace_document(Document::from_model(t.new_model(), None));
         self.camera = t.camera(nav::startup_camera());
+        self.apply_view_defaults();
     }
 
     fn replace_document(&mut self, doc: Document) {
@@ -2761,6 +2767,7 @@ impl eframe::App for VarstotasApp {
         self.log_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);
+        self.preferences_window(&ctx);
         self.doc_preview_window(&ctx);
         self.rig_editor_window(&ctx);
         self.shader_editor_window(&ctx);
