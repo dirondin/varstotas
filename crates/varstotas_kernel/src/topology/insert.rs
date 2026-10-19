@@ -234,8 +234,20 @@ impl Mesh {
         self.add_polyline_curve(pts, closed, curve)
     }
 
+    /// `add_polyline` without looking for new faces: the edges stay lines even when they close
+    /// a loop (Bezier Curve in Line mode). Edges crossing a face still split it.
+    pub fn add_polyline_lines(&mut self, pts: &[DVec3], closed: bool, as_curve: bool) -> Vec<EdgeId> {
+        self.ensure();
+        let curve = if as_curve { Some(self.next_curve_id()) } else { None };
+        self.add_polyline_inner(pts, closed, curve, false)
+    }
+
     /// `add_polyline` with an explicit curve id for the new edges.
     pub(crate) fn add_polyline_curve(&mut self, pts: &[DVec3], closed: bool, curve: Option<u32>) -> Vec<EdgeId> {
+        self.add_polyline_inner(pts, closed, curve, true)
+    }
+
+    fn add_polyline_inner(&mut self, pts: &[DVec3], closed: bool, curve: Option<u32>, faces: bool) -> Vec<EdgeId> {
         self.ensure();
         let pts = clean_points(pts, closed);
         if pts.len() < 2 {
@@ -255,7 +267,9 @@ impl Mesh {
             pieces.extend(p);
             created.extend(c);
         }
-        self.detect_faces(&created);
+        if faces {
+            self.detect_faces(&created);
+        }
         pieces.retain(|e| self.edges.contains_key(*e));
         pieces
     }

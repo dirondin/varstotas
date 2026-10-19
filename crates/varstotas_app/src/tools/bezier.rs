@@ -1,7 +1,11 @@
 //! Bezier Curve tool: anchors with handles (cubic spans), committed as one curve of edges.
-//! A click places a corner anchor; press and drag pulls out its handles (symmetric, the
-//! outgoing one under the cursor). Enter / double-click finishes, a click on the first
-//! anchor closes the curve, Backspace takes back the last anchor, Escape drops it all.
+//! Three ways to place the anchors ([`Method`]): Handles — a click places a corner anchor,
+//! press and drag pulls out its handles (symmetric, the outgoing one under the cursor);
+//! Smooth — clicks only, the handles follow the neighbours (Catmull-Rom); Freehand — press
+//! and drag a stroke, smoothed on release. The result ([`Fill`]) is a Line (edges only, a
+//! closed loop makes no face) or an Area (always closed, with a face). Enter / double-click
+//! finishes, a click on the first anchor closes the curve, Backspace takes back the last
+//! anchor, Escape drops it all. The mode is chosen in the bar over the viewport.
 
 use super::common::*;
 use super::draw::{plane_point, shape_normal};
@@ -9,6 +13,7 @@ use super::{OverlayView, Tool, ToolContext, ToolId};
 use crate::inference::{self, InferenceEngine, InferenceResult};
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2};
+use std::cell::Cell;
 use varstotas_kernel::glam::DVec3;
 use varstotas_kernel::{Plane, TOL};
 use varstotas_render::Overlay3d;
@@ -17,9 +22,103 @@ use varstotas_render::Overlay3d;
 const BEZIER_SEGS: u32 = 12;
 /// Screen distance (points) at which a click on the first anchor closes the curve.
 const CLOSE_PX: f32 = 10.0;
+/// Freehand: screen distance between the kept points of a stroke, and edges per span.
+const FREEHAND_PX: f32 = 12.0;
+const FREEHAND_SEGS: u32 = 3;
+/// Freehand Line: the stroke ends this close (points) to its start = a closed loop.
+const FREEHAND_CLOSE_PX: f32 = 16.0;
 const HANDLE: Color32 = Color32::from_rgb(0x20, 0x70, 0xE0);
 
 /// One anchor of the curve; handles are absolute points (None = a corner on that side).
+/// How the anchors are placed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Method {
+    #[default]
+    Handles,
+    Smooth,
+    Freehand,
+}
+
+/// What the curve makes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Fill {
+    /// Edges only (a closed loop makes no face).
+    #[default]
+    Line,
+    /// Always closed, with a face.
+    Area,
+}
+
+impl Method {
+    pub const ALL: [Method; 3] = [Method::Handles, Method::Smooth, Method::Freehand];
+    pub fn name(self) -> &'static str {
+        match self {
+            Method::Handles => "Handles",
+            Method::Smooth => "Smooth",
+            Method::Freehand => "Freehand",
+        }
+    }
+    fn tip(self) -> &'static str {
+        match self {
+            Method::Handles => "Click corner points; press and drag pulls out handles",
+            Method::Smooth => "Click points; the curve passes smoothly through them",
+            Method::Freehand => "Press and drag to draw; the stroke is smoothed on release",
+        }
+    }
+}
+
+impl Fill {
+    pub const ALL: [Fill; 2] = [Fill::Line, Fill::Area];
+    pub fn name(self) -> &'static str {
+        match self {
+            Fill::Line => "Line",
+            Fill::Area => "Area",
+        }
+    }
+    fn tip(self) -> &'static str {
+        match self {
+            Fill::Line => "Edges only; a closed curve makes no face",
+            Fill::Area => "Always closed, with a face",
+        }
+    }
+}
+
+thread_local! {
+    /// The tool's mode (kept while other tools are used).
+    static MODE: Cell<(Method, Fill)> = const { Cell::new((Method::Handles, Fill::Line)) };
+}
+
+pub fn mode() -> (Method, Fill) {
+    MODE.with(|m| m.get())
+}
+
+pub fn set_mode(method: Method, fill: Fill) {
+    MODE.with(|m| m.set((method, fill)));
+}
+
+/// The mode bar over the viewport (while the tool is active).
+pub fn options_ui(ui: &mut egui::Ui) {
+    let (mut method, mut fill) = mode();
+    let seg = |ui: &mut egui::Ui, on: bool, text: &str, tip: &str| {
+        let r = ui.add(egui::Button::selectable(on, text)).on_hover_text(tip);
+        crate::ui::tray_lib::spot(format!("bz:{text}"), r.rect.center());
+        r.clicked()
+    };
+    for m in Method::ALL {
+        if seg(ui, method == m, m.name(), m.tip()) {
+            method = m;
+        }
+    }
+    let (r, _) = ui.allocate_exact_size(egui::vec2(9.0, 16.0), egui::Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range(), egui::Stroke::new(1.0, Color32::from_black_alpha(40)));
+    for f in Fill::ALL {
+        if seg(ui, fill == f, f.name(), f.tip()) {
+            fill = f;
+        }
+    }
+    set_mode(method, fill);
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Anchor {
     pub p: DVec3,
@@ -36,6 +135,26 @@ impl Anchor {
 fn cubic(p0: DVec3, p1: DVec3, p2: DVec3, p3: DVec3, t: f64) -> DVec3 {
     let u = 1.0 - t;
     p0 * (u * u * u) + p1 * (3.0 * u * u * t) + p2 * (3.0 * u * t * t) + p3 * (t * t * t)
+}
+
+/// The anchors with handles that pass smoothly through them (Catmull-Rom: each handle a
+/// sixth of the chord between the neighbours); the ends of an open curve stay corners.
+pub fn smooth(anchors: &[Anchor], closed: bool) -> Vec<Anchor> {
+    let n = anchors.len();
+    (0..n)
+        .map(|i| {
+            let p = anchors[i].p;
+            let (prev, next) = if closed && n >= 3 {
+                (anchors[(i + n - 1) % n].p, anchors[(i + 1) % n].p)
+            } else if i == 0 || i + 1 == n {
+                return Anchor::corner(p);
+            } else {
+                (anchors[i - 1].p, anchors[i + 1].p)
+            };
+            let t = (next - prev) / 6.0;
+            Anchor { p, h_in: Some(p - t), h_out: Some(p + t) }
+        })
+        .collect()
 }
 
 /// Points of the curve through `anchors` (`segs` edges per curved span, one edge for a span
@@ -68,10 +187,14 @@ pub struct BezierTool {
     engine: InferenceEngine,
     segs: Option<u32>,
     anchors: Vec<Anchor>,
+    /// The method the anchors were placed with (a change in the bar drops them).
+    method: Method,
     /// Normal of the curve's plane (fixed by the first anchor: a face or an arrow lock).
     normal: Option<DVec3>,
     /// Pressed on a new anchor: dragging pulls out its handles.
     drag: Option<Pos2>,
+    /// Freehand: the stroke being drawn (points and where they are on screen).
+    stroke: Vec<(DVec3, Pos2)>,
     cur: Option<InferenceResult>,
     /// The cursor is on the first anchor (a click closes the curve).
     closing: bool,
@@ -84,6 +207,15 @@ impl BezierTool {
 
     fn plane_at(&self, p: DVec3) -> Plane {
         Plane::new(p, self.normal.unwrap_or_else(|| crate::axes::current().z))
+    }
+
+    /// Picks up a mode change made in the bar: the curve so far is dropped.
+    fn sync_mode(&mut self) {
+        let m = mode().0;
+        if m != self.method {
+            self.reset();
+            self.method = m;
+        }
     }
 
     fn update(&mut self, ctx: &ToolContext) {
@@ -112,6 +244,19 @@ impl BezierTool {
         self.cur = Some(r);
     }
 
+    /// Freehand: the stroke follows the pointer on the plane of its first point.
+    fn extend_stroke(&mut self, ctx: &ToolContext) {
+        let Some(&(p0, _)) = self.stroke.first() else { return };
+        let plane = self.plane_at(p0);
+        let ray = ctx.pointer.ray;
+        let Some(t) = plane.intersect_ray(&ray).filter(|t| *t > 0.0) else { return };
+        let p = ray.at(t);
+        let pos = ctx.pointer.pos;
+        if p.is_finite() && self.stroke.last().is_some_and(|&(q, s)| (s - pos).length() >= FREEHAND_PX && q.distance(p) > TOL) {
+            self.stroke.push((p, pos));
+        }
+    }
+
     fn add_anchor(&mut self, p: DVec3) -> bool {
         if self.anchors.last().is_some_and(|a| a.p.distance(p) <= TOL) {
             return false;
@@ -120,21 +265,54 @@ impl BezierTool {
         true
     }
 
+    /// The anchors as committed: Smooth and Freehand get their handles here.
+    fn shaped(&self, anchors: &[Anchor], closed: bool) -> Vec<Anchor> {
+        match self.method {
+            Method::Handles => anchors.to_vec(),
+            Method::Smooth | Method::Freehand => smooth(anchors, closed),
+        }
+    }
+
+    fn span_segs(&self) -> u32 {
+        if self.method == Method::Freehand { FREEHAND_SEGS } else { self.segs() }
+    }
+
+    /// Commits the curve; `closed` = the first point was clicked (an Area always closes).
     fn finish(&mut self, ctx: &mut ToolContext, closed: bool) {
+        let fill = mode().1;
+        let closed = closed || fill == Fill::Area;
         if self.anchors.len() >= 2 {
-            let curved = self.anchors.iter().any(|a| a.h_in.is_some() || a.h_out.is_some());
+            let anchors = self.shaped(&self.anchors, closed);
+            let curved = anchors.iter().any(|a| a.h_in.is_some() || a.h_out.is_some());
             let inv = context_xf(ctx.doc).inverse();
             let pts: Vec<DVec3> =
-                bezier_points(&self.anchors, closed, self.segs()).iter().map(|p| inv.transform_point3(*p)).collect();
+                bezier_points(&anchors, closed, self.span_segs()).iter().map(|p| inv.transform_point3(*p)).collect();
+            let closed = closed && pts.len() >= 3;
             if pts.len() >= 2 {
-                commit_mesh(ctx, "Bezier Curve", |m| m.add_polyline(&pts, closed && pts.len() >= 3, curved));
+                commit_mesh(ctx, "Bezier Curve", |m| match fill {
+                    Fill::Area if closed => m.add_polyline(&pts, true, curved),
+                    _ => m.add_polyline_lines(&pts, closed, curved),
+                });
             }
         }
         self.reset();
     }
 
+    /// Freehand: the stroke becomes anchors and is committed.
+    fn finish_stroke(&mut self, ctx: &mut ToolContext) {
+        let mut stroke = std::mem::take(&mut self.stroke);
+        let closes = stroke.len() >= 3
+            && (stroke[0].1 - stroke[stroke.len() - 1].1).length() <= FREEHAND_CLOSE_PX;
+        if closes {
+            stroke.pop();
+        }
+        self.anchors = stroke.iter().map(|&(p, _)| Anchor::corner(p)).collect();
+        self.finish(ctx, closes);
+    }
+
     fn reset(&mut self) {
         self.anchors.clear();
+        self.stroke.clear();
         self.normal = None;
         self.drag = None;
         self.closing = false;
@@ -143,6 +321,9 @@ impl BezierTool {
 
     /// The curve so far, with the cursor as the next (corner) anchor.
     fn preview(&self) -> Vec<DVec3> {
+        if self.method == Method::Freehand {
+            return self.stroke.iter().map(|s| s.0).collect();
+        }
         let mut a = self.anchors.clone();
         if self.drag.is_none()
             && let Some(r) = &self.cur
@@ -150,7 +331,12 @@ impl BezierTool {
         {
             a.push(Anchor::corner(r.point));
         }
-        bezier_points(&a, self.closing, self.segs())
+        let closed = self.closing || (mode().1 == Fill::Area && a.len() >= 3);
+        bezier_points(&self.shaped(&a, closed), closed, self.segs())
+    }
+
+    fn busy(&self) -> bool {
+        !self.anchors.is_empty() || !self.stroke.is_empty()
     }
 }
 
@@ -159,6 +345,13 @@ impl Tool for BezierTool {
         ToolId::Bezier
     }
     fn on_pointer_move(&mut self, ctx: &mut ToolContext) {
+        self.sync_mode();
+        if !self.stroke.is_empty() {
+            if ctx.pointer.primary_down {
+                self.extend_stroke(ctx);
+            }
+            return;
+        }
         match self.drag {
             Some(p0) if ctx.pointer.primary_down && (ctx.pointer.pos - p0).length() > DRAG_CLICK_PX => self.drag_handle(ctx),
             Some(_) if ctx.pointer.primary_down => {}
@@ -169,28 +362,46 @@ impl Tool for BezierTool {
         if ctx.pointer.button != Some(PointerButton::Primary) {
             return;
         }
+        self.sync_mode();
         self.update(ctx);
+        let Some(r) = self.cur.clone() else { return };
+        if self.method == Method::Freehand {
+            let (n, fixed) = shape_normal(&self.engine, &r);
+            self.normal = fixed.then_some(n);
+            self.stroke = vec![(r.point, ctx.pointer.pos)];
+            self.engine.arrow_lock = None;
+            return;
+        }
         if self.closing {
             self.finish(ctx, true);
             return;
         }
-        let Some(r) = self.cur.clone() else { return };
         if self.anchors.is_empty() {
             let (n, fixed) = shape_normal(&self.engine, &r);
             self.normal = fixed.then_some(n);
         }
         if self.add_anchor(r.point) {
-            self.drag = Some(ctx.pointer.pos);
+            // Smooth: clicks only, no handles to drag out
+            if self.method == Method::Handles {
+                self.drag = Some(ctx.pointer.pos);
+            }
             self.engine.arrow_lock = None;
         }
     }
     fn on_pointer_up(&mut self, ctx: &mut ToolContext) {
-        if ctx.pointer.button == Some(PointerButton::Primary) && self.drag.take().is_some() {
+        if ctx.pointer.button != Some(PointerButton::Primary) {
+            return;
+        }
+        if !self.stroke.is_empty() {
+            self.extend_stroke(ctx);
+            self.finish_stroke(ctx);
+            self.update(ctx);
+        } else if self.drag.take().is_some() {
             self.update(ctx);
         }
     }
     fn on_double_click(&mut self, ctx: &mut ToolContext) {
-        if self.anchors.len() >= 2 {
+        if self.anchors.len() >= 2 && self.method != Method::Freehand {
             self.finish(ctx, false);
         }
     }
@@ -248,18 +459,29 @@ impl Tool for BezierTool {
         }
     }
     fn status_text(&self) -> String {
-        if self.anchors.is_empty() {
-            "Click the first point of the curve; press and drag to pull out handles.".into()
-        } else if self.drag.is_some() {
-            "Drag to shape the curve through this point; release to place it.".into()
-        } else {
-            "Click the next point (drag for handles); Enter or double-click finishes, the first point closes. Backspace removes the last point.".into()
+        let fill = mode().1;
+        let end = match fill {
+            Fill::Line => "Enter or double-click finishes, the first point closes (no face)",
+            Fill::Area => "Enter or double-click closes it into a face",
+        };
+        match self.method {
+            Method::Freehand if self.stroke.is_empty() => match fill {
+                Fill::Line => "Press and drag to draw a line; end at the start to close it.".into(),
+                Fill::Area => "Press and drag to draw an area; it closes into a face on release.".into(),
+            },
+            Method::Freehand => "Drag to draw; release to finish.".into(),
+            _ if self.anchors.is_empty() && self.method == Method::Smooth => "Click the first point of the curve.".into(),
+            _ if self.anchors.is_empty() => "Click the first point of the curve; press and drag to pull out handles.".into(),
+            _ if self.drag.is_some() => "Drag to shape the curve through this point; release to place it.".into(),
+            Method::Smooth => format!("Click the next point; {end}. Backspace removes the last point."),
+            _ => format!("Click the next point (drag for handles); {end}. Backspace removes the last point."),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         let pts = self.preview();
         if pts.len() >= 2 {
-            polyline(out3d, &pts, self.closing, PREVIEW, 2.0);
+            let closed = self.method != Method::Freehand && (self.closing || (mode().1 == Fill::Area && pts.len() >= 3));
+            polyline(out3d, &pts, closed, PREVIEW, 2.0);
         }
         for (i, a) in self.anchors.iter().enumerate() {
             for h in [a.h_in, a.h_out].into_iter().flatten() {
@@ -276,7 +498,9 @@ impl Tool for BezierTool {
         {
             label(out2d, (a.p + r.point) * 0.5, fmt_len(&view.doc.model, a.p.distance(r.point)));
         }
-        if let Some(r) = &self.cur {
+        if let Some(r) = &self.cur
+            && self.stroke.is_empty()
+        {
             inference::draw_result(r, out3d, out2d);
         }
     }
@@ -284,7 +508,7 @@ impl Tool for BezierTool {
         CursorIcon::None
     }
     fn is_busy(&self) -> bool {
-        !self.anchors.is_empty()
+        self.busy()
     }
 }
 
@@ -310,6 +534,21 @@ mod tests {
         assert!(pts[0].distance(DVec3::ZERO) < 1e-12 && pts[4].distance(DVec3::new(2.0, 0.0, 0.0)) < 1e-12);
         // the middle of a symmetric span: x = 1, y = 3/4 of the handle height
         assert!(pts[2].distance(DVec3::new(1.0, 0.75, 0.0)) < 1e-12);
+    }
+
+    #[test]
+    fn smooth_handles_follow_the_neighbours() {
+        let a = [Anchor::corner(DVec3::ZERO), Anchor::corner(DVec3::new(1.0, 1.0, 0.0)), Anchor::corner(DVec3::new(2.0, 0.0, 0.0))];
+        let s = smooth(&a, false);
+        assert_eq!((s[0].h_out, s[2].h_in), (None, None));
+        assert_eq!(s[1].h_out, Some(DVec3::new(1.0 + 1.0 / 3.0, 1.0, 0.0)));
+        assert_eq!(s[1].h_in, Some(DVec3::new(1.0 - 1.0 / 3.0, 1.0, 0.0)));
+        // closed: every anchor gets handles, and the curve passes through the anchors
+        let c = smooth(&a, true);
+        assert!(c.iter().all(|x| x.h_in.is_some() && x.h_out.is_some()));
+        let pts = bezier_points(&c, true, 4);
+        assert_eq!(pts.len(), 12);
+        assert!(pts[4].distance(a[1].p) < 1e-12);
     }
 
     #[test]

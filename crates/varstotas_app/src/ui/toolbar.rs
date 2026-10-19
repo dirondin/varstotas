@@ -101,7 +101,7 @@ impl VarstotasApp {
             group_sep(ui);
             // 3 Point Arc, Pie and Rotated Rectangle live in the Draw menu (keeps the toolbar
             // on one row at the default window width).
-            for id in [ToolId::Line, ToolId::Arc, ToolId::ArcCenter, ToolId::Rectangle, ToolId::Circle, ToolId::Polygon] {
+            for id in [ToolId::Line, ToolId::Arc, ToolId::ArcCenter, ToolId::Bezier, ToolId::Rectangle, ToolId::Circle, ToolId::Polygon] {
                 self.tool_button(ui, id);
             }
             group_sep(ui);

@@ -92,7 +92,7 @@ pub fn view_label(view: Option<StandardView>, ortho: bool) -> String {
 
 impl VarstotasApp {
     /// Draw the controls over the viewport `rect`; remembers where they are.
-    pub(crate) fn view_hud(&mut self, ui: &mut Ui, rect: Rect) {
+    pub(crate) fn view_hud(&mut self, ui: &mut Ui, rect: Rect, active: bool) {
         let area = Rect::from_min_max(rect.right_top() + vec2(-520.0, 8.0), rect.right_top() + vec2(-8.0, 44.0));
         let mut hud = Rect::NOTHING;
         ui.scope_builder(UiBuilder::new().max_rect(area).layout(Layout::right_to_left(Align::Min)), |ui| {
@@ -118,6 +118,20 @@ impl VarstotasApp {
                 });
             hud = r.response.rect;
         });
+        // the active tool's options (Bezier: method and fill), top left of the active pane
+        if active && self.tool.id() == crate::tools::ToolId::Bezier {
+            let area = Rect::from_min_max(rect.left_top() + vec2(8.0, 8.0), rect.left_top() + vec2(520.0, 44.0));
+            ui.scope_builder(UiBuilder::new().max_rect(area).layout(Layout::left_to_right(Align::Min)), |ui| {
+                let fill = if ui.visuals().dark_mode { Color32::from_black_alpha(170) } else { Color32::from_white_alpha(215) };
+                let r = egui::Frame::new()
+                    .fill(fill)
+                    .stroke(Stroke::new(1.0, Color32::from_black_alpha(30)))
+                    .corner_radius(6.0)
+                    .inner_margin(egui::Margin::symmetric(6, 3))
+                    .show(ui, |ui| ui.horizontal(crate::tools::bezier::options_ui));
+                hud = hud.union(r.response.rect);
+            });
+        }
         self.hud_rect = hud;
     }
 
