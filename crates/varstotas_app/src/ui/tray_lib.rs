@@ -44,7 +44,7 @@ fn icon_menu(ui: &mut Ui, icon: Icon, tip: &str, content: impl FnOnce(&mut Ui)) 
     let b = egui::Button::new(egui::Atom::custom(id, vec2(15.0, 15.0))).frame(false).min_size(vec2(22.0, 22.0));
     let (r, _) = egui::containers::menu::MenuButton::from_button(b).ui(ui, content);
     if r.hovered() {
-        ui.painter().rect_filled(r.rect, 7.0, Color32::from_rgb(0xDF, 0xE4, 0xEB));
+        ui.painter().rect_filled(r.rect, 7.0, super::theme::pick(Color32::from_rgb(0xDF, 0xE4, 0xEB), Color32::from_rgb(0x44, 0x4B, 0x55)));
     }
     paint_icon(ui.painter(), Rect::from_center_size(r.rect.center(), vec2(15.0, 15.0)), icon, false);
     r.on_hover_text(tip)
@@ -170,12 +170,12 @@ pub fn tile(ui: &mut Ui, size: TileSize, name: &str, selected: bool, paint: impl
         let hover = resp.hovered();
         let round = if size == TileSize::Large { 6.0 } else { 4.0 };
         if size == TileSize::List && (hover || selected) {
-            p.rect_filled(rect, 4.0, if selected { super::theme::ACCENT_SOFT } else { Color32::from_rgb(0xE6, 0xEE, 0xFA) });
+            p.rect_filled(rect, 4.0, if selected { super::theme::accent_soft() } else { super::theme::hover_bg() });
         }
-        let fill = if hover && size != TileSize::List { Color32::from_rgb(0xE6, 0xEE, 0xFA) } else { Color32::from_gray(248) };
+        let fill = if hover && size != TileSize::List { super::theme::hover_bg() } else { super::theme::pick(Color32::from_gray(248), Color32::from_rgb(0x36, 0x3A, 0x41)) };
         p.rect_filled(pic, round, fill);
         paint(p, pic);
-        let border = if selected { Stroke::new(2.0, super::theme::ACCENT) } else { Stroke::new(1.0, Color32::from_gray(215)) };
+        let border = if selected { Stroke::new(2.0, super::theme::ACCENT) } else { Stroke::new(1.0, super::theme::border()) };
         p.rect_stroke(pic, round, border, egui::StrokeKind::Inside);
         let font = egui::FontId::proportional(11.0);
         let color = ui.visuals().text_color();

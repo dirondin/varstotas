@@ -299,7 +299,7 @@ impl VarstotasApp {
                             }
                         }
                         if names.is_empty() {
-                            ui.label(RichText::new("No sheets yet.").color(theme::TEXT_DIM));
+                            ui.label(RichText::new("No sheets yet.").color(theme::text_dim()));
                         }
                     });
                     ui.horizontal(|ui| {
@@ -481,7 +481,7 @@ impl VarstotasApp {
                             });
                         }
                         _ => {
-                            ui.label(RichText::new("Click an item in the preview to edit it; drag to move, drag the corner to resize.").color(theme::TEXT_DIM));
+                            ui.label(RichText::new("Click an item in the preview to edit it; drag to move, drag the corner to resize.").color(theme::text_dim()));
                         }
                     }
                 });
@@ -489,10 +489,10 @@ impl VarstotasApp {
                 ui.vertical(|ui| {
                     let (rect, resp) = ui.allocate_exact_size(PREVIEW, Sense::click_and_drag());
                     let painter = ui.painter_at(rect);
-                    painter.rect_filled(rect, 4.0, theme::BORDER);
+                    painter.rect_filled(rect, 4.0, theme::border());
                     let (Some(sheet), Some(page)) = (sheet.as_mut(), page.as_ref()) else {
                         st.preview = None;
-                        painter.text(rect.center(), egui::Align2::CENTER_CENTER, "Add a sheet to start", egui::FontId::proportional(15.0), theme::TEXT_DIM);
+                        painter.text(rect.center(), egui::Align2::CENTER_CENTER, "Add a sheet to start", egui::FontId::proportional(15.0), theme::text_dim());
                         return;
                     };
                     let k = ((rect.width() - 24.0) / sheet.size.x as f32).min((rect.height() - 24.0) / sheet.size.y as f32);
@@ -565,7 +565,7 @@ impl VarstotasApp {
                     }
                     ui.horizontal(|ui| {
                         let scale = sheet.viewports.iter().filter(|v| viewport_scale(model, v).is_some()).count();
-                        ui.label(RichText::new(format!("{} — {} viewport(s), {} to scale, {} text(s)", paper_name(sheet.size), sheet.viewports.len(), scale, sheet.texts.len())).color(theme::TEXT_DIM));
+                        ui.label(RichText::new(format!("{} — {} viewport(s), {} to scale, {} text(s)", paper_name(sheet.size), sheet.viewports.len(), scale, sheet.texts.len())).color(theme::text_dim()));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button(RichText::new("SVG…").strong()).on_hover_text("This sheet").clicked() {
                                 save = Some("svg");
@@ -573,7 +573,7 @@ impl VarstotasApp {
                             if ui.button(RichText::new("PDF…").strong()).on_hover_text("All sheets, a page each").clicked() {
                                 save = Some("pdf");
                             }
-                            ui.label(RichText::new("Export:").color(theme::TEXT_DIM));
+                            ui.label(RichText::new("Export:").color(theme::text_dim()));
                         });
                     });
                 });

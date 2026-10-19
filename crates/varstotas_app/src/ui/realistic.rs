@@ -108,7 +108,7 @@ impl VarstotasApp {
         let mut e = self.doc.model.environment;
         if self.prefs.face_style != FaceStylePref::Realistic {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Used by the Realistic style").color(theme::TEXT_DIM));
+                ui.label(RichText::new("Used by the Realistic style").color(theme::text_dim()));
                 if ui.button("Realistic").clicked() {
                     self.prefs.face_style = FaceStylePref::Realistic;
                 }
@@ -218,7 +218,7 @@ impl VarstotasApp {
                 let (rect, _) = ui.allocate_exact_size(vec2(84.0, 84.0), Sense::hover());
                 ui.painter().image(tex, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Preset").small().color(theme::TEXT_DIM));
+                    ui.label(RichText::new("Preset").small().color(theme::text_dim()));
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
                         for (name, metal, rough, glass, light) in PBR_PRESETS {
@@ -343,7 +343,7 @@ impl VarstotasApp {
                 for (map, label) in PBR_MAPS.iter().zip(MAP_LABELS) {
                     ui.label(label);
                     let name = p.map(map).map_or("—".to_string(), |t| t.file_name.clone());
-                    ui.label(RichText::new(name).small().color(theme::TEXT_DIM));
+                    ui.label(RichText::new(name).small().color(theme::text_dim()));
                     ui.horizontal(|ui| {
                         if ui.small_button("Load…").clicked() {
                             match mid {
@@ -435,7 +435,7 @@ impl VarstotasApp {
                 }
                 match &ed.error {
                     Some(e) => ui.label(RichText::new(e).color(ERROR_RED)),
-                    None => ui.label(RichText::new("Compiles; the material uses it").small().color(theme::TEXT_DIM)),
+                    None => ui.label(RichText::new("Compiles; the material uses it").small().color(theme::text_dim())),
                 };
             });
         if let Some(t) = ed.changed {
@@ -665,7 +665,7 @@ fn rebased(old: Option<CustomShader>, code: String) -> CustomShader {
 fn effects_ui(ui: &mut Ui, x: &mut Effects) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-        ui.label(RichText::new("Preset").small().color(theme::TEXT_DIM));
+        ui.label(RichText::new("Preset").small().color(theme::text_dim()));
         for name in EFFECT_PRESETS {
             let mut label = name.to_string();
             label[..1].make_ascii_uppercase();

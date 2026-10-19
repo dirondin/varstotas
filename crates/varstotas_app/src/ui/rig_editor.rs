@@ -262,7 +262,7 @@ impl VarstotasApp {
         let title = if ids.len() > 1 { format!("{} — {} copies", g.name, ids.len()) } else { g.name.clone() };
         ui.label(RichText::new(title).strong());
         let change = if g.params.is_empty() {
-            ui.label(RichText::new("No parameters yet").color(theme::TEXT_DIM));
+            ui.label(RichText::new("No parameters yet").color(theme::text_dim()));
             None
         } else {
             self.value_fields(ui, "entity_info_rig", &ids, &g, &values)
@@ -277,7 +277,7 @@ impl VarstotasApp {
             }
         });
         let parts = self.doc.model.defs.get(master).map_or(0, |d| d.rig.as_ref().map_or(0, |r| r.joints.len()));
-        ui.label(RichText::new(format!("Component with parameters ({parts} motion(s))")).small().color(theme::TEXT_DIM));
+        ui.label(RichText::new(format!("Component with parameters ({parts} motion(s))")).small().color(theme::text_dim()));
         if let Some(change) = change {
             self.actions.push(Action::SetRigValues(change, false));
         }
@@ -485,7 +485,7 @@ impl VarstotasApp {
             };
             ui.horizontal(|ui| {
                 ui.label(RichText::new(&name).strong());
-                ui.label(RichText::new(if has_rig { "— with parameters" } else { "— no parameters yet: Apply adds them" }).color(theme::TEXT_DIM));
+                ui.label(RichText::new(if has_rig { "— with parameters" } else { "— no parameters yet: Apply adds them" }).color(theme::text_dim()));
             });
             if parts.is_empty() {
                 ui.label(RichText::new("The component has no parts to move: group its pieces inside it (a door, a drawer…) — open it and use Make Group.").color(Color32::from_rgb(190, 110, 20)).small());
@@ -497,7 +497,7 @@ impl VarstotasApp {
                 let mut del = None;
                 egui::Grid::new("rig_params").num_columns(9).spacing([6.0, 4.0]).show(ui, |ui| {
                     for h in ["Name", "Label", "Type", "Min", "Max", "Step", "Default", "Options", ""] {
-                        ui.label(RichText::new(h).small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new(h).small().color(theme::text_dim()));
                     }
                     ui.end_row();
                     for (i, r) in ed.params.iter_mut().enumerate() {
@@ -597,7 +597,7 @@ impl VarstotasApp {
                                 let shown = own.iter().find(|(k, _)| *k == r.key).map(|(k, l)| if l.is_empty() { k.clone() } else { l.clone() }).unwrap_or_else(|| if r.key.is_empty() { "(parameter)".into() } else { r.key.clone() });
                                 let combo = egui::ComboBox::from_id_salt(("rig_pkey", i)).width(90.0).selected_text(shown).show_ui(ui, |ui| {
                                     if own.is_empty() {
-                                        ui.label(RichText::new("The part has no parameters").small().color(theme::TEXT_DIM));
+                                        ui.label(RichText::new("The part has no parameters").small().color(theme::text_dim()));
                                     }
                                     for (k, l) in &own {
                                         ui.selectable_value(&mut r.key, k.clone(), if l.is_empty() { k.as_str() } else { l.as_str() });
@@ -647,7 +647,7 @@ impl VarstotasApp {
                                 if ui.small_button("Pick…").on_hover_text("Click two points in the model").clicked() {
                                     pick = Some(i);
                                 }
-                                ui.label(RichText::new("mm, the component's axes").small().color(theme::TEXT_DIM));
+                                ui.label(RichText::new("mm, the component's axes").small().color(theme::text_dim()));
                             });
                         }
                     });

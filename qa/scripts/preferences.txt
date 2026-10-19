@@ -6,7 +6,7 @@ action preferences
 wait 10
 expect prefs_win=(true General)
 # View: Wireframe, no axes, parallel → File → New looks like that
-raw click 137 228
+raw click 137 255
 wait 5
 expect prefs_win=(true View)
 raw click 325 171
@@ -49,13 +49,13 @@ raw key Backspace
 raw key Backspace
 raw key Backspace
 wait 5
-raw click 137 228
+raw click 137 255
 wait 5
 expect prefs_win=(true View)
 raw click 649 92
 wait 5
 expect new_view=ViewDefaults { face_style: Shaded, edges: true, profiles: true, axes: true, ground: true, sky: true, grid: false, shadows: false, perspective: true, fov: 35.0 }
-raw click 137 147
+raw click 137 174
 wait 5
 expect prefs_win=(true Drawing)
 # Drawing: the Snapping menu's switches — Midpoints off, the same value as the menu
@@ -67,7 +67,7 @@ raw click 649 92
 wait 5
 expect snapping=(true, [])
 # Navigation: two fingers zoom (a trackpad scroll in the view zooms instead of orbiting)
-raw click 137 255
+raw click 137 282
 wait 5
 expect prefs_win=(true Navigation)
 raw click 427 372
@@ -92,4 +92,22 @@ expect cam_dist=12369
 raw click 649 92
 wait 5
 expect nav=NavPrefs { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: Orbit, two_finger: Orbit }
+# Interface: the dark look, large toolbar icons
+expect look=(false 1.00 36)
+raw click 137 147
+wait 5
+expect prefs_win=(true Interface)
+raw click 301 145
+wait 5
+raw click 377 282
+wait 5
+expect look=(true 1.00 44)
+raw click 467 213
+wait 10
+expect look=(true 1.25 44)
+screenshot shots/prefs_dark.bmp
+# Reset: light, 100 %, medium icons
+raw click 649 92
+wait 10
+expect look=(false 1.00 36)
 quit

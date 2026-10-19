@@ -81,6 +81,8 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([800.0, 500.0])
             .with_active(!background),
         wgpu_options,
+        // scripted runs open at the default size, whatever size the window was last left at
+        persist_window: std::env::var_os("VARSTOTAS_SCRIPT").is_none(),
         ..Default::default()
     };
     #[cfg(target_os = "macos")]

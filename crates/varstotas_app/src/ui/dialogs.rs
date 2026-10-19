@@ -23,7 +23,7 @@ impl VarstotasApp {
                     "Do you want to save the changes you made to “{}”?",
                     self.doc.display_name()
                 ));
-                ui.label(RichText::new("Your changes will be lost if you don't save them.").color(theme::TEXT_DIM));
+                ui.label(RichText::new("Your changes will be lost if you don't save them.").color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
                     if ui.button("Don't Save").clicked() {
@@ -79,7 +79,7 @@ impl VarstotasApp {
                 });
                 ui.label(
                     RichText::new("It may contain changes that were not saved, e.g. after a crash.")
-                        .color(theme::TEXT_DIM),
+                        .color(theme::text_dim()),
                 );
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
@@ -117,9 +117,9 @@ impl VarstotasApp {
                 ui.label(format!("Do you want to resize {what}?"));
                 ui.label(
                     RichText::new(format!("Everything in it is scaled by {:.4} about its origin.", f))
-                        .color(theme::TEXT_DIM),
+                        .color(theme::text_dim()),
                 );
-                ui.label(RichText::new("Enter = Yes · Esc = No").small().color(theme::TEXT_DIM));
+                ui.label(RichText::new("Enter = Yes · Esc = No").small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let yes = ui.add(egui::Button::new(RichText::new("Yes").strong()));
@@ -164,7 +164,7 @@ impl VarstotasApp {
                     out.state.store(ui.ctx(), out.response.id);
                     p.focused = true;
                 }
-                ui.label(RichText::new(&p.hint).small().color(theme::TEXT_DIM));
+                ui.label(RichText::new(&p.hint).small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add(egui::Button::new(RichText::new("OK").strong())).clicked() {
@@ -241,7 +241,7 @@ impl VarstotasApp {
                 ui.label(
                     RichText::new("The selection and tool previews are never exported.")
                         .small()
-                        .color(theme::TEXT_DIM),
+                        .color(theme::text_dim()),
                 );
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -282,7 +282,7 @@ impl VarstotasApp {
                 ui.set_width(340.0);
                 ui.heading("Export 2D Drawing");
                 ui.add_space(6.0);
-                ui.label(RichText::new("The current view as lines: SVG or PDF.").color(theme::TEXT_DIM));
+                ui.label(RichText::new("The current view as lines: SVG or PDF.").color(theme::text_dim()));
                 ui.add_space(4.0);
                 ui.add_enabled_ui(ortho, |ui| {
                     ui.horizontal(|ui| {
@@ -300,10 +300,10 @@ impl VarstotasApp {
                     ui.label(
                         RichText::new("Perspective view: fitted to an A4 page. Camera → Parallel Projection for a scale.")
                             .small()
-                            .color(theme::TEXT_DIM),
+                            .color(theme::text_dim()),
                     );
                 } else if o.scale.is_none() {
-                    ui.label(RichText::new("Fitted to an A4 page.").small().color(theme::TEXT_DIM));
+                    ui.label(RichText::new("Fitted to an A4 page.").small().color(theme::text_dim()));
                 }
                 ui.checkbox(&mut o.profiles, "Profiles (thick outlines)");
                 ui.checkbox(&mut o.hidden, "Hidden lines (dashed)");
@@ -382,7 +382,7 @@ impl VarstotasApp {
                     ui.add_enabled_ui(p.filled && p.extruded, |ui| ui.add(len_drag(&mut p.depth, unit)));
                     ui.end_row();
                 });
-                ui.label(RichText::new("Enter starts a new line, Cmd+Enter places the text.").small().color(theme::TEXT_DIM));
+                ui.label(RichText::new("Enter starts a new line, Cmd+Enter places the text.").small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
@@ -414,13 +414,13 @@ impl VarstotasApp {
                 ui.heading("Choose a template");
                 ui.label(
                     RichText::new("New models start with these units. You can change the default in Preferences.")
-                        .color(theme::TEXT_DIM),
+                        .color(theme::text_dim()),
                 );
                 ui.add_space(8.0);
                 for t in Template::ALL {
                     let b = egui::Button::new(RichText::new(t.name()).strong()).min_size(egui::vec2(360.0, 28.0));
                     let r = ui.add(b);
-                    ui.label(RichText::new(t.description()).small().color(theme::TEXT_DIM));
+                    ui.label(RichText::new(t.description()).small().color(theme::text_dim()));
                     ui.add_space(4.0);
                     if r.clicked() {
                         picked = Some(t);
@@ -445,7 +445,7 @@ impl VarstotasApp {
                 ui.set_width(320.0);
                 ui.heading("Varstotas");
                 ui.label("A light, native 3D modeler in the spirit of classic modellers.");
-                ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(theme::TEXT_DIM));
+                ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
                 ui.add_space(8.0);
                 ui.button("Close").clicked()
             });

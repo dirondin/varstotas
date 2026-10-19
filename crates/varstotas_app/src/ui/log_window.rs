@@ -90,15 +90,15 @@ impl VarstotasApp {
             });
             ui.separator();
             let shown = lw.shown();
-            egui::Frame::new().fill(theme::TRAY_BG).inner_margin(6.0).show(ui, |ui| {
+            egui::Frame::new().fill(theme::tray_bg()).inner_margin(6.0).show(ui, |ui| {
                 ScrollArea::vertical().stick_to_bottom(true).auto_shrink([false, false]).show(ui, |ui| {
                     if shown.is_empty() {
                         let msg = if lw.cache.1.is_empty() { "No errors or warnings in this session." } else { "Nothing matches the filters." };
-                        ui.label(RichText::new(msg).color(theme::TEXT_DIM));
+                        ui.label(RichText::new(msg).color(theme::text_dim()));
                     }
                     for e in shown {
                         ui.horizontal_top(|ui| {
-                            ui.label(RichText::new(applog::clock(e.at)).monospace().small().color(theme::TEXT_DIM));
+                            ui.label(RichText::new(applog::clock(e.at)).monospace().small().color(theme::text_dim()));
                             let (mark, c) = if e.level == Level::Error { ("●", ERR) } else { ("▲", WARN) };
                             ui.label(RichText::new(mark).small().color(c)).on_hover_text(e.level.label());
                             if !e.source.is_empty() {
@@ -130,7 +130,7 @@ impl VarstotasApp {
             let text = RichText::new(format!("● {n} error{}", if n == 1 { "" } else { "s" })).color(Color32::WHITE).small().strong();
             ui.add(egui::Button::new(text).fill(ERR).corner_radius(8.0))
         } else {
-            ui.add(egui::Button::new(RichText::new("Log").small().color(theme::TEXT_DIM)).frame(false))
+            ui.add(egui::Button::new(RichText::new("Log").small().color(theme::text_dim())).frame(false))
         };
         if resp.on_hover_text("Window → Log: errors and warnings from everywhere (scripts, import / export, libraries …)").clicked() {
             self.toggle_log(!self.log_window.open || n > 0);

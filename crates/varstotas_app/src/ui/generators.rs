@@ -291,13 +291,13 @@ pub(crate) fn formula_rows(ui: &mut Ui, g: &Generator, values: &GenValues, unit:
     match varstotas_script::generator::formula_values(g, values) {
         Ok(rows) => {
             for (f, v) in rows {
-                ui.label(RichText::new(&f.label).color(theme::TEXT_DIM)).on_hover_text(format!("= {}", f.expr));
-                ui.label(RichText::new(show_value(&v, &f.kind, unit)).color(theme::TEXT_DIM));
+                ui.label(RichText::new(&f.label).color(theme::text_dim())).on_hover_text(format!("= {}", f.expr));
+                ui.label(RichText::new(show_value(&v, &f.kind, unit)).color(theme::text_dim()));
                 ui.end_row();
             }
         }
         Err(e) => {
-            ui.label(RichText::new("Formulas").color(theme::TEXT_DIM));
+            ui.label(RichText::new("Formulas").color(theme::text_dim()));
             ui.label(RichText::new(e).color(egui::Color32::from_rgb(200, 50, 40)).small());
             ui.end_row();
         }
@@ -485,7 +485,7 @@ impl VarstotasApp {
             }
             self.make_unique_button(ui, &ids);
         });
-        ui.label(RichText::new(format!("Generator: {}", g.name)).small().color(theme::TEXT_DIM));
+        ui.label(RichText::new(format!("Generator: {}", g.name)).small().color(theme::text_dim()));
         if let Some(change) = change {
             self.actions.push(Action::SetGenValues(change, false));
         }

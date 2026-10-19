@@ -94,11 +94,23 @@ pub enum Icon {
 /// Palette used by icons.
 pub mod pal {
     use egui::Color32;
-    pub const INK: Color32 = Color32::from_rgb(0x3A, 0x3F, 0x48);
-    pub const INK_ACTIVE: Color32 = Color32::from_rgb(0x12, 0x4A, 0x9C);
-    pub const FILL: Color32 = Color32::from_rgb(0xF4, 0xF6, 0xF9);
-    pub const SHADE: Color32 = Color32::from_rgb(0xD5, 0xDB, 0xE4);
-    pub const SHADE_DARK: Color32 = Color32::from_rgb(0xAE, 0xB8, 0xC6);
+    use super::super::theme::pick;
+    // ink and the neutral fills follow the light / dark look; the colours stay
+    pub fn ink() -> Color32 {
+        pick(Color32::from_rgb(0x3A, 0x3F, 0x48), Color32::from_rgb(0xD5, 0xDA, 0xE2))
+    }
+    pub fn ink_active() -> Color32 {
+        pick(Color32::from_rgb(0x12, 0x4A, 0x9C), Color32::from_rgb(0x8C, 0xC0, 0xFF))
+    }
+    pub fn fill() -> Color32 {
+        pick(Color32::from_rgb(0xF4, 0xF6, 0xF9), Color32::from_rgb(0x4A, 0x50, 0x59))
+    }
+    pub fn shade() -> Color32 {
+        pick(Color32::from_rgb(0xD5, 0xDB, 0xE4), Color32::from_rgb(0x5E, 0x66, 0x72))
+    }
+    pub fn shade_dark() -> Color32 {
+        pick(Color32::from_rgb(0xAE, 0xB8, 0xC6), Color32::from_rgb(0x7A, 0x84, 0x93))
+    }
     pub const BLUE: Color32 = Color32::from_rgb(0x2F, 0x7D, 0xE1);
     pub const BLUE_SOFT: Color32 = Color32::from_rgb(0xB8, 0xD4, 0xF5);
     pub const RED: Color32 = Color32::from_rgb(0xE0, 0x53, 0x3D);
@@ -209,8 +221,10 @@ fn cube(pen: &Pen, top: Color32, left: Color32, right: Color32) {
 pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
     let side = rect.width().min(rect.height());
     let origin = rect.center() - vec2(side, side) * 0.5;
-    let pen = Pen { painter, origin, s: side / 24.0, ink: if active { pal::INK_ACTIVE } else { pal::INK } };
+    let pen = Pen { painter, origin, s: side / 24.0, ink: if active { pal::ink_active() } else { pal::ink() } };
     use pal::*;
+    #[allow(non_snake_case)]
+    let (FILL, SHADE, SHADE_DARK) = (pal::fill(), pal::shade(), pal::shade_dark());
     match icon {
         Icon::Select => {
             let arrow = [

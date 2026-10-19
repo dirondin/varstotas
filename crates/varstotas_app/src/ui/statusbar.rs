@@ -13,7 +13,7 @@ impl VarstotasApp {
                 self.vcb_box(ui);
                 ui.add_space(6.0);
                 let label = if self.grid_vcb() { "Grid Step" } else { self.tool.vcb_label() };
-                ui.label(RichText::new(label).color(theme::TEXT_DIM));
+                ui.label(RichText::new(label).color(theme::text_dim()));
                 ui.add_space(12.0);
                 self.log_badge(ui);
                 ui.add_space(6.0);
@@ -23,9 +23,12 @@ impl VarstotasApp {
                     let (text, flash) = self.status_text();
                     if let Some((msg, is_error)) = flash {
                         let (fg, bg) = if is_error {
-                            (Color32::from_rgb(0xA8, 0x2A, 0x1C), Color32::from_rgb(0xFB, 0xE4, 0xE0))
+                            (
+                                theme::pick(Color32::from_rgb(0xA8, 0x2A, 0x1C), Color32::from_rgb(0xFF, 0xC8, 0xBE)),
+                                theme::pick(Color32::from_rgb(0xFB, 0xE4, 0xE0), Color32::from_rgb(0x6A, 0x24, 0x1C)),
+                            )
                         } else {
-                            (Color32::from_rgb(0x1F, 0x4E, 0x8C), theme::ACCENT_SOFT)
+                            (theme::pick(Color32::from_rgb(0x1F, 0x4E, 0x8C), Color32::from_rgb(0xD6, 0xE6, 0xFA)), theme::accent_soft())
                         };
                         egui::Frame::new()
                             .fill(bg)
@@ -33,7 +36,7 @@ impl VarstotasApp {
                             .inner_margin(egui::Margin::symmetric(6, 1))
                             .show(ui, |ui| ui.label(RichText::new(msg).color(fg)));
                     }
-                    ui.add(egui::Label::new(RichText::new(text).color(Color32::from_gray(50))).truncate());
+                    ui.add(egui::Label::new(RichText::new(text).color(theme::text())).truncate());
                 });
             });
         });
@@ -55,10 +58,10 @@ impl VarstotasApp {
         } else if typing {
             theme::ACCENT
         } else {
-            theme::BORDER
+            theme::border()
         };
-        p.rect(rect, 5.0, Color32::WHITE, Stroke::new(if typing { 1.5 } else { 1.0 }, border), egui::StrokeKind::Inside);
-        let color = if typing { Color32::BLACK } else { Color32::from_gray(70) };
+        p.rect(rect, 5.0, theme::field_bg(), Stroke::new(if typing { 1.5 } else { 1.0 }, border), egui::StrokeKind::Inside);
+        let color = if typing { theme::pick(Color32::BLACK, Color32::WHITE) } else { theme::pick(Color32::from_gray(70), Color32::from_gray(200)) };
         let galley = p.layout_no_wrap(text, FontId::monospace(13.0), color);
         let pos = rect.left_center() + vec2(8.0, -galley.size().y * 0.5);
         let caret_x = pos.x + galley.size().x + 1.0;
@@ -68,7 +71,7 @@ impl VarstotasApp {
             if (t * 2.0) as i64 % 2 == 0 {
                 p.line_segment(
                     [egui::pos2(caret_x, rect.top() + 4.0), egui::pos2(caret_x, rect.bottom() - 4.0)],
-                    Stroke::new(1.0, Color32::BLACK),
+                    Stroke::new(1.0, color),
                 );
             }
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));

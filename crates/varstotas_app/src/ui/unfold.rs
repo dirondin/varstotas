@@ -253,7 +253,7 @@ impl VarstotasApp {
             // Preview of the current sheet.
             let (rect, _) = ui.allocate_exact_size(vec2(560.0, 340.0), Sense::hover());
             let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, 4.0, theme::BORDER);
+            painter.rect_filled(rect, 4.0, theme::border());
             if let Some(d) = pages.get(s.page) {
                 let k = ((rect.width() as f64 - 20.0) / d.size.x).min((rect.height() as f64 - 20.0) / d.size.y);
                 let o = rect.center() - vec2((d.size.x * k) as f32, (d.size.y * k) as f32) * 0.5;
@@ -328,7 +328,7 @@ impl VarstotasApp {
                         }
                     }
                 });
-                ui.label(RichText::new("Export:").color(theme::TEXT_DIM));
+                ui.label(RichText::new("Export:").color(theme::text_dim()));
             });
         });
         if !open {

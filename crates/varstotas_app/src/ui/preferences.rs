@@ -21,10 +21,11 @@ pub enum Section {
     Downloads,
     View,
     Navigation,
+    Interface,
 }
 
 impl Section {
-    pub const ALL: [Section; 6] = [Section::General, Section::Drawing, Section::Libraries, Section::Downloads, Section::View, Section::Navigation];
+    pub const ALL: [Section; 7] = [Section::General, Section::Interface, Section::Drawing, Section::Libraries, Section::Downloads, Section::View, Section::Navigation];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -34,6 +35,7 @@ impl Section {
             Section::Downloads => "Downloads",
             Section::View => "View",
             Section::Navigation => "Navigation",
+            Section::Interface => "Interface",
         }
     }
 
@@ -44,6 +46,7 @@ impl Section {
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle",
             Section::Libraries => "components materials folder examples in model tiles small large list",
             Section::Downloads => "watch downloads folder send to varstotas bookmarklet browser",
+            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons",
             Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
             Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera",
         }
@@ -108,7 +111,7 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
             (None, Some(p)) => format!("{} (default)", p.display()),
             (None, None) => "—".to_string(),
         };
-        ui.add(egui::Label::new(RichText::new(text).small().color(theme::TEXT_DIM)).truncate());
+        ui.add(egui::Label::new(RichText::new(text).small().color(theme::text_dim())).truncate());
     });
     ui.horizontal(|ui| {
         if ui.button("Choose…").clicked()
@@ -128,7 +131,7 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
 }
 
 fn note(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new(text).small().color(theme::TEXT_DIM));
+    ui.label(RichText::new(text).small().color(theme::text_dim()));
 }
 
 fn heading(ui: &mut Ui, text: &str) {
@@ -198,6 +201,7 @@ impl VarstotasApp {
                             Section::Downloads => self.prefs_downloads(ui),
                             Section::View => self.prefs_view(ui),
                             Section::Navigation => self.prefs_navigation(ui),
+                            Section::Interface => self.prefs_interface(ui),
                         }
                     });
                 });
@@ -237,6 +241,11 @@ impl VarstotasApp {
             }
             Section::View => p.new_view = ViewDefaults::default(),
             Section::Navigation => p.nav = Default::default(),
+            Section::Interface => {
+                p.theme = d.theme;
+                p.ui_scale = d.ui_scale;
+                p.toolbar_icons = d.toolbar_icons;
+            }
         }
         self.flash(format!("Preferences → {}: defaults", s.name()));
     }
@@ -335,6 +344,55 @@ impl VarstotasApp {
             ui.colored_label(egui::Color32::from_rgb(200, 60, 40), RichText::new(e).small());
         }
         note(ui, "Also in Window → 3D Library… → Other Sites.");
+    }
+
+    fn prefs_interface(&mut self, ui: &mut Ui) {
+        use super::theme::ThemePref;
+        heading(ui, "Theme");
+        ui.horizontal(|ui| {
+            for (t, label) in [(ThemePref::Light, "Light"), (ThemePref::Dark, "Dark"), (ThemePref::System, "As the System")] {
+                let r = ui.radio_value(&mut self.prefs.theme, t, label);
+                super::tray_lib::spot(format!("theme:{label}"), r.rect.center());
+            }
+        });
+        note(ui, "The viewport keeps its own colours (sky, ground); sheets and unfold patterns stay white paper.");
+        heading(ui, "Scale");
+        ui.horizontal(|ui| {
+            for pct in [80, 90, 100, 110, 125, 150] {
+                let on = (self.prefs.ui_scale * 100.0).round() as i32 == pct;
+                let r = ui.add(egui::Button::selectable(on, format!("{pct} %")));
+                super::tray_lib::spot(format!("scale:{pct}"), r.rect.center());
+                if r.clicked() {
+                    self.prefs.ui_scale = pct as f32 / 100.0;
+                }
+            }
+        });
+        note(ui, "Menus, panels and windows; ⌘ + / ⌘ − / ⌘ 0 change it too.");
+        heading(ui, "Toolbar icons");
+        ui.horizontal(|ui| {
+            for (label, side) in super::toolbar::ICON_SIZES {
+                let r = ui.radio_value(&mut self.prefs.toolbar_icons, side, label);
+                super::tray_lib::spot(format!("icons:{label}"), r.rect.center());
+            }
+        });
+    }
+
+    /// Theme, scale and toolbar icon size from the preferences (every frame; cheap when unchanged).
+    pub(crate) fn apply_interface(&mut self, ctx: &Context) {
+        super::theme::set_look(ctx, super::theme::wants_dark(ctx, self.prefs.theme));
+        let key = egui::Id::new("ui_scale_applied");
+        let zoom = ctx.zoom_factor();
+        let applied = ctx.data(|d| d.get_temp::<f32>(key));
+        // ⌘ + / − / 0 (egui's own zoom keys) changed it: keep that in the preferences
+        if applied.is_some_and(|a| (zoom - a).abs() > 1e-3) {
+            self.prefs.ui_scale = zoom;
+        }
+        let scale = self.prefs.ui_scale.clamp(0.5, 2.0);
+        if (zoom - scale).abs() > 1e-3 {
+            ctx.set_zoom_factor(scale);
+        }
+        ctx.data_mut(|d| d.insert_temp(key, scale));
+        super::toolbar::set_button_side(self.prefs.toolbar_icons);
     }
 
     fn prefs_navigation(&mut self, ui: &mut Ui) {

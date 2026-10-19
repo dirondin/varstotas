@@ -245,7 +245,7 @@ const SCENES: &[B] = &[
 
 const FILES: &[B] = &[
     B::P("Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval."),
-    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas), Navigation (mouse and trackpad) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
+    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas), Navigation (mouse and trackpad) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
     B::P("Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it."),
     B::Row("Import", "OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window"),
     B::Row("Export", "OBJ, STL, DXF, glTF (GLB), 3MF, PLY, faces as JSON, PNG, SVG / PDF drawings, sheets, unfold patterns, animation, report, attributions"),
@@ -371,14 +371,14 @@ fn row(ui: &mut Ui, term: &str, what: &str) {
 
 /// A tool's card: icon, name, key, what it does and how (`Use` picks it).
 fn tool_card(ui: &mut Ui, id: ToolId, ask: &mut Option<Ask>) {
-    egui::Frame::new().fill(theme::TRAY_BG).inner_margin(6.0).corner_radius(4.0).show(ui, |ui| {
+    egui::Frame::new().fill(theme::tray_bg()).inner_margin(6.0).corner_radius(4.0).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::hover());
             super::icons::paint_icon(ui.painter(), rect, id.icon(), false);
             ui.label(RichText::new(id.name()).strong().size(14.0));
             if let Some(k) = id.shortcut_label() {
-                ui.label(RichText::new(k).monospace().small().color(theme::TEXT_DIM));
+                ui.label(RichText::new(k).monospace().small().color(theme::text_dim()));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.small_button("Use").on_hover_text("Pick this tool").clicked() {
@@ -475,7 +475,7 @@ fn search_ui(ui: &mut Ui, q: &str, ask: &mut Option<Ask>) {
     let tools = find_tools(q);
     let hits = find_blocks(q);
     if tools.is_empty() && hits.is_empty() {
-        ui.label(RichText::new("Nothing found").color(theme::TEXT_DIM));
+        ui.label(RichText::new("Nothing found").color(theme::text_dim()));
         return;
     }
     if !hits.is_empty() {

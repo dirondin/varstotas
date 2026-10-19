@@ -156,7 +156,7 @@ fn code_block(ui: &mut Ui, code: &str) {
 pub(crate) fn row(ui: &mut Ui, term: &str, what: &str) {
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(term).monospace().strong());
-        ui.label(RichText::new(format!("— {what}")).color(theme::TEXT_DIM));
+        ui.label(RichText::new(format!("— {what}")).color(theme::text_dim()));
     });
 }
 
@@ -169,7 +169,7 @@ fn fn_entry(ui: &mut Ui, d: &help::FnDoc) {
         }
     }
     ui.indent(d.name, |ui| {
-        ui.label(RichText::new(d.doc).color(theme::TEXT_DIM));
+        ui.label(RichText::new(d.doc).color(theme::text_dim()));
     });
 }
 
@@ -182,7 +182,7 @@ fn member_entry(ui: &mut Ui, m: &help::Member) {
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(name).monospace().strong());
         ui.label(RichText::new(format!("→ {}", m.ty.label())).small());
-        ui.label(RichText::new(format!("— {} ({})", m.doc, on.join(", "))).color(theme::TEXT_DIM));
+        ui.label(RichText::new(format!("— {} ({})", m.doc, on.join(", "))).color(theme::text_dim()));
     });
 }
 
@@ -224,7 +224,7 @@ impl VarstotasApp {
                     self.script_help.search.clear();
                     r.request_focus();
                 }
-                ui.label(RichText::new("Full text: docs/SCRIPTING.md, docs/GENERATORS.md").small().color(theme::TEXT_DIM));
+                ui.label(RichText::new("Full text: docs/SCRIPTING.md, docs/GENERATORS.md").small().color(theme::text_dim()));
             });
             ui.separator();
             ui.horizontal_top(|ui| {
@@ -329,7 +329,7 @@ fn search_ui(ui: &mut Ui, q: &str) {
     let members = find_members(q);
     let tags: Vec<_> = help::TAGS.iter().filter(|t| t.0.contains(q) || t.2.to_lowercase().contains(q)).collect();
     if fns.is_empty() && members.is_empty() && tags.is_empty() {
-        ui.label(RichText::new("Nothing found").color(theme::TEXT_DIM));
+        ui.label(RichText::new("Nothing found").color(theme::text_dim()));
         return;
     }
     if !fns.is_empty() {

@@ -1247,7 +1247,7 @@ pub(crate) fn tile_ex(
         } else {
             let inner = pic.shrink(if large { 8.0 } else { 3.0 });
             let to = |q: egui::Pos2| inner.min + vec2(q.x * inner.width(), q.y * inner.height());
-            let stroke = Stroke::new(if large { 0.8 } else { 0.6 }, Color32::from_gray(60));
+            let stroke = Stroke::new(if large { 0.8 } else { 0.6 }, super::theme::pick(Color32::from_gray(60), Color32::from_gray(190)));
             for (a, b) in thumb {
                 p.line_segment([to(*a), to(*b)], stroke);
             }

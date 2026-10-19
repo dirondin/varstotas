@@ -167,7 +167,7 @@ fn draw_preview(ui: &Ui, rect: egui::Rect, edges: &[(DVec3, DVec3)], yaw: f32, p
     let c = ((lo.0 + hi.0) / 2.0, (lo.1 + hi.1) / 2.0);
     let to = |q: (f64, f64)| pos2(rect.center().x + ((q.0 - c.0) * s) as f32, rect.center().y + ((q.1 - c.1) * s) as f32);
     let painter = ui.painter_at(rect);
-    let stroke = Stroke::new(1.0, Color32::from_gray(50));
+    let stroke = Stroke::new(1.0, super::theme::pick(Color32::from_gray(50), Color32::from_gray(200)));
     for (a, b) in pts {
         painter.line_segment([to(a), to(b)], stroke);
     }
@@ -182,7 +182,7 @@ impl VarstotasApp {
         self.rebuild_gen_preview(ctx);
         let mut open = true;
         let pos = self.viewport.view_rect.min + vec2(40.0, 30.0);
-        let frame = egui::Frame::window(&ctx.global_style()).fill(Color32::WHITE);
+        let frame = egui::Frame::window(&ctx.global_style()).fill(super::theme::card_bg());
         let mut win = egui::Window::new("Generator Editor").open(&mut open).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
@@ -287,7 +287,7 @@ impl VarstotasApp {
         let (msg, colour) = match (&self.gen_editor.parsed, &self.gen_editor.preview) {
             (Err(e), _) => (e.clone(), Color32::from_rgb(200, 50, 40)),
             (_, Some(Err(e))) => (e.clone(), Color32::from_rgb(200, 50, 40)),
-            _ => (self.gen_editor.status.clone(), theme::TEXT_DIM),
+            _ => (self.gen_editor.status.clone(), theme::text_dim()),
         };
         let file = self.gen_editor.file.as_ref().map(|f| f.display().to_string()).unwrap_or_else(|| "not saved".into());
         ui.label(RichText::new(if msg.is_empty() { file } else { msg }).small().color(colour));
@@ -297,7 +297,7 @@ impl VarstotasApp {
     fn gen_editor_side(&mut self, ui: &mut Ui, unit: varstotas_kernel::LengthUnit, h: f32) {
         let pw = ui.available_width();
         let (rect, resp) = ui.allocate_exact_size(vec2(pw, 240.0), Sense::drag());
-        ui.painter().rect_filled(rect, 6.0, Color32::from_gray(246));
+        ui.painter().rect_filled(rect, 6.0, super::theme::pick(Color32::from_gray(246), Color32::from_rgb(0x36, 0x3A, 0x41)));
         if resp.dragged() {
             let d = resp.drag_delta();
             let ed = &mut self.gen_editor;
@@ -313,7 +313,7 @@ impl VarstotasApp {
                     egui::Align2::LEFT_BOTTOM,
                     format!("{} × {} × {}", f(p.size.x), f(p.size.y), f(p.size.z)),
                     egui::FontId::proportional(11.0),
-                    theme::TEXT_DIM,
+                    theme::text_dim(),
                 );
             }
             Some(Err(_)) => {

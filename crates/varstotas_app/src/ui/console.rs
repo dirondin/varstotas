@@ -104,7 +104,7 @@ impl VarstotasApp {
         // The reference to open (and the word to look up).
         let mut help: Option<Option<String>> = None;
         let pos = self.viewport.view_rect.min + egui::vec2(16.0, 16.0);
-        let frame = egui::Frame::window(&ctx.global_style()).fill(Color32::WHITE);
+        let frame = egui::Frame::window(&ctx.global_style()).fill(theme::card_bg());
         let mut win = egui::Window::new("Script Console").open(&mut open).default_pos(pos);
         if self.debug.script_active() {
             // Scripted runs: a fixed place (egui remembers window positions between runs).
@@ -121,19 +121,19 @@ impl VarstotasApp {
             let max_code = (avail - 130.0).max(60.0);
             let code_h = if self.console.code_h > 0.0 { self.console.code_h } else { 150.0 }.clamp(60.0, max_code);
             let out_h = (avail - code_h - 70.0).max(50.0);
-            egui::Frame::new().fill(theme::TRAY_BG).inner_margin(6.0).show(ui, |ui| {
+            egui::Frame::new().fill(theme::tray_bg()).inner_margin(6.0).show(ui, |ui| {
                 ScrollArea::vertical().max_height(out_h).min_scrolled_height(out_h).stick_to_bottom(true).auto_shrink([false, false]).show(
                     ui,
                     |ui| {
                         if self.console.log.is_empty() {
                             ui.label(
                                 RichText::new("Rhai scripts over the model. Try: box(ORIGIN, 1000, 600, 18)  — Cmd+Enter runs")
-                                    .color(theme::TEXT_DIM),
+                                    .color(theme::text_dim()),
                             );
                         }
                         for l in &self.console.log {
                             let (t, c) = match l {
-                                LogLine::Input(s) => (format!("› {s}"), theme::TEXT_DIM),
+                                LogLine::Input(s) => (format!("› {s}"), theme::text_dim()),
                                 LogLine::Output(s) => (s.clone(), ui.visuals().text_color()),
                                 LogLine::Error(s) => (s.clone(), Color32::from_rgb(200, 50, 40)),
                             };
@@ -144,7 +144,7 @@ impl VarstotasApp {
             });
             let (split, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 8.0), egui::Sense::drag());
             let resp = resp.on_hover_cursor(egui::CursorIcon::ResizeVertical);
-            let c = if resp.hovered() || resp.dragged() { theme::TEXT_DIM } else { Color32::from_gray(200) };
+            let c = if resp.hovered() || resp.dragged() { theme::text_dim() } else { Color32::from_gray(200) };
             ui.painter().hline(split.center().x - 20.0..=split.center().x + 20.0, split.center().y - 1.5, egui::Stroke::new(1.0, c));
             ui.painter().hline(split.center().x - 20.0..=split.center().x + 20.0, split.center().y + 1.5, egui::Stroke::new(1.0, c));
             self.console.code_h = (code_h - resp.drag_delta().y).clamp(60.0, max_code);
@@ -199,7 +199,7 @@ impl VarstotasApp {
                     help = Some(None);
                 }
                 if let Some(b) = &self.bridge.server {
-                    ui.label(RichText::new(format!("Python / MCP bridge: 127.0.0.1:{}", b.port)).color(theme::TEXT_DIM))
+                    ui.label(RichText::new(format!("Python / MCP bridge: 127.0.0.1:{}", b.port)).color(theme::text_dim()))
                         .on_hover_text("import varstotas; m = varstotas.connect()  — see ~/.varstotas/python");
                 }
             });

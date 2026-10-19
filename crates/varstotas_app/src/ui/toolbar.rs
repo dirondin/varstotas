@@ -7,12 +7,25 @@ use crate::app::{Action, VarstotasApp};
 use crate::tools::ToolId;
 use egui::{RichText, Ui};
 
-const BTN: f32 = 36.0;
+/// Side of a toolbar button (Preferences → Interface → Toolbar icons).
+static BTN_SIDE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(36);
+
+#[allow(non_snake_case)]
+fn BTN() -> f32 {
+    BTN_SIDE.load(std::sync::atomic::Ordering::Relaxed) as f32
+}
+
+/// Toolbar icon sizes: name and button side.
+pub const ICON_SIZES: [(&str, u32); 3] = [("Small", 28), ("Medium", 36), ("Large", 44)];
+
+pub fn set_button_side(side: u32) {
+    BTN_SIDE.store(side.clamp(20, 64), std::sync::atomic::Ordering::Relaxed);
+}
 
 fn group_sep(ui: &mut Ui) {
     ui.add_space(4.0);
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, BTN - 8.0), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, theme::BORDER);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, BTN() - 8.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, theme::border());
     ui.add_space(4.0);
 }
 
@@ -22,11 +35,11 @@ fn tip(resp: egui::Response, title: &str, shortcut: Option<&str>, desc: &str) ->
         ui.horizontal(|ui| {
             ui.label(RichText::new(title).strong());
             if let Some(s) = shortcut {
-                ui.label(RichText::new(format!("({s})")).color(theme::TEXT_DIM));
+                ui.label(RichText::new(format!("({s})")).color(theme::text_dim()));
             }
         });
         if !desc.is_empty() {
-            ui.label(RichText::new(desc).color(theme::TEXT_DIM));
+            ui.label(RichText::new(desc).color(theme::text_dim()));
         }
     })
 }
@@ -34,7 +47,7 @@ fn tip(resp: egui::Response, title: &str, shortcut: Option<&str>, desc: &str) ->
 impl VarstotasApp {
     fn tool_button(&mut self, ui: &mut Ui, id: ToolId) {
         let active = self.tool_id() == id;
-        let resp = icon_button(ui, id.icon(), active, BTN);
+        let resp = icon_button(ui, id.icon(), active, BTN());
         let mut desc = id.description().to_string();
         if !id.implemented() {
             desc.push_str("\n(not implemented yet)");
@@ -46,7 +59,7 @@ impl VarstotasApp {
 
     #[allow(clippy::too_many_arguments)]
     fn action_button(&mut self, ui: &mut Ui, icon: Icon, selected: bool, title: &str, sc: Option<&str>, desc: &str, action: Action) {
-        let resp = icon_button(ui, icon, selected, BTN);
+        let resp = icon_button(ui, icon, selected, BTN());
         if tip(resp, title, sc, desc).clicked() {
             self.actions.push(action);
         }
@@ -57,12 +70,12 @@ impl VarstotasApp {
     fn snap_button(&mut self, ui: &mut Ui) {
         let snap = &self.prefs.snapping;
         let (on, partial) = (snap.enabled, snap.partial());
-        let resp = icon_button(ui, Icon::Magnet, false, BTN);
+        let resp = icon_button(ui, Icon::Magnet, false, BTN());
         super::tray_lib::spot("magnet", resp.rect.center());
         let p = ui.painter();
         let r = resp.rect.shrink(7.0);
         if !on {
-            p.line_segment([r.left_bottom(), r.right_top()], egui::Stroke::new(2.5, theme::TEXT_DIM));
+            p.line_segment([r.left_bottom(), r.right_top()], egui::Stroke::new(2.5, theme::text_dim()));
         } else if partial {
             p.circle_filled(r.right_top() + egui::vec2(2.0, -2.0), 3.5, egui::Color32::from_rgb(0xE8, 0x7A, 0x1E));
         }

@@ -116,8 +116,8 @@ fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl 
 /// [`card`] that can be forced open.
 fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_open: bool, body: impl FnOnce(&mut Ui) -> R) {
     let r = Frame::new()
-        .fill(Color32::WHITE)
-        .stroke(Stroke::new(1.0, theme::BORDER))
+        .fill(theme::card_bg())
+        .stroke(Stroke::new(1.0, theme::border()))
         .corner_radius(8.0)
         .inner_margin(Margin::symmetric(8, 6))
         .show(ui, |ui| {
@@ -175,7 +175,7 @@ fn material_label(ui: &mut Ui, model: &Model, m: Option<varstotas_kernel::Materi
             None => (Color32::WHITE, "Default".to_string()),
         };
         let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-        ui.painter().rect(rect, 3.0, color, Stroke::new(1.0, theme::BORDER), egui::StrokeKind::Inside);
+        ui.painter().rect(rect, 3.0, color, Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
         ui.label(name);
     });
 }
@@ -244,7 +244,7 @@ impl VarstotasApp {
                 card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui));
             }
             if hidden.len() >= TRAY_CARDS.len() {
-                ui.label(RichText::new("Every card is off: Window → Tray cards").color(theme::TEXT_DIM));
+                ui.label(RichText::new("Every card is off: Window → Tray cards").color(theme::text_dim()));
             }
         });
     }
@@ -314,7 +314,7 @@ impl VarstotasApp {
             });
         });
         let alt = sh.sun_altitude_deg();
-        ui.label(RichText::new(if alt > 0.0 { format!("Sun {alt:.0}° above the horizon") } else { "Sun below the horizon".into() }).color(theme::TEXT_DIM));
+        ui.label(RichText::new(if alt > 0.0 { format!("Sun {alt:.0}° above the horizon") } else { "Sun below the horizon".into() }).color(theme::text_dim()));
         if sh != self.doc.model.shadows {
             self.actions.push(Action::SetShadows(sh));
         }
@@ -328,9 +328,9 @@ impl VarstotasApp {
         let smooth = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.smooth, "Smooth normals"));
         let coplanar = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.coplanar, "Soften coplanar"));
         if n == 0 {
-            ui.label(RichText::new("Select edges or faces").color(theme::TEXT_DIM));
+            ui.label(RichText::new("Select edges or faces").color(theme::text_dim()));
         } else {
-            ui.label(RichText::new(format!("{n} edges")).color(theme::TEXT_DIM));
+            ui.label(RichText::new(format!("{n} edges")).color(theme::text_dim()));
         }
         // One undo step per slider drag (applied on release), clicks apply at once.
         let slider_done = resp.drag_stopped() || (resp.changed() && !resp.dragged());
@@ -616,7 +616,7 @@ impl VarstotasApp {
             });
         });
         if let Err(e) = r {
-            ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::TEXT_DIM));
+            ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::text_dim()));
         }
 
         if let Some(u) = set_unit {
@@ -1155,7 +1155,7 @@ impl VarstotasApp {
                 None => (Color32::WHITE, "Default".to_string()),
             };
             let (rect, _) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::hover());
-            ui.painter().rect(rect, 6.0, color, Stroke::new(1.0, theme::BORDER), egui::StrokeKind::Inside);
+            ui.painter().rect(rect, 6.0, color, Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
             if self.doc.current_material.is_none() {
                 // Default material: white front / blue-grey back split.
                 let tri = vec![rect.right_top(), rect.right_bottom(), rect.left_bottom()];
@@ -1167,7 +1167,7 @@ impl VarstotasApp {
             }
             ui.vertical(|ui| {
                 ui.label(RichText::new(name).strong());
-                ui.label(RichText::new("Current paint material (B)").small().color(theme::TEXT_DIM));
+                ui.label(RichText::new("Current paint material (B)").small().color(theme::text_dim()));
             });
         });
         ui.add_space(4.0);
@@ -1243,7 +1243,7 @@ impl VarstotasApp {
             if small_icon_button(ui, Icon::Plus, "Add tag").clicked() {
                 add = true;
             }
-            ui.label(RichText::new("Visible · Name").small().color(theme::TEXT_DIM));
+            ui.label(RichText::new("Visible · Name").small().color(theme::text_dim()));
         });
         let un_shown = !self.doc.model.untagged_hidden;
         ui.horizontal(|ui| {
@@ -1253,7 +1253,7 @@ impl VarstotasApp {
                 self.doc.mutate_untracked(|m| m.untagged_hidden = !m.untagged_hidden);
             }
             ui.add_space(14.0);
-            ui.label(if un_shown { RichText::new("Untagged") } else { RichText::new("Untagged").color(theme::TEXT_DIM) });
+            ui.label(if un_shown { RichText::new("Untagged") } else { RichText::new("Untagged").color(theme::text_dim()) });
         });
         let tags: Vec<(TagId, String, bool, [f32; 4])> = self
             .doc
@@ -1279,7 +1279,7 @@ impl VarstotasApp {
                         }
                     }
                     _ => {
-                        let text = if visible { RichText::new(&name) } else { RichText::new(&name).color(theme::TEXT_DIM) };
+                        let text = if visible { RichText::new(&name) } else { RichText::new(&name).color(theme::text_dim()) };
                         let r = ui.add(egui::Label::new(text).sense(Sense::click())).on_hover_text("Double-click to rename; right-click for more");
                         if r.double_clicked() {
                             self.tray.tag_rename = Some((id, name.clone()));
@@ -1349,13 +1349,13 @@ impl VarstotasApp {
             // Drop on the document: move to the top level.
             drop_target(ui, model, &hdr.response, &Vec::new(), &mut actions);
             if root.instances.is_empty() {
-                ui.label(RichText::new("No groups or components yet.").color(theme::TEXT_DIM));
+                ui.label(RichText::new("No groups or components yet.").color(theme::text_dim()));
             }
             outliner_level(ui, model, root, &Vec::new(), &self.doc.active_path, &self.doc.selection, &mut actions);
         });
         outliner_drag_label(ui.ctx());
         if let Err(e) = r {
-            ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::TEXT_DIM));
+            ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::text_dim()));
         }
         self.actions.extend(actions);
     }
@@ -1398,7 +1398,7 @@ impl VarstotasApp {
             });
         });
         if self.doc.model.scenes.is_empty() {
-            ui.label(RichText::new("No scenes. Click + to save the current view.").color(theme::TEXT_DIM));
+            ui.label(RichText::new("No scenes. Click + to save the current view.").color(theme::text_dim()));
         }
         let names: Vec<String> = self.doc.model.scenes.iter().map(|s| s.name.clone()).collect();
         let mut rename_commit = None;
@@ -1471,7 +1471,7 @@ impl VarstotasApp {
             ui.vertical(|ui| {
                 ui.label(RichText::new(id.name()).strong().size(14.0));
                 if let Some(s) = id.shortcut_label() {
-                    ui.label(RichText::new(format!("Shortcut: {s}")).small().color(theme::TEXT_DIM));
+                    ui.label(RichText::new(format!("Shortcut: {s}")).small().color(theme::text_dim()));
                 }
             });
         });
@@ -1512,7 +1512,7 @@ fn outliner_level(
             paint_icon(ui.painter(), rect, if is_group { Icon::Group } else { Icon::ViewIso }, false);
             let mut text = RichText::new(label.clone());
             if inst.hidden {
-                text = text.color(theme::TEXT_DIM).italics();
+                text = text.color(theme::text_dim()).italics();
             }
             let resp = ui.selectable_label(selected, text).interact(Sense::drag());
             if resp.double_clicked() {

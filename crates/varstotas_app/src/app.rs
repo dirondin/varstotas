@@ -129,6 +129,12 @@ pub struct Prefs {
     pub new_view: crate::ui::preferences::ViewDefaults,
     /// Mouse and trackpad (Preferences → Navigation).
     pub nav: crate::nav::NavPrefs,
+    /// Light / dark / as the system (Preferences → Interface).
+    pub theme: crate::ui::theme::ThemePref,
+    /// Interface scale (1 = 100 %).
+    pub ui_scale: f32,
+    /// Side of a toolbar button, points.
+    pub toolbar_icons: u32,
 }
 
 impl Prefs {
@@ -178,6 +184,9 @@ impl Default for Prefs {
             downloads_watch_dir: None,
             new_view: Default::default(),
             nav: Default::default(),
+            theme: Default::default(),
+            ui_scale: 1.0,
+            toolbar_icons: 36,
         }
     }
 }
@@ -2642,6 +2651,7 @@ impl eframe::App for VarstotasApp {
 
         crate::axes::sync(&self.doc.model);
         crate::nav::publish(&self.prefs.nav);
+        self.apply_interface(&ctx);
         crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);
         self.handle_close_request(&ctx);
@@ -2740,8 +2750,8 @@ impl eframe::App for VarstotasApp {
             if rects.len() > 1 {
                 // the active pane: the one the settings and the tools apply to
                 // the soft selection colour, a little stronger
-                use crate::ui::theme::{ACCENT, ACCENT_SOFT};
-                let frame = ACCENT_SOFT.lerp_to_gamma(ACCENT, 0.4);
+                use crate::ui::theme::{ACCENT, accent_soft};
+                let frame = accent_soft().lerp_to_gamma(ACCENT, 0.4);
                 ui.painter().rect_stroke(rects[active], 0.0, egui::Stroke::new(2.5, frame), egui::StrokeKind::Inside);
             }
         });

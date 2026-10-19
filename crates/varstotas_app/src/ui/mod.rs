@@ -43,11 +43,11 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, selected: bool, size: f32) -> Respon
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
         if selected {
-            p.rect(rect, 7.0, theme::ACCENT_SOFT, egui::Stroke::new(1.0, theme::ACCENT), egui::StrokeKind::Inside);
+            p.rect(rect, 7.0, theme::accent_soft(), egui::Stroke::new(1.0, theme::ACCENT), egui::StrokeKind::Inside);
         } else if resp.is_pointer_button_down_on() {
-            p.rect_filled(rect, 7.0, Color32::from_rgb(0xD2, 0xD9, 0xE3));
+            p.rect_filled(rect, 7.0, theme::pick(Color32::from_rgb(0xD2, 0xD9, 0xE3), Color32::from_rgb(0x50, 0x58, 0x64)));
         } else if resp.hovered() {
-            p.rect_filled(rect, 7.0, Color32::from_rgb(0xDF, 0xE4, 0xEB));
+            p.rect_filled(rect, 7.0, theme::pick(Color32::from_rgb(0xDF, 0xE4, 0xEB), Color32::from_rgb(0x44, 0x4B, 0x55)));
         }
         let icon_size = (size * 0.68).round();
         icons::paint_icon(p, egui::Rect::from_center_size(rect.center(), vec2(icon_size, icon_size)), icon, selected);
@@ -133,7 +133,7 @@ pub fn swatch(ui: &mut Ui, color: Color32, size: f32, selected: bool) -> Respons
     let stroke = if selected {
         egui::Stroke::new(2.5, theme::ACCENT)
     } else if resp.hovered() {
-        egui::Stroke::new(1.5, Color32::from_gray(90))
+        egui::Stroke::new(1.5, theme::pick(Color32::from_gray(90), Color32::from_gray(190)))
     } else {
         egui::Stroke::new(1.0, Color32::from_black_alpha(50))
     };
