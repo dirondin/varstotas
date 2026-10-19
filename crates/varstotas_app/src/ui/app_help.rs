@@ -245,7 +245,7 @@ const SCENES: &[B] = &[
 
 const FILES: &[B] = &[
     B::P("Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval."),
-    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas), Navigation (mouse and trackpad) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
+    B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder, Send to Varstotas), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
     B::P("Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it."),
     B::Row("Import", "OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window"),
     B::Row("Export", "OBJ, STL, DXF, glTF (GLB), 3MF, PLY, faces as JSON, PNG, SVG / PDF drawings, sheets, unfold patterns, animation, report, attributions"),
@@ -310,32 +310,22 @@ pub fn topic_of(tool: ToolId) -> Topic {
 
 /// Keys other than the tools' own.
 fn keys() -> Vec<(String, &'static str)> {
-    let (c, cs) = if cfg!(target_os = "macos") { ("⌘", "⇧⌘") } else { ("Ctrl+", "Ctrl+Shift+") };
-    let mut v: Vec<(String, &'static str)> = [
-        ("N", "New"),
-        ("O", "Open…"),
-        ("S", "Save"),
-        ("Z", "Undo"),
-        ("A", "Select All"),
-        ("T", "Select None"),
-        ("X / C / V", "Cut / Copy / Paste"),
-        ("Q", "Quit"),
-    ]
-    .into_iter()
-    .map(|(k, w)| (format!("{c}{k}"), w))
-    .collect();
-    v.push((format!("{cs}S"), "Save As…"));
-    v.push((format!("{cs}Z, {c}Y"), "Redo"));
+    use crate::keymap::KeyCmd;
+    let c = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl+" };
+    // reassignable ones (Preferences → Shortcuts), then the fixed keys
+    let mut v: Vec<(String, &'static str)> = KeyCmd::all()
+        .into_iter()
+        .filter(|k| !matches!(k, KeyCmd::Tool(_)))
+        .map(|k| (crate::keymap::labels(k), k.name()))
+        .filter(|(k, _)| !k.is_empty())
+        .collect();
+    v.push((format!("{c}X / {c}C / {c}V"), "Cut / Copy / Paste"));
     v.extend(
         [
             ("Delete, Backspace", "erase the selection"),
-            ("G", "Make Group"),
             ("Esc", "cancel the operation; leave the group being edited"),
-            ("Shift+Z", "Zoom Extents"),
-            ("Shift+S", "snapping on / off"),
             ("Shift (hold)", "lock the inference direction"),
             ("→ ← ↑ ↓", "lock the red / green / blue axis, parallel to the last edge"),
-            ("PgDn / PgUp", "next / previous scene"),
             ("Enter", "apply the value typed in the Measurements box"),
             ("F1", "this guide on the active tool; in a script editor — the Script Reference"),
         ]
@@ -423,8 +413,10 @@ fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
     blocks_ui(ui, page(topic), ask);
     if topic == Topic::Shortcuts {
         ui.label(RichText::new("Tools").strong().size(15.0));
-        for id in ToolId::ALL.iter().filter(|t| t.shortcut().is_some()) {
-            row(ui, id.shortcut_label().unwrap_or_default(), id.name());
+        for id in ToolId::ALL {
+            if id.shortcut_label().is_some() {
+                row(ui, &crate::keymap::labels(crate::keymap::KeyCmd::Tool(id)), id.name());
+            }
         }
         ui.add_space(6.0);
         ui.label(RichText::new("Commands").strong().size(15.0));
@@ -432,7 +424,7 @@ fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
             row(ui, &k, w);
         }
         ui.add_space(6.0);
-        rich(ui, "Mouse and trackpad: see Navigating the view. Selection modifiers: see Selecting.");
+        rich(ui, "Change them in Window → Preferences → Shortcuts. Mouse and trackpad: see Navigating the view. Selection modifiers: see Selecting.");
     }
 }
 

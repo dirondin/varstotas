@@ -231,8 +231,8 @@ impl ToolId {
     }
 
     /// Human-readable shortcut label for tooltips/menus.
-    pub fn shortcut_label(self) -> Option<&'static str> {
-        self.shortcut().map(|k| if k == Key::Space { "Space" } else { k.name() })
+    pub fn shortcut_label(self) -> Option<String> {
+        crate::keymap::label(crate::keymap::KeyCmd::Tool(self))
     }
 
     pub fn icon(self) -> Icon {

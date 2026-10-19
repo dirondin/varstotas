@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::theme;
 use crate::app::{FaceStylePref, VarstotasApp};
+use crate::keymap::{self, KeyCmd, Shortcut};
 use crate::templates::Template;
 
 /// The sections, in the order of the list.
@@ -22,10 +23,20 @@ pub enum Section {
     View,
     Navigation,
     Interface,
+    Shortcuts,
 }
 
 impl Section {
-    pub const ALL: [Section; 7] = [Section::General, Section::Interface, Section::Drawing, Section::Libraries, Section::Downloads, Section::View, Section::Navigation];
+    pub const ALL: [Section; 8] = [
+        Section::General,
+        Section::Interface,
+        Section::Drawing,
+        Section::Libraries,
+        Section::Downloads,
+        Section::View,
+        Section::Navigation,
+        Section::Shortcuts,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -36,6 +47,7 @@ impl Section {
             Section::View => "View",
             Section::Navigation => "Navigation",
             Section::Interface => "Interface",
+            Section::Shortcuts => "Shortcuts",
         }
     }
 
@@ -48,14 +60,26 @@ impl Section {
             Section::Downloads => "watch downloads folder send to varstotas bookmarklet browser",
             Section::Interface => "theme light dark system appearance scale size zoom toolbar icons",
             Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
+            Section::Shortcuts => "keyboard shortcuts hotkeys keys",
             Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera",
         }
     }
 
     pub fn matches(self, search: &str) -> bool {
         let s = search.trim().to_lowercase();
-        s.is_empty() || self.name().to_lowercase().contains(&s) || self.words().contains(&s)
+        s.is_empty()
+            || self.name().to_lowercase().contains(&s)
+            || self.words().contains(&s)
+            || (self == Section::Shortcuts && shortcut_rows(&s).len() < KeyCmd::all().len())
     }
+}
+
+/// The commands of the Shortcuts table that `search` finds (all of them when it names none).
+fn shortcut_rows(search: &str) -> Vec<KeyCmd> {
+    let s = search.trim().to_lowercase();
+    let all = KeyCmd::all();
+    let found: Vec<KeyCmd> = all.iter().copied().filter(|c| !s.is_empty() && c.name().to_lowercase().contains(&s)).collect();
+    if found.is_empty() { all } else { found }
 }
 
 /// The window's own state (not saved).
@@ -64,6 +88,8 @@ pub struct PrefsWindow {
     pub open: bool,
     pub section: Section,
     pub search: String,
+    /// Shortcuts: the command waiting for its new keys.
+    pub capture: Option<KeyCmd>,
 }
 
 /// The view of a new document (File → New, New from Template) — Preferences → View.
@@ -156,7 +182,7 @@ impl VarstotasApp {
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
-        win.show(ctx, |ui| {
+        let shown = win.show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 // the list of sections and the search
                 ui.vertical(|ui| {
@@ -202,13 +228,19 @@ impl VarstotasApp {
                             Section::View => self.prefs_view(ui),
                             Section::Navigation => self.prefs_navigation(ui),
                             Section::Interface => self.prefs_interface(ui),
+                            Section::Shortcuts => self.prefs_shortcuts(ui),
                         }
                     });
                 });
             });
         });
+        if let Some(r) = shown {
+            // the title bar's ✕ (harness)
+            super::tray_lib::spot("prefs_close", egui::pos2(r.response.rect.max.x - 16.0, r.response.rect.min.y + 14.0));
+        }
         if !open {
             self.prefs_win.open = false;
+            self.prefs_win.capture = None;
         }
     }
 
@@ -241,6 +273,7 @@ impl VarstotasApp {
             }
             Section::View => p.new_view = ViewDefaults::default(),
             Section::Navigation => p.nav = Default::default(),
+            Section::Shortcuts => p.shortcuts.clear(),
             Section::Interface => {
                 p.theme = d.theme;
                 p.ui_scale = d.ui_scale;
@@ -393,6 +426,82 @@ impl VarstotasApp {
         }
         ctx.data_mut(|d| d.insert_temp(key, scale));
         super::toolbar::set_button_side(self.prefs.toolbar_icons);
+    }
+
+    fn prefs_shortcuts(&mut self, ui: &mut Ui) {
+        note(ui, "Click a shortcut, then press the new keys: Esc cancels, Backspace removes the shortcut. A key another command had is taken from it.");
+        if let Some(cmd) = self.prefs_win.capture {
+            let press = ui.input(|i| {
+                i.events.iter().find_map(|e| match e {
+                    egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
+                    _ => None,
+                })
+            });
+            if let Some((key, m)) = press {
+                // the keys are the table's: no button or window reacts to them
+                ui.ctx().input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Key { .. } | egui::Event::Text(_))));
+                self.prefs_win.capture = None;
+                let sc = Shortcut::from_event(key, m);
+                match key {
+                    egui::Key::Escape => {}
+                    egui::Key::Backspace | egui::Key::Delete if !sc.cmd && !sc.alt && !sc.shift => {
+                        keymap::assign(&mut self.prefs.shortcuts, cmd, None);
+                        self.flash(format!("{}: no shortcut", cmd.name()));
+                    }
+                    _ => match sc.reserved() {
+                        Some(why) => self.flash_error(format!("{} can't be a shortcut: {why}", sc.label())),
+                        None => {
+                            let taken = keymap::assign(&mut self.prefs.shortcuts, cmd, Some(sc));
+                            self.flash(match taken {
+                                Some(o) => format!("{}: {} (taken from {o})", cmd.name(), sc.label()),
+                                None => format!("{}: {}", cmd.name(), sc.label()),
+                            });
+                        }
+                    },
+                }
+            }
+        }
+        // the table shows the published keys: make it this frame's
+        keymap::publish(&self.prefs.shortcuts);
+        let rows = shortcut_rows(&self.prefs_win.search);
+        egui::Grid::new("shortcuts_grid").num_columns(3).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
+            let mut tools_heading = false;
+            for cmd in rows {
+                if matches!(cmd, KeyCmd::Tool(_)) && !tools_heading {
+                    tools_heading = true;
+                    ui.label(RichText::new("Tools").strong());
+                    ui.end_row();
+                }
+                ui.label(cmd.name());
+                let waiting = self.prefs_win.capture == Some(cmd);
+                let keys = keymap::labels(cmd);
+                let text = if waiting {
+                    RichText::new("Press keys…").italics()
+                } else if keys.is_empty() {
+                    RichText::new("—").color(theme::text_dim())
+                } else {
+                    RichText::new(keys).monospace()
+                };
+                let changed = self.prefs.shortcuts.contains_key(&cmd.id());
+                let r = ui.add(egui::Button::new(text).selected(waiting).min_size(egui::vec2(140.0, 0.0)));
+                super::tray_lib::spot(format!("key:{}", cmd.id()), r.rect.center());
+                if r.clicked() {
+                    self.prefs_win.capture = if waiting { None } else { Some(cmd) };
+                }
+                if changed {
+                    let def: Vec<String> = cmd.defaults().iter().map(|k| k.label()).collect();
+                    let tip = if def.is_empty() { "Default: none".to_string() } else { format!("Default: {}", def.join(", ")) };
+                    let r = ui.small_button("↺").on_hover_text(tip);
+                    super::tray_lib::spot(format!("keyreset:{}", cmd.id()), r.rect.center());
+                    if r.clicked() {
+                        keymap::reset(&mut self.prefs.shortcuts, cmd);
+                    }
+                } else {
+                    ui.label("");
+                }
+                ui.end_row();
+            }
+        });
     }
 
     fn prefs_navigation(&mut self, ui: &mut Ui) {

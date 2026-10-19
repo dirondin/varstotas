@@ -1,0 +1,78 @@
+# Preferences → Shortcuts: the table of commands and tools, a new key by pressing it (taken
+# from the command that had it), Backspace removes, ↺ / Reset put the defaults back; the keys
+# work in the viewport at once. Real mouse and keyboard.
+wait 10
+action preferences
+wait 10
+expect keys={} key_capture=None
+raw click 137 309
+wait 5
+expect prefs_win=(true Shortcuts)
+raw click 137 90
+raw text rect
+wait 5
+# Rectangle gets L (Line loses it), Rotated Rectangle gets Shift+R
+raw click 415 171
+wait 5
+expect key_capture=Some("tool:Rectangle")
+raw key L
+wait 5
+expect keys={"tool:Line": "", "tool:Rectangle": "L"} key_capture=None
+# (the key went to the table only)
+expect tool=Select
+raw click 415 197
+wait 5
+raw mods shift
+raw key R
+raw mods
+wait 5
+expect keys={"tool:Line": "", "tool:Rectangle": "L", "tool:RotatedRectangle": "Shift+R"}
+# a digit types into Measurements: refused
+raw click 415 171
+wait 5
+raw key 5
+wait 5
+expect keys={"tool:Line": "", "tool:Rectangle": "L", "tool:RotatedRectangle": "Shift+R"} key_capture=None
+screenshot shots/shortcuts.bmp
+# close the window: the new keys work in the viewport
+raw click 664 54
+wait 5
+expect prefs_win=(false
+raw move 700 400
+raw key L
+wait 5
+expect tool=Rectangle
+raw mods shift
+raw key R
+raw mods
+wait 5
+expect tool=RotatedRectangle
+raw key Space
+wait 5
+expect tool=Select
+# ↺ puts Rectangle back on R (Line stays without a key), Reset puts all back
+action preferences
+wait 10
+expect prefs_win=(true Shortcuts)
+raw click 511 171
+wait 5
+expect keys={"tool:Line": "", "tool:RotatedRectangle": "Shift+R"}
+raw click 649 92
+wait 5
+expect keys={}
+# Backspace: Rectangle without a shortcut
+raw click 415 171
+wait 5
+raw key Backspace
+wait 5
+expect keys={"tool:Rectangle": ""}
+raw click 649 92
+wait 5
+expect keys={}
+raw click 664 54
+wait 5
+raw move 700 400
+raw key L
+wait 5
+expect tool=Line
+quit

@@ -16,6 +16,7 @@ mod demo;
 mod document;
 mod downloads;
 mod inference;
+mod keymap;
 mod layout;
 mod nav;
 mod mat_plugins;

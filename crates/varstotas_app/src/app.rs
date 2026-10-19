@@ -6,7 +6,7 @@ use crate::overlay::Marker2d;
 use crate::tools::{self, OverlayView, PointerInfo, Tool, ToolContext, ToolId, ToolRequest};
 use crate::ui::tray::TrayState;
 use crate::viewport::Viewport;
-use egui::{Key, KeyboardShortcut, Modifiers, PointerButton, Pos2, Response, ViewportCommand};
+use egui::{Key, Modifiers, PointerButton, Pos2, Response, ViewportCommand};
 use varstotas_kernel::glam::DVec3;
 use crate::templates::Template;
 use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, IntersectScope, Model, Scene, SceneStyle, io};
@@ -135,6 +135,8 @@ pub struct Prefs {
     pub ui_scale: f32,
     /// Side of a toolbar button, points.
     pub toolbar_icons: u32,
+    /// Reassigned shortcuts (Preferences → Shortcuts): command id → keys, see `keymap`.
+    pub shortcuts: std::collections::BTreeMap<String, String>,
 }
 
 impl Prefs {
@@ -187,6 +189,7 @@ impl Default for Prefs {
             theme: Default::default(),
             ui_scale: 1.0,
             toolbar_icons: 36,
+            shortcuts: Default::default(),
         }
     }
 }
@@ -878,35 +881,21 @@ impl VarstotasApp {
         }
         let focused = ctx.text_edit_focused();
         let was_focused = std::mem::replace(&mut self.text_edit_was_focused, focused);
-        if focused || was_focused || self.modal_open() {
+        // Preferences → Shortcuts waiting for new keys: they are the table's
+        if focused || was_focused || self.modal_open() || self.prefs_win.capture.is_some() {
             return;
         }
-        let cmd = Modifiers::COMMAND;
-        let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-        let shortcuts: [(Modifiers, Key, Action); 10] = [
-            (cmd_shift, Key::Z, Action::Redo),
-            (cmd, Key::Z, Action::Undo),
-            (cmd, Key::Y, Action::Redo),
-            (cmd_shift, Key::S, Action::SaveAs),
-            (cmd, Key::S, Action::Save),
-            (cmd, Key::O, Action::Open),
-            (cmd, Key::N, Action::New),
-            (cmd, Key::A, Action::SelectAll),
-            (cmd, Key::T, Action::SelectNone),
-            (cmd, Key::Q, Action::Quit),
-        ];
-        for (m, k, a) in shortcuts {
-            if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k))) {
-                self.actions.push(a);
-            }
-        }
-
         let events = ctx.input(|i| i.events.clone());
         for ev in events {
             match ev {
                 egui::Event::Key { key, pressed, modifiers, .. } => {
                     self.last_modifiers = modifiers;
                     if modifiers.command || modifiers.ctrl || modifiers.alt {
+                        // ⌘ / Alt shortcuts (Preferences → Shortcuts)
+                        if pressed && let Some(c) = crate::keymap::lookup(crate::keymap::Shortcut::from_event(key, modifiers)) {
+                            self.actions.push(c.action());
+                            continue;
+                        }
                         if !pressed {
                             let p = self.current_pointer();
                             self.with_tool(p, |t, c| t.on_key(c, key, false));
@@ -929,11 +918,6 @@ impl VarstotasApp {
                             self.vcb.clear();
                             self.vcb_error = false;
                         }
-                        Key::Z if modifiers.shift && !typing => self.actions.push(Action::ZoomExtents),
-                        Key::S if modifiers.shift && !typing => self.actions.push(Action::ToggleSnapping),
-                        Key::G if !typing && !modifiers.shift => self.actions.push(Action::MakeGroup),
-                        Key::PageDown if !typing => self.actions.push(Action::NextScene),
-                        Key::PageUp if !typing => self.actions.push(Action::PrevScene),
                         Key::F1 if !typing => self.app_help_for_tool(),
                         Key::Escape if self.scene_player.is_some() => self.scene_player = None,
                         _ => {
@@ -942,11 +926,11 @@ impl VarstotasApp {
                             if typing && (is_letter || key == Key::Space) {
                                 continue;
                             }
-                            if !modifiers.shift
-                                && let Some(id) = ToolId::ALL.iter().copied().find(|t| t.shortcut() == Some(key)) {
-                                    self.actions.push(Action::SetTool(id));
-                                    continue;
-                                }
+                            // tools and commands on plain / Shift keys (Preferences → Shortcuts)
+                            if !typing && let Some(c) = crate::keymap::lookup(crate::keymap::Shortcut::from_event(key, modifiers)) {
+                                self.actions.push(c.action());
+                                continue;
+                            }
                             let p = self.current_pointer();
                             self.with_tool(p, |t, c| t.on_key(c, key, true));
                         }
@@ -2651,6 +2635,7 @@ impl eframe::App for VarstotasApp {
 
         crate::axes::sync(&self.doc.model);
         crate::nav::publish(&self.prefs.nav);
+        crate::keymap::publish(&self.prefs.shortcuts);
         self.apply_interface(&ctx);
         crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);

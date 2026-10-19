@@ -52,7 +52,7 @@ impl VarstotasApp {
         if !id.implemented() {
             desc.push_str("\n(not implemented yet)");
         }
-        if tip(resp, id.name(), id.shortcut_label(), &desc).clicked() {
+        if tip(resp, id.name(), id.shortcut_label().as_deref(), &desc).clicked() {
             self.actions.push(Action::SetTool(id));
         }
     }

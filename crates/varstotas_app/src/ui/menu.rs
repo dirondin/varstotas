@@ -83,7 +83,7 @@ impl VarstotasApp {
         self.item(ui, "Erase", Some("Delete"), has_sel, Action::Delete);
         ui.separator();
         self.item(ui, "Hide", None, !self.doc.selection.is_empty(), Action::HideSelected);
-        self.item(ui, "Make Group", Some("G"), has_sel, Action::MakeGroup);
+        self.item(ui, "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
         self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
         let has_inst = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Instance(_)));
         let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
@@ -128,7 +128,7 @@ impl VarstotasApp {
     pub(crate) fn menu_bar(&mut self, ui: &mut Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
-                self.item(ui, "New", Some(&cmd("N")), true, Action::New);
+                self.item(ui, "New", crate::keymap::label(crate::keymap::KeyCmd::New).as_deref(), true, Action::New);
                 ui.menu_button("New from Template", |ui| {
                     for t in Template::ALL {
                         let b = Button::new(t.name()).selected(self.prefs.template == Some(t));
@@ -137,7 +137,7 @@ impl VarstotasApp {
                         }
                     }
                 });
-                self.item(ui, "Open…", Some(&cmd("O")), true, Action::Open);
+                self.item(ui, "Open…", crate::keymap::label(crate::keymap::KeyCmd::Open).as_deref(), true, Action::Open);
                 let recent = self.prefs.recent.clone();
                 ui.add_enabled_ui(!recent.is_empty(), |ui| {
                     ui.menu_button("Open Recent", |ui| {
@@ -150,8 +150,8 @@ impl VarstotasApp {
                     });
                 });
                 ui.separator();
-                self.item(ui, "Save", Some(&cmd("S")), true, Action::Save);
-                self.item(ui, "Save As…", Some(&cmd_shift("S")), true, Action::SaveAs);
+                self.item(ui, "Save", crate::keymap::label(crate::keymap::KeyCmd::Save).as_deref(), true, Action::Save);
+                self.item(ui, "Save As…", crate::keymap::label(crate::keymap::KeyCmd::SaveAs).as_deref(), true, Action::SaveAs);
                 ui.menu_button("Preview Image", |ui| {
                     self.item(ui, "Show…", None, true, Action::PreviewShow);
                     ui.separator();
@@ -197,14 +197,14 @@ impl VarstotasApp {
                 ui.separator();
                 self.item(ui, "Run Script…", None, true, Action::RunScript);
                 ui.separator();
-                self.item(ui, "Quit", Some(&cmd("Q")), true, Action::Quit);
+                self.item(ui, "Quit", crate::keymap::label(crate::keymap::KeyCmd::Quit).as_deref(), true, Action::Quit);
             });
 
             ui.menu_button("Edit", |ui| {
                 let undo = self.doc.history.undo_label().map(|l| format!("Undo {l}"));
                 let redo = self.doc.history.redo_label().map(|l| format!("Redo {l}"));
-                self.item(ui, undo.as_deref().unwrap_or("Undo"), Some(&cmd("Z")), undo.is_some(), Action::Undo);
-                self.item(ui, redo.as_deref().unwrap_or("Redo"), Some(&cmd_shift("Z")), redo.is_some(), Action::Redo);
+                self.item(ui, undo.as_deref().unwrap_or("Undo"), crate::keymap::label(crate::keymap::KeyCmd::Undo).as_deref(), undo.is_some(), Action::Undo);
+                self.item(ui, redo.as_deref().unwrap_or("Redo"), crate::keymap::label(crate::keymap::KeyCmd::Redo).as_deref(), redo.is_some(), Action::Redo);
                 ui.separator();
                 let any_sel = self.doc.has_selection();
                 let has_sel = !self.doc.selection.is_empty();
@@ -214,13 +214,13 @@ impl VarstotasApp {
                 let has_guides = self.doc.model.has_any_guides();
                 self.item(ui, "Delete Guides", None, has_guides, Action::DeleteGuides);
                 ui.separator();
-                self.item(ui, "Select All", Some(&cmd("A")), true, Action::SelectAll);
-                self.item(ui, "Select None", Some(&cmd("T")), any_sel, Action::SelectNone);
+                self.item(ui, "Select All", crate::keymap::label(crate::keymap::KeyCmd::SelectAll).as_deref(), true, Action::SelectAll);
+                self.item(ui, "Select None", crate::keymap::label(crate::keymap::KeyCmd::SelectNone).as_deref(), any_sel, Action::SelectNone);
                 ui.separator();
                 self.item(ui, "Hide", None, has_sel, Action::HideSelected);
                 self.item(ui, "Unhide All", None, true, Action::UnhideAll);
                 ui.separator();
-                self.item(ui, "Make Group", Some("G"), has_sel, Action::MakeGroup);
+                self.item(ui, "Make Group", crate::keymap::label(crate::keymap::KeyCmd::MakeGroup).as_deref(), has_sel, Action::MakeGroup);
                 self.item(ui, "Make Component…", None, has_sel, Action::MakeComponent);
                 let has_inst = self.doc.selection.iter().any(|e| matches!(e, varstotas_kernel::EntityRef::Instance(_)));
                 let one_plain = matches!(self.doc.selection.as_slice(), [varstotas_kernel::EntityRef::Instance(i)]
@@ -293,8 +293,8 @@ impl VarstotasApp {
                     let play = if self.scene_player.is_some() { "Pause" } else { "Play" };
                     self.item(ui, play, None, has, Action::ToggleAnimation);
                     ui.separator();
-                    self.item(ui, "Next Scene", Some("PgDn"), has, Action::NextScene);
-                    self.item(ui, "Previous Scene", Some("PgUp"), has, Action::PrevScene);
+                    self.item(ui, "Next Scene", crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
+                    self.item(ui, "Previous Scene", crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
                     ui.separator();
                     self.item(ui, "Add Scene", None, true, Action::AddScene);
                 });
@@ -326,7 +326,7 @@ impl VarstotasApp {
                 self.tool_item(ui, ToolId::Orbit);
                 self.tool_item(ui, ToolId::Pan);
                 self.tool_item(ui, ToolId::Zoom);
-                self.item(ui, "Zoom Extents", Some("Shift+Z"), true, Action::ZoomExtents);
+                self.item(ui, "Zoom Extents", crate::keymap::label(crate::keymap::KeyCmd::ZoomExtents).as_deref(), true, Action::ZoomExtents);
                 ui.separator();
                 self.tool_item(ui, ToolId::PositionCamera);
                 self.tool_item(ui, ToolId::LookAround);
@@ -489,7 +489,7 @@ impl VarstotasApp {
     pub(crate) fn snapping_menu(&mut self, ui: &mut Ui) {
         use crate::inference::settings::GROUPS;
         let mut on = self.prefs.snapping.enabled;
-        if ui.add(egui::Checkbox::new(&mut on, "Snapping")).on_hover_text("Shift+S").clicked() {
+        if ui.add(egui::Checkbox::new(&mut on, "Snapping")).on_hover_text(crate::keymap::label(crate::keymap::KeyCmd::ToggleSnapping).unwrap_or_default()).clicked() {
             self.actions.push(Action::ToggleSnapping);
         }
         ui.horizontal(|ui| {
