@@ -5,17 +5,83 @@
 
 use crate::app::VarstotasApp;
 use crate::online_mats::{Msg, Online, PluginSource};
+use crate::downloads::{Downloads, LibraryState, SavedAsset};
 use crate::online_models::{ModelAsset, ModelSource};
+use varstotas_kernel::LicenseKind;
 use crate::plugins::{ParamKind, Plugin};
 use crate::ui::online_mats::{ThumbState, open_url};
 use egui::{Color32, RichText, Ui};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const TILE: f32 = 96.0;
 /// Above this many triangles a model is marked heavy.
 const HEAVY: u64 = 100_000;
+
+/// The licence filter of the 3D Library.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum LicFilter {
+    #[default]
+    Any,
+    /// CC0, CC-BY, CC-BY-SA: may be used in work you sell.
+    Commercial,
+    Cc0,
+    /// Hide models whose licence isn't known.
+    Known,
+}
+
+impl LicFilter {
+    pub const ALL: [LicFilter; 4] = [LicFilter::Any, LicFilter::Commercial, LicFilter::Cc0, LicFilter::Known];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LicFilter::Any => "Any licence",
+            LicFilter::Commercial => "Commercial use OK",
+            LicFilter::Cc0 => "CC0 only",
+            LicFilter::Known => "Known licence",
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            LicFilter::Any => "any",
+            LicFilter::Commercial => "commercial",
+            LicFilter::Cc0 => "cc0",
+            LicFilter::Known => "known",
+        }
+    }
+
+    fn pass(self, k: LicenseKind) -> bool {
+        match self {
+            LicFilter::Any => true,
+            LicFilter::Commercial => matches!(k, LicenseKind::Cc0 | LicenseKind::CcBy | LicenseKind::CcBySa),
+            LicFilter::Cc0 => k == LicenseKind::Cc0,
+            LicFilter::Known => k != LicenseKind::Unknown,
+        }
+    }
+}
+
+/// The filters of the shown models (licence, format, triangles).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Filter {
+    pub license: LicFilter,
+    /// "" = any; else a format the model (or the pack) has.
+    pub format: String,
+    /// 0 = any; models of unknown size pass.
+    pub max_tris: u64,
+}
+
+impl Filter {
+    pub fn pass(&self, a: &ModelAsset) -> bool {
+        self.license.pass(LicenseKind::parse(&a.license))
+            && (self.format.is_empty() || a.format.split(" · ").any(|f| f.eq_ignore_ascii_case(&self.format)))
+            && (self.max_tris == 0 || a.polycount <= self.max_tris)
+    }
+}
+
+const TRIS: [(u64, &str); 4] = [(0, "Any size"), (10_000, "≤ 10k triangles"), (50_000, "≤ 50k triangles"), (100_000, "≤ 100k triangles")];
 
 pub struct ModelWindow {
     pub open: bool,
@@ -27,8 +93,17 @@ pub struct ModelWindow {
     pub results: HashMap<ModelSource, (String, Result<Vec<ModelAsset>, String>)>,
     loading: HashSet<ModelSource>,
     thumbs: HashMap<String, ThumbState>,
-    /// Asset keys being downloaded.
-    pub downloading: HashSet<String>,
+    /// Asset keys being downloaded, with their cancel flags.
+    pub downloading: HashMap<String, Arc<AtomicBool>>,
+    /// Cancelled downloads whose answer hasn't come yet.
+    cancelled: HashSet<String>,
+    pub filter: Filter,
+    /// Favourites, the download history, imported files (`~/.varstotas/library_state.json`).
+    pub state: LibraryState,
+    /// The Favourites / Downloaded lists are to be made again.
+    pub(crate) saved_dirty: bool,
+    /// Sites without an API: waiting cards, the Downloads watcher, Send to Varstotas, offers.
+    pub dl: Downloads,
     pub selected: Option<String>,
     /// The last finished download: "<key> ok <file> faces=N" / "<key> error <message>" (harness).
     pub last: Option<String>,
@@ -51,7 +126,12 @@ impl Default for ModelWindow {
             results: HashMap::new(),
             loading: HashSet::new(),
             thumbs: HashMap::new(),
-            downloading: HashSet::new(),
+            downloading: HashMap::new(),
+            cancelled: HashSet::new(),
+            filter: Filter::default(),
+            state: LibraryState::load(),
+            saved_dirty: true,
+            dl: Downloads::default(),
             selected: None,
             last: None,
             plugin_values: HashMap::new(),
@@ -64,7 +144,7 @@ impl Default for ModelWindow {
 
 impl ModelWindow {
     pub fn busy(&self) -> bool {
-        self.work.busy > 0
+        self.work.busy > 0 || self.dl.importing.is_some()
     }
 
     pub fn list(&self) -> Option<&Result<Vec<ModelAsset>, String>> {
@@ -76,7 +156,7 @@ impl ModelWindow {
     pub fn shown(&self) -> Vec<&ModelAsset> {
         let local = !self.source.searches();
         match self.list() {
-            Some(Ok(list)) => list.iter().filter(|a| (self.category.is_empty() || a.category == self.category) && (!local || a.matches(&self.query))).collect(),
+            Some(Ok(list)) => list.iter().filter(|a| (self.category.is_empty() || a.category == self.category) && (!local || a.matches(&self.query)) && self.filter.pass(a)).collect(),
             _ => Vec::new(),
         }
     }
@@ -88,6 +168,9 @@ impl ModelWindow {
     /// Load the current source's models (for a searching source: for the current search) if
     /// they aren't there.
     pub fn ensure(&mut self, ctx: &egui::Context) {
+        if matches!(self.source, ModelSource::Favourites | ModelSource::History) {
+            return;
+        }
         let q = if self.source.searches() { self.query.trim().to_string() } else { String::new() };
         if self.source.searches() && q.is_empty() {
             return;
@@ -188,13 +271,61 @@ impl VarstotasApp {
             log::warn!("models: no asset {key}");
             return;
         };
-        if self.models.downloading.insert(key.to_string()) {
+        if !self.models.downloading.contains_key(key) {
+            let flag = Arc::new(AtomicBool::new(false));
+            self.models.downloading.insert(key.to_string(), flag.clone());
             let importers = self.model_importers();
-            self.models.work.download_model(asset, dir, importers, place, ctx);
+            self.models.work.download_model(asset, dir, importers, place, flag, ctx);
         }
     }
 
-    /// Download and import the model file at `url` (glb, gltf, obj, stl, dxf, zip…).
+    /// Stop downloading `key` (curl is stopped; a plugin's own download finishes unseen).
+    pub(crate) fn models_cancel(&mut self, key: &str) {
+        if let Some(flag) = self.models.downloading.remove(key) {
+            flag.store(true, Ordering::Relaxed);
+            self.models.cancelled.insert(key.to_string());
+            self.flash(format!("Download of {} cancelled", self.models.asset(key).map(|a| a.name.clone()).unwrap_or_else(|| key.to_string())));
+        }
+    }
+
+    /// Mark / unmark `a` as a favourite.
+    pub(crate) fn models_toggle_favourite(&mut self, a: &ModelAsset) {
+        let on = self.models.state.toggle_favourite(a);
+        self.models.state.save();
+        self.models.saved_dirty = true;
+        self.flash(if on { format!("☆ {} added to Favourites", a.name) } else { format!("{} removed from Favourites", a.name) });
+    }
+
+    /// The source a saved model's key names now (a plugin by its file stem).
+    fn saved_source(&self, key: &str, plugins: &[Plugin]) -> Option<ModelSource> {
+        if let Some(s) = ModelSource::from_key(key) {
+            return Some(s);
+        }
+        let stem = key.strip_prefix("plugin-")?;
+        let p = plugins.iter().find(|p| p.path.file_stem().is_some_and(|s| s.to_string_lossy() == stem))?;
+        self.model_plugin_source(p).ok()
+    }
+
+    /// Make the Favourites and Downloaded lists (after a change).
+    fn models_refresh_saved(&mut self) {
+        if !self.models.saved_dirty {
+            return;
+        }
+        self.models.saved_dirty = false;
+        let plugins = self.model_source_plugins();
+        let list = |saved: &[SavedAsset]| -> Vec<ModelAsset> { saved.iter().filter_map(|s| Some(s.asset(self.saved_source(&s.source, &plugins)?))).collect() };
+        let (fav, hist) = (list(&self.models.state.favourites), list(&self.models.state.history));
+        self.models.results.insert(ModelSource::Favourites, (String::new(), Ok(fav)));
+        self.models.results.insert(ModelSource::History, (String::new(), Ok(hist)));
+    }
+
+    /// The library file / pack folder an earlier download of `a` became (still there).
+    fn models_saved_path(&self, a: &ModelAsset) -> Option<PathBuf> {
+        let key = a.key();
+        self.models.state.history.iter().find(|h| h.key() == key).and_then(|h| h.path.clone()).filter(|p| p.exists())
+    }
+
+    /// Download and import the model file at `url` (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, zip…).
     pub(crate) fn models_from_url(&mut self, url: &str, place: bool, ctx: &egui::Context) {
         let url = url.trim();
         if !(url.starts_with("http://") || url.starts_with("https://")) {
@@ -209,10 +340,55 @@ impl VarstotasApp {
         self.models_download(&key, place, ctx);
     }
 
-    /// The components library item downloaded for `a`, if any.
+    /// The components library item downloaded for `a`, if any (a pack: its first model).
     fn models_in_library(&self, a: &ModelAsset) -> Option<usize> {
+        if let Some(p) = self.models_saved_path(a) {
+            let found = if p.is_dir() { self.library.items.iter().position(|i| i.path.starts_with(&p)) } else { self.library.items.iter().position(|i| i.path == p) };
+            if found.is_some() {
+                return found;
+            }
+        }
         let (folder, name) = (a.source.folder(), crate::ui::mat_library::safe_name(&a.name));
+        if a.pack {
+            let sub = std::path::Path::new(&folder).join(&name).to_string_lossy().to_string();
+            return self.library.items.iter().position(|i| i.folder == sub);
+        }
         self.library.items.iter().position(|i| i.folder == folder && i.name == name)
+    }
+
+    /// Show a downloaded pack's folder in the Components card (unfolded).
+    pub(crate) fn library_show_folder(&mut self, a: &ModelAsset) {
+        let sub = match self.models_in_library(a) {
+            Some(i) => self.library.items[i].folder.clone(),
+            None => Path::new(&a.source.folder()).join(crate::ui::mat_library::safe_name(&a.name)).to_string_lossy().to_string(),
+        };
+        self.show_library_folder(&sub);
+    }
+
+    /// Show components library folder `sub` ("Kenney/Car Kit") unfolded.
+    pub(crate) fn show_library_folder(&mut self, sub: &str) {
+        let top = sub.split(['/', '\\']).next().unwrap_or_default().to_string();
+        self.prefs.library_collapsed.retain(|f| f != sub && *f != top);
+        self.actions.push(crate::app::Action::ShowComponents);
+    }
+
+    /// The models of a downloaded pack in the library.
+    fn models_pack_count(&self, a: &ModelAsset) -> usize {
+        let Some(i) = self.models_in_library(a) else { return 0 };
+        let sub = self.library.items[i].folder.clone();
+        self.library.items.iter().filter(|i| i.folder == sub).count()
+    }
+
+    /// A pack downloaded in the browser (Quaternius): open its download page (found on the
+    /// pack's page, in the background) and wait for the archive in Downloads.
+    pub(crate) fn models_download_in_browser(&mut self, a: &ModelAsset) {
+        self.downloads_expect(crate::downloads::Expect::from_asset(a));
+        let page = a.page.clone();
+        std::thread::spawn(move || {
+            let link = crate::online_mats::fetch(&page).ok().and_then(|h| crate::online_models::quaternius_download(&String::from_utf8_lossy(&h)));
+            open_url(link.as_deref().unwrap_or(&page));
+        });
+        self.flash(format!("Download {} in the browser: Varstotas imports the archive from Downloads", a.name));
     }
 
     fn models_poll(&mut self, ctx: &egui::Context) {
@@ -240,8 +416,27 @@ impl VarstotasApp {
                 }
                 Msg::Model(key, res, place) => {
                     self.models.work.busy -= 1;
+                    if self.models.cancelled.remove(&key) {
+                        self.models.last = Some(format!("{key} cancelled"));
+                        if res.is_ok() {
+                            self.refresh_library();
+                        }
+                        continue;
+                    }
                     self.models.downloading.remove(&key);
+                    if let (Ok((path, _)), Some(a)) = (&res, self.models.asset(&key)) {
+                        let saved = SavedAsset::of(a);
+                        self.models.state.downloaded(saved, path.clone());
+                        self.models.state.save();
+                        self.models.saved_dirty = true;
+                    }
                     match res {
+                        Ok((path, n)) if path.is_dir() => {
+                            self.models.last = Some(format!("{key} ok {} models={n}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
+                            self.refresh_library();
+                            let folder = path.parent().and_then(|p| p.file_name()).map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+                            self.flash(format!("Downloaded {n} models to Components → {folder} → {}", path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default()));
+                        }
                         Ok((path, faces)) => {
                             self.models.last = Some(format!("{key} ok {} faces={faces}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
                             self.refresh_library();
@@ -275,13 +470,14 @@ impl VarstotasApp {
     }
 
     fn models_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        self.models_refresh_saved();
         let plugins = self.model_source_plugins();
         let mut pick: Option<Result<ModelSource, String>> = None;
         let mut search = false;
         ui.horizontal(|ui| {
             ui.label("Source");
             let cur = self.models.source.clone();
-            egui::ComboBox::from_id_salt("models_source").selected_text(cur.label()).width(150.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("models_source").selected_text(cur.label()).width(150.0).height(500.0).show_ui(ui, |ui| {
                 for s in ModelSource::BUILT_IN {
                     if ui.selectable_label(cur == s, s.label()).clicked() {
                         pick = Some(Ok(s));
@@ -296,6 +492,16 @@ impl VarstotasApp {
                 }
                 if plugins.is_empty() {
                     ui.label(RichText::new("Plugins with @model_source\nare listed here").small().weak());
+                }
+                ui.separator();
+                for s in [ModelSource::Favourites, ModelSource::History] {
+                    let n = match &s {
+                        ModelSource::Favourites => self.models.state.favourites.len(),
+                        _ => self.models.state.history.len(),
+                    };
+                    if ui.selectable_label(cur == s, format!("{} ({n})", s.label())).clicked() {
+                        pick = Some(Ok(s));
+                    }
                 }
             });
             ui.separator();
@@ -340,13 +546,15 @@ impl VarstotasApp {
         // Import from URL.
         ui.horizontal(|ui| {
             ui.label("From URL");
-            let r = ui.add(egui::TextEdit::singleline(&mut self.models.url).hint_text("https://…/model.glb (gltf, obj, stl, dxf, zip)").desired_width(ui.available_width() - 70.0).id_salt("models_url"));
+            let r = ui.add(egui::TextEdit::singleline(&mut self.models.url).hint_text("https://…/model.glb (gltf, fbx, dae, obj, 3mf, ply, stl, zip…)").desired_width(ui.available_width() - 70.0).id_salt("models_url"));
             let go = (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) | ui.button("Import").on_hover_text("Download the file into the components library and place it").clicked();
             if go && !self.models.url.trim().is_empty() {
                 let url = self.models.url.clone();
                 self.models_from_url(&url, true, ctx);
             }
         });
+        self.models_filters(ui);
+        self.downloads_ui(ui);
         ui.separator();
         let sel = self.models.selected.clone().and_then(|k| self.models.asset(&k).cloned());
         egui::Panel::bottom("models_details").resizable(false).min_size(64.0).show(ui, |ui| {
@@ -415,7 +623,23 @@ impl VarstotasApp {
                             let c = if selected { super::theme::ACCENT } else { Color32::from_gray(160) };
                             p.rect_stroke(img, 4.0, egui::Stroke::new(2.0, c), egui::StrokeKind::Inside);
                         }
-                        if self.models.downloading.contains(&key) {
+                        if self.models.state.is_favourite(&key) {
+                            p.text(img.left_bottom() + egui::vec2(5.0, -4.0), egui::Align2::LEFT_BOTTOM, "★", egui::FontId::proportional(13.0), Color32::from_rgb(250, 210, 80));
+                        }
+                        let kind = LicenseKind::parse(&a.license);
+                        let badge = match kind {
+                            LicenseKind::CcByNc => "NC",
+                            LicenseKind::CcByNd => "ND",
+                            LicenseKind::CcBySa => "SA",
+                            LicenseKind::Unknown => "?",
+                            _ => "",
+                        };
+                        if !badge.is_empty() {
+                            let r = egui::Rect::from_min_size(img.right_bottom() - egui::vec2(24.0, 16.0), egui::vec2(21.0, 13.0));
+                            p.rect_filled(r, 3.0, Color32::from_rgba_unmultiplied(30, 30, 30, 200));
+                            p.text(r.center(), egui::Align2::CENTER_CENTER, badge, egui::FontId::proportional(9.0), Color32::from_rgb(240, 180, 60));
+                        }
+                        if self.models.downloading.contains_key(&key) {
                             p.text(img.center(), egui::Align2::CENTER_CENTER, "⏳", egui::FontId::proportional(22.0), Color32::WHITE);
                         } else if self.models_in_library(a).is_some() {
                             p.text(img.right_top() + egui::vec2(-6.0, 4.0), egui::Align2::RIGHT_TOP, "✔", egui::FontId::proportional(14.0), Color32::from_rgb(120, 220, 120));
@@ -439,13 +663,50 @@ impl VarstotasApp {
         });
         if let Some((key, go)) = pick {
             self.models.selected = Some(key.clone());
-            if go {
-                match self.models.asset(&key).cloned().and_then(|a| self.models_in_library(&a)) {
+            if go && let Some(a) = self.models.asset(&key).cloned() {
+                match self.models_in_library(&a) {
+                    Some(_) if a.pack => self.library_show_folder(&a),
                     Some(i) => self.place_component(i),
-                    None => self.models_download(&key, true, ctx),
+                    None if a.source.manual() => self.models_download_in_browser(&a),
+                    None => self.models_download(&key, !a.pack, ctx),
                 }
             }
         }
+    }
+
+    /// Licence, format and size filters.
+    fn models_filters(&mut self, ui: &mut Ui) {
+        let mut formats: Vec<String> = match self.models.list() {
+            Some(Ok(list)) => list.iter().flat_map(|a| a.format.split(" · ").map(str::to_string).collect::<Vec<_>>()).filter(|f| !f.is_empty()).collect(),
+            _ => Vec::new(),
+        };
+        formats.sort();
+        formats.dedup();
+        let f = &mut self.models.filter;
+        ui.horizontal(|ui| {
+            ui.label("Show");
+            egui::ComboBox::from_id_salt("models_lic").selected_text(f.license.label()).show_ui(ui, |ui| {
+                for l in LicFilter::ALL {
+                    ui.selectable_value(&mut f.license, l, l.label());
+                }
+            });
+            let label = if f.format.is_empty() { "Any format".to_string() } else { f.format.clone() };
+            egui::ComboBox::from_id_salt("models_fmt").selected_text(label).show_ui(ui, |ui| {
+                ui.selectable_value(&mut f.format, String::new(), "Any format");
+                for x in formats {
+                    ui.selectable_value(&mut f.format, x.clone(), x);
+                }
+            });
+            let label = TRIS.iter().find(|t| t.0 == f.max_tris).map(|t| t.1).unwrap_or("Any size");
+            egui::ComboBox::from_id_salt("models_tris").selected_text(label).show_ui(ui, |ui| {
+                for (n, l) in TRIS {
+                    ui.selectable_value(&mut f.max_tris, n, l);
+                }
+            });
+            if *f != Filter::default() && ui.small_button("Clear").clicked() {
+                *f = Filter::default();
+            }
+        });
     }
 
     /// The selected model: its credit, size, and the buttons.
@@ -459,7 +720,7 @@ impl VarstotasApp {
             ui.vertical(|ui| {
                 ui.label(RichText::new(&a.name).strong());
                 let mut info = vec![a.source.label().to_string()];
-                info.extend([a.category.clone(), a.author.clone(), a.license.clone()].into_iter().filter(|x| !x.is_empty()));
+                info.extend([a.category.clone(), a.author.clone(), a.license.clone(), a.format.clone()].into_iter().filter(|x| !x.is_empty()));
                 ui.label(RichText::new(info.join(" · ")).small().weak());
                 let mut more = Vec::new();
                 if let Some(s) = a.size_mm {
@@ -477,16 +738,37 @@ impl VarstotasApp {
                 if a.polycount > HEAVY {
                     ui.label(RichText::new("⚠ A heavy model: it may slow the view down.").small().color(Color32::from_rgb(220, 160, 50)));
                 }
+                let kind = LicenseKind::parse(&a.license);
+                if !kind.note().is_empty() {
+                    ui.label(RichText::new(format!("{}: {}", kind.label(), kind.note())).small().color(Color32::from_rgb(220, 160, 50)));
+                }
                 ui.horizontal(|ui| {
                     let key = a.key();
-                    if self.models.downloading.contains(&key) {
+                    if self.models.downloading.contains_key(&key) {
                         ui.spinner();
                         ui.label("Downloading…");
+                        if ui.button("Cancel").clicked() {
+                            self.models_cancel(&key);
+                        }
+                    } else if a.pack {
+                        if in_lib.is_some() {
+                            ui.label(RichText::new(format!("✔ {} models in Components", self.models_pack_count(a))).small());
+                            if ui.button("Show in Components").clicked() {
+                                self.library_show_folder(a);
+                            }
+                        }
+                        if a.source.manual() {
+                            if ui.button("Download in Browser").on_hover_text("Open the pack's download in your browser; the archive is imported from Downloads with its credit").clicked() {
+                                self.models_download_in_browser(a);
+                            }
+                        } else if ui.button(if in_lib.is_some() { "Download Again" } else { "Download Pack" }).on_hover_text("Download the pack: each model becomes a component of the library").clicked() {
+                            self.models_download(&key, false, ctx);
+                        }
                     } else if let Some(i) = in_lib {
                         if ui.button("Place").on_hover_text("Already in the components library: place it in the model").clicked() {
                             self.place_component(i);
                         }
-                        if ui.button("Download Again").clicked() {
+                        if !a.file.is_empty() && ui.button("Download Again").clicked() {
                             self.models_download(&key, false, ctx);
                         }
                     } else {
@@ -499,6 +781,10 @@ impl VarstotasApp {
                     }
                     if !a.page.is_empty() && ui.button("Web Page").clicked() {
                         open_url(&a.page);
+                    }
+                    let fav = self.models.state.is_favourite(&key);
+                    if ui.button(if fav { "★" } else { "☆" }).on_hover_text(if fav { "Remove from Favourites" } else { "Add to Favourites" }).clicked() {
+                        self.models_toggle_favourite(a);
                     }
                 });
             });
@@ -550,12 +836,16 @@ impl VarstotasApp {
         }
     }
 
-    /// File → Import with a `@model_import` plugin (or any file the 3D Library reads): the
-    /// model as one component at the origin.
-    pub(crate) fn import_model_file(&mut self, path: &std::path::Path) {
+    /// File → Import with the `@model_import` plugin `plugin` (else any file the 3D Library
+    /// reads): the model as one component at the origin.
+    pub(crate) fn import_model_file(&mut self, path: &std::path::Path, plugin: Option<&Plugin>) {
         let importers = self.model_importers();
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Model".into());
-        let clip = crate::online_models::import_file(path, &importers, 0)
+        let read = match plugin {
+            Some(p) => crate::online_models::import_with_plugin(path, p, &importers, 0),
+            None => crate::online_models::import_file(path, &importers, 0),
+        };
+        let clip = read
             .and_then(|(m, xf)| crate::online_models::library_model(m, xf, &name, None))
             .and_then(|m| crate::clipboard::Clipboard::from_library(m, &name).map_err(|e| e.to_string()));
         let clip = match clip {

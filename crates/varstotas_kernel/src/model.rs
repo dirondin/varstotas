@@ -55,7 +55,91 @@ pub struct Attribution {
     pub url: String,
 }
 
+/// What a licence allows, read from its text ([`Attribution::license_kind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LicenseKind {
+    /// CC0 / public domain: no conditions.
+    Cc0,
+    /// CC-BY: credit the author.
+    CcBy,
+    /// CC-BY-SA: credit, share changes under the same licence.
+    CcBySa,
+    /// Non-commercial (CC-BY-NC, -NC-SA, -NC-ND).
+    CcByNc,
+    /// No derivatives (CC-BY-ND).
+    CcByNd,
+    /// A site's standard / royalty-free / personal-use licence.
+    Standard,
+    Unknown,
+}
+
+impl LicenseKind {
+    /// The choices of the licence fields.
+    pub const ALL: [LicenseKind; 7] = [LicenseKind::Cc0, LicenseKind::CcBy, LicenseKind::CcBySa, LicenseKind::CcByNc, LicenseKind::CcByNd, LicenseKind::Standard, LicenseKind::Unknown];
+
+    /// Its short name (also the text stored when chosen from a list).
+    pub fn label(self) -> &'static str {
+        match self {
+            LicenseKind::Cc0 => "CC0",
+            LicenseKind::CcBy => "CC-BY",
+            LicenseKind::CcBySa => "CC-BY-SA",
+            LicenseKind::CcByNc => "CC-BY-NC",
+            LicenseKind::CcByNd => "CC-BY-ND",
+            LicenseKind::Standard => "Standard / personal use",
+            LicenseKind::Unknown => "Unknown",
+        }
+    }
+
+    /// The reminder for models under it (empty for CC0 / CC-BY).
+    pub fn note(self) -> &'static str {
+        match self {
+            LicenseKind::CcByNc => "non-commercial: don't sell what you make with it",
+            LicenseKind::CcByNd => "no derivatives: don't share a changed copy",
+            LicenseKind::CcBySa => "share-alike: share changed copies under the same licence",
+            LicenseKind::Standard => "the site's licence: check what it allows",
+            LicenseKind::Unknown => "licence unknown: for your own use only",
+            _ => "",
+        }
+    }
+
+    /// Read a licence text ("CC BY-NC 4.0", "Creative Commons Attribution-ShareAlike",
+    /// "Public Domain", "Royalty Free"…).
+    pub fn parse(s: &str) -> LicenseKind {
+        let t = s.to_lowercase().replace(['_', '-', '–'], " ");
+        let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+        let has = |w: &str| t.split(|c: char| !c.is_alphanumeric()).any(|x| x == w);
+        if t.is_empty() || t == "unknown" {
+            return LicenseKind::Unknown;
+        }
+        if has("cc0") || t.contains("public domain") || t.contains("publicdomain") || t.contains("zero") {
+            return LicenseKind::Cc0;
+        }
+        let cc = has("cc") || t.contains("creative commons") || t.contains("attribution");
+        if cc {
+            if has("nc") || t.contains("noncommercial") || t.contains("non commercial") {
+                return LicenseKind::CcByNc;
+            }
+            if has("nd") || t.contains("noderivatives") || t.contains("no derivatives") || t.contains("noderivs") {
+                return LicenseKind::CcByNd;
+            }
+            if has("sa") || t.contains("sharealike") || t.contains("share alike") {
+                return LicenseKind::CcBySa;
+            }
+            return LicenseKind::CcBy;
+        }
+        if t.contains("royalty") || t.contains("standard") || t.contains("personal") || t.contains("editorial") || t.contains("guideline") || t.contains("local files") {
+            return LicenseKind::Standard;
+        }
+        LicenseKind::Unknown
+    }
+}
+
 impl Attribution {
+    /// What its licence allows.
+    pub fn license_kind(&self) -> LicenseKind {
+        LicenseKind::parse(&self.license)
+    }
+
     /// One line: `Title by Author (Source, licence) — url`.
     pub fn line(&self) -> String {
         let mut s = self.title.clone();

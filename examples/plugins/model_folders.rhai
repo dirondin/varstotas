@@ -1,6 +1,6 @@
 // @name Model Folders
 // @model_source
-// @description 3D models on this computer: every model file in the folder and its subfolders (glb, gltf, obj, stl, dxf, varstotas, and what importer plugins read); an image with the same name is its thumbnail, the subfolder its category.
+// @description 3D models on this computer: every model file in the folder and its subfolders (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas, and what importer plugins read); an image with the same name is its thumbnail, the subfolder its category.
 // @param folder:text = "" "Folder"
 // @param unit:text = "" "Unit (empty: the file's own)"
 
@@ -20,7 +20,7 @@ fn stem_of(p) {
 fn catalogue(params) {
     if params.folder == "" { throw "Set the folder of your models and press Load"; }
     if !file_exists(params.folder) { throw "No folder " + params.folder; }
-    let exts = ["glb", "gltf", "obj", "stl", "dxf", "vrst", "ply"];
+    let exts = ["glb", "gltf", "fbx", "dae", "obj", "3mf", "ply", "stl", "dxf", "vrst"];
     let out = [];
     for f in list_files(params.folder, "") {
         let l = f.to_lower();

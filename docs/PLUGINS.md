@@ -6,8 +6,8 @@
 Примеры лежат в `examples/plugins/`. При каждом запуске приложение копирует их в `~/.varstotas/plugins/examples/` — свои плагины держите в другой подпапке, иначе они будут перезаписаны:
 - `stairs.rhai` — лестница: параметры и одна точка.
 - `beam.rhai` — балка между двумя точками.
-- `import_points_csv.rhai` — импорт контура из CSV.
-- `export_faces_json.py` — экспорт граней в JSON на Python.
+- `import_points_csv.rhai` — импорт контура из CSV («Points from CSV (plugin)»; формат встроен: File → Import → Points (CSV)).
+- `export_faces_json.py` — экспорт граней в JSON на Python («Faces as JSON (plugin)»; формат встроен: File → Export → Faces (JSON)).
 - `unity_material.rhai` — импорт материалов Unity (`.mat`), см. «Плагины материалов».
 - `texture_folders.rhai` — источник материалов из папок с текстурами на диске.
 - `ambientcg_python.py` — источник материалов на Python: поиск по ambientCG.
@@ -139,7 +139,7 @@ fn import_material(path, params) { … }   // → спецификация ил�
 | `name` | имя компонента |
 | `preview` | картинка-превью (путь или URL); без неё берётся `thumb` из каталога. Сохраняется в файле и видна в карточке Components |
 
-Python-плагины: `python3 plugin.py catalogue|search|download|import_model`, аргументы (`params`, `query`, `id`, `dir`, `path`) — JSON в stdin, ответ — JSON в последней строке stdout. Примеры в `examples/plugins`: `model_folders.rhai` (модели из папки на диске; картинка с тем же именем — превью), `poly_pizza.rhai` (Poly Pizza, бесплатный API-ключ, поиск), `sketchfab.py` (Sketchfab: поиск открыт, скачивание по личному токену), `import_ply.py` (импортёр PLY, ASCII и binary).
+Python-плагины: `python3 plugin.py catalogue|search|download|import_model`, аргументы (`params`, `query`, `id`, `dir`, `path`) — JSON в stdin, ответ — JSON в последней строке stdout. Примеры в `examples/plugins`: `model_folders.rhai` (модели из папки на диске; картинка с тем же именем — превью), `poly_pizza.rhai` (Poly Pizza, бесплатный API-ключ, поиск), `sketchfab.py` (Sketchfab: поиск открыт, скачивание по личному токену), `import_ply.py` (импортёр PLY, ASCII и binary; «PLY Import (Python) (plugin)» — PLY теперь встроен, плагин оставлен примером). Unity `.mat` остаётся плагином (формат закрытый).
 
 ## Библиотека компонентов
 Раздел **Components** в Default Tray (включается галочкой в меню **Window**) показывает файлы `.vrst` из папки библиотеки. По умолчанию это `~/.varstotas/components`; кнопка «…» выбирает другую папку, «Default» в заголовке корневой папки возвращает папку по умолчанию. Подпапки показываются как категории со стрелкой сворачивания.

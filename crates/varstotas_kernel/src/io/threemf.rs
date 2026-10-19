@@ -212,6 +212,179 @@ pub(crate) fn zip_stored(files: &[(&str, &[u8])]) -> Vec<u8> {
     out
 }
 
+// ---- Import ----
+
+/// A 3MF `transform` ("m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32", row vectors).
+fn transform_3mf(s: Option<&str>) -> glam::DMat4 {
+    let v: Vec<f64> = s.unwrap_or("").split_whitespace().filter_map(|x| x.parse().ok()).collect();
+    if v.len() != 12 {
+        return glam::DMat4::IDENTITY;
+    }
+    glam::DMat4::from_cols(
+        glam::DVec4::new(v[0], v[1], v[2], 0.0),
+        glam::DVec4::new(v[3], v[4], v[5], 0.0),
+        glam::DVec4::new(v[6], v[7], v[8], 0.0),
+        glam::DVec4::new(v[9], v[10], v[11], 1.0),
+    )
+}
+
+/// One `.model` part of the package: its objects and colour resources.
+struct Part {
+    unit_mm: f64,
+    objects: HashMap<String, super::xml::El>,
+    /// Resource id → material indices (basematerials / colorgroup entries).
+    colors: HashMap<String, Vec<usize>>,
+}
+
+struct Reader3mf {
+    files: HashMap<String, Vec<u8>>,
+    parts: HashMap<String, Part>,
+    mats: Vec<super::meshes::ImpMat>,
+}
+
+fn unit_mm(u: Option<&str>) -> f64 {
+    match u.unwrap_or("millimeter") {
+        "micron" => 0.001,
+        "centimeter" => 10.0,
+        "inch" => 25.4,
+        "foot" => 304.8,
+        "meter" => 1000.0,
+        _ => 1.0,
+    }
+}
+
+impl Reader3mf {
+    /// Load the model part `path` (once).
+    fn part(&mut self, path: &str) -> Result<(), IoError> {
+        if self.parts.contains_key(path) {
+            return Ok(());
+        }
+        let key = path.trim_start_matches('/');
+        let bytes = self.files.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v.clone()).ok_or_else(|| IoError::Format(format!("3MF: no part {path}")))?;
+        let root = super::xml::El::parse(&String::from_utf8_lossy(&bytes))?;
+        let mut part = Part { unit_mm: unit_mm(root.attr("unit")), objects: HashMap::new(), colors: HashMap::new() };
+        if let Some(res) = root.child("resources") {
+            for r in &res.children {
+                let id = r.attr("id").unwrap_or("").to_string();
+                match r.name.as_str() {
+                    "object" => {
+                        part.objects.insert(id, clone_el(r));
+                    }
+                    "basematerials" | "colorgroup" => {
+                        let mut list = Vec::new();
+                        for (k, b) in r.children.iter().enumerate() {
+                            let c = b.attr("displaycolor").or(b.attr("color")).and_then(super::meshes::hex_color).unwrap_or([0.8, 0.8, 0.8, 1.0]);
+                            let name = b.attr("name").map(str::to_string).unwrap_or_else(|| format!("Color {}", k + 1));
+                            let i = match self.mats.iter().position(|m| m.name == name && m.color == c) {
+                                Some(i) => i,
+                                None => {
+                                    self.mats.push(super::meshes::ImpMat { name, color: c, image: None });
+                                    self.mats.len() - 1
+                                }
+                            };
+                            list.push(i);
+                        }
+                        part.colors.insert(id, list);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.parts.insert(path.to_string(), part);
+        Ok(())
+    }
+
+    /// The triangles of object `id` of part `path` (components followed), into `out`.
+    fn object(&mut self, path: &str, id: &str, xf: glam::DMat4, out: &mut super::meshes::ImpMesh, depth: usize) -> Result<(), IoError> {
+        if depth > 32 {
+            return Err(IoError::Format("3MF: components nested too deep".into()));
+        }
+        self.part(path)?;
+        let part = &self.parts[path];
+        let Some(obj) = part.objects.get(id) else { return Err(IoError::Format(format!("3MF: no object {id}"))) };
+        if let Some(mesh) = obj.child("mesh") {
+            let verts: Vec<glam::DVec3> = mesh
+                .child("vertices")
+                .map(|v| v.all("vertex").map(|p| glam::DVec3::new(p.num("x").unwrap_or(0.0), p.num("y").unwrap_or(0.0), p.num("z").unwrap_or(0.0))).collect())
+                .unwrap_or_default();
+            let (opid, oidx) = (obj.attr("pid"), obj.attr("pindex").and_then(|s| s.parse::<usize>().ok()));
+            for t in mesh.child("triangles").into_iter().flat_map(|t| t.all("triangle")) {
+                let idx: Vec<usize> = ["v1", "v2", "v3"].iter().filter_map(|k| t.attr(k)?.parse().ok()).collect();
+                if idx.len() != 3 || idx.iter().any(|i| *i >= verts.len()) {
+                    continue;
+                }
+                let pid = t.attr("pid").or(opid);
+                let pi = t.attr("p1").and_then(|s| s.parse::<usize>().ok()).or(oidx).unwrap_or(0);
+                let mat = pid.and_then(|p| part.colors.get(p)).and_then(|l| l.get(pi).copied());
+                out.polys.push(super::meshes::ImpPoly { pts: idx.iter().map(|i| xf.transform_point3(verts[*i])).collect(), uv: None, mat });
+            }
+        }
+        let comps: Vec<(String, String, glam::DMat4)> = obj
+            .child("components")
+            .into_iter()
+            .flat_map(|c| c.all("component"))
+            .map(|c| {
+                let p = c.attr("path").map(str::to_string).unwrap_or_else(|| path.to_string());
+                (p, c.attr("objectid").unwrap_or("").to_string(), xf * transform_3mf(c.attr("transform")))
+            })
+            .collect();
+        for (p, oid, t) in comps {
+            self.object(&p, &oid, t, out, depth + 1)?;
+        }
+        Ok(())
+    }
+}
+
+fn clone_el(e: &super::xml::El) -> super::xml::El {
+    super::xml::El { name: e.name.clone(), attrs: e.attrs.clone(), children: e.children.iter().map(clone_el).collect(), text: e.text.clone() }
+}
+
+/// Import a 3MF package: each build item becomes a group (named after its object), colours
+/// of base materials / colour groups become materials.
+pub fn import_3mf(model: &mut Model, path: &Path) -> Result<(), IoError> {
+    import_3mf_with(model, path, &super::ImportOptions::default())
+}
+
+pub fn import_3mf_with(model: &mut Model, path: &Path, opts: &super::ImportOptions) -> Result<(), IoError> {
+    let data = std::fs::read(path)?;
+    add_3mf(model, &data, opts)
+}
+
+/// Add 3MF package bytes to the model.
+pub fn add_3mf(model: &mut Model, data: &[u8], opts: &super::ImportOptions) -> Result<(), IoError> {
+    let files: HashMap<String, Vec<u8>> = super::zip::unzip(data, |n| n.ends_with(".model") || n.ends_with(".rels")).map_err(IoError::Format)?.into_iter().collect();
+    // The start part: the 3D model relationship of _rels/.rels, else the first .model file.
+    let start = files
+        .get("_rels/.rels")
+        .and_then(|r| super::xml::El::parse(&String::from_utf8_lossy(r)).ok())
+        .and_then(|r| r.all("Relationship").find(|x| x.attr("Type").is_some_and(|t| t.ends_with("/3dmodel"))).and_then(|x| x.attr("Target").map(str::to_string)))
+        .or_else(|| files.keys().find(|k| k.ends_with(".model")).map(|k| format!("/{k}")))
+        .ok_or_else(|| IoError::Format("3MF: no 3D model part".into()))?;
+    let mut rd = Reader3mf { files, parts: HashMap::new(), mats: Vec::new() };
+    rd.part(&start)?;
+    let bytes = rd.files.iter().find(|(k, _)| k.eq_ignore_ascii_case(start.trim_start_matches('/'))).map(|(_, v)| v.clone()).unwrap_or_default();
+    let root = super::xml::El::parse(&String::from_utf8_lossy(&bytes))?;
+    let k = rd.parts[&start].unit_mm;
+    let items: Vec<(String, String, glam::DMat4)> = root
+        .child("build")
+        .into_iter()
+        .flat_map(|b| b.all("item"))
+        .map(|i| {
+            let p = i.attr("path").map(str::to_string).unwrap_or_else(|| start.clone());
+            (p, i.attr("objectid").unwrap_or("").to_string(), transform_3mf(i.attr("transform")))
+        })
+        .collect();
+    let mut meshes = Vec::new();
+    for (p, oid, t) in items {
+        let name = rd.parts.get(&p).and_then(|x| x.objects.get(&oid)).and_then(|o| o.attr("name")).unwrap_or("").to_string();
+        let mut m = super::meshes::ImpMesh { name, polys: Vec::new() };
+        rd.object(&p, &oid, t, &mut m, 0)?;
+        meshes.push(m);
+    }
+    // Coordinates are in the start part's unit.
+    super::meshes::add_meshes(model, meshes, &rd.mats, glam::DMat4::from_scale(glam::DVec3::splat(k)), opts).map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

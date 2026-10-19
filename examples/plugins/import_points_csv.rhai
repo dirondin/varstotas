@@ -1,6 +1,6 @@
-// @name Points from CSV
+// @name Points from CSV (plugin)
 // @import csv
-// @description Lines through the points of a CSV file (x,y[,z] per line, mm; other lines are skipped); a closed planar outline becomes a face.
+// @description An example importer (Varstotas has it built in: File → Import → Points (CSV)…). Lines through the points of a CSV file (x,y[,z] per line, mm; other lines are skipped); a closed planar outline becomes a face.
 fn num(s) {
     let t = s;
     t.trim();

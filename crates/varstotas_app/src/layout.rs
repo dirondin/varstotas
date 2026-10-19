@@ -57,6 +57,15 @@ pub fn viewport_scale(model: &Model, vp: &SheetViewport) -> Option<f64> {
     vp.scale.filter(|n| *n > 0.0 && model.viewport_scene(vp).ortho)
 }
 
+/// A sheet text's field for the credits of the downloaded models (File → Export → Attributions).
+pub const CREDITS: &str = "{credits}";
+
+/// "Credits:" and a line per downloaded model the model uses.
+pub fn credits_text(model: &Model) -> String {
+    let lines: Vec<String> = model.attributions().iter().map(|a| a.line()).collect();
+    if lines.is_empty() { "Credits: no downloaded models".into() } else { format!("Credits:\n{}", lines.join("\n")) }
+}
+
 /// Clip segment `a`–`b` to the box (Liang–Barsky).
 fn clip(a: DVec2, b: DVec2, lo: DVec2, hi: DVec2) -> Option<(DVec2, DVec2)> {
     let d = b - a;
@@ -316,7 +325,8 @@ pub fn sheet_drawing(model: &Model, sheet: &LayoutSheet, index: usize, total: us
         table_drawing(&mut d, model, t);
     }
     for t in &sheet.texts {
-        d.texts.push(Text2 { at: t.at, angle: 0.0, size: t.size, lines: t.text.lines().map(str::to_string).collect(), left: true });
+        let text = if t.text.contains(CREDITS) { t.text.replace(CREDITS, &credits_text(model)) } else { t.text.clone() };
+        d.texts.push(Text2 { at: t.at, angle: 0.0, size: t.size, lines: text.lines().map(str::to_string).collect(), left: true });
     }
     if let Some(tb) = &sheet.title {
         let w = TB_W.min(sheet.size.x - 2.0 * BORDER);
@@ -399,6 +409,7 @@ mod tests {
         let mut sheet = LayoutSheet::new("S1", DVec2::new(420., 297.));
         sheet.viewports.push(SheetViewport::new(DVec2::new(20., 20.), DVec2::new(200., 150.), camera_scene("Iso", &cam)));
         sheet.texts.push(SheetText { at: DVec2::new(30., 200.), size: 4.0, text: "Note one\nNote two".into() });
+        sheet.texts.push(SheetText { at: DVec2::new(30., 250.), size: 2.5, text: CREDITS.into() });
         sheet.title.as_mut().unwrap().author = "Me".into();
         model.sheets.push(sheet.clone());
         let d = sheet_drawing(&model, &sheet, 0, 1, "box");
@@ -407,7 +418,7 @@ mod tests {
         let vp_lines: Vec<_> = d.lines.iter().filter(|l| l.2 == Pen::Edge || l.2 == Pen::Profile).filter(|l| l.0.x < 230.0 && l.0.y < 180.0 && l.0.x > 15.0 && l.0.y > 15.0).collect();
         assert!(vp_lines.len() >= 9, "{}", vp_lines.len());
         let texts: Vec<String> = d.texts.iter().map(|t| t.lines.join("|")).collect();
-        for want in ["box", "Author: Me", "Sheet: 1 of 1", "Scale: -", "Note one|Note two", "Iso"] {
+        for want in ["box", "Author: Me", "Sheet: 1 of 1", "Scale: -", "Note one|Note two", "Iso", "Credits: no downloaded models"] {
             assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
         }
         // Following a scene: the scene's camera wins.

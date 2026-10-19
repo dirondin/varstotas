@@ -2,7 +2,7 @@
 //! Poly Haven (CC0 models, glTF with 1K textures), Smithsonian Open Access 3D (CC0, searched
 //! on the server), NASA 3D Resources (GLB files of the NASA GitHub repository); plugins add
 //! more (`@model_source`, see `docs/PLUGINS.md`). A download goes to
-//! `~/.varstotas/downloads/<source>/<id>/`, is imported (glTF / OBJ / STL / DXF / `.vrst`, or
+//! `~/.varstotas/downloads/<source>/<id>/`, is imported (glTF / FBX / DAE / OBJ / 3MF / PLY / STL / DXF / `.vrst`, or
 //! a `@model_import` plugin), wrapped into one component that carries its [`Attribution`]
 //! and saved as `<components library>/<source>/<name>.vrst`.
 //!
@@ -34,8 +34,18 @@ pub enum ModelSource {
     PolyHaven,
     Smithsonian,
     Nasa,
+    /// Kenney's CC0 packs (kenney.nl): a pack downloads as a zip, every model of it becomes
+    /// a library component.
+    Kenney,
+    /// Quaternius' CC0 packs (quaternius.com): downloaded by the user from the pack's Google
+    /// Drive folder in the browser (the Downloads watcher brings the archive in).
+    Quaternius,
     /// Import from URL (not in the Source list).
     Web,
+    /// The models marked ☆ (of any source; kept in `~/.varstotas/library_state.json`).
+    Favourites,
+    /// Everything downloaded or imported (newest first), searched locally.
+    History,
     Plugin(Arc<PluginSource>),
 }
 
@@ -60,14 +70,18 @@ impl std::hash::Hash for ModelSource {
 }
 
 impl ModelSource {
-    pub const BUILT_IN: [ModelSource; 3] = [ModelSource::PolyHaven, ModelSource::Smithsonian, ModelSource::Nasa];
+    pub const BUILT_IN: [ModelSource; 5] = [ModelSource::PolyHaven, ModelSource::Smithsonian, ModelSource::Nasa, ModelSource::Kenney, ModelSource::Quaternius];
 
     pub fn label(&self) -> &str {
         match self {
             ModelSource::PolyHaven => "Poly Haven",
             ModelSource::Smithsonian => "Smithsonian",
             ModelSource::Nasa => "NASA",
+            ModelSource::Kenney => "Kenney",
+            ModelSource::Quaternius => "Quaternius",
             ModelSource::Web => "Web",
+            ModelSource::Favourites => "Favourites",
+            ModelSource::History => "Downloaded",
             ModelSource::Plugin(p) => &p.plugin.name,
         }
     }
@@ -78,18 +92,28 @@ impl ModelSource {
             ModelSource::PolyHaven => "polyhaven".into(),
             ModelSource::Smithsonian => "smithsonian".into(),
             ModelSource::Nasa => "nasa".into(),
+            ModelSource::Kenney => "kenney".into(),
+            ModelSource::Quaternius => "quaternius".into(),
             ModelSource::Web => "web".into(),
+            ModelSource::Favourites => "favourites".into(),
+            ModelSource::History => "history".into(),
             ModelSource::Plugin(p) => format!("plugin-{}", p.plugin.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()),
         }
     }
 
     pub fn from_key(s: &str) -> Option<ModelSource> {
-        ModelSource::BUILT_IN.into_iter().find(|x| x.key().eq_ignore_ascii_case(s.trim()))
+        ModelSource::BUILT_IN.into_iter().chain([ModelSource::Web, ModelSource::Favourites, ModelSource::History]).find(|x| x.key().eq_ignore_ascii_case(s.trim()))
     }
 
     /// The components library folder of its downloads.
     pub fn folder(&self) -> String {
         crate::ui::mat_library::safe_name(self.label())
+    }
+
+    /// Its models are downloaded by the user in the browser (Download in Browser, then the
+    /// Downloads watcher).
+    pub fn manual(&self) -> bool {
+        matches!(self, ModelSource::Quaternius)
     }
 
     /// The source searches itself (the query goes to it on Enter; no local filtering).
@@ -106,7 +130,11 @@ impl ModelSource {
             ModelSource::PolyHaven => "Free CC0 models (glTF, 1K textures) at their real size.",
             ModelSource::Smithsonian => "Smithsonian Open Access 3D (CC0): scans of museum objects. Type a search and press Enter.",
             ModelSource::Nasa => "NASA 3D Resources: spacecraft, rovers, planets (GLB; free for non-commercial and educational use, see NASA media guidelines).",
+            ModelSource::Kenney => "Kenney's game asset packs (CC0): a pack downloads whole, each model becomes a component in Components → Kenney → <pack>.",
+            ModelSource::Quaternius => "Quaternius' low-poly packs (CC0). They are downloaded in your browser (Google Drive): Varstotas opens the page and imports the archive from Downloads.",
             ModelSource::Web => "",
+            ModelSource::Favourites => "Models you marked ☆ (click ☆ in a model's details).",
+            ModelSource::History => "Everything downloaded or imported from Downloads, newest first. Type to search.",
             ModelSource::Plugin(p) => &p.plugin.description,
         }
     }
@@ -133,6 +161,10 @@ pub struct ModelAsset {
     pub bytes: u64,
     /// What to download (a file URL; source specific).
     pub file: String,
+    /// A pack of models (a zip): each becomes a component in `<source>/<name>/`.
+    pub pack: bool,
+    /// The file format ("glTF", "GLB", "FBX", "OBJ", "STL"…; a pack: "GLB · FBX · OBJ"; "" = unknown).
+    pub format: String,
 }
 
 impl ModelAsset {
@@ -170,6 +202,8 @@ impl ModelAsset {
             size_mm: None,
             bytes: 0,
             file: String::new(),
+            pack: false,
+            format: String::new(),
         }
     }
 }
@@ -198,6 +232,7 @@ pub fn parse_polyhaven(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
             m.keywords = format!("{} {} {id}", strs("tags").join(" "), cats.join(" "));
             m.author = a["authors"].as_object().map(|o| o.keys().cloned().collect::<Vec<_>>().join(", ")).unwrap_or_default();
             m.license = "CC0".into();
+            m.format = "glTF".into();
             m.thumb = format!("https://cdn.polyhaven.com/asset_img/thumbs/{id}.png?width=128&height=128");
             m.page = format!("https://polyhaven.com/a/{id}");
             m.polycount = a["polycount"].as_u64().unwrap_or(0);
@@ -235,6 +270,7 @@ pub fn parse_smithsonian(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
                 m.author = "Smithsonian Institution".into();
                 m.license = "CC0".into();
                 m.category = "Smithsonian".into();
+                m.format = "GLB".into();
                 out.push(m);
                 out.len() - 1
             }
@@ -281,6 +317,7 @@ pub fn parse_nasa(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
         m.keywords = folder.to_string();
         m.author = "NASA".into();
         m.license = "NASA media guidelines".into();
+        m.format = "GLB".into();
         m.thumb = thumb.map(|t| format!("{RAW}{}", encode_path(t))).unwrap_or_default();
         m.page = format!("https://github.com/nasa/NASA-3D-Resources/tree/master/{}", encode_path(&dir));
         m.bytes = *size;
@@ -289,6 +326,90 @@ pub fn parse_nasa(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
     }
     out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
+}
+
+/// The text between `a` and the next `b` after it.
+fn between<'a>(s: &'a str, a: &str, b: &str) -> Option<&'a str> {
+    let i = s.find(a)? + a.len();
+    let j = s[i..].find(b)? + i;
+    Some(&s[i..j])
+}
+
+/// HTML text: tags dropped, the common entities decoded, spaces collapsed.
+fn html_text(s: &str) -> String {
+    let mut out = String::new();
+    let mut tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => tag = true,
+            '>' => tag = false,
+            c if !tag => out.push(c),
+            _ => {}
+        }
+    }
+    let out = out.replace("&amp;", "&").replace("&middot;", "·").replace("&#039;", "'").replace("&quot;", "\"").replace("&nbsp;", " ");
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// One page of Kenney's asset list (`kenney.nl/assets/category:3D/page:N`).
+pub fn parse_kenney(html: &str) -> Vec<ModelAsset> {
+    html.split("<div class='asset'>")
+        .skip(1)
+        .filter_map(|c| {
+            let page = between(c, "<a href='", "'")?.to_string();
+            let slug = page.rsplit('/').next()?.to_string();
+            if slug.contains(':') || slug.is_empty() {
+                return None;
+            }
+            let mut m = ModelAsset::blank(ModelSource::Kenney, slug.clone());
+            m.name = between(c, "<h2>", "</h2>").map(html_text).filter(|n| !n.is_empty()).unwrap_or_else(|| slug.clone());
+            m.thumb = between(c, "url(\"", "\")").unwrap_or_default().to_string();
+            m.category = between(c, "series:", "'").map(|s| s.replace("%20", " ")).unwrap_or_default();
+            m.keywords = slug.replace('-', " ");
+            m.author = "Kenney".into();
+            m.license = "CC0".into();
+            m.page = page;
+            m.pack = true;
+            m.format = "GLB · FBX · OBJ".into();
+            Some(m)
+        })
+        .collect()
+}
+
+/// The pack's zip on its Kenney page.
+pub fn kenney_zip(html: &str) -> Option<String> {
+    html.split(['"', '\'']).find(|s| s.starts_with("https://kenney.nl/media/") && s.to_lowercase().ends_with(".zip")).map(str::to_string)
+}
+
+/// Quaternius' pack list (quaternius.com).
+pub fn parse_quaternius(html: &str) -> Vec<ModelAsset> {
+    const SITE: &str = "https://quaternius.com";
+    let mut out: Vec<ModelAsset> = Vec::new();
+    for c in html.split("<div class=\"pack\">").skip(1) {
+        let Some(href) = between(c, "href=\"", "\"").filter(|h| h.starts_with("/packs/")) else { continue };
+        let id = href.trim_start_matches("/packs/").trim_end_matches(".html").to_string();
+        if out.iter().any(|a| a.id == id) {
+            continue;
+        }
+        let mut m = ModelAsset::blank(ModelSource::Quaternius, id.clone());
+        m.name = between(c, "<div class=\"PackText\">", "<").map(html_text).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
+        m.thumb = between(c, "src=\"", "\"").map(|s| if s.starts_with('/') { format!("{SITE}{s}") } else { s.to_string() }).unwrap_or_default();
+        let tags: Vec<String> = c.split("<div class=\"viewtag tags\">").skip(1).filter_map(|t| t.split('<').next()).map(html_text).filter(|t| !t.is_empty()).collect();
+        m.category = tags.first().cloned().unwrap_or_default();
+        m.keywords = format!("{} {id}", tags.join(" "));
+        m.author = "Quaternius".into();
+        m.license = "CC0".into();
+        m.page = format!("{SITE}{href}");
+        m.pack = true;
+        m.format = "FBX · OBJ · glTF".into();
+        out.push(m);
+    }
+    out
+}
+
+/// The download link (a Google Drive folder) on a Quaternius pack page.
+pub fn quaternius_download(html: &str) -> Option<String> {
+    html.split(['"', '\'']).find(|s| s.starts_with("https://drive.google.com/")).map(str::to_string)
 }
 
 fn text(v: &Value) -> Option<String> {
@@ -320,6 +441,7 @@ pub fn parse_plugin_catalogue(source: &ModelSource, v: &Value) -> Result<Vec<Mod
             m.polycount = a["polycount"].as_u64().unwrap_or(0);
             m.size_mm = a["size"].as_array().filter(|d| d.len() == 3).and_then(|d| Some([d[0].as_f64()?, d[1].as_f64()?, d[2].as_f64()?]));
             m.bytes = a["bytes"].as_u64().unwrap_or(0);
+            m.format = s("format");
             Some(m)
         })
         .collect())
@@ -357,7 +479,41 @@ fn catalogue_raw(source: &ModelSource, query: &str) -> Result<Vec<ModelAsset>, S
             parse_smithsonian(&cached(&url, &format!("smithsonian/{}.json", file_safe(&q.to_lowercase())), day)?)
         }
         ModelSource::Nasa => parse_nasa(&cached("https://api.github.com/repos/nasa/NASA-3D-Resources/git/trees/master?recursive=1", "nasa_tree.json", day)?),
-        ModelSource::Web => Ok(Vec::new()),
+        ModelSource::Kenney => {
+            let week = Some(Duration::from_secs(7 * 24 * 3600));
+            let mut out: Vec<ModelAsset> = Vec::new();
+            for page in 1..=12 {
+                let url = if page == 1 { "https://kenney.nl/assets/category:3D".to_string() } else { format!("https://kenney.nl/assets/category:3D/page:{page}") };
+                let html = match cached(&url, &format!("kenney/3d_{page}.html"), week) {
+                    Ok(h) => String::from_utf8_lossy(&h).to_string(),
+                    Err(e) if page == 1 => return Err(e),
+                    Err(_) => break,
+                };
+                let list = parse_kenney(&html);
+                let before = out.len();
+                for a in list {
+                    if !out.iter().any(|x| x.id == a.id) {
+                        out.push(a);
+                    }
+                }
+                if out.len() == before || !html.contains(&format!("page:{}", page + 1)) {
+                    break;
+                }
+            }
+            if out.is_empty() {
+                return Err("no packs found on kenney.nl (the page changed?)".into());
+            }
+            Ok(out)
+        }
+        ModelSource::Quaternius => {
+            let html = cached("https://quaternius.com/", "quaternius.html", Some(Duration::from_secs(7 * 24 * 3600)))?;
+            let list = parse_quaternius(&String::from_utf8_lossy(&html));
+            if list.is_empty() {
+                return Err("no packs found on quaternius.com (the page changed?)".into());
+            }
+            Ok(list)
+        }
+        ModelSource::Web | ModelSource::Favourites | ModelSource::History => Ok(Vec::new()),
         ModelSource::Plugin(p) => {
             let params = Value::Object(p.params.clone());
             let v = if source.searches() { call(&p.plugin, "search", vec![("query", json!(query)), ("params", params)])? } else { call(&p.plugin, "catalogue", vec![("params", params)])? };
@@ -386,7 +542,7 @@ fn safe_rel(p: &str) -> Option<PathBuf> {
 }
 
 /// The last part of a URL path (decoded spaces), for a file name.
-fn url_file(url: &str) -> String {
+pub fn url_file(url: &str) -> String {
     let path = url.split(['?', '#']).next().unwrap_or(url);
     let f = path.rsplit('/').next().unwrap_or("model").replace("%20", " ");
     if f.is_empty() { "model".into() } else { f }
@@ -407,13 +563,19 @@ fn fetch_asset(asset: &ModelAsset, dir: &Path) -> Result<Value, String> {
             }
             Ok(json!({ "file": main.to_string_lossy() }))
         }
-        ModelSource::Smithsonian | ModelSource::Nasa | ModelSource::Web => Ok(json!({ "url": asset.file })),
+        ModelSource::Smithsonian | ModelSource::Nasa | ModelSource::Web | ModelSource::Favourites | ModelSource::History => Ok(json!({ "url": asset.file })),
+        ModelSource::Kenney => {
+            let html = fetch(&asset.page)?;
+            let zip = kenney_zip(&String::from_utf8_lossy(&html)).ok_or("no download on the pack's page")?;
+            Ok(json!({ "url": zip }))
+        }
+        ModelSource::Quaternius => Err("Quaternius packs are downloaded in the browser: use Download in Browser".into()),
         ModelSource::Plugin(p) => call(&p.plugin, "download", vec![("id", json!(asset.id)), ("dir", json!(dir.to_string_lossy())), ("params", Value::Object(p.params.clone()))]),
     }
 }
 
 /// Model files by preference.
-const MODEL_EXTS: [&str; 6] = ["glb", "gltf", "obj", "stl", "dxf", "vrst"];
+const MODEL_EXTS: [&str; 10] = ["glb", "gltf", "fbx", "dae", "obj", "3mf", "ply", "stl", "dxf", "vrst"];
 
 fn ext_of(p: &Path) -> String {
     p.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
@@ -449,22 +611,31 @@ pub fn import_file(path: &Path, importers: &[Plugin], depth: usize) -> Result<(M
         "glb" | "gltf" => io::import_gltf(&mut m, path),
         "obj" => io::import_obj(&mut m, path),
         "stl" => io::import_stl(&mut m, path),
+        "3mf" => io::import_3mf(&mut m, path),
+        "dae" => io::import_dae(&mut m, path),
+        "fbx" => io::import_fbx(&mut m, path),
+        "ply" => io::import_ply(&mut m, path),
         "dxf" => io::import_dxf(&mut m, path),
         "vrst" => io::load(path).map(|x| m = x),
         "zip" => return model_from_spec(&json!({ "zip": path.to_string_lossy() }), path.parent().unwrap_or(Path::new(".")), importers, depth),
         _ => {
             let p = importers.iter().find(|p| p.model_import.contains(&ext)).ok_or_else(|| format!("can't import .{ext} files (no importer)"))?;
-            if depth > 3 {
-                return Err("importer plugins call each other too deep".into());
-            }
-            let params = crate::plugins::param_values(p, &[], varstotas_kernel::LengthUnit::Millimeter)?;
-            let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
-            let v = call(p, "import_model", vec![("path", json!(abs.to_string_lossy())), ("params", Value::Object(params))]).map_err(|e| format!("{}: {e}", p.name))?;
-            return model_from_spec(&v, abs.parent().unwrap_or(Path::new(".")), importers, depth + 1);
+            return import_with_plugin(path, p, importers, depth);
         }
     };
     crate::document::guarded(|| r)?.map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((m, DMat4::IDENTITY))
+}
+
+/// Import a model file with the `@model_import` plugin `p` (even for a format read natively).
+pub fn import_with_plugin(path: &Path, p: &Plugin, importers: &[Plugin], depth: usize) -> Result<(Model, DMat4), String> {
+    if depth > 3 {
+        return Err("importer plugins call each other too deep".into());
+    }
+    let params = crate::plugins::param_values(p, &[], varstotas_kernel::LengthUnit::Millimeter)?;
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let v = call(p, "import_model", vec![("path", json!(abs.to_string_lossy())), ("params", Value::Object(params))]).map_err(|e| format!("{}: {e}", p.name))?;
+    model_from_spec(&v, abs.parent().unwrap_or(Path::new(".")), importers, depth + 1)
 }
 
 /// A model from a spec (see the module docs); relative paths resolve against `base`. Also the
@@ -519,7 +690,7 @@ fn from_zip(zip: &Path, base: &Path, importers: &[Plugin], depth: usize) -> Resu
     let dir = base.join(format!("{}_files", zip.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
     let _ = std::fs::remove_dir_all(&dir);
     extract(zip, &dir)?;
-    let f = find_model(&dir, importers).ok_or("no model file (glb, gltf, obj, stl, dxf) in the archive")?;
+    let f = find_model(&dir, importers).ok_or("no model file (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf) in the archive")?;
     import_file(&f, importers, depth)
 }
 
@@ -618,6 +789,17 @@ pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<
     let dir = downloads_dir().ok_or("no home folder")?.join(asset.source.key()).join(id);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let spec = fetch_asset(asset, &dir)?;
+    if asset.pack {
+        let url = spec["url"].as_str().ok_or("no download for this pack")?;
+        let zip = dir.join(url_file(url));
+        save(&zip, &fetch(url)?)?;
+        let files = dir.join("files");
+        let _ = std::fs::remove_dir_all(&files);
+        extract(&zip, &files)?;
+        let out = lib.join(asset.source.folder()).join(crate::ui::mat_library::safe_name(&asset.name));
+        let n = import_pack(&files, &out, &asset.attribution(), importers)?;
+        return Ok((out, n));
+    }
     let (m, xf) = model_from_spec(&spec, &dir, importers, 0)?;
     let faces = face_count(&m);
     let name = crate::ui::mat_library::safe_name(&asset.name);
@@ -629,6 +811,72 @@ pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<
     }
     varstotas_kernel::io::save(&m, &path).map_err(|e| e.to_string())?;
     Ok((path, faces))
+}
+
+/// "debris-bumper" → "Debris Bumper".
+pub fn pretty_name(stem: &str) -> String {
+    stem.split(['-', '_', ' '])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Every model of the unpacked pack `dir` (each model once, in its best format: glb before
+/// gltf, fbx, dae, obj…) as a component file in the library folder `out`, credited like
+/// `credit` ("<pack>: <model>"); an image with the model's name (e.g. `Previews/<name>.png`)
+/// is its preview. The number of models saved (an error when none could be read).
+pub fn import_pack(dir: &Path, out: &Path, credit: &Attribution, importers: &[Plugin]) -> Result<usize, String> {
+    let files: Vec<PathBuf> = varstotas_script::list_files(dir, "").into_iter().map(PathBuf::from).filter(|f| !f.to_string_lossy().contains("__MACOSX")).collect();
+    let stem = |f: &Path| f.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let rank = |f: &Path| {
+        let e = ext_of(f);
+        MODEL_EXTS.iter().position(|x| *x == e).or_else(|| importers.iter().any(|p| p.model_import.contains(&e)).then_some(MODEL_EXTS.len()))
+    };
+    let mut best: std::collections::BTreeMap<String, (usize, PathBuf)> = std::collections::BTreeMap::new();
+    for f in &files {
+        let Some(r) = rank(f) else { continue };
+        let k = stem(f);
+        if best.get(&k).is_none_or(|(br, _)| r < *br) {
+            best.insert(k, (r, f.clone()));
+        }
+    }
+    let images: std::collections::HashMap<String, &PathBuf> = files.iter().filter(|f| ["png", "jpg", "jpeg"].contains(&ext_of(f).as_str())).map(|f| (stem(f), f)).collect();
+    if best.is_empty() {
+        return Err("no model files in the archive".into());
+    }
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let (mut n, mut first_err) = (0, None);
+    let mut used = std::collections::HashSet::new();
+    for (k, (_, f)) in &best {
+        let raw = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let mut name = crate::ui::mat_library::safe_name(&pretty_name(&raw));
+        let mut i = 2;
+        while !used.insert(name.to_lowercase()) {
+            name = format!("{} {i}", crate::ui::mat_library::safe_name(&pretty_name(&raw)));
+            i += 1;
+        }
+        let c = Attribution { title: format!("{}: {name}", credit.title), ..credit.clone() };
+        let r = import_file(f, importers, 0).and_then(|(m, xf)| library_model(m, xf, &name, Some(c)));
+        match r {
+            Ok(mut m) => {
+                m.set_preview(images.get(k).and_then(|p| std::fs::read(p).ok()).and_then(|b| crate::textures::preview_bytes(&b).ok()));
+                varstotas_kernel::io::save(&m, &out.join(format!("{name}.vrst"))).map_err(|e| e.to_string())?;
+                n += 1;
+            }
+            Err(e) => {
+                log::warn!("pack {}: {}: {e}", credit.title, f.display());
+                first_err.get_or_insert(format!("{}: {e}", f.display()));
+            }
+        }
+    }
+    if n == 0 {
+        return Err(first_err.unwrap_or_else(|| "no models could be read".into()));
+    }
+    Ok(n)
 }
 
 /// The preview picture of a download: the spec's `preview` (a file of `dir` or a URL), else
@@ -668,7 +916,20 @@ pub fn url_asset(url: &str) -> ModelAsset {
     a.name = name;
     a.file = url.to_string();
     a.page = url.to_string();
+    a.format = format_of(&file);
     a
+}
+
+/// A file's format name by its extension ("GLB", "glTF", "FBX"…; "" when not a model).
+pub fn format_of(file: &str) -> String {
+    let e = Path::new(file).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    match e.as_str() {
+        "gltf" => "glTF".into(),
+        "dae" => "COLLADA".into(),
+        "vrst" => "Varstotas".into(),
+        "glb" | "fbx" | "obj" | "3mf" | "ply" | "stl" | "dxf" | "zip" => e.to_uppercase(),
+        _ => String::new(),
+    }
 }
 
 impl Online {
@@ -684,10 +945,11 @@ impl Online {
     }
 
     /// Download `asset` into the components library `lib` (background).
-    pub fn download_model(&mut self, asset: ModelAsset, lib: PathBuf, importers: Vec<Plugin>, place: bool, ctx: &egui::Context) {
+    pub fn download_model(&mut self, asset: ModelAsset, lib: PathBuf, importers: Vec<Plugin>, place: bool, cancel: Arc<std::sync::atomic::AtomicBool>, ctx: &egui::Context) {
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
         self.busy += 1;
         std::thread::spawn(move || {
+            crate::online_mats::set_cancel(Some(cancel));
             let res = download(&asset, &lib, &importers);
             let _ = tx.send(Msg::Model(asset.key(), res, place));
             ctx.request_repaint();
@@ -813,7 +1075,7 @@ mod tests {
         assert_eq!(p.model_import, ["ply"]);
         let ply = "ply\nformat ascii 1.0\ncomment a tetrahedron\nelement vertex 4\nproperty float x\nproperty float y\nproperty float z\nelement face 4\nproperty list uchar int vertex_indices\nend_header\n0 0 0\n1 0 0\n0 1 0\n0 0 1\n3 0 2 1\n3 0 1 3\n3 1 2 3\n3 0 3 2\n";
         std::fs::write(d.join("tetra.ply"), ply).unwrap();
-        let (m, xf) = import_file(&d.join("tetra.ply"), &[p], 0).unwrap();
+        let (m, xf) = import_with_plugin(&d.join("tetra.ply"), &p, std::slice::from_ref(&p), 0).unwrap();
         assert_eq!(face_count(&m), 4);
         let lib = library_model(m, xf, "tetra", None).unwrap();
         let b = lib.bounds().unwrap();
@@ -838,6 +1100,58 @@ mod tests {
         a.thumb.clear();
         assert!(preview_of(&a, &json!({}), &d).is_none());
         assert!(preview_of(&a, &json!({ "preview": "missing.png" }), &d).is_none());
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn kenney_and_quaternius_catalogues() {
+        let k = r#"<div class='asset'><a href='https://kenney.nl/assets/car-kit'><div class='image' style='background-image: url("https://kenney.nl/media/pages/assets/car-kit/x/preview.png")'></div></a>
+            <a href='https://kenney.nl/assets/series:Blocky%20Characters'>s</a><h2>Car Kit</h2></div>
+            <div class='asset'><a href='https://kenney.nl/assets/category:3D'>x</a></div>"#;
+        let a = parse_kenney(k);
+        assert_eq!(a.len(), 1);
+        assert_eq!((a[0].id.as_str(), a[0].name.as_str(), a[0].category.as_str(), a[0].license.as_str()), ("car-kit", "Car Kit", "Blocky Characters", "CC0"));
+        assert!(a[0].pack && a[0].thumb.ends_with("preview.png") && a[0].format.contains("GLB"));
+        assert_eq!(kenney_zip("<a href=\"https://kenney.nl/media/pages/assets/car-kit/abc/kenney_car-kit.zip\">"), Some("https://kenney.nl/media/pages/assets/car-kit/abc/kenney_car-kit.zip".into()));
+        let q = r#"<div class="pack"><a href="/packs/ultimatespaceKit.html"><img src="/assets/images/thumbnails/space.jpg"><div class="PackText">Ultimate Space Kit</div></a>
+            <div class="viewtag tags">Sci-Fi</div><div class="viewtag tags">Vehicles</div></div>
+            <div class="pack"><a href="/packs/ultimatespaceKit.html">dup</a></div>"#;
+        let b = parse_quaternius(q);
+        assert_eq!(b.len(), 1);
+        assert_eq!((b[0].name.as_str(), b[0].category.as_str(), b[0].thumb.as_str()), ("Ultimate Space Kit", "Sci-Fi", "https://quaternius.com/assets/images/thumbnails/space.jpg"));
+        assert!(b[0].source.manual() && b[0].page.ends_with("/packs/ultimatespaceKit.html"));
+        assert_eq!(pretty_name("debris-bumper_02"), "Debris Bumper 02");
+        assert_eq!(format_of("https://x.org/a/Chair.GLB"), "GLB");
+        assert_eq!(format_of("scene.gltf"), "glTF");
+        assert_eq!(format_of("page.html"), "");
+    }
+
+    /// A pack: each model once in its best format, the preview by name, credited "<pack>: <model>".
+    #[test]
+    fn pack_import_each_model_once() {
+        let d = tmp("pack");
+        let mut src = Model::new();
+        src.root_mesh_mut().add_face(&[DVec3::ZERO, DVec3::new(500.0, 0.0, 0.0), DVec3::new(500.0, 500.0, 0.0)]).unwrap();
+        let glb = varstotas_kernel::io::write_glb(&src);
+        let files = d.join("files");
+        for (p, b) in [("Models/GLB format/car-sedan.glb", &glb[..]), ("Models/GLB format/car_truck.glb", &glb[..]), ("Models/OBJ format/car-sedan.obj", b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"), ("License.txt", b"CC0")] {
+            let f = files.join(p);
+            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            std::fs::write(f, b).unwrap();
+        }
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([200, 30, 30, 255])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        std::fs::create_dir_all(files.join("Previews")).unwrap();
+        std::fs::write(files.join("Previews/car-sedan.png"), png).unwrap();
+        let credit = Attribution { source: "Kenney".into(), title: "Car Kit".into(), author: "Kenney".into(), license: "CC0".into(), url: "https://kenney.nl/assets/car-kit".into() };
+        let out = d.join("lib/Kenney/Car Kit");
+        assert_eq!(import_pack(&files, &out, &credit, &[]).unwrap(), 2);
+        let sedan = varstotas_kernel::io::load(&out.join("Car Sedan.vrst")).unwrap();
+        assert!(sedan.preview.is_some());
+        assert_eq!(sedan.defs.values().find_map(|x| x.source.clone()).map(|c| c.title), Some("Car Kit: Car Sedan".into()));
+        let truck = varstotas_kernel::io::load(&out.join("Car Truck.vrst")).unwrap();
+        assert!(truck.preview.is_none());
+        assert!(import_pack(&files.join("Previews"), &d.join("none"), &credit, &[]).is_err());
         let _ = std::fs::remove_dir_all(d);
     }
 }

@@ -29,6 +29,7 @@ skrifa = "0.44"
 epaint_default_fonts = "0.36"
 # Script Console editor: highlighting, line numbers, completion (egui 0.36).
 egui_code_editor = { version = "0.4.2", default-features = false, features = ["egui", "editor"] }
+toml = "1"
 
 # macOS: scripted runs start as a background app (no activation, no Dock icon); the same
 # winit as eframe's.

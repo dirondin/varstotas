@@ -1,6 +1,6 @@
-# @name PLY Import (Python)
+# @name PLY Import (Python) (plugin)
 # @model_import ply
-# @description An example model importer in Python: Stanford PLY meshes (ASCII or binary) for File → Import and the 3D Library. The protocol: `plugin.py import_model`, the arguments ({path, params}) as JSON on stdin, a model spec as JSON on the last line of stdout ({meshes: [{name, vertices, faces}], unit}).
+# @description An example model importer in Python (Varstotas reads PLY itself: File → Import → PLY…; this plugin stays as an example): Stanford PLY meshes (ASCII or binary) for File → Import and the 3D Library. The protocol: `plugin.py import_model`, the arguments ({path, params}) as JSON on stdin, a model spec as JSON on the last line of stdout ({meshes: [{name, vertices, faces}], unit}).
 # @param unit:text = "m" "Unit of the file (m, cm, mm, in, ft)"
 import json
 import os

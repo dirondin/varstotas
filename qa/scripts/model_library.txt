@@ -16,7 +16,7 @@ screenshot shots/modlib_1.bmp
 raw click 266 90
 wait 5
 screenshot shots/modlib_2.bmp
-raw click 248 211
+raw click 248 265
 wait 10
 screenshot shots/modlib_3.bmp
 raw click 294 144
@@ -32,7 +32,7 @@ action online_wait
 wait 30
 screenshot shots/modlib_5.bmp
 expect models=(true plugin-model_folders models=2 shown=2
-raw dblclick 195 299
+raw dblclick 195 407
 wait 5
 action online_wait
 wait 10
@@ -41,7 +41,7 @@ raw click 945 579
 wait 10
 expect credits=["Stool"]
 screenshot shots/modlib_6.bmp
-raw click 297 299
+raw click 297 407
 wait 5
 screenshot shots/modlib_7.bmp
 expect models=(true plugin-model_folders models=2 shown=2 busy=0 sel=Some("plugin-model_folders:

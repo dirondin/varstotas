@@ -356,6 +356,11 @@ impl VarstotasApp {
                             sheet.texts.push(SheetText { at, size: 4.0, text: "Text".into() });
                             st.selected = Some(SheetItem::Text(sheet.texts.len() - 1));
                         }
+                        if ui.button("+ Credits").on_hover_text("The credits of the downloaded models (title, author, site, licence): a text with {credits}, filled when drawn").clicked() {
+                            let at = DVec2::new(BORDER + 6.0, sheet.size.y - BORDER - 30.0);
+                            sheet.texts.push(SheetText { at, size: 2.5, text: crate::layout::CREDITS.into() });
+                            st.selected = Some(SheetItem::Text(sheet.texts.len() - 1));
+                        }
                         if ui.add_enabled(st.selected.is_some(), egui::Button::new("Remove")).clicked() {
                             match st.selected.take() {
                                 Some(SheetItem::Viewport(i)) if i < sheet.viewports.len() => {

@@ -1,6 +1,6 @@
-# @name Faces as JSON
+# @name Faces as JSON (plugin)
 # @export json
-# @description Every face of the model (world coordinates, mm) with its normal, area and material: an example exporter in Python.
+# @description An example exporter (built in: File → Export → Faces (JSON)…). Every face of the model (world coordinates, mm) with its normal, area and material: an example exporter in Python.
 import json
 
 import varstotas

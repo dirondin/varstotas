@@ -96,6 +96,10 @@ pub struct Prefs {
     pub hide_document: bool,
     /// Components list: collapsed folders.
     pub library_collapsed: Vec<String>,
+    /// 3D Library → Other Sites: offer new model files of the Downloads folder for import.
+    pub watch_downloads: bool,
+    /// 3D Library → Other Sites: listen for the Send to Varstotas bookmarklet (127.0.0.1).
+    pub send_to_varstotas: bool,
     /// Default Tray cards turned off in the Window menu (by title, see `ui::tray::TRAY_CARDS`).
     pub tray_hidden: Vec<String>,
     /// View → Snapping: master switch and the inferences turned off.
@@ -135,6 +139,8 @@ impl Default for Prefs {
             hide_examples: false,
             hide_document: false,
             library_collapsed: Vec::new(),
+            watch_downloads: false,
+            send_to_varstotas: false,
             tray_hidden: Vec::new(),
             snapping: Default::default(),
             grid: Default::default(),
@@ -154,11 +160,16 @@ pub enum Action {
     ImportStl,
     ImportDxf,
     ImportGltf,
+    /// File → Import of another native format: 3mf, dae, fbx, ply, csv (points).
+    ImportAs(&'static str),
     ExportObj,
     ExportStl,
     ExportDxf,
     ExportGlb,
     Export3mf,
+    ExportPly,
+    /// Every face with its outer loop, normal, area and material (JSON).
+    ExportFacesJson,
     ExportReport,
     /// Credits of the downloaded components in the model (text).
     ExportAttributions,
@@ -1128,10 +1139,20 @@ impl VarstotasApp {
             Action::ExportObj => self.export("obj"),
             Action::ImportDxf => self.import(&["dxf"], "DXF"),
             Action::ImportGltf => self.import(&["glb", "gltf"], "glTF"),
+            Action::ImportAs(ext) => {
+                let label = match ext {
+                    "dae" => "COLLADA",
+                    "csv" => "Points",
+                    e => &e.to_ascii_uppercase(),
+                };
+                self.import(&[ext], label)
+            }
             Action::ExportStl => self.export("stl"),
             Action::ExportDxf => self.export("dxf"),
             Action::ExportGlb => self.export("glb"),
             Action::Export3mf => self.export("3mf"),
+            Action::ExportPly => self.export("ply"),
+            Action::ExportFacesJson => self.export("json"),
             Action::ExportReport => self.export("csv"),
             Action::ExportAttributions => {
                 if self.doc.model.attributions().is_empty() {
@@ -1141,10 +1162,10 @@ impl VarstotasApp {
                 }
             }
             Action::ImportModelPlugin(i) => {
-                if let Some(p) = self.plugins.list.get(i) {
+                if let Some(p) = self.plugins.list.get(i).cloned() {
                     let exts: Vec<&str> = p.model_import.iter().map(String::as_str).collect();
                     if let Some(path) = rfd::FileDialog::new().add_filter(p.name.clone(), &exts).pick_file() {
-                        self.import_model_file(&path);
+                        self.import_model_file(&path, Some(&p));
                     }
                 }
             }
@@ -2160,6 +2181,8 @@ impl VarstotasApp {
             "dxf" => io::export_dxf(model, path),
             "glb" => io::export_glb(model, path),
             "3mf" => io::export_3mf(model, path),
+            "ply" => io::export_ply(model, path),
+            "json" => io::export_faces_json(model, path),
             "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
             "txt" => {
                 let lines: Vec<String> = model.attributions().iter().map(|a| a.line()).collect();
@@ -2175,7 +2198,10 @@ impl VarstotasApp {
             _ => io::export_stl(model, path),
         });
         match r {
-            Ok(Ok(())) => self.flash(format!("Exported {}", path.display())),
+            Ok(Ok(())) => match crate::downloads::licence_warning(&self.doc.model.attributions()) {
+                Some(w) if ext != "txt" => self.flash_error(format!("Exported {}. {w}", path.display())),
+                _ => self.flash(format!("Exported {}", path.display())),
+            },
             Ok(Err(e)) => self.flash(format!("Export failed: {e}")),
             Err(e) => self.flash(format!("Export failed: {e}")),
         }
@@ -2195,6 +2221,11 @@ impl VarstotasApp {
             "obj" => io::import_obj(m, path),
             "dxf" => io::import_dxf(m, path),
             "glb" | "gltf" => io::import_gltf(m, path),
+            "3mf" => io::import_3mf(m, path),
+            "dae" => io::import_dae(m, path),
+            "fbx" => io::import_fbx(m, path),
+            "ply" => io::import_ply(m, path),
+            "csv" => io::import_points_csv(m, path).map(|_| ()),
             _ => io::import_stl(m, path),
         });
         if r.is_some() {
@@ -2597,7 +2628,10 @@ impl eframe::App for VarstotasApp {
             Some(r) if self.preview_shot_done(&r) => {}
             Some(Ok(p)) => {
                 log::info!("exported {}", p.display());
-                self.flash(format!("Exported {}", p.display()));
+                match crate::downloads::licence_warning(&self.doc.model.attributions()) {
+                    Some(w) => self.flash_error(format!("Exported {}. {w}", p.display())),
+                    None => self.flash(format!("Exported {}", p.display())),
+                }
             }
             Some(Err(e)) => {
                 log::warn!("PNG export failed: {e}");
@@ -2620,6 +2654,7 @@ impl eframe::App for VarstotasApp {
         self.animation_window(&ctx);
         self.online_window(&ctx);
         self.models_window(&ctx);
+        self.downloads_tick(&ctx);
         self.bridge_tick(&ctx);
         self.run_actions(&ctx);
         self.autosave_tick(&ctx);

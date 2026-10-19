@@ -165,6 +165,11 @@ impl VarstotasApp {
                     self.item(ui, "STL…", None, true, Action::ImportStl);
                     self.item(ui, "DXF…", None, true, Action::ImportDxf);
                     self.item(ui, "glTF / GLB…", None, true, Action::ImportGltf);
+                    self.item(ui, "3MF…", None, true, Action::ImportAs("3mf"));
+                    self.item(ui, "COLLADA (DAE)…", None, true, Action::ImportAs("dae"));
+                    self.item(ui, "FBX…", None, true, Action::ImportAs("fbx"));
+                    self.item(ui, "PLY…", None, true, Action::ImportAs("ply"));
+                    self.item(ui, "Points (CSV)…", None, true, Action::ImportAs("csv"));
                     self.plugin_file_items(ui, false);
                     self.model_import_items(ui);
                 });
@@ -177,11 +182,13 @@ impl VarstotasApp {
                     self.item(ui, "DXF…", None, true, Action::ExportDxf);
                     self.item(ui, "glTF (GLB)…", None, true, Action::ExportGlb);
                     self.item(ui, "3MF (3D printing)…", None, true, Action::Export3mf);
+                    self.item(ui, "PLY…", None, true, Action::ExportPly);
                     self.item(ui, "2D Drawing (SVG / PDF)…", None, true, Action::ExportDrawing);
                     self.item(ui, "Unfold (SVG / PDF / DXF)…", None, true, Action::Unfold);
                     self.item(ui, "Sheets (PDF / SVG)…", None, true, Action::Sheets);
                     ui.separator();
                     self.item(ui, "Report: Parts and Areas (CSV)…", None, true, Action::ExportReport);
+                    self.item(ui, "Faces (JSON)…", None, true, Action::ExportFacesJson);
                     self.item(ui, "Attributions (credits of downloaded models)…", None, true, Action::ExportAttributions);
                     self.plugin_file_items(ui, true);
                 });

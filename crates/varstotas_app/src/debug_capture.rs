@@ -1854,12 +1854,100 @@ impl VarstotasApp {
             self.models_download(&key, it.next() == Some("place"), ctx);
             return;
         }
+        // `models_fav <key|@n>` toggles a favourite, `models_cancel <key|@n>` stops a download,
+        // `models_filter [license=any|commercial|cc0|known] [format=<name>|-] [tris=<n>]`.
+        if let Some(k) = name.strip_prefix("models_fav ").or(name.strip_prefix("models_cancel ")) {
+            let mut key = k.trim().to_string();
+            if let Some(n) = key.strip_prefix('@').and_then(|n| n.parse::<usize>().ok()) {
+                key = self.models.shown().get(n).map(|a| a.key()).unwrap_or_default();
+            }
+            if name.starts_with("models_cancel ") {
+                self.models_cancel(&key);
+            } else if let Some(a) = self.models.asset(&key).cloned() {
+                self.models_toggle_favourite(&a);
+            } else {
+                log::warn!("models_fav: no asset {key}");
+            }
+            return;
+        }
+        if let Some(args) = name.strip_prefix("models_filter") {
+            let mut f = crate::ui::model_library::Filter::default();
+            for a in args.split_whitespace() {
+                match a.split_once('=') {
+                    Some(("license", v)) => f.license = crate::ui::model_library::LicFilter::ALL.into_iter().find(|l| l.key() == v).unwrap_or_default(),
+                    Some(("format", v)) if v != "-" => f.format = v.to_string(),
+                    Some(("tris", v)) => f.max_tris = v.parse().unwrap_or(0),
+                    _ => {}
+                }
+            }
+            self.models.filter = f;
+            return;
+        }
+        // Sites without an API: `dl_watch <dir>` watches that folder (instead of Downloads),
+        // `dl_send <query>` is what the bookmarklet sends (`url=…&title=…&license=…`),
+        // `dl_drop <path>` drops a file (or .webloc / .url) on the window, `dl_title <text>` /
+        // `dl_license <text>` edit the offer's credit, `dl_pick <n> on|off` a model of an
+        // archive, `dl_import` / `dl_ignore` answer it (`online_wait` waits for the import).
+        if let Some(d) = name.strip_prefix("dl_watch ") {
+            self.models.dl.dir = Some(std::path::PathBuf::from(d.trim()));
+            self.prefs.watch_downloads = true;
+            return;
+        }
+        if let Some(q) = name.strip_prefix("dl_send ") {
+            let q = crate::downloads::parse_query(q.trim());
+            self.downloads_sent(&q);
+            return;
+        }
+        if let Some(p) = name.strip_prefix("dl_drop ") {
+            self.downloads_drop(std::path::Path::new(p.trim()), ctx);
+            return;
+        }
+        if let Some(o) = self.models.dl.offers.first_mut() {
+            if let Some(t) = name.strip_prefix("dl_title ") {
+                o.credit.title = t.trim().to_string();
+                return;
+            }
+            if let Some(t) = name.strip_prefix("dl_license ") {
+                o.credit.license = t.trim().to_string();
+                o.kind = o.credit.license_kind();
+                return;
+            }
+            if let Some(args) = name.strip_prefix("dl_pick ") {
+                let mut it = args.split_whitespace();
+                if let (Some(Ok(i)), Some(v)) = (it.next().map(str::parse::<usize>), it.next())
+                    && let Some(m) = o.models.get_mut(i)
+                {
+                    m.1 = v == "on";
+                }
+                return;
+            }
+        }
+        if name == "dl_import" {
+            self.downloads_import();
+            return;
+        }
+        if name == "dl_ignore" {
+            if !self.models.dl.offers.is_empty() {
+                self.models.dl.offers.remove(0);
+            }
+            return;
+        }
         if let Some(url) = name.strip_prefix("models_url ") {
             self.models_from_url(url, false, ctx);
             return;
         }
+        // `import_model <path>` (the 3D Library's importers) / `import_model_plugin <plugin> <path>`.
+        if let Some(rest) = name.strip_prefix("import_model_plugin ") {
+            let (who, path) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
+            let p = self.plugins.list.iter().find(|p| p.path.file_stem().is_some_and(|s| s.to_string_lossy().eq_ignore_ascii_case(who))).cloned();
+            match p {
+                Some(p) => self.import_model_file(std::path::Path::new(path.trim()), Some(&p)),
+                None => log::warn!("import_model_plugin: no plugin {who}"),
+            }
+            return;
+        }
         if let Some(path) = name.strip_prefix("import_model ") {
-            self.import_model_file(std::path::Path::new(path.trim()));
+            self.import_model_file(std::path::Path::new(path.trim()), None);
             return;
         }
         if let Some(path) = name.strip_prefix("export_attributions ") {
@@ -2170,7 +2258,7 @@ impl VarstotasApp {
             }
             _ => "none".into(),
         };
-        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} online={} models={} credits={:?} pbr_more={:?} mat_delete={:?} current_mat={:?} previews={:?} stats={} def_delete={:?} rig={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.online_dump(), self.models_dump(), m.attributions().iter().map(|a| a.title.clone()).collect::<Vec<_>>(), self.pbr_more_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.previews_dump(), self.stats_dump(), self.library.def_delete.and_then(|d| m.defs.get(d)).map(|d| d.name.clone()), self.rig_dump());
+        let extra = format!("textures={textures:?} uv_placed={} uvs={uvs:?} vector={:?} param={param} script={:?} bridge_calls={} bridge_confirm={} plugins={} plugin_errors={} plugin_dialog={:?} library={} unfold={:?} unfold_open={} sheets={:?} sheet_sel={:?} sheet_vp={:?} sheet_texts={:?} snapping={:?} inc={:?} vcbv={:?} snap={:?} grid={:?} code={:?} code_h={} gen={} gens={:?} gen_defs={} ged={} lib_folders={:?} revealed={:?} lib_delete={:?} tray_hidden={:?} env={} hdri={:?} pbr={:?} fx={} shaders={:?} shader_err={:?} shader_edit={:?} render={} anim_win={} {:?} lightsel={} shader_members={:?} shader_line={:?} outliner={} matlib={:?} online={} models={} credits={:?} pbr_more={:?} mat_delete={:?} current_mat={:?} previews={:?} stats={} def_delete={:?} rig={} downloads={}", uvs.len(), self.last_vector, self.console.last, self.bridge.calls, self.bridge.confirm.len(), self.plugins.list.len(), self.plugins.errors.len(), self.plugins.dialog.as_ref().and_then(|d| self.plugin_at(d.idx)).map(|p| p.name.clone()), self.library.items.len(), self.unfold.last, self.unfold.open, self.sheets_dump(), self.sheets.selected, self.sheet_vp_dump(), self.sheet_texts_dump(), (self.prefs.snapping.enabled, &self.prefs.snapping.off), self.inc_dump(), self.tool.vcb_value(), crate::inference::last_snap().map(|(k, p)| (k, p.x.round() as i64, p.y.round() as i64, p.z.round() as i64)), (self.prefs.grid.show, self.prefs.grid.step, self.prefs.grid.major), self.prefs.console_code, self.console.code_h.round(), self.gen_dump(), m.generators.keys().collect::<Vec<_>>(), m.defs.values().filter(|d| d.generated.is_some()).count(), self.ged_dump(), self.library.shown_folders, crate::ui::extensions::LAST_REVEALED.lock().ok().and_then(|l| l.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string())), self.library.delete_ask.as_ref().map(|d| d.1.clone()), self.prefs.tray_hidden, self.env_dump(), m.hdri.as_ref().map(|h| h.file_name.clone()), self.pbr_dump(), self.fx_dump(), self.shaders_dump(), self.viewport.shader_errors.iter().map(|(_, e)| e.clone()).collect::<Vec<_>>(), self.tray.shader_edit.as_ref().map(|e| (e.material.clone(), e.error.clone())), self.render_dump(), self.anim_window.open, self.anim_window.last, self.light_sel_dump(), self.tray.shader_edit.as_ref().map(|e| e.editor.member_names()).unwrap_or_default(), self.tray.shader_edit.as_ref().map(|e| e.editor.cursor_line(&e.code)).unwrap_or_default(), self.outliner_dump(), self.matlib_dump(), self.online_dump(), self.models_dump(), m.attributions().iter().map(|a| a.title.clone()).collect::<Vec<_>>(), self.pbr_more_dump(), self.mat_library.delete_ask.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()), self.doc.current_material.as_ref().map(|c| (c.name.clone(), c.pbr.as_ref().map(|p| (p.metallic, p.transmission)))), self.previews_dump(), self.stats_dump(), self.library.def_delete.and_then(|d| m.defs.get(d)).map(|d| d.name.clone()), self.rig_dump(), self.downloads_dump());
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -2546,7 +2634,22 @@ impl VarstotasApp {
             Some(Err(e)) => format!("error {e:?}"),
             None => "-".into(),
         };
-        format!("({} {} models={n} shown={} busy={} sel={:?} last={:?})", o.open, o.source.key(), o.shown().len(), o.work.busy, o.selected, o.last)
+        format!("({} {} models={n} shown={} busy={} sel={:?} last={:?} favs={} history={} filter={:?})", o.open, o.source.key(), o.shown().len(), o.work.busy, o.selected, o.last, o.state.favourites.len(), o.state.history.len(), (o.filter.license.key(), &o.filter.format, o.filter.max_tris))
+    }
+
+    /// `(waiting=[titles] offers=N first=(title source licence on/models dup place) watching send last)`.
+    fn downloads_dump(&self) -> String {
+        let d = &self.models.dl;
+        let first = d.offers.first().map(|o| format!("({:?} {:?} {:?} {}/{} dup={} place={})", o.credit.title, o.credit.source, o.kind.label(), o.models.iter().filter(|m| m.1).count(), o.models.len(), o.duplicate.is_some(), o.place));
+        format!(
+            "(waiting={:?} offers={} first={} watching={} send={} last={:?})",
+            d.expects.iter().map(|e| format!("{} [{}]", e.credit.title, e.credit.license)).collect::<Vec<_>>(),
+            d.offers.len(),
+            first.unwrap_or_else(|| "-".into()),
+            d.watcher.as_ref().map(|w| w.dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()).unwrap_or_else(|| "-".into()),
+            d.send.as_ref().map(|s| s.port.to_string()).unwrap_or_else(|| "-".into()),
+            d.last
+        )
     }
 
     /// Library materials as "folder/name" (the examples not built).

@@ -1944,6 +1944,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skrifa",
+ "toml",
  "winit",
  "winresource",
 ]
@@ -1953,11 +1954,14 @@ name = "varstotas_kernel"
 version = "0.1.0"
 dependencies = [
  "draco-core",
+ "flate2",
  "glam",
+ "quick-xml",
  "serde",
  "serde_json",
  "slotmap",
  "thiserror 2.0.21",
+ "ufbx",
 ]
 
 [[package]]
@@ -2745,6 +2749,15 @@ name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
+
+[[package]]
+name = "ufbx"
+version = "0.11.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "260522f1eb74139f0e78b29dd82a58e5437d728c5498024a39e5af7282694240"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "unicode-general-category"

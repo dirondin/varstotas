@@ -13,6 +13,7 @@ mod clipboard;
 mod debug_capture;
 mod demo;
 mod document;
+mod downloads;
 mod inference;
 mod layout;
 mod nav;

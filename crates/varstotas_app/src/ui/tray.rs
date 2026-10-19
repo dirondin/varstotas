@@ -559,6 +559,14 @@ impl VarstotasApp {
                             let who = if c.author.is_empty() { c.source.clone() } else { format!("{} · {}", c.author, c.source) };
                             ui.add(egui::Label::new(format!("{who} · {lic}")).truncate()).on_hover_text(format!("{}\nFile → Export → Attributions lists the credits of the model", c.line()));
                             ui.end_row();
+                            // What the licence asks (an ND badge, NC / SA / unknown reminders).
+                            let kind = c.license_kind();
+                            if !kind.note().is_empty() {
+                                ui.label("");
+                                let col = if matches!(kind, varstotas_kernel::LicenseKind::CcByNd | varstotas_kernel::LicenseKind::CcByNc | varstotas_kernel::LicenseKind::Unknown) { egui::Color32::from_rgb(220, 150, 50) } else { ui.visuals().weak_text_color() };
+                                ui.add(egui::Label::new(RichText::new(format!("{} — {}", kind.label(), kind.note())).small().color(col)).truncate());
+                                ui.end_row();
+                            }
                         }
                     }
                     _ => {

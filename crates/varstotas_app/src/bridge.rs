@@ -45,7 +45,7 @@ pub fn python_dir() -> Option<PathBuf> {
     home_dir().map(|d| d.join("python"))
 }
 
-fn random_token() -> String {
+pub fn random_token() -> String {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);

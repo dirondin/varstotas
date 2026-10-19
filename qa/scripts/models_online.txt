@@ -1,6 +1,6 @@
 # 3D Library over the network: Poly Haven (download a 196-triangle table with its textures,
 # placed with a real click: real size, credit), NASA's GitHub catalogue (download a GLB),
-# the Smithsonian searched on the server.
+# the Smithsonian searched on the server, a Kenney pack, the Quaternius pack list.
 action tray_only Components
 action components
 wait 10
@@ -49,3 +49,27 @@ action online_wait
 wait 10
 expect last=Some("smithsonian:
 expect .vrst faces=
+# Kenney: the catalogue of 3D packs, a pack downloads whole (each model a component).
+action models kenney
+wait 5
+action online_wait
+wait 10
+expect models=(true kenney models=
+action models_search mini skate
+wait 5
+screenshot shots/modnet_5.bmp
+action models_get @0
+wait 5
+action online_wait
+wait 10
+expect models=(true kenney
+expect ok Mini Skate models=
+screenshot shots/modnet_6.bmp
+# Quaternius: its pack list (downloaded in the browser).
+action models quaternius
+action models_search kit
+wait 5
+action online_wait
+wait 10
+expect models=(true quaternius models=
+screenshot shots/modnet_7.bmp

@@ -1,17 +1,30 @@
-//! File IO: native `.vrst` JSON, OBJ/STL/DXF/glTF export and import, 3MF export.
+//! File IO: native `.vrst` JSON, OBJ/STL/DXF/glTF export and import, 3MF export and
+//! import, COLLADA and FBX import, PLY import and export, CSV points, faces as JSON.
 
+mod dae;
 mod dxf;
+mod fbx;
 mod gltf;
+mod meshes;
 mod native;
 mod obj;
+mod ply;
+mod points;
 mod stl;
 mod threemf;
+mod xml;
+mod zip;
 
+pub use dae::{add_dae, import_dae, import_dae_with};
 pub use dxf::{DxfData, add_dxf, export_dxf, import_dxf, import_dxf_with, parse_dxf, write_dxf};
+pub use fbx::{add_fbx, import_fbx, import_fbx_with};
 pub use gltf::{add_gltf, export_glb, import_gltf, import_gltf_with, write_glb};
 pub use native::{MATERIAL_EXT, MATERIAL_FORMAT, from_json, load, load_material, save, save_material, to_json};
 pub use obj::{export_obj, import_obj, import_obj_with, write_obj, write_obj_with_textures};
-pub use threemf::{export_3mf, write_3mf, write_3mf_model};
+pub use threemf::{add_3mf, export_3mf, import_3mf, import_3mf_with, write_3mf, write_3mf_model};
+pub use zip::unzip;
+pub use ply::{add_ply, export_ply, import_ply, import_ply_with, write_ply};
+pub use points::{export_faces_json, faces_json, import_points_csv, parse_points_csv};
 pub use stl::{export_stl, import_stl, import_stl_with, write_stl_binary};
 
 /// Options of the OBJ / STL / DXF / glTF importers.
