@@ -26,6 +26,40 @@ pub enum StandardView {
     Right,
 }
 
+impl StandardView {
+    pub const ALL: [StandardView; 7] =
+        [StandardView::Iso, StandardView::Top, StandardView::Bottom, StandardView::Front, StandardView::Back, StandardView::Left, StandardView::Right];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            StandardView::Iso => "Iso",
+            StandardView::Top => "Top",
+            StandardView::Bottom => "Bottom",
+            StandardView::Front => "Front",
+            StandardView::Back => "Back",
+            StandardView::Left => "Left",
+            StandardView::Right => "Right",
+        }
+    }
+
+    /// Direction from the target toward the eye, and the up direction.
+    fn frame(self) -> (DVec3, DVec3) {
+        match self {
+            StandardView::Iso => {
+                let d = ISO_DIR.normalize();
+                let right = (-d).cross(DVec3::Z).normalize();
+                (d, right.cross(-d))
+            }
+            StandardView::Top => (DVec3::Z, DVec3::Y),
+            StandardView::Bottom => (-DVec3::Z, -DVec3::Y),
+            StandardView::Front => (-DVec3::Y, DVec3::Z),
+            StandardView::Back => (DVec3::Y, DVec3::Z),
+            StandardView::Left => (-DVec3::X, DVec3::Z),
+            StandardView::Right => (DVec3::X, DVec3::Z),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
     pub eye: DVec3,
@@ -346,23 +380,16 @@ impl Camera {
 
     /// Standard view; keeps target and distance.
     pub fn set_standard_view(&mut self, v: StandardView) {
-        // (direction from target toward eye, up)
-        let (dir, up) = match v {
-            StandardView::Iso => {
-                let d = ISO_DIR.normalize();
-                let right = (-d).cross(DVec3::Z).normalize();
-                (d, right.cross(-d))
-            }
-            StandardView::Top => (DVec3::Z, DVec3::Y),
-            StandardView::Bottom => (-DVec3::Z, -DVec3::Y),
-            StandardView::Front => (-DVec3::Y, DVec3::Z),
-            StandardView::Back => (DVec3::Y, DVec3::Z),
-            StandardView::Left => (-DVec3::X, DVec3::Z),
-            StandardView::Right => (DVec3::X, DVec3::Z),
-        };
+        let (dir, up) = v.frame();
         let d = self.distance().max(1e-3);
         self.eye = self.target + dir * d;
         self.up = up;
+    }
+
+    /// The standard view the camera looks along (within a fraction of a degree), if any.
+    pub fn standard_view(&self) -> Option<StandardView> {
+        let dir = -self.basis().forward;
+        StandardView::ALL.into_iter().find(|v| v.frame().0.normalize().dot(dir) > 0.99995)
     }
 }
 
@@ -385,6 +412,18 @@ mod tests {
     use super::*;
 
     const VP: DVec2 = DVec2::new(1200.0, 800.0);
+
+    #[test]
+    fn standard_view_is_recognised() {
+        let mut c = Camera::default();
+        assert_eq!(c.standard_view(), Some(StandardView::Iso));
+        for v in StandardView::ALL {
+            c.set_standard_view(v);
+            assert_eq!(c.standard_view(), Some(v));
+        }
+        c.orbit(DVec2::new(40.0, 0.0), DVec3::ZERO);
+        assert_eq!(c.standard_view(), None);
+    }
 
     fn cams() -> Vec<Camera> {
         let mut v = vec![Camera::default()];

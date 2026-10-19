@@ -483,6 +483,8 @@ pub struct VarstotasApp {
     pub(crate) rig_editor: crate::ui::rig_editor::RigEditor,
     /// File → Preview Image → Use Current View: the PNG being rendered for it.
     pub(crate) preview_shot: Option<(PathBuf, crate::ui::library::PreviewTarget)>,
+    /// Where the viewport's view / style controls are (`ui/view_hud.rs`): clicks there are theirs.
+    pub(crate) hud_rect: egui::Rect,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -613,6 +615,7 @@ impl VarstotasApp {
             online: Default::default(),
             models: Default::default(),
             preview_shot: None,
+            hud_rect: egui::Rect::NOTHING,
             model_info: Default::default(),
             thumbs: Default::default(),
             rig_editor: Default::default(),
@@ -958,7 +961,10 @@ impl VarstotasApp {
         if self.scene_player.is_some() && response.contains_pointer() && ctx.input(|i| i.pointer.any_pressed()) {
             self.scene_player = None;
         }
-        let over = response.contains_pointer();
+        // Not over the view / style controls drawn on top of the viewport.
+        let hud = self.hud_rect.expand(2.0);
+        let on_hud = move |p: egui::Pos2| hud.contains(p);
+        let over = response.contains_pointer() && !ctx.input(|i| i.pointer.hover_pos()).is_some_and(on_hud);
         let (events, modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
         // Primary-button state as of each event, NOT `i.pointer.primary_down()` (the state at
         // the end of the frame): one frame often holds the last moves of a drag *and* the
@@ -991,7 +997,7 @@ impl VarstotasApp {
                     }
                     self.last_modifiers = modifiers;
                     let local = (pos - rect.min).to_pos2();
-                    if pressed && over && rect.contains(pos) {
+                    if pressed && over && rect.contains(pos) && !on_hud(pos) {
                         // A new click supersedes any stale error message.
                         if self.flash.as_ref().is_some_and(|f| f.2) {
                             self.flash = None;
@@ -2643,6 +2649,8 @@ impl eframe::App for VarstotasApp {
                 Some(self.viewport.rect.min + p.to_vec2())
             });
             self.viewport.paint(ui, frame, &self.doc, &self.camera, &style, &o3, &o2, cursor);
+            let vr = self.viewport.rect;
+            self.view_hud(ui, vr);
         });
         // Animation frames collect their own results (anim_tick).
         let export_result = if self.anim_window.run.is_some() { None } else { self.viewport.export_result.take() };

@@ -12,7 +12,7 @@
 | Zoom Extents (Shift+Z) | вписать всю модель | P0 | ✅ |
 | Zoom Window | зум в рамку | P2 | ⬜ |
 | Стандартные виды (Top/Front/Right/Back/Left/Bottom/Iso) | | P0 | ✅ |
-| Perspective / Parallel projection | переключение | P0 | ✅ |
+| Perspective / Parallel projection | переключение; также выпадающий список вида в правом верхнем углу вьюпорта (вместе со стилем отображения) | P0 | ✅ |
 | Field of view, Walk/Look Around/Position Camera | | P2 | ✅ |
 | Previous/Next view | | P2 | ⬜ |
 
