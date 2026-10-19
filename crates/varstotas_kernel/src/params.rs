@@ -73,6 +73,7 @@ impl Model {
             source: None,
             rig: None,
             rigged: None,
+            preview: None,
         });
         self.defs[pd].mesh.instances[inst].def = p;
         self.regenerate_params(p)?;

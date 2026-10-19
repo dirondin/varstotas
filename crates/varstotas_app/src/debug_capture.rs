@@ -1708,7 +1708,8 @@ impl VarstotasApp {
                 Some(i) => {
                     let path = self.library.items[i].path.clone();
                     let img = img.trim();
-                    self.set_library_preview(&path, (img != "clear").then(|| std::path::Path::new(img)));
+                    let target = crate::ui::library::PreviewTarget::File(path);
+                    self.preview_of_from_file(&target, (img != "clear").then(|| std::path::Path::new(img)));
                 }
                 None => log::warn!("script: no library item {n}"),
             }
@@ -2634,9 +2635,12 @@ impl VarstotasApp {
     }
 
     /// The document's preview picture (pixel size) and the library items with one.
-    fn previews_dump(&self) -> (Option<[u32; 2]>, Vec<String>) {
+    /// (document picture size, library items with a picture, document components with one).
+    fn previews_dump(&self) -> (Option<[u32; 2]>, Vec<String>, Vec<String>) {
         let lib = self.library.items.iter().filter(|i| i.preview.is_some()).map(|i| i.name.clone()).collect();
-        (self.doc.model.preview.as_ref().map(|p| p.pixels), lib)
+        let mut defs: Vec<String> = self.doc.model.defs.values().filter(|d| d.preview.is_some()).map(|d| d.name.clone()).collect();
+        defs.sort();
+        (self.doc.model.preview.as_ref().map(|p| p.pixels), lib, defs)
     }
 
     fn models_dump(&self) -> String {

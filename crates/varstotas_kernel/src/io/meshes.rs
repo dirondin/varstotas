@@ -84,7 +84,7 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
             let made = new_faces(&mesh, &HashSet::<FaceId>::new());
             mesh.merge_coplanar_faces(&made);
         }
-        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
+        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         let root = model.root;
         model.defs[root].mesh.instances.insert(Instance { def, transform: DMat4::IDENTITY, name: m.name, material: None, tag: None, hidden: false, locked: false });
         groups += 1;

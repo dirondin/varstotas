@@ -481,7 +481,7 @@ pub struct VarstotasApp {
     pub(crate) thumbs: crate::thumbs::Thumbs,
     pub(crate) rig_editor: crate::ui::rig_editor::RigEditor,
     /// File → Preview Image → Use Current View: the PNG being rendered for it.
-    pub(crate) preview_shot: Option<PathBuf>,
+    pub(crate) preview_shot: Option<(PathBuf, crate::ui::library::PreviewTarget)>,
     pub(crate) gen_editor: crate::ui::gen_editor::GenEditor,
     pub(crate) text3d_last: crate::text3d::Text3dParams,
     /// One-line text prompt (dimension text, Move Axes).
@@ -1194,7 +1194,7 @@ impl VarstotasApp {
                     self.preview_from_file(&f);
                 }
             }
-            Action::PreviewFromView => self.preview_from_view(),
+            Action::PreviewFromView => self.preview_from_view(crate::ui::library::PreviewTarget::Document),
             Action::PreviewShow => self.model_info.preview_open = !self.model_info.preview_open,
             Action::ModelInfo => self.model_info.open = !self.model_info.open,
             Action::RigEditor => self.open_rig_editor(),

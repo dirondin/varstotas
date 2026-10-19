@@ -64,10 +64,23 @@ pub struct LibraryState {
     pub delete_ask: Option<(Option<PathBuf>, String)>,
     /// A document's component to delete once confirmed (it has placed copies).
     pub def_delete: Option<varstotas_kernel::DefId>,
+    /// Pictures of the document's components that have one (`Definition::preview`): the
+    /// bytes' address and the texture.
+    pub def_pics: std::collections::HashMap<varstotas_kernel::DefId, (usize, egui::TextureHandle)>,
     /// The Rename dialog: the component (document's or a library file) and the name typed.
     pub rename: Option<(RenameTarget, String)>,
     /// Thumbnails of the document's components (Document folder).
     pub def_thumbs: std::collections::HashMap<varstotas_kernel::DefId, DefThumb>,
+}
+
+/// Whose preview picture a view render becomes (File → Preview Image, a tile's menu).
+#[derive(Clone, Debug, PartialEq)]
+pub enum PreviewTarget {
+    Document,
+    /// A library `.vrst` file.
+    File(PathBuf),
+    /// A component of the open document.
+    Def(varstotas_kernel::DefId),
 }
 
 /// What the Rename dialog renames.
@@ -119,8 +132,8 @@ pub struct DefThumb {
 }
 
 fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
-    let mut model = crate::document::guarded(|| varstotas_kernel::io::load(path)).and_then(|r| r.map_err(|e| e.to_string()))?;
-    let preview = model.preview.take().map(|p| p.bytes);
+    let model = crate::document::guarded(|| varstotas_kernel::io::load(path)).and_then(|r| r.map_err(|e| e.to_string()))?;
+    let preview = model.preview.as_ref().map(|p| p.bytes.clone());
     let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let clip = crate::document::guarded(|| Clipboard::from_library(model, &name)).and_then(|r| r.map_err(|e| e.to_string()))?;
     let folder = path
@@ -560,11 +573,28 @@ impl VarstotasApp {
                 t.pic_key = key;
             }
         }
+        // Its own picture, when it has one.
+        let own = match m.defs.get(d).and_then(|x| x.preview.as_ref()) {
+            Some(img) => {
+                let key = std::sync::Arc::as_ptr(&img.bytes) as *const u8 as usize;
+                if self.library.def_pics.get(&d).is_none_or(|p| p.0 != key)
+                    && let Some(ci) = crate::textures::thumbnail(&img.bytes, 2 * TILE as u32)
+                {
+                    let tex = ui.ctx().load_texture(format!("defpreview:{d:?}"), ci, egui::TextureOptions::LINEAR);
+                    self.library.def_pics.insert(d, (key, tex));
+                }
+                self.library.def_pics.get(&d).map(|p| p.1.id())
+            }
+            None => {
+                self.library.def_pics.remove(&d);
+                None
+            }
+        };
         let name = m.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
         let uses = m.defs.values().flat_map(|x| x.mesh.instances.values()).filter(|i| i.def == d).count();
         let t = &self.library.def_thumbs[&d];
         let note = format!("In this document: {uses} placed");
-        tile_ex(ui, &name, &t.thumb, t.pic, t.size, m.unit, false, &note)
+        tile_ex(ui, &name, &t.thumb, own.or(t.pic), t.size, m.unit, false, &note)
     }
 
     /// Set or remove the open document's preview picture (undoable; saved with the file).
@@ -585,32 +615,32 @@ impl VarstotasApp {
     /// The document's preview picture from the current view (rendered like File → Export →
     /// 2D Graphic, at most [`crate::textures::PREVIEW_SIDE`] pixels; finished by
     /// [`Self::preview_shot_done`]).
-    pub(crate) fn preview_from_view(&mut self) {
+    pub(crate) fn preview_from_view(&mut self, target: PreviewTarget) {
         let vp = self.viewport.size();
         let side = crate::textures::PREVIEW_SIDE as f32;
         let k = side / vp.x.max(vp.y).max(1.0);
         let size = [(vp.x * k).round().max(1.0) as u32, (vp.y * k).round().max(1.0) as u32];
         let path = std::env::temp_dir().join(format!("varstotas_preview_{}.png", std::process::id()));
         let content = crate::app::ExportContent { transparent: false, axes: false, guides: false, dims: false };
-        self.preview_shot = Some(path.clone());
+        self.preview_shot = Some((path.clone(), target));
         self.export_png_to(path, size, content);
     }
 
     /// True when `r` is the render of [`Self::preview_from_view`] (then it becomes the preview).
     pub(crate) fn preview_shot_done(&mut self, r: &Result<PathBuf, String>) -> bool {
-        let Some(path) = self.preview_shot.take() else { return false };
+        let Some((path, target)) = self.preview_shot.take() else { return false };
         match r {
             Ok(p) if *p == path => {
                 let res = std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b));
                 let _ = std::fs::remove_file(p);
                 match res {
-                    Ok(b) => self.set_doc_preview(Some(b)),
+                    Ok(b) => self.set_preview_of(&target, Some(b)),
                     Err(e) => self.flash_error(format!("Preview image: {e}")),
                 }
                 true
             }
             Ok(_) => {
-                self.preview_shot = Some(path);
+                self.preview_shot = Some((path, target));
                 false
             }
             Err(e) => {
@@ -620,14 +650,41 @@ impl VarstotasApp {
         }
     }
 
-    /// Set (from the image file `image`) or remove the preview picture of library file `path`.
-    pub(crate) fn set_library_preview(&mut self, path: &Path, image: Option<&Path>) {
+    /// Set (`bytes`: a PNG / JPEG) or remove the preview picture of `target`: the document
+    /// (undoable), a library file (written at once) or a component of the document (undoable).
+    pub(crate) fn set_preview_of(&mut self, target: &PreviewTarget, bytes: Option<Vec<u8>>) {
+        match target {
+            PreviewTarget::Document => self.set_doc_preview(bytes),
+            PreviewTarget::File(path) => self.set_library_preview(path, bytes),
+            PreviewTarget::Def(d) => {
+                let (d, set) = (*d, bytes.is_some());
+                let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+                self.doc.commit(if set { "Set Component Preview" } else { "Remove Component Preview" }, |m| {
+                    if let Some(def) = m.defs.get_mut(d) {
+                        def.preview = bytes.map(|b| varstotas_kernel::texture::TextureImage::new(b, "preview", 0.0));
+                    }
+                });
+                self.flash(if set { format!("Preview image of {name} set (saved with the document)") } else { format!("Preview image of {name} removed") });
+            }
+        }
+    }
+
+    /// Set (from the image file `image`) or remove the preview picture of `target`.
+    pub(crate) fn preview_of_from_file(&mut self, target: &PreviewTarget, image: Option<&Path>) {
+        let bytes = match image {
+            Some(f) => match std::fs::read(f).map_err(|e| format!("{}: {e}", f.display())).and_then(|b| crate::textures::preview_bytes(&b)) {
+                Ok(b) => Some(b),
+                Err(e) => return self.flash_error(format!("Preview image: {e}")),
+            },
+            None => None,
+        };
+        self.set_preview_of(target, bytes);
+    }
+
+    /// Set or remove the preview picture of library file `path` (the file is rewritten).
+    pub(crate) fn set_library_preview(&mut self, path: &Path, bytes: Option<Vec<u8>>) {
         let res = (|| -> Result<(), String> {
             let mut m = varstotas_kernel::io::load(path).map_err(|e| e.to_string())?;
-            let bytes = match image {
-                Some(f) => Some(crate::textures::preview_bytes(&std::fs::read(f).map_err(|e| format!("{}: {e}", f.display()))?)?),
-                None => None,
-            };
             m.set_preview(bytes);
             varstotas_kernel::io::save(&m, path).map_err(|e| e.to_string())
         })();
@@ -733,7 +790,8 @@ impl VarstotasApp {
         let mut rename = None;
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let lib_dir = self.library_dir();
-        let mut set_preview: Option<(PathBuf, bool)> = None;
+        let mut set_preview: Option<(PreviewTarget, bool)> = None;
+        let mut preview_view: Option<PreviewTarget> = None;
         self.library.shown_folders.clear();
         // The library folder itself: always a heading (its own items fold under it).
         let root_folded = self.folder_header(ui, "", lib_dir.as_deref());
@@ -767,12 +825,16 @@ impl VarstotasApp {
                                         place = Some(i);
                                         ui.close();
                                     }
+                                    if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the picture (saved in the file): frame the model first").clicked() {
+                                        preview_view = Some(PreviewTarget::File(it.path.clone()));
+                                        ui.close();
+                                    }
                                     if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
-                                        set_preview = Some((it.path.clone(), true));
+                                        set_preview = Some((PreviewTarget::File(it.path.clone()), true));
                                         ui.close();
                                     }
                                     if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
-                                        set_preview = Some((it.path.clone(), false));
+                                        set_preview = Some((PreviewTarget::File(it.path.clone()), false));
                                         ui.close();
                                     }
                                     if ui.button("Rename…").clicked() {
@@ -797,6 +859,18 @@ impl VarstotasApp {
                                     }
                                     if ui.button("Select Instances").clicked() {
                                         select_def = Some(d);
+                                        ui.close();
+                                    }
+                                    if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the tile's picture (saved with the document): frame the component first").clicked() {
+                                        preview_view = Some(PreviewTarget::Def(d));
+                                        ui.close();
+                                    }
+                                    if ui.button("Set Preview Image…").on_hover_text("A picture shown on the tile instead of the rendered model").clicked() {
+                                        set_preview = Some((PreviewTarget::Def(d), true));
+                                        ui.close();
+                                    }
+                                    if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button("Remove Preview Image").clicked() {
+                                        set_preview = Some((PreviewTarget::Def(d), false));
                                         ui.close();
                                     }
                                     if ui.button("Rename…").clicked() {
@@ -838,11 +912,14 @@ impl VarstotasApp {
         if rename.is_some() {
             self.library.rename = rename;
         }
-        if let Some((path, set)) = set_preview {
+        if let Some((target, set)) = set_preview {
             let image = if set { rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
             if !set || image.is_some() {
-                self.set_library_preview(&path, image.as_deref());
+                self.preview_of_from_file(&target, image.as_deref());
             }
+        }
+        if let Some(target) = preview_view {
+            self.preview_from_view(target);
         }
         if let Some(d) = place_def {
             self.place_definition(d);

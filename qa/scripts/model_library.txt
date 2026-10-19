@@ -51,7 +51,7 @@ action online_wait
 wait 10
 expect last=Some("plugin-model_folders:
 expect Tetra.vrst faces=4")
-expect previews=(None, ["Stool"])
+expect previews=(None, ["Stool"], ["Stool"])
 screenshot shots/modlib_8.bmp
 action import_model ../../qa/fixtures/model_library/models/Shapes/Tetra.ply
 wait 5
@@ -63,16 +63,16 @@ wait 5
 screenshot shots/modlib_9.bmp
 action library_preview Tetra|../../qa/fixtures/model_library/models/Furniture/Stool.png
 wait 5
-expect previews=(None, ["Stool", "Tetra"])
+expect previews=(None, ["Stool", "Tetra"], ["Stool"])
 action library_preview Tetra|clear
 wait 5
-expect previews=(None, ["Stool"])
+expect previews=(None, ["Stool"], ["Stool"])
 action preview_view
 wait 10
 expect previews=(Some([512,
 action preview_clear
 wait 5
-expect previews=(None, ["Stool"])
+expect previews=(None, ["Stool"], ["Stool"])
 screenshot shots/modlib_10.bmp
 raw rclick 1186 199
 wait 5

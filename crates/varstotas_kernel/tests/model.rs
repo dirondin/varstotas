@@ -298,6 +298,13 @@ fn preview_image_round_trip() {
     let mut back = back;
     back.set_preview(None);
     assert!(back.preview.is_none());
+    // a component's own picture too
+    let d = back.defs.keys().next().unwrap();
+    back.defs.get_mut(d).unwrap().preview = Some(varstotas_kernel::texture::TextureImage::new(png.clone(), "preview", 0.0));
+    io::save(&back, &path).unwrap();
+    let again = io::load(&path).unwrap();
+    assert!(again.preview.is_none());
+    assert_eq!(&again.defs.get(d).unwrap().preview.as_ref().unwrap().bytes[..], &png[..]);
     let _ = std::fs::remove_dir_all(dir);
 }
 

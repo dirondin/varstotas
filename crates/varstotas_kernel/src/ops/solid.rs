@@ -371,7 +371,7 @@ impl Model {
                 f.normal = inv.transform_vector3(f.normal).normalize_or(f.normal);
             }
             r.rebuild_caches();
-            let def = self.defs.insert(Definition { name: "Group".into(), mesh: r, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
+            let def = self.defs.insert(Definition { name: "Group".into(), mesh: r, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
             let inst = Instance { def, transform: tb, name: ib.name.clone(), material: None, tag: ib.tag, hidden: false, locked: false };
             out.push(self.defs[pd].mesh.instances.insert(inst));
         }

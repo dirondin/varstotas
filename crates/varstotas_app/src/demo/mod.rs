@@ -216,6 +216,7 @@ impl Builder {
             source: None,
             rig: None,
             rigged: None,
+            preview: None,
         })
     }
 

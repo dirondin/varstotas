@@ -190,7 +190,7 @@ fn table() -> (Model, DefId, InstanceId, InstanceId) {
     let mut mesh = Mesh::new();
     let inst = |def, name: &str, x: f64| Instance { def, transform: DMat4::from_translation(DVec3::new(x, 0.0, 0.0)), name: name.into(), material: None, tag: None, hidden: false, locked: false };
     mesh.instances.insert(inst(leg, "Leg", 0.0));
-    let t = m.defs.insert(Definition { name: "Table".into(), mesh, is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None });
+    let t = m.defs.insert(Definition { name: "Table".into(), mesh, is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
     let a = m.root_mesh_mut().instances.insert(inst(t, "", 0.0));
     let b = m.root_mesh_mut().instances.insert(inst(t, "", 3000.0));
     (m, t, a, b)

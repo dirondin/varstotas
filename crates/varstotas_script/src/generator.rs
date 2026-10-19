@@ -157,6 +157,7 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
         source: None,
         rig: None,
         rigged: None,
+        preview: None,
     });
     model.graft_content(d, &built);
     Ok(d)

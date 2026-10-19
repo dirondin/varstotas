@@ -236,6 +236,13 @@ impl Clipboard {
             ([EntityRef::Instance(i)], true) if model.instance_rigged(&[], *i).is_some() => *i,
             _ => model.make_component(&[], &ents, name)?,
         };
+        // The file's picture goes with the component (its tile in the document shows it).
+        let d = model.root_mesh().instances[inst].def;
+        if let Some(def) = model.defs.get_mut(d)
+            && def.preview.is_none()
+        {
+            def.preview = model.preview.clone();
+        }
         model.guides.clear();
         model.guide_points.clear();
         let mut c = Self::from_parts(&model, LIBRARY_UID, &[], &[EntityRef::Instance(inst)], &[])?;
@@ -253,6 +260,8 @@ impl Clipboard {
         let root = m.root_mesh();
         if root.faces.is_empty() && root.edges.is_empty() && root.instances.len() == 1 {
             let i = root.instances.keys().next().expect("one instance");
+            // A component's own picture becomes the file's.
+            m.preview = m.defs.get(root.instances[i].def).and_then(|d| d.preview.clone());
             // A component with parameters stays one (its master and variants in the file).
             if m.instance_rigged(&[], i).is_none() {
                 m.explode(&[], i)?;
