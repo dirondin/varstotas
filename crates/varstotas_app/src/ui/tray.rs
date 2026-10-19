@@ -1500,6 +1500,9 @@ impl VarstotasApp {
         ui.label(RichText::new(id.description()).italics());
         ui.add_space(2.0);
         ui.label(id.instructor());
+        if ui.link("More in the User Guide (F1)").clicked() {
+            self.app_help_for_tool();
+        }
         if !id.implemented() {
             ui.add_space(4.0);
             ui.label(RichText::new("This tool is not implemented yet.").color(Color32::from_rgb(0xC0, 0x60, 0x20)));

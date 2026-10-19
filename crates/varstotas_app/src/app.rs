@@ -422,6 +422,7 @@ pub struct VarstotasApp {
     pub(crate) show_about: bool,
     pub(crate) console: crate::ui::console::ConsoleState,
     pub(crate) script_help: crate::ui::script_help::ScriptHelp,
+    pub(crate) app_help: crate::ui::app_help::AppHelp,
     pub(crate) log_window: crate::ui::log_window::LogWindow,
     /// Local server for Python scripts and AI agents.
     pub(crate) bridge: crate::bridge_ops::BridgeState,
@@ -574,6 +575,7 @@ impl VarstotasApp {
             show_about: false,
             console: Default::default(),
             script_help: Default::default(),
+            app_help: Default::default(),
             log_window: Default::default(),
             bridge: Default::default(),
             plugins: Default::default(),
@@ -861,6 +863,7 @@ impl VarstotasApp {
                         Key::G if !typing && !modifiers.shift => self.actions.push(Action::MakeGroup),
                         Key::PageDown if !typing => self.actions.push(Action::NextScene),
                         Key::PageUp if !typing => self.actions.push(Action::PrevScene),
+                        Key::F1 if !typing => self.app_help_for_tool(),
                         Key::Escape if self.scene_player.is_some() => self.scene_player = None,
                         _ => {
                             // Letters while typing in the VCB go to the VCB (via Text events).
@@ -2662,6 +2665,7 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.console_window(&ctx);
+        self.app_help_window(&ctx);
         self.script_help_window(&ctx);
         self.log_window(&ctx);
         self.gen_editor_window(&ctx);

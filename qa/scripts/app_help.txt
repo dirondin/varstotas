@@ -1,0 +1,34 @@
+# Help → User Guide (real mouse and keys).
+wait 10
+raw click 392 -105
+wait 5
+raw click 417 -49
+wait 5
+expect guide=(true Start "")
+screenshot shots/guide_start.bmp
+raw key P
+wait 3
+raw key F1
+wait 5
+expect guide=(true Modifying "")
+screenshot shots/guide_f1.bmp
+# Use on the Move card picks the tool
+raw click 728 259
+wait 5
+expect tool=Move
+# search: a word from the Files topic and the tools
+raw click 180 82
+wait 2
+raw text autosave
+wait 5
+expect guide=(true Modifying "autosave")
+screenshot shots/guide_search.bmp
+# a topic in the list clears the search
+raw click 143 525
+wait 5
+expect guide=(true Files "")
+screenshot shots/guide_files.bmp
+raw click 135 579
+wait 5
+expect guide=(true Shortcuts "")
+screenshot shots/guide_keys.bmp

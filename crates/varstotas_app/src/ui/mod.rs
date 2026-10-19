@@ -20,6 +20,7 @@ pub mod realistic;
 pub mod render;
 pub mod rig_editor;
 pub mod script_help;
+pub mod app_help;
 pub mod sheets;
 pub mod statusbar;
 pub mod theme;

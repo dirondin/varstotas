@@ -449,6 +449,14 @@ impl VarstotasApp {
                 })
                 .response
                 .on_hover_text("Demo models: furnished house and material gallery with scenes for Window → Render…, test geometry");
+                if ui
+                    .add(egui::Button::new("User Guide").shortcut_text("F1").selected(self.app_help.open))
+                    .on_hover_text("How to use Varstotas: tools, menus, files, keys (F1 over the model: the active tool)")
+                    .clicked()
+                {
+                    self.open_app_help(crate::ui::app_help::Topic::Start);
+                    ui.close();
+                }
                 if ui.add(egui::Button::new("Script Reference").selected(self.script_help.open)).on_hover_text("Scripts, generators and component scripts: functions, properties, examples").clicked() {
                     self.open_script_help(crate::ui::script_help::Topic::Basics, None);
                     ui.close();

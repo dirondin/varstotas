@@ -113,8 +113,8 @@ fn page(topic: Topic) -> &'static [B] {
 
 const CODE_BG: Color32 = Color32::from_rgb(246, 246, 243);
 
-/// Text with `code` spans in the monospace font.
-fn rich(ui: &mut Ui, text: &str) {
+/// Text with `code` spans in the monospace font and **strong** spans.
+pub(crate) fn rich(ui: &mut Ui, text: &str) {
     let mut job = LayoutJob::default();
     let body = egui::TextFormat { font_id: egui::TextStyle::Body.resolve(ui.style()), color: ui.visuals().text_color(), ..Default::default() };
     let code = egui::TextFormat {
@@ -123,8 +123,15 @@ fn rich(ui: &mut Ui, text: &str) {
         background: if ui.visuals().dark_mode { Color32::from_gray(50) } else { CODE_BG },
         ..Default::default()
     };
+    let strong = egui::TextFormat { color: ui.visuals().strong_text_color(), ..body.clone() };
     for (i, part) in text.split('`').enumerate() {
-        job.append(part, 0.0, if i % 2 == 1 { code.clone() } else { body.clone() });
+        if i % 2 == 1 {
+            job.append(part, 0.0, code.clone());
+            continue;
+        }
+        for (j, p) in part.split("**").enumerate() {
+            job.append(p, 0.0, if j % 2 == 1 { strong.clone() } else { body.clone() });
+        }
     }
     job.wrap.max_width = ui.available_width();
     ui.label(job);
@@ -146,7 +153,7 @@ fn code_block(ui: &mut Ui, code: &str) {
     });
 }
 
-fn row(ui: &mut Ui, term: &str, what: &str) {
+pub(crate) fn row(ui: &mut Ui, term: &str, what: &str) {
     ui.horizontal_wrapped(|ui| {
         ui.label(RichText::new(term).monospace().strong());
         ui.label(RichText::new(format!("— {what}")).color(theme::TEXT_DIM));
@@ -213,7 +220,7 @@ impl VarstotasApp {
             ui.horizontal(|ui| {
                 ui.label("Search");
                 let r = ui.add(egui::TextEdit::singleline(&mut self.script_help.search).hint_text("function, property or word").desired_width(220.0));
-                if !self.script_help.search.is_empty() && ui.small_button("✕").clicked() {
+                if !self.script_help.search.is_empty() && ui.small_button("×").clicked() {
                     self.script_help.search.clear();
                     r.request_focus();
                 }
