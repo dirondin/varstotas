@@ -28,7 +28,12 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 echo "==> icon"
-python3 "$ROOT/scripts/make_icon.py" png "$WORK/icon_256.png" 256
+MASTER="$ROOT/crates/varstotas_app/assets/icon.png"
+if command -v sips >/dev/null; then
+  sips -z 256 256 "$MASTER" --out "$WORK/icon_256.png" >/dev/null
+else
+  python3 "$ROOT/scripts/make_icon.py" png "$WORK/icon_256.png" 256
+fi
 PNGS=()
 for s in 16 24 32 48 64 128; do
   if command -v sips >/dev/null; then

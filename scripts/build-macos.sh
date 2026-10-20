@@ -14,7 +14,7 @@ MAKE_DMG=1
 TARGETS=(aarch64-apple-darwin x86_64-apple-darwin)
 BIN=varstotas
 APP_NAME=Varstotas
-BUNDLE_ID=dev.vrst.app
+BUNDLE_ID=dev.varstotas.app
 MIN_MACOS=11.0
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
@@ -44,11 +44,11 @@ for t in "${TARGETS[@]}"; do SLICES+=("target/$t/release/$BIN"); done
 lipo -create -output "$APP/Contents/MacOS/$BIN" "${SLICES[@]}"
 chmod +x "$APP/Contents/MacOS/$BIN"
 
-# 4. Icon (.icns via iconutil from a programmatically drawn PNG).
+# 4. Icon (.icns via iconutil from the master PNG drawn by scripts/make_icon.py).
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 echo "==> icon"
-python3 "$ROOT/scripts/make_icon.py" png "$WORK/icon_1024.png" 1024
+cp "$ROOT/crates/varstotas_app/assets/icon.png" "$WORK/icon_1024.png"
 ICONSET="$WORK/Varstotas.iconset"
 mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
