@@ -130,7 +130,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `layout.rs` | Sheets on paper: `viewport_drawing` (scene camera → `view_lines`, fit or 1:N, clipped), `sheet_drawing` (border, title block, texts with `{credits}` (`CREDITS`, `credits_text`), parts tables), `standard_views` (3 views + iso at a standard scale), overall dims (`auto_dims`), `table_rows` / `table_size`, `sheets_pdf`, `scene_camera` / `camera_scene` |
 | `ui/sheets.rs` | Window → Sheets…: sheet list, paper, title block, item properties, preview with pick / move / resize (working copy → one undo step), `export_sheets`, harness dumps |
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
-| `nav.rs` | mouse and trackpad camera navigation |
+| `nav.rs` | mouse and trackpad camera navigation; `startup_camera` (new documents: the standard Iso view) |
 | `animation.rs` | animation export frames: `scene_frames` (scene tour: holds + `CameraAnimation` transitions), `orbit_frames`, `frame_path`, `ffmpeg()` lookup, `encode` (H.264 MP4) |
 | `inference/mod.rs`, `inference/geo.rs` | snapping (inference) engine |
 | `inference/settings.rs` | which snaps are on: `SnapPrefs` (in `Prefs::snapping`), `GROUPS` for the menus, `publish` once per frame, `allowed(kind)` checked by the engine and the tools; `GridPrefs` (in `Prefs::grid`) → `GridStyle` on the axes plane, `publish_grid` / `grid()` for grid snapping (`grid_snap`, `grid_crossing` in `inference/mod.rs`); `Increments` (in `SnapPrefs`): `move_step` / `angle_step` / `scale_step`, `round_move` (Move tool) |

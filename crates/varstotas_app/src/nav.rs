@@ -330,14 +330,12 @@ pub fn startup_camera() -> Camera {
         ortho: false,
         ortho_height: 5000.0,
     });
-    cam.eye = DVec3::new(-4500.0, -7500.0, 2400.0);
-    cam.target = DVec3::new(2500.0, 2500.0, 400.0);
-    cam.up = DVec3::Z;
+    // The standard Iso view (as View → Iso shows it), a few metres around the origin.
+    cam.target = DVec3::new(2000.0, 2000.0, 400.0);
+    cam.eye = cam.target + DVec3::new(0.0, -12000.0, 0.0);
     cam.ortho = false;
     cam.ortho_height = 7000.0;
-    if let Ok(b) = guarded(|| cam.basis()) {
-        cam.up = b.up;
-    }
+    let _ = guarded(|| cam.set_standard_view(StandardView::Iso));
     cam
 }
 
@@ -402,6 +400,7 @@ mod tests {
         for ortho in [false, true] {
             let mut cam = startup_camera();
             cam.set_ortho(ortho);
+            assert_eq!(cam.standard_view(), Some(StandardView::Iso));
             for v in [StandardView::Top, StandardView::Front, StandardView::Right, StandardView::Iso] {
                 let c = standard_view_camera(&model, &cam, v, 1.5);
                 assert_eq!(c.ortho, ortho);

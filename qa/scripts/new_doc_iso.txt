@@ -1,0 +1,7 @@
+# A new document opens in the standard Iso view (View → Iso), the origin in sight.
+wait 10
+expect hud=(Some(Iso) false
+box 0 0 0 1000 1000 1000
+wait 5
+screenshot shots/new_doc_iso.bmp
+quit
