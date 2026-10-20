@@ -1,4 +1,5 @@
 /target
 .DS_Store
-*.vrst.autosave
+*~autosave
 /dist
+__pycache__/
