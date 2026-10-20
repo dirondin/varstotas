@@ -1,0 +1,106 @@
+# Edit Curve with the real mouse: a closed smooth curve (a face) is double-clicked with Select,
+# a point is dragged, a point is added by a click on the curve and removed with Delete (the
+# curve stays), a double-click turns a point into a corner, `6s` sets the segments; an open
+# curve's end point drags the line attached to it; Undo.
+wait 10
+view top
+parallel on
+zoom_extents
+wait 5
+tool smooth curve
+wait 3
+# closed through (0,0) (2000,1500) (4000,0): 3 spans × 12 edges, a face
+rawp click 0 0 0
+rawp click 2000 1500 0
+rawp click 4000 0 0
+rawp click 0 0 0
+wait 3
+expect active_mesh F=1 E=36
+expect curves=["Spline3p3h12sc"]
+# farther out: room to drag
+raw scroll 500 400 -200
+wait 5
+tool select
+wait 3
+# double-click the curve (middle of the first span): Edit Curve
+rawp dblclick 625 843.75 0
+wait 3
+expect tool=EditCurve
+expect status="Drag points and handles
+screenshot shots/curve_edit_on.bmp
+# drag the top point up by 1000: the same face, one undo step
+rawp drag 2000 1500 0 2000 2500 0
+wait 3
+expect undo=Some("Edit Curve")
+expect active_mesh F=1 E=36
+expect curves=["Spline3p3h12sc"]
+screenshot shots/curve_edit_drag.bmp
+# a click on the curve (middle of the first span, now higher): a 4th point, the shape stays
+rawp click 625 1343.75 0
+wait 3
+expect undo=Some("Add Curve Point")
+expect active_mesh F=1 E=48
+expect curves=["Spline4p4h12sc"]
+# Delete removes the selected point, not the curve
+raw key Delete
+wait 3
+expect undo=Some("Remove Curve Point")
+expect active_mesh F=1 E=36
+expect curves=["Spline3p3h12sc"]
+# double-click the right point: a corner
+rawp dblclick 4000 0 0
+wait 3
+expect curves=["Spline3p2h12sc"]
+expect active_mesh F=1 E=36
+# 6 segments per span
+raw text 6s
+raw key Enter
+wait 3
+expect undo=Some("Edit Segments")
+expect active_mesh F=1 E=18
+expect curves=["Spline3p2h6sc"]
+screenshot shots/curve_edit_corner.bmp
+# Enter: back to Select, the curve stays selected
+raw key Enter
+wait 3
+expect tool=Select
+expect sel F=0 E=18
+# Undo the segments
+raw mods cmd
+raw key Z
+raw mods
+wait 3
+expect active_mesh F=1 E=36
+expect curves=["Spline3p2h12sc"]
+# an open curve with a line at its end: dragging the end point stretches the line
+tool smooth curve
+wait 3
+rawp click 500 -1100 0
+rawp click 1500 -500 0
+rawp click 2500 -1100 0
+raw key Enter
+wait 3
+tool line
+wait 3
+rawp click 2500 -1800 0
+rawp click 2500 -1100 0
+raw key Escape
+wait 3
+expect active_mesh F=1 E=61
+tool select
+wait 20
+rawp dblclick 1500 -500 0
+wait 3
+expect tool=EditCurve
+rawp drag 2500 -1100 0 3000 -800 0
+wait 3
+expect undo=Some("Edit Curve")
+expect active_mesh F=1 E=61
+expect curves=["Spline3p2h12sc", "Spline3p1h12s"]
+raw key Escape
+wait 3
+expect tool=Select
+zoom_extents
+wait 5
+screenshot shots/curve_edit.bmp
+quit

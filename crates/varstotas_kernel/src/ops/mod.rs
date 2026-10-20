@@ -101,9 +101,9 @@ impl Mesh {
             out.push(EntityRef::Vertex(n));
         }
         // Copied curves get fresh ids (and their metadata, transformed).
-        let src_curves = self.curves.clone();
+        let (src_curves, src_splines) = (self.curves.clone(), self.splines.clone());
         let cids: Vec<u32> = edges.iter().filter_map(|e| self.edges[*e].curve).collect();
-        let cmap = self.remap_curves(&src_curves, cids, m);
+        let cmap = self.remap_curves(&src_curves, &src_splines, cids, m);
         for e in edges {
             let mut tmpl = self.edges[e].clone();
             tmpl.curve = tmpl.curve.and_then(|c| cmap.get(&c).copied());

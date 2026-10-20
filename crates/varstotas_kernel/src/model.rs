@@ -673,6 +673,11 @@ impl Model {
             {
                 mesh.curves.insert(c, *info);
             }
+            if let Some(c) = ed.curve
+                && let Some(sp) = parent.splines.get(&c)
+            {
+                mesh.splines.insert(c, sp.clone());
+            }
         }
         // Selected dimensions move along; anchors on moved vertices stay attached.
         for id in &dims {
@@ -832,7 +837,7 @@ impl Model {
             parent.dims.insert(d);
         }
         // Curves get fresh ids in the parent (metadata transformed with the instance).
-        let cmap = parent.remap_curves(&child.curves, child.edges.values().filter_map(|e| e.curve), &t);
+        let cmap = parent.remap_curves(&child.curves, &child.splines, child.edges.values().filter_map(|e| e.curve), &t);
         for (_, ed) in &child.edges {
             let (a, b) = (vmap[&ed.v[0]], vmap[&ed.v[1]]);
             if a == b {

@@ -440,8 +440,6 @@ impl Mesh {
             new.segments = s;
         }
         let (mut chain, closed) = self.curve_chain(cid).ok_or(OpError::NotFound)?;
-        let edges = self.curve_edges(cid);
-        let eset: HashSet<EdgeId> = edges.iter().copied().collect();
         if closed {
             let pts: Vec<DVec3> = chain.iter().map(|v| self.pos(*v)).collect();
             if crate::geom::newell(&pts).dot(old.normal) < 0.0 {
@@ -453,7 +451,37 @@ impl Mesh {
                 chain.reverse();
             }
         }
+        self.rebuild_curve(cid, chain, closed, &Plane::new(old.center, old.normal), &new.points())?;
+        self.curves.insert(cid, new);
+        Ok(self.curve_edges(cid))
+    }
+
+    /// Faces bounded by the edges of curve `cid`.
+    pub(crate) fn curve_faces(&self, cid: u32) -> Vec<FaceId> {
+        let mut faces: Vec<FaceId> = Vec::new();
+        for e in self.curve_edges(cid) {
+            for f in self.edge_faces(e) {
+                if !faces.contains(&f) {
+                    faces.push(f);
+                }
+            }
+        }
+        faces
+    }
+
+    /// Replace the vertices of curve `cid` (`chain`, in the order of `pts`; open: the ends
+    /// are kept and moved to the ends of `pts`) by new ones at `pts`. Faces bounded by the
+    /// curve keep their ids; faces attached at moved ends are made planar again.
+    ///
+    /// Errors (`Invalid`): other edges attached to the inner vertices; the curve bounds faces
+    /// outside `plane`.
+    pub(crate) fn rebuild_curve(&mut self, cid: u32, chain: Vec<VertexId>, closed: bool, plane: &Plane, pts: &[DVec3]) -> OpResult<()> {
+        let edges = self.curve_edges(cid);
+        let eset: HashSet<EdgeId> = edges.iter().copied().collect();
         let k = chain.len();
+        if pts.len() < 2 || (closed && pts.len() < 3) {
+            return Err(OpError::Invalid("too few points".into()));
+        }
         let interior: Vec<VertexId> = if closed { chain.clone() } else { chain[1..k - 1].to_vec() };
         for v in &interior {
             let ves = self.vertex_edges(*v);
@@ -461,21 +489,12 @@ impl Mesh {
                 return Err(OpError::Invalid("other edges are attached to the curve".into()));
             }
         }
-        let plane = Plane::new(old.center, old.normal);
-        let mut faces: Vec<FaceId> = Vec::new();
-        for e in &edges {
-            for f in self.edge_faces(*e) {
-                if !faces.contains(&f) {
-                    faces.push(f);
-                }
-            }
-        }
+        let faces = self.curve_faces(cid);
         for f in &faces {
             if self.faces[*f].loops().flatten().any(|v| plane.distance(self.pos(*v)).abs() > PTOL * 10.0) {
                 return Err(OpError::Invalid("the curve bounds faces outside its plane".into()));
             }
         }
-        let pts = new.points();
         let tmpl = self.edges[edges[0]].clone();
         for f in &faces {
             self.f_unregister(*f);
@@ -486,11 +505,12 @@ impl Mesh {
         for v in &interior {
             self.v_remove(*v);
         }
+        let (first, last) = (chain[0], chain[k - 1]);
+        let ends_moved = !closed && (self.pos(first).distance(pts[0]) > 1e-9 || self.pos(last).distance(*pts.last().unwrap()) > 1e-9);
         let new_chain: Vec<VertexId> = if closed {
             pts.iter().map(|p| self.v_new(*p)).collect()
         } else {
-            let (first, last) = (chain[0], chain[k - 1]);
-            if new.radius != old.radius {
+            if ends_moved {
                 self.v_set_pos(first, pts[0]);
                 self.v_set_pos(last, *pts.last().unwrap());
             }
@@ -520,10 +540,10 @@ impl Mesh {
         for f in &faces {
             self.f_register(*f);
         }
-        if !closed && new.radius != old.radius {
-            // Faces attached at the moved arc ends (outside the curve's own faces).
+        if ends_moved {
+            // Faces attached at the moved ends (outside the curve's own faces).
             let mut fix = Vec::new();
-            for v in [chain[0], chain[k - 1]] {
+            for v in [first, last] {
                 for f in self.faces_of_vertex(v) {
                     if !faces.contains(&f) && !fix.contains(&f) {
                         fix.push(f);
@@ -538,33 +558,33 @@ impl Mesh {
             }
             self.merge_coplanar_at(&new_edges);
         }
-        self.curves.insert(cid, new);
         let mut weld: Vec<VertexId> = new_chain.into_iter().filter(|v| self.vertices.contains_key(*v)).collect();
         weld.sort();
         // The curve's faces too: a grown curve may now enclose (or overlap) other coplanar faces.
         self.absorb(&weld, &faces);
-        Ok(self.curve_edges(cid))
+        Ok(())
     }
 
     /// Drop metadata of curves that have no edges left.
     pub fn prune_curves(&mut self) {
-        if self.curves.is_empty() {
+        if self.curves.is_empty() && self.splines.is_empty() {
             return;
         }
         let used: HashSet<u32> = self.edges.values().filter_map(|e| e.curve).collect();
         self.curves.retain(|k, _| used.contains(k));
+        self.splines.retain(|k, _| used.contains(k));
     }
 
     /// After moving vertices `vs` by `m`: transform the metadata of curves that moved as a whole
     /// (drop it when the transform is not a similarity).
     pub(crate) fn transform_curve_infos(&mut self, vs: &HashSet<VertexId>, m: &DMat4) {
-        if self.curves.is_empty() {
+        if self.curves.is_empty() && self.splines.is_empty() {
             return;
         }
         let mut all_in: HashMap<u32, bool> = HashMap::new();
         for e in self.edges.values() {
             if let Some(c) = e.curve
-                && self.curves.contains_key(&c)
+                && (self.curves.contains_key(&c) || self.splines.contains_key(&c))
             {
                 let inside = vs.contains(&e.v[0]) && vs.contains(&e.v[1]);
                 let x = all_in.entry(c).or_insert(true);
@@ -572,6 +592,11 @@ impl Mesh {
             }
         }
         for (c, inside) in all_in {
+            if let Some(sp) = self.splines.get(&c).filter(|_| inside) {
+                let t = sp.transformed(m);
+                self.splines.insert(c, t);
+                continue;
+            }
             if inside {
                 match self.curves[&c].transformed(m) {
                     Some(t) => {
@@ -605,23 +630,40 @@ impl Mesh {
             }
         }
         for (cid, list) in groups {
-            let Some(info) = self.curves.get(&cid).copied() else { continue };
+            let info = self.curves.get(&cid).copied();
+            let spline = self.splines.get(&cid).cloned();
+            let (origin, normal) = match (&info, &spline) {
+                (Some(i), _) => (i.center, i.normal),
+                (None, Some(s)) => (s.plane().origin, s.normal),
+                _ => continue,
+            };
             let (_, _, p, p2) = list[0];
             // Which loop holds the stored metadata: the one in the curve's plane.
-            let on_orig = (p - info.center).dot(info.normal).abs() <= TOL;
+            let on_orig = (p - origin).dot(normal).abs() <= TOL;
             let (delta, targets): (DVec3, Vec<EdgeId>) = if on_orig {
                 (p2 - p, list.iter().map(|x| x.1).collect())
             } else {
                 (p - p2, list.iter().map(|x| x.0).collect())
             };
-            let Some(moved) = info.transformed(&DMat4::from_translation(delta)) else { continue };
+            let shift = DMat4::from_translation(delta);
             let next = self.next_curve_id();
-            for e in &targets {
-                self.edges[*e].curve = Some(next);
-            }
-            self.curves.insert(next, moved);
-            if self.curve_info(next).is_none() {
-                self.curves.remove(&next);
+            if let Some(info) = info {
+                let Some(moved) = info.transformed(&shift) else { continue };
+                for e in &targets {
+                    self.edges[*e].curve = Some(next);
+                }
+                self.curves.insert(next, moved);
+                if self.curve_info(next).is_none() {
+                    self.curves.remove(&next);
+                }
+            } else if let Some(s) = spline {
+                for e in &targets {
+                    self.edges[*e].curve = Some(next);
+                }
+                self.splines.insert(next, s.transformed(&shift));
+                if self.spline(next).is_none() {
+                    self.splines.remove(&next);
+                }
             }
             // The kept side must still be one valid curve under its old id.
             let kept: Vec<EdgeId> = list.iter().map(|x| if on_orig { x.0 } else { x.1 }).collect();
@@ -632,10 +674,11 @@ impl Mesh {
     }
 
     /// Curve ids used by `edges` mapped to fresh ids of this mesh, with metadata from `src`
-    /// transformed by `m` (for copies: duplicate / explode).
+    /// transformed by `m` (for copies: duplicate / explode); splines from `src_splines` likewise.
     pub(crate) fn remap_curves(
         &mut self,
         src: &std::collections::BTreeMap<u32, CurveInfo>,
+        src_splines: &std::collections::BTreeMap<u32, crate::spline::Spline>,
         ids: impl IntoIterator<Item = u32>,
         m: &DMat4,
     ) -> HashMap<u32, u32> {
@@ -647,6 +690,9 @@ impl Mesh {
             map.insert(c, next);
             if let Some(t) = src.get(&c).and_then(|i| i.transformed(m)) {
                 self.curves.insert(next, t);
+            }
+            if let Some(s) = src_splines.get(&c) {
+                self.splines.insert(next, s.transformed(m));
             }
         }
         map

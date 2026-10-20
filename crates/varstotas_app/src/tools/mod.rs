@@ -15,6 +15,7 @@ pub mod bezier;
 mod camera_tools;
 pub(crate) mod construct;
 mod dims;
+mod curve_edit;
 mod draw;
 mod edit;
 mod nav_tools;
@@ -57,6 +58,7 @@ pub enum ToolId {
     Bezier,
     SmoothCurve,
     Freehand,
+    EditCurve,
     Rectangle,
     RotatedRectangle,
     Circle,
@@ -92,7 +94,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 44] = [
+    pub const ALL: [ToolId; 45] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -105,6 +107,7 @@ impl ToolId {
         ToolId::Bezier,
         ToolId::SmoothCurve,
         ToolId::Freehand,
+        ToolId::EditCurve,
         ToolId::Rectangle,
         ToolId::RotatedRectangle,
         ToolId::Circle,
@@ -153,6 +156,7 @@ impl ToolId {
             ToolId::Bezier => "Bezier Curve",
             ToolId::SmoothCurve => "Smooth Curve",
             ToolId::Freehand => "Freehand",
+            ToolId::EditCurve => "Edit Curve",
             ToolId::Rectangle => "Rectangle",
             ToolId::RotatedRectangle => "Rotated Rectangle",
             ToolId::Circle => "Circle",
@@ -225,6 +229,7 @@ impl ToolId {
             | ToolId::Bezier
             | ToolId::SmoothCurve
             | ToolId::Freehand
+            | ToolId::EditCurve
             | ToolId::RotatedRectangle
             | ToolId::TexturePosition
             | ToolId::Section
@@ -257,6 +262,7 @@ impl ToolId {
             ToolId::Bezier => Icon::Bezier,
             ToolId::SmoothCurve => Icon::SmoothCurve,
             ToolId::Freehand => Icon::Freehand,
+            ToolId::EditCurve => Icon::EditCurve,
             ToolId::Rectangle => Icon::Rectangle,
             ToolId::RotatedRectangle => Icon::RotatedRectangle,
             ToolId::Circle => Icon::Circle,
@@ -307,6 +313,7 @@ impl ToolId {
             ToolId::Bezier => "Draw a curve shaped by handles: click for a corner, press and drag for a smooth point.",
             ToolId::SmoothCurve => "Draw a smooth curve through the points you click; closed, it makes a face.",
             ToolId::Freehand => "Draw a curve freehand: press and drag; ended at its start, it makes a face.",
+            ToolId::EditCurve => "Reshape a drawn curve: drag its points and handles, add or remove points.",
             ToolId::Rectangle => "Draw a rectangular face from two corners.",
             ToolId::RotatedRectangle => "Draw a rectangle at any angle from an edge and a width.",
             ToolId::Circle => "Draw a circle from center and radius.",
@@ -412,6 +419,13 @@ impl ToolId {
                 "Click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
                  Enter or a double-click finishes an open curve (edges only); a click on the first point closes it into a face.\n\
                  Backspace removes the last point. Type a length for the next point toward the cursor; `12s` sets segments per span."
+            }
+            ToolId::EditCurve => {
+                "Reshape a curve drawn with Bezier Curve, Smooth Curve or Freehand (double-click it with Select, or select it and pick Edit Curve).\n\
+                 • Drag a point (square) to move it, a handle (circle) to bend the curve; a smooth point keeps its handles in line.\n\
+                 • Click the curve between points to add a point; Delete removes the selected point.\n\
+                 • Double-click a point: corner ↔ smooth. `12s` sets segments per span.\n\
+                 • Enter, Esc or a click in empty space finishes."
             }
             ToolId::SmoothCurve => {
                 "Click points; the curve passes smoothly through them.\n\
@@ -569,6 +583,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Bezier => Box::new(bezier::BezierTool::new(bezier::Method::Handles)),
         ToolId::SmoothCurve => Box::new(bezier::BezierTool::new(bezier::Method::Smooth)),
         ToolId::Freehand => Box::new(bezier::BezierTool::new(bezier::Method::Freehand)),
+        ToolId::EditCurve => Box::new(curve_edit::EditCurveTool::default()),
         ToolId::Arc3 => Box::new(arcs::Arc3Tool::default()),
         ToolId::RotatedRectangle => Box::new(arcs::RotatedRectTool::default()),
         ToolId::Axes => Box::new(construct::AxesTool::default()),

@@ -934,7 +934,13 @@ impl VarstotasApp {
                         Key::Backspace if typing => {
                             self.vcb.pop();
                         }
-                        Key::Backspace | Key::Delete => self.actions.push(Action::Delete),
+                        Key::Backspace | Key::Delete => {
+                            // the tool first (Bezier: the last point, Edit Curve: a point)
+                            let p = self.current_pointer();
+                            if !self.with_tool(p, |t, c| t.on_key(c, key, true)) {
+                                self.actions.push(Action::Delete);
+                            }
+                        }
                         Key::Enter if typing => self.submit_vcb(),
                         Key::Escape if typing => {
                             self.vcb.clear();

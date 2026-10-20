@@ -78,7 +78,7 @@ impl Item {
         match self {
             Item::Tool(T::Orbit | T::Pan | T::Zoom | T::PositionCamera | T::LookAround | T::Walk) => Some("Camera"),
             Item::Tool(
-                T::Line | T::Arc | T::ArcCenter | T::Arc3 | T::Pie | T::Bezier | T::SmoothCurve | T::Freehand | T::Rectangle | T::RotatedRectangle | T::Circle | T::Polygon,
+                T::Line | T::Arc | T::ArcCenter | T::Arc3 | T::Pie | T::Bezier | T::SmoothCurve | T::Freehand | T::EditCurve | T::Rectangle | T::RotatedRectangle | T::Circle | T::Polygon,
             ) => Some("Draw"),
             Item::Tool(id) if crate::tools::SHAPES.contains(&id) => Some("Draw"),
             Item::Tool(_) => Some("Tools"),

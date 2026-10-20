@@ -603,6 +603,13 @@ impl Tool for SelectTool {
                 sel.extend(edges.into_iter().map(EntityRef::Edge));
                 ctx.doc.add_to_selection(sel);
             }
+            (2, EntityRef::Edge(e))
+                if ctx.doc.model.mesh_at(&path).is_some_and(|m| m.spline_of_edge(e).is_some()) =>
+            {
+                // a Bezier / smooth / freehand curve: reshape it
+                ctx.doc.set_selection(vec![EntityRef::Edge(e)]);
+                ctx.requests.push(super::ToolRequest::SwitchTool(super::ToolId::EditCurve));
+            }
             (2, EntityRef::Edge(e)) => {
                 let faces = guarded(|| ctx.doc.model.mesh_at(&path).map(|m| m.edge_faces(e)))
                     .ok()

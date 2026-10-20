@@ -370,7 +370,7 @@ impl Mesh {
     /// Next unused curve id.
     pub(crate) fn next_curve_id(&self) -> u32 {
         let e = self.edges.values().filter_map(|e| e.curve).max();
-        e.max(self.curves.keys().next_back().copied()).map_or(1, |m| m + 1)
+        e.max(self.curves.keys().next_back().copied()).max(self.splines.keys().next_back().copied()).map_or(1, |m| m + 1)
     }
 }
 

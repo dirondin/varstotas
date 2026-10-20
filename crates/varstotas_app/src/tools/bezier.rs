@@ -13,7 +13,8 @@ use crate::inference::{self, InferenceEngine, InferenceResult};
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::{Color32, CursorIcon, Key, PointerButton, Pos2};
 use varstotas_kernel::glam::DVec3;
-use varstotas_kernel::{Plane, TOL};
+pub use varstotas_kernel::spline::{Anchor, bezier_points, smooth};
+use varstotas_kernel::{Plane, Spline, TOL};
 use varstotas_render::Overlay3d;
 
 /// Default edges per span between two anchors.
@@ -34,70 +35,6 @@ pub enum Method {
     Handles,
     Smooth,
     Freehand,
-}
-
-/// One anchor of the curve; handles are absolute points (None = a corner on that side).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Anchor {
-    pub p: DVec3,
-    pub h_in: Option<DVec3>,
-    pub h_out: Option<DVec3>,
-}
-
-impl Anchor {
-    fn corner(p: DVec3) -> Self {
-        Self { p, h_in: None, h_out: None }
-    }
-}
-
-fn cubic(p0: DVec3, p1: DVec3, p2: DVec3, p3: DVec3, t: f64) -> DVec3 {
-    let u = 1.0 - t;
-    p0 * (u * u * u) + p1 * (3.0 * u * u * t) + p2 * (3.0 * u * t * t) + p3 * (t * t * t)
-}
-
-/// The anchors with handles that pass smoothly through them (Catmull-Rom: each handle a
-/// sixth of the chord between the neighbours); the ends of an open curve stay corners.
-pub fn smooth(anchors: &[Anchor], closed: bool) -> Vec<Anchor> {
-    let n = anchors.len();
-    (0..n)
-        .map(|i| {
-            let p = anchors[i].p;
-            let (prev, next) = if closed && n >= 3 {
-                (anchors[(i + n - 1) % n].p, anchors[(i + 1) % n].p)
-            } else if i == 0 || i + 1 == n {
-                return Anchor::corner(p);
-            } else {
-                (anchors[i - 1].p, anchors[i + 1].p)
-            };
-            let t = (next - prev) / 6.0;
-            Anchor { p, h_in: Some(p - t), h_out: Some(p + t) }
-        })
-        .collect()
-}
-
-/// Points of the curve through `anchors` (`segs` edges per curved span, one edge for a span
-/// without handles); closed curves add the span from the last anchor back to the first and
-/// do not repeat the first point.
-pub fn bezier_points(anchors: &[Anchor], closed: bool, segs: u32) -> Vec<DVec3> {
-    let Some(first) = anchors.first() else { return Vec::new() };
-    let mut out = vec![first.p];
-    let n = anchors.len();
-    let spans = if closed && n >= 2 { n } else { n.saturating_sub(1) };
-    for i in 0..spans {
-        let (a, b) = (anchors[i], anchors[(i + 1) % n]);
-        if a.h_out.is_none() && b.h_in.is_none() {
-            out.push(b.p);
-            continue;
-        }
-        let (p1, p2) = (a.h_out.unwrap_or(a.p), b.h_in.unwrap_or(b.p));
-        for k in 1..=segs.max(1) {
-            out.push(cubic(a.p, p1, p2, b.p, k as f64 / segs.max(1) as f64));
-        }
-    }
-    if closed && out.len() > 2 {
-        out.pop();
-    }
-    out
 }
 
 #[derive(Default)]
@@ -196,13 +133,18 @@ impl BezierTool {
     fn finish(&mut self, ctx: &mut ToolContext, closed: bool) {
         if self.anchors.len() >= 2 {
             let anchors = self.shaped(&self.anchors, closed);
-            let curved = anchors.iter().any(|a| a.h_in.is_some() || a.h_out.is_some());
-            let inv = context_xf(ctx.doc).inverse();
-            let pts: Vec<DVec3> =
-                bezier_points(&anchors, closed, self.span_segs()).iter().map(|p| inv.transform_point3(*p)).collect();
-            let closed = closed && pts.len() >= 3;
-            if pts.len() >= 2 {
-                commit_mesh(ctx, self.id().name(), |m| m.add_polyline(&pts, closed, curved));
+            let closed = closed && anchors.len() >= 2 && bezier_points(&anchors, closed, self.span_segs()).len() >= 3;
+            let normal = self.normal.unwrap_or_else(|| {
+                let n = varstotas_kernel::geom::newell(&bezier_points(&anchors, closed, self.span_segs()));
+                n.try_normalize().unwrap_or(crate::axes::current().z)
+            });
+            // In the active context's frame; the anchors are kept, so the curve can be reshaped.
+            let sp = Spline { anchors, closed, segs: self.span_segs(), normal }.transformed(&context_xf(ctx.doc).inverse());
+            if sp.is_curved() {
+                commit_mesh(ctx, self.id().name(), |m| m.add_spline(&sp));
+            } else {
+                let pts = sp.points();
+                commit_mesh(ctx, self.id().name(), |m| m.add_polyline(&pts, closed, false));
             }
         }
         self.reset();
@@ -413,56 +355,5 @@ impl Tool for BezierTool {
     }
     fn is_busy(&self) -> bool {
         self.busy()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn corners_make_a_polyline() {
-        let a = [Anchor::corner(DVec3::ZERO), Anchor::corner(DVec3::X), Anchor::corner(DVec3::Y)];
-        assert_eq!(bezier_points(&a, false, 12), vec![DVec3::ZERO, DVec3::X, DVec3::Y]);
-        assert_eq!(bezier_points(&a, true, 12).len(), 3);
-    }
-
-    #[test]
-    fn handles_bend_the_span() {
-        let a = [
-            Anchor { p: DVec3::ZERO, h_in: None, h_out: Some(DVec3::new(0.0, 1.0, 0.0)) },
-            Anchor { p: DVec3::new(2.0, 0.0, 0.0), h_in: Some(DVec3::new(2.0, 1.0, 0.0)), h_out: None },
-        ];
-        let pts = bezier_points(&a, false, 4);
-        assert_eq!(pts.len(), 5);
-        assert!(pts[0].distance(DVec3::ZERO) < 1e-12 && pts[4].distance(DVec3::new(2.0, 0.0, 0.0)) < 1e-12);
-        // the middle of a symmetric span: x = 1, y = 3/4 of the handle height
-        assert!(pts[2].distance(DVec3::new(1.0, 0.75, 0.0)) < 1e-12);
-    }
-
-    #[test]
-    fn smooth_handles_follow_the_neighbours() {
-        let a = [Anchor::corner(DVec3::ZERO), Anchor::corner(DVec3::new(1.0, 1.0, 0.0)), Anchor::corner(DVec3::new(2.0, 0.0, 0.0))];
-        let s = smooth(&a, false);
-        assert_eq!((s[0].h_out, s[2].h_in), (None, None));
-        assert_eq!(s[1].h_out, Some(DVec3::new(1.0 + 1.0 / 3.0, 1.0, 0.0)));
-        assert_eq!(s[1].h_in, Some(DVec3::new(1.0 - 1.0 / 3.0, 1.0, 0.0)));
-        // closed: every anchor gets handles, and the curve passes through the anchors
-        let c = smooth(&a, true);
-        assert!(c.iter().all(|x| x.h_in.is_some() && x.h_out.is_some()));
-        let pts = bezier_points(&c, true, 4);
-        assert_eq!(pts.len(), 12);
-        assert!(pts[4].distance(a[1].p) < 1e-12);
-    }
-
-    #[test]
-    fn closed_curve_does_not_repeat_the_start() {
-        let a = [
-            Anchor { p: DVec3::ZERO, h_in: Some(DVec3::new(-1.0, 0.0, 0.0)), h_out: Some(DVec3::X) },
-            Anchor::corner(DVec3::new(2.0, 2.0, 0.0)),
-        ];
-        let pts = bezier_points(&a, true, 6);
-        assert_eq!(pts.len(), 12);
-        assert!(pts.iter().skip(1).all(|p| p.distance(DVec3::ZERO) > 1e-9));
     }
 }

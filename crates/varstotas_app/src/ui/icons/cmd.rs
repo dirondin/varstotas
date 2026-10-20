@@ -90,6 +90,29 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
     #[allow(non_snake_case)]
     let (FILL, SHADE, SHADE_DARK) = (pal::fill(), pal::shade(), pal::shade_dark());
     match icon {
+        Icon::EditCurve => {
+            // a curve with its points, one point grabbed with its handle
+            let curve: Vec<(f32, f32)> = (0..=20)
+                .map(|k| {
+                    let t = k as f32 / 20.0;
+                    let u = 1.0 - t;
+                    let (x0, y0, x1, y1, x2, y2, x3, y3) = (2.0, 20.0, 6.0, 4.0, 18.0, 4.0, 22.0, 20.0);
+                    (
+                        u * u * u * x0 + 3.0 * u * u * t * x1 + 3.0 * u * t * t * x2 + t * t * t * x3,
+                        u * u * u * y0 + 3.0 * u * u * t * y1 + 3.0 * u * t * t * y2 + t * t * t * y3,
+                    )
+                })
+                .collect();
+            pen.line(&curve);
+            let thin = Stroke::new(1.0 * pen.s, BLUE);
+            pen.line_c(&[(5.0, 8.0), (19.0, 8.0)], thin);
+            pen.circle((5.0, 8.0), 1.7, FILL);
+            pen.circle((19.0, 8.0), 1.7, FILL);
+            for c in [(2.0, 20.0), (22.0, 20.0)] {
+                rect(pen, (c.0 - 1.8, c.1 - 1.8), (c.0 + 1.8, c.1 + 1.8), FILL, pen.thin());
+            }
+            rect(pen, (10.0, 6.0), (14.0, 10.0), BLUE, pen.thin());
+        }
         Icon::FileNew => {
             page(pen, (4.0, 2.0), (18.0, 21.0), 5.0);
             pen.dot((17.0, 17.0), 5.0, GREEN);

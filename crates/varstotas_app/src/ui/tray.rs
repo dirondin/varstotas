@@ -407,6 +407,10 @@ impl VarstotasApp {
             self.curve_info(ui, cid);
             return;
         }
+        if guides.is_empty() && self.doc.dim_sel.is_empty() && let Some(cid) = self.selected_spline() {
+            self.spline_info(ui, cid);
+            return;
+        }
         // Dimensions mixed with other things: multi-selection layout.
         let sel = if self.doc.dim_sel.is_empty() || sel.len() > 1 {
             sel
@@ -915,6 +919,18 @@ impl VarstotasApp {
 
     /// The curve (arc / circle / polygon with metadata) when the selection is exactly its edges.
     fn selected_curve(&self) -> Option<u32> {
+        let cid = self.selected_curve_edges()?;
+        self.doc.model.mesh_at(&self.doc.active_path)?.curve_info(cid).map(|_| cid)
+    }
+
+    /// The Bezier / smooth / freehand curve when the selection is exactly its edges.
+    fn selected_spline(&self) -> Option<u32> {
+        let cid = self.selected_curve_edges()?;
+        self.doc.model.mesh_at(&self.doc.active_path)?.spline(cid).map(|_| cid)
+    }
+
+    /// The curve id when the selection is exactly the edges of one curve.
+    fn selected_curve_edges(&self) -> Option<u32> {
         let mesh = self.doc.model.mesh_at(&self.doc.active_path)?;
         let mut cid = None;
         let mut n = 0;
@@ -928,7 +944,66 @@ impl VarstotasApp {
             n += 1;
         }
         let cid = cid?;
-        (n == mesh.curve_edges(cid).len() && mesh.curve_info(cid).is_some()).then_some(cid)
+        (n == mesh.curve_edges(cid).len()).then_some(cid)
+    }
+
+    /// Entity Info for a Bezier / smooth / freehand curve: segments per span are editable,
+    /// Edit Curve reshapes it.
+    fn spline_info(&mut self, ui: &mut Ui, cid: u32) {
+        let path = self.doc.active_path.clone();
+        let unit = self.doc.model.unit;
+        let Some(sp) = self.doc.model.mesh_at(&path).and_then(|m| m.spline(cid)) else { return };
+        let s_text = sp.segs.to_string();
+        if self.tray.curve_edit.as_ref().map(|c| c.0) != Some(cid) {
+            self.tray.curve_edit = Some((cid, String::new(), s_text.clone()));
+        }
+        let mut apply: Option<u32> = None;
+        let mut bad = false;
+        egui::Grid::new("entity_info_spline").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new(if sp.closed { "Closed Curve" } else { "Curve" }).strong());
+            ui.end_row();
+            ui.label("Points");
+            let smooth = sp.anchors.iter().filter(|a| !a.is_corner()).count();
+            ui.label(format!("{} ({smooth} smooth)", sp.anchors.len()));
+            ui.end_row();
+            let Some((_, _, sb)) = self.tray.curve_edit.as_mut() else { return };
+            ui.label("Segments").on_hover_text("Edges per curved span between two points");
+            let resp = ui.add(egui::TextEdit::singleline(sb).desired_width(120.0));
+            if committed(ui, &resp) && *sb != s_text {
+                match sb.trim().trim_end_matches(['s', 'S']).trim().parse::<u32>() {
+                    Ok(n) => apply = Some(n),
+                    Err(_) => bad = true,
+                }
+            } else if !resp.has_focus() && *sb != s_text {
+                *sb = s_text.clone();
+            }
+            ui.end_row();
+            ui.label("Length");
+            ui.label(fmt_len(sp.length(), unit));
+            ui.end_row();
+        });
+        let edit = ui.button("Edit Curve").on_hover_text("Drag its points and handles (or double-click the curve)");
+        super::tray_lib::spot("entity_info:edit_curve", edit.rect.center());
+        if edit.clicked() {
+            self.actions.push(Action::SetTool(crate::tools::ToolId::EditCurve));
+        }
+        if bad {
+            self.tray.curve_edit = None;
+            self.flash_error("Invalid value");
+        }
+        if let Some(n) = apply {
+            let new = varstotas_kernel::Spline { segs: n, ..sp };
+            let edges = self.doc.try_commit("Edit Segments", |m| match m.mesh_at_mut(&path) {
+                Some(mesh) => mesh.set_spline(cid, &new),
+                None => Err(varstotas_kernel::OpError::NotFound),
+            });
+            self.tray.curve_edit = None;
+            if let Some(es) = edges {
+                self.doc.set_selection(es.into_iter().map(EntityRef::Edge).collect());
+            } else if let Some(e) = self.doc.last_error.clone() {
+                self.flash_error(e);
+            }
+        }
     }
 
     /// Entity Info for an arc / circle / polygon: radius and segments are editable.

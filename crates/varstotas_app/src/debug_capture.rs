@@ -2248,6 +2248,11 @@ impl VarstotasApp {
                 me.curves
                     .values()
                     .map(|c| format!("{:?}r{:.1}s{}a{:.0}", c.kind, c.radius, c.segments, (c.end_angle - c.start_angle).to_degrees()))
+                    .chain(me.splines.iter().map(|(cid, s)| {
+                        let ok = if me.spline(*cid).is_some() { "" } else { "-stale" };
+                        let smooth = s.anchors.iter().filter(|a| !a.is_corner()).count();
+                        format!("Spline{}p{smooth}h{}s{}{ok}", s.anchors.len(), s.segs, if s.closed { "c" } else { "" })
+                    }))
                     .collect()
             })
             .unwrap_or_default();

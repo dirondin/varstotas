@@ -19,7 +19,8 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `topology/erase.rs` | eraser semantics |
 | `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
 | `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags (`tag_visible(def, tag)`, `untagged_hidden`, `delete_tag`), axes, raycast |
-| `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve`, tangents |
+| `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve` (via `rebuild_curve`, shared with splines), tangents |
+| `spline.rs` | Bezier curves: `Anchor`, `Spline` (anchors, closed, segs, normal; in `Mesh::splines` by curve id), `bezier_points`, `smooth`; `add_spline`, `spline` / `spline_chain` (valid while the edges are that curve), `set_spline` (reshape keeping faces) |
 | `dims.rs` | linear dimensions, stored per definition, anchored to vertices |
 | `guides.rs` | guide lines and points, stored per definition |
 | `history.rs` | undo; each snapshot is a full model clone |
@@ -147,7 +148,8 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `tools/select.rs` | Select tool |
 | `tools/draw.rs` | Line, Rectangle, Circle, Polygon, 2 Point Arc |
 | `tools/arcs.rs` | Arc (centre), Pie, 3 Point Arc, Rotated Rectangle |
-| `tools/bezier.rs` | Curve tools: `Anchor` (point + handles), `bezier_points` (cubic spans), `smooth` (Catmull-Rom handles); `BezierTool::new(Method)` = Bezier Curve (Handles: click corner, drag handles) / Smooth Curve (clicks) / Freehand (stroke); closed (first point / stroke ends at start) → face via `add_polyline`, open → edges |
+| `tools/bezier.rs` | Curve tools (anchors / `smooth` from `varstotas_kernel::spline`); `BezierTool::new(Method)` = Bezier Curve (Handles: click corner, drag handles) / Smooth Curve (clicks) / Freehand (stroke); closed (first point / stroke ends at start) → face, open → edges; curved → `add_spline` (anchors kept), corners only → `add_polyline` |
+| `tools/curve_edit.rs` | Edit Curve: drag anchors / handles (smooth keeps in line), click curve = add anchor (`split_span`, de Casteljau), Delete = remove, double-click = corner ↔ smooth, `12s`; commits `set_spline` |
 | `tools/edit.rs` | Eraser, Paint Bucket, Push/Pull, Offset, Follow Me |
 | `tools/transform.rs` | Move, Rotate, Scale (copies, arrays) |
 | `tools/construct.rs` | Tape Measure, Protractor, Axes |

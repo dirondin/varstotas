@@ -50,6 +50,9 @@ pub struct Mesh {
     /// Omitted from files when empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub curves: BTreeMap<u32, CurveInfo>,
+    /// Anchors of Bezier curves by `Edge::curve` id (see [`crate::spline`]). Omitted when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub splines: BTreeMap<u32, crate::spline::Spline>,
     /// Linear dimensions of this context (see [`crate::dims`]). Omitted from files when empty.
     #[serde(default, skip_serializing_if = "SlotMap::is_empty")]
     pub dims: SlotMap<DimId, Dimension>,

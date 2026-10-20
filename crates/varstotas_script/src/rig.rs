@@ -203,7 +203,7 @@ fn hash_of(v: &impl serde::Serialize) -> u64 {
 
 /// The own geometry of a mesh (not its groups / components).
 fn geometry_hash(m: &Mesh) -> u64 {
-    hash_of(&(&m.vertices, &m.edges, &m.faces, &m.curves))
+    hash_of(&(&m.vertices, &m.edges, &m.faces, &m.curves, &m.splines))
 }
 
 /// Run the rig's script on a copy of `model` whose top level is `content` (the variant posed by
@@ -364,7 +364,8 @@ fn unscript(model: &mut Model, v: DefId, master: DefId, values: &GenValues) -> R
     }
     if geometry_hash(pm) != geometry_hash(&j) {
         let m = &model.defs[master].mesh;
-        (e.vertices, e.edges, e.faces, e.curves) = (m.vertices.clone(), m.edges.clone(), m.faces.clone(), m.curves.clone());
+        (e.vertices, e.edges, e.faces, e.curves, e.splines) =
+            (m.vertices.clone(), m.edges.clone(), m.faces.clone(), m.curves.clone(), m.splines.clone());
     }
     model.defs[v].mesh = e;
     Ok(())

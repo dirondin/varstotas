@@ -18,6 +18,7 @@ pub enum Icon {
     Arc3,
     Pie,
     Bezier,
+    EditCurve,
     SmoothCurve,
     Freehand,
     Rectangle,

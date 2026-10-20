@@ -12,6 +12,7 @@
 //! - `ops` — push/pull, offset, follow-me, transform, duplicate, orientation.
 //! - [`model`] — `Model` document (definitions, instances, groups, components, materials, tags).
 //! - [`curves`] — arc / circle / polygon metadata, construction helpers, regeneration.
+//! - [`spline`] — Bezier curves: anchors with handles, reshaping.
 //! - [`dims`] — linear dimensions (per context, anchored to vertices).
 //! - [`history`] — snapshot undo/redo.
 //! - [`tessellate()`] — world-space triangles/edges for rendering and picking.
@@ -42,6 +43,7 @@ pub mod report;
 pub mod rig;
 pub mod section;
 pub mod shadows;
+pub mod spline;
 pub mod stats;
 mod ops;
 pub mod tessellate;
@@ -54,6 +56,7 @@ pub mod units;
 pub mod workplane;
 
 pub use curves::{CurveInfo, CurveKind};
+pub use spline::{Anchor, Spline};
 pub use dims::{DimAnchor, DimGeom, DimId, Dimension};
 pub use guides::{DefGuides, GuideGeom, GuideId, GuidePointId, GuideRef};
 pub use history::History;
