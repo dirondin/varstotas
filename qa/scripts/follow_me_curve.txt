@@ -1,0 +1,42 @@
+# Follow Me along a smooth curve with the real mouse: the curve leaves its start at ~30°, the
+# profile (a 400 × 300 rectangle, normal locked to red with the Right arrow) stands along the
+# axes; the short tilted end segments used to fold the first sections inside out. The sweep is
+# one closed solid, smooth along the curve.
+wait 10
+view top
+parallel on
+zoom_extents
+wait 5
+tool smooth curve
+wait 3
+rawp click 0 0 0
+rawp click 1500 800 0
+rawp click 3000 0 0
+raw key Enter
+wait 3
+view iso
+zoom_extents
+wait 5
+tool rectangle
+wait 3
+rawp move 0 -200 0
+raw key Right
+wait 3
+rawp click 0 -200 0
+rawp click 0 200 300
+wait 3
+expect active_mesh F=1
+tool select
+wait 20
+rawp click 1500 800 0
+wait 3
+tool follow me
+wait 20
+rawp click 0 0 150
+wait 5
+expect undo=Some("Follow Me")
+expect active_mesh F=48 E=142
+zoom_extents
+wait 5
+screenshot shots/follow_me_curve.bmp
+quit

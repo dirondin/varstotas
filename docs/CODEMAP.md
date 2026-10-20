@@ -17,7 +17,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `topology/insert.rs` | sticky line insertion: vertex merge, edge split, automatic faces |
 | `topology/region.rs` | planar region recompute (the core of sticky faces; largest file) |
 | `topology/erase.rs` | eraser semantics |
-| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs`, `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
+| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs` (`sweep_sections`: skips path vertices where a section would fold back; soft edges along curves), `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
 | `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags (`tag_visible(def, tag)`, `untagged_hidden`, `delete_tag`), axes, raycast |
 | `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve` (via `rebuild_curve`, shared with splines), tangents |
 | `spline.rs` | Bezier curves: `Anchor`, `Spline` (anchors, closed, segs, normal; in `Mesh::splines` by curve id), `bezier_points`, `smooth`; `add_spline`, `spline` / `spline_chain` (valid while the edges are that curve), `set_spline` (reshape keeping faces) |
