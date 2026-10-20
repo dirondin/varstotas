@@ -1,7 +1,7 @@
-//! glTF / GLB and 3MF exchange.
+//! glTF / GLB, 3MF and COLLADA exchange.
 
 use varstotas_kernel::glam::DVec3;
-use varstotas_kernel::io::{ImportOptions, add_gltf, write_3mf, write_3mf_model, write_glb};
+use varstotas_kernel::io::{ImportOptions, add_dae, add_gltf, export_dae, import_dae, write_3mf, write_3mf_model, write_dae, write_glb};
 use varstotas_kernel::texture::base64_encode;
 use varstotas_kernel::{EntityRef, Model};
 
@@ -203,4 +203,57 @@ fn gltf_draco_primitive() {
     let b = m.bounds().unwrap();
     // glTF metres, Y-up: 2 m × 1 m on the ground.
     assert!((b.max.x - b.min.x - 2000.0).abs() < 1e-3 && (b.max.y - b.min.y - 1000.0).abs() < 1e-3 && (b.max.z - b.min.z).abs() < 1e-3, "{b:?}");
+}
+
+#[test]
+fn dae_round_trip() {
+    let src = box_model();
+    let (text, files) = write_dae(&src);
+    assert!(text.contains("<up_axis>Z_UP</up_axis>") && text.contains("meter=\"0.001\""), "mm, Z up");
+    assert_eq!(text.matches("<node ").count(), 1);
+    assert!(files.is_empty(), "no textures");
+    let mut m = Model::default();
+    add_dae(&mut m, &text, None, &ImportOptions::default()).unwrap();
+    let root = m.root_mesh();
+    assert_eq!(root.instances.len(), 1, "one node → one group");
+    let inst = root.instances.values().next().unwrap();
+    assert_eq!(inst.name, "Box");
+    let mesh = &m.defs[inst.def].mesh;
+    assert_eq!(mesh.faces.len(), 6, "triangles merged back into the box faces");
+    assert!(mesh.is_solid());
+    assert!((mesh.volume().abs() - 2000.0 * 1000.0 * 500.0).abs() < 1e3, "{}", mesh.volume());
+    let (lo, hi) = mesh.vertices.values().fold((DVec3::MAX, DVec3::MIN), |(lo, hi), v| (lo.min(v.pos), hi.max(v.pos)));
+    assert!(lo.distance(DVec3::ZERO) < 1e-3 && hi.distance(DVec3::new(2000.0, 1000.0, 500.0)) < 1e-3, "{lo} {hi}");
+    let mat = mesh.faces.values().next().unwrap().front.expect("material kept");
+    assert_eq!(m.materials[mat].name, "Red");
+    let c = m.materials[mat].color;
+    assert!((c[0] - 0.8).abs() < 1e-3 && (c[1] - 0.1).abs() < 1e-3, "{c:?}");
+    // Unpainted faces stay unpainted: no material in the file, none made on import.
+    let mut plain = box_model();
+    plain.materials.clear();
+    let (text, _) = write_dae(&plain);
+    assert!(!text.contains("<material ") && !text.contains("material=\""), "no material");
+    let mut m = Model::default();
+    add_dae(&mut m, &text, None, &ImportOptions::default()).unwrap();
+    assert!(m.materials.is_empty());
+}
+
+#[test]
+fn dae_texture_file_next_to_the_document() {
+    use varstotas_kernel::TextureImage;
+    let mut src = box_model();
+    let red = src.materials.keys().next().unwrap();
+    src.materials[red].image = Some(TextureImage::new(png_bytes(7), "bricks.png", 500.0));
+    let dir = std::env::temp_dir().join(format!("varstotas_dae_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("box.dae");
+    export_dae(&src, &path).unwrap();
+    assert!(dir.join("Red.png").exists(), "the image is written next to the .dae");
+    let mut m = Model::default();
+    import_dae(&mut m, &path).unwrap();
+    let inst = m.root_mesh().instances.values().next().unwrap();
+    let face = m.defs[inst.def].mesh.faces.values().next().unwrap();
+    let img = m.materials[face.front.unwrap()].image.as_ref().expect("texture read back");
+    assert_eq!(img.bytes[..], png_bytes(7)[..]);
+    let _ = std::fs::remove_dir_all(&dir);
 }

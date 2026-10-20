@@ -233,7 +233,7 @@ impl VarstotasApp {
                     self.cmd_item(ui, ExportImage);
                     self.cmd_item(ui, ExportAnimation);
                     ui.separator();
-                    for c in [ExportObj, ExportStl, ExportDxf, ExportGlb, Export3mf, ExportPly, ExportDrawing] {
+                    for c in [ExportObj, ExportStl, ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing] {
                         self.cmd_item(ui, c);
                     }
                     self.cmd_item_as(ui, Unfold, "Unfold (SVG / PDF / DXF)…");

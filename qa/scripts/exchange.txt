@@ -1,4 +1,4 @@
-# Exchange formats: export a box group to GLB / 3MF / DXF, delete it, import it back.
+# Exchange formats: export a box group to GLB / 3MF / DXF / DAE, delete it, import it back.
 box 0 0 0 2000 1000 500
 view iso
 zoom_extents
@@ -9,6 +9,7 @@ wait 2
 action export_file models/exchange.glb
 action export_file models/exchange.3mf
 action export_file models/exchange.dxf
+action export_file models/exchange.dae
 wait 2
 select_all
 action delete
@@ -32,3 +33,12 @@ wait 5
 expect defs=2 model_faces=12
 expect mats={"-": 6}
 expect undo=Some("Import DXF")
+# COLLADA back: one group again
+action undo
+wait 2
+expect defs=2 model_faces=6
+action import_file models/exchange.dae
+wait 5
+expect defs=3 model_faces=12
+expect undo=Some("Import DAE")
+screenshot shots/exchange_dae.bmp

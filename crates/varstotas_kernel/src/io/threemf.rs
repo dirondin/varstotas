@@ -21,11 +21,11 @@ const RELS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 </Relationships>
 "#;
 
-fn xml_escape(s: &str) -> String {
+pub(super) fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
-fn num(x: f64) -> String {
+pub(super) fn num(x: f64) -> String {
     let s = format!("{:.4}", crate::geom::snap(x));
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" || s.is_empty() { "0".into() } else { s.into() }

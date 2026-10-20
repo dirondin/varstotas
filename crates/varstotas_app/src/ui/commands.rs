@@ -35,6 +35,7 @@ pub enum Cmd {
     ExportGlb,
     Export3mf,
     ExportPly,
+    ExportDae,
     ExportDrawing,
     Sheets,
     ExportReport,
@@ -100,7 +101,7 @@ impl Cmd {
         let mut v = vec![
             New, Open, Save, SaveAs, PreviewShow, PreviewFromFile, PreviewFromView, PreviewRemove, ImportObj, ImportStl, ImportDxf,
             ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv, ExportImage, ExportAnimation, ExportObj, ExportStl,
-            ExportDxf, ExportGlb, Export3mf, ExportPly, ExportDrawing, Sheets, ExportReport, ExportFacesJson, ExportAttributions,
+            ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing, Sheets, ExportReport, ExportFacesJson, ExportAttributions,
             RunScript, Quit, Undo, Redo, Cut, Copy, Paste, PasteInPlace, Delete, PurgeUnused, DeleteGuides, SelectAll, SelectNone,
             Hide, UnhideAll, MakeGroup, MakeComponent, MakeUnique, MakeParametric, Explode, CloseGroup, IntersectModel, IntersectSelection,
             IntersectContext, ReverseFaces, OrientFaces, FlipRed, FlipGreen, FlipBlue,
@@ -162,6 +163,7 @@ impl Cmd {
             | Cmd::ExportGlb
             | Cmd::Export3mf
             | Cmd::ExportPly
+            | Cmd::ExportDae
             | Cmd::ExportDrawing
             | Cmd::ExportReport
             | Cmd::ExportFacesJson
@@ -199,7 +201,7 @@ impl Cmd {
             Cmd::ImportDxf | Cmd::ExportDxf => "DXF…",
             Cmd::ImportGltf => "glTF / GLB…",
             Cmd::Import3mf => "3MF…",
-            Cmd::ImportDae => "COLLADA (DAE)…",
+            Cmd::ImportDae | Cmd::ExportDae => "COLLADA (DAE)…",
             Cmd::ImportFbx => "FBX…",
             Cmd::ImportPly | Cmd::ExportPly => "PLY…",
             Cmd::ImportCsv => "Points (CSV)…",
@@ -289,6 +291,7 @@ impl Cmd {
             Cmd::ExportGlb => Icon::Export("GLB"),
             Cmd::Export3mf => Icon::Export("3MF"),
             Cmd::ExportPly => Icon::Export("PLY"),
+            Cmd::ExportDae => Icon::Export("DAE"),
             Cmd::ExportDrawing => Icon::Drawing,
             Cmd::Sheets => Icon::Sheets,
             Cmd::ExportReport => Icon::Report,
@@ -476,6 +479,7 @@ impl Cmd {
             Cmd::ExportGlb => Action::ExportGlb,
             Cmd::Export3mf => Action::Export3mf,
             Cmd::ExportPly => Action::ExportPly,
+            Cmd::ExportDae => Action::ExportDae,
             Cmd::ExportDrawing => Action::ExportDrawing,
             Cmd::Sheets => Action::Sheets,
             Cmd::ExportReport => Action::ExportReport,

@@ -227,6 +227,7 @@ pub enum Action {
     ExportGlb,
     Export3mf,
     ExportPly,
+    ExportDae,
     /// Every face with its outer loop, normal, area and material (JSON).
     ExportFacesJson,
     ExportReport,
@@ -1259,6 +1260,7 @@ impl VarstotasApp {
             Action::ExportGlb => self.export("glb"),
             Action::Export3mf => self.export("3mf"),
             Action::ExportPly => self.export("ply"),
+            Action::ExportDae => self.export("dae"),
             Action::ExportFacesJson => self.export("json"),
             Action::ExportReport => self.export("csv"),
             Action::ExportAttributions => {
@@ -2310,6 +2312,7 @@ impl VarstotasApp {
             "glb" => io::export_glb(model, path),
             "3mf" => io::export_3mf(model, path),
             "ply" => io::export_ply(model, path),
+            "dae" => io::export_dae(model, path),
             "json" => io::export_faces_json(model, path),
             "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
             "txt" => {

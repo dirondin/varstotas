@@ -1,5 +1,5 @@
 //! File IO: native `.vrst` JSON, OBJ/STL/DXF/glTF export and import, 3MF export and
-//! import, COLLADA and FBX import, PLY import and export, CSV points, faces as JSON.
+//! import, COLLADA import and export, FBX import, PLY import and export, CSV points, faces as JSON.
 
 mod dae;
 mod dxf;
@@ -15,7 +15,7 @@ mod threemf;
 mod xml;
 mod zip;
 
-pub use dae::{add_dae, import_dae, import_dae_with};
+pub use dae::{add_dae, export_dae, import_dae, import_dae_with, write_dae};
 pub use dxf::{DxfData, add_dxf, export_dxf, import_dxf, import_dxf_with, parse_dxf, write_dxf};
 pub use fbx::{add_fbx, import_fbx, import_fbx_with};
 pub use gltf::{add_gltf, export_glb, import_gltf, import_gltf_with, write_glb};

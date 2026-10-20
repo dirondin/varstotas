@@ -2,11 +2,20 @@
 //! scene's nodes (matrix / translate / rotate / scale, instance_node), materials from the
 //! effects (diffuse colour or image), the asset's unit and up axis. Each placed geometry
 //! becomes a group.
+//!
+//! Export (COLLADA 1.4.1): millimetres, Z up (said in `<asset>`, so coordinates stay as they
+//! are); one node per top-level group / component (loose geometry: one "Model" node) with
+//! world-space triangles, one `<triangles>` per material; normals (smooth where edges are
+//! smooth) and texture coordinates; materials as Lambert colours or colour textures (unpainted
+//! faces: no material), the images as files next to the `.dae`.
 
 use super::meshes::{ImpMat, ImpMesh, ImpPoly, add_meshes};
+use super::obj::TextureFile;
+use super::threemf::{num, xml_escape};
 use super::xml::El;
 use super::{ImportOptions, IoError};
-use crate::Model;
+use crate::{MaterialId, Model, tessellate};
+use std::fmt::Write as _;
 use glam::{DMat4, DVec2, DVec3, DVec4};
 use std::collections::HashMap;
 use std::path::Path;
@@ -305,4 +314,200 @@ pub fn add_dae(model: &mut Model, text: &str, dir: Option<&Path>, opts: &ImportO
         }
     }
     add_meshes(model, meshes, &doc.mats, xf, opts).map(|_| ())
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+/// One node's geometry: shared deduplicated vertices, triangles per material.
+#[derive(Default)]
+struct OutGeo {
+    pos: Vec<f64>,
+    nrm: Vec<f64>,
+    uv: Vec<f64>,
+    seen: HashMap<[u64; 8], u32>,
+    tris: Vec<(Option<MaterialId>, Vec<u32>)>,
+}
+
+impl OutGeo {
+    fn vertex(&mut self, mat: Option<MaterialId>, p: DVec3, n: DVec3, uv: DVec2) {
+        let key = [p.x, p.y, p.z, n.x, n.y, n.z, uv.x, uv.y].map(f64::to_bits);
+        let next = (self.pos.len() / 3) as u32;
+        let i = *self.seen.entry(key).or_insert_with(|| {
+            self.pos.extend([p.x, p.y, p.z]);
+            self.nrm.extend([n.x, n.y, n.z]);
+            self.uv.extend([uv.x, uv.y]);
+            next
+        });
+        match self.tris.iter_mut().find(|t| t.0 == mat) {
+            Some(t) => t.1.push(i),
+            None => self.tris.push((mat, vec![i])),
+        }
+    }
+}
+
+/// `seconds` since 1970 as `YYYY-MM-DDThh:mm:ssZ`.
+fn iso_time(seconds: u64) -> String {
+    let (days, rem) = ((seconds / 86_400) as i64, seconds % 86_400);
+    // Civil date from days (H. Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem / 60 % 60, rem % 60)
+}
+
+fn nums(v: &[f64]) -> String {
+    v.iter().map(|x| num(*x)).collect::<Vec<_>>().join(" ")
+}
+
+/// COLLADA text of the visible model and the image files it references: (file name, bytes).
+pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
+    let tess = tessellate(model);
+    let root = model.root_mesh();
+    let mut nodes: Vec<(Option<crate::InstanceId>, OutGeo)> = Vec::new();
+    for f in &tess.faces {
+        let owner = f.owner_path.first().copied();
+        let mat = f.front.or(f.inherited).filter(|m| model.materials.contains_key(*m));
+        let ni = match nodes.iter().position(|n| n.0 == owner) {
+            Some(i) => i,
+            None => {
+                nodes.push((owner, OutGeo::default()));
+                nodes.len() - 1
+            }
+        };
+        let tile = mat.and_then(|m| model.materials[m].image.as_ref()).map(|i| i.size).filter(|s| s[0] > 0.0 && s[1] > 0.0);
+        for (k, p) in f.positions.iter().enumerate() {
+            let n = f.normals.get(k).copied().unwrap_or(f.normal);
+            let uv = match (tile, f.uv.get(k)) {
+                (Some([w, h]), Some(t)) => DVec2::new(t.x / w, t.y / h),
+                _ => DVec2::ZERO,
+            };
+            nodes[ni].1.vertex(mat, *p, n, uv);
+        }
+    }
+    // Materials in the order they are first used, with unique ids.
+    let mut mats: Vec<MaterialId> = Vec::new();
+    for (_, g) in &nodes {
+        for (m, _) in &g.tris {
+            if let Some(m) = m
+                && !mats.contains(m)
+            {
+                mats.push(*m);
+            }
+        }
+    }
+    let mat_id = |m: MaterialId| format!("material{}", mats.iter().position(|x| *x == m).unwrap_or(0));
+    let mut images = String::new();
+    let mut effects = String::new();
+    let mut materials = String::new();
+    let mut files: Vec<TextureFile> = Vec::new();
+    let mut effect = |id: &str, name: &str, color: [f32; 4], image: Option<&crate::texture::TextureImage>| {
+        let diffuse = match image {
+            Some(img) => {
+                let base: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+                let mut file = format!("{base}.{}", img.extension());
+                let mut k = 2;
+                while files.iter().any(|f| f.0 == file) {
+                    file = format!("{base}_{k}.{}", img.extension());
+                    k += 1;
+                }
+                let _ = writeln!(images, "    <image id=\"{id}-image\" name=\"{}\"><init_from>{}</init_from></image>", xml_escape(name), xml_escape(&file));
+                files.push((file, img.bytes.clone()));
+                format!("<texture texture=\"{id}-sampler\" texcoord=\"UVSET0\"/>")
+            }
+            None => format!("<color sid=\"diffuse\">{} {} {} {}</color>", num(color[0] as f64), num(color[1] as f64), num(color[2] as f64), num(color[3] as f64)),
+        };
+        let params = if image.is_some() {
+            format!(
+                "        <newparam sid=\"{id}-surface\"><surface type=\"2D\"><init_from>{id}-image</init_from></surface></newparam>\n        <newparam sid=\"{id}-sampler\"><sampler2D><source>{id}-surface</source></sampler2D></newparam>\n"
+            )
+        } else {
+            String::new()
+        };
+        let transparency = if color[3] < 0.999 { format!("<transparent opaque=\"A_ONE\"><color>1 1 1 {}</color></transparent><transparency><float>1</float></transparency>", num(color[3] as f64)) } else { String::new() };
+        let _ = writeln!(
+            effects,
+            "    <effect id=\"{id}-effect\">\n      <profile_COMMON>\n{params}        <technique sid=\"common\"><lambert><diffuse>{diffuse}</diffuse>{transparency}</lambert></technique>\n      </profile_COMMON>\n    </effect>"
+        );
+        let _ = writeln!(materials, "    <material id=\"{id}\" name=\"{}\"><instance_effect url=\"#{id}-effect\"/></material>", xml_escape(name));
+    };
+    for m in &mats {
+        let mm = &model.materials[*m];
+        effect(&mat_id(*m), &mm.name, mm.color, mm.image.as_ref());
+    }
+    let mut geometries = String::new();
+    let mut scene = String::new();
+    let mut names: Vec<String> = Vec::new();
+    for (gi, (owner, g)) in nodes.iter().enumerate() {
+        if g.tris.is_empty() {
+            continue;
+        }
+        let name = match owner.and_then(|i| root.instances.get(i)) {
+            Some(i) if !i.name.is_empty() => i.name.clone(),
+            Some(i) => model.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default(),
+            None => "Model".into(),
+        };
+        names.push(name.clone());
+        let id = format!("geometry{gi}");
+        let n = g.pos.len() / 3;
+        let _ = writeln!(geometries, "    <geometry id=\"{id}\" name=\"{}\">\n      <mesh>", xml_escape(&name));
+        for (suffix, vals, stride, params) in [("positions", &g.pos, 3, "XYZ"), ("normals", &g.nrm, 3, "XYZ"), ("uv", &g.uv, 2, "ST")] {
+            let ps: String = params.chars().map(|c| format!("<param name=\"{c}\" type=\"float\"/>")).collect();
+            let _ = writeln!(
+                geometries,
+                "        <source id=\"{id}-{suffix}\">\n          <float_array id=\"{id}-{suffix}-array\" count=\"{}\">{}</float_array>\n          <technique_common><accessor source=\"#{id}-{suffix}-array\" count=\"{}\" stride=\"{stride}\">{ps}</accessor></technique_common>\n        </source>",
+                vals.len(),
+                nums(vals),
+                n
+            );
+        }
+        let _ = writeln!(geometries, "        <vertices id=\"{id}-vertices\"><input semantic=\"POSITION\" source=\"#{id}-positions\"/></vertices>");
+        let mut binds = String::new();
+        for (m, idx) in &g.tris {
+            // Unpainted faces: no material.
+            let attr = m.map(|m| format!(" material=\"{}\"", mat_id(m))).unwrap_or_default();
+            let p: Vec<String> = idx.iter().map(|i| format!("{i} {i} {i}")).collect();
+            let _ = writeln!(
+                geometries,
+                "        <triangles{attr} count=\"{}\">\n          <input semantic=\"VERTEX\" source=\"#{id}-vertices\" offset=\"0\"/>\n          <input semantic=\"NORMAL\" source=\"#{id}-normals\" offset=\"1\"/>\n          <input semantic=\"TEXCOORD\" source=\"#{id}-uv\" offset=\"2\" set=\"0\"/>\n          <p>{}</p>\n        </triangles>",
+                idx.len() / 3,
+                p.join(" ")
+            );
+            if let Some(m) = m {
+                let mid = mat_id(*m);
+                let _ = write!(binds, "<instance_material symbol=\"{mid}\" target=\"#{mid}\"><bind_vertex_input semantic=\"UVSET0\" input_semantic=\"TEXCOORD\" input_set=\"0\"/></instance_material>");
+            }
+        }
+        let _ = writeln!(geometries, "      </mesh>\n    </geometry>");
+        let bind = if binds.is_empty() { String::new() } else { format!("<bind_material><technique_common>{binds}</technique_common></bind_material>") };
+        let _ = writeln!(scene, "      <node id=\"node{gi}\" name=\"{}\" type=\"NODE\"><instance_geometry url=\"#{id}\">{bind}</instance_geometry></node>", xml_escape(&name));
+    }
+    let now = iso_time(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+    let lib = |tag: &str, body: &str| if body.is_empty() { String::new() } else { format!("  <{tag}>\n{body}  </{tag}>\n") };
+    let text = format!(
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<COLLADA xmlns=\"http://www.collada.org/2005/11/COLLADASchema\" version=\"1.4.1\">\n  <asset>\n    <contributor><authoring_tool>Varstotas</authoring_tool></contributor>\n    <created>{now}</created>\n    <modified>{now}</modified>\n    <unit name=\"millimeter\" meter=\"0.001\"/>\n    <up_axis>Z_UP</up_axis>\n  </asset>\n{}{}{}{}  <library_visual_scenes>\n    <visual_scene id=\"scene\" name=\"Scene\">\n{scene}    </visual_scene>\n  </library_visual_scenes>\n  <scene><instance_visual_scene url=\"#scene\"/></scene>\n</COLLADA>\n",
+        lib("library_images", &images),
+        lib("library_effects", &effects),
+        lib("library_materials", &materials),
+        lib("library_geometries", &geometries),
+    );
+    (text, files)
+}
+
+/// Write `path` (`.dae`) and its images next to it.
+pub fn export_dae(model: &Model, path: &Path) -> Result<(), IoError> {
+    let (text, files) = write_dae(model);
+    std::fs::write(path, text)?;
+    let dir = path.parent().unwrap_or(Path::new("."));
+    for (name, bytes) in files {
+        std::fs::write(dir.join(name), &bytes[..])?;
+    }
+    Ok(())
 }

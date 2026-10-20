@@ -250,7 +250,7 @@ const FILES: &[B] = &[
     B::P("Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New, how many undo steps are kept), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back), Render (the render settings of new documents; where ffmpeg and the Open Image Denoise library are) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults."),
     B::P("Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it."),
     B::Row("Import", "OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window"),
-    B::Row("Export", "OBJ, STL, DXF, glTF (GLB), 3MF, PLY, faces as JSON, PNG, SVG / PDF drawings, sheets, unfold patterns, animation, report, attributions"),
+    B::Row("Export", "OBJ, STL, DXF, glTF (GLB), 3MF, COLLADA (DAE), PLY, faces as JSON, PNG, SVG / PDF drawings, sheets, unfold patterns, animation, report, attributions"),
     B::Row("Edit → Cut / Copy / Paste / Paste in Place", "Paste in Place keeps the copied position"),
     B::Row("File → Preview Image", "the picture the library shows for this file"),
 ];

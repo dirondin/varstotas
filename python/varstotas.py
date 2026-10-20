@@ -273,7 +273,7 @@ class Model:
         return self.request("save", **({"path": os.path.abspath(path)} if path else {}))
 
     def export(self, path):
-        """Export by extension: stl, obj, dxf, glb, 3mf, csv, svg, pdf, png."""
+        """Export by extension: stl, obj, dxf, glb, 3mf, dae, ply, csv, svg, pdf, png."""
         return self.request("export", path=os.path.abspath(path))
 
     def open(self, path):

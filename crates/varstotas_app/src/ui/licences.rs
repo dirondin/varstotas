@@ -85,7 +85,7 @@ pub const FORMATS: &[(&str, &str, &str, &str)] = &[
     ("STL", "import, export", "own reader / writer", "open, public specification"),
     ("PLY", "import, export", "own reader / writer", "open, public specification"),
     ("3MF", "import, export", "own reader / writer (zip + XML)", "3MF Consortium specification, royalty-free"),
-    ("COLLADA (.dae)", "import", "own reader", "Khronos open standard, royalty-free"),
+    ("COLLADA (.dae)", "import, export", "own reader / writer (images as files next to it)", "Khronos open standard, royalty-free"),
     ("FBX", "import", "ufbx (MIT / Unlicense), an independent reader", "Autodesk's format; FBX is an Autodesk trademark, Varstotas is not affiliated"),
     ("DXF", "import, export", "own reader / writer", "Autodesk's openly published format; DXF is an Autodesk trademark"),
     ("SVG, PDF", "export (drawings, unfolds, sheets)", "own writers", "W3C / ISO open standards"),

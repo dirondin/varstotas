@@ -94,7 +94,7 @@ TOOLS = [
     },
     {
         "name": "export",
-        "description": "Export the model; the format follows the extension: stl, obj, dxf, glb, 3mf, csv (parts list), svg/pdf (2D drawing of the view), png (image). Overwriting a file asks the user.",
+        "description": "Export the model; the format follows the extension: stl, obj, dxf, glb, 3mf, dae (COLLADA, images next to it), ply, csv (parts list), svg/pdf (2D drawing of the view), png (image). Overwriting a file asks the user.",
         "inputSchema": _obj({"path": {"type": "string", "description": "Absolute path"}}, ["path"]),
         "annotations": {"destructiveHint": True},
     },

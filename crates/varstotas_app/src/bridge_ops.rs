@@ -344,7 +344,7 @@ impl VarstotasApp {
                 if ext == "png" {
                     return self.bridge_png(path, p, ctx, req.reply.clone(), false);
                 }
-                if !["stl", "obj", "dxf", "glb", "3mf", "ply", "json", "csv", "svg", "pdf"].contains(&ext.as_str()) {
+                if !["stl", "obj", "dxf", "glb", "3mf", "dae", "ply", "json", "csv", "svg", "pdf"].contains(&ext.as_str()) {
                     return done(Err(format!("unknown export format .{ext}")));
                 }
                 self.flash = None;
