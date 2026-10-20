@@ -103,26 +103,35 @@ fn equal_values_share_a_definition() {
 }
 
 #[test]
-fn a_copy_made_unique_stays_apart() {
+fn make_unique_forks_the_generator() {
     let mut m = Model::new();
     generator::add(&mut m, SHELF).unwrap();
     let none = GenValues::new();
     let a = generator::place(&mut m, &[], "Shelf", &none, DMat4::IDENTITY).unwrap();
-    let b = generator::place(&mut m, &[], "Shelf", &none, DMat4::from_translation(DVec3::X * 2000.0)).unwrap();
+    // Copies of one generator: even with other values, a script edit would reach both.
+    let b = generator::place(&mut m, &[], "Shelf", &vals(&[("width", GenValue::Num(1000.0))]), DMat4::from_translation(DVec3::X * 2000.0)).unwrap();
     assert!(m.can_make_unique(&[], a));
     m.make_unique(&[], a).unwrap();
     let u = def_of(&m, a);
-    assert_ne!(u, def_of(&m, b));
-    assert!(m.defs[u].generated.as_ref().unwrap().unique);
-    assert!(!m.can_make_unique(&[], a));
-    // New values rebuild it in place; the values of the other copy don't bring it back.
-    generator::set_values(&mut m, &[], a, &vals(&[("width", GenValue::Num(1000.0))]), false).unwrap();
-    assert_eq!(def_of(&m, a), u);
-    generator::set_values(&mut m, &[], a, &GenValues::new(), true).unwrap();
-    assert_eq!(def_of(&m, a), u, "not shared with the equal copy");
-    // Another placement with those values shares the ordinary definition, not the unique one.
-    let c = generator::place(&mut m, &[], "Shelf", &none, DMat4::from_translation(DVec3::X * 4000.0)).unwrap();
-    assert_eq!(def_of(&m, c), def_of(&m, b));
+    assert_eq!(m.defs[u].generated.as_ref().unwrap().generator, "Shelf 2");
+    assert_eq!(m.defs[u].name, "Shelf 2");
+    let g2 = &m.generators["Shelf 2"];
+    assert!(g2.source.contains("// @generator Shelf 2") && g2.params == m.generators["Shelf"].params);
+    assert!(!m.can_make_unique(&[], a) && !m.can_make_unique(&[], b));
+    // A new script for "Shelf 2" (one more part) rebuilds only that copy.
+    let before_a = m.defs[def_of(&m, a)].mesh.instances.len();
+    let before_b = m.defs[def_of(&m, b)].mesh.instances.len();
+    let src2 = g2.source.replace("fn build(p) {", "fn build(p) {\n    box(vec3(0, 0, -100), 10, 10, 10);");
+    assert_ne!(src2, g2.source);
+    generator::add(&mut m, &src2).unwrap();
+    assert_eq!(m.defs[def_of(&m, a)].mesh.instances.len(), before_a + 1);
+    assert_eq!(m.defs[def_of(&m, b)].mesh.instances.len(), before_b);
+    // Renamed in its header: the generator and its components follow.
+    let g3 = varstotas_kernel::Generator::parse(&varstotas_kernel::generator::renamed_source(&src2, "Low Shelf")).unwrap();
+    assert!(m.rename_generator("Shelf 2", g3));
+    assert_eq!(m.defs[def_of(&m, a)].generated.as_ref().unwrap().generator, "Low Shelf");
+    assert_eq!(m.defs[def_of(&m, a)].name, "Low Shelf");
+    assert!(!m.generators.contains_key("Shelf 2"));
 }
 
 #[test]

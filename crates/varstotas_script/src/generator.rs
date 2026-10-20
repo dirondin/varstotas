@@ -129,15 +129,6 @@ fn generator(model: &Model, name: &str) -> Result<Generator, String> {
     model.generators.get(name).cloned().ok_or_else(|| format!("no generator `{name}` in the document"))
 }
 
-/// A free component name: `name`, else `name 2`, `name 3`…
-fn def_name(model: &Model, name: &str) -> String {
-    let taken: HashSet<&str> = model.defs.values().map(|d| d.name.as_str()).collect();
-    if !taken.contains(name) {
-        return name.to_string();
-    }
-    (2..).map(|n| format!("{name} {n}")).find(|n| !taken.contains(n.as_str())).expect("a free name")
-}
-
 /// The definition of generator `name` with `values` (normalized): the shared one, else a new
 /// one built now.
 pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefId, String> {
@@ -146,20 +137,15 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
     if let Some(d) = model.generated_def(name, &values) {
         return Ok(d);
     }
-    new_def(model, name, values, false)
-}
-
-/// A new definition of generator `name` built now with `values` (normalized).
-fn new_def(model: &mut Model, name: &str, values: GenValues, unique: bool) -> Result<DefId, String> {
-    let g = generator(model, name)?;
     let built = build(model, &g, &values)?;
     let d = model.defs.insert(Definition {
-        name: def_name(model, name),
+        // called as the generator, whatever the values (the Outliner shows what it is)
+        name: name.to_string(),
         mesh: Default::default(),
         is_group: false,
         guides: Default::default(),
         params: None,
-        generated: Some(Generated { generator: name.to_string(), values, unique }),
+        generated: Some(Generated { generator: name.to_string(), values }),
         source: None,
         rig: None,
         rigged: None,
@@ -199,9 +185,7 @@ pub fn rebuild_all(model: &mut Model, name: &str) -> Result<(), String> {
         let values = g.normalize(&kept)?;
         let built = build(model, &g, &values)?;
         model.graft_content(d, &built);
-        if let Some(x) = model.defs[d].generated.as_mut() {
-            x.values = values;
-        }
+        model.defs[d].generated = Some(Generated { generator: name.to_string(), values });
     }
     Ok(())
 }
@@ -227,22 +211,13 @@ pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, valu
         return Ok(());
     }
     let old = model.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def).ok_or("no such instance")?;
-    // A copy made unique keeps its own definition: rebuilt, or a new unique one when it was
-    // copied since.
-    let shared = if cur.unique { None } else { model.generated_def(&g.name, &values) };
-    let target = match shared {
+    let target = match model.generated_def(&g.name, &values) {
         Some(d) => d,
         None if model.instance_count(old) == 1 => {
             let built = build(model, &g, &values)?;
             model.graft_content(old, &built);
-            model.defs[old].generated = Some(Generated { generator: g.name.clone(), values, unique: cur.unique });
+            model.defs[old].generated = Some(Generated { generator: g.name.clone(), values });
             return Ok(());
-        }
-        None if cur.unique => {
-            let name = model.free_def_name(&model.defs[old].name);
-            let d = new_def(model, &g.name, values, true)?;
-            model.defs[d].name = name;
-            d
         }
         None => def_for(model, &g.name, &values)?,
     };

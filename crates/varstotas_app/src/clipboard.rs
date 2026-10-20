@@ -383,23 +383,45 @@ impl Clipboard {
                 return Ok(id);
             }
         }
-        // A generated component: its generator comes along (unless the target has one of that
-        // name), and equal values share the target's definition when the sources match.
+        // A generated component: its generator comes along. The target's generator with the
+        // same script (by that name, or a copy of it "<name> 2") is used, and equal values share
+        // its definition; when the target's one was edited, this script comes in beside it as
+        // "<name> 2".
+        let mut gen_name = None;
         if let Some(g) = &src.generated
             && let Some(gen_src) = self.model.generators.get(&g.generator)
         {
-            match model.generators.get(&g.generator) {
-                None => model.add_generator(gen_src.clone()),
-                Some(t) if t.source == gen_src.source => {
-                    if !top && let Some(id) = model.generated_def(&g.generator, &g.values) {
-                        maps.defs.insert(d, id);
-                        return Ok(id);
-                    }
+            let same_script = |t: &varstotas_kernel::Generator| t.source == varstotas_kernel::generator::renamed_source(&gen_src.source, &t.name);
+            let same = match model.generators.get(&g.generator).filter(|t| same_script(t)) {
+                Some(t) => Some(t.name.clone()),
+                None => model.generators.values().find(|t| same_or_numbered(&t.name, &g.generator) && same_script(t)).map(|t| t.name.clone()),
+            };
+            let name = match same {
+                Some(n) => n,
+                None if !model.generators.contains_key(&g.generator) => {
+                    model.add_generator(gen_src.clone());
+                    g.generator.clone()
                 }
-                Some(_) => {}
+                None => {
+                    let n = varstotas_kernel::model::free_name(model.generators.keys().map(|k| k.as_str()).collect(), &g.generator);
+                    let copy = varstotas_kernel::Generator::parse(&varstotas_kernel::generator::renamed_source(&gen_src.source, &n)).map_err(OpError::Invalid)?;
+                    model.add_generator(copy);
+                    n
+                }
+            };
+            if !top && let Some(id) = model.generated_def(&name, &g.values) {
+                maps.defs.insert(d, id);
+                return Ok(id);
+            }
+            if name != g.generator {
+                gen_name = Some(name);
             }
         }
         let mut def = src.clone();
+        if let (Some(x), Some(n)) = (def.generated.as_mut(), gen_name) {
+            x.generator = n.clone();
+            def.name = n;
+        }
         if let (Some(r), Some(nm)) = (def.rigged.as_mut(), rig_master) {
             r.master = nm;
             // a variant is called as its master (renamed when it came in beside a changed copy)
@@ -750,6 +772,23 @@ mod tests {
         other.try_commit("P", |m| varstotas_script::generator::set_values(m, &[], pasted[1], &v, false)).unwrap();
         let b = other.model.def_bounds(other.model.root_mesh().instances[pasted[1]].def).unwrap();
         assert!((b.max.x - b.min.x - 1000.0).abs() < 1e-6);
+
+        // The target's Shelf script edited: the original comes in beside it as "Shelf 2" (its
+        // header renamed), and placed again shares that one.
+        let edited = src.replace("fn build(p) {", "fn build(p) {\n    box(vec3(0, 0, -100), 10, 10, 10);");
+        other.try_commit("Edit", |m| varstotas_script::generator::add(m, &edited)).unwrap();
+        let mut more = Vec::new();
+        for k in 2..4 {
+            let t = DMat4::from_translation(DVec3::X * 2000.0 * k as f64);
+            let (ents, _) = other.commit("Paste", |m| clip.paste_into(m, ouid, &[], &t)).unwrap().unwrap();
+            let [EntityRef::Instance(c)] = ents.as_slice() else { panic!("{ents:?}") };
+            more.push(other.model.root_mesh().instances[*c].def);
+        }
+        let m = &other.model;
+        assert_eq!(more[0], more[1]);
+        assert_eq!(m.defs[more[0]].generated.as_ref().unwrap().generator, "Shelf 2");
+        assert_eq!(m.generators["Shelf 2"].source, varstotas_kernel::generator::renamed_source(src, "Shelf 2"));
+        assert_eq!(m.generators["Shelf"].source, edited, "the edited one stays");
     }
 
     #[test]

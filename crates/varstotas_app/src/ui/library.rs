@@ -1322,7 +1322,10 @@ impl VarstotasApp {
             self.actions.push(Action::PlaceGenerator(src, Default::default()));
         }
         if let Some(i) = edit {
-            self.gen_editor.edit(&gens[i].source, gens[i].file.clone());
+            match gens[i].folder == super::generators::DOCUMENT_FOLDER && gens[i].file.is_none() && !gens[i].bundled {
+                true => self.gen_editor.edit_doc(&gens[i].source, &gens[i].name),
+                false => self.gen_editor.edit(&gens[i].source, gens[i].file.clone()),
+            }
         }
         if !self.library.errors.is_empty() {
             ui.label(RichText::new(format!("{} file(s) could not be read", self.library.errors.len())).color(Color32::from_rgb(200, 50, 40)))

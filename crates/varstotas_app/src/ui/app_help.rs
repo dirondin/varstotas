@@ -174,7 +174,7 @@ const GROUPS: &[B] = &[
     B::Row("Make Component…", "a component: copies share one definition — editing one edits all"),
     B::Row("Double-click", "enter a group / component to edit it (the rest dims); Esc or Edit → Close Group leaves"),
     B::Row("Explode", "back to loose geometry"),
-    B::Row("Make Unique (right-click, Entity Info)", "a copy of a component gets its own definition (\"Box 2\"): editing it no longer changes the other copies"),
+    B::Row("Make Unique (right-click, Entity Info)", "a copy of a component gets its own definition (\"Box 2\"): editing it no longer changes the other copies; a generated one gets a copy of its generator (\"Shelf 2\" under In Model)"),
     B::Row("Place from the library again", "the copy in the model is reused while it is unchanged; after you edited it the library's original comes in as a new definition (\"Chair 2\")"),
     B::H("Components with parameters"),
     B::P("Edit → Make Parametric gives a component sizes X / Y / Z (stretch or scale) and a row of copies in Entity Info."),

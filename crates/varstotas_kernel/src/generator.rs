@@ -213,9 +213,6 @@ pub struct GenCheck {
 pub struct Generated {
     pub generator: String,
     pub values: GenValues,
-    /// Made unique (Make Unique): not shared with copies of equal values; new values rebuild it.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub unique: bool,
 }
 
 /// Parameter keys the Scale tool changes instead of stretching: local X, Y, Z.
@@ -495,12 +492,11 @@ impl Model {
         self.defs.get(d)?.generated.as_ref()
     }
 
-    /// A definition built by `generator` with exactly `values` (the shared one, not one made
-    /// unique).
+    /// A definition built by `generator` with exactly `values` (the shared one).
     pub fn generated_def(&self, generator: &str, values: &GenValues) -> Option<DefId> {
         self.defs
             .iter()
-            .find(|(_, d)| d.generated.as_ref().is_some_and(|g| !g.unique && g.generator == generator && g.values == *values))
+            .find(|(_, d)| d.generated.as_ref().is_some_and(|g| g.generator == generator && g.values == *values))
             .map(|(id, _)| id)
     }
 
@@ -521,6 +517,35 @@ impl Model {
             self.defs[d].generated = None;
         }
         Some(placed)
+    }
+
+    /// A copy of generator `name` under a free name ("Shelf 2": its `@generator` header
+    /// renamed). Returns the new name.
+    pub fn fork_generator(&mut self, name: &str) -> Option<String> {
+        let g = self.generators.get(name)?;
+        let new = crate::model::free_name(self.generators.keys().map(|k| k.as_str()).collect(), name);
+        let copy = Generator::parse(&renamed_source(&g.source, &new)).ok()?;
+        self.add_generator(copy);
+        Some(new)
+    }
+
+    /// Rename generator `old` to `g`'s name and give it `g`'s source (its components follow;
+    /// rebuilding them is the caller's). False when the new name is another generator's.
+    pub fn rename_generator(&mut self, old: &str, g: Generator) -> bool {
+        if g.name != old && self.generators.contains_key(&g.name) {
+            return false;
+        }
+        self.generators.remove(old);
+        let ds: Vec<DefId> = self.defs.iter().filter(|(_, d)| d.generated.as_ref().is_some_and(|x| x.generator == old)).map(|(id, _)| id).collect();
+        for d in ds {
+            let def = &mut self.defs[d];
+            def.name = g.name.clone();
+            if let Some(x) = def.generated.as_mut() {
+                x.generator = g.name.clone();
+            }
+        }
+        self.add_generator(g);
+        true
     }
 
     /// Placed instances of the components built by generator `name`.
@@ -669,4 +694,26 @@ impl Model {
             }
         }
     }
+}
+
+/// `source` with its `@generator` header line naming `name`.
+pub fn renamed_source(source: &str, name: &str) -> String {
+    let mut done = false;
+    let lines: Vec<String> = source
+        .lines()
+        .map(|l| {
+            let t = l.trim_start();
+            if !done && t.starts_with("//") && t.trim_start_matches('/').trim_start().starts_with("@generator") {
+                done = true;
+                format!("// @generator {name}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    let mut out = lines.join("\n");
+    if source.ends_with('\n') {
+        out.push('\n');
+    }
+    out
 }

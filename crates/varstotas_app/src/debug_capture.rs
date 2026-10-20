@@ -1566,7 +1566,15 @@ impl VarstotasApp {
             if !self.library.gens.scanned {
                 self.refresh_generators();
             }
-            match name.strip_prefix("gen_editor ").and_then(|n| self.generator_items().into_iter().find(|g| g.name.eq_ignore_ascii_case(n.trim()))) {
+            // `gen_editor doc:<name>`: the document's generator (In Model)
+            if let Some(n) = name.strip_prefix("gen_editor doc:")
+                && let Some(g) = self.doc.model.generators.get(n.trim())
+            {
+                let (src, n) = (g.source.clone(), g.name.clone());
+                self.gen_editor.edit_doc(&src, &n);
+                return;
+            }
+            match name.strip_prefix("gen_editor ").and_then(|n| self.generator_items().into_iter().find(|g| g.name.eq_ignore_ascii_case(n.trim()) && g.folder != super::ui::generators::DOCUMENT_FOLDER)) {
                 Some(it) => self.gen_editor.edit(&it.source, it.file.clone()),
                 None => self.gen_editor.new_generator(),
             }

@@ -1,0 +1,55 @@
+# Generators in the document (real mouse): the Shelf placed from Examples twice gets its copy
+# under In Model; editing that script rebuilds both; Make Unique (right-click) on one makes a
+# generator "Shelf 2" of its own, whose script then changes only that copy.
+wait 10
+view iso
+action components
+wait 40
+raw click 1270 273
+wait 3
+rawp click 0 0 0
+wait 3
+action generator Shelf
+wait 3
+rawp click 1500 0 0
+wait 3
+zoom_extents
+wait 5
+expect gens=["Shelf"] gen_defs=1
+expect lib_folders=[("Document", 1, false), ("Examples", 6, false)]
+expect tris=192
+# the In Model copy's script: one more part, Apply → both rebuilt
+action gen_editor doc:Shelf
+wait 10
+action ged_sub fn build(p) {|fn build(p) { box(vec3(0, 0, -100), 10, 10, 10);
+wait 10
+action ged_apply
+wait 5
+expect undo=Some("Update Generator Shelf")
+expect tris=216
+action ged_close
+wait 5
+tool select
+select_none
+rawp click 1500 150 1200
+wait 30
+# right-click the second shelf's top board → Make Unique
+raw rclick 850 259
+wait 5
+raw click 913 502
+wait 5
+expect undo=Some("Make Unique")
+expect gens=["Shelf", "Shelf 2"]
+expect lib_folders=[("Document", 2, false), ("Examples", 6, false)]
+# Shelf 2's script without the extra part: only that copy changes (216 − 12)
+action gen_editor doc:Shelf 2
+wait 10
+action ged_sub fn build(p) { box(vec3(0, 0, -100), 10, 10, 10);|fn build(p) {
+wait 10
+action ged_apply
+wait 5
+expect undo=Some("Update Generator Shelf 2")
+expect tris=204
+action ged_close
+wait 5
+quit

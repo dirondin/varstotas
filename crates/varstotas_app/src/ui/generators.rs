@@ -328,27 +328,16 @@ impl VarstotasApp {
     pub(crate) fn generator_items(&self) -> Vec<GenItem> {
         let mut out: Vec<GenItem> = self.library.gens.items.clone();
         out.extend(bundled().into_iter().filter(|b| !self.library.gens.items.iter().any(|x| x.name == b.name)));
-        for it in &mut out {
-            if let Some(g) = self.doc.model.generators.get(&it.name)
-                && g.source != it.source
-            {
-                it.source = g.source.clone();
-                it.file = None;
-                it.bundled = false;
-            }
-        }
-        for g in self.doc.model.generators.values() {
-            if !out.iter().any(|x| x.name == g.name)  {
-                out.push(GenItem {
-                    name: g.name.clone(),
-                    description: g.description.clone(),
-                    source: g.source.clone(),
-                    file: None,
-                    folder: DOCUMENT_FOLDER.into(),
-                    bundled: false,
-                });
-            }
-        }
+        // The document's generators, always under In Model: its own copies, edited apart from
+        // the library's.
+        out.extend(self.doc.model.generators.values().map(|g| GenItem {
+            name: g.name.clone(),
+            description: g.description.clone(),
+            source: g.source.clone(),
+            file: None,
+            folder: DOCUMENT_FOLDER.into(),
+            bundled: false,
+        }));
         out.sort_by(|a, b| a.folder.cmp(&b.folder).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
         out
     }
@@ -494,9 +483,11 @@ impl VarstotasApp {
 
     /// Make Unique for one shared selected component.
     pub(crate) fn make_unique_button(&mut self, ui: &mut Ui, ids: &[InstanceId]) {
+        let generated = ids.first().is_some_and(|i| self.doc.model.instance_generated(&self.doc.active_path, *i).is_some());
         let tip = match ids {
+            [_] if self.doc.can_make_unique() && generated => "A copy of its generator for this component (\"Shelf 2\" under In Model): editing that script changes only it",
             [_] if self.doc.can_make_unique() => "Give this component its own definition: editing it no longer changes the other copies",
-            [_] => "This copy is already unique: nothing else shares its definition",
+            [_] => "This copy is already unique: nothing else shares its definition or generator",
             _ => "Select one component",
         };
         let r = ui.add_enabled(self.doc.can_make_unique(), egui::Button::new("Make Unique"));

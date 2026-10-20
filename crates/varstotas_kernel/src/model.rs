@@ -11,6 +11,19 @@ use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
 use std::collections::{HashMap, HashSet};
 
+/// `name` when not `taken`, else "<name> 2", "<name> 3", … (a trailing number of `name` is
+/// replaced).
+pub fn free_name(taken: HashSet<&str>, name: &str) -> String {
+    if !taken.contains(name) {
+        return name.to_string();
+    }
+    let base = match name.rsplit_once(' ') {
+        Some((b, n)) if !b.is_empty() && n.parse::<u32>().is_ok() => b,
+        _ => name,
+    };
+    (2..).map(|n| format!("{base} {n}")).find(|n| !taken.contains(n.as_str())).expect("a free name")
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Definition {
     pub name: String,
@@ -898,6 +911,9 @@ impl Model {
     /// (edits inside any copy go to the master).
     pub fn can_make_unique(&self, path: &[InstanceId], inst: InstanceId) -> bool {
         let Some(d) = self.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def) else { return false };
+        if let Some(g) = self.defs.get(d).and_then(|x| x.generated.as_ref()) {
+            return self.generator_uses(&g.generator) > 1;
+        }
         match self.rig_master(d) {
             Some(m) if m != d => self.placed_count(m) > 1,
             _ => self.instance_count(d) > 1,
@@ -906,8 +922,8 @@ impl Model {
 
     /// Give an instance its own copy of the definition, named "<name> 2" (the next free number).
     /// A copy of a component with parameters gets its own master too (later edits inside it
-    /// leave the other copies alone); a generated one stays apart from copies with equal values
-    /// ([`crate::generator::Generated::unique`]). Nested components stay shared.
+    /// leave the other copies alone); a generated one its own generator — a copy of the script
+    /// named "<generator> 2", edited apart from the first. Nested components stay shared.
     pub fn make_unique(&mut self, path: &[InstanceId], inst: InstanceId) -> OpResult<()> {
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let d = self.defs[pd].mesh.instances.get(inst).ok_or(OpError::NotFound)?.def;
@@ -916,7 +932,12 @@ impl Model {
         }
         let mut copy = self.defs[d].clone();
         if let Some(g) = copy.generated.as_mut() {
-            g.unique = true;
+            let new = self.fork_generator(&g.generator).ok_or(OpError::Invalid("the generator's script can't be copied".into()))?;
+            g.generator = new.clone();
+            copy.name = new;
+            let nd = self.defs.insert(copy);
+            self.defs[pd].mesh.instances[inst].def = nd;
+            return Ok(());
         }
         match self.rig_master(d).filter(|m| *m != d) {
             Some(master) => {
@@ -938,15 +959,7 @@ impl Model {
     /// `name` when no definition has it, else "<name> 2", "<name> 3", … (a trailing number of
     /// `name` is replaced).
     pub fn free_def_name(&self, name: &str) -> String {
-        let taken: HashSet<&str> = self.defs.values().map(|d| d.name.as_str()).collect();
-        if !taken.contains(name) {
-            return name.to_string();
-        }
-        let base = match name.rsplit_once(' ') {
-            Some((b, n)) if !b.is_empty() && n.parse::<u32>().is_ok() => b,
-            _ => name,
-        };
-        (2..).map(|n| format!("{base} {n}")).find(|n| !taken.contains(n.as_str())).expect("a free name")
+        free_name(self.defs.values().map(|d| d.name.as_str()).collect(), name)
     }
 
     /// A hash of definition `d`'s content: geometry (to 0.001 mm), materials and tags by name,

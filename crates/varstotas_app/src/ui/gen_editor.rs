@@ -48,6 +48,9 @@ pub struct GenEditor {
     pub source: String,
     /// The library file it came from / was saved to.
     pub file: Option<PathBuf>,
+    /// The document's generator it edits (In Model): Apply updates that one, renaming it when
+    /// the header names it otherwise.
+    pub doc: Option<String>,
     /// Preview values (over the defaults).
     pub values: GenValues,
     editor: ScriptEditor,
@@ -75,6 +78,7 @@ impl Default for GenEditor {
             open: false,
             source: String::new(),
             file: None,
+            doc: None,
             values: GenValues::new(),
             editor: ScriptEditor::with_id("generator_editor_code"),
             parsed: Err(String::new()),
@@ -119,12 +123,19 @@ impl GenEditor {
         self.open = true;
         self.source = source.to_string();
         self.file = file;
+        self.doc = None;
         self.values.clear();
         self.bufs.clear();
         self.built = None;
         self.preview = None;
         self.edited_at = f64::NEG_INFINITY;
         self.status.clear();
+    }
+
+    /// Open the document's generator `name` (In Model).
+    pub fn edit_doc(&mut self, source: &str, name: &str) {
+        self.edit(source, None);
+        self.doc = Some(name.to_string());
     }
 
     pub fn new_generator(&mut self) {
@@ -240,10 +251,11 @@ impl VarstotasApp {
             {
                 self.actions.push(Action::GenEditorSave);
             }
-            if ui
-                .add_enabled(ok, egui::Button::new("Apply to Document"))
-                .on_hover_text("Use this source in the document: its components are rebuilt (one undo step)")
-                .clicked()
+            let (apply, tip) = match &self.gen_editor.doc {
+                Some(_) => ("Apply", "Update this generator of the document: all its components are rebuilt (one undo step)"),
+                None => ("Apply to Document", "Use this source in the document: its components are rebuilt (one undo step)"),
+            };
+            if ui.add_enabled(ok, egui::Button::new(apply)).on_hover_text(tip).clicked()
             {
                 self.actions.push(Action::GenEditorApply);
             }
@@ -289,7 +301,11 @@ impl VarstotasApp {
             (_, Some(Err(e))) => (e.clone(), Color32::from_rgb(200, 50, 40)),
             _ => (self.gen_editor.status.clone(), theme::text_dim()),
         };
-        let file = self.gen_editor.file.as_ref().map(|f| f.display().to_string()).unwrap_or_else(|| "not saved".into());
+        let file = match (&self.gen_editor.doc, &self.gen_editor.file) {
+            (Some(n), _) => format!("In Model: {n}"),
+            (None, Some(f)) => f.display().to_string(),
+            (None, None) => "not saved".into(),
+        };
         ui.label(RichText::new(if msg.is_empty() { file } else { msg }).small().color(colour));
     }
 
@@ -384,6 +400,27 @@ impl VarstotasApp {
     pub(crate) fn gen_editor_apply(&mut self) {
         let Ok(g) = &self.gen_editor.parsed else { return };
         let name = g.name.clone();
+        // The document's generator renamed in its header: it and its components follow.
+        if let Some(old) = self.gen_editor.doc.clone().filter(|o| *o != name && self.doc.model.generators.contains_key(o)) {
+            if self.doc.model.generators.contains_key(&name) {
+                self.gen_editor.status = format!("The document already has a generator named {name}");
+                return;
+            }
+            let g = g.clone();
+            let r = self.doc.try_commit(&format!("Update Generator {name}"), |m| {
+                m.rename_generator(&old, g);
+                varstotas_script::generator::rebuild_all(m, &name)
+            });
+            self.gen_editor.status = match r {
+                Some(_) => {
+                    self.gen_editor.doc = Some(name.clone());
+                    format!("{old} → {name}: applied to the document")
+                }
+                None => self.doc.last_error.take().unwrap_or_default(),
+            };
+            self.library.gens.thumbs.clear();
+            return;
+        }
         if self.doc.model.generators.get(&name).is_some_and(|x| x.source == self.gen_editor.source) {
             self.gen_editor.status = format!("{name}: the document already uses this source");
             return;
