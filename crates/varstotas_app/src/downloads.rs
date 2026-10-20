@@ -4,9 +4,8 @@
 //!
 //! - **Search on sites**: `~/.varstotas/sources.toml` keeps each site's own search address
 //!   (`{query}` is replaced); a click opens the site's results in the browser.
-//! - **Send to Varstotas**: a bookmarklet sends the open page (address, title, author, licence
-//!   text found on the page, links to model files) to a small local listener
-//!   (127.0.0.1, a fixed port, a token); Varstotas shows a *waiting card* with the credit.
+//! - **A page link dropped on the window** (or a pack downloaded in the browser): Varstotas
+//!   shows a *waiting card* with the page as the credit.
 //! - **Downloads watcher** (while a card waits, or always when switched on): a new model
 //!   file or archive in the Downloads folder is offered for import, its credit taken from
 //!   the card whose page the file came from (`kMDItemWhereFroms` on macOS, the
@@ -20,19 +19,14 @@
 use varstotas_kernel::{Attribution, LicenseKind};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, channel};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 /// Model files and archives the watcher offers.
 pub const FILE_EXTS: [&str; 11] = ["glb", "gltf", "fbx", "dae", "obj", "3mf", "ply", "stl", "dxf", "vrst", "zip"];
-
-/// The listener's port (the bookmarklet carries it; the next free one of 10 when taken).
-pub const SEND_PORT: u16 = 47815;
 
 // ---- Sites (sources.toml) ---------------------------------------------------------------
 
@@ -137,8 +131,9 @@ impl Expect {
         Self::new(a.attribution(), Vec::new())
     }
 
-    /// What the bookmarklet sent (`url`, `title`, `author`, `license`, `files` lines).
-    pub fn from_send(q: &HashMap<String, String>, sites: &[Site]) -> Option<Self> {
+    /// A page: its `url` and, when known, `title`, `author`, `license` and `files` lines (a
+    /// page link dropped on the window; the harness).
+    pub fn from_page(q: &HashMap<String, String>, sites: &[Site]) -> Option<Self> {
         let url = q.get("url").filter(|u| u.starts_with("http"))?.clone();
         let site = sites.iter().find(|s| host(&s.search) == host(&url));
         let mut license = q.get("license").cloned().unwrap_or_default();
@@ -298,34 +293,7 @@ impl Drop for Watcher {
     }
 }
 
-// ---- Send to Varstotas -------------------------------------------------------------------
-
-/// The token of the bookmarklet (`~/.varstotas/send_token`, made once).
-pub fn send_token() -> String {
-    let path = crate::bridge::home_dir().map(|d| d.join("send_token"));
-    if let Some(t) = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| t.trim().to_string()).filter(|t| t.len() >= 16) {
-        return t;
-    }
-    let t = crate::bridge::random_token();
-    if let Some(p) = path {
-        if let Some(d) = p.parent() {
-            let _ = std::fs::create_dir_all(d);
-        }
-        let _ = std::fs::write(&p, &t);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
-        }
-    }
-    t
-}
-
-/// The bookmarklet: sends the page to the listener at `port` (a small window that closes).
-pub fn bookmarklet(port: u16, token: &str) -> String {
-    let js = r#""#;
-    format!("javascript:{}", js.replace("PORT", &port.to_string()).replace("TOKEN", token))
-}
+// ---- Queries ---------------------------------------------------------------------------
 
 /// A `?a=1&b=2` query (percent-decoded, `+` as space).
 pub fn parse_query(q: &str) -> HashMap<String, String> {
@@ -352,77 +320,6 @@ pub fn parse_query(q: &str) -> HashMap<String, String> {
         String::from_utf8_lossy(&out).to_string()
     }
     q.trim_start_matches('?').split('&').filter_map(|kv| kv.split_once('=').map(|(k, v)| (dec(k), dec(v)))).collect()
-}
-
-/// The listener: `GET /send?t=<token>&url=…` → the query to the app; answers a small page.
-pub struct SendServer {
-    pub port: u16,
-    pub rx: Receiver<HashMap<String, String>>,
-    stop: Arc<AtomicBool>,
-}
-
-impl Drop for SendServer {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        // Wake the listener up so it sees the flag.
-        let _ = TcpStream::connect_timeout(&([127, 0, 0, 1], self.port).into(), Duration::from_millis(200));
-    }
-}
-
-impl SendServer {
-    pub fn start(token: String, ctx: egui::Context) -> std::io::Result<Self> {
-        let listener = (SEND_PORT..SEND_PORT + 10).find_map(|p| TcpListener::bind(("127.0.0.1", p)).ok()).ok_or_else(|| std::io::Error::other("ports 47815–47824 are taken"))?;
-        let port = listener.local_addr()?.port();
-        let (tx, rx) = channel();
-        let stop = Arc::new(AtomicBool::new(false));
-        let st = stop.clone();
-        std::thread::Builder::new().name("send-to-varstotas".into()).spawn(move || {
-            for s in listener.incoming().flatten() {
-                if st.load(Ordering::Relaxed) {
-                    break;
-                }
-                let (tx, tok, ctx) = (tx.clone(), token.clone(), ctx.clone());
-                let _ = std::thread::Builder::new().name("send-conn".into()).spawn(move || serve(s, &tok, &tx, &ctx));
-            }
-        })?;
-        Ok(Self { port, rx, stop })
-    }
-}
-
-const PAGE: &str = "<!doctype html><meta charset=utf-8><title>Varstotas</title><body style=\"font:15px -apple-system,sans-serif;padding:24px\">MSG<script>setTimeout(()=>window.close(),1800)</script>";
-
-fn serve(stream: TcpStream, token: &str, tx: &Sender<HashMap<String, String>>, ctx: &egui::Context) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let Ok(mut w) = stream.try_clone() else { return };
-    let mut r = BufReader::new(stream);
-    let mut first = String::new();
-    if r.read_line(&mut first).is_err() {
-        return;
-    }
-    // Headers (ignored).
-    let mut h = String::new();
-    while r.read_line(&mut h).is_ok_and(|n| n > 0) && h.trim() != "" {
-        h.clear();
-    }
-    let target = first.split_whitespace().nth(1).unwrap_or("");
-    let (path, query) = target.split_once('?').unwrap_or((target, ""));
-    let (code, msg) = if first.starts_with("GET ") && path == "/send" {
-        let q = parse_query(query);
-        if q.get("t").map(String::as_str) != Some(token) {
-            ("403 Forbidden", "Varstotas: this bookmarklet is out of date. Make a new one in Window → 3D Library → Other Sites.")
-        } else {
-            let _ = tx.send(q);
-            ctx.request_repaint();
-            ("200 OK", "✔ Sent to Varstotas. Download the model: Varstotas imports it from your Downloads folder.")
-        }
-    } else if path == "/ping" {
-        ("200 OK", "Varstotas")
-    } else {
-        ("404 Not Found", "Not found")
-    };
-    let body = PAGE.replace("MSG", msg);
-    let _ = write!(w, "HTTP/1.1 {code}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n{body}", body.len());
-    let _ = w.flush();
 }
 
 // ---- The import of a downloaded file --------------------------------------------------
@@ -521,13 +418,14 @@ fn safe_rel(p: &str) -> Option<PathBuf> {
 
 // ---- Licences --------------------------------------------------------------------------
 
-/// The reminder an export of a model with these credits gets: non-commercial, share-alike,
-/// no-derivatives or unknown licences (None when all allow anything).
+/// The reminder an export or a placement of models with these credits gets: non-commercial,
+/// share-alike, no-derivatives, a site's own (royalty-free, personal use, usage conditions)
+/// or unknown licences (None when all are CC0 / CC-BY).
 pub fn licence_warning(credits: &[Attribution]) -> Option<String> {
     let mut by: Vec<(LicenseKind, Vec<&str>)> = Vec::new();
     for c in credits {
         let k = c.license_kind();
-        if matches!(k, LicenseKind::Cc0 | LicenseKind::CcBy | LicenseKind::Standard) {
+        if matches!(k, LicenseKind::Cc0 | LicenseKind::CcBy) {
             continue;
         }
         match by.iter_mut().find(|(x, _)| *x == k) {
@@ -705,8 +603,6 @@ pub struct Downloads {
     /// Files waiting for Import / Ignore (the first is shown).
     pub offers: Vec<Offer>,
     pub watcher: Option<Watcher>,
-    pub send: Option<SendServer>,
-    pub send_error: Option<String>,
     /// `sources.toml` (read when the 3D Library opens; None = not yet).
     pub sites: Option<Result<Vec<Site>, String>>,
     pub importing: Option<Receiver<Imported>>,
@@ -770,21 +666,21 @@ mod tests {
         let q = parse_query("t=abc&url=https%3A%2F%2Fwww.printables.com%2Fmodel%2F12-chair&title=Chair+by+Bob+%7C+Printables&license=CC+BY-NC+4.0&files=https%3A%2F%2Fx.org%2Fa.stl%0Ahttps%3A%2F%2Fx.org%2Fb.zip");
         assert_eq!(q["t"], "abc");
         let sites = default_sites();
-        let e = Expect::from_send(&q, &sites).unwrap();
+        let e = Expect::from_page(&q, &sites).unwrap();
         assert_eq!(e.credit.source, "Printables");
         assert_eq!(e.credit.title, "Chair by Bob");
         assert_eq!(e.credit.license_kind(), LicenseKind::CcByNc);
         assert_eq!(e.files, ["https://x.org/a.stl", "https://x.org/b.zip"]);
         // A site's default licence when the page had none.
         let q2 = parse_query("url=https://free3d.com/3d-model/lamp-1.html&title=Lamp");
-        let e2 = Expect::from_send(&q2, &sites).unwrap();
+        let e2 = Expect::from_page(&q2, &sites).unwrap();
         assert_eq!(e2.credit.license_kind(), LicenseKind::Standard);
         // The file from the first card's page goes to it; an unknown one to the newest card.
         let cards = vec![e.clone(), e2.clone()];
         assert_eq!(match_expect(&cards, &["https://x.org/a.stl".into()]).unwrap().id, e.id);
         assert_eq!(match_expect(&cards, &["https://www.printables.com/dl/9".into()]).unwrap().id, e.id);
         assert_eq!(match_expect(&cards, &[]).unwrap().id, e2.id);
-        assert!(Expect::from_send(&parse_query("title=x"), &sites).is_none());
+        assert!(Expect::from_page(&parse_query("title=x"), &sites).is_none());
         assert_eq!(search_url(&sites[0], "red chair"), "https://www.printables.com/search/models?q=red%20chair");
         assert_eq!(parse_mdls_list("(\n    \"https://a.org/f.zip\",\n    \"https://a.org/page\"\n)"), ["https://a.org/f.zip", "https://a.org/page"]);
         assert!(parse_mdls_list("(null)").is_empty());
@@ -834,7 +730,8 @@ mod tests {
     #[test]
     fn licence_warnings_and_saved_assets() {
         let c = |t: &str, l: &str| Attribution { title: t.into(), license: l.into(), ..Default::default() };
-        assert_eq!(licence_warning(&[c("Rock", "CC0"), c("Lamp", "CC-BY 4.0"), c("Desk", "Royalty Free")]), None);
+        assert_eq!(licence_warning(&[c("Rock", "CC0"), c("Lamp", "CC-BY 4.0")]), None);
+        assert!(licence_warning(&[c("Desk", "Royalty Free")]).unwrap().contains("Standard / personal use (Desk)"));
         let w = licence_warning(&[c("Chair", "CC BY-NC 4.0"), c("Bust", ""), c("Car", "CC-BY-NC")]).unwrap();
         assert!(w.contains("CC-BY-NC (Chair, Car)") && w.contains("Unknown (Bust)") && w.find("NC").unwrap() < w.find("Unknown").unwrap(), "{w}");
         let a = crate::online_models::url_asset("https://x.org/m/chair.glb");
@@ -849,27 +746,6 @@ mod tests {
         let json = serde_json::to_string(&st).unwrap();
         let st2: LibraryState = serde_json::from_str(&json).unwrap();
         assert_eq!(st2.history, st.history);
-    }
-
-    /// The listener: a wrong token is refused, the right one hands the query over.
-    #[test]
-    fn send_listener() {
-        use std::io::Read;
-        let srv = SendServer::start("tok1234567890abcdef".into(), egui::Context::default()).unwrap();
-        let get = |path: &str| {
-            let mut c = TcpStream::connect(("127.0.0.1", srv.port)).unwrap();
-            write!(c, "GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").unwrap();
-            let mut r = String::new();
-            c.read_to_string(&mut r).unwrap();
-            r
-        };
-        assert!(get("/send?t=bad&url=https%3A%2F%2Fa.org").starts_with("HTTP/1.1 403"));
-        assert!(srv.rx.try_recv().is_err());
-        assert!(get("/send?t=tok1234567890abcdef&url=https%3A%2F%2Fa.org%2Fm&title=Lamp").starts_with("HTTP/1.1 200"));
-        let q = srv.rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        assert_eq!((q["url"].as_str(), q["title"].as_str()), ("https://a.org/m", "Lamp"));
-        let b = bookmarklet(srv.port, "tok1234567890abcdef");
-        assert!(b.starts_with("javascript:") && b.contains(&format!("127.0.0.1:{}/send?t=tok1234567890abcdef", srv.port)));
     }
 
     /// The watcher: files there before are not new; a new model file is sent once it is
@@ -904,6 +780,7 @@ mod tests {
             ("CC-BY-ND", LicenseKind::CcByNd),
             ("Royalty Free", LicenseKind::Standard),
             ("NASA media guidelines", LicenseKind::Standard),
+            ("Smithsonian Open Access: check the usage", LicenseKind::Standard),
             ("", LicenseKind::Unknown),
             ("All rights reserved", LicenseKind::Unknown),
         ] {

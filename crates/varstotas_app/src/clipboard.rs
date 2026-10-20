@@ -98,6 +98,11 @@ fn collect_edges(model: &Model, d: DefId, m: DMat4, out: &mut Vec<(DVec3, DVec3)
 }
 
 impl Clipboard {
+    /// The credits of downloaded models in the clipboard (licence warnings on placement).
+    pub fn credits(&self) -> Vec<varstotas_kernel::Attribution> {
+        self.model.attributions()
+    }
+
     /// Copy the document's selection (entities of the active context + selected guides).
     pub fn from_selection(doc: &Document) -> OpResult<Clipboard> {
         if !doc.has_selection() {

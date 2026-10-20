@@ -299,6 +299,7 @@ impl VarstotasApp {
                 ui.label(RichText::new("Free CC0 photo scans (colour, normal, roughness, occlusion, metal maps at real-world size). Downloads go to the materials library.").small().weak());
             }
         }
+        crate::ui::licences::terms_notice(ui, self.online.source.terms());
         ui.separator();
         // Details of the selected asset (bottom), the grid above.
         let sel = self.online.selected.clone().and_then(|k| self.online.asset(&k).cloned());

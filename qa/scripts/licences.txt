@@ -1,0 +1,24 @@
+# Help → Licences…: the menu item opens the window on the Varstotas tab; the tabs switch;
+# a crate picked in Open Source shows its texts. (No screenshot right after the menu
+# click: a capture while the menu closes hangs.)
+wait 10
+raw click 456 -105
+wait 5
+raw click 480 5
+wait 10
+expect licences=(true varstotas None)
+action licences formats
+wait 10
+expect licences=(true formats None)
+screenshot shots/lic_formats.bmp
+action licences libraries
+wait 10
+expect licences=(true libraries None)
+screenshot shots/lic_libraries.bmp
+action licences components
+wait 5
+action licences_pick egui
+wait 10
+expect licences=(true components Some("egui"))
+screenshot shots/lic_components.bmp
+quit

@@ -1,4 +1,4 @@
-//! Layout sheets on paper (a light page layout): each viewport is the line drawing of a scene
+//! Layout sheets on paper (light page layout): each viewport is the line drawing of a scene
 //! (`vector_export::view_lines`) fitted into its rectangle or drawn to scale 1:N, clipped to
 //! the rectangle, with optional overall dimensions; plus free texts, parts tables, a border
 //! and a title block. `standard_views` lays out front / top / left / iso views at a common

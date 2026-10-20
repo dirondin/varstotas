@@ -445,10 +445,19 @@ impl VarstotasApp {
             let resp = Modal::new(Id::new("about")).show(ctx, |ui| {
                 ui.set_width(320.0);
                 ui.heading("Varstotas");
-                ui.label("A light, native 3D modeler in the spirit of classic modellers.");
+                ui.label("A light, native 3D modeler for drawing and building.");
                 ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
+                ui.label(RichText::new("Free software under the MIT licence.").color(theme::text_dim()));
                 ui.add_space(8.0);
-                ui.button("Close").clicked()
+                let mut close = false;
+                ui.horizontal(|ui| {
+                    if ui.button("Licences…").clicked() {
+                        self.open_licences(crate::ui::licences::Tab::Varstotas);
+                        close = true;
+                    }
+                    close |= ui.button("Close").clicked();
+                });
+                close
             });
             if resp.inner || resp.should_close() {
                 self.show_about = false;

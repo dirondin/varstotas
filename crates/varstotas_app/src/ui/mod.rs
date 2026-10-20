@@ -21,6 +21,7 @@ pub mod online_mats;
 pub mod realistic;
 pub mod render;
 pub mod rig_editor;
+pub mod licences;
 pub mod script_help;
 pub mod app_help;
 pub mod view_hud;

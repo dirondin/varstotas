@@ -302,8 +302,13 @@ impl VarstotasApp {
     /// Start placing library item `i`.
     pub(crate) fn place_component(&mut self, i: usize) {
         let Some(item) = self.library.items.get(i) else { return };
+        let warning = crate::downloads::licence_warning(&item.clip.credits());
         let tool = crate::tools::transform::PasteTool::named(item.clip.clone(), item.name.clone());
         self.install_tool(Box::new(tool));
+        // A model whose licence limits its use: say so when it is placed.
+        if let Some(w) = warning {
+            self.flash(w);
+        }
     }
 
     /// Default name for Save Selection: the selected group / component's name.

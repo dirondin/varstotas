@@ -102,7 +102,7 @@ pub struct ModelWindow {
     pub state: LibraryState,
     /// The Favourites / Downloaded lists are to be made again.
     pub(crate) saved_dirty: bool,
-    /// Sites without an API: waiting cards, the Downloads watcher, Send to Varstotas, offers.
+    /// Sites without an API: waiting cards, the Downloads watcher, offers.
     pub dl: Downloads,
     pub selected: Option<String>,
     /// The last finished download: "<key> ok <file> faces=N" / "<key> error <message>" (harness).
@@ -543,6 +543,7 @@ impl VarstotasApp {
                 ui.label(RichText::new(format!("{} Downloads go to the components library.", self.models.source.description())).small().weak());
             }
         }
+        crate::ui::licences::terms_notice(ui, self.models.source.terms());
         // Import from URL.
         ui.horizontal(|ui| {
             ui.label("From URL");

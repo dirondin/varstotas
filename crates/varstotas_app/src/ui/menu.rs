@@ -493,6 +493,10 @@ impl VarstotasApp {
                     ui.close();
                 }
                 ui.separator();
+                if ui.add(egui::Button::new("Licences…").selected(self.licences.open)).on_hover_text("Varstotas's licence, the open-source components, file formats and online libraries with their terms").clicked() {
+                    self.open_licences(crate::ui::licences::Tab::Varstotas);
+                    ui.close();
+                }
                 self.item(ui, "About Varstotas", None, true, Action::About);
             });
         });

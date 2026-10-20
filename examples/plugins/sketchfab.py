@@ -2,6 +2,7 @@
 # @model_source search
 # @description Downloadable models of Sketchfab (Creative Commons; the credit goes with the component). Searching is open; downloading needs your API token (sketchfab.com/settings/password). Type a search and press Enter. The protocol: `plugin.py search | download`, the arguments as JSON on stdin, the answer as JSON on the last line of stdout.
 # @param token:text = "" "API token"
+# @notice Models provided by Sketchfab (sketchfab.com). Each has its own licence (CC0, CC-BY, CC-BY-NC, Standard…): it goes with the component; credit the author and Sketchfab, and check NC / ND / Standard licences before commercial use.
 import json
 import os
 import subprocess

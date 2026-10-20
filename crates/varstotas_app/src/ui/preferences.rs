@@ -64,7 +64,7 @@ impl Section {
             Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise",
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle",
             Section::Libraries => "components materials folder examples in model tiles small large list",
-            Section::Downloads => "watch downloads folder send to varstotas bookmarklet browser",
+            Section::Downloads => "watch downloads folder browser",
             Section::Interface => "theme light dark system appearance scale size zoom toolbar icons",
             Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
             Section::Shortcuts => "keyboard shortcuts hotkeys keys",
@@ -307,7 +307,6 @@ impl VarstotasApp {
             Section::Downloads => {
                 p.watch_downloads = d.watch_downloads;
                 p.downloads_watch_dir = None;
-                p.send_to_varstotas = d.send_to_varstotas;
             }
             Section::View => p.new_view = ViewDefaults::default(),
             Section::Navigation => p.nav = Default::default(),
@@ -479,22 +478,6 @@ impl VarstotasApp {
         ui.checkbox(&mut self.prefs.watch_downloads, "Offer new model files for import")
             .on_hover_text("Every new model file or archive in the folder is offered for import (always on while a page of Other Sites waits)");
         folder_row(ui, "Watched folder", &mut self.prefs.downloads_watch_dir, crate::downloads::downloads_folder(), "Where your browser saves files");
-        heading(ui, "Send to Varstotas");
-        ui.checkbox(&mut self.prefs.send_to_varstotas, "Listen for the bookmarklet")
-            .on_hover_text("A bookmarklet: on a model's page, click it to send the page's title, author and licence here");
-        if let Some(s) = &self.models.dl.send {
-            let port = s.port;
-            ui.horizontal(|ui| {
-                note(ui, &format!("listening on 127.0.0.1:{port}"));
-                if ui.button("Copy Bookmarklet").on_hover_text("Make a bookmark in the browser and paste this as its address").clicked() {
-                    ui.ctx().copy_text(crate::downloads::bookmarklet(port, &crate::downloads::send_token()));
-                    self.flash("Bookmarklet copied: make a bookmark and paste it as the address");
-                }
-            });
-        }
-        if let Some(e) = &self.models.dl.send_error {
-            ui.colored_label(egui::Color32::from_rgb(200, 60, 40), RichText::new(e).small());
-        }
         note(ui, "Also in Window → 3D Library… → Other Sites.");
     }
 

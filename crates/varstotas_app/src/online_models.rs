@@ -29,6 +29,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+/// The licence text of Smithsonian models (read as a site's own licence: a warning on use).
+pub const SMITHSONIAN_LICENCE: &str = "Smithsonian Open Access: check the usage on the object's page";
+
 #[derive(Clone, Debug)]
 pub enum ModelSource {
     PolyHaven,
@@ -125,11 +128,26 @@ impl ModelSource {
         }
     }
 
+    /// The source's terms, shown above its models (empty when none): the models' licence and
+    /// what using the source asks for. A plugin's comes from its `@notice` line.
+    pub fn terms(&self) -> &str {
+        match self {
+            ModelSource::PolyHaven => "Powered by Poly Haven (polyhaven.com). The models are CC0: free for any use, also commercial; no credit needed.",
+            ModelSource::Smithsonian => "Most objects are CC0, but some are marked «Usage conditions apply» (non-commercial only). Check the object's page before commercial use; trademarks and other rights in the objects themselves are not covered.",
+            ModelSource::Nasa => "NASA media are generally not copyrighted, but the NASA insignia and logos on models are protected, and nothing may suggest NASA endorses your product.",
+            ModelSource::Kenney => "Kenney's packs are CC0: free for any use, also commercial; credit optional. Kenney's logo is not part of it.",
+            ModelSource::Quaternius => "Quaternius' packs are CC0: free for any use, also commercial; credit optional.",
+            ModelSource::Web => "",
+            ModelSource::Favourites | ModelSource::History => "Each model keeps the licence it came with (its details; File → Export → Attributions). Varstotas warns when a placed or exported model's licence limits its use.",
+            ModelSource::Plugin(p) => &p.plugin.notice,
+        }
+    }
+
     pub fn description(&self) -> &str {
         match self {
             ModelSource::PolyHaven => "Free CC0 models (glTF, 1K textures) at their real size.",
-            ModelSource::Smithsonian => "Smithsonian Open Access 3D (CC0): scans of museum objects. Type a search and press Enter.",
-            ModelSource::Nasa => "NASA 3D Resources: spacecraft, rovers, planets (GLB; free for non-commercial and educational use, see NASA media guidelines).",
+            ModelSource::Smithsonian => "Smithsonian Open Access 3D: scans of museum objects. Type a search and press Enter.",
+            ModelSource::Nasa => "NASA 3D Resources: spacecraft, rovers, planets (GLB).",
             ModelSource::Kenney => "Kenney's game asset packs (CC0): a pack downloads whole, each model becomes a component in Components → Kenney → <pack>.",
             ModelSource::Quaternius => "Quaternius' low-poly packs (CC0). They are downloaded in your browser (Google Drive): Varstotas opens the page and imports the archive from Downloads.",
             ModelSource::Web => "",
@@ -268,7 +286,9 @@ pub fn parse_smithsonian(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
                 let mut m = ModelAsset::blank(ModelSource::Smithsonian, id.clone());
                 m.name = r["title"].as_str().unwrap_or(&id).to_string();
                 m.author = "Smithsonian Institution".into();
-                m.license = "CC0".into();
+                // Most 3D objects are CC0, some "Usage conditions apply" (non-commercial); the
+                // API doesn't say which, so the model's page has to be checked.
+                m.license = SMITHSONIAN_LICENCE.into();
                 m.category = "Smithsonian".into();
                 m.format = "GLB".into();
                 out.push(m);

@@ -13,6 +13,7 @@
 //! // @material_source                      (a source of the Online Materials window)
 //! // @model_import ply                      (3D models: File → Import, 3D Library downloads)
 //! // @model_source [search]                 (a source of the 3D Library window)
+//! // @notice Models are CC-BY: credit …      (terms shown above a source's assets; repeatable)
 //! ```
 //!
 //! The header ends at the first line that is not a comment. Examples ship in `examples/plugins`
@@ -84,6 +85,9 @@ pub struct Plugin {
     /// `@model_source`: a catalogue of 3D models (3D Library window); `@model_source search`:
     /// the source searches itself (`search(query, params)` instead of `catalogue(params)`).
     pub model_source: Option<bool>,
+    /// `@notice`: the source's terms (licences, what its site asks for), shown as a warning
+    /// above its assets in the 3D Library / Online Materials window (several lines joined).
+    pub notice: String,
 }
 
 impl Plugin {
@@ -180,6 +184,7 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         material_source: false,
         model_import: Vec::new(),
         model_source: None,
+        notice: String::new(),
     };
     for line in src.lines() {
         let t = line.trim();
@@ -212,6 +217,12 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             "material_source" => p.material_source = true,
             "model_import" => p.model_import = exts(),
             "model_source" => p.model_source = Some(rest.eq_ignore_ascii_case("search")),
+            "notice" => {
+                if !p.notice.is_empty() {
+                    p.notice.push(' ');
+                }
+                p.notice.push_str(rest);
+            }
             // Unknown tags are ignored (room for later additions).
             _ => {}
         }
@@ -311,6 +322,8 @@ let x = 1; // @name not a header any more
         assert_eq!((p.name.as_str(), p.lang, p.import.as_slice(), p.menu.len()), ("points in", Lang::Python, &["csv".to_string()][..], 1));
         let p = parse("// @name Unity\n// @material_import .mat, MATERIAL\n", Path::new("u.rhai")).unwrap();
         assert_eq!((p.material_import.as_slice(), p.material_source, p.in_menu()), (&["mat".to_string(), "material".to_string()][..], false, false));
+        let p = parse("# @model_source search\n# @notice Models are CC-BY:\n# @notice credit the authors.\n", Path::new("s.py")).unwrap();
+        assert_eq!(p.notice, "Models are CC-BY: credit the authors.");
         let p = parse("# @material_source\n", Path::new("site.py")).unwrap();
         assert!(p.material_source && !p.in_menu());
         assert!(parse("// @name X\n", Path::new("x.rhai")).unwrap().in_menu());

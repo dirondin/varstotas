@@ -60,6 +60,15 @@ impl Source {
         }
     }
 
+    /// The source's terms, shown above its materials (a plugin's `@notice`).
+    pub fn terms(&self) -> &str {
+        match self {
+            Source::PolyHaven => "Powered by Poly Haven (polyhaven.com). The textures are CC0: free for any use, also commercial; no credit needed.",
+            Source::AmbientCg => "ambientCG materials are CC0: free for any use, also commercial; credit optional.",
+            Source::Plugin(p) => &p.plugin.notice,
+        }
+    }
+
     /// Short name (harness, cache files): `polyhaven`, `ambientcg`, `plugin-<file stem>`.
     pub fn key(&self) -> String {
         match self {

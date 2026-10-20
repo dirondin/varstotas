@@ -1,4 +1,4 @@
-//! Layout sheets (a light page layout): paper sheets stored in the document with viewports of
+//! Layout sheets (light page layout): paper sheets stored in the document with viewports of
 //! the model (a scene, or a view captured when the viewport was made), texts and a title
 //! block. Drawing them on paper is the app's job (`varstotas_app::layout`); this module only
 //! keeps the data and the scene state a viewport shows.

@@ -2,6 +2,7 @@
 # @material_source
 # @description An example material source in Python: ambientCG materials matching a search, downloaded as a zip of 1K maps. The protocol: `plugin.py catalogue | download`, the arguments as JSON on stdin, the answer as JSON on the last line of stdout.
 # @param search:text = "metal" "Search"
+# @notice ambientCG materials are CC0: free for any use, also commercial; credit optional.
 import json
 import os
 import subprocess

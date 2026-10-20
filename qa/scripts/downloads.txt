@@ -1,4 +1,4 @@
-# 3D Library → sites without an API (offline): the Send to Varstotas bookmarklet's message
+# 3D Library → sites without an API (offline): a page (dl_page: address, title, licence)
 # makes a waiting card; the archive downloaded from that page (dropped on the window) is
 # offered with the card's credit; one of its two models unticked (real click), Import makes
 # a component in Components → Printables; the Downloaded list shows it, ☆ marks it, Place
@@ -10,7 +10,7 @@ action components
 wait 10
 action models favourites
 wait 10
-action dl_send url=https%3A%2F%2Fwww.printables.com%2Fmodel%2F1-chairs&title=Two+Chairs+%7C+Printables&author=Bob&license=CC+BY-NC+4.0
+action dl_page url=https%3A%2F%2Fwww.printables.com%2Fmodel%2F1-chairs&title=Two+Chairs+%7C+Printables&author=Bob&license=CC+BY-NC+4.0
 wait 5
 expect downloads=(waiting=["Two Chairs [CC BY-NC 4.0]"] offers=0
 screenshot shots/dl_1.bmp

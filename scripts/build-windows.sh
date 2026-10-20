@@ -56,7 +56,9 @@ rm -f "$ZIP"
 STAGE="$WORK/stage"
 mkdir -p "$STAGE"
 cp "$EXE" "$STAGE/varstotas.exe"
-(cd "$STAGE" && zip -q -9 "$ZIP" varstotas.exe)
+cp "$ROOT/LICENSE" "$STAGE/LICENSE.txt"
+cp "$ROOT/THIRD-PARTY-LICENSES.txt" "$STAGE/"
+(cd "$STAGE" && zip -q -9 "$ZIP" varstotas.exe LICENSE.txt THIRD-PARTY-LICENSES.txt)
 
 echo "==> done"
 file "$EXE"

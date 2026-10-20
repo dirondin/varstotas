@@ -1,9 +1,9 @@
 //! 3D Library → sites without an API (see `crate::downloads`): the «Search on» row, the
-//! Other Sites section (Send to Varstotas, the Downloads watcher, waiting cards), the Import
+//! Other Sites section (the Downloads watcher, waiting cards), the Import
 //! Download window for a file that came, and files / links dropped on the window.
 
 use crate::app::VarstotasApp;
-use crate::downloads::{Expect, Offer, SavedAsset, SendServer, Watcher, import_offer, search_url, send_token};
+use crate::downloads::{Expect, Offer, SavedAsset, Watcher, import_offer, search_url};
 use crate::ui::online_mats::open_url;
 use egui::{Color32, RichText, Ui};
 use varstotas_kernel::{Attribution, LicenseKind};
@@ -77,14 +77,14 @@ impl VarstotasApp {
         let sites = self.models.dl.sites().to_vec();
         let mut q = std::collections::HashMap::new();
         q.insert("url".to_string(), url.to_string());
-        if let Some(e) = Expect::from_send(&q, &sites) {
+        if let Some(e) = Expect::from_page(&q, &sites) {
             self.flash(format!("Waiting for a file from {}: download it in the browser", e.credit.source));
             self.downloads_expect(e);
             self.models.open = true;
         }
     }
 
-    /// Run every frame: the watcher and the listener on / off, what they found, imports done,
+    /// Run every frame: the watcher on / off, what it found, imports done,
     /// dropped files, the Import Download window.
     pub(crate) fn downloads_tick(&mut self, ctx: &egui::Context) {
         let want = self.prefs.watch_downloads || !self.models.dl.expects.is_empty();
@@ -95,22 +95,9 @@ impl VarstotasApp {
             (Some(_), false, _) => self.models.dl.watcher = None,
             _ => {}
         }
-        if self.prefs.send_to_varstotas && self.models.dl.send.is_none() && self.models.dl.send_error.is_none() {
-            match SendServer::start(send_token(), ctx.clone()) {
-                Ok(s) => self.models.dl.send = Some(s),
-                Err(e) => self.models.dl.send_error = Some(e.to_string()),
-            }
-        } else if !self.prefs.send_to_varstotas {
-            self.models.dl.send = None;
-            self.models.dl.send_error = None;
-        }
         let found: Vec<PathBuf> = self.models.dl.watcher.as_ref().map(|w| w.rx.try_iter().collect()).unwrap_or_default();
         for p in found {
             self.downloads_offer(&p);
-        }
-        let sent: Vec<_> = self.models.dl.send.as_ref().map(|s| s.rx.try_iter().collect()).unwrap_or_default();
-        for q in sent {
-            self.downloads_sent(&q);
         }
         let done = self.models.dl.importing.as_ref().and_then(|r| r.try_recv().ok());
         if let Some((o, res)) = done {
@@ -124,16 +111,16 @@ impl VarstotasApp {
         self.import_offer_window(ctx);
     }
 
-    /// What the bookmarklet sent: a waiting card.
-    pub(crate) fn downloads_sent(&mut self, q: &std::collections::HashMap<String, String>) {
+    /// A page (address, title, author, licence): a waiting card (harness `dl_page`).
+    pub(crate) fn downloads_page(&mut self, q: &std::collections::HashMap<String, String>) {
         let sites = self.models.dl.sites().to_vec();
-        match Expect::from_send(q, &sites) {
+        match Expect::from_page(q, &sites) {
             Some(e) => {
                 self.flash(format!("Waiting for the file of {} ({}): download it in the browser", e.credit.title, e.credit.source));
                 self.downloads_expect(e);
                 self.models.open = true;
             }
-            None => log::warn!("send: no page address"),
+            None => log::warn!("dl_page: no page address"),
         }
     }
 
@@ -247,20 +234,6 @@ impl VarstotasApp {
                         self.models.dl.offered.remove(&p);
                         self.downloads_offer(&p);
                     }
-                }
-            });
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut self.prefs.send_to_varstotas, "Send to Varstotas").on_hover_text("A bookmarklet: on a model's page, click it to send the page's title, author and licence here");
-                if let Some(s) = &self.models.dl.send {
-                    ui.label(RichText::new(format!("listening on 127.0.0.1:{}", s.port)).small().weak());
-                    let port = s.port;
-                    if ui.button("Copy Bookmarklet").on_hover_text("Make a bookmark in the browser and paste this as its address").clicked() {
-                        ui.ctx().copy_text(crate::downloads::bookmarklet(port, &send_token()));
-                        self.flash("Bookmarklet copied: make a bookmark and paste it as the address");
-                    }
-                }
-                if let Some(e) = &self.models.dl.send_error {
-                    ui.colored_label(Color32::from_rgb(200, 60, 40), RichText::new(e).small());
                 }
             });
             let mut close = None;

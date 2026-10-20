@@ -1,4 +1,4 @@
-//! Texture Position: move, rotate and scale a face's texture with pins, like the classic
+//! Texture Position: move, rotate and scale a face's texture with pins, like the usual
 //! Texture → Position. Red pin (or dragging the face) moves the texture, green rotates and
 //! scales it uniformly about the red pin, blue scales its height.
 

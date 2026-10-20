@@ -57,6 +57,7 @@ for s in 16 32 128 256 512; do
   sips -z "$d" "$d" "$WORK/icon_1024.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Varstotas.icns"
+cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY-LICENSES.txt" "$APP/Contents/Resources/"
 
 # 5. Info.plist.
 cat >"$APP/Contents/Info.plist" <<EOF
@@ -97,6 +98,7 @@ if [[ $MAKE_DMG == 1 ]]; then
   STAGE="$WORK/dmg"
   mkdir -p "$STAGE"
   cp -R "$APP" "$STAGE/"
+  cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY-LICENSES.txt" "$STAGE/"
   ln -s /Applications "$STAGE/Applications"
   hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 fi

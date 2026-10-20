@@ -115,8 +115,6 @@ pub struct Prefs {
     pub mat_recent: Vec<String>,
     /// 3D Library → Other Sites: offer new model files of the Downloads folder for import.
     pub watch_downloads: bool,
-    /// 3D Library → Other Sites: listen for the Send to Varstotas bookmarklet (127.0.0.1).
-    pub send_to_varstotas: bool,
     /// Side bar cards turned off in the Window menu (by title, see `ui::tray::TRAY_CARDS`).
     pub tray_hidden: Vec<String>,
     /// The Snapping menu: master switch and the inferences turned off.
@@ -190,7 +188,6 @@ impl Default for Prefs {
             mat_favourites: Vec::new(),
             mat_recent: Vec::new(),
             watch_downloads: false,
-            send_to_varstotas: false,
             tray_hidden: Vec::new(),
             snapping: Default::default(),
             grid: Default::default(),
@@ -494,6 +491,8 @@ pub struct VarstotasApp {
     pub(crate) show_about: bool,
     pub(crate) console: crate::ui::console::ConsoleState,
     pub(crate) script_help: crate::ui::script_help::ScriptHelp,
+    /// Help → Licences….
+    pub(crate) licences: crate::ui::licences::LicencesWindow,
     pub(crate) app_help: crate::ui::app_help::AppHelp,
     pub(crate) log_window: crate::ui::log_window::LogWindow,
     /// Local server for Python scripts and AI agents.
@@ -661,6 +660,7 @@ impl VarstotasApp {
             show_about: false,
             console: Default::default(),
             script_help: Default::default(),
+            licences: Default::default(),
             app_help: Default::default(),
             log_window: Default::default(),
             bridge: Default::default(),
@@ -2812,6 +2812,7 @@ impl eframe::App for VarstotasApp {
         self.console_window(&ctx);
         self.app_help_window(&ctx);
         self.script_help_window(&ctx);
+        self.licences_window(&ctx);
         self.log_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);

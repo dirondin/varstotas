@@ -113,7 +113,7 @@ impl LicenseKind {
             LicenseKind::CcByNc => "non-commercial: don't sell what you make with it",
             LicenseKind::CcByNd => "no derivatives: don't share a changed copy",
             LicenseKind::CcBySa => "share-alike: share changed copies under the same licence",
-            LicenseKind::Standard => "the site's licence: check what it allows",
+            LicenseKind::Standard => "the site's own licence (royalty-free / personal use / usage conditions): often no commercial use or no sharing of the model file itself — check it",
             LicenseKind::Unknown => "licence unknown: for your own use only",
             _ => "",
         }
@@ -144,7 +144,7 @@ impl LicenseKind {
             }
             return LicenseKind::CcBy;
         }
-        if t.contains("royalty") || t.contains("standard") || t.contains("personal") || t.contains("editorial") || t.contains("guideline") || t.contains("local files") {
+        if t.contains("royalty") || t.contains("standard") || t.contains("personal") || t.contains("editorial") || t.contains("guideline") || t.contains("local files") || t.contains("usage") {
             return LicenseKind::Standard;
         }
         LicenseKind::Unknown
