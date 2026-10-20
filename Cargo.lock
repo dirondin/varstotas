@@ -1924,74 +1924,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
-name = "varstotas_app"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "egui-wgpu",
- "egui_code_editor",
- "env_logger",
- "epaint_default_fonts",
- "flate2",
- "glam",
- "image",
- "libc",
- "log",
- "varstotas_kernel",
- "varstotas_render",
- "varstotas_script",
- "rfd",
- "serde",
- "serde_json",
- "skrifa",
- "toml",
- "winit",
- "winresource",
-]
-
-[[package]]
-name = "varstotas_kernel"
-version = "0.1.0"
-dependencies = [
- "draco-core",
- "flate2",
- "glam",
- "quick-xml",
- "serde",
- "serde_json",
- "slotmap",
- "thiserror 2.0.21",
- "ufbx",
-]
-
-[[package]]
-name = "varstotas_render"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "eframe",
- "egui",
- "egui-wgpu",
- "env_logger",
- "glam",
- "libloading",
- "log",
- "png",
-]
-
-[[package]]
-name = "varstotas_script"
-version = "0.1.0"
-dependencies = [
- "varstotas_kernel",
- "rhai",
- "serde",
- "serde_json",
- "slotmap",
-]
-
-[[package]]
 name = "png"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2798,6 +2730,74 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "varstotas_app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui-wgpu",
+ "egui_code_editor",
+ "env_logger",
+ "epaint_default_fonts",
+ "flate2",
+ "glam",
+ "image",
+ "libc",
+ "log",
+ "rfd",
+ "serde",
+ "serde_json",
+ "skrifa",
+ "toml",
+ "varstotas_kernel",
+ "varstotas_render",
+ "varstotas_script",
+ "winit",
+ "winresource",
+]
+
+[[package]]
+name = "varstotas_kernel"
+version = "0.1.0"
+dependencies = [
+ "draco-core",
+ "flate2",
+ "glam",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "thiserror 2.0.21",
+ "ufbx",
+]
+
+[[package]]
+name = "varstotas_render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "eframe",
+ "egui",
+ "egui-wgpu",
+ "env_logger",
+ "glam",
+ "libloading",
+ "log",
+ "png",
+]
+
+[[package]]
+name = "varstotas_script"
+version = "0.1.0"
+dependencies = [
+ "rhai",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "varstotas_kernel",
 ]
 
 [[package]]
