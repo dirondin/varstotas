@@ -122,6 +122,16 @@ pub fn section(ui: &mut Ui, collapsed: &mut Vec<String>, key: &str, title: &str,
     (folded, clicked, title)
 }
 
+/// The Purge button of an In Model heading: removes the `unused` items nothing in the model
+/// uses (`what`: "materials" / "components"); greyed out when there are none.
+pub fn purge_button(ui: &mut Ui, key: &str, what: &str, unused: usize) -> bool {
+    let tip = if unused > 0 { format!("Purge Unused: remove the {unused} {what} nothing in the model uses") } else { format!("Purge Unused: no unused {what}") };
+    let r = ui.add_enabled_ui(unused > 0, |ui| super::icon_button(ui, Icon::Purge, false, 18.0)).inner;
+    let r = r.on_hover_text(&tip).on_disabled_hover_text(&tip);
+    spot(format!("purge:{key}"), r.rect.center());
+    r.clicked()
+}
+
 /// Lay out `n` tiles of `size` (rows of as many as fit; a list: one per row); `tile(ui, k)`
 /// draws the k-th.
 pub fn tiles(ui: &mut Ui, size: TileSize, n: usize, mut tile: impl FnMut(&mut Ui, usize)) {

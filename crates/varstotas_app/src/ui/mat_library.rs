@@ -349,6 +349,11 @@ impl VarstotasApp {
         let custom = self.prefs.mat_library_dir.is_some();
         let (mut texture, mut import, mut choose, mut default_dir, mut reveal_root) = (false, false, false, false, false);
         let mut show_ex = !self.prefs.hide_mat_examples;
+        let unused = {
+            let s = self.model_stats();
+            s.materials - s.materials_used
+        };
+        let mut purge = false;
         let top: TopRow = top_row(
             ui,
             "m:",
@@ -377,6 +382,10 @@ impl VarstotasApp {
                 }
                 if ui.button("Show in Finder").clicked() {
                     reveal_root = true;
+                    ui.close();
+                }
+                if ui.add_enabled(unused > 0, egui::Button::new("Purge Unused Materials")).on_hover_text("Remove the materials nothing in the model uses").clicked() {
+                    purge = true;
                     ui.close();
                 }
                 ui.separator();
@@ -418,7 +427,12 @@ impl VarstotasApp {
         self.mat_library.shown.clear();
         // In Model
         let model: Vec<(MaterialId, Material)> = self.doc.model.materials.iter().filter(|(_, m)| found(m)).map(|(id, m)| (id, m.clone())).collect();
-        let (folded, _, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", "In Model", "The materials of the open document", false, false, Some(model.len()), |_| {});
+        let (folded, _, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", "In Model", "The materials of the open document", false, false, Some(model.len()), |ui| {
+            purge |= super::tray_lib::purge_button(ui, "mat", "materials", unused);
+        });
+        if purge {
+            self.purge_unused(false, true);
+        }
         if !folded {
             self.mat_library.shown.extend(model.iter().map(|(_, m)| m.name.clone()));
             tiles(ui, size, model.len(), |ui, k| {

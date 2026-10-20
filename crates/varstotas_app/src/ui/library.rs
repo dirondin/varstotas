@@ -379,7 +379,12 @@ impl VarstotasApp {
             f => (f.to_string(), shown(&dir), dir.is_some()),
         };
         let mut hide = None;
+        let unused = if folder == DOCUMENT_FOLDER { self.unused_defs() } else { 0 };
+        let mut purge = false;
         let (folded, clicked, title) = super::tray_lib::section(ui, &mut self.prefs.library_collapsed, folder, &title, &tip, link, false, Some(count), |ui| {
+            if folder == DOCUMENT_FOLDER {
+                purge = super::tray_lib::purge_button(ui, "doc", "components", unused);
+            }
             if folder == EXAMPLES_FOLDER || folder == DOCUMENT_FOLDER {
                 let tip = if folder == EXAMPLES_FOLDER { "Hide the bundled examples (… → Show Examples brings them back)" } else { "Hide the document's components (… → Show In Model brings them back)" };
                 let r = ui.small_button("Hide").on_hover_text(tip);
@@ -390,6 +395,9 @@ impl VarstotasApp {
             }
         });
         super::tray_lib::folder_menu(&title, folder, dir.as_deref(), act);
+        if purge {
+            self.purge_unused(true, false);
+        }
         match hide {
             Some(true) => self.prefs.hide_examples = true,
             Some(false) => self.prefs.hide_document = true,
@@ -968,6 +976,8 @@ impl VarstotasApp {
         let custom = self.prefs.library_dir.is_some();
         let (mut save, mut new_gen, mut choose, mut default_dir, mut reveal_root) = (false, false, false, false, false);
         let (mut show_ex, mut show_doc) = (!self.prefs.hide_examples, !self.prefs.hide_document);
+        let unused = self.unused_defs();
+        let mut purge = false;
         let top = super::tray_lib::top_row(
             ui,
             "",
@@ -998,6 +1008,10 @@ impl VarstotasApp {
                     reveal_root = true;
                     ui.close();
                 }
+                if ui.add_enabled(unused > 0, egui::Button::new("Purge Unused Components")).on_hover_text("Remove the components (and group definitions) nothing in the model uses").clicked() {
+                    purge = true;
+                    ui.close();
+                }
                 ui.separator();
                 ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The bundled example generators");
                 ui.checkbox(&mut show_doc, "Show In Model").on_hover_text("The open document's components and generators");
@@ -1005,6 +1019,9 @@ impl VarstotasApp {
         );
         self.prefs.hide_examples = !show_ex;
         self.prefs.hide_document = !show_doc;
+        if purge {
+            self.purge_unused(true, false);
+        }
         if top.refresh {
             self.refresh_library();
         }
@@ -1098,8 +1115,10 @@ impl VarstotasApp {
         let size = self.prefs.lib_tiles;
         let favs = self.prefs.lib_favourites.clone();
         self.library.shown_folders.clear();
+        // In Model stays while it has something to purge (unused group definitions show no tiles)
+        let purgeable = !self.prefs.hide_document && filter.is_empty() && self.unused_defs() > 0;
         for (folder, group, listed) in secs {
-            let fixed = folder.is_empty() || dirs.contains(&folder);
+            let fixed = folder.is_empty() || dirs.contains(&folder) || (purgeable && folder == DOCUMENT_FOLDER);
             if group.is_empty() && !(fixed && (filter.is_empty() || folder.is_empty())) {
                 continue;
             }

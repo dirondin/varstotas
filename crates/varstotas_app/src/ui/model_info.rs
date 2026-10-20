@@ -64,6 +64,12 @@ impl VarstotasApp {
         &self.model_info.cache.as_ref().unwrap().1
     }
 
+    /// Component and group definitions nothing in the model uses.
+    pub(crate) fn unused_defs(&mut self) -> usize {
+        let s = self.model_stats();
+        (s.component_defs - s.component_defs_used) + (s.group_defs - s.group_defs_used)
+    }
+
     /// Purge Unused (one undo step): the unused components / materials the window's switches
     /// choose.
     pub(crate) fn purge_unused(&mut self, defs: bool, mats: bool) {
