@@ -64,7 +64,7 @@ const BASICS: &[B] = &[
 ];
 
 const CONSOLE: &[B] = &[
-    B::P("Window → Script Console runs code against the open model. Cmd+Enter runs, Cmd+↑ / ↓ goes through earlier runs, Open… / Save… work with `.rhai` files. File → Run Script… runs a file."),
+    B::P("Window → Script Console runs code against the open model. %CMD%+Enter runs, %CMD%+↑ / ↓ goes through earlier runs, Open… / Save… work with `.rhai` files. File → Run Script… runs a file."),
     B::P("Completion shows API functions while typing, properties after a dot (by the type on the left), and the signature of the function being called above the cursor. F1 opens this reference on the word at the cursor."),
     B::H("Header: dialogs and menu items"),
     B::P("Lines `// @tag …` at the top turn a script into a plugin: Run first asks the parameters, points and objects. A file in `~/.varstotas/plugins` becomes an Extensions menu item."),
@@ -265,7 +265,7 @@ fn topic_ui(ui: &mut Ui, topic: Topic) {
                 ui.add_space(6.0);
                 ui.label(RichText::new(*t).strong().size(15.0));
             }
-            B::P(t) => rich(ui, t),
+            B::P(t) => rich(ui, &crate::keys::tr(t)),
             B::Code(c) => code_block(ui, c),
             B::Row(a, b) => row(ui, a, b),
         }

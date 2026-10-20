@@ -350,7 +350,11 @@ impl ToolId {
     }
 
     /// Longer help shown in the Instructor panel.
-    pub fn instructor(self) -> &'static str {
+    pub fn instructor(self) -> String {
+        crate::keys::tr(self.instructor_text()).into_owned()
+    }
+
+    fn instructor_text(self) -> &'static str {
         match self {
             ToolId::Select if cfg!(target_os = "macos") => {
                 "Click an entity to select it.\n\
@@ -469,9 +473,9 @@ impl ToolId {
             }
             ToolId::PushPull => {
                 "Hover a face, click, move to set the distance, click again.\n\
-                 Ctrl/Option keeps the original face. Double-click repeats the last distance."
+                 %COPY% keeps the original face. Double-click repeats the last distance."
             }
-            ToolId::Move => "Click a point to pick up the selection, click the destination. Ctrl/Option makes a copy; type `5x` for an array.",
+            ToolId::Move => "Click a point to pick up the selection, click the destination. %COPY% makes a copy; type `5x` for an array.",
             ToolId::Rotate => "Click the center, click the zero direction, click the angle. Type an angle in degrees.",
             ToolId::Scale => "Select entities, then drag a grip. Type a scale factor.",
             ToolId::Offset => "Click a face, move inward or outward, click. Type a distance.",
@@ -545,7 +549,7 @@ impl ToolId {
             ToolId::LookAround => "Drag to turn the view around the eye. Type an eye height and press Enter.",
             ToolId::Walk => {
                 "Drag up/down to walk forward/back, left/right to turn.\n\
-                 • Shift: move up/down and sideways. Ctrl: run.\n\
+                 • Shift: move up/down and sideways. %CMD%: run.\n\
                  • Arrow keys: step and turn. Type an eye height and press Enter."
             }
         }

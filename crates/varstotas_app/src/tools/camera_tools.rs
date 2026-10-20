@@ -307,7 +307,7 @@ impl Tool for WalkTool {
         fmt_len(self.unit.unwrap_or(LengthUnit::Millimeter), self.eye_z)
     }
     fn status_text(&self) -> String {
-        "Hold the button and move up/down to walk, left/right to turn (farther = faster). Shift = up/down and sideways, Ctrl = run. Arrow keys step.".into()
+        "Hold the button and move up/down to walk, left/right to turn (farther = faster). Shift = up/down and sideways, %CMD% = run. Arrow keys step.".into()
     }
     fn overlay(&self, _view: &super::OverlayView, _out3d: &mut varstotas_render::Overlay3d, out2d: &mut Vec<Marker2d>) {
         // Where the button went down (speed zero) and a line to the cursor.

@@ -1,0 +1,10 @@
+# Hints name the platform modifier keys (macOS here): Option / Cmd, never Alt or Ctrl/Option.
+wait 10
+tool move
+wait 3
+expect status="Pick the point to move from
+expect Option = copy; after a copy
+tool eraser
+wait 3
+expect Shift = hide, Cmd = soften, Cmd+Shift = unsoften
+quit

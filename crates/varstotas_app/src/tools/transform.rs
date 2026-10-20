@@ -422,7 +422,7 @@ impl Tool for MoveTool {
         let copy = if self.copy.on { " (copy)" } else { "" };
         if self.from.is_none() {
             format!(
-                "Pick the point to move from{copy}. Moves the selection, or the entity under the cursor. Ctrl/Option = copy; after a copy type `5x` or `/5` for arrays."
+                "Pick the point to move from{copy}. Moves the selection, or the entity under the cursor. %COPY% = copy; after a copy type `5x` or `/5` for arrays."
             )
         } else {
             format!("Pick the destination or type a distance{copy}. Shift = lock inference, arrows = lock axis.")
@@ -683,7 +683,7 @@ impl Tool for RotateTool {
             None => "Select the rotation center (face orients the protractor; arrows lock its axis).".into(),
             Some(RotStage::Center { .. }) => "Select the zero direction.".into(),
             Some(RotStage::Angle { .. }) => format!(
-                "Select the angle ({}) or type degrees. Ctrl/Option = copy{}; after a copy type `6x` for a radial array.",
+                "Select the angle ({}) or type degrees. %COPY% = copy{}; after a copy type `6x` for a radial array.",
                 match crate::inference::settings::angle_step() {
                     Some(st) => format!("rounded to {st}°"),
                     None => "snaps every 15°".into(),
@@ -1066,13 +1066,13 @@ impl Tool for ScaleTool {
                 _ => "along one axis",
             };
             format!(
-                "Move to scale {what} about the {}; click or type a factor (per axis: `1.5; 2`). Ctrl = about centre.",
+                "Move to scale {what} about the {}; click or type a factor (per axis: `1.5; 2`). %CMD% = about centre.",
                 if d.about_center { "centre" } else { "opposite grip" }
             )
         } else if self.ents.is_empty() {
             "Select entities (or hover one), then drag a grip.".into()
         } else {
-            "Drag a grip: corners scale uniformly, edge midpoints two axes, face centres one axis. Ctrl = about centre."
+            "Drag a grip: corners scale uniformly, edge midpoints two axes, face centres one axis. %CMD% = about centre."
                 .into()
         }
     }

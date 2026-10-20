@@ -90,7 +90,7 @@ const NAVIGATION: &[B] = &[
     B::Row("Shift + middle drag", "pan"),
     B::Row("Wheel", "zoom toward the cursor"),
     B::Row("Trackpad: two-finger swipe", "orbit; with Shift — pan"),
-    B::Row("Trackpad: pinch, or ⌘ / Ctrl + swipe", "zoom"),
+    B::Row("Trackpad: pinch, or %CMD% + swipe", "zoom"),
     B::P("These work in every tool, so you never need to leave a drawing operation to look around."),
     B::P("Window → Preferences → Navigation changes them: orbit and zoom speed, an inverted wheel, zoom toward the middle of the view instead of the cursor, the middle button panning (Shift orbits), two fingers panning or zooming."),
     B::H("Views"),
@@ -110,7 +110,7 @@ const NAVIGATION: &[B] = &[
 
 const SELECTING: &[B] = &[
     B::Tools(&[ToolId::Select]),
-    B::P("Edit → Select All (`⌘A` / `Ctrl+A`), Select None (`⌘T` / `Ctrl+T`). Delete or Backspace erases the selection; Edit → Hide hides it, Unhide All brings everything back."),
+    B::P("Edit → Select All (`%CMDK%A`), Select None (`%CMDK%T`). Delete or Backspace erases the selection; Edit → Hide hides it, Unhide All brings everything back."),
     B::P("Right-click the model for the context menu: Erase, Hide, Make Group, Make Component…, Explode, Intersect Faces, Reverse / Orient Faces, Flip Along, Texture → Position, Unfold…, and the commands of section planes and axes."),
     B::P("The Outliner card shows the groups and components as a tree: a click there selects, a double click zooms to the object."),
 ];
@@ -128,7 +128,7 @@ const SHAPES: &[B] = &[
 
 const MODIFYING: &[B] = &[
     B::P("Move, Rotate and Scale work on the selection, or on what you click when nothing is selected. Moving a vertex, edge or face stretches the geometry around it."),
-    B::Row("Copy", "Move / Rotate with Option (Ctrl on Windows / Linux) makes a copy"),
+    B::Row("Copy", "Move / Rotate with %COPY% makes a copy"),
     B::Row("Arrays", "after a copy type `5x` (five copies at the same step) or `/5` (five copies between)"),
     B::Tools(&[ToolId::Move, ToolId::Rotate, ToolId::Scale, ToolId::PushPull, ToolId::FollowMe, ToolId::Offset, ToolId::Chamfer, ToolId::Fillet, ToolId::Eraser, ToolId::SolidTools]),
     B::H("Edit menu and context menu"),
@@ -377,7 +377,7 @@ fn tool_card(ui: &mut Ui, id: ToolId, ask: &mut Option<Ask>) {
             });
         });
         ui.label(RichText::new(id.description()).italics());
-        rich(ui, id.instructor());
+        rich(ui, &id.instructor());
     });
     ui.add_space(4.0);
 }
@@ -389,8 +389,8 @@ fn blocks_ui(ui: &mut Ui, blocks: &[B], ask: &mut Option<Ask>) {
                 ui.add_space(6.0);
                 ui.label(RichText::new(*t).strong().size(15.0));
             }
-            B::P(t) => rich(ui, t),
-            B::Row(a, b) => row(ui, a, b),
+            B::P(t) => rich(ui, &crate::keys::tr(t)),
+            B::Row(a, b) => row(ui, &crate::keys::tr(a), &crate::keys::tr(b)),
             B::Tools(ids) => {
                 ui.add_space(2.0);
                 for id in *ids {
@@ -431,8 +431,8 @@ fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
 /// The text of a block that a search looks at.
 fn block_text(b: &B) -> Option<String> {
     match b {
-        B::H(t) | B::P(t) => Some(t.to_string()),
-        B::Row(a, b) => Some(format!("{a} {b}")),
+        B::H(t) | B::P(t) => Some(crate::keys::tr(t).into_owned()),
+        B::Row(a, b) => Some(crate::keys::tr(&format!("{a} {b}")).into_owned()),
         B::Script(_, l) => Some(l.to_string()),
         B::Tools(_) => None,
     }

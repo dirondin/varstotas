@@ -71,15 +71,15 @@ impl Shortcut {
             Key::PageUp => "PgUp",
             k => k.name(),
         };
-        if self.cmd && cfg!(target_os = "macos") {
+        if cfg!(target_os = "macos") && (self.cmd || self.alt) {
+            // ⌥⇧⌘ — macOS has no Alt or Ctrl+ in its shortcuts
             let mut s = String::new();
-            if self.alt {
-                s.push('⌥');
+            for (on, c) in [(self.alt, '⌥'), (self.shift, '⇧'), (self.cmd, '⌘')] {
+                if on {
+                    s.push(c);
+                }
             }
-            if self.shift {
-                s.push('⇧');
-            }
-            return s + "⌘" + key;
+            return s + key;
         }
         let mut s = String::new();
         for (on, w) in [(self.cmd, "Ctrl+"), (self.alt, "Alt+"), (self.shift, "Shift+")] {
@@ -317,6 +317,17 @@ mod tests {
             assert_eq!(Shortcut::from_store(&sc.to_store()), Some(sc));
         }
         assert_eq!(Shortcut::from_store("Hyper+K"), None);
+    }
+
+    #[test]
+    fn labels_name_the_platform_keys() {
+        let alt = Shortcut::from_store("Alt+Shift+K").unwrap();
+        let cmd = Shortcut::cmd_shift(Key::Z);
+        if cfg!(target_os = "macos") {
+            assert_eq!((alt.label(), cmd.label()), ("⌥⇧K".to_string(), "⇧⌘Z".to_string()));
+        } else {
+            assert_eq!((alt.label(), cmd.label()), ("Alt+Shift+K".to_string(), "Ctrl+Shift+Z".to_string()));
+        }
     }
 
     #[test]

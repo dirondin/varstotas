@@ -233,7 +233,7 @@ impl Tool for TapeTool {
             return format!("Type a new length to resize the model, or select a start point ({g}).");
         }
         if self.start.is_none() {
-            format!("Select a start point (an edge for a parallel guide). Ctrl/Option toggles guides ({g}).")
+            format!("Select a start point (an edge for a parallel guide). %COPY% toggles guides ({g}).")
         } else {
             format!("Select the end point or type a distance ({g}).")
         }

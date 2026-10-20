@@ -155,7 +155,7 @@ impl Tool for EraserTool {
         false
     }
     fn status_text(&self) -> String {
-        "Click or drag over edges, guides, dimensions or groups to erase. Shift = hide, Ctrl = soften, Ctrl+Shift = unsoften."
+        "Click or drag over edges, guides, dimensions or groups to erase. Shift = hide, %CMD% = soften, %CMD%+Shift = unsoften."
             .into()
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -485,7 +485,7 @@ impl Tool for PushPullTool {
     fn status_text(&self) -> String {
         if self.state.is_some() {
             format!(
-                "Move to set the distance, click or type a value. Ctrl/Option = keep original face ({}).",
+                "Move to set the distance, click or type a value. %COPY% = keep original face ({}).",
                 if self.keep.on { "on" } else { "off" }
             )
         } else {

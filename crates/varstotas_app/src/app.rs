@@ -2651,7 +2651,7 @@ impl VarstotasApp {
             .as_ref()
             .filter(|f| f.1 > self.now)
             .map(|f| (f.0.clone(), f.2));
-        (self.tool.status_text(), flash)
+        (crate::keys::tr(&self.tool.status_text()).into_owned(), flash)
     }
 
 }

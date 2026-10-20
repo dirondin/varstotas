@@ -608,7 +608,7 @@ impl VarstotasApp {
                 }
             }
         });
-        note(ui, "Menus, panels and windows; ⌘ + / ⌘ − / ⌘ 0 change it too.");
+        note(ui, &crate::keys::tr("Menus, panels and windows; %CMDK%+ / %CMDK%− / %CMDK%0 change it too."));
         heading(ui, "Toolbar icons");
         ui.horizontal(|ui| {
             for (label, side) in super::toolbar::ICON_SIZES {
@@ -748,7 +748,7 @@ impl VarstotasApp {
             let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, "Zoom");
             super::tray_lib::spot("nav:two_zoom", r.rect.center());
         });
-        note(ui, "Shift: Pan (Orbit when two fingers pan). Pinch and ⌘ + two fingers always zoom.");
+        note(ui, &crate::keys::tr("Shift: Pan (Orbit when two fingers pan). Pinch and %CMD% + two fingers always zoom."));
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {

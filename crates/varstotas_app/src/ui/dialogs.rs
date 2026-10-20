@@ -383,7 +383,7 @@ impl VarstotasApp {
                     ui.add_enabled_ui(p.filled && p.extruded, |ui| ui.add(len_drag(&mut p.depth, unit)));
                     ui.end_row();
                 });
-                ui.label(RichText::new("Enter starts a new line, Cmd+Enter places the text.").small().color(theme::text_dim()));
+                ui.label(RichText::new(crate::keys::tr("Enter starts a new line, %CMD%+Enter places the text.")).small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
