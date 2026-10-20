@@ -110,11 +110,13 @@ pub(crate) const TRAY_CARDS: [&str; 10] =
     ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"];
 
 fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl FnOnce(&mut Ui) -> R) {
-    card_ex(ui, title, icon, default_open, false, body)
+    card_ex(ui, title, icon, default_open, false, None, body);
 }
 
-/// [`card`] that can be forced open.
-fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_open: bool, body: impl FnOnce(&mut Ui) -> R) {
+/// [`card`] that can be forced open and have an icon button at the right of its header
+/// (`button`: icon, tooltip). True when that button was clicked.
+fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_open: bool, button: Option<(Icon, &str)>, body: impl FnOnce(&mut Ui) -> R) -> bool {
+    let mut clicked = false;
     let r = Frame::new()
         .fill(theme::card_bg())
         .stroke(Stroke::new(1.0, theme::border()))
@@ -133,6 +135,13 @@ fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_op
                     paint_icon(ui.painter(), rect, icon, false);
                     super::tray_lib::spot(format!("card:{title}"), rect.center());
                     ui.label(RichText::new(title).strong());
+                    if let Some((icon, tip)) = button {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let r = super::icon_button(ui, icon, false, 22.0).on_hover_text(tip);
+                            super::tray_lib::spot(format!("card_btn:{title}"), r.rect.center());
+                            clicked = r.clicked();
+                        });
+                    }
                 })
                 .body(|ui| {
                     ui.add_space(2.0);
@@ -143,6 +152,7 @@ fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_op
         r.response.scroll_to_me(Some(egui::Align::Min));
     }
     ui.add_space(6.0);
+    clicked
 }
 
 fn tag_name(model: &Model, t: Option<TagId>) -> String {
@@ -213,14 +223,17 @@ impl VarstotasApp {
         let on = |n: &str| !hidden.iter().any(|h| h == n);
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             if on("Entity Info") {
-                card(ui, "Entity Info", Icon::Info, true, |ui| self.entity_info(ui));
+                let tip = "Model Info: statistics of the document, Purge Unused";
+                if card_ex(ui, "Entity Info", Icon::Info, true, false, Some((Icon::ModelInfo, tip)), |ui| self.entity_info(ui)) {
+                    self.actions.push(Action::ModelInfo);
+                }
             }
             if on("Materials") {
                 card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui));
             }
             if on("Components") {
                 let open = self.library_open_requested();
-                card_ex(ui, "Components", Icon::Group, false, open, |ui| self.library_panel(ui));
+                card_ex(ui, "Components", Icon::Group, false, open, None, |ui| self.library_panel(ui));
             }
             if on("Tags") {
                 card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));

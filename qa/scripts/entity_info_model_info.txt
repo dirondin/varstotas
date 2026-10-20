@@ -1,0 +1,13 @@
+# Entity Info's header has a Model Info button at its right: it opens (and closes) the window.
+wait 10
+action tray_only Entity Info
+wait 10
+expect stats=(0 0 0 0 | 0/0 0/0 0/0) None window=false
+screenshot shots/entity_info_model_info.bmp
+raw click 1372 27
+wait 5
+expect window=true
+raw click 1372 27
+wait 5
+expect window=false
+quit

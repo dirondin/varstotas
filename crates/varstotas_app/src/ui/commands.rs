@@ -342,7 +342,7 @@ impl Cmd {
             },
             Cmd::Render => Icon::Render,
             Cmd::WorkPlanes => Icon::GuidePlane,
-            Cmd::ModelInfo => Icon::Info,
+            Cmd::ModelInfo => Icon::ModelInfo,
             Cmd::ComponentParams => Icon::Parametric,
             Cmd::Library3d => Icon::Cloud,
             Cmd::GeneratorEditor => Icon::Generator,

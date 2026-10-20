@@ -2647,8 +2647,8 @@ impl VarstotasApp {
     fn stats_dump(&self) -> String {
         let s = self.doc.model.statistics();
         format!(
-            "({} {} {} {} | {}/{} {}/{} {}/{}) {:?}",
-            s.scene.faces, s.scene.triangles, s.scene.groups, s.scene.components, s.component_defs_used, s.component_defs, s.group_defs_used, s.group_defs, s.materials_used, s.materials, self.model_info.last
+            "({} {} {} {} | {}/{} {}/{} {}/{}) {:?} window={}",
+            s.scene.faces, s.scene.triangles, s.scene.groups, s.scene.components, s.component_defs_used, s.component_defs, s.group_defs_used, s.group_defs, s.materials_used, s.materials, self.model_info.last, self.model_info.open
         )
     }
 

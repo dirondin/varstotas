@@ -90,6 +90,17 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
     #[allow(non_snake_case)]
     let (FILL, SHADE, SHADE_DARK) = (pal::fill(), pal::shade(), pal::shade_dark());
     match icon {
+        Icon::ModelInfo => {
+            // the document's page with an info badge
+            page(pen, (3.0, 2.0), (17.0, 21.0), 4.5);
+            for y in [8.0, 11.5, 15.0] {
+                pen.line_c(&[(6.0, y), (12.0, y)], pen.thin());
+            }
+            pen.circle((17.0, 17.0), 5.5, BLUE);
+            let white = Stroke::new(1.6 * pen.s, Color32::WHITE);
+            pen.dot((17.0, 14.4), 0.9, Color32::WHITE);
+            pen.line_c(&[(17.0, 16.3), (17.0, 19.8)], white);
+        }
         Icon::EditCurve => {
             // a curve with its points, one point grabbed with its handle
             let curve: Vec<(f32, f32)> = (0..=20)

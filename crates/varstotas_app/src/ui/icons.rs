@@ -19,6 +19,7 @@ pub enum Icon {
     Pie,
     Bezier,
     EditCurve,
+    ModelInfo,
     SmoothCurve,
     Freehand,
     Rectangle,
