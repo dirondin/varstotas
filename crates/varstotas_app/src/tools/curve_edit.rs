@@ -18,7 +18,7 @@ use varstotas_render::Overlay3d;
 /// Screen distance (points) for grabbing an anchor or a handle.
 const GRIP_PX: f32 = 8.0;
 /// Screen distance (points) for a click on the curve itself.
-const CURVE_PX: f32 = 6.0;
+const CURVE_PX: f32 = 8.0;
 const HANDLE: Color32 = Color32::from_rgb(0x20, 0x70, 0xE0);
 const HOT: Color32 = Color32::from_rgb(0xE0, 0x60, 0x10);
 
@@ -58,6 +58,8 @@ pub struct EditCurveTool {
     /// The selected anchor (Delete removes it).
     sel: Option<usize>,
     hover: Option<Grip>,
+    /// Where a click would add a point (world), the pointer being on the curve.
+    insert_at: Option<DVec3>,
     drag: Option<Drag>,
     cur: Option<InferenceResult>,
 }
@@ -149,15 +151,20 @@ impl EditCurveTool {
             let one = Spline { anchors: vec![sp.anchors[i], sp.anchors[(i + 1) % n]], closed: false, segs: 64, ..sp.clone() };
             let pts = one.points();
             let k = (pts.len() - 1).max(1) as f64;
-            for (j, p) in pts.iter().enumerate() {
-                let Some(s) = ctx.to_screen(xf.transform_point3(*p)) else { continue };
-                let d = s.distance(ctx.pointer.pos);
+            let scr: Vec<Option<Pos2>> = pts.iter().map(|p| ctx.to_screen(xf.transform_point3(*p))).collect();
+            // distance to each screen segment between samples (not just to the samples)
+            for j in 0..scr.len().saturating_sub(1) {
+                let (Some(a), Some(b)) = (scr[j], scr[j + 1]) else { continue };
+                let ab = b - a;
+                let u = if ab.length_sq() > 0.0 { ((ctx.pointer.pos - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+                let d = (a + ab * u).distance(ctx.pointer.pos);
                 if best.is_none_or(|b| d < b.0) {
-                    best = Some((d, i, j as f64 / k));
+                    best = Some((d, i, (j as f64 + u as f64) / k));
                 }
             }
         }
-        best.filter(|b| b.0 <= CURVE_PX && b.2 > 0.0 && b.2 < 1.0).map(|b| (b.1, b.2))
+        // not on an anchor (that is a grip)
+        best.filter(|b| b.0 <= CURVE_PX && b.2 > 0.01 && b.2 < 0.99).map(|b| (b.1, b.2))
     }
 
     /// The pointer on the curve's plane (world), with snapping.
@@ -253,7 +260,16 @@ impl Tool for EditCurveTool {
             return;
         }
         self.cur = None;
-        self.hover = self.spline(ctx.doc).and_then(|sp| self.grip_under(ctx, &sp));
+        let sp = self.spline(ctx.doc);
+        self.hover = sp.as_ref().and_then(|sp| self.grip_under(ctx, sp));
+        self.insert_at = match (&sp, self.hover) {
+            (Some(sp), None) => self.on_curve(ctx, sp).map(|(i, t)| {
+                let mut c = sp.clone();
+                let k = split_span(&mut c, i, t);
+                context_xf(ctx.doc).transform_point3(c.anchors[k].p)
+            }),
+            _ => None,
+        };
     }
 
     fn on_pointer_down(&mut self, ctx: &mut ToolContext) {
@@ -385,6 +401,9 @@ impl Tool for EditCurveTool {
         if self.drag.is_some() {
             return "Drag to reshape; release to apply, Esc cancels.".into();
         }
+        if self.insert_at.is_some() {
+            return "Click to add a point here (the curve keeps its shape).".into();
+        }
         "Drag points and handles; click the curve to add a point, Delete removes the selected point; \
          double-click a point: corner / smooth. Enter finishes."
             .into()
@@ -413,6 +432,9 @@ impl Tool for EditCurveTool {
                 Color32::from_gray(60)
             };
             out2d.push(Marker2d::Point { at: w(a.p), shape: MarkerShape::Square, color });
+        }
+        if let Some(p) = self.insert_at.filter(|_| self.drag.is_none()) {
+            out2d.push(Marker2d::Point { at: p, shape: MarkerShape::Square, color: HOT });
         }
         if let Some(r) = &self.cur {
             inference::draw_result(r, out3d, out2d);
