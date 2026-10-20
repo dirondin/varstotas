@@ -9,7 +9,7 @@ use crate::{
 use glam::{DAffine3, DMat3, DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Definition {
@@ -893,17 +893,115 @@ impl Model {
         Ok(out)
     }
 
-    /// Give an instance its own copy of the definition.
+    /// Whether Make Unique applies to instance `inst` (context `path`): other copies share its
+    /// content — the same definition, or for a component with parameters the same master
+    /// (edits inside any copy go to the master).
+    pub fn can_make_unique(&self, path: &[InstanceId], inst: InstanceId) -> bool {
+        let Some(d) = self.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def) else { return false };
+        match self.rig_master(d) {
+            Some(m) if m != d => self.placed_count(m) > 1,
+            _ => self.instance_count(d) > 1,
+        }
+    }
+
+    /// Give an instance its own copy of the definition, named "<name> 2" (the next free number).
+    /// A copy of a component with parameters gets its own master too (later edits inside it
+    /// leave the other copies alone); a generated one stays apart from copies with equal values
+    /// ([`crate::generator::Generated::unique`]). Nested components stay shared.
     pub fn make_unique(&mut self, path: &[InstanceId], inst: InstanceId) -> OpResult<()> {
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let d = self.defs[pd].mesh.instances.get(inst).ok_or(OpError::NotFound)?.def;
-        if self.instance_count(d) <= 1 {
+        if !self.can_make_unique(path, inst) {
             return Ok(());
         }
-        let copy = self.defs[d].clone();
-        let nd = self.defs.insert(Definition { name: format!("{}#{}", copy.name, self.defs.len()), ..copy });
+        let mut copy = self.defs[d].clone();
+        if let Some(g) = copy.generated.as_mut() {
+            g.unique = true;
+        }
+        match self.rig_master(d).filter(|m| *m != d) {
+            Some(master) => {
+                let mut mc = self.defs[master].clone();
+                mc.name = self.free_def_name(&mc.name);
+                copy.name = mc.name.clone();
+                let nm = self.defs.insert(mc);
+                if let Some(r) = copy.rigged.as_mut() {
+                    r.master = nm;
+                }
+            }
+            None => copy.name = self.free_def_name(&copy.name),
+        }
+        let nd = self.defs.insert(copy);
         self.defs[pd].mesh.instances[inst].def = nd;
         Ok(())
+    }
+
+    /// `name` when no definition has it, else "<name> 2", "<name> 3", … (a trailing number of
+    /// `name` is replaced).
+    pub fn free_def_name(&self, name: &str) -> String {
+        let taken: HashSet<&str> = self.defs.values().map(|d| d.name.as_str()).collect();
+        if !taken.contains(name) {
+            return name.to_string();
+        }
+        let base = match name.rsplit_once(' ') {
+            Some((b, n)) if !b.is_empty() && n.parse::<u32>().is_ok() => b,
+            _ => name,
+        };
+        (2..).map(|n| format!("{base} {n}")).find(|n| !taken.contains(n.as_str())).expect("a free name")
+    }
+
+    /// A hash of definition `d`'s content: geometry (to 0.001 mm), materials and tags by name,
+    /// edge flags, nested copies (their content and placement), parameters. Equal for copies
+    /// of one content in different models (a library component and its placed definition).
+    pub fn content_hash(&self, d: DefId) -> u64 {
+        self.content_hash_in(d, 0)
+    }
+
+    fn content_hash_in(&self, d: DefId, depth: usize) -> u64 {
+        use std::hash::{Hash, Hasher};
+        fn h<T: Hash>(x: T) -> u64 {
+            let mut s = std::collections::hash_map::DefaultHasher::new();
+            x.hash(&mut s);
+            s.finish()
+        }
+        let q = |p: DVec3| [(p.x * 1000.0).round() as i64, (p.y * 1000.0).round() as i64, (p.z * 1000.0).round() as i64];
+        let Some(def) = self.defs.get(d) else { return 0 };
+        if depth > 32 {
+            return 0;
+        }
+        let m = &def.mesh;
+        let mat = |x: Option<MaterialId>| x.and_then(|x| self.materials.get(x)).map(|x| x.name.as_str());
+        let tag = |x: Option<TagId>| x.and_then(|x| self.tags.get(x)).map(|x| x.name.as_str());
+        let pos = |v: VertexId| m.vertices.get(v).map(|x| q(x.pos));
+        let mut faces: Vec<u64> = m
+            .faces
+            .values()
+            .map(|f| {
+                let loops: Vec<Vec<_>> = f.loops().map(|l| l.iter().map(|v| pos(*v)).collect()).collect();
+                h((loops, mat(f.front), mat(f.back), f.hidden, tag(f.tag)))
+            })
+            .collect();
+        let mut edges: Vec<u64> = m
+            .edges
+            .values()
+            .map(|e| {
+                let mut ends = [pos(e.v[0]), pos(e.v[1])];
+                ends.sort();
+                h((ends, e.soft, e.smooth, e.hidden, tag(e.tag)))
+            })
+            .collect();
+        let mut insts: Vec<u64> = m
+            .instances
+            .values()
+            .map(|i| {
+                let xf: Vec<i64> = i.transform.to_cols_array().iter().map(|x| (x * 1000.0).round() as i64).collect();
+                h((self.content_hash_in(i.def, depth + 1), xf, &i.name, mat(i.material), tag(i.tag), i.hidden))
+            })
+            .collect();
+        faces.sort_unstable();
+        edges.sort_unstable();
+        insts.sort_unstable();
+        let extra = format!("{:?}{:?}{}", def.rig, def.generated, def.is_group);
+        h((faces, edges, insts, extra))
     }
 
     pub fn add_material(&mut self, name: &str, color: [f32; 4]) -> MaterialId {

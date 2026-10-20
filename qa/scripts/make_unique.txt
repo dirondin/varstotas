@@ -1,0 +1,58 @@
+# Make Unique from the context menu (real mouse): two copies of a component, one made unique
+# by a right-click → Make Unique; an edit inside it leaves the other copy alone; Undo.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+select_all
+wait 3
+rawp rclick 500 0 500
+wait 5
+raw click 515 257
+wait 5
+action components
+wait 40
+# a second copy from Components → In Model
+raw click 1185 173
+wait 5
+raw move 780 600
+wait 3
+raw click 800 629
+wait 5
+expect tris=24
+expect defs=2
+tool select
+wait 3
+rawp click 500 0 500
+wait 3
+rawp rclick 500 0 500
+wait 5
+screenshot shots/make_unique_menu.bmp
+raw click 515 257
+wait 5
+expect undo=Some("Make Unique")
+expect defs=3
+# inside the unique copy: erase its top face; the other copy keeps all 6 (2 × 12 → 22 triangles)
+wait 30
+rawp dblclick 500 0 500
+wait 5
+expect context_depth=1
+rawp click 500 500 1000
+wait 3
+raw key Delete
+wait 5
+raw key Escape
+wait 3
+raw key Escape
+wait 5
+expect tris=22
+screenshot shots/make_unique.bmp
+# Undo the erase and Make Unique: one definition again
+raw mods cmd
+raw key Z
+raw key Z
+raw mods
+wait 5
+expect tris=24
+expect defs=2
+quit

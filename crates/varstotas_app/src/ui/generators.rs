@@ -494,13 +494,13 @@ impl VarstotasApp {
 
     /// Make Unique for one shared selected component.
     pub(crate) fn make_unique_button(&mut self, ui: &mut Ui, ids: &[InstanceId]) {
-        let shared = ids.len() == 1
-            && self.doc.active_mesh().and_then(|m| m.instances.get(ids[0])).is_some_and(|i| self.doc.model.instance_count(i.def) > 1);
-        if ui
-            .add_enabled(shared, egui::Button::new("Make Unique"))
-            .on_hover_text("Give this component its own definition (instances with equal values share one)")
-            .clicked()
-        {
+        let tip = match ids {
+            [_] if self.doc.can_make_unique() => "Give this component its own definition: editing it no longer changes the other copies",
+            [_] => "This copy is already unique: nothing else shares its definition",
+            _ => "Select one component",
+        };
+        let r = ui.add_enabled(self.doc.can_make_unique(), egui::Button::new("Make Unique"));
+        if r.on_hover_text(tip).on_disabled_hover_text(tip).clicked() {
             self.actions.push(Action::MakeUnique);
         }
     }

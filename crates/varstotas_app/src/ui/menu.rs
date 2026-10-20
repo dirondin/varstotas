@@ -142,6 +142,10 @@ impl VarstotasApp {
         ui.separator();
         for c in [Cmd::Hide, Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode] {
             self.cmd_item(ui, c);
+            // on a component other copies share
+            if c == Cmd::MakeComponent && self.doc.can_make_unique() {
+                self.cmd_item(ui, Cmd::MakeUnique);
+            }
         }
         ui.separator();
         if let Some(i) = self.doc.section_sel {
@@ -263,7 +267,7 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::Hide);
                 self.cmd_item(ui, Cmd::UnhideAll);
                 ui.separator();
-                for c in [Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode, Cmd::CloseGroup] {
+                for c in [Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeUnique, Cmd::MakeParametric, Cmd::Explode, Cmd::CloseGroup] {
                     self.cmd_item(ui, c);
                 }
                 ui.separator();

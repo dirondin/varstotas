@@ -1630,6 +1630,14 @@ fn outliner_level(
                     actions.push(Action::Explode);
                     ui.close();
                 }
+                if !is_group
+                    && model.can_make_unique(&path, id)
+                    && ui.button("Make Unique").on_hover_text("Its own definition: editing it no longer changes the other copies").clicked()
+                {
+                    actions.push(Action::SelectInstance(path.clone(), id));
+                    actions.push(Action::MakeUnique);
+                    ui.close();
+                }
                 if let Some((_, parent)) = path.split_last()
                     && ui.button("Move Out of Group").on_hover_text("Into the group / component around this one (or drag the row)").clicked()
                 {

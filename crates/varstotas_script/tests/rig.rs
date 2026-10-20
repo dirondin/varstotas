@@ -322,3 +322,32 @@ fn script_uses_the_whole_api() {
     assert!(m.rig_parts(def_of(&m, b)).iter().any(|(_, n)| n == "Shelf") && m.rig_parts(def_of(&m, b)).iter().any(|(_, n)| n == "Lid"));
     assert_eq!(knob_z(&m, def_of(&m, a)), (490.0, true));
 }
+
+#[test]
+fn make_unique_gives_a_copy_its_own_master() {
+    let (mut m, d, a, b) = cabinet();
+    rig::set_rig(&mut m, d, Some(door_rig())).unwrap();
+    // Both copies on one variant: Make Unique applies; also to a copy with other values, as
+    // edits inside any copy go to the shared master.
+    assert!(m.can_make_unique(&[], a));
+    rig::set_values(&mut m, &[], a, &vals(&[("open", GenValue::Num(90.0))]), false).unwrap();
+    assert!(m.can_make_unique(&[], a) && m.can_make_unique(&[], b));
+    m.make_unique(&[], a).unwrap();
+    let va = def_of(&m, a);
+    let ma = m.rig_master(va).unwrap();
+    assert_ne!(ma, d, "a master of its own");
+    assert_eq!(m.defs[ma].name, "Cabinet 2");
+    assert_eq!(m.defs[va].name, "Cabinet 2");
+    assert_eq!(m.defs[ma].rig, m.defs[d].rig, "with the same parameters");
+    assert!(!m.can_make_unique(&[], a) && !m.can_make_unique(&[], b));
+    // An edit inside it goes to its own master: the other copy stays as it was.
+    let door = m.defs[va].mesh.instances.iter().find(|(_, i)| i.name == "Door").map(|(id, _)| id).unwrap();
+    m.defs[va].mesh.instances[door].transform = varstotas_kernel::glam::DMat4::from_translation(DVec3::new(0.0, 0.0, 100.0)) * m.defs[va].mesh.instances[door].transform;
+    rig::after_edit(&mut m, &[a]).unwrap();
+    assert!(close(part_bounds(&m, ma, "Door").min, DVec3::new(0.0, -20.0, 100.0)));
+    assert!(close(part_bounds(&m, d, "Door").min, DVec3::new(0.0, -20.0, 0.0)), "the first master untouched");
+    assert!(close(part_bounds(&m, def_of(&m, b), "Door").min, DVec3::new(0.0, -20.0, 0.0)), "the other copy untouched");
+    // Its values still change.
+    rig::set_values(&mut m, &[], a, &vals(&[("open", GenValue::Num(0.0))]), false).unwrap();
+    assert_eq!(m.rig_master(def_of(&m, a)), Some(ma));
+}

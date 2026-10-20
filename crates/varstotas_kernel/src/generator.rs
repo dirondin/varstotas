@@ -213,6 +213,9 @@ pub struct GenCheck {
 pub struct Generated {
     pub generator: String,
     pub values: GenValues,
+    /// Made unique (Make Unique): not shared with copies of equal values; new values rebuild it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unique: bool,
 }
 
 /// Parameter keys the Scale tool changes instead of stretching: local X, Y, Z.
@@ -492,11 +495,12 @@ impl Model {
         self.defs.get(d)?.generated.as_ref()
     }
 
-    /// A definition built by `generator` with exactly `values` (the shared one).
+    /// A definition built by `generator` with exactly `values` (the shared one, not one made
+    /// unique).
     pub fn generated_def(&self, generator: &str, values: &GenValues) -> Option<DefId> {
         self.defs
             .iter()
-            .find(|(_, d)| d.generated.as_ref().is_some_and(|g| g.generator == generator && g.values == *values))
+            .find(|(_, d)| d.generated.as_ref().is_some_and(|g| !g.unique && g.generator == generator && g.values == *values))
             .map(|(id, _)| id)
     }
 

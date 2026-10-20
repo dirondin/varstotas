@@ -63,13 +63,13 @@ expect matlib=["Sheet"]
 raw click 1371 257
 wait 5
 screenshot shots/traylib_more.bmp
-raw click 1320 444
+raw click 1320 470
 wait 5
 expect lib_tiles=List
 screenshot shots/traylib_list.bmp
 raw click 1371 257
 wait 5
-raw click 1320 390
+raw click 1320 416
 wait 5
 expect lib_tiles=Small
 screenshot shots/traylib_small.bmp
@@ -102,7 +102,7 @@ expect lib_names=["Component"]
 # … → Large Tiles again
 raw click 1371 56
 wait 5
-raw click 1320 243
+raw click 1320 269
 wait 5
 expect lib_tiles=Large
 screenshot shots/traylib_end.bmp

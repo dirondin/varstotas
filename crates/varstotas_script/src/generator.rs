@@ -146,6 +146,12 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
     if let Some(d) = model.generated_def(name, &values) {
         return Ok(d);
     }
+    new_def(model, name, values, false)
+}
+
+/// A new definition of generator `name` built now with `values` (normalized).
+fn new_def(model: &mut Model, name: &str, values: GenValues, unique: bool) -> Result<DefId, String> {
+    let g = generator(model, name)?;
     let built = build(model, &g, &values)?;
     let d = model.defs.insert(Definition {
         name: def_name(model, name),
@@ -153,7 +159,7 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
         is_group: false,
         guides: Default::default(),
         params: None,
-        generated: Some(Generated { generator: name.to_string(), values }),
+        generated: Some(Generated { generator: name.to_string(), values, unique }),
         source: None,
         rig: None,
         rigged: None,
@@ -193,7 +199,9 @@ pub fn rebuild_all(model: &mut Model, name: &str) -> Result<(), String> {
         let values = g.normalize(&kept)?;
         let built = build(model, &g, &values)?;
         model.graft_content(d, &built);
-        model.defs[d].generated = Some(Generated { generator: name.to_string(), values });
+        if let Some(x) = model.defs[d].generated.as_mut() {
+            x.values = values;
+        }
     }
     Ok(())
 }
@@ -219,13 +227,22 @@ pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, valu
         return Ok(());
     }
     let old = model.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def).ok_or("no such instance")?;
-    let target = match model.generated_def(&g.name, &values) {
+    // A copy made unique keeps its own definition: rebuilt, or a new unique one when it was
+    // copied since.
+    let shared = if cur.unique { None } else { model.generated_def(&g.name, &values) };
+    let target = match shared {
         Some(d) => d,
         None if model.instance_count(old) == 1 => {
             let built = build(model, &g, &values)?;
             model.graft_content(old, &built);
-            model.defs[old].generated = Some(Generated { generator: g.name.clone(), values });
+            model.defs[old].generated = Some(Generated { generator: g.name.clone(), values, unique: cur.unique });
             return Ok(());
+        }
+        None if cur.unique => {
+            let name = model.free_def_name(&model.defs[old].name);
+            let d = new_def(model, &g.name, values, true)?;
+            model.defs[d].name = name;
+            d
         }
         None => def_for(model, &g.name, &values)?,
     };

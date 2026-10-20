@@ -103,6 +103,29 @@ fn equal_values_share_a_definition() {
 }
 
 #[test]
+fn a_copy_made_unique_stays_apart() {
+    let mut m = Model::new();
+    generator::add(&mut m, SHELF).unwrap();
+    let none = GenValues::new();
+    let a = generator::place(&mut m, &[], "Shelf", &none, DMat4::IDENTITY).unwrap();
+    let b = generator::place(&mut m, &[], "Shelf", &none, DMat4::from_translation(DVec3::X * 2000.0)).unwrap();
+    assert!(m.can_make_unique(&[], a));
+    m.make_unique(&[], a).unwrap();
+    let u = def_of(&m, a);
+    assert_ne!(u, def_of(&m, b));
+    assert!(m.defs[u].generated.as_ref().unwrap().unique);
+    assert!(!m.can_make_unique(&[], a));
+    // New values rebuild it in place; the values of the other copy don't bring it back.
+    generator::set_values(&mut m, &[], a, &vals(&[("width", GenValue::Num(1000.0))]), false).unwrap();
+    assert_eq!(def_of(&m, a), u);
+    generator::set_values(&mut m, &[], a, &GenValues::new(), true).unwrap();
+    assert_eq!(def_of(&m, a), u, "not shared with the equal copy");
+    // Another placement with those values shares the ordinary definition, not the unique one.
+    let c = generator::place(&mut m, &[], "Shelf", &none, DMat4::from_translation(DVec3::X * 4000.0)).unwrap();
+    assert_eq!(def_of(&m, c), def_of(&m, b));
+}
+
+#[test]
 fn script_errors_are_reported() {
     let mut m = Model::new();
     generator::add(&mut m, "// @generator Bad\n// @param n:int = 1\nfn build(p) { box(ORIGIN, 1, 1, 1); throw \"boom\"; }").unwrap();

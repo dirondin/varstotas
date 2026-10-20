@@ -362,6 +362,18 @@ impl Document {
         self.set_selection(Vec::new());
     }
 
+    /// One component is selected whose content other copies share (Make Unique applies).
+    pub fn can_make_unique(&self) -> bool {
+        match self.selection.as_slice() {
+            [EntityRef::Instance(i)] => {
+                let m = &self.model;
+                let group = m.mesh_at(&self.active_path).and_then(|x| x.instances.get(*i)).and_then(|x| m.defs.get(x.def)).is_none_or(|d| d.is_group);
+                !group && m.can_make_unique(&self.active_path, *i)
+            }
+            _ => false,
+        }
+    }
+
     /// Anything (entities or guides) selected.
     pub fn has_selection(&self) -> bool {
         !self.selection.is_empty() || !self.guide_sel.is_empty() || !self.dim_sel.is_empty() || self.section_sel.is_some() || self.light_sel.is_some()

@@ -370,24 +370,18 @@ impl Clipboard {
             }
             rig_master = Some(nm);
         }
-        // A component with parameters from the library placed again: its master (same name and
-        // parameters) is reused whatever the file is called.
-        if !top
-            && self.src_doc == LIBRARY_UID
-            && src.rig.is_some()
-            && let Some((id, _)) = model.defs.iter().find(|(_, t)| t.name == src.name && t.rig == src.rig)
-        {
-            maps.defs.insert(d, id);
-            return Ok(id);
-        }
-        // A library component placed again: reuse its definition.
-        if !top
-            && !src.is_group
-            && self.library.as_deref() == Some(src.name.as_str())
-            && let Some((id, _)) = model.defs.iter().find(|(_, t)| !t.is_group && t.name == src.name && t.rigged.is_none())
-        {
-            maps.defs.insert(d, id);
-            return Ok(id);
+        // A library component placed again: its definition (for a component with parameters,
+        // its master) is reused while it still has the library's content — a copy changed in
+        // the model leaves it be, and the library's original comes in as a new definition.
+        let from_library = !top && !src.is_group && src.rigged.is_none() && src.generated.is_none() && self.src_doc == LIBRARY_UID;
+        if from_library && (src.rig.is_some() || self.library.as_deref() == Some(src.name.as_str())) {
+            let h = self.model.content_hash(d);
+            if let Some((id, _)) =
+                model.defs.iter().find(|(id, t)| !t.is_group && t.rigged.is_none() && same_or_numbered(&t.name, &src.name) && model.content_hash(*id) == h)
+            {
+                maps.defs.insert(d, id);
+                return Ok(id);
+            }
         }
         // A generated component: its generator comes along (unless the target has one of that
         // name), and equal values share the target's definition when the sources match.
@@ -408,6 +402,10 @@ impl Clipboard {
         let mut def = src.clone();
         if let (Some(r), Some(nm)) = (def.rigged.as_mut(), rig_master) {
             r.master = nm;
+            // a variant is called as its master (renamed when it came in beside a changed copy)
+            if r.paint.is_none() {
+                def.name = model.defs[nm].name.clone();
+            }
         }
         let children: Vec<(InstanceId, DefId)> = def.mesh.instances.iter().map(|(i, x)| (i, x.def)).collect();
         for (i, cd) in children {
@@ -435,10 +433,19 @@ impl Clipboard {
         for e in def.mesh.edges.values_mut() {
             e.tag = e.tag.map(|t| maps.tag(&self.model, model, t));
         }
+        // A library definition beside a changed copy of it in the model: "<name> 2".
+        if from_library {
+            def.name = model.free_def_name(&def.name);
+        }
         let nd = model.defs.insert(def);
         maps.defs.insert(d, nd);
         Ok(nd)
     }
+}
+
+/// `name` is `base` or `base` with a number ("Chair 2"): a copy [`Model::free_def_name`] made.
+fn same_or_numbered(name: &str, base: &str) -> bool {
+    name == base || name.strip_prefix(base).and_then(|r| r.strip_prefix(' ')).is_some_and(|n| n.parse::<u32>().is_ok())
 }
 
 /// Clipboard-model id → target-model id maps for one paste.
@@ -533,6 +540,20 @@ mod tests {
         assert_eq!(m.root_mesh().instances.len(), 2);
         assert!(m.root_mesh().instances.values().all(|i| i.def == crates[0]));
         assert!((m.bounds().unwrap().max.x - 3000.0).abs() < 1e-9);
+
+        // The model's Crate changed (a face erased): the library's comes in as "Crate 2", as in
+        // the file; placed again, that one is shared.
+        let d = crates[0];
+        let f = target.model.defs[d].mesh.faces.keys().next().unwrap();
+        target.commit("erase", |m| m.defs[d].mesh.erase(&[EntityRef::Face(f)]));
+        for x in [4000.0, 6000.0] {
+            assert!(crate::tools::transform::paste_clipboard(&mut target, &clip, &DMat4::from_translation(DVec3::new(x, 0.0, 0.0))));
+        }
+        let m = &target.model;
+        let by_name = |n: &str| m.defs.iter().find(|(_, x)| x.name == n).map(|(k, _)| k).unwrap();
+        let (c1, c2) = (by_name("Crate"), by_name("Crate 2"));
+        assert_eq!((m.defs[c1].mesh.faces.len(), m.defs[c2].mesh.faces.len()), (5, 6));
+        assert_eq!((m.instance_count(c1), m.instance_count(c2)), (2, 2));
     }
 
     #[test]
@@ -579,6 +600,18 @@ mod tests {
         let clip3 = Clipboard::from_library(file, "Kitchen cabinet").unwrap();
         assert!(crate::tools::transform::paste_clipboard(&mut target, &clip3, &DMat4::from_translation(DVec3::new(4000.0, 0.0, 0.0))));
         assert_eq!(target.model.defs.values().filter(|x| x.rig.is_some()).count(), 1);
+        // The master changed in the model (a part added): the library's comes in as a master of
+        // its own, beside it.
+        let mut changed = target.model.clone();
+        let edited = changed.add_material("Blue", [0.0, 0.0, 1.0, 1.0]);
+        let mf = changed.defs[masters[0]].mesh.instances.keys().next().unwrap();
+        changed.defs[masters[0]].mesh.instances[mf].material = Some(edited);
+        let mut t2 = Document::new();
+        t2.model = changed;
+        assert!(crate::tools::transform::paste_clipboard(&mut t2, &clip3, &DMat4::from_translation(DVec3::new(8000.0, 0.0, 0.0))));
+        let names: Vec<&str> = t2.model.defs.values().filter(|x| x.rig.is_some()).map(|x| x.name.as_str()).collect();
+        assert_eq!(names.len(), 2, "{names:?}");
+        assert!(names.iter().any(|n| n.ends_with(" 2")), "{names:?}");
         // The master placed from the Document folder gets the variant for the defaults.
         let clip4 = Clipboard::of_definition(&target.model, target.uid, masters[0]).unwrap();
         assert!(crate::tools::transform::paste_clipboard(&mut target, &clip4, &DMat4::from_translation(DVec3::new(6000.0, 0.0, 0.0))));

@@ -57,6 +57,7 @@ pub enum Cmd {
     UnhideAll,
     MakeGroup,
     MakeComponent,
+    MakeUnique,
     MakeParametric,
     Explode,
     CloseGroup,
@@ -101,7 +102,7 @@ impl Cmd {
             ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv, ExportImage, ExportAnimation, ExportObj, ExportStl,
             ExportDxf, ExportGlb, Export3mf, ExportPly, ExportDrawing, Sheets, ExportReport, ExportFacesJson, ExportAttributions,
             RunScript, Quit, Undo, Redo, Cut, Copy, Paste, PasteInPlace, Delete, PurgeUnused, DeleteGuides, SelectAll, SelectNone,
-            Hide, UnhideAll, MakeGroup, MakeComponent, MakeParametric, Explode, CloseGroup, IntersectModel, IntersectSelection,
+            Hide, UnhideAll, MakeGroup, MakeComponent, MakeUnique, MakeParametric, Explode, CloseGroup, IntersectModel, IntersectSelection,
             IntersectContext, ReverseFaces, OrientFaces, FlipRed, FlipGreen, FlipBlue,
         ];
         v.extend(SolidOp::ALL.map(Solid));
@@ -228,6 +229,7 @@ impl Cmd {
             Cmd::UnhideAll => "Unhide All",
             Cmd::MakeGroup => "Make Group",
             Cmd::MakeComponent => "Make Component…",
+            Cmd::MakeUnique => "Make Unique",
             Cmd::MakeParametric => "Make Parametric",
             Cmd::Explode => "Explode",
             Cmd::CloseGroup => "Close Group",
@@ -308,7 +310,7 @@ impl Cmd {
             Cmd::Hide => Icon::EyeOff,
             Cmd::UnhideAll => Icon::Eye,
             Cmd::MakeGroup => Icon::Group,
-            Cmd::MakeComponent => Icon::Component,
+            Cmd::MakeComponent | Cmd::MakeUnique => Icon::Component,
             Cmd::MakeParametric => Icon::Parametric,
             Cmd::Explode => Icon::Explode,
             Cmd::CloseGroup => Icon::CloseGroup,
@@ -404,6 +406,7 @@ impl Cmd {
             Cmd::UnhideAll => "Show everything hidden.".into(),
             Cmd::MakeGroup => "Wrap the selection in a group.".into(),
             Cmd::MakeComponent => "Turn the selection into a component.".into(),
+            Cmd::MakeUnique => "Give the selected component its own definition: editing it no longer changes the other copies.".into(),
             Cmd::MakeParametric => "Give the selected group parameters (Component Parameters).".into(),
             Cmd::Explode => "Unpack the selected groups and components.".into(),
             Cmd::CloseGroup => "Leave the group being edited.".into(),
@@ -495,6 +498,7 @@ impl Cmd {
             Cmd::UnhideAll => Action::UnhideAll,
             Cmd::MakeGroup => Action::MakeGroup,
             Cmd::MakeComponent => Action::MakeComponent,
+            Cmd::MakeUnique => Action::MakeUnique,
             Cmd::MakeParametric => Action::MakeParametric,
             Cmd::Explode => Action::Explode,
             Cmd::CloseGroup => Action::ExitContext,
@@ -561,6 +565,7 @@ impl Cmd {
             Cmd::Paste | Cmd::PasteInPlace => app.clipboard.is_some(),
             Cmd::DeleteGuides => doc.model.has_any_guides(),
             Cmd::Hide | Cmd::MakeGroup | Cmd::MakeComponent | Cmd::FlipRed | Cmd::FlipGreen | Cmd::FlipBlue => !sel.is_empty(),
+            Cmd::MakeUnique => doc.can_make_unique(),
             Cmd::MakeParametric => {
                 matches!(sel.as_slice(), [EntityRef::Instance(i)] if doc.model.instance_params(&doc.active_path, *i).is_none())
             }
