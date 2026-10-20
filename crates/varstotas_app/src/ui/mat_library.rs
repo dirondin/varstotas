@@ -556,7 +556,7 @@ impl VarstotasApp {
             let mut hide = false;
             let (folded, clicked, title) = section(ui, &mut self.prefs.library_collapsed, &sec.key, &sec.title, &sec.tip, sec.dir.is_some(), sec.fold_default, Some(sec.list.len()), |ui| {
                 if sec.examples {
-                    let r = ui.small_button("Hide").on_hover_text("Hide the bundled examples (… → Show Examples brings them back)");
+                    let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text("Hide the bundled examples (… → Show Examples brings them back)");
                     super::tray_lib::spot("hide:mat:Examples", r.rect.center());
                     hide = r.clicked();
                 }

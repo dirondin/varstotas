@@ -387,7 +387,7 @@ impl VarstotasApp {
             }
             if folder == EXAMPLES_FOLDER || folder == DOCUMENT_FOLDER {
                 let tip = if folder == EXAMPLES_FOLDER { "Hide the bundled examples (… → Show Examples brings them back)" } else { "Hide the document's components (… → Show In Model brings them back)" };
-                let r = ui.small_button("Hide").on_hover_text(tip);
+                let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text(tip);
                 super::tray_lib::spot(format!("hide:{folder}"), r.rect.center());
                 if r.clicked() {
                     hide = Some(folder == EXAMPLES_FOLDER);

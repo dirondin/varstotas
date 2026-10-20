@@ -1,4 +1,4 @@
-# Components list: generators found only in the document show under "In Model" (Hide, … → Show
+# Components list: generators found only in the document show under "In Model" (the crossed-out eye hides them, … → Show
 # In Model), and Delete… removes one from the document (one undo step). Real mouse.
 wait 10
 action gen_editor
@@ -13,13 +13,13 @@ expect gens=["My Generator"]
 expect lib_folders=[("Document", 1, false), ("Examples", 6, false)]
 screenshot shots/libdoc_start.bmp
 # Hide, then … → Show In Model
-raw click 1250 89
+raw click 1259 89
 wait 5
 expect lib_folders=[("Examples", 6, false)]
 raw click 1371 61
 wait 5
 screenshot shots/libdoc_menu.bmp
-raw click 1320 183
+raw click 1320 209
 wait 5
 raw key Escape
 wait 5

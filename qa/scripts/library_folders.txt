@@ -1,5 +1,5 @@
 # Components list folders: a heading per subfolder with a fold arrow and a link to the folder;
-# the bundled Examples fold, hide (Hide button or … → Show Examples) and come back.
+# the bundled Examples fold, hide (the crossed-out eye or … → Show Examples) and come back.
 # Fixture: qa/fixtures/library_folders/components/Kitchen/counter.rhai.
 wait 10
 action components
@@ -13,7 +13,7 @@ expect lib_folders=[("Kitchen", 1, true), ("Examples", 6, false)]
 screenshot shots/libf_folded.bmp
 dump folded
 # Hide the examples (real mouse); the tray scrolls up as the card shrinks; the arrow brings Kitchen back
-raw click 1255 147
+raw click 1242 147
 wait 5
 expect lib_folders=[("Kitchen", 1, true)]
 raw click 1154 328
@@ -28,7 +28,7 @@ raw click 1371 270
 wait 5
 screenshot shots/libf_menu.bmp
 dump menu
-raw click 1320 365
+raw click 1320 391
 wait 10
 expect lib_folders=[("Kitchen", 1, false), ("Examples", 6, false)]
 screenshot shots/libf_back.bmp
