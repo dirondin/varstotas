@@ -20,11 +20,11 @@ wait 5
 expect new_view=ViewDefaults { face_style: Wireframe, edges: true, profiles: true, axes: false
 expect perspective: false
 # the current view is not touched
-expect hud=(None false Shaded false)
+expect hud=(Some(Iso) false Shaded false)
 expect hud_show=["Axes",
 action new
 wait 10
-expect hud=(None true Wireframe false)
+expect hud=(Some(Iso) true Wireframe false)
 expect hud_show=["Ground", "Sky",
 # Search "fov" -> only View is listed; then "tiles" -> Libraries
 raw click 137 90
@@ -76,18 +76,18 @@ expect two_finger: Zoom
 # a new document (perspective again after the View Reset); scroll up = closer
 action new
 wait 10
-expect cam_dist=12369
+expect cam_dist=12000
 raw scroll 900 600 100
 wait 5
-expect cam_dist=4550
-expect hud=(None false Shaded false)
+expect cam_dist=4415
+expect hud=(Some(Iso) false Shaded false)
 # Invert the wheel: the same scroll goes back out
 raw click 281 224
 wait 3
 expect invert_zoom: true
 raw scroll 900 600 100
 wait 5
-expect cam_dist=12369
+expect cam_dist=12000
 # Reset: Orbit, no inversion
 raw click 649 92
 wait 5

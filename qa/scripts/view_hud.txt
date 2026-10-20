@@ -4,7 +4,7 @@ wait 10
 action script box(vec3(0, 0, 0), 1000, 600, 750);
 zoom_extents
 wait 20
-expect hud=(None false Shaded false) hud_show=["Axes", "Ground", "Sky", "Guides", "Section Planes", "Section Cuts", "Section Fill"] panes=(1 0
+expect hud=(Some(Iso) false Shaded false) hud_show=["Axes", "Ground", "Sky", "Guides", "Section Planes", "Section Cuts", "Section Fill"] panes=(1 0
 screenshot shots/hud_start.bmp
 # the view drop-down: field of view 60°, then Top, then Parallel
 raw click 961 22

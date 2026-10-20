@@ -1132,7 +1132,9 @@ impl VarstotasApp {
     /// A selected light: its properties (one undo step per edit, as in the Render window).
     fn light_info(&mut self, ui: &mut Ui, i: usize) {
         let Some(mut l) = self.doc.model.lights.get(i).cloned() else { return };
-        let before = l.clone();
+        // Compared sanitized: re-normalizing the direction the aim handle wrote may change its
+        // last bits, which must not count as an edit (it would take over the drag as "Edit Lights").
+        let before = l.clone().sanitized();
         ui.label(RichText::new("Light").strong());
         crate::ui::render::light_editor(ui, "entity_info_light", &mut l, self.doc.model.unit, &self.camera);
         ui.horizontal(|ui| {

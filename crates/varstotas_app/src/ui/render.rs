@@ -134,7 +134,9 @@ impl VarstotasApp {
         let m = &self.doc.model;
         let unit = m.unit;
         let (mut lights, mut settings, mut env) = (m.lights.clone(), m.render, m.environment);
-        let before = (lights.clone(), settings, env);
+        // Sanitized like the result below, so values that only re-sanitize differently (a
+        // re-normalized light direction) are not an edit.
+        let before = (lights.iter().cloned().map(Light::sanitized).collect::<Vec<_>>(), settings.sanitized(), env.sanitized());
         let mut sel = self.doc.light_sel.filter(|i| *i < lights.len());
         let sel_before = sel;
         let mut open = true;
