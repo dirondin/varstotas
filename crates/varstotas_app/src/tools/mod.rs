@@ -24,6 +24,7 @@ pub mod plugin_pick;
 pub mod plugin_select;
 pub(crate) mod light;
 pub(crate) mod section;
+mod slice;
 pub(crate) mod workplane;
 mod chamfer;
 pub(crate) mod solid;
@@ -85,6 +86,7 @@ pub enum ToolId {
     Text,
     Section,
     GuidePlane,
+    Slice,
     Orbit,
     Pan,
     Zoom,
@@ -94,7 +96,7 @@ pub enum ToolId {
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 45] = [
+    pub const ALL: [ToolId; 46] = [
         ToolId::Select,
         ToolId::Eraser,
         ToolId::Paint,
@@ -134,6 +136,7 @@ impl ToolId {
         ToolId::Text,
         ToolId::Section,
         ToolId::GuidePlane,
+        ToolId::Slice,
         ToolId::Orbit,
         ToolId::Pan,
         ToolId::Zoom,
@@ -183,6 +186,7 @@ impl ToolId {
             ToolId::Text => "Text",
             ToolId::Section => "Section Plane",
             ToolId::GuidePlane => "Guide Plane",
+            ToolId::Slice => "Slice",
             ToolId::Orbit => "Orbit",
             ToolId::Pan => "Pan",
             ToolId::Zoom => "Zoom",
@@ -234,6 +238,7 @@ impl ToolId {
             | ToolId::TexturePosition
             | ToolId::Section
             | ToolId::GuidePlane
+            | ToolId::Slice
             | ToolId::Text
             | ToolId::PositionCamera
             | ToolId::LookAround
@@ -289,6 +294,7 @@ impl ToolId {
             ToolId::Text => Icon::Text,
             ToolId::Section => Icon::Section,
             ToolId::GuidePlane => Icon::GuidePlane,
+            ToolId::Slice => Icon::Slice,
             ToolId::Orbit => Icon::Orbit,
             ToolId::Pan => Icon::Pan,
             ToolId::Zoom => Icon::Zoom,
@@ -340,6 +346,7 @@ impl ToolId {
             ToolId::Text => "Add a text with a leader pointing at the model.",
             ToolId::Section => "Cut the model with a section plane to see inside.",
             ToolId::GuidePlane => "Add a work plane to draw on in the air; the axes and the grid follow it.",
+            ToolId::Slice => "Cut the selection or the model with a plane; optionally split it into two groups.",
             ToolId::Orbit => "Rotate the camera around the model.",
             ToolId::Pan => "Move the camera sideways.",
             ToolId::Zoom => "Zoom the camera in or out.",
@@ -530,6 +537,14 @@ impl ToolId {
                  • Drag the active plane's handles: origin, normal tip (tilt), red handle (spin).\n\
                  • Window → Work Planes… to activate, hide, rename, delete or type angles."
             }
+            ToolId::Slice => {
+                "Set the cutting plane like a guide plane: click three points.\n\
+                 • Double-click a face (or Enter after the first click): the plane of that face.\n\
+                 • After the first click, arrows set the normal: → red, ← green, ↑ blue, ↓ last edge.\n\
+                 • Cuts the selection (faces, groups, components), or everything in the active context.\n\
+                 • Edges are added along the cut; a component shared by other copies is made unique first.\n\
+                 • %COPY% toggles Split (+ on the cursor): each cut body becomes two groups, closed where it was cut."
+            }
             ToolId::Orbit => {
                 "Drag to orbit around the point under the cursor.\n\
                  Middle mouse button orbits in any tool; Shift+middle pans.\n\
@@ -594,6 +609,7 @@ pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
         ToolId::Dimension => Box::new(dims::DimensionTool::default()),
         ToolId::Section => Box::new(section::SectionTool::default()),
         ToolId::GuidePlane => Box::new(workplane::GuidePlaneTool::default()),
+        ToolId::Slice => Box::new(slice::SliceTool::default()),
         ToolId::Text => Box::new(text::TextTool::default()),
         ToolId::Eraser => Box::new(edit::EraserTool::default()),
         ToolId::Paint => Box::new(edit::PaintTool::default()),

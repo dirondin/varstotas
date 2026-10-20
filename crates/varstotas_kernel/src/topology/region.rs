@@ -62,7 +62,6 @@ pub(crate) struct RegionFace {
     /// A point strictly inside the face.
     pub sample: DVec3,
     pub area: f64,
-    #[allow(dead_code)]
     pub created: bool,
 }
 

@@ -1,0 +1,64 @@
+# Slice tool with a real mouse: a plane by a point + arrow key (edges only), Split toggled by
+# the copy modifier (two closed groups), three points (a diagonal cut), the plane of another
+# box's face by double-click, a selected group only, undo.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+tool slice
+expect tool=Slice
+# a point on the front face, ↑ = normal along blue: a horizontal cut at z = 400
+rawp click 500 0 400
+wait 2
+raw key ArrowUp
+wait 3
+expect undo=Some("Slice")
+expect active_mesh F=10 E=20
+screenshot shots/slice_edges.bmp
+undo
+wait 2
+expect active_mesh F=6 E=12
+# Split on (a tap of the copy modifier), the same cut: two closed groups, selected
+raw mods alt
+wait 1
+raw mods none
+wait 1
+rawp click 500 0 400
+wait 2
+raw key ArrowUp
+wait 3
+expect undo=Some("Slice and Split")
+expect defs=3 model_faces=12
+expect sel F=0 E=0 I=2
+expect active_mesh F=0 E=0
+screenshot shots/slice_split.bmp
+undo
+wait 2
+# three points: a vertical diagonal plane through two opposite bottom corners
+select_none
+rawp click 0 0 0
+wait 2
+rawp click 1000 1000 0
+wait 2
+rawp click 0 0 1000
+wait 3
+expect undo=Some("Slice and Split")
+expect defs=3 model_faces=10
+undo
+wait 2
+# Split off again; the plane of a lower box's top face (double-click) cuts the first box
+raw mods alt
+wait 1
+raw mods none
+wait 1
+box 2000 0 0 1000 1000 500
+zoom_extents
+wait 5
+select_none
+rawp dblclick 2500 500 500
+wait 3
+expect undo=Some("Slice")
+expect active_mesh F=16 E=32
+undo
+wait 2
+dump done

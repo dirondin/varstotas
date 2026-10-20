@@ -5,11 +5,13 @@ mod follow_me;
 mod intersect;
 mod offset;
 mod push_pull;
+mod slice;
 mod solid;
 mod transform;
 
 pub use chamfer::{ChamferKind, ChamferResult};
 pub use intersect::IntersectScope;
+pub use slice::SliceOutcome;
 pub use solid::SolidOp;
 
 use crate::mesh::Mesh;

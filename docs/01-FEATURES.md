@@ -44,6 +44,7 @@
 | Follow Me | выдавливание профиля по пути; вдоль кривых — гладкие рёбра, без вывернутых сечений | P1 | ✅ |
 | Chamfer / Fillet | ровная фаска и скругление ребра между двумя гранями | P2 | ✅ |
 | Intersect Faces | пересечение с моделью/выделением | P1 | ✅ |
+| Slice | плоскость (3 точки / грань / ось) режет выделение или контекст; Split — две закрытые группы | P2 | ✅ |
 | Flip Along / Reverse Faces / Orient Faces | | P1 | ✅ |
 | Soften/Smooth edges | | P2 | ✅ |
 | Solid tools (Union/Subtract/Intersect/Trim/Split) | Outer Shell, Intersect, Union, Subtract, Trim, Split солид-групп; Entity Info: объём | P2 | ✅ |

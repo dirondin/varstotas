@@ -36,10 +36,10 @@ pub enum IntersectScope {
 slotmap::new_key_type! { struct PolyKey; }
 
 /// A face polygon in the active context's coordinates.
-struct IPoly {
+pub(super) struct IPoly {
     outer: Vec<DVec3>,
     holes: Vec<Vec<DVec3>>,
-    plane: Plane,
+    pub(super) plane: Plane,
     pr: Projector,
     outer2: Vec<DVec2>,
     holes2: Vec<Vec<DVec2>>,
@@ -53,7 +53,7 @@ struct IPoly {
 }
 
 impl IPoly {
-    fn new(outer: Vec<DVec3>, holes: Vec<Vec<DVec3>>, body: usize, active: bool) -> Option<Self> {
+    pub(super) fn new(outer: Vec<DVec3>, holes: Vec<Vec<DVec3>>, body: usize, active: bool) -> Option<Self> {
         let n = geom::newell(&outer);
         if outer.len() < 3 || !n.is_finite() || n.length() < 1e-12 {
             return None;
@@ -67,7 +67,7 @@ impl IPoly {
         Some(Self { outer, holes, plane: Plane { origin: c, normal: n }, pr, outer2, holes2, bbox, body, active, in_a: false, in_b: false })
     }
 
-    fn loc(&self, p: DVec3) -> PointLoc {
+    pub(super) fn loc(&self, p: DVec3) -> PointLoc {
         geom::point_in_region(self.pr.to2(p), &self.outer2, &self.holes2, TOL)
     }
 
@@ -81,7 +81,7 @@ impl IPoly {
 }
 
 /// Merge consecutive accepted parameter intervals along a line into segments.
-fn emit_intervals(ts: &mut Vec<f64>, at: impl Fn(f64) -> DVec3, accept: impl Fn(DVec3) -> bool, out: &mut Vec<(DVec3, DVec3)>) {
+pub(super) fn emit_intervals(ts: &mut Vec<f64>, at: impl Fn(f64) -> DVec3, accept: impl Fn(DVec3) -> bool, out: &mut Vec<(DVec3, DVec3)>) {
     ts.sort_by(|a, b| a.total_cmp(b));
     ts.dedup_by(|b, a| (*b - *a).abs() < TOL);
     let mut cur: Option<(f64, f64)> = None;
@@ -102,7 +102,7 @@ fn emit_intervals(ts: &mut Vec<f64>, at: impl Fn(f64) -> DVec3, accept: impl Fn(
 }
 
 /// Parameters along the line `p0 + t dir` where the loops of `p` meet the plane `other`.
-fn line_params(p: &IPoly, other: &Plane, p0: DVec3, dir: DVec3, ts: &mut Vec<f64>) {
+pub(super) fn line_params(p: &IPoly, other: &Plane, p0: DVec3, dir: DVec3, ts: &mut Vec<f64>) {
     for l in p.loops() {
         let k = l.len();
         for i in 0..k {

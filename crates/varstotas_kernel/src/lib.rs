@@ -61,7 +61,7 @@ pub use dims::{DimAnchor, DimGeom, DimId, Dimension};
 pub use guides::{DefGuides, GuideGeom, GuideId, GuidePointId, GuideRef};
 pub use history::History;
 pub use mesh::Mesh;
-pub use ops::{ChamferKind, ChamferResult, IntersectScope, SolidOp};
+pub use ops::{ChamferKind, ChamferResult, IntersectScope, SliceOutcome, SolidOp};
 pub use model::{
     Attribution, ContextPath, LicenseKind, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };

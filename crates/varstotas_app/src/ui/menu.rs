@@ -403,7 +403,7 @@ impl VarstotasApp {
             });
 
             ui.menu_button("Tools", |ui| {
-                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section, ToolId::GuidePlane] {
+                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section, ToolId::GuidePlane, ToolId::Slice] {
                     self.tool_item(ui, id);
                 }
                 ui.separator();

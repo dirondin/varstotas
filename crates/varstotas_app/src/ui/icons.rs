@@ -37,6 +37,7 @@ pub enum Icon {
     Axes,
     Dimension,
     Section,
+    Slice,
     Orbit,
     Pan,
     Zoom,
@@ -745,6 +746,17 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.poly_c(&[(2.5, 9.0), (13.0, 3.5), (21.5, 9.5), (11.0, 15.0)], Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70), Stroke::new(1.4 * pen.s, orange));
             pen.line_c(&[(12.0, 9.25), (12.0, 20.5)], Stroke::new(1.4 * pen.s, orange));
             pen.head((12.0, 22.0), (0.0, 1.0), 3.5, orange);
+        }
+        Icon::Slice => {
+            // A block cut in two: the upper part lifted off, the cut face tinted red.
+            let red = Color32::from_rgb(0xD6, 0x3A, 0x2A);
+            let st = Stroke::new(1.2 * pen.s, Color32::from_rgb(0x3A, 0x3A, 0x40));
+            pen.poly_c(&[(4.0, 13.0), (12.0, 17.0), (12.0, 21.5), (4.0, 17.5)], SHADE, st);
+            pen.poly_c(&[(12.0, 17.0), (20.0, 13.0), (20.0, 17.5), (12.0, 21.5)], SHADE_DARK, st);
+            pen.poly_c(&[(4.0, 13.0), (12.0, 9.0), (20.0, 13.0), (12.0, 17.0)], Color32::from_rgba_unmultiplied(0xD6, 0x3A, 0x2A, 90), Stroke::new(1.2 * pen.s, red));
+            pen.poly_c(&[(4.0, 5.5), (12.0, 9.5), (12.0, 13.0), (4.0, 9.0)], SHADE, st);
+            pen.poly_c(&[(12.0, 9.5), (20.0, 5.5), (20.0, 9.0), (12.0, 13.0)], SHADE_DARK, st);
+            pen.poly_c(&[(4.0, 5.5), (12.0, 1.5), (20.0, 5.5), (12.0, 9.5)], FILL, st);
         }
         Icon::StyleTextured => {
             // Brick cube: mortar rows on the sides, staggered joints.

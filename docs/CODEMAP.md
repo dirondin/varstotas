@@ -17,7 +17,7 @@ Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-chang
 | `topology/insert.rs` | sticky line insertion: vertex merge, edge split, automatic faces |
 | `topology/region.rs` | planar region recompute (the core of sticky faces; largest file) |
 | `topology/erase.rs` | eraser semantics |
-| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs` (`sweep_sections`: skips path vertices where a section would fold back; soft edges along curves), `ops/intersect.rs`, `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
+| `ops/push_pull.rs`, `ops/transform.rs`, `ops/offset.rs`, `ops/follow_me.rs` (`sweep_sections`: skips path vertices where a section would fold back; soft edges along curves), `ops/intersect.rs`, `ops/slice.rs` (`Model::slice`: cut by a plane, Split into capped parts), `ops/chamfer.rs` (Chamfer / Fillet), `ops/solid.rs` (Solid Tools: booleans of closed meshes) | modelling operations |
 | `model.rs` | `Model`: definitions (root, groups, components), instances, materials, tags (`tag_visible(def, tag)`, `untagged_hidden`, `delete_tag`), axes, raycast; `make_unique` / `can_make_unique` (a rig copy gets its own master, a generated one a copy of its generator — `fork_generator`, `rename_generator`, `generator::renamed_source`), `free_def_name`, `content_hash` |
 | `curves.rs` | `CurveInfo` (arc, circle, polygon), `add_curve`, `add_pie`, `set_curve` (via `rebuild_curve`, shared with splines), tangents |
 | `spline.rs` | Bezier curves: `Anchor`, `Spline` (anchors, closed, segs, normal; in `Mesh::splines` by curve id), `bezier_points`, `smooth`; `add_spline`, `spline` / `spline_chain` (valid while the edges are that curve), `set_spline` (reshape keeping faces) |
@@ -164,6 +164,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `text3d.rs` | glyph outlines of egui's bundled fonts (`skrifa`), `Text3dParams` |
 | `tools/texture.rs` | Texture Position tool (red/green/blue pins) |
 | `tools/section.rs` | Section Plane tool; drawing and picking of section planes, cut lines and fill |
+| `tools/slice.rs` | Slice tool: plane by three points / face (double-click, Enter) / arrow normal, Split toggled by the copy modifier → `Model::slice` |
 | `tools/light.rs` | lights in the viewport: `draw_lights` / `draw_light` (marker, point rays, spot cone, area rectangle, aim line + handle of the selected one), `pick_light`, `on_aim_handle`, `light_screen` (harness); Select picks lights and drags the aim handle, Move / Rotate move them (`transform::Targets::light`), Entity Info edits them (`render::light_editor`) |
 | `tools/workplane.rs` | Guide Plane tool (3 points, face, normal by arrows; gizmo drags of the active plane), `draw_work_planes` |
 | `ui/animation.rs` | File → Export → Animation… (`AnimWindow`, `AnimRun`): `start_animation`, `anim_tick` (one frame per app frame via `export_png_to` or the path tracer job, ffmpeg in a thread), the window |
