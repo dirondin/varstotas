@@ -1,4 +1,4 @@
-# Track Р batch 2: effects of the Realistic style (soft shadows, AO, reflections, bloom, DOF, fog,
+# Track R batch 2: effects of the Realistic style (soft shadows, AO, reflections, bloom, DOF, fog,
 # vignette), clay, NPR styles, custom WGSL surface shaders (presets, parameters, errors).
 box 0 0 0 7000 4500 100
 box 500 500 100 1000 1000 1000

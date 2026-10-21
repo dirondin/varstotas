@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Path tracer (track Р batch 3, pathtrace.rs): progressive, one sample per pixel per dispatch.
+// Path tracer (track R batch 3, pathtrace.rs): progressive, one sample per pixel per dispatch.
 // Uses the scene module's environment (group 0), textures and material table (group 1) and
 // custom surfaces; its own data is group 2 (scene BVH, triangles, lights, accumulation) and
 // group 3 (one denoise step).

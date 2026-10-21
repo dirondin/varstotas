@@ -1,4 +1,4 @@
-# Track У 2б / 2в: favourites, Recent, folders from the tray, deleting a model material, and
+# Track U 2b / 2c: favourites, Recent, folders from the tray, deleting a model material, and
 # dragging tiles into the viewport. A library material joins the model only when it paints
 # something. Real mouse and keys. Fixture: qa/fixtures/tray_fav/components (Box, Kitchen/counter.rhai).
 box 0 0 0 1000 1000 1000

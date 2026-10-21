@@ -1,4 +1,4 @@
-# Track Р batch 1: the Realistic face style — PBR materials (metal, glossy, glass, emissive),
+# Track R batch 1: the Realistic face style — PBR materials (metal, glossy, glass, emissive),
 # the environment (sky, HDRI, colour), sun, exposure and tone mapping.
 box 0 0 0 7000 4500 100
 box 500 500 100 1000 1000 1000

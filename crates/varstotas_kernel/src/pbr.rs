@@ -1,4 +1,4 @@
-//! Physically based materials and the environment light (track Р, the Realistic style).
+//! Physically based materials and the environment light (track R, the Realistic style).
 //!
 //! A material's base colour stays in [`crate::Material::color`] (sRGB + opacity) and its
 //! base colour map in [`crate::Material::image`]; [`Pbr`] adds the metallic-roughness

@@ -1,37 +1,37 @@
 # Varstotas
 
-Лёгкий нативный 3D-редактор классического типа для macOS и Windows. Rust + egui + wgpu.
+A lightweight native classic-style 3D editor for macOS and Windows. Rust + egui + wgpu.
 
 ```bash
-cargo run --release -p varstotas_app     # запустить
-cargo test --workspace                 # тесты
+cargo run --release -p varstotas_app     # run
+cargo test --workspace                 # tests
 ```
 
-## Документы
-- [Видение и UX-принципы](docs/00-VISION.md)
-- [Функции → план и статусы](docs/01-FEATURES.md)
-- [Архитектура](docs/02-ARCHITECTURE.md)
-- [Роадмап](docs/03-ROADMAP.md)
-- [Команда и процесс](docs/04-TEAM.md)
-- [**Текущий статус и прогресс**](docs/06-STATUS.md)
-- [UX-спецификация инструментов](docs/05-UX-SPEC.md)
-- [QA-отчёт M3](docs/qa/M3-report.md)
+## Documents
+- [Vision and UX principles](docs/00-VISION.md)
+- [Features → plan and statuses](docs/01-FEATURES.md)
+- [Architecture](docs/02-ARCHITECTURE.md)
+- [Roadmap](docs/03-ROADMAP.md)
+- [Team and process](docs/04-TEAM.md)
+- [**Current status and progress**](docs/06-STATUS.md)
+- [UX specification of the tools](docs/05-UX-SPEC.md)
+- [M3 QA report](docs/qa/M3-report.md)
 
-## Структура
+## Structure
 ```
-crates/varstotas_kernel  — геометрическое ядро (липкая геометрия, push/pull, offset, follow me, IO)
-crates/varstotas_render  — wgpu-рендер и камера
-crates/varstotas_app     — приложение: UI, инструменты, inference, VCB
+crates/varstotas_kernel  — geometry kernel (sticky geometry, push/pull, offset, follow me, IO)
+crates/varstotas_render  — wgpu renderer and camera
+crates/varstotas_app     — application: UI, tools, inference, VCB
 ```
 
-## Сборка релизов
-Артефакты складываются в `dist/` (в git не попадает).
+## Release builds
+Artifacts go to `dist/` (not tracked by git).
 
 ```bash
 scripts/build-macos.sh      # macOS universal (arm64 + x86_64)
-scripts/build-windows.sh    # Windows x86_64, кросс-сборка с macOS
+scripts/build-windows.sh    # Windows x86_64, cross-built from macOS
 ```
 
-- **macOS** — `scripts/build-macos.sh [--no-dmg]`: при необходимости ставит target `x86_64-apple-darwin`, собирает release под обе архитектуры, склеивает через `lipo`, собирает `dist/Varstotas.app` (Info.plist: `dev.varstotas.app`, версия из Cargo, macOS ≥ 11, Retina), собирает иконку (`crates/varstotas_app/assets/icon.png`, нарисована `scripts/make_icon.py` → `iconutil` → `.icns`), подписывает ad-hoc (`codesign -s -`) и упаковывает `Varstotas-<версия>-macos-universal.zip` и `.dmg`. Подписи Developer ID и нотаризации нет — при первом запуске: правый клик → «Открыть».
-- **Windows** — `scripts/build-windows.sh`: ставит target `x86_64-pc-windows-gnu` и `mingw-w64` (через brew), собирает `varstotas.exe` (GUI-подсистема, без консоли; иконка и version-ресурс встраиваются через `crates/varstotas_app/build.rs` / `winresource` + `windres`) и кладёт его в `dist/varstotas-windows-x86_64.zip`. Нужен Windows 10+ (UCRT); внешних DLL нет.
-- Проверка сборки без UI-клика: `VARSTOTAS_SCREENSHOT=shot.bmp dist/Varstotas.app/Contents/MacOS/varstotas` — снимет окно и выйдет.
+- **macOS** — `scripts/build-macos.sh [--no-dmg]`: installs the `x86_64-apple-darwin` target if needed, builds release for both architectures, joins them with `lipo`, assembles `dist/Varstotas.app` (Info.plist: `dev.varstotas.app`, version from Cargo, macOS ≥ 11, Retina), builds the icon (`crates/varstotas_app/assets/icon.png`, drawn by `scripts/make_icon.py` → `iconutil` → `.icns`), signs ad-hoc (`codesign -s -`) and packs `Varstotas-<version>-macos-universal.zip` and `.dmg`. There is no Developer ID signature or notarization — on first launch: right click → "Open".
+- **Windows** — `scripts/build-windows.sh`: installs the `x86_64-pc-windows-gnu` target and `mingw-w64` (via brew), builds `varstotas.exe` (GUI subsystem, no console; the icon and version resource are embedded via `crates/varstotas_app/build.rs` / `winresource` + `windres`) and puts it into `dist/varstotas-windows-x86_64.zip`. Requires Windows 10+ (UCRT); no external DLLs.
+- Checking the build without a UI click: `VARSTOTAS_SCREENSHOT=shot.bmp dist/Varstotas.app/Contents/MacOS/varstotas` — captures the window and exits.

@@ -1,4 +1,4 @@
-# Track У 2а: the Components and Materials cards in one frame — the top row (search, Refresh, +,
+# Track U 2a: the Components and Materials cards in one frame — the top row (search, Refresh, +,
 # online, …), sections In Model / My Library / Examples, tile sizes (… menu, shared by both),
 # the tiles' menus (Use, Rename…, Save to Library). Real mouse and keys.
 box 0 0 0 1000 1000 1000

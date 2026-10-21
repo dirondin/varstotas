@@ -1,4 +1,4 @@
-//! Light objects and render settings of the path tracer (track Р batch 3): point, spot and
+//! Light objects and render settings of the path tracer (track R batch 3): point, spot and
 //! rectangular area lights placed in the model (world space, mm), and the Render window's
 //! settings saved with the document.
 

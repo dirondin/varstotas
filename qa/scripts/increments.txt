@@ -1,4 +1,4 @@
-# Increments (track П batch 4): Move / Rotate / Scale rounded to a step with a real mouse,
+# Increments (track P batch 4): Move / Rotate / Scale rounded to a step with a real mouse,
 # model geometry and typed values win, the steps in the magnet menu.
 box 0 0 0 1000 600 400
 view iso

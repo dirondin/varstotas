@@ -30,7 +30,7 @@ pub enum FaceStylePref {
     Monochrome,
     HiddenLine,
     Wireframe,
-    /// Physically based materials lit by the environment (track Р).
+    /// Physically based materials lit by the environment (track R).
     Realistic,
 }
 

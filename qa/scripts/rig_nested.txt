@@ -1,5 +1,5 @@
 # The `generate` call uses the defaults (radius 500, height 1000): `#` starts a comment here.
-# Parameters of a component driving a nested generated component (track У 6): a cylinder drawn
+# Parameters of a component driving a nested generated component (track U 6): a cylinder drawn
 # with Draw → Shapes → Cylinder (real mouse) adds the generator; a Table component has a
 # generated leg; Window → Component Parameters: "Set parameter" passes the table's Height to the
 # leg's height; values per copy, shared leg definitions, undo.

@@ -1,4 +1,4 @@
-//! Parametric generators (track К): a Rhai script with a parameter header whose `build(p)`
+//! Parametric generators (track K): a Rhai script with a parameter header whose `build(p)`
 //! makes the content of a component in its local axes. The kernel keeps the data — the
 //! generator sources in [`Model::generators`] and, on each generated definition, the values
 //! it was built with ([`Generated`]); running the script is `varstotas_script::generator`.

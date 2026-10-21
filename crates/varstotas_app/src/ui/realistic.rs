@@ -1,4 +1,4 @@
-//! The Realistic style's UI (track Р): the Environment tray card, the physical properties of the
+//! The Realistic style's UI (track R): the Environment tray card, the physical properties of the
 //! current material in the Materials card (with a shaded sphere preview), HDRI and map loading.
 
 use super::{color_f32, color32, theme};

@@ -1,66 +1,66 @@
-# Архитектура
+# Architecture
 
-## Стек
-| Слой | Выбор | Почему |
+## Stack
+| Layer | Choice | Why |
 |---|---|---|
-| Язык | Rust (stable, edition 2024) | скорость C++, безопасность, кросс-компиляция mac/win одной командой |
-| Окно + UI | `eframe`/`egui` 0.36 (wgpu-бэкенд) | нативное окно, immediate-mode UI, крошечный бинарь, без Qt/Electron |
-| GPU | `wgpu` (реэкспорт `egui_wgpu::wgpu` — **только он**, чтобы версии совпадали) | Metal на macOS, DX12/Vulkan на Windows |
-| Математика | `glam` (f64 — `DVec3/DMat4` в ядре, f32 — на GPU) | |
-| ID сущностей | `slotmap` | стабильные generational-ключи |
-| Сериализация | `serde` + `serde_json` (`.vrst`) | читаемо, легко мигрировать |
-| Файловые диалоги | `rfd` | нативные диалоги |
+| Language | Rust (stable, edition 2024) | C++ speed, safety, mac/win cross-compilation with one command |
+| Window + UI | `eframe`/`egui` 0.36 (wgpu backend) | native window, immediate-mode UI, a tiny binary, no Qt/Electron |
+| GPU | `wgpu` (re-export `egui_wgpu::wgpu` — **only that one**, so the versions match) | Metal on macOS, DX12/Vulkan on Windows |
+| Math | `glam` (f64 — `DVec3/DMat4` in the kernel, f32 — on the GPU) | |
+| Entity IDs | `slotmap` | stable generational keys |
+| Serialization | `serde` + `serde_json` (`.vrst`) | readable, easy to migrate |
+| File dialogs | `rfd` | native dialogs |
 
-Единицы внутри ядра — **миллиметры, f64**. Допуск слияния точек `TOL = 1e-3` мм.
-Оси: X — красная, Y — зелёная, **Z — синяя (вверх)**, правая система.
+Units inside the kernel — **millimetres, f64**. Point merge tolerance `TOL = 1e-3` mm.
+Axes: X — red, Y — green, **Z — blue (up)**, right-handed system.
 
-## Крейты (workspace)
+## Crates (workspace)
 ```
 crates/
-  varstotas_kernel/   # геометрическое ядро + документ. Без GPU, без UI. 100% unit-тестируемо.
-  varstotas_render/   # wgpu-рендерер + Camera. Не знает о ядре: принимает плоские буферы.
-  varstotas_app/      # бинарь: окно, UI-панели, инструменты, inference, VCB, ввод.
+  varstotas_kernel/   # geometry kernel + document. No GPU, no UI. 100% unit-testable.
+  varstotas_render/   # wgpu renderer + Camera. Does not know about the kernel: takes flat buffers.
+  varstotas_app/      # binary: window, UI panels, tools, inference, VCB, input.
 ```
-Зависимости: `app → kernel`, `app → render`. `kernel` и `render` друг от друга **не зависят**.
+Dependencies: `app → kernel`, `app → render`. `kernel` and `render` do **not** depend on each other.
 
 ## varstotas_kernel
-- `Model` — документ: дерево `Definition` (корень + группы/компоненты), материалы, теги, сцены, настройки единиц.
-- `Mesh` — «липкая» геометрия одного контекста: вершины, рёбра, грани (внешний контур + дыры), экземпляры дочерних определений.
-  - `add_line` сливает вершины, режет рёбра в точках пересечения, режет грани, автоматически создаёт грани на замкнутых плоских контурах.
-  - `push_pull`, `offset_face`, `follow_me`, `transform_vertices` (растяжение связной геометрии), `erase`, `reverse_face`, `intersect`.
-- Группа = `Definition` с одним `Instance`; компонент = `Definition` с N экземплярами.
-- `History` — undo/redo на снимках `Model` (клон). Просто и надёжно; оптимизация — позже.
-- `tessellate` — треугуляция граней (с дырами) + список рёбер с ссылками на сущности для пикинга.
-- `io` — `.vrst` (JSON), экспорт OBJ/STL, импорт OBJ/STL.
-- `units` — парсер/форматтер длин VCB (`2500`, `2.5m`, `1'6"`, `300,200`).
+- `Model` — the document: a tree of `Definition` (root + groups/components), materials, tags, scenes, unit settings.
+- `Mesh` — the "sticky" geometry of one context: vertices, edges, faces (outer loop + holes), instances of child definitions.
+  - `add_line` merges vertices, cuts edges at intersection points, cuts faces, automatically creates faces on closed flat loops.
+  - `push_pull`, `offset_face`, `follow_me`, `transform_vertices` (stretching connected geometry), `erase`, `reverse_face`, `intersect`.
+- Group = a `Definition` with one `Instance`; component = a `Definition` with N instances.
+- `History` — undo/redo on snapshots of `Model` (a clone). Simple and reliable; optimization — later.
+- `tessellate` — triangulation of faces (with holes) + a list of edges with references to entities for picking.
+- `io` — `.vrst` (JSON), OBJ/STL export, OBJ/STL import.
+- `units` — parser/formatter of VCB lengths (`2500`, `2.5m`, `1'6"`, `300,200`).
 
 ## varstotas_render
-- `Camera` (f64): perspective/ortho, orbit/pan/zoom, `screen_ray`, `world_to_screen`, `zoom_extents`, стандартные виды.
-- `Renderer`: рисует **во внеэкранную текстуру** (MSAA 4x + depth), регистрирует её в egui как `TextureId`; app показывает её как изображение и рисует 2D-оверлеи (маркеры inference, рамку выделения, подписи) через `egui::Painter`.
-- Входные данные:
-  - `SceneGeometry` — треугольники (pos, normal, color) + рёбра (pos, color). Загружается **только при изменении модели**.
-  - `Overlay3d` — линии в 3D на каждый кадр (inference-оси, направляющие, превью инструмента): толщина в px, пунктир, «поверх всего» или с depth-test.
-  - `RenderStyle` — фон (небо/земля), рёбра вкл/выкл, профили, X-ray, wireframe, hidden-line, сетка, оси.
-- Толстые линии — расширение в квады в вершинном шейдере (в wgpu нет line width).
+- `Camera` (f64): perspective/ortho, orbit/pan/zoom, `screen_ray`, `world_to_screen`, `zoom_extents`, standard views.
+- `Renderer`: draws **into an offscreen texture** (MSAA 4x + depth), registers it in egui as a `TextureId`; the app shows it as an image and draws 2D overlays (inference markers, the selection box, labels) through `egui::Painter`.
+- Inputs:
+  - `SceneGeometry` — triangles (pos, normal, color) + edges (pos, color). Uploaded **only when the model changes**.
+  - `Overlay3d` — lines in 3D every frame (inference axes, guides, tool preview): width in px, dashes, "on top of everything" or with a depth test.
+  - `RenderStyle` — background (sky/ground), edges on/off, profiles, X-ray, wireframe, hidden-line, grid, axes.
+- Thick lines — expanded into quads in the vertex shader (wgpu has no line width).
 
 ## varstotas_app
-- `App` (eframe): меню, левый тулбар, правый лоток панелей (Entity Info, Materials, Tags, Outliner, Scenes, Instructor), статус-бар с VCB.
+- `App` (eframe): menu, left toolbar, right tray of panels (Entity Info, Materials, Tags, Outliner, Scenes, Instructor), status bar with the VCB.
 - `tools/` — trait `Tool` (state machine): `on_mouse_move/down/up`, `on_key`, `on_vcb(input)`, `overlay()`, `status_text()`.
-- `inference/` — движок привязок: собирает кандидатов (вершины/середины/рёбра/грани/оси/параллели/направляющие) в экранном пространстве, ранжирует, отдаёт `InferenceResult { point, kind, constraint_dir, ref_entity }`.
-- `nav` — камера: средняя кнопка — orbit, Shift+средняя — pan, колесо — zoom к курсору.
-- `scene_builder` — `Model + selection + context` → `SceneGeometry` (подсветка выделения, тусклость вне редактируемой группы).
-- `picking` — CPU: грани — raycast, рёбра/вершины — расстояние в пикселях после проекции.
+- `inference/` — the snapping engine: collects candidates (vertices/midpoints/edges/faces/axes/parallels/guides) in screen space, ranks them, returns `InferenceResult { point, kind, constraint_dir, ref_entity }`.
+- `nav` — camera: middle button — orbit, Shift+middle — pan, wheel — zoom to the cursor.
+- `scene_builder` — `Model + selection + context` → `SceneGeometry` (selection highlight, dimming outside the group being edited).
+- `picking` — CPU: faces — raycast, edges/vertices — distance in pixels after projection.
 
-## Поток данных кадра
+## Frame data flow
 ```
-input → nav / active Tool ── (InferenceEngine) ──→ ops над Model (через History.commit)
+input → nav / active Tool ── (InferenceEngine) ──→ ops on Model (via History.commit)
                                                    │ model_version++
-Model ──scene_builder (если version изменилась)──→ Renderer.set_geometry
-Tool.overlay() ─→ Overlay3d + 2D-маркеры ──→ Renderer.render → egui image + painter
+Model ──scene_builder (if version changed)──→ Renderer.set_geometry
+Tool.overlay() ─→ Overlay3d + 2D markers ──→ Renderer.render → egui image + painter
 ```
 
-## Правила совместной разработки
-1. Каждый крейт имеет владельца (см. `04-TEAM.md`). Чужой крейт не правим — пишем запрос в `docs/requests/`.
-2. Публичный API крейта описан в его `lib.rs`; ломающие изменения — только с обновлением этого документа.
-3. `cargo build`, `cargo test`, `cargo clippy` — зелёные перед сдачей задачи.
-4. Ядро покрыто unit-тестами на каждую операцию (особенно топология граней).
+## Rules of joint development
+1. Each crate has an owner (see `04-TEAM.md`). We do not edit another's crate — we write a request in `docs/requests/`.
+2. A crate's public API is described in its `lib.rs`; breaking changes — only with an update of this document.
+3. `cargo build`, `cargo test`, `cargo clippy` — green before handing off a task.
+4. The kernel is covered by unit tests for every operation (especially face topology).

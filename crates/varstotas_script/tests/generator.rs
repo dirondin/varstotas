@@ -1,4 +1,4 @@
-//! Generators (track К): header parsing, building, shared definitions, scaling, the script API.
+//! Generators (track K): header parsing, building, shared definitions, scaling, the script API.
 
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{GenKind, GenValue, GenValues, Generator, InstanceId, Model};

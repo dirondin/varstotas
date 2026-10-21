@@ -1,4 +1,4 @@
-# Track Р batch 4: File → Export → Animation… — a scene tour or an orbit as MP4 (ffmpeg) or PNG frames
+# Track R batch 4: File → Export → Animation… — a scene tour or an orbit as MP4 (ffmpeg) or PNG frames
 box 0 0 0 3000 2000 1000
 view iso
 zoom_extents

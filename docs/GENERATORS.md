@@ -1,9 +1,9 @@
-# Генераторы — параметрические компоненты (трек «К»)
+# Generators — parametric components (track K)
 
-Генератор — это компонент с параметрами: Rhai-скрипт с заголовком параметров. Его функция `build(p)` строит содержимое компонента в локальных осях: начало координат компонента — точка вставки. У каждого экземпляра свои значения параметров, их правят в Entity Info. Экземпляры с одинаковыми значениями делят одно определение компонента.
+A generator is a component with parameters: a Rhai script with a parameter header. Its `build(p)` function builds the component's content in local axes: the component's origin is the insertion point. Each instance has its own parameter values, edited in Entity Info. Instances with equal values share one component definition.
 
-## Заголовок
-Комментарии `// @…` в начале файла, до первой строки кода:
+## Header
+`// @…` comments at the start of the file, before the first line of code:
 
 ```rhai
 // @generator Shelf
@@ -22,125 +22,125 @@ fn build(p) {
 }
 ```
 
-- `@generator Имя` — обязателен. Имя служит ключом генератора в документе.
-- `@description` — подсказка в лотке.
-- `@param ключ:тип(диапазон) = значение "Подпись"`:
-  - диапазон пишется как `мин..макс/шаг`, каждая часть необязательна: `(..2000)`, `(/10)`;
-  - значения прижимаются к диапазону и округляются к шагу (от `мин`, иначе от 0);
-  - подпись видна в Entity Info; без неё подписью служит ключ.
+- `@generator Name` — required. The name serves as the generator's key in the document.
+- `@description` — a hint in the tray.
+- `@param key:type(range) = value "Label"`:
+  - the range is written as `min..max/step`, each part optional: `(..2000)`, `(/10)`;
+  - values are clamped to the range and rounded to the step (from `min`, otherwise from 0);
+  - the label is shown in Entity Info; without it the key serves as the label.
 
-| Тип | В `p` | Поле в Entity Info |
+| Type | In `p` | Field in Entity Info |
 |---|---|---|
-| `length` (по умолчанию для чисел) | число, мм; в значении можно писать единицы: `1.2m` | текст с единицами модели |
-| `int` | целое | счётчик (перетаскивание или ввод) |
-| `number` | число | счётчик |
-| `bool` | `true` / `false` | флажок |
-| `choice(a\|b\|c)` | строка-вариант | выпадающий список |
-| `angle` | градусы | ползунок (без диапазона — 0–360°) |
-| `percent` | 0–100 (или свой диапазон) | ползунок |
-| `material` | имя материала, `""` — нет | список материалов документа |
+| `length` (default for numbers) | a number, mm; units can be written in the value: `1.2m` | text with the model's units |
+| `int` | an integer | a counter (drag or type) |
+| `number` | a number | a counter |
+| `bool` | `true` / `false` | a checkbox |
+| `choice(a\|b\|c)` | the chosen string | a drop-down list |
+| `angle` | degrees | a slider (without a range — 0–360°) |
+| `percent` | 0–100 (or its own range) | a slider |
+| `material` | a material name, `""` — none | a list of the document's materials |
 
-## Формулы и проверки
+## Formulas and checks
 ```rhai
 // @formula count:int = ceil(height / max_riser) "Risers"
 // @formula riser = height / count "Riser height"
 // @formula first:int = if layout == "landing" { count / 2 } else { count }
 // @check 2 * riser + going >= 550 && 2 * riser + going <= 700 "Uncomfortable step"
 ```
-- `@formula ключ[:тип] = выражение "Подпись"` — значение, вычисленное из параметров. Выражение на Rhai, параметры и предыдущие формулы доступны по именам. Результат попадает в `p` наравне с параметрами (`p.riser`) и показывается в Entity Info серым, только для чтения (выражение — в подсказке). Тип задаёт только вид значения: `length` (по умолчанию), `int` (округляется до целого), `number`, `bool`, `angle`, `percent`, `text`. Имена формул и параметров не должны совпадать.
-- `@check выражение "Сообщение"` — условие на значения. Если оно ложно, значения не принимаются: в документе ничего не меняется, сообщение показывается в строке состояния.
-- Строка в кавычках в конце строки заголовка — подпись или сообщение. Если выражение само кончается строкой (`finish == "Oak"`), это распознаётся по оператору перед ней.
-- Кроме стандартных функций Rhai (`floor`, `round`, `abs`, `sqrt`, …) есть `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)` и `ceil(x)`; они же доступны в скриптах.
+- `@formula key[:type] = expression "Label"` — a value computed from the parameters. The expression is Rhai; parameters and previous formulas are available by name. The result goes into `p` on a par with the parameters (`p.riser`) and is shown in Entity Info in grey, read-only (the expression is in the hint). The type only sets how the value looks: `length` (default), `int` (rounded to an integer), `number`, `bool`, `angle`, `percent`, `text`. Formula and parameter names must not coincide.
+- `@check expression "Message"` — a condition on the values. If it is false, the values are not accepted: nothing changes in the document, and the message is shown in the status bar.
+- A quoted string at the end of a header line is the label or message. If the expression itself ends with a string (`finish == "Oak"`), this is recognised by the operator before it.
+- Besides the standard Rhai functions (`floor`, `round`, `abs`, `sqrt`, …) there are `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)` and `ceil(x)`; they are available in scripts too.
 
-Внутри `build` доступен весь API из `docs/SCRIPTING.md`. Скрипт работает в пустой модели, в которой есть материалы и теги документа, поэтому `material("Oak", "#C8A26B")` создаёт материал один раз. Всё, что построено, становится содержимым компонента; вложенные группы сохраняются. Время работы ограничено 10 с. Ошибка в скрипте ничего не меняет в документе — сообщение показывается в строке состояния.
+Inside `build` the whole API from `docs/SCRIPTING.md` is available. The script runs in an empty model that contains the document's materials and tags, so `material("Oak", "#C8A26B")` creates the material only once. Everything that is built becomes the component's content; nested groups are kept. The running time is limited to 10 s. An error in the script changes nothing in the document — the message is shown in the status bar.
 
-## Работа в приложении
-- **Каталог.** Генераторы — это компоненты с параметрами, поэтому они лежат в том же каталоге, что и компоненты: `~/.varstotas/components` (или папка, выбранная в лотке), файлы `.rhai` рядом с `.vrst`. Подпапки — категории: у каждой заголовок со стрелкой (свернуть / развернуть, запоминается) и ссылкой, открывающей папку в Finder. В лотке **Components** — один общий список плиток с эскизами, по папкам и по имени; на плитке генератора в правом верхнем углу шестерёнка. Эскиз строится со значениями по умолчанию. Встроенные примеры (Shelf, Drawer Box, Stair, Cabinet, Railing, Table) показаны в папке Examples; на диск они не пишутся — «Edit Generator…» → «Save to Library» делает свою копию. Контекстное меню плитки из каталога → «Delete…» удаляет файл после подтверждения. Кнопка «Hide» у заголовка Examples прячет примеры, «…» → «Show Examples» возвращает (настройка сохраняется). Генераторы, которые есть только в документе, показаны в секции In Model (тоже с «Hide» и галочкой «…» → «Show In Model»); «Delete…» удаляет такой генератор из документа — размещённые компоненты остаются обычными компонентами без параметров, Undo возвращает. Файлы из прежней папки `~/.varstotas/generators` при запуске переносятся в каталог компонентов.
-- **Размещение.** Клик по генератору — компонент со значениями по умолчанию следует за курсором, следующий клик ставит его. Исходник генератора при этом сохраняется в документе (`Model::generators`), поэтому файл откроется и на другой машине. Если в библиотеке лежит более новая версия, при размещении она заменяет копию в документе, и все её компоненты перестраиваются (шаг Undo «Update Generator …»).
-- **Редактор (Window → Generator Editor…, «+» в лотке, контекстное меню плитки → Edit Generator…).** Кнопка «? Reference» справа открывает справочник на теме Generators, F1 — на слове под курсором. Слева — исходник в том же редакторе, что у Script Console (подсветка, дополнение, подсказки по тегам `@formula` и `@check`). Справа — превью, которое перестраивается через 0,4 с после правки (перетаскивание поворачивает его), поля параметров для превью, значения формул и ошибки. Кнопки:
-  - **New** — шаблон;
-  - **Open…** — файл `.rhai`;
-  - **Save to Library** — записать в каталог компонентов: в свой файл, если генератор открыт оттуда, иначе в `<имя>.rhai` (чужой файл с тем же именем не перезаписывается);
-  - **Apply to Document** — заменить исходник в документе, его компоненты перестраиваются (один шаг Undo);
-  - **Place** — поставить компонент со значениями превью.
-- **Entity Info.** При выделении сгенерированных компонентов показываются поля их параметров.
-  - Каждое изменение перестраивает компонент и даёт один шаг Undo. Ползунок и счётчик применяются, когда отпущена мышь.
-  - Если выделено несколько экземпляров одного генератора, изменение применяется ко всем, а остальные их значения не меняются.
-  - **Reset** возвращает значения по умолчанию.
-  - **Make Unique** (Entity Info или правый клик) копирует генератор экземпляра: в документе появляется «<имя> 2» (тот же скрипт, заголовок `@generator` переименован, плитка в In Model), и экземпляр переходит на него. Правка скрипта копии меняет только её экземпляры. Кнопка доступна, когда генератор используют и другие экземпляры (даже с другими значениями).
-- **Генераторы документа (In Model).**
-  - Генератор, поставленный из библиотеки или Examples, хранится в документе и всегда показан плиткой в In Model, отдельно от библиотечного. Edit на этой плитке открывает Generator Editor для копии документа: **Apply** перестраивает все её экземпляры; если в заголовке поменять имя, генератор и его компоненты переименовываются.
-  - Повторная вставка из библиотеки берёт генератор документа с тем же скриптом. Если скрипт в документе правили, библиотечный приходит рядом как «<имя> 2».
-  - Все определения генератора называются по нему (в Outliner копии Shelf — «Shelf» при любых значениях).
-- **Общие определения.**
-  - Если у другого экземпляра уже есть определение с такими же значениями, экземпляр переходит на него.
-  - Если определение используется только этим экземпляром, оно перестраивается на месте.
-  - Иначе строится новое.
-  - Определения, которыми больше никто не пользуется, удаляются.
-- **Scale.** Масштабирование одного сгенерированного компонента меняет его параметры `width` (или `length`) по локальной X, `depth` по Y и `height` по Z, если они есть и имеют тип `length`. Геометрия при этом не растягивается: доски сохраняют толщину. Начало компонента сдвигается так же, как при обычном масштабе. Оси, для которых параметра нет, не меняются. Если у генератора нет ни одного такого параметра, компонент масштабируется обычным образом. Превью во время перетаскивания пока показывает простое растяжение.
-- **Копирование.** Copy/Paste переносит генератор в другой документ. Экземпляры с равными значениями и тем же исходником делят одно определение.
+## Working in the application
+- **Catalogue.** Generators are components with parameters, so they live in the same catalogue as components: `~/.varstotas/components` (or the folder chosen in the tray), `.rhai` files next to `.vrst`. Subfolders are categories: each has a header with an arrow (collapse / expand, remembered) and a link that opens the folder in Finder. The **Components** tray is one common list of tiles with thumbnails, by folder and by name; a generator tile has a gear in its top right corner. The thumbnail is built with the default values. The built-in examples (Shelf, Drawer Box, Stair, Cabinet, Railing, Table) are shown in the Examples folder; they are not written to disk — "Edit Generator…" → "Save to Library" makes your own copy. A catalogue tile's context menu → "Delete…" deletes the file after confirmation. The "Hide" button at the Examples header hides the examples, "…" → "Show Examples" brings them back (the setting is remembered). Generators that exist only in the document are shown in the In Model section (also with "Hide" and the "…" → "Show In Model" checkbox); "Delete…" removes such a generator from the document — placed components remain ordinary components without parameters, Undo brings it back. Files from the former `~/.varstotas/generators` folder are moved to the components catalogue at startup.
+- **Placement.** Click a generator — a component with the default values follows the cursor, the next click places it. The generator's source is saved in the document (`Model::generators`), so the file opens on another machine too. If the library has a newer version, placing replaces the copy in the document with it, and all its components are rebuilt (the Undo step "Update Generator …").
+- **Editor (Window → Generator Editor…, "+" in the tray, a tile's context menu → Edit Generator…).** The "? Reference" button on the right opens the reference on the Generators topic, F1 — on the word under the cursor. On the left is the source in the same editor as the Script Console (highlighting, completion, hints for the `@formula` and `@check` tags). On the right are a preview that is rebuilt 0.4 s after an edit (dragging rotates it), parameter fields for the preview, formula values and errors. Buttons:
+  - **New** — a template;
+  - **Open…** — a `.rhai` file;
+  - **Save to Library** — write to the components catalogue: to its own file if the generator was opened from there, otherwise to `<name>.rhai` (someone else's file with the same name is not overwritten);
+  - **Apply to Document** — replace the source in the document, its components are rebuilt (one Undo step);
+  - **Place** — place a component with the preview's values.
+- **Entity Info.** When generated components are selected, their parameter fields are shown.
+  - Every change rebuilds the component and gives one Undo step. A slider and a counter are applied when the mouse is released.
+  - If several instances of one generator are selected, the change is applied to all of them, and their other values are not changed.
+  - **Reset** returns the default values.
+  - **Make Unique** (Entity Info or right click) copies the instance's generator: "<name> 2" appears in the document (the same script, the `@generator` header renamed, a tile in In Model), and the instance moves to it. Editing the copy's script changes only its instances. The button is available when other instances use the generator too (even with other values).
+- **Document generators (In Model).**
+  - A generator placed from the library or Examples is stored in the document and is always shown as a tile in In Model, separately from the library one. Edit on this tile opens the Generator Editor for the document's copy: **Apply** rebuilds all its instances; if the name in the header is changed, the generator and its components are renamed.
+  - Inserting again from the library takes the document's generator with the same script. If the script in the document was edited, the library one arrives next to it as "<name> 2".
+  - All of a generator's definitions are named after it (in the Outliner, Shelf copies are "Shelf" with any values).
+- **Shared definitions.**
+  - If another instance already has a definition with the same values, the instance moves to it.
+  - If the definition is used only by this instance, it is rebuilt in place.
+  - Otherwise a new one is built.
+  - Definitions that nobody uses any more are deleted.
+- **Scale.** Scaling a single generated component changes its parameters `width` (or `length`) along local X, `depth` along Y and `height` along Z, if they exist and have the `length` type. The geometry is not stretched: boards keep their thickness. The component's origin shifts the same way as in an ordinary scale. Axes for which there is no parameter do not change. If the generator has none of these parameters, the component is scaled in the ordinary way. The preview during dragging still shows a simple stretch.
+- **Copying.** Copy/Paste carries the generator to another document. Instances with equal values and the same source share one definition.
 
-## Скрипты, Python, MCP
-| Функция | Что делает |
+## Scripts, Python, MCP
+| Function | What it does |
 |---|---|
-| `add_generator(src)` | добавить или обновить генератор из исходника; вернуть имя (при новом исходнике все его компоненты перестраиваются) |
-| `generators()` | имена генераторов документа |
-| `generate(name, at)`, `generate(name, at, #{ width: 1200, finish: "White" })` | поставить компонент в точку `at`; вернуть его |
-| `params(g)` | значения сгенерированного компонента (map) |
-| `set_params(g, #{ shelves: 5 })` | изменить часть значений (остальные сохраняются) |
-| `reset_params(g)` | значения по умолчанию |
+| `add_generator(src)` | add or update a generator from source; return the name (with a new source all its components are rebuilt) |
+| `generators()` | the document's generator names |
+| `generate(name, at)`, `generate(name, at, #{ width: 1200, finish: "White" })` | place a component at point `at`; return it |
+| `params(g)` | the values of a generated component (map) |
+| `set_params(g, #{ shelves: 5 })` | change some of the values (the others are kept) |
+| `reset_params(g)` | the default values |
 
-Python: `m.add_generator(open("shelf.rhai").read())`, `g = m.generate("Shelf", varstotas.vec3(0, 0, 0), {"width": 1200})`, `m.set_params(g, {"back": False})`. Агент MCP пользуется теми же функциями через `run_script`.
+Python: `m.add_generator(open("shelf.rhai").read())`, `g = m.generate("Shelf", varstotas.vec3(0, 0, 0), {"width": 1200})`, `m.set_params(g, {"back": False})`. The MCP agent uses the same functions through `run_script`.
 
-## Устройство
+## Internals
 - `varstotas_kernel::generator`:
-  - разбор заголовка (`Generator::parse`);
-  - типы `GenKind`, `GenParam`, `GenValue`, проверка значений (`normalize`);
-  - `Generated` на определении (генератор + значения);
-  - `Model::generated_def` ищет общее определение;
-  - `graft_content` переносит построенное в определение;
-  - `SIZE_KEYS` — ключи размеров для Scale.
-- `varstotas_script::generator`: `build` (прогон `build(p)` в пустой модели), `def_for`, `place`, `set_values`, `scale`, `add`, `rebuild_all`.
-- `varstotas_script::generator::derive` считает формулы и проверки (`formula_values` — для показа).
-- Приложение: `ui/generators.rs` (плитки генераторов в общем списке `ui/library.rs`, встроенные примеры, перенос старой папки, размещение через `PasteTool`, поля Entity Info `param_field`, строки формул), `ui/gen_editor.rs` (окно редактора). Scale — `tools/transform.rs::scale_generated`.
-- Харнесс: `action generator <name>`, `action gen key=value …` (`_` в значении означает пробел), `action gen_reset`, `action make_unique`; редактор — `action gen_editor [name]`, `action ged key=value …`, `action ged_sub старое|новое`, `action ged_save`, `action ged_apply`, `action ged_place`, `action ged_close`. В дампе: `gen=` (значения и размер выделенных), `gens=`, `gen_defs=`, `ged=Имя{p=…,f=…}:preview(рёбер,ШxГxВ)|err(…):статус:hвысота_кода`.
+  - header parsing (`Generator::parse`);
+  - the types `GenKind`, `GenParam`, `GenValue`, value checking (`normalize`);
+  - `Generated` on a definition (generator + values);
+  - `Model::generated_def` looks up a shared definition;
+  - `graft_content` carries the built content into the definition;
+  - `SIZE_KEYS` — the size keys for Scale.
+- `varstotas_script::generator`: `build` (runs `build(p)` in an empty model), `def_for`, `place`, `set_values`, `scale`, `add`, `rebuild_all`.
+- `varstotas_script::generator::derive` computes formulas and checks (`formula_values` — for display).
+- Application: `ui/generators.rs` (generator tiles in the common list `ui/library.rs`, built-in examples, moving the old folder, placement through `PasteTool`, Entity Info fields `param_field`, formula rows), `ui/gen_editor.rs` (the editor window). Scale — `tools/transform.rs::scale_generated`.
+- Harness: `action generator <name>`, `action gen key=value …` (`_` in a value means a space), `action gen_reset`, `action make_unique`; the editor — `action gen_editor [name]`, `action ged key=value …`, `action ged_sub old|new`, `action ged_save`, `action ged_apply`, `action ged_place`, `action ged_close`. In the dump: `gen=` (values and size of the selected), `gens=`, `gen_defs=`, `ged=Name{p=…,f=…}:preview(edges,WxDxH)|err(…):status:hcode_height`.
 
-## Параметры обычных компонентов
-Генератор строит компонент скриптом. Компонент, который уже есть (нарисованный или импортированный), тоже может получить параметры: например, «степень открытия» поворачивает дверцу шкафчика.
+## Parameters of ordinary components
+A generator builds a component with a script. A component that already exists (drawn or imported) can get parameters too: for example, an "opening degree" turns a cabinet door.
 
-- **Детали** — группы и компоненты прямо внутри компонента, по имени. Безымянные получают имена при добавлении параметров (имя определения, повторы с номером). Сплошную модель сначала нужно разбить: открыть компонент и сделать дверцу группой.
-- **Window → Component Parameters** (или Entity Info → Edit Parameters…, или Components → Document → правый клик → Parameters…) для выделенного компонента:
-  - **Parameters**: имя, подпись, тип (length, angle, number, int, percent, bool, choice, material), диапазон, шаг, значение по умолчанию — как `@param`.
-  - **Formulas**: `имя = выражение` — как `@formula`.
-  - **Motions**: деталь, движение, параметр или формула (либо выражение), From / To:
-    - Rotate — поворот вокруг оси (точка и направление; кнопка Pick… — два клика в модели);
-    - Slide — сдвиг по направлению;
-    - Show / hide — показ по флагу или числу ≠ 0;
-    - Paint — материал по имени («» — как нарисовано);
-    - Set parameter — параметр самой детали, если он у неё есть. Это сгенерированный компонент (например, цилиндр из Draw → Shapes) или компонент со своими параметрами. Значение передаётся как есть: высота стола → высота ножки-цилиндра. Копии с равными значениями делят одно определение детали. Правки внутри копии возвращают мастеру его собственную деталь.
-    Диапазон параметра (min..max) переводится в From..To (градусы или длина). Без диапазона, а также с выражением, значение и есть движение.
-  - **Script** (необязательно): `fn update(p) { … }` — выполняется после движений внутри компонента:
-    - доступен весь API обычных скриптов и генераторов (`rotate`, `move`, `scale`, `paint`, `show` / `hide`, `set_params`, `box`, `generate`…), без особых функций;
-    - деталь находится по имени: `child("Door")`, вглубь — `child("Knob", true)`, внутри детали — `child(door, "Knob")`;
-    - габариты — поля самой детали: `door.min`, `door.max`, `door.size`, `door.bounds`;
-    - `p` — значения и формулы;
-    - скрипт меняет копию: изменённые детали копируются в вариант, мастер не трогается. Правки внутри копии возвращаются мастеру за вычетом сделанного скриптом (то, что скрипт добавил, отбрасывается; изменённая скриптом геометрия самого мастера остаётся как в мастере);
-    - старая форма `fn update(p, parts)` (`parts[имя]` — габариты в покое) ещё работает.
-  - Скрипт хранится в компоненте.
-  - Apply применяет; Revert отменяет правки в окне; Remove Parameters возвращает копиям вид «как нарисовано».
-- **Копии.** Значения у каждой копии свои: в Entity Info ползунки и поля, Reset, Make Unique. Копии с равными значениями используют один *вариант* — определение с содержимым мастера в нужной позе. Make Unique даёт копии собственный мастер «<имя> 2» с теми же параметрами: правки внутри неё уходят в её мастер, а другие копии не меняются. Мастер хранит позу «как нарисовано» и сам не ставится: копия, поставленная из плитки Document или вставленная, получает вариант со значениями по умолчанию.
-- **Правки внутри копии** (двойной клик) после каждого шага уходят в мастер. Позы при этом снимаются: дверцу, сдвинутую в открытой копии, мастер получает закрытой и сдвинутой. Остальные копии перестраиваются в том же шаге отмены. Правки внутри покрашенной детали теряются; её форму меняйте при пустом материале.
-- **Сцены** запоминают значения всех копий. Переход к сцене меняет числа плавно, вместе с камерой; флаги и тексты переключаются на середине перехода. То же происходит в видео File → Export → Animation.
-- **Библиотека.** Save to Library оставляет компонент целым: в файле мастер, параметры и вариант. Из библиотеки он ставится в любой документ с параметрами и с сохранёнными значениями. Повторная вставка использует тот же мастер — по имени и одинаковым параметрам, как бы ни назывался файл. Copy / Paste между документами работает так же.
-- **Устройство:** `varstotas_kernel::rig` (данные, позы, варианты, обратная запись), `varstotas_script::rig` (движения, выражения, скрипт `update`), `ui/rig_editor.rs`; хук в `Document::commit`.
-- **Харнесс:**
-  - окно: `action rig_edit`;
-  - строки: `action rig_param <текст @param>`, `action rig_formula <текст @formula>`, `action rig_joint деталь|движение(0 поворот,1 сдвиг,2 показ,3 покраска,4 параметр детали)|параметр|from|to|ox oy oz|ax ay az|выражение|ключ`, `action rig_script <файл>`, `action rig_clear`;
-  - применение: `action rig_apply`, `action rig_remove`, `action rig_pick <номер>`;
-  - значения выделенных копий: `action rig key=value …`, `action rig_reset`;
-  - дамп: `rig=Some("копий Имя [ключ=значение…] joints=N variants=N") ed=(открыто имя p f j ошибка ось_первого)`.
+- **Parts** — groups and components directly inside the component, by name. Unnamed ones get names when parameters are added (the definition name, repeats with a number). A solid model must be split first: open the component and make the door a group.
+- **Window → Component Parameters** (or Entity Info → Edit Parameters…, or Components → Document → right click → Parameters…) for the selected component:
+  - **Parameters**: name, label, type (length, angle, number, int, percent, bool, choice, material), range, step, default value — as with `@param`.
+  - **Formulas**: `name = expression` — as with `@formula`.
+  - **Motions**: a part, a motion, a parameter or formula (or an expression), From / To:
+    - Rotate — rotation about an axis (a point and a direction; the Pick… button — two clicks in the model);
+    - Slide — a shift along a direction;
+    - Show / hide — shown by a flag or a number ≠ 0;
+    - Paint — a material by name ("" — as drawn);
+    - Set parameter — the part's own parameter, if it has one. This is a generated component (for example, a cylinder from Draw → Shapes) or a component with its own parameters. The value is passed as is: table height → the height of a cylindrical leg. Copies with equal values share one part definition. Edits inside a copy return its own part to the master.
+    The parameter's range (min..max) is converted to From..To (degrees or length). Without a range, and with an expression, the value is the motion itself.
+  - **Script** (optional): `fn update(p) { … }` — runs after the motions, inside the component:
+    - the whole API of ordinary scripts and generators is available (`rotate`, `move`, `scale`, `paint`, `show` / `hide`, `set_params`, `box`, `generate`…), with no special functions;
+    - a part is found by name: `child("Door")`, deeper — `child("Knob", true)`, inside a part — `child(door, "Knob")`;
+    - extents are fields of the part itself: `door.min`, `door.max`, `door.size`, `door.bounds`;
+    - `p` — the values and formulas;
+    - the script changes the copy: changed parts are copied into the variant, the master is not touched. Edits inside a copy are returned to the master minus what the script did (what the script added is discarded; geometry of the master itself changed by the script stays as in the master);
+    - the old form `fn update(p, parts)` (`parts[name]` — the extents at rest) still works.
+  - The script is stored in the component.
+  - Apply applies; Revert cancels the edits in the window; Remove Parameters returns the copies to the "as drawn" look.
+- **Copies.** Each copy has its own values: in Entity Info there are sliders and fields, Reset, Make Unique. Copies with equal values use one *variant* — a definition with the master's content in the required pose. Make Unique gives a copy its own master "<name> 2" with the same parameters: edits inside it go to its master, and the other copies do not change. The master keeps the "as drawn" pose and is not placed itself: a copy placed from the Document tile or pasted gets a variant with the default values.
+- **Edits inside a copy** (double click) go to the master after every step. Poses are removed in the process: a door moved in an open copy reaches the master closed and moved. The other copies are rebuilt in the same undo step. Edits inside a painted part are lost; change its shape with an empty material.
+- **Scenes** remember the values of all copies. Going to a scene changes the numbers smoothly, together with the camera; flags and texts switch in the middle of the transition. The same happens in the File → Export → Animation video.
+- **Library.** Save to Library keeps the component whole: the file holds the master, the parameters and the variant. From the library it is placed into any document with its parameters and saved values. Inserting again uses the same master — by name and identical parameters, whatever the file is called. Copy / Paste between documents works the same way.
+- **Internals:** `varstotas_kernel::rig` (data, poses, variants, write-back), `varstotas_script::rig` (motions, expressions, the `update` script), `ui/rig_editor.rs`; a hook in `Document::commit`.
+- **Harness:**
+  - window: `action rig_edit`;
+  - rows: `action rig_param <@param text>`, `action rig_formula <@formula text>`, `action rig_joint part|motion(0 rotate,1 slide,2 show,3 paint,4 part parameter)|parameter|from|to|ox oy oz|ax ay az|expression|key`, `action rig_script <file>`, `action rig_clear`;
+  - applying: `action rig_apply`, `action rig_remove`, `action rig_pick <number>`;
+  - values of the selected copies: `action rig key=value …`, `action rig_reset`;
+  - dump: `rig=Some("copies Name [key=value…] joints=N variants=N") ed=(open name p f j error first_axis)`.
 
-## Партии
-- Партия 1 ✅ — механизм.
-- Партия 2 ✅ — лестница, шкаф, ограждение, стол; формулы и проверки; редактор с превью; генераторы и компоненты — один каталог и один список.
-- Примитивы (трек У) ✅ — `examples/generators/primitives/` (box, cylinder, cone, pyramid, sphere, torus): их ставят инструменты Draw → Shapes; во вкладке Components они не показываются.
+## Batches
+- Batch 1 ✅ — the mechanism.
+- Batch 2 ✅ — stair, cabinet, railing, table; formulas and checks; an editor with a preview; generators and components — one catalogue and one list.
+- Primitives (track U) ✅ — `examples/generators/primitives/` (box, cylinder, cone, pyramid, sphere, torus): the Draw → Shapes tools place them; they are not shown in the Components tab.

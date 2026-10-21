@@ -1,4 +1,4 @@
-# Work planes (track П batch 3): Guide Plane tool by three points with a real mouse, drawing in
+# Work planes (track P batch 3): Guide Plane tool by three points with a real mouse, drawing in
 # the air on the active plane (grid nodes on it), plane of a face by double-click, normal by an
 # arrow key, origin dragged by its gizmo handle, angles, activate / hide / delete, undo.
 box 0 0 0 2000 1000 1000

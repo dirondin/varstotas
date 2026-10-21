@@ -1,4 +1,4 @@
-# Draw → Shapes (track У): Box, Cylinder, Cone, Pyramid, Sphere, Torus with the real mouse and the
+# Draw → Shapes (track U): Box, Cylinder, Cone, Pyramid, Sphere, Torus with the real mouse and the
 # Measurements box; each is a generated component (sizes in Entity Info), one undo step.
 wait 10
 view iso

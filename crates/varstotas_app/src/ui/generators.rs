@@ -1,4 +1,4 @@
-//! Generators (track К) in the UI: the Generators list of the Components card (the document's
+//! Generators (track K) in the UI: the Generators list of the Components card (the document's
 //! generators and `~/.varstotas/generators`), placing one, and the parameters of selected
 //! generated components in Entity Info. See `docs/GENERATORS.md`.
 

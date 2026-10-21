@@ -1,4 +1,4 @@
-# Track Р batch 3: the GPU path tracer (Window → Render…) — PBR materials, glass, emission,
+# Track R batch 3: the GPU path tracer (Window → Render…) — PBR materials, glass, emission,
 # sun + physical sky, point / spot / area lights, denoising, PNG / EXR, every scene.
 box 0 0 0 7000 4500 100
 box 500 500 100 1000 1000 1000

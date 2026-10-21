@@ -1,4 +1,4 @@
-# Generators (track К): place from the Components card, equal values share a definition,
+# Generators (track K): place from the Components card, equal values share a definition,
 # parameters in Entity Info, Scale changes the size parameters, copy / paste, undo.
 wait 10
 view iso

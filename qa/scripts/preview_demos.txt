@@ -1,4 +1,4 @@
-# Track У: Help → Demos (the demos in one submenu) opens Material Gallery as a new document;
+# Track U: Help → Demos (the demos in one submenu) opens Material Gallery as a new document;
 # File → Preview Image → Show… opens the Preview Image window with the picture set from the
 # current view (menus clicked with the real mouse; the menu bar is above the viewport: y < 0).
 wait 10
