@@ -2,6 +2,7 @@
 //! icons, shortcuts and when they apply. The menus draw their rows from here, and any of them
 //! can be put on the toolbar (Preferences → Toolbar).
 
+use varstotas_i18n::tr;
 use super::icons::Icon;
 use crate::app::{Action, VarstotasApp};
 use crate::inference::InferenceKind;
@@ -121,26 +122,26 @@ impl Cmd {
         let at = |c: Cmd| all.iter().position(|x| *x == c).unwrap_or(0);
         let i = at(self);
         if i < at(Cmd::Undo) {
-            "File"
+            "File" // i18n-ignore
         } else if i < at(Cmd::Solid(SolidOp::ALL[0])) {
-            "Edit"
+            "Edit" // i18n-ignore
         } else if i < at(Cmd::Snapping) {
-            "Tools"
+            "Tools" // i18n-ignore
         } else if i < at(Cmd::SideBar) {
-            "Snapping"
+            "Snapping" // i18n-ignore
         } else {
-            "Window"
+            "Window" // i18n-ignore
         }
     }
 
     /// The id kept in the preferences (the toolbar's layout).
     pub fn key(self) -> String {
         match self {
-            Cmd::Snap(k) => format!("Snap:{}", k.key()),
-            Cmd::Solid(op) => format!("Solid:{op:?}"),
+            Cmd::Snap(k) => format!("Snap:{}", k.key()), // i18n-ignore
+            Cmd::Solid(op) => format!("Solid:{op:?}"), // i18n-ignore
             // "Snapping" is the toolbar's magnet (the menu)
-            Cmd::Snapping => "SnappingOnOff".into(),
-            Cmd::Card(n) => format!("Card:{n}"),
+            Cmd::Snapping => "SnappingOnOff".into(), // i18n-ignore
+            Cmd::Card(n) => format!("Card:{n}"), // i18n-ignore
             _ => format!("{self:?}"),
         }
     }
@@ -153,7 +154,7 @@ impl Cmd {
     pub fn name(self) -> String {
         match self {
             Cmd::ImportObj | Cmd::ImportStl | Cmd::ImportDxf | Cmd::ImportGltf | Cmd::Import3mf | Cmd::ImportDae | Cmd::ImportFbx | Cmd::ImportPly | Cmd::ImportCsv => {
-                format!("Import {}", self.menu_label().trim_end_matches('…'))
+                tr!("cmd-name-import", name = self.menu_label().trim_end_matches('…'))
             }
             Cmd::ExportImage
             | Cmd::ExportAnimation
@@ -167,20 +168,20 @@ impl Cmd {
             | Cmd::ExportDrawing
             | Cmd::ExportReport
             | Cmd::ExportFacesJson
-            | Cmd::ExportAttributions => format!("Export {}", self.menu_label().trim_end_matches('…')),
-            Cmd::PreviewShow => "Preview Image: Show".into(),
-            Cmd::PreviewFromFile => "Preview Image from File".into(),
-            Cmd::PreviewFromView => "Preview Image from View".into(),
-            Cmd::PreviewRemove => "Remove Preview Image".into(),
-            Cmd::IntersectModel => "Intersect with Model".into(),
-            Cmd::IntersectSelection => "Intersect with Selection".into(),
-            Cmd::IntersectContext => "Intersect with Context".into(),
-            Cmd::FlipRed => "Flip Along Red".into(),
-            Cmd::FlipGreen => "Flip Along Green".into(),
-            Cmd::FlipBlue => "Flip Along Blue".into(),
-            Cmd::Solid(op) => format!("Solid {}", op.name()),
-            Cmd::Snap(k) => format!("Snap: {}", k.menu_label()),
-            Cmd::Card(n) => format!("Side Bar: {n}"),
+            | Cmd::ExportAttributions => tr!("cmd-name-export", name = self.menu_label().trim_end_matches('…')),
+            Cmd::PreviewShow => tr!("cmd-name-preview-show"),
+            Cmd::PreviewFromFile => tr!("cmd-name-preview-from-file"),
+            Cmd::PreviewFromView => tr!("cmd-name-preview-from-view"),
+            Cmd::PreviewRemove => tr!("cmd-name-preview-remove"),
+            Cmd::IntersectModel => tr!("cmd-name-intersect-model"),
+            Cmd::IntersectSelection => tr!("cmd-name-intersect-selection"),
+            Cmd::IntersectContext => tr!("cmd-name-intersect-context"),
+            Cmd::FlipRed => tr!("cmd-name-flip-red"),
+            Cmd::FlipGreen => tr!("cmd-name-flip-green"),
+            Cmd::FlipBlue => tr!("cmd-name-flip-blue"),
+            Cmd::Solid(op) => tr!("cmd-name-solid", name = op.name()),
+            Cmd::Snap(k) => tr!("cmd-name-snap", name = k.menu_label()),
+            Cmd::Card(n) => tr!("cmd-name-card", card = crate::ui::tray::card_label(n)),
             _ => self.menu_label().trim_end_matches('…').into(),
         }
     }
@@ -251,7 +252,7 @@ impl Cmd {
             Cmd::ShowGrid => "cmd-show-grid",
             Cmd::Snap(k) => return k.menu_label(),
             Cmd::SideBar => "cmd-side-bar",
-            Cmd::Card(n) => return n.to_string(),
+            Cmd::Card(n) => return crate::ui::tray::card_label(n),
             Cmd::Render => "cmd-render",
             Cmd::WorkPlanes => "cmd-work-planes",
             Cmd::ModelInfo => "cmd-model-info",
@@ -334,15 +335,15 @@ impl Cmd {
             Cmd::Snap(k) => Icon::Snap(k),
             Cmd::SideBar => Icon::SideBar,
             Cmd::Card(n) => match n {
-                "Entity Info" => Icon::Info,
-                "Materials" => Icon::Paint,
-                "Components" => Icon::Component,
-                "Tags" => Icon::Tag,
-                "Outliner" => Icon::Outliner,
-                "Scenes" => Icon::AddScene,
-                "Shadows" => Icon::Shadows,
-                "Environment" => Icon::StyleRealistic,
-                "Soften Edges" => Icon::Arc,
+                "Entity Info" => Icon::Info, // i18n-ignore
+                "Materials" => Icon::Paint, // i18n-ignore
+                "Components" => Icon::Component, // i18n-ignore
+                "Tags" => Icon::Tag, // i18n-ignore
+                "Outliner" => Icon::Outliner, // i18n-ignore
+                "Scenes" => Icon::AddScene, // i18n-ignore
+                "Shadows" => Icon::Shadows, // i18n-ignore
+                "Environment" => Icon::StyleRealistic, // i18n-ignore
+                "Soften Edges" => Icon::Arc, // i18n-ignore
                 _ => Icon::Select,
             },
             Cmd::Render => Icon::Render,
@@ -375,8 +376,8 @@ impl Cmd {
             Cmd::Copy => return Some(cmd_key("C", false)),
             Cmd::Paste => return Some(cmd_key("V", false)),
             Cmd::PasteInPlace => return Some(cmd_key("V", true)),
-            Cmd::Delete => return Some("Delete".into()),
-            Cmd::CloseGroup => return Some("Esc".into()),
+            Cmd::Delete => return Some("Delete".into()), // i18n-ignore
+            Cmd::CloseGroup => return Some("Esc".into()), // i18n-ignore
             _ => return None,
         };
         label(key)
@@ -385,70 +386,66 @@ impl Cmd {
     /// One line for the toolbar's tooltip.
     pub fn description(self) -> String {
         match self {
-            Cmd::New => "Start a new document.".into(),
-            Cmd::Open => "Open a Varstotas file.".into(),
-            Cmd::Save => "Save the document.".into(),
-            Cmd::SaveAs => "Save the document under a new name.".into(),
-            Cmd::PreviewShow => "The picture the Components library shows for this file.".into(),
-            Cmd::PreviewFromFile => "Use an image file as the document's preview.".into(),
-            Cmd::PreviewFromView => "Use the current view as the document's preview.".into(),
-            Cmd::PreviewRemove => "Drop the preview (the library draws the model).".into(),
-            Cmd::RunScript => "Run a Rhai script file on the model.".into(),
-            Cmd::Quit => "Close Varstotas.".into(),
-            Cmd::Undo | Cmd::Redo => format!("{} the last change.", self.menu_label()),
-            Cmd::Cut => "Copy the selection and erase it.".into(),
-            Cmd::Copy => "Copy the selection.".into(),
-            Cmd::Paste => "Place the copied geometry with the mouse.".into(),
-            Cmd::PasteInPlace => "Paste where the geometry was.".into(),
-            Cmd::Delete => "Erase the selection.".into(),
-            Cmd::PurgeUnused => "Drop materials and components the model no longer uses.".into(),
-            Cmd::DeleteGuides => "Erase every guide line and guide point.".into(),
-            Cmd::SelectAll => "Select everything in the active context.".into(),
-            Cmd::SelectNone => "Clear the selection.".into(),
-            Cmd::Hide => "Hide the selection.".into(),
-            Cmd::UnhideAll => "Show everything hidden.".into(),
-            Cmd::MakeGroup => "Wrap the selection in a group.".into(),
-            Cmd::MakeComponent => "Turn the selection into a component.".into(),
-            Cmd::MakeUnique => "Give the selected component its own definition: editing it no longer changes the other copies.".into(),
-            Cmd::MakeParametric => "Give the selected group parameters (Component Parameters).".into(),
-            Cmd::Explode => "Unpack the selected groups and components.".into(),
-            Cmd::CloseGroup => "Leave the group being edited.".into(),
-            Cmd::IntersectModel | Cmd::IntersectSelection | Cmd::IntersectContext => {
-                format!("Add edges where the selected faces cut {}.", match self {
-                    Cmd::IntersectModel => "the model",
-                    Cmd::IntersectSelection => "each other",
-                    _ => "the group being edited",
-                })
-            }
-            Cmd::ReverseFaces => "Swap the front and back of the selected faces.".into(),
-            Cmd::OrientFaces => "Turn the faces next to the selected one the same way.".into(),
-            Cmd::FlipRed | Cmd::FlipGreen | Cmd::FlipBlue => "Mirror the selection along this axis.".into(),
-            Cmd::Solid(op) => format!("{} two selected solids.", match op {
-                SolidOp::OuterShell => "Keep the outer shell of",
-                SolidOp::Intersect => "Keep the shared volume of",
-                SolidOp::Union => "Join",
-                SolidOp::Subtract => "Cut the first out of the second of",
-                SolidOp::Trim => "Trim the second by the first of",
-                SolidOp::Split => "Split into pieces",
+            Cmd::New => tr!("cmd-desc-new"),
+            Cmd::Open => tr!("cmd-desc-open"),
+            Cmd::Save => tr!("cmd-desc-save"),
+            Cmd::SaveAs => tr!("cmd-desc-save-as"),
+            Cmd::PreviewShow => tr!("cmd-desc-preview-show"),
+            Cmd::PreviewFromFile => tr!("cmd-desc-preview-from-file"),
+            Cmd::PreviewFromView => tr!("cmd-desc-preview-from-view"),
+            Cmd::PreviewRemove => tr!("cmd-desc-preview-remove"),
+            Cmd::RunScript => tr!("cmd-desc-run-script"),
+            Cmd::Quit => tr!("cmd-desc-quit"),
+            Cmd::Undo | Cmd::Redo => tr!("cmd-desc-undo-redo", name = self.menu_label()),
+            Cmd::Cut => tr!("cmd-desc-cut"),
+            Cmd::Copy => tr!("cmd-desc-copy"),
+            Cmd::Paste => tr!("cmd-desc-paste"),
+            Cmd::PasteInPlace => tr!("cmd-desc-paste-in-place"),
+            Cmd::Delete => tr!("cmd-desc-delete"),
+            Cmd::PurgeUnused => tr!("cmd-desc-purge-unused"),
+            Cmd::DeleteGuides => tr!("cmd-desc-delete-guides"),
+            Cmd::SelectAll => tr!("cmd-desc-select-all"),
+            Cmd::SelectNone => tr!("cmd-desc-select-none"),
+            Cmd::Hide => tr!("cmd-desc-hide"),
+            Cmd::UnhideAll => tr!("cmd-desc-unhide-all"),
+            Cmd::MakeGroup => tr!("cmd-desc-make-group"),
+            Cmd::MakeComponent => tr!("cmd-desc-make-component"),
+            Cmd::MakeUnique => tr!("cmd-desc-make-unique"),
+            Cmd::MakeParametric => tr!("cmd-desc-make-parametric"),
+            Cmd::Explode => tr!("cmd-desc-explode"),
+            Cmd::CloseGroup => tr!("cmd-desc-close-group"),
+            Cmd::IntersectModel => tr!("cmd-desc-intersect-model"),
+            Cmd::IntersectSelection => tr!("cmd-desc-intersect-selection"),
+            Cmd::IntersectContext => tr!("cmd-desc-intersect-context"),
+            Cmd::ReverseFaces => tr!("cmd-desc-reverse-faces"),
+            Cmd::OrientFaces => tr!("cmd-desc-orient-faces"),
+            Cmd::FlipRed | Cmd::FlipGreen | Cmd::FlipBlue => tr!("cmd-desc-flip"),
+            Cmd::Solid(op) => tr!(match op {
+                SolidOp::OuterShell => "cmd-desc-solid-outer-shell",
+                SolidOp::Intersect => "cmd-desc-solid-intersect",
+                SolidOp::Union => "cmd-desc-solid-union",
+                SolidOp::Subtract => "cmd-desc-solid-subtract",
+                SolidOp::Trim => "cmd-desc-solid-trim",
+                SolidOp::Split => "cmd-desc-solid-split",
             }),
-            Cmd::Unfold => "Lay the selected faces flat (SVG / PDF / DXF).".into(),
-            Cmd::Text3d => "Add text as 3D geometry (a group).".into(),
-            Cmd::ZoomExtents => "Fit the whole model in the view.".into(),
-            Cmd::Snapping => "Snapping on / off.".into(),
-            Cmd::ShowGrid => "The grid on the ground on / off.".into(),
-            Cmd::Snap(_) => "This snap on / off.".into(),
-            Cmd::SideBar => "The side bar with the cards (Entity Info, Materials …) shown or hidden.".into(),
-            Cmd::Card(n) => format!("The {n} card of the side bar shown or hidden."),
-            Cmd::Render => "Path-traced pictures of the model (Window → Render).".into(),
-            Cmd::WorkPlanes => "Saved drawing planes.".into(),
-            Cmd::ModelInfo => "Statistics of the document, Purge Unused.".into(),
-            Cmd::ComponentParams => "Parameters of the selected component: values that turn, slide, show or paint its parts.".into(),
-            Cmd::Library3d => "Free models from online libraries.".into(),
-            Cmd::GeneratorEditor => "Write and run generator scripts.".into(),
-            Cmd::Console => "Run Rhai commands on the model.".into(),
-            Cmd::Log => "Errors and warnings from everywhere: scripts, import / export, libraries, downloads …".into(),
-            Cmd::Preferences => "Settings of Varstotas.".into(),
-            _ => format!("{}.", self.name()),
+            Cmd::Unfold => tr!("cmd-desc-unfold"),
+            Cmd::Text3d => tr!("cmd-desc-text-3d"),
+            Cmd::ZoomExtents => tr!("cmd-desc-zoom-extents"),
+            Cmd::Snapping => tr!("cmd-desc-snapping"),
+            Cmd::ShowGrid => tr!("cmd-desc-show-grid"),
+            Cmd::Snap(_) => tr!("cmd-desc-snap"),
+            Cmd::SideBar => tr!("cmd-desc-side-bar"),
+            Cmd::Card(n) => tr!("cmd-desc-card", card = crate::ui::tray::card_label(n)),
+            Cmd::Render => tr!("cmd-desc-render"),
+            Cmd::WorkPlanes => tr!("cmd-desc-work-planes"),
+            Cmd::ModelInfo => tr!("cmd-desc-model-info"),
+            Cmd::ComponentParams => tr!("cmd-desc-component-params"),
+            Cmd::Library3d => tr!("cmd-desc-library-3d"),
+            Cmd::GeneratorEditor => tr!("cmd-desc-generator-editor"),
+            Cmd::Console => tr!("cmd-desc-console"),
+            Cmd::Log => tr!("cmd-desc-log"),
+            Cmd::Preferences => tr!("cmd-desc-preferences"),
+            _ => tr!("cmd-desc-default", name = self.name()),
         }
     }
 
@@ -589,8 +586,8 @@ fn cmd_key(key: &str, shift: bool) -> String {
     match (cfg!(target_os = "macos"), shift) {
         (true, false) => format!("⌘{key}"),
         (true, true) => format!("⇧⌘{key}"),
-        (false, false) => format!("Ctrl+{key}"),
-        (false, true) => format!("Ctrl+Shift+{key}"),
+        (false, false) => format!("Ctrl+{key}"), // i18n-ignore
+        (false, true) => format!("Ctrl+Shift+{key}"), // i18n-ignore
     }
 }
 

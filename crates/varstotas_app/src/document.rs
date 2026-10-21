@@ -1,5 +1,6 @@
 //! The open document: model + undo history + file state + selection + editing context.
 
+use varstotas_i18n::tr;
 use varstotas_kernel::{ContextPath, DimId, EntityRef, GuideRef, History, MaterialId, Mesh, Model, ModelHit, Ray};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -126,7 +127,7 @@ pub fn guarded<R>(f: impl FnOnce() -> R) -> Result<R, String> {
         } else if let Some(s) = e.downcast_ref::<String>() {
             s.clone()
         } else {
-            "internal error".to_string()
+            tr!("edit-internal-error")
         }
     })
 }
@@ -166,7 +167,7 @@ impl Document {
             .as_ref()
             .and_then(|p| p.file_stem())
             .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Untitled".to_string())
+            .unwrap_or_else(|| tr!("edit-untitled"))
     }
 
     pub fn active_mesh(&self) -> Option<&Mesh> {
@@ -194,7 +195,7 @@ impl Document {
             }
             Err(msg) => {
                 self.model = before;
-                self.last_error = Some(format!("{label} failed: {msg}"));
+                self.last_error = Some(tr!("edit-failed", label = label, error = msg.to_string()));
                 log::warn!("{label} failed: {msg}");
                 None
             }
@@ -237,12 +238,12 @@ impl Document {
             }
             Ok(Err(e)) => {
                 self.model = before;
-                self.last_error = Some(format!("{label}: {e}"));
+                self.last_error = Some(tr!("edit-op-error", label = label, error = e.to_string()));
                 None
             }
             Err(msg) => {
                 self.model = before;
-                self.last_error = Some(format!("{label} failed: {msg}"));
+                self.last_error = Some(tr!("edit-failed", label = label, error = msg.to_string()));
                 log::warn!("{label} failed: {msg}");
                 None
             }
@@ -276,7 +277,7 @@ impl Document {
     fn rig_hook(&mut self) {
         if let Err(e) = varstotas_script::rig::after_edit(&mut self.model, &self.active_path) {
             log::warn!("parameters: {e}");
-            self.last_error = Some(format!("Parameters: {e}"));
+            self.last_error = Some(tr!("edit-parameters-error", error = e.to_string()));
         }
     }
 
@@ -581,7 +582,7 @@ impl Document {
 
     /// Erase the current selection from the active context (one undo step).
     pub fn erase_selection(&mut self) {
-        self.erase_selection_labeled("Erase");
+        self.erase_selection_labeled(&tr!("edit-undo-erase"));
     }
 
     /// [`Self::erase_selection`] with an undo label (e.g. "Cut").
@@ -618,7 +619,7 @@ impl Document {
         if !self.model.has_any_guides() {
             return false;
         }
-        self.commit("Delete Guides", |m| m.delete_all_guides());
+        self.commit(&tr!("edit-undo-delete-guides"), |m| m.delete_all_guides());
         true
     }
 }

@@ -52,6 +52,7 @@ fn add_areas(model: &Model, def: DefId, xf: DMat4, inherited: Option<MaterialId>
                 (p[1] - p[0]).cross(p[2] - p[0]).length() * 0.5
             })
             .sum();
+        // i18n-ignore-next
         let mat = d.mesh.faces[f].front.or(inherited).and_then(|m| model.materials.get(m)).map_or("Default", |m| &m.name);
         *out.entry(mat.to_string()).or_default() += a;
         total += a;
@@ -169,6 +170,7 @@ pub fn report_csv(model: &Model) -> String {
     let mut s = String::new();
     let _ = writeln!(
         s,
+        // i18n-ignore-next
         "Name,Definition,Type,Level,Count,Length ({sx}),Width ({sx}),Thickness ({sx}),Area ({sx}²),Volume ({sx}³),Material,Tag"
     );
     for r in &rows {
@@ -177,6 +179,7 @@ pub fn report_csv(model: &Model) -> String {
             "{},{},{},{},{},{},{},{},{},{},{},{}",
             csv_field(&format!("{}{}", "  ".repeat(r.depth), r.name)),
             csv_field(&r.definition),
+            // i18n-ignore-next
             if r.component { "Component" } else { "Group" },
             r.depth + 1,
             r.count,

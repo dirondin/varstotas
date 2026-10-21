@@ -88,3 +88,11 @@ fn keys_used_in_the_sources_exist() {
     }
     assert!(missing.is_empty(), "keys not in locales/en: {missing:#?}");
 }
+
+#[test]
+fn plural_forms_by_count() {
+    // `{ $count -> [one] … *[other] … }` with integer counts of any type; no digit grouping.
+    assert_eq!(tr!("app-faces-reversed", count = 1usize), "1 face reversed");
+    assert_eq!(tr!("app-faces-reversed", count = 5u32), "5 faces reversed");
+    assert_eq!(tr!("app-faces-reversed", count = 12345i64), "12345 faces reversed");
+}

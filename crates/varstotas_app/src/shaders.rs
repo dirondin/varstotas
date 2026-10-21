@@ -1,8 +1,21 @@
 //! Bundled custom surface shaders (docs/SHADERS.md): procedural wood, water, reeded glass and
 //! glowing panels for the material editor's Shader menu.
 
+use varstotas_i18n::tr;
+
 /// (name, WGSL source).
-pub const PRESETS: [(&str, &str); 4] = [("Wood", WOOD), ("Water", WATER), ("Reeded Glass", GLASS), ("Glow", GLOW)];
+pub const PRESETS: [(&str, &str); 4] = [("Wood", WOOD), ("Water", WATER), ("Reeded Glass", GLASS), ("Glow", GLOW)]; // i18n-ignore
+
+/// The text shown for a preset name (the names above are ids).
+pub fn label(id: &str) -> String {
+    match id {
+        "Wood" => tr!("shader-preset-wood"), // i18n-ignore
+        "Water" => tr!("shader-preset-water"), // i18n-ignore
+        "Reeded Glass" => tr!("shader-preset-reeded-glass"), // i18n-ignore
+        "Glow" => tr!("shader-preset-glow"), // i18n-ignore
+        other => other.to_string(),
+    }
+}
 
 /// The preset whose source is `src`.
 pub fn preset_name(src: &str) -> Option<&'static str> {

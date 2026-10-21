@@ -8,6 +8,7 @@ use crate::Model;
 use glam::{DMat4, DVec2, DVec3, DVec4};
 use std::collections::HashMap;
 use std::path::Path;
+use varstotas_i18n::tr;
 
 fn matrix(m: &ufbx::Matrix) -> DMat4 {
     DMat4::from_cols(
@@ -70,7 +71,7 @@ pub fn add_fbx(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Import
         ignore_animation: true,
         ..Default::default()
     };
-    let scene = ufbx::load_memory(data, lo).map_err(|e| IoError::Format(format!("FBX: {}", e.description)))?;
+    let scene = ufbx::load_memory(data, lo).map_err(|e| IoError::Format(tr!("kernel-io-fbx-description", description = e.description.to_string())))?;
     let mut mats: Vec<ImpMat> = Vec::new();
     let mut mat_index: HashMap<u32, usize> = HashMap::new();
     let mut meshes = Vec::new();

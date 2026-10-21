@@ -1,5 +1,6 @@
 //! Editing tools: Eraser, Paint Bucket, Push/Pull, Offset, Follow Me.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -59,15 +60,15 @@ impl EraserTool {
         let unsoften = soften && m.shift;
         let path = ctx.doc.active_path.clone();
         let label = if hide {
-            "Hide"
+            tr!("tool-undo-hide")
         } else if unsoften {
-            "Unsoften"
+            tr!("tool-undo-unsoften")
         } else if soften {
-            "Soften"
+            tr!("tool-undo-soften")
         } else {
-            "Erase"
+            tr!("tool-undo-erase")
         };
-        ctx.doc.commit(label, |model| {
+        ctx.doc.commit(&label, |model| {
             let guides: Vec<GuideRef> =
                 marked.iter().filter_map(|t| if let EraseTarget::Guide(g) = t { Some(*g) } else { None }).collect();
             let dims: Vec<varstotas_kernel::DimId> =
@@ -155,8 +156,7 @@ impl Tool for EraserTool {
         false
     }
     fn status_text(&self) -> String {
-        "Click or drag over edges, guides, dimensions or groups to erase. Shift = hide, %CMD% = soften, %CMD%+Shift = unsoften."
-            .into()
+        tr!("tool-eraser-status")
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         let draw = |t: &EraseTarget, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>| match t {
@@ -187,11 +187,9 @@ impl Tool for EraserTool {
 // ===========================================================================
 
 /// Paint Bucket modifier help, per platform (conventions).
-pub const PAINT_MODS_HELP: &str = if cfg!(target_os = "macos") {
-    "Cmd = sample, Option = connected faces with the same material, Shift = all matching faces, Option+Shift = matching connected faces"
-} else {
-    "Alt = sample, Ctrl = connected faces with the same material, Shift = all matching faces, Ctrl+Shift = matching connected faces"
-};
+pub fn paint_mods_help() -> String {
+    tr!("tool-paint-mods")
+}
 
 /// What a Paint Bucket click does, decoded from the modifiers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -270,7 +268,7 @@ impl Tool for PaintTool {
         }
         let palette = ctx.doc.current_material.clone();
         let PaintMods { connected, same, .. } = pm;
-        ctx.doc.commit("Paint", |model| {
+        ctx.doc.commit(&tr!("tool-undo-paint"), |model| {
             let mat = palette.as_ref().map(|p| p.ensure_in(model));
             let Some(mesh) = model.mesh_at_mut(&path) else { return };
             match h {
@@ -313,13 +311,13 @@ impl Tool for PaintTool {
         });
     }
     fn status_text(&self) -> String {
-        format!("Click a face or group to paint. {PAINT_MODS_HELP}.")
+        tr!("tool-paint-status", mods = paint_mods_help())
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(h) = &self.hover {
             highlight_hover(view, h, out3d);
         }
-        let name = view.doc.current_material.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| "Default".into());
+        let name = view.doc.current_material.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| tr!("tool-paint-default-material"));
         out2d.push(Marker2d::CursorTooltip { text: name });
     }
     fn cursor(&self) -> CursorIcon {
@@ -369,7 +367,7 @@ impl PushPullTool {
 
     fn apply(&mut self, ctx: &mut ToolContext, face: FaceId, dist_world: f64, n_world: DVec3, keep: bool) -> bool {
         let d = dist_world * local_scale_along(ctx.doc, n_world);
-        let ok = try_commit_mesh(ctx, "Push/Pull", |m| m.push_pull(face, d, keep)).is_some();
+        let ok = try_commit_mesh(ctx, &tr!("tool-undo-push-pull"), |m| m.push_pull(face, d, keep)).is_some();
         if ok {
             self.last = Some((face, dist_world, keep));
             self.last_dist = Some(dist_world);
@@ -472,8 +470,8 @@ impl Tool for PushPullTool {
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Distance"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-distance")
     }
     fn vcb_value(&self) -> String {
         let d = self.state.as_ref().map(|s| s.dist).or(self.last_dist);
@@ -484,12 +482,9 @@ impl Tool for PushPullTool {
     }
     fn status_text(&self) -> String {
         if self.state.is_some() {
-            format!(
-                "Move to set the distance, click or type a value. %COPY% = keep original face ({}).",
-                if self.keep.on { "on" } else { "off" }
-            )
+            tr!("tool-push-pull-moving", keep = if self.keep.on { "on" } else { "off" })
         } else {
-            "Click a face to push or pull it. Double-click repeats the last distance.".into()
+            tr!("tool-push-pull-idle")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -606,7 +601,7 @@ impl OffsetTool {
         let n = self.state.as_ref().map(|s| s.plane.normal).unwrap_or(DVec3::Z);
         let tangent = plane_axes(n).0;
         let dl = d * local_scale_along(ctx.doc, tangent);
-        let ok = try_commit_mesh(ctx, "Offset", |m| m.offset_face(face, dl)).is_some();
+        let ok = try_commit_mesh(ctx, &tr!("tool-undo-offset"), |m| m.offset_face(face, dl)).is_some();
         if ok {
             self.last = Some((face, d));
             self.last_dist = Some(d);
@@ -677,8 +672,8 @@ impl Tool for OffsetTool {
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Distance"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-distance")
     }
     fn vcb_value(&self) -> String {
         let d = self.state.as_ref().map(|s| s.dist).or(self.last_dist);
@@ -689,9 +684,9 @@ impl Tool for OffsetTool {
     }
     fn status_text(&self) -> String {
         if self.state.is_some() {
-            "Move inward or outward and click, or type a distance.".into()
+            tr!("tool-offset-moving")
         } else {
-            "Click a face to offset its edges. Double-click repeats the last offset.".into()
+            tr!("tool-offset-idle")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -758,7 +753,7 @@ impl FollowMeTool {
         if path.is_empty() {
             return;
         }
-        try_commit_mesh(ctx, "Follow Me", |m| m.follow_me(profile, &path));
+        try_commit_mesh(ctx, &tr!("tool-undo-follow-me"), |m| m.follow_me(profile, &path));
         self.profile = None;
         self.path.clear();
     }
@@ -874,10 +869,9 @@ impl Tool for FollowMeTool {
     }
     fn status_text(&self) -> String {
         if self.profile.is_none() {
-            "Click the profile face (pre-select path edges to sweep immediately).".into()
+            tr!("tool-follow-me-profile")
         } else {
-            "Click or drag along path edges; double-click/Enter to finish. Click a face to sweep around its edge. Esc = cancel."
-                .into()
+            tr!("tool-follow-me-path")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, _out2d: &mut Vec<Marker2d>) {

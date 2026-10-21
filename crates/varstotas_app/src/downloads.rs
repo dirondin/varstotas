@@ -16,6 +16,7 @@
 //! an archive is unpacked, the chosen models become library components with the credit
 //! (one component, or a pack folder for several), duplicates are found by the file's hash.
 
+use varstotas_i18n::tr;
 use varstotas_kernel::{Attribution, LicenseKind};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -51,16 +52,16 @@ const SITES_HEADER: &str = "# Sites searched by Window → 3D Library → Search
 pub fn default_sites() -> Vec<Site> {
     let s = |name: &str, search: &str, license: &str| Site { name: name.into(), search: search.into(), license: license.into() };
     vec![
-        s("Printables", "https://www.printables.com/search/models?q={query}", ""),
-        s("Thingiverse", "https://www.thingiverse.com/search?q={query}&type=things&sort=relevant", ""),
-        s("MyMiniFactory", "https://www.myminifactory.com/search/?query={query}&price=free", ""),
-        s("Cults3D", "https://cults3d.com/en/search?q={query}&only_free=true", ""),
-        s("GrabCAD", "https://grabcad.com/library?query={query}", "Standard / personal use"),
-        s("Sketchfab", "https://sketchfab.com/search?features=downloadable&q={query}&type=models", ""),
-        s("Poly Pizza", "https://poly.pizza/search/{query}", ""),
-        s("Free3D", "https://free3d.com/3d-models/{query}", "Standard / personal use"),
-        s("CGTrader (free)", "https://www.cgtrader.com/free-3d-models?keywords={query}", "Royalty Free"),
-        s("TurboSquid (free)", "https://www.turbosquid.com/Search/3D-Models/free/{query}", "Royalty Free"),
+        s("Printables", "https://www.printables.com/search/models?q={query}", ""), // i18n-ignore
+        s("Thingiverse", "https://www.thingiverse.com/search?q={query}&type=things&sort=relevant", ""), // i18n-ignore
+        s("MyMiniFactory", "https://www.myminifactory.com/search/?query={query}&price=free", ""), // i18n-ignore
+        s("Cults3D", "https://cults3d.com/en/search?q={query}&only_free=true", ""), // i18n-ignore
+        s("GrabCAD", "https://grabcad.com/library?query={query}", "Standard / personal use"), // i18n-ignore
+        s("Sketchfab", "https://sketchfab.com/search?features=downloadable&q={query}&type=models", ""), // i18n-ignore
+        s("Poly Pizza", "https://poly.pizza/search/{query}", ""), // i18n-ignore
+        s("Free3D", "https://free3d.com/3d-models/{query}", "Standard / personal use"), // i18n-ignore
+        s("CGTrader (free)", "https://www.cgtrader.com/free-3d-models?keywords={query}", "Royalty Free"), // i18n-ignore
+        s("TurboSquid (free)", "https://www.turbosquid.com/Search/3D-Models/free/{query}", "Royalty Free"), // i18n-ignore
     ]
 }
 
@@ -88,7 +89,7 @@ pub fn load_sites() -> Result<Vec<Site>, String> {
 
 /// Percent-encode a search query.
 pub fn url_encode(s: &str) -> String {
-    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect() // i18n-ignore
 }
 
 /// The address of `site`'s search for `query`.
@@ -355,15 +356,15 @@ pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugi
     let dir = dir.to_path_buf();
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let name = o.path.file_name().ok_or("no file name")?;
+    let name = o.path.file_name().ok_or_else(|| tr!("downloads-err-no-file-name"))?;
     let copy = dir.join(name);
     std::fs::copy(&o.path, &copy).map_err(|e| format!("{}: {e}", o.path.display()))?;
-    let source = safe_name(if o.credit.source.trim().is_empty() { "Downloads" } else { o.credit.source.trim() });
+    let source = safe_name(if o.credit.source.trim().is_empty() { "Downloads" } else { o.credit.source.trim() }); // i18n-ignore
     let stem = o.path.file_stem().map(|s| crate::online_models::pretty_name(&s.to_string_lossy())).unwrap_or_default();
     let title = safe_name(if o.credit.title.trim().is_empty() { &stem } else { o.credit.title.trim() });
     let chosen: Vec<&String> = o.models.iter().filter(|(_, on)| *on).map(|(n, _)| n).collect();
     if chosen.is_empty() {
-        return Err("no model chosen".into());
+        return Err(tr!("downloads-err-no-model-chosen"));
     }
     let files = if ext(&copy) == "zip" {
         let out = dir.join("files");
@@ -441,10 +442,10 @@ pub fn licence_warning(credits: &[Attribution]) -> Option<String> {
         .iter()
         .map(|(k, t)| {
             let more = if t.len() > 2 { format!(" +{}", t.len() - 2) } else { String::new() };
-            format!("{} ({}{more}) — {}", k.label(), t[..t.len().min(2)].join(", "), k.note())
+            tr!("downloads-licence-part", label = k.label(), names = t[..t.len().min(2)].join(", "), more = more, note = k.note())
         })
         .collect();
-    Some(format!("Licences: {}. File → Export → Attributions lists the credits.", parts.join("; ")))
+    Some(tr!("downloads-licences", list = parts.join("; ")))
 }
 
 // ---- Favourites, history, imported files ---------------------------------------------
@@ -636,7 +637,7 @@ impl Downloads {
             None => {
                 let page = from.last().cloned().unwrap_or_default();
                 let sites = self.sites().to_vec();
-                let site = if page.is_empty() { "Downloads".to_string() } else { site_name(&page, &sites) };
+                let site = if page.is_empty() { "Downloads".to_string() } else { site_name(&page, &sites) }; // i18n-ignore
                 let license = sites.iter().find(|s| s.name == site).map(|s| s.license.clone()).unwrap_or_default();
                 Attribution { source: site, title: crate::online_models::pretty_name(&stem), author: String::new(), license, url: page }
             }

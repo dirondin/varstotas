@@ -13,6 +13,7 @@
 pub mod geo;
 pub mod settings;
 
+use varstotas_i18n::tr;
 use crate::document::guarded;
 use crate::overlay::{Marker2d, MarkerShape};
 use egui::Color32;
@@ -944,7 +945,7 @@ pub fn draw_result(r: &InferenceResult, out3d: &mut Overlay3d, out2d: &mut Vec<M
     }
     let mut label = r.kind.label().to_string();
     if r.kind.is_direction() && r.from_point.is_some() {
-        label = "From Point".into();
+        label = tr!("inference-from-point");
     }
     if !label.is_empty() {
         out2d.push(Marker2d::CursorTooltip { text: label });

@@ -693,7 +693,7 @@ impl Renderer {
         let mut n = geo.tris.len() - geo.tris.len() % 3;
         if n > max_tris_verts {
             log::warn!(
-                "varstotas_render: {} triangle vertices exceed the device buffer limit, truncating to {}",
+                "varstotas_render: {} triangle vertices exceed the device buffer limit, truncating to {}", // i18n-ignore
                 n,
                 max_tris_verts
             );
@@ -846,7 +846,7 @@ impl Renderer {
         g.radius = geo.radius.max(0.0) as f64 + g.origin.length();
         if self.timing.is_some() {
             eprintln!(
-                "varstotas_render timing: set_geometry {} tris ({} translucent), {} edges: {:.2} ms",
+                "varstotas_render timing: set_geometry {} tris ({} translucent), {} edges: {:.2} ms", // i18n-ignore
                 ntris,
                 translucent_tris,
                 ne / 2,
@@ -902,7 +902,7 @@ impl Renderer {
         }
         if self.timing.is_some() {
             eprintln!(
-                "varstotas_render timing: update_highlight {} tris, {} edges: {:.3} ms",
+                "varstotas_render timing: update_highlight {} tris, {} edges: {:.3} ms", // i18n-ignore
                 g.tri_groups.len(),
                 g.edge_groups.len(),
                 t0.elapsed().as_secs_f64() * 1000.0
@@ -1081,7 +1081,7 @@ impl Renderer {
             if t.frames >= 120 {
                 let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0 / t.frames as f64;
                 eprintln!(
-                    "varstotas_render timing ({} frames): cpu {:.3} ms/frame (incl. sort {:.3} ms, {} sorts), gpu wait {:.3} ms/frame",
+                    "varstotas_render timing ({} frames): cpu {:.3} ms/frame (incl. sort {:.3} ms, {} sorts), gpu wait {:.3} ms/frame", // i18n-ignore
                     t.frames,
                     ms(t.cpu),
                     ms(t.sort),
@@ -1705,7 +1705,7 @@ impl Renderer {
         if let Err((line, msg)) = crate::custom::validate(&src) {
             // Each one compiles alone but not together (a name clash): keep the old module.
             log::warn!("custom shaders: line {line:?}: {msg}");
-            let all = Some(format!("does not compile with the other shaders: {msg}"));
+            let all = Some(varstotas_i18n::tr!("render-shader-clash", error = msg.to_string()));
             return vec![all; shaders.len()];
         }
         let device = &rs.device;

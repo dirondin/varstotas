@@ -20,10 +20,10 @@ pub enum Level {
 }
 
 impl Level {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Level::Error => "error",
-            Level::Warn => "warning",
+            Level::Error => varstotas_i18n::tr!("log-level-error"),
+            Level::Warn => varstotas_i18n::tr!("log-level-warning"),
         }
     }
 }

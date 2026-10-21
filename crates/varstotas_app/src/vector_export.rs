@@ -9,6 +9,7 @@
 
 use crate::document::guarded;
 use std::collections::HashSet;
+use varstotas_i18n::tr;
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{Model, Ray, tessellate};
 use varstotas_render::Camera;
@@ -311,7 +312,7 @@ pub fn build(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) -> Dr
         let tp = to_paper;
         return finish(d, strokes, fills_scr, dims, dim_labels, notes, move |p| tp(p) + shift, None);
     }
-    let label = scale.map(|n| format!("Scale 1:{}", trim(n)));
+    let label = scale.map(|n| tr!("layout-scale-label", n = trim(n)));
     d.size.y += if label.is_some() { 6.0 } else { 0.0 };
     finish(d, strokes, fills_scr, dims, dim_labels, notes, to_paper, label)
 }
@@ -402,7 +403,7 @@ pub fn to_svg(d: &Drawing) -> String {
     let mut s = String::new();
     let _ = writeln!(
         s,
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}mm\" height=\"{h}mm\" viewBox=\"0 0 {w} {h}\">",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}mm\" height=\"{h}mm\" viewBox=\"0 0 {w} {h}\">", // i18n-ignore
         w = n(d.size.x),
         h = n(d.size.y)
     );
@@ -441,7 +442,7 @@ pub fn to_svg(d: &Drawing) -> String {
         let anchor = if t.left { "start" } else { "middle" };
         let _ = write!(
             s,
-            "<text x=\"{x}\" y=\"{y}\" font-family=\"Helvetica, Arial, sans-serif\" font-size=\"{}\" text-anchor=\"{anchor}\"",
+            "<text x=\"{x}\" y=\"{y}\" font-family=\"Helvetica, Arial, sans-serif\" font-size=\"{}\" text-anchor=\"{anchor}\"", // i18n-ignore
             n(t.size),
             x = n(t.at.x),
             y = n(t.at.y)
@@ -531,7 +532,7 @@ fn pdf_content(d: &Drawing) -> Vec<u8> {
             let at = t.at + DVec2::new(-t.angle.sin(), t.angle.cos()) * (i as f64 * t.size * 1.2);
             let (x, y) = p(at);
             let (x, y) = (x - cos * width * 0.5, y - sin * width * 0.5);
-            w(&mut c, format!("BT /F1 {} Tf {} {} {} {} {} {} Tm ", n(size), n(cos), n(sin), n(-sin), n(cos), n(x), n(y)));
+            w(&mut c, format!("BT /F1 {} Tf {} {} {} {} {} {} Tm ", n(size), n(cos), n(sin), n(-sin), n(cos), n(x), n(y))); // i18n-ignore
             c.extend(pdf_string(line));
             c.extend_from_slice(b" Tj ET\n");
         }

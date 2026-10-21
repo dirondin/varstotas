@@ -10,6 +10,7 @@ use varstotas_kernel::{
 };
 use rhai::{Array, Dynamic, Engine, EvalAltResult, ImmutableString, Map, Scope};
 use std::time::{Duration, Instant};
+use varstotas_i18n::tr;
 
 type R<T> = Result<T, Box<EvalAltResult>>;
 
@@ -53,7 +54,7 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
 /// request headers (`#{ "Authorization": "Token …" }`).
 fn fetch(url: &str, to: Option<&str>, headers: &Map) -> Result<Vec<u8>, String> {
     let mut cmd = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
-    cmd.args(["-sSfL", "--max-time", "300", "--retry", "2", "--user-agent", "Varstotas"]);
+    cmd.args(["-sSfL", "--max-time", "300", "--retry", "2", "--user-agent", "Varstotas"]); // i18n-ignore
     for (k, v) in headers {
         cmd.arg("-H").arg(format!("{k}: {v}"));
     }
@@ -81,7 +82,7 @@ fn with<T>(f: impl FnOnce(&mut State) -> R<T>) -> R<T> {
         let mut b = s.borrow_mut();
         match b.as_mut() {
             Some(st) => f(st),
-            None => err("no model"),
+            None => err(tr!("script-err-no-model")),
         }
     })
 }
@@ -107,10 +108,10 @@ pub(crate) fn num(d: &Dynamic) -> R<f64> {
     if let Some(s) = d.clone().try_cast::<ImmutableString>() {
         return with(|st| match units::parse_length(&s, st.model.unit) {
             Some(v) => Ok(v),
-            None => err(format!("not a length: {s}")),
+            None => err(tr!("script-err-not-a-length-s", s = s.to_string())),
         });
     }
-    err(format!("expected a number, got {}", d.type_name()))
+    err(tr!("script-err-expected-a-number-got-type-name", type_name = d.type_name().to_string()))
 }
 
 pub(crate) fn pt(d: &Dynamic) -> R<DVec3> {
@@ -123,13 +124,13 @@ pub(crate) fn pt(d: &Dynamic) -> R<DVec3> {
         let z = if a.len() == 3 { num(&a[2])? } else { 0.0 };
         return Ok(DVec3::new(num(&a[0])?, num(&a[1])?, z));
     }
-    err(format!("expected a point (vec3 or [x, y, z]), got {}", d.type_name()))
+    err(tr!("script-err-expected-a-point-vec-or-x", type_name = d.type_name().to_string()))
 }
 
 fn pts(d: &Dynamic) -> R<Vec<DVec3>> {
     match d.clone().try_cast::<Array>() {
         Some(a) => a.iter().map(pt).collect(),
-        None => err("expected an array of points"),
+        None => err(tr!("script-err-expected-an-array-of-points")),
     }
 }
 
@@ -142,7 +143,7 @@ fn ents(d: &Dynamic) -> R<Vec<Entity>> {
     if let Some(name) = d.clone().try_cast::<ImmutableString>() {
         return with(|st| {
             let path = st.path.clone();
-            find_child(st, &path, &name, false).map(|e| vec![e]).ok_or_else(|| format!("no group / component named `{name}` here").into())
+            find_child(st, &path, &name, false).map(|e| vec![e]).ok_or_else(|| tr!("script-err-no-group-component-named-name-here", name = name.to_string()).into())
         });
     }
     if let Some(a) = d.clone().try_cast::<Array>() {
@@ -153,9 +154,9 @@ fn ents(d: &Dynamic) -> R<Vec<Entity>> {
         return Ok(out);
     }
     if d.is_unit() {
-        return err("expected an entity, got () (did the operation fail?)");
+        return err(tr!("script-err-expected-an-entity-got-did-the"));
     }
-    err(format!("expected an entity or an array of entities, got {}", d.type_name()))
+    err(tr!("script-err-expected-an-entity-or-an-array", type_name = d.type_name().to_string()))
 }
 
 /// The name of instance `i` as found by [`find_child`]: its own, else its definition's.
@@ -223,7 +224,7 @@ fn children_of(st: &State, path: &ContextPath, deep: bool, out: &mut Array, dept
 fn one(d: &Dynamic) -> R<Entity> {
     let mut v = ents(d)?;
     if v.len() != 1 {
-        return err(format!("expected one entity, got {}", v.len()));
+        return err(tr!("script-err-expected-one-entity-got-len", len = v.len().to_string()));
     }
     Ok(v.remove(0))
 }
@@ -291,11 +292,11 @@ fn show_ent(e: &Entity) -> String {
 // State helpers
 
 fn mesh<'a>(st: &'a State, path: &ContextPath) -> R<&'a Mesh> {
-    st.model.mesh_at(path).ok_or_else(|| "context no longer exists".into())
+    st.model.mesh_at(path).ok_or_else(|| tr!("script-err-context-no-longer-exists").into())
 }
 
 fn mesh_mut<'a>(st: &'a mut State, path: &ContextPath) -> R<&'a mut Mesh> {
-    st.model.mesh_at_mut(path).ok_or_else(|| "context no longer exists".into())
+    st.model.mesh_at_mut(path).ok_or_else(|| tr!("script-err-context-no-longer-exists").into())
 }
 
 fn world(st: &State, path: &ContextPath) -> DMat4 {
@@ -318,7 +319,7 @@ fn alive(st: &State, e: &Entity) -> bool {
 }
 
 fn check(st: &State, e: &Entity) -> R<()> {
-    if alive(st, e) { Ok(()) } else { err("entity no longer exists (merged, split or erased)") }
+    if alive(st, e) { Ok(()) } else { err(tr!("script-err-entity-no-longer-exists-merged-split")) }
 }
 
 fn kind(st: &State, e: &Entity) -> String {
@@ -342,7 +343,7 @@ fn face_id(st: &State, e: &Entity) -> R<FaceId> {
     check(st, e)?;
     match e.r {
         EntityRef::Face(f) => Ok(f),
-        _ => err(format!("expected a face, got {}", kind(st, e))),
+        _ => err(tr!("script-err-expected-a-face-got-e", e = kind(st, e).to_string())),
     }
 }
 
@@ -350,7 +351,7 @@ fn inst_id(st: &State, e: &Entity) -> R<InstanceId> {
     check(st, e)?;
     match e.r {
         EntityRef::Instance(i) => Ok(i),
-        _ => err(format!("expected a group or component, got {}", kind(st, e))),
+        _ => err(tr!("script-err-expected-a-group-or-component-got", e = kind(st, e).to_string())),
     }
 }
 
@@ -360,7 +361,7 @@ fn edge_ids(st: &State, es: &[Entity]) -> R<Vec<EdgeId>> {
             check(st, e)?;
             match e.r {
                 EntityRef::Edge(x) => Ok(x),
-                _ => err(format!("expected edges, got {}", kind(st, e))),
+                _ => err(tr!("script-err-expected-edges-got-e", e = kind(st, e).to_string())),
             }
         })
         .collect()
@@ -455,12 +456,12 @@ fn add_curve(info: impl FnOnce(&State, &DMat4) -> Option<CurveInfo>, closed: boo
     edit(|st| {
         let path = st.path.clone();
         let inv = world(st, &path).inverse();
-        let Some(c) = info(st, &inv) else { return err("degenerate curve") };
+        let Some(c) = info(st, &inv) else { return err(tr!("script-err-degenerate-curve")) };
         let up = inv.transform_vector3(DVec3::Z);
         let m = mesh_mut(st, &path)?;
         let edges = m.add_curve(&c);
         if edges.is_empty() {
-            return err("curve not added");
+            return err(tr!("script-err-curve-not-added"));
         }
         Ok(if closed { curve_result(&path, m, edges, up) } else { dyn_ents(&path, edges.into_iter().map(EntityRef::Edge)) })
     })
@@ -471,7 +472,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
     let path = st.path.clone();
     let local = world(st, &path).inverse() * xf;
     let def = st.model.defs.insert(Definition {
-        name: "Group".into(),
+        name: "Group".into(), // i18n-ignore
         mesh,
         is_group: true,
         guides: Default::default(),
@@ -532,11 +533,11 @@ fn transform_ents(st: &mut State, es: Vec<Entity>, world_m: DMat4, copy: bool) -
 fn color(d: &Dynamic) -> R<[f32; 4]> {
     if let Some(s) = d.clone().try_cast::<ImmutableString>() {
         let h = s.trim_start_matches('#');
-        let v = u32::from_str_radix(h, 16).map_err(|_| format!("bad colour {s}"))?;
+        let v = u32::from_str_radix(h, 16).map_err(|_| tr!("script-err-bad-colour-s", s = s.to_string()))?;
         return match h.len() {
             6 => Ok([(v >> 16) as f32 / 255.0, ((v >> 8) & 255) as f32 / 255.0, (v & 255) as f32 / 255.0, 1.0]),
             8 => Ok([(v >> 24) as f32 / 255.0, ((v >> 16) & 255) as f32 / 255.0, ((v >> 8) & 255) as f32 / 255.0, (v & 255) as f32 / 255.0]),
-            _ => err(format!("bad colour {s} (use #RRGGBB)")),
+            _ => err(tr!("script-err-bad-colour-s-use-rrggbb", s = s.to_string())),
         };
     }
     if let Some(a) = d.clone().try_cast::<Array>()
@@ -546,7 +547,7 @@ fn color(d: &Dynamic) -> R<[f32; 4]> {
         let k = if v.iter().take(3).any(|c| *c > 1.0) { 255.0 } else { 1.0 };
         return Ok([(v[0] / k) as f32, (v[1] / k) as f32, (v[2] / k) as f32, v.get(3).map_or(1.0, |a| (*a / if *a > 1.0 { 255.0 } else { 1.0 }) as f32)]);
     }
-    err("expected a colour: \"#RRGGBB\" or [r, g, b]")
+    err(tr!("script-err-expected-a-colour-rrggbb-or-r"))
 }
 
 fn solid(a: &Dynamic, b: &Dynamic, op_: SolidOp, swap: bool) -> R<Dynamic> {
@@ -554,7 +555,7 @@ fn solid(a: &Dynamic, b: &Dynamic, op_: SolidOp, swap: bool) -> R<Dynamic> {
     edit(|st| {
         let (ia, ib) = (inst_id(st, &a)?, inst_id(st, &b)?);
         if a.path != b.path {
-            return err("both solids must be in the same context");
+            return err(tr!("script-err-both-solids-must-be-in-the"));
         }
         let (first, second) = if swap { (ib, ia) } else { (ia, ib) };
         let out = op(st.model.solid_op_in(&a.path, op_, first, second))?;
@@ -590,7 +591,7 @@ pub fn engine(limit: Duration) -> Engine {
     e.set_max_expr_depths(256, 256);
     e.set_max_call_levels(128);
     let start = Instant::now();
-    e.on_progress(move |_| (start.elapsed() > limit).then(|| Dynamic::from(format!("time limit of {}s exceeded", limit.as_secs()))));
+    e.on_progress(move |_| (start.elapsed() > limit).then(|| Dynamic::from(tr!("script-err-time-limit-of-secs-s-exceeded", secs = limit.as_secs().to_string()))));
     e.on_print(|s| {
         let _ = with(|st| {
             st.out.push_str(s);
@@ -616,7 +617,7 @@ pub fn engine(limit: Duration) -> Engine {
 }
 
 pub(crate) fn register_vec(e: &mut Engine) {
-    e.register_type_with_name::<DVec3>("Vec3");
+    e.register_type_with_name::<DVec3>("Vec3"); // i18n-ignore
     e.register_fn("vec3", |x: Dynamic, y: Dynamic, z: Dynamic| -> R<DVec3> { Ok(DVec3::new(num(&x)?, num(&y)?, num(&z)?)) });
     e.register_fn("vec3", |x: Dynamic, y: Dynamic| -> R<DVec3> { Ok(DVec3::new(num(&x)?, num(&y)?, 0.0)) });
     e.register_get_set("x", |v: &mut DVec3| v.x, |v: &mut DVec3, x: f64| v.x = x);
@@ -643,7 +644,7 @@ pub(crate) fn register_vec(e: &mut Engine) {
 }
 
 fn register_entity(e: &mut Engine) {
-    e.register_type_with_name::<Entity>("Entity");
+    e.register_type_with_name::<Entity>("Entity"); // i18n-ignore
     e.register_fn("to_string", |x: &mut Entity| show_ent(x));
     e.register_fn("to_debug", |x: &mut Entity| show_ent(x));
     e.register_fn("==", |a: Entity, b: Entity| a == b);
@@ -670,7 +671,7 @@ fn register_entity(e: &mut Engine) {
                 let p = ent_points(st, x)?;
                 Ok(p[0].distance(p[1]))
             }
-            _ => err("length: not an edge"),
+            _ => err(tr!("script-err-length-not-an-edge")),
         })
     });
     e.register_get("normal", |x: &mut Entity| -> R<DVec3> {
@@ -722,7 +723,7 @@ fn register_entity(e: &mut Engine) {
             let fs = match x.r {
                 EntityRef::Edge(e) => m.edge_faces(e),
                 EntityRef::Face(f) => m.face_neighbors(f),
-                _ => return err("faces: not an edge or face"),
+                _ => return err(tr!("script-err-faces-not-an-edge-or-face")),
             };
             Ok(fs.into_iter().map(|f| dyn_ent(&x.path, EntityRef::Face(f))).collect())
         })
@@ -780,7 +781,7 @@ fn register_entity(e: &mut Engine) {
             check(st, x)?;
             match x.r {
                 EntityRef::Edge(e) => Ok(mesh(st, &x.path)?.edges[e].soft),
-                _ => err("soft: not an edge"),
+                _ => err(tr!("script-err-soft-not-an-edge")),
             }
         })
     });
@@ -825,7 +826,7 @@ fn register_geometry(e: &mut Engine) {
                     face_up(m, f, up);
                     Ok(dyn_ent(&path, EntityRef::Face(f)))
                 }
-                None => err("face: points are not a valid planar polygon"),
+                None => err(tr!("script-err-face-points-are-not-a-valid")),
             }
         })
     }
@@ -837,7 +838,7 @@ fn register_geometry(e: &mut Engine) {
     fn circle(c: &Dynamic, r: &Dynamic, segs: i64, n: DVec3, polygon: bool) -> R<Dynamic> {
         let (c, r) = (pt(c)?, num(r)?);
         if r <= 0.0 || !(3..=1000).contains(&segs) {
-            return err("circle: radius must be positive, segments 3..1000");
+            return err(tr!("script-err-circle-radius-must-be-positive-segments"));
         }
         add_curve(
             |_, inv| {
@@ -882,7 +883,7 @@ fn register_geometry(e: &mut Engine) {
     e.register_fn("box", |o: Dynamic, sx: Dynamic, sy: Dynamic, sz: Dynamic| -> R<Dynamic> {
         let (o, s) = (pt(&o)?, DVec3::new(num(&sx)?, num(&sy)?, num(&sz)?));
         if s.abs().min_element() <= 1e-6 {
-            return err("box: sizes must be non-zero");
+            return err(tr!("script-err-box-sizes-must-be-non-zero"));
         }
         let lo = o + s.min(DVec3::ZERO);
         let s = s.abs();
@@ -898,13 +899,13 @@ fn register_geometry(e: &mut Engine) {
     fn cylinder(c: &Dynamic, r: &Dynamic, h: &Dynamic, segs: i64) -> R<Dynamic> {
         let (c, r, h) = (pt(c)?, num(r)?, num(h)?);
         if r <= 0.0 || h.abs() <= 1e-6 || !(3..=1000).contains(&segs) {
-            return err("cylinder: radius and height must be non-zero, segments 3..1000");
+            return err(tr!("script-err-cylinder-radius-and-height-must-be"));
         }
         edit(|st| {
             let mut m = Mesh::new();
             let info = CurveInfo::circle(DVec3::ZERO, DVec3::Z, DVec3::X, r, segs as u32).ok_or("cylinder: degenerate")?;
             let es = m.add_curve(&info);
-            let f = loop_face(&m, &es).ok_or("cylinder: no face")?;
+            let f = loop_face(&m, &es).ok_or_else(|| tr!("script-err-cylinder-no-face"))?;
             extrude_up(&mut m, f, h.abs())?;
             let base = if h < 0.0 { c + DVec3::Z * h } else { c };
             insert_group(st, m, DMat4::from_translation(base))
@@ -914,7 +915,7 @@ fn register_geometry(e: &mut Engine) {
     e.register_fn("cylinder", |c: Dynamic, r: Dynamic, h: Dynamic, s: i64| cylinder(&c, &r, &h, s));
     /// A [`Primitive`] (in its own axes) as a group moved to `at`.
     fn primitive(p: Primitive, at: DVec3, what: &str) -> R<Dynamic> {
-        let m = p.mesh().ok_or_else(|| format!("{what}: sizes must be positive (a torus tube thinner than its radius), segments 3..1000"))?;
+        let m = p.mesh().ok_or_else(|| tr!("script-err-what-sizes-must-be-positive-a", what = what.to_string()))?;
         edit(|st| insert_group(st, m, DMat4::from_translation(at)))
     }
     fn segs(s: i64) -> u32 {
@@ -947,7 +948,7 @@ fn register_geometry(e: &mut Engine) {
             st.model
                 .add_dimension_in(&path, inv.transform_point3(a), inv.transform_point3(b), inv.transform_vector3(off))
                 .map(|_| ())
-                .ok_or_else(|| "dimension: not added".into())
+                .ok_or_else(|| tr!("script-err-dimension-not-added").into())
         })
     });
     e.register_fn("note", |at: Dynamic, off: Dynamic, text: ImmutableString| -> R<()> {
@@ -958,7 +959,7 @@ fn register_geometry(e: &mut Engine) {
             st.model
                 .add_text_note_in(&path, inv.transform_point3(at), inv.transform_vector3(off), text.to_string())
                 .map(|_| ())
-                .ok_or_else(|| "note: not added".into())
+                .ok_or_else(|| tr!("script-err-note-not-added").into())
         })
     });
 }
@@ -985,7 +986,7 @@ fn register_ops(e: &mut Engine) {
         edit(|st| {
             let id = face_id(st, &f)?;
             if p.iter().any(|e| e.path != f.path) {
-                return err("follow_me: the path must be in the face's context");
+                return err(tr!("script-err-follow-me-the-path-must-be"));
             }
             let edges = edge_ids(st, &p)?;
             op(mesh_mut(st, &f.path)?.follow_me(id, &edges))
@@ -1011,7 +1012,7 @@ fn register_ops(e: &mut Engine) {
     e.register_fn("rotate", |x: Dynamic, c: Dynamic, axis: Dynamic, deg: Dynamic| -> R<Array> {
         let (es, c, a, deg) = (ents(&x)?, pt(&c)?, pt(&axis)?, num(&deg)?);
         if a.length() < 1e-9 {
-            return err("rotate: zero axis");
+            return err(tr!("script-err-rotate-zero-axis"));
         }
         let m = DMat4::from_translation(c) * DMat4::from_axis_angle(a.normalize(), deg.to_radians()) * DMat4::from_translation(-c);
         edit(|st| Ok(transform_ents(st, es, m, false)?.into_iter().map(Dynamic::from).collect()))
@@ -1020,7 +1021,7 @@ fn register_ops(e: &mut Engine) {
         let (es, c) = (ents(&x)?, pt(&c)?);
         let k = if k.is::<DVec3>() || k.is_array() { pt(&k)? } else { DVec3::splat(num(&k)?) };
         if k.abs().min_element() < 1e-9 {
-            return err("scale: zero factor");
+            return err(tr!("script-err-scale-zero-factor"));
         }
         let m = DMat4::from_translation(c) * DMat4::from_scale(k) * DMat4::from_translation(-c);
         edit(|st| Ok(transform_ents(st, es, m, false)?.into_iter().map(Dynamic::from).collect()))
@@ -1029,7 +1030,7 @@ fn register_ops(e: &mut Engine) {
         let es = ents(x)?;
         edit(|st| {
             let groups = by_path(es);
-            let [(path, refs)] = groups.as_slice() else { return err("group: entities must be in one context") };
+            let [(path, refs)] = groups.as_slice() else { return err(tr!("script-err-group-entities-must-be-in-one")) };
             let id = match name {
                 Some(n) => op(st.model.make_component(path, refs, n))?,
                 None => op(st.model.make_group(path, refs))?,
@@ -1064,7 +1065,7 @@ fn register_ops(e: &mut Engine) {
         let es = ents(&x)?;
         edit(|st| {
             let groups = by_path(es);
-            let [(path, refs)] = groups.as_slice() else { return err("outer_shell: solids must be in one context") };
+            let [(path, refs)] = groups.as_slice() else { return err(tr!("script-err-outer-shell-solids-must-be-in")) };
             let ids: Vec<InstanceId> = refs.iter().filter_map(|r| if let EntityRef::Instance(i) = r { Some(*i) } else { None }).collect();
             let id = op(st.model.solid_union_all_in(path, &ids))?;
             Ok(dyn_ent(path, EntityRef::Instance(id)))
@@ -1125,7 +1126,7 @@ fn register_ops(e: &mut Engine) {
                                 i.hidden = hidden;
                             }
                         }
-                        _ => return err("show / hide: groups and components only"),
+                        _ => return err(tr!("script-err-show-hide-groups-and-components-only")),
                     }
                 }
             }
@@ -1137,7 +1138,7 @@ fn register_ops(e: &mut Engine) {
     e.register_fn("hide", |x: Dynamic| set_hidden(&x, true));
     e.register_fn("paint", |x: Dynamic, name: Dynamic| -> R<()> {
         let es = ents(&x)?;
-        let name = if name.is_unit() { None } else { Some(name.into_immutable_string().map_err(|t| format!("paint: expected a material name, got {t}"))?) };
+        let name = if name.is_unit() { None } else { Some(name.into_immutable_string().map_err(|t| tr!("script-err-paint-expected-a-material-name-got", t = t.to_string()))?) };
         edit(|st| {
             let mat = match &name {
                 Some(n) => Some(
@@ -1146,7 +1147,7 @@ fn register_ops(e: &mut Engine) {
                         .iter()
                         .find(|(_, m)| m.name == n.as_str())
                         .map(|(id, _)| id)
-                        .ok_or_else(|| format!("paint: no material {n} (create it with material(name, colour))"))?,
+                        .ok_or_else(|| tr!("script-err-paint-no-material-n-create-it", n = n.to_string()))?,
                 ),
                 None => None,
             };
@@ -1236,7 +1237,7 @@ fn register_ops(e: &mut Engine) {
         edit(|st| {
             let i = inst_id(st, &g)?;
             let Some(mut p) = st.model.instance_params(&g.path, i).cloned() else {
-                return err("set_params: not parametric (call make_parametric first)");
+                return err(tr!("script-err-set-params-not-parametric-call-make"));
             };
             for (k, v) in &m {
                 match k.as_str() {
@@ -1254,8 +1255,8 @@ fn register_ops(e: &mut Engine) {
                         }
                     }
                     "gap" => p.gap = num(v)?,
-                    "stretch" => p.stretch = v.as_bool().map_err(|_| "set_params: stretch is true / false")?,
-                    k => return err(format!("set_params: unknown key {k} (x, y, z, count, axis, gap, stretch)")),
+                    "stretch" => p.stretch = v.as_bool().map_err(|_| tr!("script-err-set-params-stretch-is-true-false"))?,
+                    k => return err(tr!("script-err-set-params-unknown-key-k-x", k = k.to_string())),
                 }
             }
             op(st.model.set_instance_params(&g.path, i, p))
@@ -1277,7 +1278,7 @@ fn gen_values(m: &Map) -> R<varstotas_kernel::GenValues> {
             } else if let Some(s) = v.clone().try_cast::<ImmutableString>() {
                 GenValue::Text(s.to_string())
             } else {
-                return err(format!("{k}: expected a number, bool or string, got {}", v.type_name()));
+                return err(tr!("script-err-k-expected-a-number-bool-or", k = k.to_string(), type_name = v.type_name().to_string()));
             };
             Ok((k.to_string(), x))
         })
@@ -1462,7 +1463,7 @@ fn register_context(e: &mut Engine) {
     e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString| fetch_file(&url, &path, &Map::new()));
     e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString, headers: Map| fetch_file(&url, &path, &headers));
     e.register_fn("url_encode", |s: ImmutableString| -> String {
-        s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+        s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect() // i18n-ignore
     });
     e.register_fn("materials", || -> R<Array> {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))

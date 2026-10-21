@@ -9,6 +9,7 @@ use varstotas_kernel::{DefId, GenKind, GenValue, GenValues, Generated, Generator
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::time::Duration;
+use varstotas_i18n::tr;
 
 thread_local! {
     /// Generators building generators: nesting depth.
@@ -49,7 +50,7 @@ pub(crate) fn to_value(d: &rhai::Dynamic) -> Option<GenValue> {
 pub(crate) fn register_math(e: &mut rhai::Engine) {
     type R = Result<f64, Box<rhai::EvalAltResult>>;
     fn f(d: &rhai::Dynamic) -> Result<f64, Box<rhai::EvalAltResult>> {
-        d.as_float().or_else(|_| d.as_int().map(|i| i as f64)).map_err(|t| format!("expected a number, got {t}").into())
+        d.as_float().or_else(|_| d.as_int().map(|i| i as f64)).map_err(|t| tr!("script-err-expected-a-number-got-t", t = t.to_string()).into())
     }
     e.register_fn("min", |a: rhai::Dynamic, b: rhai::Dynamic| -> R { Ok(f(&a)?.min(f(&b)?)) });
     e.register_fn("max", |a: rhai::Dynamic, b: rhai::Dynamic| -> R { Ok(f(&a)?.max(f(&b)?)) });
@@ -90,7 +91,7 @@ pub fn derive(g: &Generator, values: &GenValues) -> Result<rhai::Map, String> {
     }
     for c in &g.checks {
         let ok = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, &c.expr).map_err(|e| format!("{}: check `{}`: {e}", g.name, c.expr))?;
-        if !ok.as_bool().map_err(|_| format!("{}: check `{}` is not true / false", g.name, c.expr))? {
+        if !ok.as_bool().map_err(|_| tr!("script-err-name-check-expr-is-not-true", name = g.name.to_string(), expr = c.expr.to_string()))? {
             return Err(format!("{}: {}", g.name, c.message));
         }
     }
@@ -106,7 +107,7 @@ pub fn formula_values(g: &Generator, values: &GenValues) -> Result<Vec<(varstota
 /// Run the generator with `values` (normalized) into a fresh model.
 fn build(model: &Model, g: &Generator, values: &GenValues) -> Result<Model, String> {
     if DEPTH.get() >= 4 {
-        return Err(format!("{}: generators nested too deep", g.name));
+        return Err(tr!("script-err-name-generators-nested-too-deep", name = g.name.to_string()));
     }
     let p = derive(g, values)?;
     let mut tmp = Model::new();
@@ -126,7 +127,7 @@ fn build(model: &Model, g: &Generator, values: &GenValues) -> Result<Model, Stri
 }
 
 fn generator(model: &Model, name: &str) -> Result<Generator, String> {
-    model.generators.get(name).cloned().ok_or_else(|| format!("no generator `{name}` in the document"))
+    model.generators.get(name).cloned().ok_or_else(|| tr!("script-err-no-generator-name-in-the-document", name = name.to_string()))
 }
 
 /// The definition of generator `name` with `values` (normalized): the shared one, else a new
@@ -194,7 +195,7 @@ pub fn rebuild_all(model: &mut Model, name: &str) -> Result<(), String> {
 /// local transform `xf`.
 pub fn place(model: &mut Model, path: &[InstanceId], name: &str, values: &GenValues, xf: DMat4) -> Result<InstanceId, String> {
     let d = def_for(model, name, values)?;
-    let mesh = model.mesh_at_mut(path).ok_or("no such context")?;
+    let mesh = model.mesh_at_mut(path).ok_or_else(|| tr!("script-err-no-such-context"))?;
     Ok(mesh.instances.insert(Instance { def: d, transform: xf, name: String::new(), material: None, tag: None, hidden: false, locked: false }))
 }
 
@@ -202,7 +203,7 @@ pub fn place(model: &mut Model, path: &[InstanceId], name: &str, values: &GenVal
 /// defaults with `reset`). The instance moves to the definition with the new values: the shared
 /// one, its own rebuilt in place when nothing else uses it, else a new one.
 pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, values: &GenValues, reset: bool) -> Result<(), String> {
-    let cur = model.instance_generated(path, inst).cloned().ok_or("not a generated component")?;
+    let cur = model.instance_generated(path, inst).cloned().ok_or_else(|| tr!("script-err-not-a-generated-component"))?;
     let g = generator(model, &cur.generator)?;
     let mut merged = if reset { GenValues::new() } else { cur.values.clone() };
     merged.extend(values.iter().map(|(k, v)| (k.clone(), v.clone())));
@@ -210,7 +211,7 @@ pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, valu
     if values == cur.values {
         return Ok(());
     }
-    let old = model.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def).ok_or("no such instance")?;
+    let old = model.mesh_at(path).and_then(|m| m.instances.get(inst)).map(|i| i.def).ok_or_else(|| tr!("script-err-no-such-instance"))?;
     let target = match model.generated_def(&g.name, &values) {
         Some(d) => d,
         None if model.instance_count(old) == 1 => {

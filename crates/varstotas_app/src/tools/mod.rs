@@ -34,6 +34,7 @@ mod texture;
 pub(crate) mod select;
 pub(crate) mod transform;
 
+use varstotas_i18n::tr;
 use crate::document::Document;
 use crate::overlay::Marker2d;
 use crate::ui::icons::Icon;
@@ -358,216 +359,56 @@ impl ToolId {
 
     /// Longer help shown in the Instructor panel.
     pub fn instructor(self) -> String {
-        varstotas_i18n::platform_keys(self.instructor_text()).into_owned()
+        self.instructor_text()
     }
 
-    fn instructor_text(self) -> &'static str {
-        match self {
-            ToolId::Select if cfg!(target_os = "macos") => {
-                "Click an entity to select it.\n\
-                 • Double-click a face: select it with its edges.\n\
-                 • Triple-click: select everything connected.\n\
-                 • Drag left→right: window selection (fully inside).\n\
-                 • Drag right→left: crossing selection (touching).\n\
-                 • Option (or Cmd) = add, Shift = toggle, Shift+Option = remove.\n\
-                 • Double-click a group to edit it; Esc to close it.\n\
-                 • Delete erases the selection."
-            }
-            ToolId::Select => {
-                "Click an entity to select it.\n\
-                 • Double-click a face: select it with its edges.\n\
-                 • Triple-click: select everything connected.\n\
-                 • Drag left→right: window selection (fully inside).\n\
-                 • Drag right→left: crossing selection (touching).\n\
-                 • Ctrl = add, Shift = toggle, Ctrl+Shift = remove.\n\
-                 • Double-click a group to edit it; Esc to close it.\n\
-                 • Delete erases the selection."
-            }
-            ToolId::Eraser => {
-                "Click or drag over edges to erase them. Erasing an edge removes the faces it bounds."
-            }
-            ToolId::Paint if cfg!(target_os = "macos") => {
-                "Pick a material in the Materials panel, then click faces.\n\
-                 • Cmd: sample a material.\n\
-                 • Option: fill connected faces with the same material.\n\
-                 • Shift: replace the material on all matching faces.\n\
-                 • Option+Shift: replace it on matching connected faces."
-            }
-            ToolId::Paint => {
-                "Pick a material in the Materials panel, then click faces.\n\
-                 • Alt: sample a material.\n\
-                 • Ctrl: fill connected faces with the same material.\n\
-                 • Shift: replace the material on all matching faces.\n\
-                 • Ctrl+Shift: replace it on matching connected faces."
-            }
-            ToolId::TexturePosition => {
-                "Position the texture of a textured face (select it, or click it).\n\
-                 • Drag the face or the red pin: move the texture.\n\
-                 • Green pin: rotate and scale about the red pin.\n\
-                 • Blue pin: stretch the texture height.\n\
-                 • Esc cancels a drag; Enter or a click outside finishes."
-            }
-            ToolId::Line => {
-                "Click to start, click to end. Each end starts a new segment.\n\
-                 Type a length and press Enter for precision.\n\
-                 Shift locks the inference direction; arrow keys lock axes."
-            }
-            ToolId::Arc => {
-                "Click the start point, click the end point, then move to set the bulge and click.\n\
-                 • Type a length for the chord, then a bulge (or `500r` for a radius); `12s` sets segments.\n\
-                 • Starting at the end of an edge, a cyan arc is tangent to it.\n\
-                 • Double-click to draw an arc tangent to the previous one."
-            }
-            ToolId::ArcCenter => {
-                "Click the center, click the start point (radius), then move around and click the end.\n\
-                 Type a radius after the first click, then an angle. `12s` sets segments."
-            }
-            ToolId::Arc3 => {
-                "Click the start point, click a point the arc passes through, then click the end.\n\
-                 Type a length after the first click, an angle after the second."
-            }
-            ToolId::Bezier => {
-                "Click points of the curve; press and drag at a point to pull out its handles (a plain click makes a corner).\n\
-                 Enter or a double-click finishes an open curve (edges only); a click on the first point closes it into a face.\n\
-                 Backspace removes the last point. Type a length for the next point toward the cursor; `12s` sets segments per span."
-            }
-            ToolId::EditCurve => {
-                "Reshape a curve drawn with Bezier Curve, Smooth Curve or Freehand (double-click it with Select, or select it and pick Edit Curve).\n\
-                 • Drag a point (square) to move it, a handle (circle) to bend the curve; a smooth point keeps its handles in line.\n\
-                 • Click the curve between points to add a point; Delete removes the selected point.\n\
-                 • Double-click a point: corner ↔ smooth. `12s` sets segments per span.\n\
-                 • Enter, Esc or a click in empty space finishes."
-            }
-            ToolId::SmoothCurve => {
-                "Click points; the curve passes smoothly through them.\n\
-                 Enter or a double-click finishes an open curve (edges only); a click on the first point closes it into a face.\n\
-                 Backspace removes the last point. Type a length for the next point toward the cursor; `12s` sets segments per span."
-            }
-            ToolId::Freehand => {
-                "Press and drag to draw; release to finish. The stroke is smoothed.\n\
-                 A stroke that ends at its start closes into a face; otherwise it stays edges."
-            }
-            ToolId::Pie => {
-                "Click the center, click the start point (radius), then click the end to make a closed pie face.\n\
-                 Type a radius, then an angle."
-            }
-            ToolId::Rectangle => "Click the first corner, then the opposite corner. Type width,height to be exact.",
-            ToolId::RotatedRectangle => {
-                "Click the first corner, click the second (the first edge), then move to set the width and click.\n\
-                 Type a length (or `l,w`) for the edge, then the width (or `w,angle`)."
-            }
-            ToolId::Circle => "Click the center, then move and click to set the radius. Type `24s` before clicking to set segments.",
-            ToolId::Polygon => "Click the center, then the radius. Type `6s` to set the number of sides.",
-            ToolId::Box | ToolId::Pyramid => {
-                "Click the first corner of the base, click the opposite corner, then move up or down and click to set the height.\n\
-                 • A face under the cursor carries the base; arrows after the first click set its plane.\n\
-                 • Type `width, depth`, then the height — or `width, depth, height` at once.\n\
-                 • The result is a component: change its sizes in Entity Info; Explode it for plain geometry."
-            }
-            ToolId::Cylinder | ToolId::Cone => {
-                "Click the centre of the base, click the radius, then move up or down and click to set the height.\n\
-                 • Type the radius, then the height — or `radius, height` at once; `32s` sets segments.\n\
-                 • The result is a component: change its sizes in Entity Info; Explode it for plain geometry."
-            }
-            ToolId::Sphere => {
-                "Click where the sphere rests, then move and click to set the radius (or type it).\n\
-                 • `32s` sets segments. The result is a component: change its sizes in Entity Info."
-            }
-            ToolId::Torus => {
-                "Click the centre, click the radius (to the middle of the tube), then move and click to set the tube.\n\
-                 • Type `radius, tube` at once; `32s` sets segments.\n\
-                 • The result is a component: change its sizes in Entity Info."
-            }
-            ToolId::PushPull => {
-                "Hover a face, click, move to set the distance, click again.\n\
-                 %COPY% keeps the original face. Double-click repeats the last distance."
-            }
-            ToolId::Move => "Click a point to pick up the selection, click the destination. %COPY% makes a copy; type `5x` for an array.",
-            ToolId::Rotate => "Click the center, click the zero direction, click the angle. Type an angle in degrees.",
-            ToolId::Scale => "Select entities, then drag a grip. Type a scale factor.",
-            ToolId::Offset => "Click a face, move inward or outward, click. Type a distance.",
-            ToolId::Chamfer => {
-                "Click an edge between two faces (or one of the selected edges: all of them), move away \
-                 from it to set the size, click again.\n\
-                 • Type the distance while sizing; double-click uses the last size.\n\
-                 • Typing right after a chamfer redoes it with the new size. Esc cancels."
-            }
-            ToolId::Fillet => {
-                "Click an edge between two faces (or one of the selected edges: all of them), move away \
-                 from it to set the radius, click again.\n\
-                 • Type the radius, `12s` for the number of segments, or both: `20,12s`.\n\
-                 • Double-click uses the last radius; typing right after a fillet redoes it. Esc cancels."
-            }
-            ToolId::SolidTools => {
-                "Tools → Solid Tools: pick an operation, then click the first solid group, then the second.\n\
-                 • With solids selected the operation runs at once.\n\
-                 • Subtract / Trim cut the second solid with the first (Trim keeps the first).\n\
-                 • Split makes three pieces; Outer Shell / Union keep adding clicked solids.\n\
-                 • A solid: every edge bounds exactly two faces, no nested groups."
-            }
-            ToolId::FollowMe => "Select a path, then click the profile face to sweep it.",
-            ToolId::Tape => "Click two points to measure. Starting on an edge creates a parallel guide.",
-            ToolId::Protractor => "Click the center, click the base direction, click the angle to create a guide.",
-            ToolId::Axes => {
-                "Click the new origin, click a point along the red axis, then a point toward the green axis.\n\
-                 Type `x,y,z` for the origin. Right-click the axes for Place / Move / Reset."
-            }
-            ToolId::Dimension => {
-                "Click a start point and an end point (or click an edge), then move to offset the dimension and click.\n\
-                 Double-click a dimension's text with Select to edit it; empty text restores the measured length."
-            }
-            ToolId::Text => {
-                "Click a point, edge or face, move the text away and click again.\n\
-                 • Default text: a point's coordinates, an edge's length, a face's area.\n\
-                 • Click empty space for a text without a leader.\n\
-                 • Edit the text in Entity Info; move it with Move or by moving the geometry."
-            }
-            ToolId::Section => {
-                "Click a face to place a section plane on it; it becomes the active cut.\n\
-                 • The arrows point to the part that stays visible.\n\
-                 • Select a plane by its border; move it with Move, delete it with Delete.\n\
-                 • Right-click a plane: Active Cut, Reverse, Align View.\n\
-                 • View → Section Planes / Section Cuts / Section Fill."
-            }
-            ToolId::GuidePlane => {
-                "Click three points: origin, a point along red, a point on the plane.\n\
-                 • Double-click a face (or Enter after the first click): the plane of that face.\n\
-                 • After the first click, arrows set the normal: → red, ← green, ↑ blue, ↓ last edge.\n\
-                 • The new plane is active: points in the air land on it, axes and grid follow it.\n\
-                 • Drag the active plane's handles: origin, normal tip (tilt), red handle (spin).\n\
-                 • Window → Work Planes… to activate, hide, rename, delete or type angles."
-            }
-            ToolId::Slice => {
-                "Set the cutting plane like a guide plane: click three points.\n\
-                 • Double-click a face (or Enter after the first click): the plane of that face.\n\
-                 • After the first click, arrows set the normal: → red, ← green, ↑ blue, ↓ last edge.\n\
-                 • Cuts the selection (faces, groups, components), or everything in the active context.\n\
-                 • Edges are added along the cut; a component shared by other copies is made unique first.\n\
-                 • %COPY% toggles Split (+ on the cursor): each cut body becomes two groups, closed where it was cut."
-            }
-            ToolId::Orbit => {
-                "Drag to orbit around the point under the cursor.\n\
-                 Middle mouse button orbits in any tool; Shift+middle pans.\n\
-                 Trackpad: two-finger scroll orbits, Shift+scroll pans, pinch zooms."
-            }
-            ToolId::Pan => "Drag to pan the view. Shift + middle mouse button pans in any tool.",
-            ToolId::Zoom => {
-                "Drag up to zoom in, down to zoom out. The mouse wheel zooms toward the cursor in any tool.\n\
-                 Type a field of view (e.g. 35) and press Enter. Shift+Z zooms to the whole model."
-            }
-            ToolId::PositionCamera => {
-                "Click to stand at a point, looking the way the camera looks now.\n\
-                 • Drag from where to stand toward where to look.\n\
-                 • Type the eye height (default 1676 mm) before clicking.\n\
-                 • Switches to Look Around afterwards."
-            }
-            ToolId::LookAround => "Drag to turn the view around the eye. Type an eye height and press Enter.",
-            ToolId::Walk => {
-                "Drag up/down to walk forward/back, left/right to turn.\n\
-                 • Shift: move up/down and sideways. %CMD%: run.\n\
-                 • Arrow keys: step and turn. Type an eye height and press Enter."
-            }
-        }
+    fn instructor_text(self) -> String {
+        tr!(match self {
+            ToolId::Select => "tool-select-instructor",
+            ToolId::Eraser => "tool-eraser-instructor",
+            ToolId::Paint => "tool-paint-instructor",
+            ToolId::TexturePosition => "tool-texture-position-instructor",
+            ToolId::Line => "tool-line-instructor",
+            ToolId::Arc => "tool-arc-instructor",
+            ToolId::ArcCenter => "tool-arc-center-instructor",
+            ToolId::Arc3 => "tool-arc3-instructor",
+            ToolId::Bezier => "tool-bezier-instructor",
+            ToolId::EditCurve => "tool-edit-curve-instructor",
+            ToolId::SmoothCurve => "tool-smooth-curve-instructor",
+            ToolId::Freehand => "tool-freehand-instructor",
+            ToolId::Pie => "tool-pie-instructor",
+            ToolId::Rectangle => "tool-rectangle-instructor",
+            ToolId::RotatedRectangle => "tool-rotated-rectangle-instructor",
+            ToolId::Circle => "tool-circle-instructor",
+            ToolId::Polygon => "tool-polygon-instructor",
+            ToolId::Box | ToolId::Pyramid => "tool-box-instructor",
+            ToolId::Cylinder | ToolId::Cone => "tool-cylinder-instructor",
+            ToolId::Sphere => "tool-sphere-instructor",
+            ToolId::Torus => "tool-torus-instructor",
+            ToolId::PushPull => "tool-push-pull-instructor",
+            ToolId::Move => "tool-move-instructor",
+            ToolId::Rotate => "tool-rotate-instructor",
+            ToolId::Scale => "tool-scale-instructor",
+            ToolId::Offset => "tool-offset-instructor",
+            ToolId::Chamfer => "tool-chamfer-instructor",
+            ToolId::Fillet => "tool-fillet-instructor",
+            ToolId::SolidTools => "tool-solid-tools-instructor",
+            ToolId::FollowMe => "tool-follow-me-instructor",
+            ToolId::Tape => "tool-tape-instructor",
+            ToolId::Protractor => "tool-protractor-instructor",
+            ToolId::Axes => "tool-axes-instructor",
+            ToolId::Dimension => "tool-dimension-instructor",
+            ToolId::Text => "tool-text-instructor",
+            ToolId::Section => "tool-section-instructor",
+            ToolId::GuidePlane => "tool-guide-plane-instructor",
+            ToolId::Slice => "tool-slice-instructor",
+            ToolId::Orbit => "tool-orbit-instructor",
+            ToolId::Pan => "tool-pan-instructor",
+            ToolId::Zoom => "tool-zoom-instructor",
+            ToolId::PositionCamera => "tool-position-camera-instructor",
+            ToolId::LookAround => "tool-look-around-instructor",
+            ToolId::Walk => "tool-walk-instructor",
+        })
     }
 
     /// Whether the tool is implemented (others are stubs).
@@ -741,8 +582,8 @@ pub trait Tool {
     fn on_vcb(&mut self, _ctx: &mut ToolContext, _input: &str) -> bool {
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Measurements"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-measurements")
     }
     fn vcb_value(&self) -> String {
         String::new()
@@ -779,7 +620,7 @@ impl Tool for StubTool {
         self.0
     }
     fn status_text(&self) -> String {
-        format!("{} tool is not implemented yet.", self.0.name())
+        tr!("tool-not-implemented", name = self.0.name())
     }
     fn cursor(&self) -> CursorIcon {
         CursorIcon::NotAllowed

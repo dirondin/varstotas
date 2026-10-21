@@ -5,6 +5,7 @@
 use crate::animation::{FrameSpec, encode, ffmpeg, frame_path, orbit_frames, scene_frames};
 use crate::app::{ExportContent, VarstotasApp};
 use egui::{Context, vec2};
+use varstotas_i18n::tr;
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 
@@ -93,8 +94,8 @@ impl VarstotasApp {
             AnimSource::Orbit => orbit_frames(&self.camera, w.seconds, w.turns, fps),
         };
         if frames.is_empty() {
-            self.anim_window.last = Some(Err("no scenes in the animation".into()));
-            self.flash_error("No scenes in the animation");
+            self.anim_window.last = Some(Err(tr!("anim-no-scenes")));
+            self.flash_error(tr!("anim-no-scenes-flash"));
             return;
         }
         let (dir, video) = if w.video {
@@ -106,7 +107,7 @@ impl VarstotasApp {
         };
         if let Err(e) = std::fs::create_dir_all(&dir) {
             self.anim_window.last = Some(Err(e.to_string()));
-            self.flash_error(format!("Animation: {e}"));
+            self.flash_error(tr!("anim-error", error = e.to_string()));
             return;
         }
         let size = [w.width.clamp(16, 8192), w.height.clamp(16, 8192)];
@@ -124,11 +125,11 @@ impl VarstotasApp {
             self.anim_window.encoding = None;
             match r {
                 Ok(p) => {
-                    self.flash(format!("Saved {}", p.display()));
+                    self.flash(tr!("anim-saved", what = p.display().to_string()));
                     self.anim_window.last = Some(Ok(p.display().to_string()));
                 }
                 Err(e) => {
-                    self.flash_error(format!("Animation: {e}"));
+                    self.flash_error(tr!("anim-error", error = e.clone()));
                     self.anim_window.last = Some(Err(e));
                 }
             }
@@ -150,7 +151,7 @@ impl VarstotasApp {
                             None
                         }
                     },
-                    None => Some(Err("the render was dropped".into())),
+                    None => Some(Err(tr!("anim-render-dropped"))),
                 }
             } else {
                 self.viewport.export_result.take().map(|r| r.map(|_| ()))
@@ -162,7 +163,7 @@ impl VarstotasApp {
                 }
                 Some(Err(e)) => {
                     self.camera = run.orig;
-                    self.flash_error(format!("Animation: {e}"));
+                    self.flash_error(tr!("anim-error", error = e.clone()));
                     self.anim_window.last = Some(Err(e));
                     return;
                 }
@@ -216,15 +217,15 @@ impl VarstotasApp {
                     self.anim_window.encoding = Some(rx);
                 }
                 None => {
-                    let msg = format!("ffmpeg not found; the {n} frames are in {}", run.dir.display());
+                    let msg = tr!("anim-no-ffmpeg", n = n, dir = run.dir.display().to_string());
                     self.flash_error(msg.clone());
                     self.anim_window.last = Some(Err(msg));
                 }
             },
             None => {
-                let msg = format!("{n} frames in {}", run.dir.display());
+                let msg = tr!("anim-frames-in", n = n, dir = run.dir.display().to_string());
                 log::info!("animation: {msg} ({:.1} s)", run.started.elapsed().as_secs_f64());
-                self.flash(format!("Saved {msg}"));
+                self.flash(tr!("anim-saved", what = msg.clone()));
                 self.anim_window.last = Some(Ok(msg));
             }
         }
@@ -240,7 +241,7 @@ impl VarstotasApp {
         let mut export = false;
         let mut cancel = false;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 40.0);
-        let mut win = egui::Window::new("Export Animation")
+        let mut win = egui::Window::new(tr!("anim-title"))
             .id(egui::Id::new("animation_window"))
             .open(&mut open)
             .collapsible(false)
@@ -255,51 +256,51 @@ impl VarstotasApp {
             ui.set_width(380.0);
             ui.add_enabled_ui(!w.busy(), |ui| {
                 egui::Grid::new("anim_settings").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                    ui.label("Animate");
+                    ui.label(tr!("anim-animate"));
                     ui.horizontal(|ui| {
-                        ui.add_enabled_ui(has_scenes, |ui| ui.radio_value(&mut w.source, AnimSource::Scenes, "Scenes"))
+                        ui.add_enabled_ui(has_scenes, |ui| ui.radio_value(&mut w.source, AnimSource::Scenes, tr!("anim-scenes")))
                             .response
-                            .on_disabled_hover_text("Add scenes (with “Include in animation”) first");
-                        ui.radio_value(&mut w.source, AnimSource::Orbit, "Orbit around the view");
+                            .on_disabled_hover_text(tr!("anim-add-scenes"));
+                        ui.radio_value(&mut w.source, AnimSource::Orbit, tr!("anim-orbit"));
                     });
                     ui.end_row();
                     if w.source == AnimSource::Orbit {
-                        ui.label("Length");
+                        ui.label(tr!("anim-length"));
                         ui.horizontal(|ui| {
                             ui.add(egui::DragValue::new(&mut w.seconds).range(0.5..=600.0).suffix(" s"));
-                            ui.add(egui::DragValue::new(&mut w.turns).range(-10.0..=10.0).speed(0.05).suffix(" turns"));
+                            ui.add(egui::DragValue::new(&mut w.turns).range(-10.0..=10.0).speed(0.05).suffix(tr!("anim-turns-suffix")));
                         });
                         ui.end_row();
                     } else {
                         ui.label("");
-                        ui.label(egui::RichText::new("Holds and transitions: Scenes card → Animation").small().weak());
+                        ui.label(egui::RichText::new(tr!("anim-holds-hint")).small().weak());
                         ui.end_row();
                     }
-                    ui.label("Size");
+                    ui.label(tr!("anim-size"));
                     ui.horizontal(|ui| {
                         ui.add(egui::DragValue::new(&mut w.width).range(16..=8192).suffix(" px"));
                         ui.label("×");
                         ui.add(egui::DragValue::new(&mut w.height).range(16..=8192).suffix(" px"));
                     });
                     ui.end_row();
-                    ui.label("Frame rate");
+                    ui.label(tr!("anim-fps"));
                     ui.add(egui::DragValue::new(&mut w.fps).range(1..=120).suffix(" fps"));
                     ui.end_row();
-                    ui.label("Frames");
+                    ui.label(tr!("anim-frames"));
                     ui.horizontal(|ui| {
-                        ui.radio_value(&mut w.traced, false, "As the view");
-                        ui.radio_value(&mut w.traced, true, "Path traced");
+                        ui.radio_value(&mut w.traced, false, tr!("anim-as-view"));
+                        ui.radio_value(&mut w.traced, true, tr!("anim-path-traced"));
                         if w.traced {
                             ui.add(egui::DragValue::new(&mut w.spp).range(1..=4096).suffix(" spp"));
                         }
                     });
                     ui.end_row();
-                    ui.label("Output");
+                    ui.label(tr!("anim-output"));
                     ui.horizontal(|ui| {
-                        ui.add_enabled_ui(has_ffmpeg, |ui| ui.radio_value(&mut w.video, true, "Video (MP4)"))
+                        ui.add_enabled_ui(has_ffmpeg, |ui| ui.radio_value(&mut w.video, true, tr!("anim-video")))
                             .response
-                            .on_disabled_hover_text("Install ffmpeg to make videos");
-                        ui.radio_value(&mut w.video, false, "PNG sequence");
+                            .on_disabled_hover_text(tr!("anim-install-ffmpeg"));
+                        ui.radio_value(&mut w.video, false, tr!("anim-png-sequence"));
                     });
                     ui.end_row();
                 });
@@ -312,18 +313,18 @@ impl VarstotasApp {
             }
             ui.separator();
             if let Some((done, total)) = progress {
-                ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).text(format!("Frame {done} / {total}")));
-                if ui.button("Cancel").clicked() {
+                ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).text(tr!("anim-frame-progress", done = done, total = total)));
+                if ui.button(tr!("cancel")).clicked() {
                     cancel = true;
                 }
             } else if w.encoding.is_some() {
-                ui.add(egui::ProgressBar::new(1.0).text("Encoding the video…").animate(true));
+                ui.add(egui::ProgressBar::new(1.0).text(tr!("anim-encoding")).animate(true));
             } else {
-                if ui.button("Export…").clicked() {
+                if ui.button(tr!("anim-export")).clicked() {
                     export = true;
                 }
                 match &w.last {
-                    Some(Ok(m)) => ui.label(egui::RichText::new(format!("Saved {m}")).small()),
+                    Some(Ok(m)) => ui.label(egui::RichText::new(tr!("anim-saved", what = m.clone())).small()),
                     Some(Err(e)) => ui.label(egui::RichText::new(e).small().color(crate::ui::realistic::ERROR_RED)),
                     None => ui.label(""),
                 };
@@ -336,7 +337,7 @@ impl VarstotasApp {
             if let Some(run) = self.anim_window.run.take() {
                 self.camera = run.orig;
             }
-            self.anim_window.last = Some(Err("cancelled".into()));
+            self.anim_window.last = Some(Err(tr!("anim-cancelled")));
         }
         if export {
             let out = if self.anim_window.video {

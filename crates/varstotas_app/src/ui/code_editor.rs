@@ -11,6 +11,7 @@ use egui::{Align2, Color32, Event, FontId, Id, Key, Modifiers, Order, Ui};
 use egui_code_editor::{CodeEditor, ColorTheme, Completer, Syntax};
 use varstotas_script::help;
 use std::collections::BTreeSet;
+use varstotas_i18n::tr;
 
 /// The language an editor is for.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -66,7 +67,7 @@ impl Item {
             None => rest.to_string(),
         };
         let what = if m.sig.is_some() { m.ty.label().to_string() } else { format!(": {}", m.ty.label()) };
-        Self { name: m.name.to_string(), label: m.sig.unwrap_or(m.name).to_string(), insert, detail: format!("{what}  — {}", m.doc) }
+        Self { name: m.name.to_string(), label: m.sig.unwrap_or(m.name).to_string(), insert, detail: format!("{what}  — {}", m.text()) }
     }
 }
 
@@ -83,12 +84,12 @@ fn items_at(lang: Lang, text: &str, idx: usize) -> Option<(Vec<Item>, String, us
             help::TagCtx::Tag => help::TAGS
                 .iter()
                 .filter(|t| t.0.starts_with(prefix.as_str()))
-                .map(|t| Item { name: t.0.to_string(), label: format!("@{}", t.0), insert: format!("{} ", rest(t.0, &prefix)), detail: format!("{}  — {}", t.1, t.2) })
+                .map(|t| Item { name: t.0.to_string(), label: format!("@{}", t.0), insert: format!("{} ", rest(t.0, &prefix)), detail: format!("{}  — {}", t.1, varstotas_i18n::tr(t.2)) })
                 .collect(),
             help::TagCtx::ParamType => help::PARAM_TYPES
                 .iter()
                 .filter(|t| t.0.starts_with(prefix.as_str()))
-                .map(|t| Item { name: t.0.to_string(), label: t.0.to_string(), insert: rest(t.0, &prefix), detail: format!("— {}", t.1) })
+                .map(|t| Item { name: t.0.to_string(), label: t.0.to_string(), insert: rest(t.0, &prefix), detail: format!("— {}", help::param_type_text(t.1, false)) })
                 .collect(),
         };
         return Some((items, prefix, start));
@@ -310,7 +311,7 @@ fn member_popup(ui: &Ui, out: &TextEditOutput, pop: &MemberPopup, font: f32) {
                     });
                 }
                 if pop.items.len() > 12 {
-                    ui.label(egui::RichText::new(format!("{} of {}", pop.sel + 1, pop.items.len())).small().color(weak));
+                    ui.label(egui::RichText::new(tr!("console-completion-count", sel = pop.sel + 1, n = pop.items.len())).small().color(weak));
                 }
             });
         });
@@ -326,30 +327,30 @@ fn param_hint(ui: &Ui, out: &TextEditOutput, font: f32, lang: Lang) {
         let job = if crate::shader_help::on_param_line(text, idx) {
             let mut job = LayoutJob::default();
             job.append(t.1, 0.0, TextFormat::simple(FontId::monospace(font), ui.visuals().text_color()));
-            job.append(&format!("  — {}", t.2), 0.0, TextFormat::simple(FontId::proportional(font * 0.9), ui.visuals().weak_text_color()));
+            job.append(&format!("  — {}", crate::shader_help::text(t.2)), 0.0, TextFormat::simple(FontId::proportional(font * 0.9), ui.visuals().weak_text_color()));
             job
         } else {
             let Some((name, arg, false)) = help::call_context(text, idx) else { return };
             let Some((sig, doc)) = crate::shader_help::fn_doc(&name) else { return };
-            hint_job(ui, sig, arg, doc, font)
+            hint_job(ui, sig, arg, &doc, font)
         };
         return show_hint(ui, out, idx, job);
     }
     if let Some(t) = help::tag_at(text, idx) {
         let mut job = LayoutJob::default();
         job.append(t.1, 0.0, TextFormat::simple(FontId::monospace(font), ui.visuals().text_color()));
-        job.append(&format!("  — {}", t.2), 0.0, TextFormat::simple(FontId::proportional(font * 0.9), ui.visuals().weak_text_color()));
+        job.append(&format!("  — {}", varstotas_i18n::tr(t.2)), 0.0, TextFormat::simple(FontId::proportional(font * 0.9), ui.visuals().weak_text_color()));
         return show_hint(ui, out, idx, job);
     }
     let Some((name, arg, member)) = help::call_context(text, idx) else { return };
     let job = if member {
         let Some(m) = help::MEMBERS.iter().find(|m| m.name == name && m.sig.is_some()) else { return };
-        hint_job(ui, m.sig.unwrap_or(m.name), arg, m.doc, font)
+        hint_job(ui, m.sig.unwrap_or(m.name), arg, &m.text(), font)
     } else {
         let Some(d) = help::fn_doc(&name) else { return };
         // The first overload with enough arguments, else the longest.
         let sig = d.sigs.iter().find(|s| help::sig_args(s).len() > arg).unwrap_or_else(|| d.sigs.last().unwrap());
-        let mut job = hint_job(ui, sig, arg, d.doc, font);
+        let mut job = hint_job(ui, sig, arg, &d.text(), font);
         if d.sigs.len() > 1 {
             let more = format!("   (+{} more)", d.sigs.len() - 1);
             job.append(&more, 0.0, TextFormat::simple(FontId::proportional(font * 0.85), ui.visuals().weak_text_color()));

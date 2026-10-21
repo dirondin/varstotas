@@ -23,6 +23,7 @@ use crate::topology::{Classify, Orient};
 use crate::{EdgeId, Face, FaceId, OpError, OpResult, TOL, VertexId};
 use glam::{DVec2, DVec3};
 use std::collections::{HashMap, HashSet};
+use varstotas_i18n::tr;
 
 impl Mesh {
     /// Push/Pull a face along its normal by `distance` (negative = into the solid).
@@ -34,7 +35,7 @@ impl Mesh {
         self.ensure();
         let face = self.faces.get(f).ok_or(OpError::NotFound)?.clone();
         if !distance.is_finite() {
-            return Err(OpError::Invalid("distance is not finite".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-distance-is-not-finite").into()));
         }
         if distance.abs() < TOL {
             return Ok(f);
@@ -46,7 +47,7 @@ impl Mesh {
         for l in &loops {
             for i in 0..l.len() {
                 let (a, b) = (l[i], l[(i + 1) % l.len()]);
-                let e = self.edge_between(a, b).ok_or_else(|| OpError::Invalid("face loop without edge".into()))?;
+                let e = self.edge_between(a, b).ok_or_else(|| OpError::Invalid(tr!("kernel-err-face-loop-without-edge").into()))?;
                 bedges.push((e, a, b));
             }
         }
@@ -114,7 +115,7 @@ impl Mesh {
                         let w = self.pos(self.edges[e].other(*v));
                         let (old, new) = (w - pv, w - (pv + off));
                         if new.dot(old) <= 0.0 || new.length() < TOL {
-                            return Err(OpError::Invalid("push/pull would collapse geometry".into()));
+                            return Err(OpError::Invalid(tr!("kernel-err-push-pull-would-collapse-geometry").into()));
                         }
                     }
                 }
@@ -321,7 +322,7 @@ impl Mesh {
         let mut map: HashMap<VertexId, VertexId> = HashMap::new();
         for v in loops.iter().flatten() {
             let p = self.pos(*v) + off;
-            let w = self.v_find(p, TOL).ok_or_else(|| OpError::Invalid("through-hole: cap vertex missing".into()))?;
+            let w = self.v_find(p, TOL).ok_or_else(|| OpError::Invalid(tr!("kernel-err-through-hole-cap-vertex-missing").into()))?;
             map.insert(*v, w);
         }
         self.f_remove(f);

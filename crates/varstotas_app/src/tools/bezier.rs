@@ -6,6 +6,7 @@
 //! open curve (edges only); a click on the first anchor (a stroke ended at its start) closes
 //! it into a face. Backspace takes back the last anchor, Escape drops it all.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::{plane_point, shape_normal};
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -301,8 +302,8 @@ impl Tool for BezierTool {
         self.update(ctx);
         true
     }
-    fn vcb_label(&self) -> &str {
-        if self.anchors.is_empty() { "Segments" } else { "Length" }
+    fn vcb_label(&self) -> String {
+        tr!(if self.anchors.is_empty() { "tool-vcb-segments" } else { "tool-vcb-length" })
     }
     fn vcb_value(&self) -> String {
         match (self.anchors.last(), &self.cur) {
@@ -312,15 +313,15 @@ impl Tool for BezierTool {
         }
     }
     fn status_text(&self) -> String {
-        let end = "Enter or double-click finishes, a click on the first point closes it into a face";
+        let end = tr!("tool-bezier-end");
         match self.method {
-            Method::Freehand if self.stroke.is_empty() => "Press and drag to draw; end at the start to close it into a face.".into(),
-            Method::Freehand => "Drag to draw; release to finish.".into(),
-            Method::Smooth if self.anchors.is_empty() => "Click the first point of the curve.".into(),
-            Method::Smooth => format!("Click the next point; {end}. Backspace removes the last point."),
-            Method::Handles if self.anchors.is_empty() => "Click the first point of the curve; press and drag to pull out handles.".into(),
-            Method::Handles if self.drag.is_some() => "Drag to shape the curve through this point; release to place it.".into(),
-            Method::Handles => format!("Click the next point (drag for handles); {end}. Backspace removes the last point."),
+            Method::Freehand if self.stroke.is_empty() => tr!("tool-bezier-freehand-start"),
+            Method::Freehand => tr!("tool-bezier-freehand-draw"),
+            Method::Smooth if self.anchors.is_empty() => tr!("tool-bezier-smooth-first"),
+            Method::Smooth => tr!("tool-bezier-smooth-next", end = end),
+            Method::Handles if self.anchors.is_empty() => tr!("tool-bezier-handles-first"),
+            Method::Handles if self.drag.is_some() => tr!("tool-bezier-handles-drag"),
+            Method::Handles => tr!("tool-bezier-handles-next", end = end),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

@@ -29,6 +29,7 @@ use crate::units::parse_length;
 use crate::{DefId, InstanceId, MaterialId, Mesh, TagId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use varstotas_i18n::tr;
 
 /// Kind of a generator parameter.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -130,14 +131,14 @@ impl GenParam {
                 };
                 match opts.iter().find(|o| o.eq_ignore_ascii_case(s.trim())) {
                     Some(o) => Ok(GenValue::Text(o.clone())),
-                    None => Err(format!("{}: `{s}` is not one of {}", self.key, opts.join(" / "))),
+                    None => Err(tr!("kernel-gen-key-s-is-not-one-of", key = self.key.to_string(), s = s.to_string(), join = opts.join(" / ").to_string())),
                 }
             }
             _ => {
                 let mut x = match v {
                     GenValue::Num(x) => *x,
                     GenValue::Text(s) => {
-                        parse_number(&self.kind, s).ok_or_else(|| format!("{}: not a {}: {s}", self.key, self.kind.name()))?
+                        parse_number(&self.kind, s).ok_or_else(|| tr!("kernel-gen-key-not-a-name-s", key = self.key.to_string(), name = self.kind.name().to_string(), s = s.to_string()))?
                     }
                     GenValue::Bool(_) => return Err(bad()),
                 };
@@ -239,7 +240,7 @@ fn parse_range(p: &mut GenParam, r: &str) -> Result<(), String> {
         if s.is_empty() {
             return Ok(None);
         }
-        parse_number(&p.kind, s).map(Some).ok_or_else(|| format!("{}: bad number `{s}` in the range", p.key))
+        parse_number(&p.kind, s).map(Some).ok_or_else(|| tr!("kernel-gen-key-bad-number-s-in-the", key = p.key.to_string(), s = s.to_string()))
     };
     if !range.is_empty() {
         let (a, b) = range.split_once("..").ok_or_else(|| format!("{}: range is `min..max/step`", p.key))?;
@@ -284,7 +285,7 @@ pub(crate) fn parse_formula(s: &str) -> Result<GenFormula, String> {
         None => (decl.trim(), None),
     };
     if !is_key(key) {
-        return Err(format!("bad formula name `{key}`"));
+        return Err(tr!("kernel-gen-bad-formula-name-key", key = key.to_string()));
     }
     let kind = match ty {
         None | Some("length") => GenKind::Length,
@@ -294,11 +295,11 @@ pub(crate) fn parse_formula(s: &str) -> Result<GenFormula, String> {
         Some("angle") => GenKind::Angle,
         Some("percent") => GenKind::Percent,
         Some("text") => GenKind::Material,
-        Some(t) => return Err(format!("{key}: a formula is length, int, number, bool, angle, percent or text, not `{t}`")),
+        Some(t) => return Err(tr!("kernel-gen-key-a-formula-is-length-int", key = key.to_string(), t = t.to_string())),
     };
     let (expr, label) = split_expr_label(rhs);
     if expr.is_empty() {
-        return Err(format!("{key}: empty formula"));
+        return Err(tr!("kernel-gen-key-empty-formula", key = key.to_string()));
     }
     Ok(GenFormula { key: key.to_string(), label: label.unwrap_or_else(|| key.replace('_', " ")), kind, expr })
 }
@@ -308,7 +309,7 @@ fn parse_check(s: &str) -> Result<GenCheck, String> {
     if expr.is_empty() {
         return Err("empty @check".into());
     }
-    let message = msg.unwrap_or_else(|| format!("check failed: {expr}"));
+    let message = msg.unwrap_or_else(|| tr!("kernel-gen-check-failed-expr", expr = expr.to_string()));
     Ok(GenCheck { expr, message })
 }
 
@@ -320,7 +321,7 @@ pub(crate) fn parse_param(s: &str) -> Result<GenParam, String> {
         None => (decl, None),
     };
     if !is_key(key) {
-        return Err(format!("bad parameter name `{key}`"));
+        return Err(tr!("kernel-gen-bad-parameter-name-key", key = key.to_string()));
     }
     let (ty, args) = match ty {
         Some(t) => match t.split_once('(') {
@@ -350,11 +351,11 @@ pub(crate) fn parse_param(s: &str) -> Result<GenParam, String> {
             let opts: Vec<String> =
                 args.unwrap_or_default().split('|').map(|o| o.trim().to_string()).filter(|o| !o.is_empty()).collect();
             if opts.is_empty() {
-                return Err(format!("{key}: choice needs options: choice(a|b|c)"));
+                return Err(tr!("kernel-gen-key-choice-needs-options-choice-a", key = key.to_string()));
             }
             GenKind::Choice(opts)
         }
-        Some(t) => return Err(format!("unknown parameter type `{t}` (length, int, number, bool, choice, angle, percent, material)")),
+        Some(t) => return Err(tr!("kernel-gen-unknown-parameter-type-t-length-int", t = t.to_string())),
         None if dtext == "true" || dtext == "false" => GenKind::Bool,
         None if quoted => GenKind::Material,
         None => GenKind::Length,
@@ -384,7 +385,7 @@ pub(crate) fn parse_param(s: &str) -> Result<GenParam, String> {
         GenKind::Bool => match dtext.as_str() {
             "true" => GenValue::Bool(true),
             "false" => GenValue::Bool(false),
-            _ => return Err(format!("{key}: bool default is true / false")),
+            _ => return Err(tr!("kernel-gen-key-bool-default-is-true-false", key = key.to_string())),
         },
         _ => GenValue::Text(dtext),
     };
@@ -436,7 +437,7 @@ impl Generator {
                 "formula" => {
                     let f = parse_formula(rest)?;
                     if g.param(&f.key).is_some() || g.formulas.iter().any(|x| x.key == f.key) {
-                        return Err(format!("`{}` twice (formulas and parameters share names)", f.key));
+                        return Err(tr!("kernel-gen-key-twice-formulas-and-parameters-share", key = f.key.to_string()));
                     }
                     g.formulas.push(f);
                 }
@@ -445,10 +446,10 @@ impl Generator {
             }
         }
         if !tagged {
-            return Err("not a generator: the header needs `// @generator Name`".into());
+            return Err(tr!("kernel-gen-not-a-generator-the-header-needs").into());
         }
         if g.name.trim().is_empty() {
-            return Err("empty @generator name".into());
+            return Err(tr!("kernel-gen-empty-generator-name").into());
         }
         if !source.contains("fn build") {
             return Err("a generator needs `fn build(p) { ... }`".into());
@@ -468,7 +469,7 @@ impl Generator {
     pub fn normalize(&self, values: &GenValues) -> Result<GenValues, String> {
         if let Some(k) = values.keys().find(|k| self.param(k).is_none()) {
             let keys: Vec<&str> = self.params.iter().map(|p| p.key.as_str()).collect();
-            return Err(format!("{}: no parameter `{k}` ({})", self.name, keys.join(", ")));
+            return Err(tr!("kernel-gen-name-no-parameter-k-join", name = self.name.to_string(), k = k.to_string(), join = keys.join(", ").to_string()));
         }
         self.params
             .iter()

@@ -5,6 +5,7 @@
 use crate::app::Action;
 use crate::tools::ToolId;
 use egui::{Key, Modifiers};
+use varstotas_i18n::tr;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
@@ -38,7 +39,8 @@ impl Shortcut {
     /// Stored form: `Cmd+Shift+Z`.
     pub fn to_store(self) -> String {
         let mut s = String::new();
-        for (on, w) in [(self.cmd, "Cmd+"), (self.alt, "Alt+"), (self.shift, "Shift+")] {
+        for (on, w) in [(self.cmd, "Cmd+"), (self.alt, "Alt+"), (self.shift, "Shift+")] // i18n-ignore
+         {
             if on {
                 s.push_str(w);
             }
@@ -66,10 +68,10 @@ impl Shortcut {
     /// What menus and the guide show: `⇧⌘Z` on macOS, `Ctrl+Shift+Z` elsewhere, `Shift+Z`, `L`.
     pub fn label(self) -> String {
         let key = match self.key {
-            Key::Space => "Space",
-            Key::PageDown => "PgDn",
-            Key::PageUp => "PgUp",
-            k => k.name(),
+            Key::Space => tr!("key-name-space"),
+            Key::PageDown => tr!("key-name-pgdn"),
+            Key::PageUp => tr!("key-name-pgup"),
+            k => k.name().to_string(),
         };
         if cfg!(target_os = "macos") && (self.cmd || self.alt) {
             // ⌥⇧⌘ — macOS has no Alt or Ctrl+ in its shortcuts
@@ -79,29 +81,30 @@ impl Shortcut {
                     s.push(c);
                 }
             }
-            return s + key;
+            return s + key.as_str();
         }
         let mut s = String::new();
-        for (on, w) in [(self.cmd, "Ctrl+"), (self.alt, "Alt+"), (self.shift, "Shift+")] {
+        for (on, w) in [(self.cmd, "Ctrl+"), (self.alt, "Alt+"), (self.shift, "Shift+")] // i18n-ignore
+         {
             if on {
                 s.push_str(w);
             }
         }
-        s + key
+        s + key.as_str()
     }
 
     /// Keys that cannot be assigned: they belong to typing, the Measurements box and tools.
-    pub fn reserved(self) -> Option<&'static str> {
+    pub fn reserved(self) -> Option<String> {
         let typing = !self.cmd && !self.alt;
         match self.key {
-            Key::Escape | Key::Enter | Key::Tab | Key::Backspace | Key::Delete => Some("this key is used by every tool"),
-            Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp | Key::ArrowDown => Some("arrows lock the inference axes"),
-            Key::F1 => Some("F1 opens the guide"),
-            k if typing && k.name().chars().all(|c| c.is_ascii_digit()) => Some("digits type into Measurements"),
+            Key::Escape | Key::Enter | Key::Tab | Key::Backspace | Key::Delete => Some(tr!("key-reserved-tools")),
+            Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp | Key::ArrowDown => Some(tr!("key-reserved-arrows")),
+            Key::F1 => Some(tr!("key-reserved-f1")),
+            k if typing && k.name().chars().all(|c| c.is_ascii_digit()) => Some(tr!("key-reserved-digits")),
             Key::Minus | Key::Period | Key::Comma | Key::Semicolon | Key::Slash | Key::Quote if typing => {
-                Some("this key types into Measurements")
+                Some(tr!("key-reserved-measurements"))
             }
-            Key::X | Key::C | Key::V if self.cmd && !self.alt => Some("Cut / Copy / Paste"),
+            Key::X | Key::C | Key::V if self.cmd && !self.alt => Some(tr!("key-reserved-clipboard")),
             _ => None,
         }
     }

@@ -4,12 +4,13 @@ use crate::mesh::Mesh;
 use crate::{EdgeId, EntityRef, Face, FaceId, OpError, OpResult, TOL, VertexId};
 use glam::DVec3;
 use std::collections::HashMap;
+use varstotas_i18n::tr;
 
 impl Mesh {
     /// Order path edges into a vertex chain. Returns `(vertices, closed)`.
     fn order_path(&self, path: &[EdgeId]) -> OpResult<(Vec<VertexId>, bool)> {
         if path.is_empty() {
-            return Err(OpError::Invalid("empty path".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-empty-path").into()));
         }
         let mut adj: HashMap<VertexId, Vec<(EdgeId, VertexId)>> = HashMap::new();
         for &e in path {
@@ -18,12 +19,12 @@ impl Mesh {
             adj.entry(ed.v[1]).or_default().push((e, ed.v[0]));
         }
         if adj.values().any(|l| l.len() > 2) {
-            return Err(OpError::Invalid("path branches".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-path-branches").into()));
         }
         let ends: Vec<VertexId> = adj.iter().filter(|(_, l)| l.len() == 1).map(|(v, _)| *v).collect();
         let closed = ends.is_empty();
         if !closed && ends.len() != 2 {
-            return Err(OpError::Invalid("path is not connected".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-path-is-not-connected").into()));
         }
         let start = if closed { self.edges[path[0]].v[0] } else { ends[0] };
         let mut chain = vec![start];
@@ -40,7 +41,7 @@ impl Mesh {
             cur = w;
         }
         if used.len() != path.len() {
-            return Err(OpError::Invalid("path is not connected".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-path-is-not-connected").into()));
         }
         Ok((chain, closed))
     }
@@ -86,7 +87,7 @@ impl Mesh {
         }
         let d0 = (pts[1] - pts[0]).normalize();
         if face0.normal.dot(d0).abs() < 1e-6 {
-            return Err(OpError::Invalid("profile is parallel to the path".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-profile-is-parallel-to-the-path").into()));
         }
         // Start cap must face against the sweep direction.
         if face0.normal.dot(d0) > 0.0 {
@@ -231,7 +232,7 @@ fn sweep_sections(pts: &[DVec3], closed: bool, base: &[Vec<DVec3>]) -> OpResult<
             (dirs[i - 1], dirs[i])
         };
         let s = prev + next;
-        if s.length() < 1e-9 { Err(OpError::Invalid("path reverses".into())) } else { Ok(s.normalize()) }
+        if s.length() < 1e-9 { Err(OpError::Invalid(tr!("kernel-err-path-reverses").into())) } else { Ok(s.normalize()) }
     };
     let project = |pts_in: &[Vec<DVec3>], d: DVec3, origin: DVec3, nm: DVec3| -> OpResult<Vec<Vec<DVec3>>> {
         let den = d.dot(nm);

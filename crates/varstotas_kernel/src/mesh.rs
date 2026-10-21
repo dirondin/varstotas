@@ -419,10 +419,12 @@ impl Mesh {
     pub fn validate(&self) -> Result<(), String> {
         for (e, ed) in &self.edges {
             if ed.v[0] == ed.v[1] {
+                // i18n-ignore-next
                 return Err(format!("edge {e:?} is degenerate"));
             }
             for v in ed.v {
                 if !self.vertices.contains_key(v) {
+                    // i18n-ignore-next
                     return Err(format!("edge {e:?} references missing vertex"));
                 }
             }
@@ -431,6 +433,7 @@ impl Mesh {
         for (_, ed) in &self.edges {
             let k = if ed.v[0] < ed.v[1] { (ed.v[0], ed.v[1]) } else { (ed.v[1], ed.v[0]) };
             if !pairs.insert(k) {
+                // i18n-ignore-next
                 return Err("duplicate edge".into());
             }
         }
@@ -442,25 +445,30 @@ impl Mesh {
                 for i in 0..l.len() {
                     let (a, b) = (l[i], l[(i + 1) % l.len()]);
                     let Some(e) = self.edge_between(a, b) else {
+                        // i18n-ignore-next
                         return Err(format!("face {f:?} loop pair has no edge"));
                     };
                     if self.cache.valid && !self.cache.edge_faces.get(e).is_some_and(|l| l.contains(&f)) {
+                        // i18n-ignore-next
                         return Err(format!("edge_faces cache missing face {f:?}"));
                     }
                 }
             }
             let nn = geom::newell(&self.loop_pos(&face.outer));
             if nn.normalize_or_zero().dot(face.normal) < 0.999 {
+                // i18n-ignore-next
                 return Err(format!("face {f:?} normal inconsistent with outer loop"));
             }
             for h in &face.holes {
                 if geom::newell(&self.loop_pos(h)).dot(face.normal) > 0.0 {
+                    // i18n-ignore-next
                     return Err(format!("face {f:?} hole not CW"));
                 }
             }
             let pl = self.face_plane(f);
             for v in face.loops().flatten() {
                 if pl.distance(self.pos(*v)).abs() > 10.0 * PTOL {
+                    // i18n-ignore-next
                     return Err(format!("face {f:?} not planar"));
                 }
             }
@@ -468,6 +476,7 @@ impl Mesh {
         for (_, d) in &self.dims {
             for a in [d.a, d.b] {
                 if a.vertex.is_some_and(|v| !self.vertices.contains_key(v)) {
+                    // i18n-ignore-next
                     return Err("dimension anchored to a missing vertex".into());
                 }
             }
@@ -475,20 +484,24 @@ impl Mesh {
         if self.cache.valid {
             for (e, l) in &self.cache.edge_faces {
                 if !self.edges.contains_key(e) {
+                    // i18n-ignore-next
                     return Err("edge_faces cache has dead edge".into());
                 }
                 for f in l {
                     if !self.faces.contains_key(*f) {
+                        // i18n-ignore-next
                         return Err("edge_faces cache has dead face".into());
                     }
                 }
             }
             for (v, l) in &self.cache.vert_edges {
                 if !self.vertices.contains_key(v) {
+                    // i18n-ignore-next
                     return Err("vert_edges cache has dead vertex".into());
                 }
                 for e in l {
                     if !self.edges.get(*e).is_some_and(|ed| ed.has(v)) {
+                        // i18n-ignore-next
                         return Err("vert_edges cache inconsistent".into());
                     }
                 }
@@ -496,6 +509,7 @@ impl Mesh {
             for (e, ed) in &self.edges {
                 for v in ed.v {
                     if !self.cache.vert_edges.get(v).is_some_and(|l| l.contains(&e)) {
+                        // i18n-ignore-next
                         return Err("vert_edges cache missing edge".into());
                     }
                 }

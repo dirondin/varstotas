@@ -8,6 +8,7 @@ use crate::app::VarstotasApp;
 use crate::online_mats::{Asset, Msg, Online, PluginSource, Source};
 use crate::plugins::{ParamKind, Plugin};
 use egui::{Color32, RichText, Ui};
+use varstotas_i18n::tr;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -218,11 +219,11 @@ impl VarstotasApp {
                             if use_it {
                                 self.pick_material(&mat);
                             }
-                            self.flash(format!("Downloaded {} to the materials library", mat.name));
+                            self.flash(tr!("mat-online-downloaded", name = mat.name.as_str()));
                         }
                         Err(e) => {
                             self.online.last = Some(format!("{key} error {e}"));
-                            self.flash_error(format!("Download failed: {e}"));
+                            self.flash_error(tr!("model-lib-download-failed", error = e));
                         }
                     }
                 }
@@ -237,7 +238,7 @@ impl VarstotasApp {
         }
         self.online.ensure_catalogue(ctx);
         let mut open = true;
-        egui::Window::new("Online Materials").open(&mut open).default_pos([120.0, 180.0]).default_size([640.0, 560.0]).min_width(420.0).collapsible(false).show(ctx, |ui| self.online_ui(ui, ctx));
+        egui::Window::new(tr!("mat-online-title")).id(egui::Id::new("Online Materials")).open(&mut open).default_pos([120.0, 180.0]).default_size([640.0, 560.0]).min_width(420.0).collapsible(false).show(ctx, |ui| self.online_ui(ui, ctx));
         self.online.open &= open;
     }
 
@@ -245,7 +246,7 @@ impl VarstotasApp {
         let plugins = self.source_plugins();
         let mut pick: Option<Result<Source, String>> = None;
         ui.horizontal(|ui| {
-            ui.label("Source");
+            ui.label(tr!("model-lib-source"));
             let cur = self.online.source.clone();
             egui::ComboBox::from_id_salt("online_source").selected_text(cur.label()).width(150.0).show_ui(ui, |ui| {
                 for s in Source::BUILT_IN {
@@ -262,11 +263,11 @@ impl VarstotasApp {
                     }
                 }
                 if plugins.is_empty() {
-                    ui.label(RichText::new("Plugins with @material_source\nare listed here").small().weak());
+                    ui.label(RichText::new(tr!("mat-online-plugins-hint")).small().weak());
                 }
             });
             ui.separator();
-            ui.add(egui::TextEdit::singleline(&mut self.online.query).hint_text("Search: brick, oak, concrete…").desired_width(180.0).id_salt("online_search"));
+            ui.add(egui::TextEdit::singleline(&mut self.online.query).hint_text(tr!("mat-online-search")).desired_width(180.0).id_salt("online_search"));
             let cats: Vec<String> = match self.online.catalogues.get(&self.online.source) {
                 Some(Ok(list)) => {
                     let mut c: Vec<String> = list.iter().map(|a| a.category.clone()).filter(|c| !c.is_empty()).collect();
@@ -276,9 +277,9 @@ impl VarstotasApp {
                 }
                 _ => Vec::new(),
             };
-            let label = if self.online.category.is_empty() { "All categories".to_string() } else { self.online.category.clone() };
+            let label = if self.online.category.is_empty() { tr!("model-lib-all-categories") } else { self.online.category.clone() };
             egui::ComboBox::from_id_salt("online_cat").selected_text(label).height(400.0).show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.online.category, String::new(), "All categories");
+                ui.selectable_value(&mut self.online.category, String::new(), tr!("model-lib-all-categories"));
                 for c in cats {
                     ui.selectable_value(&mut self.online.category, c.clone(), c);
                 }
@@ -296,10 +297,10 @@ impl VarstotasApp {
         match &plugin {
             Some(p) => self.online_plugin_header(ui, p, ctx),
             None => {
-                ui.label(RichText::new("Free CC0 photo scans (colour, normal, roughness, occlusion, metal maps at real-world size). Downloads go to the materials library.").small().weak());
+                ui.label(RichText::new(tr!("mat-online-description")).small().weak());
             }
         }
-        crate::ui::licences::terms_notice(ui, self.online.source.terms());
+        crate::ui::licences::terms_notice(ui, &self.online.source.terms());
         ui.separator();
         // Details of the selected asset (bottom), the grid above.
         let sel = self.online.selected.clone().and_then(|k| self.online.asset(&k).cloned());
@@ -307,7 +308,7 @@ impl VarstotasApp {
             ui.add_space(4.0);
             match &sel {
                 None => {
-                    ui.label(RichText::new("Click a material to see it; double-click downloads it and paints with it.").weak());
+                    ui.label(RichText::new(tr!("mat-online-click-hint")).weak());
                 }
                 Some(a) => {
                     let in_lib = self.online_in_library(a);
@@ -318,29 +319,29 @@ impl VarstotasApp {
                         ui.vertical(|ui| {
                             ui.label(RichText::new(&a.name).strong());
                             let mut info = vec![a.source.label().to_string()];
-                            info.extend([a.category.clone(), format!("{} wide", varstotas_kernel::units::format_length(a.width_mm, self.doc.model.unit)), a.license.clone()].into_iter().filter(|x| !x.is_empty()));
+                            info.extend([a.category.clone(), tr!("mat-online-wide", width = varstotas_kernel::units::format_length(a.width_mm, self.doc.model.unit)), a.license.clone()].into_iter().filter(|x| !x.is_empty()));
                             ui.label(RichText::new(info.join(" · ")).small().weak());
                             ui.horizontal(|ui| {
                                 let key = a.key();
                                 if self.online.downloading.contains(&key) {
                                     ui.spinner();
-                                    ui.label("Downloading…");
+                                    ui.label(tr!("model-lib-downloading"));
                                 } else if let Some(m) = &in_lib {
-                                    if ui.button("Use").on_hover_text("Already in the library: paint with it").clicked() {
+                                    if ui.button(tr!("mat-use")).on_hover_text(tr!("mat-online-use-hover")).clicked() {
                                         self.pick_material(m);
                                     }
-                                    if ui.button("Download Again").clicked() {
+                                    if ui.button(tr!("model-lib-download-again")).clicked() {
                                         self.online_download(&key, false, ctx);
                                     }
                                 } else {
-                                    if ui.button("Download & Use").on_hover_text("Save it to the library, add it to the model and paint").clicked() {
+                                    if ui.button(tr!("mat-online-download-use")).on_hover_text(tr!("mat-online-download-use-hover")).clicked() {
                                         self.online_download(&key, true, ctx);
                                     }
-                                    if ui.button("Download").on_hover_text("Save it to the materials library").clicked() {
+                                    if ui.button(tr!("model-lib-download")).on_hover_text(tr!("mat-online-download-hover")).clicked() {
                                         self.online_download(&key, false, ctx);
                                     }
                                 }
-                                if !a.page.is_empty() && ui.button("Web Page").clicked() {
+                                if !a.page.is_empty() && ui.button(tr!("model-lib-web-page")).clicked() {
                                     open_url(&a.page);
                                 }
                             });
@@ -354,7 +355,7 @@ impl VarstotasApp {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(format!("Loading the {} catalogue…", self.online.source.label()));
+                    ui.label(tr!("mat-online-loading", source = self.online.source.label()));
                 });
                 if !self.online.loading.contains(&self.online.source) {
                     self.online.ensure_catalogue(ctx);
@@ -362,8 +363,8 @@ impl VarstotasApp {
                 return;
             }
             Some(Err(e)) => {
-                ui.colored_label(Color32::from_rgb(200, 60, 40), format!("Can't load the catalogue: {e}"));
-                if ui.button("Retry").clicked() {
+                ui.colored_label(Color32::from_rgb(200, 60, 40), tr!("mat-online-load-failed", error = e));
+                if ui.button(tr!("model-lib-retry")).clicked() {
                     self.online.catalogues.remove(&self.online.source);
                 }
                 return;
@@ -371,7 +372,7 @@ impl VarstotasApp {
             Some(Ok(_)) => {}
         }
         let shown: Vec<Asset> = self.online.shown().into_iter().cloned().collect();
-        ui.label(RichText::new(format!("{} materials", shown.len())).small().weak());
+        ui.label(RichText::new(tr!("mat-online-count", n = shown.len())).small().weak());
         let cols = ((ui.available_width() + 6.0) / (TILE + 6.0)).floor().max(1.0) as usize;
         let rows = shown.len().div_ceil(cols);
         let row_h = TILE + 22.0;
@@ -403,7 +404,7 @@ impl VarstotasApp {
                         let galley = ui.fonts_mut(|f| f.layout_job(name));
                         let tp = egui::pos2(rect.min.x + ((TILE - galley.size().x) / 2.0).max(0.0), img.max.y + 3.0);
                         ui.painter().with_clip_rect(rect).galley(tp, galley, Color32::WHITE);
-                        let resp = resp.on_hover_text(format!("{}\n{} · {} wide", a.name, a.category, varstotas_kernel::units::format_length(a.width_mm, self.doc.model.unit)));
+                        let resp = resp.on_hover_text(format!("{}\n{} · {}", a.name, a.category, tr!("mat-online-wide", width = varstotas_kernel::units::format_length(a.width_mm, self.doc.model.unit))));
                         if resp.double_clicked() {
                             pick = Some((key.clone(), true));
                         } else if resp.clicked() {
@@ -433,7 +434,7 @@ impl VarstotasApp {
             ui.label(RichText::new(&p.description).small().weak());
         }
         if p.params.is_empty() {
-            if ui.small_button("Reload").clicked() {
+            if ui.small_button(tr!("model-lib-reload")).clicked() {
                 self.online_plugin_source(&p.name, true, ctx);
             }
             return;
@@ -454,7 +455,7 @@ impl VarstotasApp {
                     let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(&q.default).id_salt(("online_param", &q.key)));
                     load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     // A folder / file parameter: pick it.
-                    if q.kind == ParamKind::Text && is_path_param(&q.key) && ui.small_button("…").on_hover_text("Choose it").clicked() {
+                    if q.kind == ParamKind::Text && is_path_param(&q.key) && ui.small_button("…").on_hover_text(tr!("model-lib-choose-it")).clicked() {
                         let d = rfd::FileDialog::new();
                         let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
                         if let Some(d) = picked {
@@ -464,7 +465,7 @@ impl VarstotasApp {
                     }
                 }
             }
-            load |= ui.button("Load").on_hover_text("Ask the plugin for its materials with these values").clicked();
+            load |= ui.button(tr!("model-lib-load")).on_hover_text(tr!("mat-online-load-hover")).clicked();
         });
         if load {
             self.online_plugin_source(&p.name, true, ctx);

@@ -8,12 +8,18 @@ use super::generators::show_value;
 use super::theme;
 use crate::app::{Action, VarstotasApp};
 use egui::{Color32, Context, RichText, Ui, vec2};
+use varstotas_i18n::tr;
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{DefId, EntityRef, GenFormula, GenKind, GenParam, GenValue, GenValues, Generator, InstanceId, Joint, JointKind, Rig};
 
 const KINDS: [&str; 8] = ["length", "angle", "number", "int", "percent", "bool", "choice", "material"];
 const FORMULA_KINDS: [&str; 7] = ["length", "angle", "number", "int", "percent", "bool", "text"];
-const MOTIONS: [&str; 5] = ["Rotate", "Slide", "Show / hide", "Paint", "Set parameter"];
+const MOTIONS: usize = 5;
+
+/// The shown name of motion kind `k` (0..5).
+fn motion_label(k: usize) -> String {
+    tr!(["rig-motion-rotate", "rig-motion-slide", "rig-motion-show", "rig-motion-paint", "rig-motion-set"][k])
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ParamRow {
@@ -208,7 +214,7 @@ impl RigEditor {
                 self.script = r.script.clone();
             }
             None => {
-                self.params = vec![ParamRow { key: "open".into(), label: "Opening".into(), kind: 1, min: "0".into(), max: "90".into(), step: "1".into(), default: "0".into(), choices: String::new() }];
+                self.params = vec![ParamRow { key: "open".into(), label: "Opening".into() /* i18n-ignore */, kind: 1, min: "0".into(), max: "90".into(), step: "1".into(), default: "0".into(), choices: String::new() }];
                 self.formulas.clear();
                 self.joints.clear();
                 self.script.clear();
@@ -259,25 +265,25 @@ impl VarstotasApp {
     pub(crate) fn rig_info(&mut self, ui: &mut Ui) -> bool {
         let Some((ids, master, g, values)) = self.selected_rigged() else { return false };
         ui.add_space(6.0);
-        let title = if ids.len() > 1 { format!("{} — {} copies", g.name, ids.len()) } else { g.name.clone() };
+        let title = if ids.len() > 1 { tr!("rig-info-copies", name = g.name.clone(), n = ids.len()) } else { g.name.clone() };
         ui.label(RichText::new(title).strong());
         let change = if g.params.is_empty() {
-            ui.label(RichText::new("No parameters yet").color(theme::text_dim()));
+            ui.label(RichText::new(tr!("rig-no-params")).color(theme::text_dim()));
             None
         } else {
             self.value_fields(ui, "entity_info_rig", &ids, &g, &values)
         };
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Reset").on_hover_text("Back to the default values").clicked() {
+            if ui.button(tr!("rig-reset")).on_hover_text(tr!("rig-reset-hint")).clicked() {
                 self.actions.push(Action::SetRigValues(GenValues::new(), true));
             }
             self.make_unique_button(ui, &ids);
-            if ui.button("Edit Parameters…").on_hover_text("Window → Component Parameters: parameters, formulas, parts' motions, script").clicked() {
+            if ui.button(tr!("rig-edit")).on_hover_text(tr!("rig-edit-hint")).clicked() {
                 self.actions.push(Action::RigEditor);
             }
         });
         let parts = self.doc.model.defs.get(master).map_or(0, |d| d.rig.as_ref().map_or(0, |r| r.joints.len()));
-        ui.label(RichText::new(format!("Component with parameters ({parts} motion(s))")).small().color(theme::text_dim()));
+        ui.label(RichText::new(tr!("rig-info-summary", n = parts)).small().color(theme::text_dim()));
         if let Some(change) = change {
             self.actions.push(Action::SetRigValues(change, false));
         }
@@ -287,11 +293,11 @@ impl VarstotasApp {
     /// Apply values to every selected copy (one undo step).
     pub(crate) fn set_rig_values(&mut self, values: GenValues, reset: bool) {
         let Some((ids, ..)) = self.selected_rigged() else {
-            return self.flash("Select components with parameters");
+            return self.flash(tr!("rig-select-rigged"));
         };
         let path = self.doc.active_path.clone();
-        let label = if reset { "Reset Parameters" } else { "Component Parameters" };
-        let r = self.doc.try_commit(label, |m| {
+        let label = tr!(if reset { "rig-undo-reset" } else { "rig-title" });
+        let r = self.doc.try_commit(&label, |m| {
             for id in &ids {
                 varstotas_script::rig::set_values(m, &path, *id, &values, reset)?;
             }
@@ -322,7 +328,7 @@ impl VarstotasApp {
             None => {
                 self.rig_editor.open = !self.rig_editor.open;
                 if self.rig_editor.open && self.rig_editor.def.is_none() {
-                    self.flash("Select a component to give it parameters");
+                    self.flash(tr!("rig-select-component"));
                 }
             }
         }
@@ -335,10 +341,10 @@ impl VarstotasApp {
         let master = m.rig_master(d).unwrap_or(d);
         let Some(def) = m.defs.get(master) else { return };
         if def.is_group {
-            return self.flash_error("Groups can't have parameters: make it a component first (Edit → Make Component)".to_string());
+            return self.flash_error(tr!("rig-err-group"));
         }
         if def.generated.is_some() || def.params.is_some() {
-            return self.flash_error("This component is built by a generator or a parametric group".to_string());
+            return self.flash_error(tr!("rig-err-generated"));
         }
         let xf = xf.or_else(|| self.copy_transform(master));
         let rig = def.rig.clone();
@@ -357,13 +363,13 @@ impl VarstotasApp {
         let rig = match self.rig_editor.rig() {
             Ok(r) => r,
             Err(e) => {
-                crate::applog::error("Component Parameters", &e);
+                crate::applog::error("Component Parameters", &e); // i18n-ignore
                 self.rig_editor.error = Some(e);
                 return;
             }
         };
-        let label = if self.doc.model.defs.get(d).is_some_and(|x| x.rig.is_some()) { "Edit Parameters" } else { "Add Parameters" };
-        let r = self.doc.try_commit(label, |m| varstotas_script::rig::set_rig(m, d, Some(rig.clone())));
+        let label = tr!(if self.doc.model.defs.get(d).is_some_and(|x| x.rig.is_some()) { "rig-undo-edit" } else { "rig-undo-add" });
+        let r = self.doc.try_commit(&label, |m| varstotas_script::rig::set_rig(m, d, Some(rig.clone())));
         match r {
             Some(master) => {
                 self.rig_editor.def = Some(master);
@@ -371,11 +377,11 @@ impl VarstotasApp {
                 self.rig_editor.loaded = Some(rig);
                 self.library.def_thumbs.clear();
                 self.tray.gen_text = None;
-                self.flash("Parameters applied".to_string());
+                self.flash(tr!("rig-applied"));
             }
             None => {
                 self.rig_editor.error = self.doc.last_error.take();
-                crate::applog::error("Component Parameters", self.rig_editor.error.as_deref().unwrap_or_default());
+                crate::applog::error("Component Parameters", self.rig_editor.error.as_deref().unwrap_or_default()); // i18n-ignore
             }
         }
     }
@@ -387,13 +393,13 @@ impl VarstotasApp {
             self.rig_editor.open = false;
             return;
         }
-        if self.doc.try_commit("Remove Parameters", |m| varstotas_script::rig::set_rig(m, d, None)).is_some() {
+        if self.doc.try_commit(&tr!("rig-undo-remove"), |m| varstotas_script::rig::set_rig(m, d, None)).is_some() {
             self.rig_editor.load(d, None, self.rig_editor.xf);
             self.rig_editor.loaded = None;
-            self.flash("Parameters removed".to_string());
+            self.flash(tr!("rig-removed"));
         } else {
             self.rig_editor.error = self.doc.last_error.take();
-            crate::applog::error("Component Parameters", self.rig_editor.error.as_deref().unwrap_or_default());
+            crate::applog::error("Component Parameters", self.rig_editor.error.as_deref().unwrap_or_default()); // i18n-ignore
         }
     }
 
@@ -401,13 +407,13 @@ impl VarstotasApp {
     /// one along it; slide: from → to).
     pub(crate) fn rig_pick(&mut self, j: usize) {
         if self.rig_editor.xf.is_none() {
-            return self.flash_error("Place a copy of the component to pick in the model".to_string());
+            return self.flash_error(tr!("rig-err-place-copy"));
         }
         self.rig_editor.pick = Some(j);
         // Out of the way while picking (back when done or cancelled).
         self.rig_editor.open = false;
-        let prompt = if self.rig_editor.joints.get(j).is_some_and(|r| r.motion == 0) { "Click two points on the axis of rotation" } else { "Click two points: the direction of the slide" };
-        self.install_tool(Box::new(crate::tools::plugin_pick::PluginPickTool::new(2, prompt.to_string())));
+        let prompt = if self.rig_editor.joints.get(j).is_some_and(|r| r.motion == 0) { tr!("rig-pick-axis") } else { tr!("rig-pick-slide") };
+        self.install_tool(Box::new(crate::tools::plugin_pick::PluginPickTool::new(2, prompt)));
     }
 
     /// The picked points of [`Self::rig_pick`] (world): into the component's axes. False when no
@@ -419,7 +425,7 @@ impl VarstotasApp {
         let (la, lb) = (inv.transform_point3(*a), inv.transform_point3(*b));
         let dir = lb - la;
         if dir.length() < 1e-6 {
-            self.flash_error("The two points are the same".to_string());
+            self.flash_error(tr!("rig-err-same-points"));
             return true;
         }
         if let Some(r) = self.rig_editor.joints.get_mut(j) {
@@ -473,30 +479,30 @@ impl VarstotasApp {
         let mut pick = None;
         let mut help: Option<Option<String>> = None;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 40.0);
-        let mut win = egui::Window::new("Component Parameters").id(egui::Id::new("rig_editor_window")).open(&mut open).collapsible(false).resizable(true).default_pos(pos).default_width(760.0);
+        let mut win = egui::Window::new(tr!("rig-title")).id(egui::Id::new("rig_editor_window")).open(&mut open).collapsible(false).resizable(true).default_pos(pos).default_width(760.0);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
         let ed = &mut self.rig_editor;
         win.show(ctx, |ui| {
             let Some(name) = name else {
-                ui.label("Select a component (not a group) and choose Window → Component Parameters, or Edit Parameters… in Entity Info.");
+                ui.label(tr!("rig-select-hint"));
                 return;
             };
             ui.horizontal(|ui| {
                 ui.label(RichText::new(&name).strong());
-                ui.label(RichText::new(if has_rig { "— with parameters" } else { "— no parameters yet: Apply adds them" }).color(theme::text_dim()));
+                ui.label(RichText::new(tr!(if has_rig { "rig-state-has" } else { "rig-state-none" })).color(theme::text_dim()));
             });
             if parts.is_empty() {
-                ui.label(RichText::new("The component has no parts to move: group its pieces inside it (a door, a drawer…) — open it and use Make Group.").color(Color32::from_rgb(190, 110, 20)).small());
+                ui.label(RichText::new(tr!("rig-no-parts")).color(Color32::from_rgb(190, 110, 20)).small());
             }
             egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
                 // Parameters.
                 ui.add_space(4.0);
-                ui.label(RichText::new("Parameters").strong()).on_hover_text("The values each copy has (Entity Info shows them)");
+                ui.label(RichText::new(tr!("rig-parameters")).strong()).on_hover_text(tr!("rig-parameters-hint"));
                 let mut del = None;
                 egui::Grid::new("rig_params").num_columns(9).spacing([6.0, 4.0]).show(ui, |ui| {
-                    for h in ["Name", "Label", "Type", "Min", "Max", "Step", "Default", "Options", ""] {
+                    for h in [tr!("rig-col-name"), tr!("rig-col-label"), tr!("rig-col-type"), tr!("rig-col-min"), tr!("rig-col-max"), tr!("rig-col-step"), tr!("rig-col-default"), tr!("rig-col-options"), String::new()] {
                         ui.label(RichText::new(h).small().color(theme::text_dim()));
                     }
                     ui.end_row();
@@ -520,8 +526,8 @@ impl VarstotasApp {
                                 }
                             }
                             "material" => {
-                                egui::ComboBox::from_id_salt(("rig_pm", i)).width(90.0).selected_text(if r.default.is_empty() { "(as drawn)" } else { r.default.as_str() }).show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut r.default, String::new(), "(as drawn)");
+                                egui::ComboBox::from_id_salt(("rig_pm", i)).width(90.0).selected_text(if r.default.is_empty() { tr!("rig-as-drawn") } else { r.default.clone() }).show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut r.default, String::new(), tr!("rig-as-drawn"));
                                     for m in &materials {
                                         ui.selectable_value(&mut r.default, m.clone(), m);
                                     }
@@ -531,8 +537,8 @@ impl VarstotasApp {
                                 ui.add(egui::TextEdit::singleline(&mut r.default).desired_width(70.0));
                             }
                         }
-                        ui.add_enabled(KINDS[r.kind] == "choice", egui::TextEdit::singleline(&mut r.choices).desired_width(90.0).hint_text("a|b|c"));
-                        if ui.small_button("×").on_hover_text("Remove the parameter").clicked() {
+                        ui.add_enabled(KINDS[r.kind] == "choice", egui::TextEdit::singleline(&mut r.choices).desired_width(90.0).hint_text("a|b|c") /* i18n-ignore */);
+                        if ui.small_button("×").on_hover_text(tr!("rig-remove-param")).clicked() {
                             del = Some(i);
                         }
                         ui.end_row();
@@ -541,19 +547,19 @@ impl VarstotasApp {
                 if let Some(i) = del {
                     ed.params.remove(i);
                 }
-                if ui.button("+ Parameter").clicked() {
+                if ui.button(tr!("rig-add-param")).clicked() {
                     let n = (1..).map(|k| format!("p{k}")).find(|k| !ed.params.iter().any(|r| &r.key == k)).unwrap_or_default();
                     ed.params.push(ParamRow { key: n.clone(), label: n, kind: 0, default: "0".into(), ..Default::default() });
                 }
                 // Formulas.
                 ui.add_space(6.0);
-                ui.label(RichText::new("Formulas").strong()).on_hover_text("Values computed from the parameters (Rhai expressions), usable by the motions and the script");
+                ui.label(RichText::new(tr!("rig-formulas")).strong()).on_hover_text(tr!("rig-formulas-hint"));
                 let mut del = None;
                 egui::Grid::new("rig_formulas").num_columns(5).spacing([6.0, 4.0]).show(ui, |ui| {
                     for (i, r) in ed.formulas.iter_mut().enumerate() {
                         ui.add(egui::TextEdit::singleline(&mut r.key).desired_width(80.0));
                         ui.label("=");
-                        ui.add(egui::TextEdit::singleline(&mut r.expr).desired_width(260.0).hint_text("open / 2"));
+                        ui.add(egui::TextEdit::singleline(&mut r.expr).desired_width(260.0).hint_text("open / 2") /* i18n-ignore */);
                         egui::ComboBox::from_id_salt(("rig_fk", i)).width(70.0).selected_text(FORMULA_KINDS[r.kind]).show_ui(ui, |ui| {
                             for (k, n) in FORMULA_KINDS.iter().enumerate() {
                                 ui.selectable_value(&mut r.kind, k, *n);
@@ -568,14 +574,14 @@ impl VarstotasApp {
                 if let Some(i) = del {
                     ed.formulas.remove(i);
                 }
-                if ui.button("+ Formula").clicked() {
+                if ui.button(tr!("rig-add-formula")).clicked() {
                     let n = (1..).map(|k| format!("f{k}")).find(|k| !ed.formulas.iter().any(|r| &r.key == k)).unwrap_or_default();
                     ed.formulas.push(FormulaRow { key: n, kind: 0, ..Default::default() });
                 }
                 // Motions of the parts.
                 ui.add_space(6.0);
-                ui.label(RichText::new("Motions").strong()).on_hover_text(
-                    "A part (a group / component directly inside) turned, slid, shown, painted or given a parameter value (Set parameter: a part that has parameters itself — a generated component such as a Draw → Shapes cylinder, or a component with parameters) by a parameter. Turn / slide: the parameter's range maps onto From..To (degrees / length); without a range, or with an expression, the value is the motion itself",
+                ui.label(RichText::new(tr!("rig-motions")).strong()).on_hover_text(
+                    tr!("rig-motions-hint"),
                 );
                 let keys: Vec<String> = ed.params.iter().map(|r| r.key.clone()).chain(ed.formulas.iter().map(|r| r.key.clone())).collect();
                 let mut del = None;
@@ -587,67 +593,67 @@ impl VarstotasApp {
                                     ui.selectable_value(&mut r.part, p.clone(), p);
                                 }
                             });
-                            egui::ComboBox::from_id_salt(("rig_motion", i)).width(90.0).selected_text(MOTIONS[r.motion]).show_ui(ui, |ui| {
-                                for (k, n) in MOTIONS.iter().enumerate() {
-                                    ui.selectable_value(&mut r.motion, k, *n);
+                            egui::ComboBox::from_id_salt(("rig_motion", i)).width(90.0).selected_text(motion_label(r.motion)).show_ui(ui, |ui| {
+                                for k in 0..MOTIONS {
+                                    ui.selectable_value(&mut r.motion, k, motion_label(k));
                                 }
                             });
                             if r.motion == 4 {
                                 let own = part_params.get(&r.part).cloned().unwrap_or_default();
-                                let shown = own.iter().find(|(k, _)| *k == r.key).map(|(k, l)| if l.is_empty() { k.clone() } else { l.clone() }).unwrap_or_else(|| if r.key.is_empty() { "(parameter)".into() } else { r.key.clone() });
+                                let shown = own.iter().find(|(k, _)| *k == r.key).map(|(k, l)| if l.is_empty() { k.clone() } else { l.clone() }).unwrap_or_else(|| if r.key.is_empty() { tr!("rig-parameter") } else { r.key.clone() });
                                 let combo = egui::ComboBox::from_id_salt(("rig_pkey", i)).width(90.0).selected_text(shown).show_ui(ui, |ui| {
                                     if own.is_empty() {
-                                        ui.label(RichText::new("The part has no parameters").small().color(theme::text_dim()));
+                                        ui.label(RichText::new(tr!("rig-part-no-params")).small().color(theme::text_dim()));
                                     }
                                     for (k, l) in &own {
                                         ui.selectable_value(&mut r.key, k.clone(), if l.is_empty() { k.as_str() } else { l.as_str() });
                                     }
                                 });
-                                combo.response.on_hover_text("The part's own parameter set to the value");
+                                combo.response.on_hover_text(tr!("rig-part-param-hint"));
                             }
-                            ui.label("by");
-                            let shown = if r.param.is_empty() { "(expression)" } else { r.param.as_str() };
+                            ui.label(tr!("rig-by"));
+                            let shown = if r.param.is_empty() { tr!("rig-expression") } else { r.param.clone() };
                             egui::ComboBox::from_id_salt(("rig_jp", i)).width(90.0).selected_text(shown).show_ui(ui, |ui| {
                                 for k in &keys {
                                     ui.selectable_value(&mut r.param, k.clone(), k);
                                 }
-                                ui.selectable_value(&mut r.param, String::new(), "(expression)");
+                                ui.selectable_value(&mut r.param, String::new(), tr!("rig-expression"));
                             });
                             if r.motion <= 1 {
                                 let suffix = if r.motion == 0 { "°" } else { "" };
-                                ui.label("from");
+                                ui.label(tr!("rig-from"));
                                 ui.add(egui::DragValue::new(&mut r.from).speed(1.0).suffix(suffix));
-                                ui.label("to");
+                                ui.label(tr!("rig-to"));
                                 ui.add(egui::DragValue::new(&mut r.to).speed(1.0).suffix(suffix));
                             }
-                            if ui.small_button("×").on_hover_text("Remove the motion").clicked() {
+                            if ui.small_button("×").on_hover_text(tr!("rig-remove-motion")).clicked() {
                                 del = Some(i);
                             }
                         });
                         if r.param.is_empty() || !r.expr.is_empty() {
                             ui.horizontal(|ui| {
                                 ui.label("=");
-                                ui.add(egui::TextEdit::singleline(&mut r.expr).desired_width(360.0).hint_text("open * 2   |   open > 0   |   if open > 45 { \"Red\" } else { \"\" }"));
+                                ui.add(egui::TextEdit::singleline(&mut r.expr).desired_width(360.0).hint_text("open * 2   |   open > 0   |   if open > 45 { \"Red\" } else { \"\" }") /* i18n-ignore */);
                             });
                         }
                         if r.motion <= 1 {
                             ui.horizontal(|ui| {
                                 if r.motion == 0 {
-                                    ui.label("Axis through");
+                                    ui.label(tr!("rig-axis-through"));
                                     for k in 0..3 {
                                         ui.add(egui::DragValue::new(&mut r.origin[k]).speed(1.0).max_decimals(2));
                                     }
-                                    ui.label("along");
+                                    ui.label(tr!("rig-along"));
                                 } else {
-                                    ui.label("Direction");
+                                    ui.label(tr!("rig-direction"));
                                 }
                                 for k in 0..3 {
                                     ui.add(egui::DragValue::new(&mut r.axis[k]).speed(0.01).max_decimals(4));
                                 }
-                                if ui.small_button("Pick…").on_hover_text("Click two points in the model").clicked() {
+                                if ui.small_button(tr!("rig-pick")).on_hover_text(tr!("rig-pick-hint")).clicked() {
                                     pick = Some(i);
                                 }
-                                ui.label(RichText::new("mm, the component's axes").small().color(theme::text_dim()));
+                                ui.label(RichText::new(tr!("rig-axes-note")).small().color(theme::text_dim()));
                             });
                         }
                     });
@@ -655,22 +661,22 @@ impl VarstotasApp {
                 if let Some(i) = del {
                     ed.joints.remove(i);
                 }
-                if ui.button("+ Motion").clicked() {
+                if ui.button(tr!("rig-add-motion")).clicked() {
                     let key = ed.params.first().map(|r| r.key.clone()).unwrap_or_default();
                     ed.joints.push(JointRow { part: parts.first().cloned().unwrap_or_default(), param: key, ..Default::default() });
                 }
                 // Script.
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Script").strong()).on_hover_text(
-                        "Optional Rhai code run after the motions inside the component: fn update(p) { … } with the whole script API (rotate, move, paint, show / hide, set_params, box…); child(name) / child(name, true) finds a part by name (deeply), part.min / max / size / bounds — its extents; p — the values and formulas",
+                    ui.label(RichText::new(tr!("rig-script")).strong()).on_hover_text(
+                        tr!("rig-script-hint"),
                     );
                     if super::script_help::help_button(ui) {
                         help = Some(None);
                     }
                 });
-                if ed.script.is_empty() && ui.button("+ Script").clicked() {
-                    ed.script = "fn update(p) {\n    // let door = child(\"Door\", true);\n    // rotate(door, door.min, vec3(0, 0, 1), -p.open);\n}\n".into();
+                if ed.script.is_empty() && ui.button(tr!("rig-add-script")).clicked() {
+                    ed.script = "fn update(p) {\n    // let door = child(\"Door\", true);\n    // rotate(door, door.min, vec3(0, 0, 1), -p.open);\n}\n".into(); // i18n-ignore
                 }
                 if !ed.script.is_empty() {
                     let f1 = ed.editor.f1(ui, &ed.script);
@@ -688,13 +694,13 @@ impl VarstotasApp {
                 ui.label(RichText::new(e).color(Color32::from_rgb(200, 50, 40)));
             }
             ui.horizontal(|ui| {
-                if ui.button(if has_rig { "Apply" } else { "Add Parameters" }).clicked() {
+                if ui.button(if has_rig { tr!("apply") } else { tr!("rig-add") }).clicked() {
                     act = Some("apply");
                 }
-                if ui.add_enabled(ed.changed(), egui::Button::new("Revert")).clicked() {
+                if ui.add_enabled(ed.changed(), egui::Button::new(tr!("rig-revert"))).clicked() {
                     act = Some("revert");
                 }
-                if ui.add_enabled(has_rig, egui::Button::new("Remove Parameters")).on_hover_text("The copies show the component as drawn again").clicked() {
+                if ui.add_enabled(has_rig, egui::Button::new(tr!("rig-remove"))).on_hover_text(tr!("rig-remove-hint")).clicked() {
                     act = Some("remove");
                 }
             });

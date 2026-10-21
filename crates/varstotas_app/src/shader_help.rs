@@ -10,72 +10,77 @@ pub const KEYWORDS: &[&str] = &[
 
 pub const TYPES: &[&str] = &[
     "f32", "i32", "u32", "bool", "vec2", "vec3", "vec4", "vec2f", "vec3f", "vec4f", "vec2i", "vec3i", "vec2u", "mat2x2", "mat3x3",
-    "mat4x4", "array", "Surface", "Params",
+    "mat4x4", "array", "Surface", "Params", // i18n-ignore
 ];
 
 /// (name, signature, description): the helpers every shader gets and the common WGSL built-ins.
 pub const FNS: &[(&str, &str, &str)] = &[
-    ("surface", "surface(s: Surface, p: Params) -> Surface", "the shader: return the changed surface"),
-    ("hash3", "hash3(p: vec3<f32>) -> f32", "pseudo-random value 0..1 per point"),
-    ("noise", "noise(p: vec3<f32>) -> f32", "smooth value noise 0..1"),
-    ("fbm", "fbm(p: vec3<f32>, octaves: i32) -> f32", "layered noise 0..1 (clouds, marble, warping)"),
-    ("srgb", "srgb(c: vec3<f32>) -> vec3<f32>", "a colour picked in sRGB (0..1) → linear"),
-    ("hsv", "hsv(h: f32, sat: f32, v: f32) -> vec3<f32>", "hue / saturation / value (0..1) → linear colour"),
-    ("tangent_of", "tangent_of(n: vec3<f32>) -> vec3<f32>", "a unit vector across n"),
-    ("bump", "bump(n: vec3<f32>, dh: vec2<f32>) -> vec3<f32>", "n tilted by the slope of a height field"),
-    ("abs", "abs(x)", "absolute value"),
-    ("min", "min(a, b)", "the smaller"),
-    ("max", "max(a, b)", "the larger"),
-    ("clamp", "clamp(x, lo, hi)", "x limited to lo..hi"),
-    ("saturate", "saturate(x)", "x limited to 0..1"),
-    ("mix", "mix(a, b, t)", "a + (b − a)·t"),
-    ("step", "step(edge, x)", "0 below edge, 1 from it"),
-    ("smoothstep", "smoothstep(lo, hi, x)", "smooth 0→1 between lo and hi"),
-    ("fract", "fract(x)", "x − floor(x)"),
-    ("floor", "floor(x)", "round down"),
-    ("ceil", "ceil(x)", "round up"),
-    ("round", "round(x)", "nearest whole number"),
-    ("sign", "sign(x)", "−1, 0 or 1"),
-    ("sqrt", "sqrt(x)", "square root"),
-    ("pow", "pow(x, y)", "x to the power y"),
-    ("exp", "exp(x)", "e to the power x"),
-    ("log", "log(x)", "natural logarithm"),
-    ("sin", "sin(x)", "sine (radians)"),
-    ("cos", "cos(x)", "cosine (radians)"),
-    ("tan", "tan(x)", "tangent (radians)"),
-    ("atan2", "atan2(y, x)", "angle of (x, y), radians"),
-    ("length", "length(v)", "vector length"),
-    ("distance", "distance(a, b)", "length(a − b)"),
-    ("normalize", "normalize(v)", "unit vector along v"),
-    ("dot", "dot(a, b)", "dot product"),
-    ("cross", "cross(a, b)", "cross product of two vec3"),
-    ("reflect", "reflect(i, n)", "i mirrored about the normal n"),
-    ("select", "select(f, t, cond)", "t when cond, else f"),
-    ("vec2", "vec2<f32>(x, y)", "a 2-vector"),
-    ("vec3", "vec3<f32>(x, y, z)", "a 3-vector"),
-    ("vec4", "vec4<f32>(x, y, z, w)", "a 4-vector"),
+    ("surface", "surface(s: Surface, p: Params) -> Surface", "shader-fn-surface"),
+    ("hash3", "hash3(p: vec3<f32>) -> f32", "shader-fn-hash3"),
+    ("noise", "noise(p: vec3<f32>) -> f32", "shader-fn-noise"),
+    ("fbm", "fbm(p: vec3<f32>, octaves: i32) -> f32", "shader-fn-fbm"),
+    ("srgb", "srgb(c: vec3<f32>) -> vec3<f32>", "shader-fn-srgb"),
+    ("hsv", "hsv(h: f32, sat: f32, v: f32) -> vec3<f32>", "shader-fn-hsv"),
+    ("tangent_of", "tangent_of(n: vec3<f32>) -> vec3<f32>", "shader-fn-tangent_of"),
+    ("bump", "bump(n: vec3<f32>, dh: vec2<f32>) -> vec3<f32>", "shader-fn-bump"),
+    ("abs", "abs(x)", "shader-fn-abs"),
+    ("min", "min(a, b)", "shader-fn-min"),
+    ("max", "max(a, b)", "shader-fn-max"),
+    ("clamp", "clamp(x, lo, hi)", "shader-fn-clamp"),
+    ("saturate", "saturate(x)", "shader-fn-saturate"),
+    ("mix", "mix(a, b, t)", "shader-fn-mix"),
+    ("step", "step(edge, x)", "shader-fn-step"),
+    ("smoothstep", "smoothstep(lo, hi, x)", "shader-fn-smoothstep"),
+    ("fract", "fract(x)", "shader-fn-fract"),
+    ("floor", "floor(x)", "shader-fn-floor"),
+    ("ceil", "ceil(x)", "shader-fn-ceil"),
+    ("round", "round(x)", "shader-fn-round"),
+    ("sign", "sign(x)", "shader-fn-sign"),
+    ("sqrt", "sqrt(x)", "shader-fn-sqrt"),
+    ("pow", "pow(x, y)", "shader-fn-pow"),
+    ("exp", "exp(x)", "shader-fn-exp"),
+    ("log", "log(x)", "shader-fn-log"),
+    ("sin", "sin(x)", "shader-fn-sin"),
+    ("cos", "cos(x)", "shader-fn-cos"),
+    ("tan", "tan(x)", "shader-fn-tan"),
+    ("atan2", "atan2(y, x)", "shader-fn-atan2"),
+    ("length", "length(v)", "shader-fn-length"),
+    ("distance", "distance(a, b)", "shader-fn-distance"),
+    ("normalize", "normalize(v)", "shader-fn-normalize"),
+    ("dot", "dot(a, b)", "shader-fn-dot"),
+    ("cross", "cross(a, b)", "shader-fn-cross"),
+    ("reflect", "reflect(i, n)", "shader-fn-reflect"),
+    ("select", "select(f, t, cond)", "shader-fn-select"),
+    ("vec2", "vec2<f32>(x, y)", "shader-fn-vec2"),
+    ("vec3", "vec3<f32>(x, y, z)", "shader-fn-vec3"),
+    ("vec4", "vec4<f32>(x, y, z, w)", "shader-fn-vec4"),
 ];
 
 /// The fields of `Surface`: (name, type, description).
 pub const SURFACE: &[(&str, &str, &str)] = &[
-    ("base", "vec3<f32>", "linear base colour"),
-    ("alpha", "f32", "opacity"),
-    ("metallic", "f32", "0 = dielectric, 1 = metal"),
-    ("roughness", "f32", "0 = mirror, 1 = matte"),
-    ("transmission", "f32", "glass: 1 = light passes through"),
-    ("emission", "vec3<f32>", "light given off, linear, strength included"),
-    ("normal", "vec3<f32>", "world normal, unit, facing the viewer"),
-    ("pos", "vec3<f32>", "model position, mm (z = up)"),
-    ("uv", "vec2<f32>", "planar texture coordinates, mm"),
-    ("view", "vec3<f32>", "unit direction toward the eye"),
-    ("time", "f32", "seconds"),
+    ("base", "vec3<f32>", "shader-surface-base"),
+    ("alpha", "f32", "shader-surface-alpha"),
+    ("metallic", "f32", "shader-surface-metallic"),
+    ("roughness", "f32", "shader-surface-roughness"),
+    ("transmission", "f32", "shader-surface-transmission"),
+    ("emission", "vec3<f32>", "shader-surface-emission"),
+    ("normal", "vec3<f32>", "shader-surface-normal"),
+    ("pos", "vec3<f32>", "shader-surface-pos"),
+    ("uv", "vec2<f32>", "shader-surface-uv"),
+    ("view", "vec3<f32>", "shader-surface-view"),
+    ("time", "f32", "shader-surface-time"),
 ];
 
 const SWIZZLE2: &[&str] = &["x", "y", "xy", "yx"];
 const SWIZZLE3: &[&str] = &["x", "y", "z", "xy", "xz", "yz", "xyz", "zyx", "r", "g", "b", "rgb"];
 
 /// The `@param` tag: (tag, syntax, description).
-pub const PARAM_TAG: (&str, &str, &str) = ("param", "// @param name = default (min..max) \"Label\"", "a slider of the material editor, read as p.name (at most 8)");
+pub const PARAM_TAG: (&str, &str, &str) = ("param", "// @param name = default (min..max) \"Label\"", "shader-param-tag"); // i18n-ignore
+
+/// The text of a description key of [`FNS`], [`SURFACE`] or [`PARAM_TAG`].
+pub fn text(key: &str) -> String {
+    varstotas_i18n::tr(key)
+}
 
 /// A row of the completion list: (name, label, text inserted after the typed prefix, detail).
 pub type Row = (String, String, String, String);
@@ -145,7 +150,7 @@ pub fn items_at(src: &str, cursor: usize) -> Option<(Vec<Row>, String, usize)> {
         && after.chars().all(is_ident)
     {
         let rows = if PARAM_TAG.0.starts_with(after) {
-            vec![(PARAM_TAG.0.to_string(), format!("@{}", PARAM_TAG.0), format!("{} ", rest(PARAM_TAG.0)), format!("{}  — {}", PARAM_TAG.1, PARAM_TAG.2))]
+            vec![(PARAM_TAG.0.to_string(), format!("@{}", PARAM_TAG.0), format!("{} ", rest(PARAM_TAG.0)), format!("{}  — {}", PARAM_TAG.1, text(PARAM_TAG.2)))]
         } else {
             Vec::new()
         };
@@ -191,7 +196,7 @@ pub fn items_at(src: &str, cursor: usize) -> Option<(Vec<Row>, String, usize)> {
         None if svars.contains(&word) => SURFACE
             .iter()
             .filter(|f| f.0.starts_with(prefix.as_str()))
-            .map(|f| (f.0.to_string(), f.0.to_string(), rest(f.0), format!(": {}  — {}", f.1, f.2)))
+            .map(|f| (f.0.to_string(), f.0.to_string(), rest(f.0), format!(": {}  — {}", f.1, text(f.2))))
             .collect(),
         None => return None,
     };
@@ -199,8 +204,8 @@ pub fn items_at(src: &str, cursor: usize) -> Option<(Vec<Row>, String, usize)> {
 }
 
 /// The signature and description of function `name`.
-pub fn fn_doc(name: &str) -> Option<(&'static str, &'static str)> {
-    FNS.iter().find(|f| f.0 == name).map(|f| (f.1, f.2))
+pub fn fn_doc(name: &str) -> Option<(&'static str, String)> {
+    FNS.iter().find(|f| f.0 == name).map(|f| (f.1, text(f.2)))
 }
 
 /// The cursor (char index) is on a `// @param` line.

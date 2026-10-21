@@ -9,6 +9,7 @@ use crate::model::{Definition, Model};
 use crate::tessellate::triangulate_face;
 use crate::{EntityRef, Instance, InstanceId, OpError, OpResult};
 use glam::{DMat4, DVec2, DVec3};
+use varstotas_i18n::tr;
 
 /// Side edges folding by less than this become soft and smooth.
 const SOFT_SIDE_DEG: f64 = 35.0;
@@ -88,8 +89,9 @@ impl Model {
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let mesh = text_mesh(outlines, opts);
         if mesh.edges.is_empty() {
-            return Err(OpError::Invalid("no outlines".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-no-outlines").into()));
         }
+        // i18n-ignore-next
         let def = self.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         let inst = Instance {
             def,

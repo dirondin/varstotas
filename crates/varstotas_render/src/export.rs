@@ -150,13 +150,13 @@ pub enum ExportError {
 impl std::fmt::Display for ExportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExportError::EmptySize => write!(f, "image size must be at least 1 x 1 pixels"),
+            ExportError::EmptySize => write!(f, "{}", varstotas_i18n::tr!("render-export-empty")),
             ExportError::TooLarge { requested, max } => write!(
                 f,
-                "image size {} x {} is too large (at most {max} pixels per side)",
-                requested[0], requested[1]
+                "{}",
+                varstotas_i18n::tr!("render-export-too-large", w = requested[0], h = requested[1], max = *max)
             ),
-            ExportError::Gpu(e) => write!(f, "GPU error while exporting the image: {e}"),
+            ExportError::Gpu(e) => write!(f, "{}", varstotas_i18n::tr!("render-export-gpu", error = e.clone())),
         }
     }
 }

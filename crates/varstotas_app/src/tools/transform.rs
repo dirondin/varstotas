@@ -1,5 +1,6 @@
 //! Transform tools: Move, Rotate, Scale (with Ctrl copy and `Nx` / `/N` arrays).
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -107,6 +108,7 @@ fn run_transform(
             if copy {
                 for w in &world {
                     let n = model.sections.len() + 1;
+                    // i18n-ignore-next
                     model.sections.push(varstotas_kernel::SectionPlane { name: format!("Section {n}"), active: false, ..s.transformed(w) });
                 }
                 out.section = Some(model.sections.len() - 1);
@@ -312,7 +314,7 @@ impl MoveTool {
         }
         let kind = XfKind::Translate(v);
         let copy = self.copy.on;
-        if run_transform(ctx, if copy { "Copy" } else { "Move" }, &tg, kind, copy, None).is_some() {
+        if run_transform(ctx, &tr!(if copy { "tool-undo-copy" } else { "tool-undo-move" }), &tg, kind, copy, None).is_some() {
             self.last = Some(LastXf { tg, kind, copy, arr: None });
         }
         self.copy.reset();
@@ -373,7 +375,7 @@ impl Tool for MoveTool {
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
         if self.from.is_none()
-            && let Some(ok) = vcb_after(ctx, &mut self.last, input, "Copy Array")
+            && let Some(ok) = vcb_after(ctx, &mut self.last, input, &tr!("tool-undo-copy-array"))
         {
             return ok;
         }
@@ -394,19 +396,19 @@ impl Tool for MoveTool {
             }
             let kind = XfKind::Translate(v.normalize_or(DVec3::X) * len);
             let label = match (l.copy, l.arr) {
-                (true, Some(_)) => "Copy Array",
-                (true, None) => "Copy",
-                _ => "Move",
+                (true, Some(_)) => tr!("tool-undo-copy-array"),
+                (true, None) => tr!("tool-undo-copy"),
+                _ => tr!("tool-undo-move"),
             };
-            if run_transform(ctx, label, &l.tg, kind, l.copy, l.arr).is_some() {
+            if run_transform(ctx, &label, &l.tg, kind, l.copy, l.arr).is_some() {
                 self.last = Some(LastXf { kind, ..l });
                 return true;
             }
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Distance"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-distance")
     }
     fn vcb_value(&self) -> String {
         let d = self.vector().map(|v| v.length()).or(match self.last.as_ref().map(|l| l.kind) {
@@ -419,13 +421,11 @@ impl Tool for MoveTool {
         }
     }
     fn status_text(&self) -> String {
-        let copy = if self.copy.on { " (copy)" } else { "" };
+        let copy = if self.copy.on { format!(" {}", tr!("tool-suffix-copy")) } else { String::new() };
         if self.from.is_none() {
-            format!(
-                "Pick the point to move from{copy}. Moves the selection, or the entity under the cursor. %COPY% = copy; after a copy type `5x` or `/5` for arrays."
-            )
+            tr!("tool-move-from", copy = copy)
         } else {
-            format!("Pick the destination or type a distance{copy}. Shift = lock inference, arrows = lock axis.")
+            tr!("tool-move-to", copy = copy)
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -568,7 +568,7 @@ impl RotateTool {
         }
         let kind = XfKind::Rotate { center: c, axis: n, deg };
         let copy = self.copy.on;
-        if run_transform(ctx, if copy { "Copy" } else { "Rotate" }, &tg, kind, copy, None).is_some() {
+        if run_transform(ctx, &tr!(if copy { "tool-undo-copy" } else { "tool-undo-rotate" }), &tg, kind, copy, None).is_some() {
             self.last = Some(LastXf { tg, kind, copy, arr: None });
         }
         self.copy.reset();
@@ -643,7 +643,7 @@ impl Tool for RotateTool {
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
         if self.stage.is_none()
-            && let Some(ok) = vcb_after(ctx, &mut self.last, input, "Rotate Array")
+            && let Some(ok) = vcb_after(ctx, &mut self.last, input, &tr!("tool-undo-rotate-array"))
         {
             return ok;
         }
@@ -660,16 +660,16 @@ impl Tool for RotateTool {
                 return false;
             }
             let kind = XfKind::Rotate { center, axis, deg: a };
-            let label = if l.arr.is_some() { "Rotate Array" } else { "Rotate" };
-            if run_transform(ctx, label, &l.tg, kind, l.copy, l.arr).is_some() {
+            let label = tr!(if l.arr.is_some() { "tool-undo-rotate-array" } else { "tool-undo-rotate" });
+            if run_transform(ctx, &label, &l.tg, kind, l.copy, l.arr).is_some() {
                 self.last = Some(LastXf { kind, ..l });
                 return true;
             }
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Angle"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-angle")
     }
     fn vcb_value(&self) -> String {
         match (self.stage, self.last.as_ref().map(|l| l.kind)) {
@@ -680,15 +680,15 @@ impl Tool for RotateTool {
     }
     fn status_text(&self) -> String {
         match self.stage {
-            None => "Select the rotation center (face orients the protractor; arrows lock its axis).".into(),
-            Some(RotStage::Center { .. }) => "Select the zero direction.".into(),
-            Some(RotStage::Angle { .. }) => format!(
-                "Select the angle ({}) or type degrees. %COPY% = copy{}; after a copy type `6x` for a radial array.",
-                match crate::inference::settings::angle_step() {
-                    Some(st) => format!("rounded to {st}°"),
-                    None => "snaps every 15°".into(),
+            None => tr!("tool-rotate-center"),
+            Some(RotStage::Center { .. }) => tr!("tool-rotate-zero"),
+            Some(RotStage::Angle { .. }) => tr!(
+                "tool-rotate-angle",
+                step = match crate::inference::settings::angle_step() {
+                    Some(st) => tr!("tool-rotate-rounded", step = st),
+                    None => tr!("tool-rotate-snaps"),
                 },
-                if self.copy.on { " (on)" } else { "" }
+                on = if self.copy.on { format!(" {}", tr!("tool-suffix-on")) } else { String::new() }
             ),
         }
     }
@@ -878,7 +878,7 @@ fn scale_generated(ctx: &mut ToolContext, tg: &Targets, kind: XfKind) -> bool {
     }
     let xf = kind.at(1.0);
     let r = ctx.doc.try_commit_if(
-        "Scale",
+        &tr!("tool-undo-scale"),
         |m| match varstotas_script::generator::scale(m, &path, *i, &xf) {
             None => Ok(false),
             Some(r) => r.map(|()| true),
@@ -970,7 +970,7 @@ impl ScaleTool {
         }
         let kind = XfKind::Scale { anchor, factor };
         let tg = Targets::ents(self.ents.clone());
-        if scale_generated(ctx, &tg, kind) || run_transform(ctx, "Scale", &tg, kind, false, None).is_some() {
+        if scale_generated(ctx, &tg, kind) || run_transform(ctx, &tr!("tool-undo-scale"), &tg, kind, false, None).is_some() {
             self.last = Some((LastXf { tg, kind, copy: false, arr: None }, axes));
         }
         self.bbox = None;
@@ -1036,15 +1036,15 @@ impl Tool for ScaleTool {
                 return false;
             }
             let kind = XfKind::Scale { anchor, factor: factors_from(axes, &v) };
-            if scale_generated(ctx, &l.tg, kind) || run_transform(ctx, "Scale", &l.tg, kind, false, None).is_some() {
+            if scale_generated(ctx, &l.tg, kind) || run_transform(ctx, &tr!("tool-undo-scale"), &l.tg, kind, false, None).is_some() {
                 self.last = Some((LastXf { kind, ..l }, axes));
                 return true;
             }
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Scale"
+    fn vcb_label(&self) -> String {
+        tr!("tool-undo-scale")
     }
     fn vcb_value(&self) -> String {
         if let Some(d) = self.drag {
@@ -1061,19 +1061,19 @@ impl Tool for ScaleTool {
     fn status_text(&self) -> String {
         if let Some(d) = self.drag {
             let what = match d.grip.count() {
-                3 => "uniformly",
-                2 => "along two axes",
-                _ => "along one axis",
+                3 => tr!("tool-scale-uniformly"),
+                2 => tr!("tool-scale-two-axes"),
+                _ => tr!("tool-scale-one-axis"),
             };
-            format!(
-                "Move to scale {what} about the {}; click or type a factor (per axis: `1.5; 2`). %CMD% = about centre.",
-                if d.about_center { "centre" } else { "opposite grip" }
+            tr!(
+                "tool-scale-dragging",
+                what = what,
+                about = tr!(if d.about_center { "tool-scale-about-centre" } else { "tool-scale-about-opposite" })
             )
         } else if self.ents.is_empty() {
-            "Select entities (or hover one), then drag a grip.".into()
+            tr!("tool-scale-select")
         } else {
-            "Drag a grip: corners scale uniformly, edge midpoints two axes, face centres one axis. %CMD% = about centre."
-                .into()
+            tr!("tool-scale-idle")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -1083,8 +1083,8 @@ impl Tool for ScaleTool {
             let target = t.transform_point3(d.grip.pos);
             dashed(out3d, d.anchor, target, Color32::from_gray(60), 1.5);
             out2d.push(Marker2d::Point { at: d.anchor, shape: MarkerShape::Ring, color: Color32::from_rgb(0xFF, 0, 0) });
-            let what = if d.grip.count() == 3 { "Uniform scale" } else { "Scale" };
-            out2d.push(Marker2d::CursorTooltip { text: format!("{what} {}", fmt_factors(d.grip.axes(), d.factor)) });
+            let key = if d.grip.count() == 3 { "tool-scale-tooltip-uniform" } else { "tool-scale-tooltip" };
+            out2d.push(Marker2d::CursorTooltip { text: tr!(key, factors = fmt_factors(d.grip.axes(), d.factor)) });
             return;
         }
         if let Some(h) = &self.hover {
@@ -1152,7 +1152,7 @@ impl PasteTool {
 pub fn paste_clipboard(doc: &mut crate::document::Document, clip: &crate::clipboard::Clipboard, t: &DMat4) -> bool {
     let path = doc.active_path.clone();
     let uid = doc.uid;
-    match doc.try_commit("Paste", |m| {
+    match doc.try_commit(&tr!("tool-undo-paste"), |m| {
         let (e, g) = clip.paste_into(m, uid, &path, t)?;
         let d = clip.paste_dims_into(m, &path, t);
         Ok::<_, varstotas_kernel::OpError>((e, g, d))
@@ -1202,8 +1202,8 @@ impl Tool for PasteTool {
     }
     fn status_text(&self) -> String {
         match &self.name {
-            Some(n) => format!("Click to place {n} (Esc cancels)."),
-            None => format!("Click to place the pasted {} (Esc cancels).", plural(self.clip.count, "entity", "entities")),
+            Some(n) => tr!("tool-paste-place-named", name = n.as_str()),
+            None => tr!("tool-paste-place", count = self.clip.count),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -1229,10 +1229,6 @@ impl Tool for PasteTool {
     fn is_busy(&self) -> bool {
         true
     }
-}
-
-fn plural(n: usize, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 #[cfg(test)]

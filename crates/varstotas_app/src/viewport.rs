@@ -12,6 +12,7 @@ use crate::nav::NavController;
 use crate::overlay::{Marker2d, OverlayPainter, hud_text};
 use crate::scene_builder::{self, BuildParams, HighlightParams};
 use egui::{Align2, Color32, Pos2, Rect, Response, Sense, Shape, Ui, pos2, vec2};
+use varstotas_i18n::tr;
 use varstotas_kernel::{ContextPath, Tessellation};
 use varstotas_render::{Camera, ExportOptions, FaceStyle, HighlightUpdate, Overlay3d, RenderStyle, Renderer};
 
@@ -366,7 +367,7 @@ impl Viewport {
                             job.running = false;
                             let [w, h] = [job.settings.width, job.settings.height];
                             log::info!(
-                                "path tracer: {} spp {w}x{h} in {:.2} s ({:.2} s wall)",
+                                "path tracer: {} spp {w}x{h} in {:.2} s ({:.2} s wall)", // i18n-ignore
                                 job.samples,
                                 job.elapsed,
                                 job.started.elapsed().as_secs_f64()
@@ -386,12 +387,12 @@ impl Viewport {
                         let r = if exr {
                             renderer
                                 .pt_linear(rs, job.denoised)
-                                .ok_or_else(|| "nothing rendered".to_string())
+                                .ok_or_else(|| tr!("view-nothing-rendered"))
                                 .and_then(|(w, h, rgb)| std::fs::write(&path, varstotas_render::encode_exr(w, h, &rgb)).map_err(|e| e.to_string()))
                         } else {
                             renderer
                                 .pt_image(rs)
-                                .ok_or_else(|| "nothing rendered".to_string())
+                                .ok_or_else(|| tr!("view-nothing-rendered"))
                                 .and_then(|img| img.write_png(&path).map_err(|e| e.to_string()))
                         };
                         job.saved = Some(r.map(|_| path));
@@ -426,12 +427,12 @@ impl Viewport {
         }
         if !drew {
             if self.export.take_if(|_| active).is_some() {
-                self.export_result = Some(Err("the 3D renderer is not available".into()));
+                self.export_result = Some(Err(tr!("view-no-renderer")));
             }
             paint_fallback_background(&painter, rect);
             let msg = match self.gpus.get(pane).and_then(|g| g.renderer_error.as_ref()) {
-                Some(e) => format!("3D renderer not available yet ({e})"),
-                None => "3D renderer not available (wgpu backend required)".to_string(),
+                Some(e) => tr!("view-renderer-unavailable-yet", error = e.to_string()),
+                None => tr!("view-renderer-unavailable"),
             };
             hud_text(&painter, rect.center(), Align2::CENTER_CENTER, &msg, Color32::from_gray(90));
         }
@@ -457,13 +458,13 @@ impl Viewport {
                                 doc.model.defs.get(inst.def).map(|d| d.name.clone()).unwrap_or_default()
                             }
                         })
-                        .unwrap_or_else(|| "Group".into());
-                    out.push(if name.is_empty() { "Group".into() } else { name });
+                        .unwrap_or_else(|| tr!("view-group"));
+                    out.push(if name.is_empty() { tr!("view-group") } else { name });
                 }
                 out
             })
             .unwrap_or_default();
-            let text = format!("Editing: Model › {}   (Esc to close)", names.join(" › "));
+            let text = tr!("view-editing", path = names.join(" › "));
             let galley = painter.layout_no_wrap(text, egui::FontId::proportional(12.5), Color32::from_gray(40));
             let r = Rect::from_min_size(rect.min + vec2(10.0, 10.0), galley.size() + vec2(16.0, 8.0));
             painter.rect_filled(r, 6.0, Color32::from_rgba_unmultiplied(255, 255, 255, 210));

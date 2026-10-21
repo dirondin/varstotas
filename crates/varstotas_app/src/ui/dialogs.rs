@@ -5,6 +5,7 @@ use super::theme;
 use crate::app::VarstotasApp;
 use crate::templates::Template;
 use egui::{Context, Id, Modal, RichText};
+use varstotas_i18n::tr;
 
 impl VarstotasApp {
     pub(crate) fn dialogs(&mut self, ctx: &Context) {
@@ -18,25 +19,22 @@ impl VarstotasApp {
             let mut choice: Option<u8> = None;
             let resp = Modal::new(Id::new("confirm_save")).show(ctx, |ui| {
                 ui.set_width(360.0);
-                ui.heading("Save changes?");
+                ui.heading(tr!("dialog-save-title"));
                 ui.add_space(4.0);
-                ui.label(format!(
-                    "Do you want to save the changes you made to “{}”?",
-                    self.doc.display_name()
-                ));
-                ui.label(RichText::new("Your changes will be lost if you don't save them.").color(theme::text_dim()));
+                ui.label(tr!("dialog-save-question", name = self.doc.display_name()));
+                ui.label(RichText::new(tr!("dialog-save-warning")).color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Don't Save").clicked() {
+                    if ui.button(tr!("dialog-dont-save")).clicked() {
                         choice = Some(1);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(egui::Button::new(RichText::new("Save").strong())).clicked()
+                        if ui.add(egui::Button::new(RichText::new(tr!("dialog-save")).strong())).clicked()
                             || ui.input(|i| i.key_pressed(egui::Key::Enter))
                         {
                             choice = Some(2);
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(tr!("cancel")).clicked() {
                             choice = Some(0);
                         }
                     });
@@ -68,30 +66,26 @@ impl VarstotasApp {
             let mut choice: Option<Option<bool>> = None;
             let resp = Modal::new(Id::new("recover_autosave")).show(ctx, |ui| {
                 ui.set_width(400.0);
-                ui.heading("Recover autosaved model?");
+                ui.heading(tr!("dialog-recover-title"));
                 ui.add_space(4.0);
                 ui.label(match &r.original {
-                    Some(_) => format!(
-                        "Varstotas found an autosaved copy of “{}” from {} that is newer than the saved file.",
-                        r.display_name(),
-                        r.age_text()
-                    ),
-                    None => format!("Varstotas found an autosaved untitled model from {}.", r.age_text()),
+                    Some(_) => tr!("dialog-recover-copy", name = r.display_name(), age = r.age_text()),
+                    None => tr!("dialog-recover-untitled", age = r.age_text()),
                 });
                 ui.label(
-                    RichText::new("It may contain changes that were not saved, e.g. after a crash.")
+                    RichText::new(tr!("dialog-recover-note"))
                         .color(theme::text_dim()),
                 );
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Discard").on_hover_text("Delete the autosaved copy").clicked() {
+                    if ui.button(tr!("dialog-discard")).on_hover_text(tr!("dialog-discard-hint")).clicked() {
                         choice = Some(Some(false));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(egui::Button::new(RichText::new("Recover").strong())).clicked() {
+                        if ui.add(egui::Button::new(RichText::new(tr!("dialog-recover")).strong())).clicked() {
                             choice = Some(Some(true));
                         }
-                        if ui.button("Not Now").on_hover_text("Keep the autosaved copy for later").clicked() {
+                        if ui.button(tr!("dialog-not-now")).on_hover_text(tr!("dialog-not-now-hint")).clicked() {
                             choice = Some(None);
                         }
                     });
@@ -110,24 +104,24 @@ impl VarstotasApp {
             && let Some(f) = self.resize_confirm
         {
             let mut choice: Option<bool> = None;
-            let what = if self.doc.active_path.is_empty() { "the model" } else { "the active group or component" };
+            let question = tr!(if self.doc.active_path.is_empty() { "dialog-resize-model" } else { "dialog-resize-group" });
             let resp = Modal::new(Id::new("confirm_resize")).show(ctx, |ui| {
                 ui.set_width(360.0);
-                ui.heading("Resize?");
+                ui.heading(tr!("dialog-resize-title"));
                 ui.add_space(4.0);
-                ui.label(format!("Do you want to resize {what}?"));
+                ui.label(question.clone());
                 ui.label(
-                    RichText::new(format!("Everything in it is scaled by {:.4} about its origin.", f))
+                    RichText::new(tr!("dialog-resize-scaled", factor = format!("{:.4}", f)))
                         .color(theme::text_dim()),
                 );
-                ui.label(RichText::new("Enter = Yes · Esc = No").small().color(theme::text_dim()));
+                ui.label(RichText::new(tr!("dialog-resize-keys")).small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let yes = ui.add(egui::Button::new(RichText::new("Yes").strong()));
+                    let yes = ui.add(egui::Button::new(RichText::new(tr!("dialog-yes")).strong()));
                     if yes.clicked() {
                         choice = Some(true);
                     }
-                    if ui.button("No").clicked() {
+                    if ui.button(tr!("dialog-no")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -168,10 +162,10 @@ impl VarstotasApp {
                 ui.label(RichText::new(&p.hint).small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(RichText::new("OK").strong())).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(tr!("ok")).strong())).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -187,7 +181,7 @@ impl VarstotasApp {
                     if self.apply_prompt(&p) {
                         self.text_prompt = None;
                     } else {
-                        self.flash_error("Invalid value");
+                        self.flash_error(tr!("dialog-invalid-value"));
                         self.text_prompt = Some(p);
                     }
                 }
@@ -203,14 +197,14 @@ impl VarstotasApp {
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("export_png")).show(ctx, |ui| {
                 ui.set_width(340.0);
-                ui.heading("Export 2D Graphic");
+                ui.heading(tr!("dialog-export-title"));
                 ui.add_space(6.0);
                 let max = varstotas_render::MAX_EXPORT_DIM;
                 egui::Grid::new("export_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-                    ui.label("Width");
+                    ui.label(tr!("dialog-width"));
                     let w = ui.add(egui::DragValue::new(&mut d.width).range(1..=max).suffix(" px"));
                     ui.end_row();
-                    ui.label("Height");
+                    ui.label(tr!("dialog-height"));
                     let h = ui.add(egui::DragValue::new(&mut d.height).range(1..=max).suffix(" px"));
                     ui.end_row();
                     if d.lock_aspect {
@@ -221,35 +215,35 @@ impl VarstotasApp {
                         }
                     }
                 });
-                ui.checkbox(&mut d.lock_aspect, "Use view aspect ratio");
+                ui.checkbox(&mut d.lock_aspect, tr!("dialog-export-aspect"));
                 ui.horizontal(|ui| {
                     let px = vp * ppp;
-                    if ui.button("Viewport size").on_hover_text(format!("{} × {} px (screen pixels)", px.x.round(), px.y.round())).clicked() {
+                    if ui.button(tr!("dialog-export-viewport")).on_hover_text(tr!("dialog-export-viewport-hint", w = px.x.round().to_string(), h = px.y.round().to_string())).clicked() {
                         d.width = px.x.round().max(1.0) as u32;
                         d.height = px.y.round().max(1.0) as u32;
                     }
-                    if ui.button("×2").on_hover_text("Double the image size").clicked() {
+                    if ui.button("×2").on_hover_text(tr!("dialog-export-double")).clicked() {
                         d.width = (d.width * 2).min(max);
                         d.height = (d.height * 2).min(max);
                     }
                 });
-                ui.checkbox(&mut d.content.transparent, "Transparent background");
+                ui.checkbox(&mut d.content.transparent, tr!("dialog-export-transparent"));
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut d.content.axes, "Axes");
-                    ui.checkbox(&mut d.content.guides, "Guides");
-                    ui.checkbox(&mut d.content.dims, "Dimensions");
+                    ui.checkbox(&mut d.content.axes, tr!("dialog-export-axes"));
+                    ui.checkbox(&mut d.content.guides, tr!("dialog-export-guides"));
+                    ui.checkbox(&mut d.content.dims, tr!("dialog-export-dims"));
                 });
                 ui.label(
-                    RichText::new("The selection and tool previews are never exported.")
+                    RichText::new(tr!("dialog-export-note"))
                         .small()
                         .color(theme::text_dim()),
                 );
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(RichText::new("Export…").strong())).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(tr!("dialog-export")).strong())).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -261,7 +255,7 @@ impl VarstotasApp {
                 Some(true) => {
                     self.export_dialog = None;
                     if let Some(mut path) = rfd::FileDialog::new()
-                        .add_filter("PNG image", &["png"])
+                        .add_filter(tr!("dialog-filter-png"), &["png"])
                         .set_file_name(format!("{}.png", self.doc.display_name()))
                         .save_file()
                     {
@@ -281,14 +275,14 @@ impl VarstotasApp {
             let mut choice: Option<&str> = None;
             let resp = Modal::new(Id::new("export_drawing")).show(ctx, |ui| {
                 ui.set_width(340.0);
-                ui.heading("Export 2D Drawing");
+                ui.heading(tr!("dialog-drawing-title"));
                 ui.add_space(6.0);
-                ui.label(RichText::new("The current view as lines: SVG or PDF.").color(theme::text_dim()));
+                ui.label(RichText::new(tr!("dialog-drawing-intro")).color(theme::text_dim()));
                 ui.add_space(4.0);
                 ui.add_enabled_ui(ortho, |ui| {
                     ui.horizontal(|ui| {
                         let mut to_scale = o.scale.is_some() && ortho;
-                        if ui.checkbox(&mut to_scale, "To scale 1:").changed() {
+                        if ui.checkbox(&mut to_scale, tr!("dialog-drawing-scale")).changed() {
                             o.scale = to_scale.then_some(o.scale.unwrap_or(50.0));
                         }
                         let mut n = o.scale.unwrap_or(50.0);
@@ -299,26 +293,26 @@ impl VarstotasApp {
                 });
                 if !ortho {
                     ui.label(
-                        RichText::new("Perspective view: fitted to an A4 page. Camera → Parallel Projection for a scale.")
+                        RichText::new(tr!("dialog-drawing-perspective"))
                             .small()
                             .color(theme::text_dim()),
                     );
                 } else if o.scale.is_none() {
-                    ui.label(RichText::new("Fitted to an A4 page.").small().color(theme::text_dim()));
+                    ui.label(RichText::new(tr!("dialog-drawing-fitted")).small().color(theme::text_dim()));
                 }
-                ui.checkbox(&mut o.profiles, "Profiles (thick outlines)");
-                ui.checkbox(&mut o.hidden, "Hidden lines (dashed)");
-                ui.checkbox(&mut o.dims, "Dimensions and text");
-                ui.checkbox(&mut o.sections, "Section cut");
+                ui.checkbox(&mut o.profiles, tr!("dialog-drawing-profiles"));
+                ui.checkbox(&mut o.hidden, tr!("dialog-drawing-hidden"));
+                ui.checkbox(&mut o.dims, tr!("dialog-drawing-dims"));
+                ui.checkbox(&mut o.sections, tr!("dialog-drawing-sections"));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(RichText::new("PDF…").strong())).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(tr!("dialog-drawing-pdf")).strong())).clicked() {
                         choice = Some("pdf");
                     }
-                    if ui.add(egui::Button::new(RichText::new("SVG…").strong())).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(tr!("dialog-drawing-svg")).strong())).clicked() {
                         choice = Some("svg");
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some("");
                     }
                 });
@@ -358,7 +352,7 @@ impl VarstotasApp {
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("text3d")).show(ctx, |ui| {
                 ui.set_width(360.0);
-                ui.heading("Place 3D Text");
+                ui.heading(tr!("dialog-text3d-title"));
                 ui.add_space(6.0);
                 let te = ui.add(egui::TextEdit::multiline(&mut p.text).desired_rows(3).desired_width(f32::INFINITY));
                 if !te.has_focus() && ui.memory(|m| m.focused().is_none()) {
@@ -366,31 +360,31 @@ impl VarstotasApp {
                 }
                 ui.add_space(4.0);
                 egui::Grid::new("text3d_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-                    ui.label("Font");
+                    ui.label(tr!("dialog-text3d-font"));
                     egui::ComboBox::from_id_salt("text3d_font").selected_text(p.font.name()).show_ui(ui, |ui| {
                         for f in crate::text3d::Text3dFont::ALL {
                             ui.selectable_value(&mut p.font, f, f.name());
                         }
                     });
                     ui.end_row();
-                    ui.label("Height");
+                    ui.label(tr!("dialog-height"));
                     ui.add(len_drag(&mut p.height, unit));
                     ui.end_row();
-                    ui.checkbox(&mut p.filled, "Filled");
+                    ui.checkbox(&mut p.filled, tr!("dialog-text3d-filled"));
                     ui.label("");
                     ui.end_row();
-                    ui.add_enabled_ui(p.filled, |ui| ui.checkbox(&mut p.extruded, "Extruded"));
+                    ui.add_enabled_ui(p.filled, |ui| ui.checkbox(&mut p.extruded, tr!("dialog-text3d-extruded")));
                     ui.add_enabled_ui(p.filled && p.extruded, |ui| ui.add(len_drag(&mut p.depth, unit)));
                     ui.end_row();
                 });
-                ui.label(RichText::new(varstotas_i18n::platform_keys("Enter starts a new line, %CMD%+Enter places the text.")).small().color(theme::text_dim()));
+                ui.label(RichText::new(tr!("dialog-text3d-hint")).small().color(theme::text_dim()));
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
-                    if ui.add(egui::Button::new(RichText::new("Place").strong())).clicked() || enter {
+                    if ui.add(egui::Button::new(RichText::new(tr!("dialog-text3d-place")).strong())).clicked() || enter {
                         choice = Some(true);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -412,9 +406,9 @@ impl VarstotasApp {
             let mut picked: Option<Template> = None;
             let resp = Modal::new(Id::new("choose_template")).show(ctx, |ui| {
                 ui.set_width(380.0);
-                ui.heading("Choose a template");
+                ui.heading(tr!("dialog-template-title"));
                 ui.label(
-                    RichText::new("New models start with these units. You can change the default in Preferences.")
+                    RichText::new(tr!("dialog-template-intro"))
                         .color(theme::text_dim()),
                 );
                 ui.add_space(8.0);
@@ -444,18 +438,18 @@ impl VarstotasApp {
         if self.show_about {
             let resp = Modal::new(Id::new("about")).show(ctx, |ui| {
                 ui.set_width(320.0);
-                ui.heading("Varstotas");
-                ui.label("A light, native 3D modeler for drawing and building.");
-                ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
-                ui.label(RichText::new("Free software under the MIT licence.").color(theme::text_dim()));
+                ui.heading("Varstotas"); // i18n-ignore
+                ui.label(tr!("dialog-about-tagline"));
+                ui.label(RichText::new(tr!("dialog-about-version", version = env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
+                ui.label(RichText::new(tr!("dialog-about-licence")).color(theme::text_dim()));
                 ui.add_space(8.0);
                 let mut close = false;
                 ui.horizontal(|ui| {
-                    if ui.button("Licences…").clicked() {
+                    if ui.button(tr!("dialog-about-licences")).clicked() {
                         self.open_licences(crate::ui::licences::Tab::Varstotas);
                         close = true;
                     }
-                    close |= ui.button("Close").clicked();
+                    close |= ui.button(tr!("close")).clicked();
                 });
                 close
             });

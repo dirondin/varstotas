@@ -10,6 +10,7 @@ use glam::{DAffine3, DMat3, DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 use slotmap::SlotMap;
 use std::collections::{HashMap, HashSet};
+use varstotas_i18n::tr;
 
 /// `name` when not `taken`, else "<name> 2", "<name> 3", … (a trailing number of `name` is
 /// replaced).
@@ -163,6 +164,7 @@ impl Attribution {
         if !self.author.is_empty() {
             s += &format!(" by {}", self.author);
         }
+        // i18n-ignore-next
         let lic = if self.license.is_empty() { "licence unknown" } else { &self.license };
         s += &format!(" ({}, {lic})", self.source);
         if !self.url.is_empty() {
@@ -395,6 +397,7 @@ impl Model {
     /// Empty model: a root definition, no materials/tags, millimetres.
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
+        // i18n-ignore-next
         let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         Self {
             defs,
@@ -630,7 +633,7 @@ impl Model {
         let guides: Vec<GuideRef> = guides.iter().copied().filter(|g| self.has_guide_in(path, *g)).collect();
         let dims: Vec<DimId> = dims.iter().copied().filter(|d| self.defs[pd].mesh.dims.contains_key(*d)).collect();
         if ents.is_empty() && guides.is_empty() && dims.is_empty() {
-            return Err(OpError::Invalid("nothing selected".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-nothing-selected").into()));
         }
         let parent = &mut self.defs[pd].mesh;
         parent.ensure();
@@ -761,6 +764,7 @@ impl Model {
     /// Move `ents` from the mesh at `path` into a new group; returns the new instance.
     /// Edges still used by faces that stay in the parent are copied (they remain in both).
     pub fn make_group(&mut self, path: &[InstanceId], ents: &[EntityRef]) -> OpResult<InstanceId> {
+        // i18n-ignore-next
         self.new_def_from(path, ents, &[], &[], "Group", true)
     }
 
@@ -778,6 +782,7 @@ impl Model {
         guides: &[GuideRef],
         dims: &[DimId],
     ) -> OpResult<InstanceId> {
+        // i18n-ignore-next
         self.new_def_from(path, ents, guides, dims, "Group", true)
     }
 
@@ -932,7 +937,7 @@ impl Model {
         }
         let mut copy = self.defs[d].clone();
         if let Some(g) = copy.generated.as_mut() {
-            let new = self.fork_generator(&g.generator).ok_or(OpError::Invalid("the generator's script can't be copied".into()))?;
+            let new = self.fork_generator(&g.generator).ok_or(OpError::Invalid(tr!("kernel-err-the-generator-s-script-can-t").into()))?;
             g.generator = new.clone();
             copy.name = new;
             let nd = self.defs.insert(copy);

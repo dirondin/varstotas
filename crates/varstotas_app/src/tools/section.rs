@@ -3,6 +3,7 @@
 //! Click a face: a section plane is placed on it, facing into the model (its arrows point to
 //! the side that stays visible), and becomes the active cut.
 
+use varstotas_i18n::tr;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
 use crate::document::Document;
 use crate::overlay::Marker2d;
@@ -138,7 +139,7 @@ fn plane_under(ctx: &ToolContext) -> Option<SectionPlane> {
             n
         }
     };
-    let name = format!("Section {}", m.sections.len() + 1);
+    let name = format!("Section {}", m.sections.len() + 1); // i18n-ignore
     Some(SectionPlane::new(name, hit.point, -snap(n)))
 }
 
@@ -161,7 +162,7 @@ impl Tool for SectionTool {
             return;
         }
         let Some(s) = plane_under(ctx) else { return };
-        let r = ctx.commit("Section Plane", |m| {
+        let r = ctx.commit(&tr!("tool-undo-section-plane"), |m| {
             m.sections.push(s);
             let i = m.sections.len() - 1;
             m.set_active_section(Some(i));
@@ -184,7 +185,7 @@ impl Tool for SectionTool {
     }
 
     fn status_text(&self) -> String {
-        "Click a face to place a section plane. It cuts away the side behind its arrows.".into()
+        tr!("tool-section-status")
     }
 
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, _out2d: &mut Vec<Marker2d>) {

@@ -4,6 +4,7 @@ use super::IoError;
 use crate::Model;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use varstotas_i18n::tr;
 
 pub const FORMAT: &str = "varstotas";
 pub const VERSION: u32 = 1;
@@ -31,14 +32,14 @@ pub fn to_json(model: &Model) -> Result<String, IoError> {
 pub fn from_json(text: &str) -> Result<Model, IoError> {
     let f: FileIn = serde_json::from_str(text).map_err(|e| IoError::Format(e.to_string()))?;
     if f.format != FORMAT {
-        return Err(IoError::Format(format!("not a varstotas file (format = {:?})", f.format)));
+        return Err(IoError::Format(tr!("kernel-io-not-a-varstotas-file-format-format", format = format!("{:?}", f.format))));
     }
     if f.version > VERSION {
-        return Err(IoError::Format(format!("unsupported version {}", f.version)));
+        return Err(IoError::Format(tr!("kernel-io-unsupported-version-version", version = f.version.to_string())));
     }
     let mut m = f.model;
     if !m.defs.contains_key(m.root) {
-        return Err(IoError::Format("missing root definition".into()));
+        return Err(IoError::Format(tr!("kernel-io-missing-root-definition").into()));
     }
     m.rebuild_caches();
     Ok(m)
@@ -93,10 +94,10 @@ pub fn save_material(mat: &crate::Material, path: &Path) -> Result<(), IoError> 
 pub fn load_material(path: &Path) -> Result<crate::Material, IoError> {
     let f: MatIn = serde_json::from_str(&std::fs::read_to_string(path)?).map_err(|e| IoError::Format(e.to_string()))?;
     if f.format != MATERIAL_FORMAT {
-        return Err(IoError::Format(format!("not a varstotas material (format = {:?})", f.format)));
+        return Err(IoError::Format(tr!("kernel-io-not-a-varstotas-material-format-format", format = format!("{:?}", f.format))));
     }
     if f.version > VERSION {
-        return Err(IoError::Format(format!("unsupported version {}", f.version)));
+        return Err(IoError::Format(tr!("kernel-io-unsupported-version-version", version = f.version.to_string())));
     }
     Ok(f.material)
 }

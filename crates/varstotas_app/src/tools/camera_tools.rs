@@ -3,6 +3,7 @@
 //! The camera keeps a target in front of the eye (`LOOK_DIST` at least) so Orbit and Zoom keep
 //! working after these tools.
 
+use varstotas_i18n::tr;
 use super::{Tool, ToolContext, ToolId, ToolRequest};
 use crate::nav::dvec2;
 use crate::overlay::Marker2d;
@@ -120,14 +121,14 @@ impl Tool for PositionCameraTool {
             None => false,
         }
     }
-    fn vcb_label(&self) -> &str {
-        "Height Offset"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-height-offset")
     }
     fn vcb_value(&self) -> String {
         fmt_len(self.unit, self.height)
     }
     fn status_text(&self) -> String {
-        "Click to stand at a point, or drag from where to stand toward where to look. Type the eye height.".into()
+        tr!("tool-position-camera-status")
     }
     fn is_busy(&self) -> bool {
         self.down.is_some()
@@ -187,14 +188,14 @@ impl Tool for LookAroundTool {
             None => false,
         }
     }
-    fn vcb_label(&self) -> &str {
-        "Eye Height"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-eye-height")
     }
     fn vcb_value(&self) -> String {
         fmt_len(self.unit.unwrap_or(LengthUnit::Millimeter), self.eye_z)
     }
     fn status_text(&self) -> String {
-        "Drag to look around. Type an eye height and press Enter.".into()
+        tr!("tool-look-around-status")
     }
     fn cursor(&self) -> CursorIcon {
         if self.dragging { CursorIcon::Grabbing } else { CursorIcon::Grab }
@@ -300,14 +301,14 @@ impl Tool for WalkTool {
             None => false,
         }
     }
-    fn vcb_label(&self) -> &str {
-        "Eye Height"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-eye-height")
     }
     fn vcb_value(&self) -> String {
         fmt_len(self.unit.unwrap_or(LengthUnit::Millimeter), self.eye_z)
     }
     fn status_text(&self) -> String {
-        "Hold the button and move up/down to walk, left/right to turn (farther = faster). Shift = up/down and sideways, %CMD% = run. Arrow keys step.".into()
+        tr!("tool-walk-status")
     }
     fn overlay(&self, _view: &super::OverlayView, _out3d: &mut varstotas_render::Overlay3d, out2d: &mut Vec<Marker2d>) {
         // Where the button went down (speed zero) and a line to the cursor.

@@ -5,6 +5,7 @@
 //! the first two in selection order). Otherwise click the first solid, then the second; Outer
 //! Shell / Union keep adding the next clicked solid to the result.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
@@ -118,15 +119,13 @@ impl Tool for SolidTool {
     fn status_text(&self) -> String {
         let name = self.op.name();
         if let Some(Err(_)) = self.hover {
-            return format!("{name}: not a solid (every edge must bound exactly two faces, no nested groups).");
+            return tr!("tool-solid-not-solid", name = name);
         }
         match (self.first.is_some(), self.op) {
-            (false, _) => format!("{name}: click the first solid group or component."),
-            (true, SolidOp::Union | SolidOp::OuterShell) => format!("{name}: click the next solid to add it (Esc to start over)."),
-            (true, SolidOp::Subtract | SolidOp::Trim) => {
-                format!("{name}: click the solid to cut with the first one (Esc to start over).")
-            }
-            (true, _) => format!("{name}: click the second solid (Esc to start over)."),
+            (false, _) => tr!("tool-solid-first", name = name),
+            (true, SolidOp::Union | SolidOp::OuterShell) => tr!("tool-solid-next", name = name),
+            (true, SolidOp::Subtract | SolidOp::Trim) => tr!("tool-solid-cut", name = name),
+            (true, _) => tr!("tool-solid-second", name = name),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, _out2d: &mut Vec<Marker2d>) {

@@ -5,6 +5,7 @@
 //! anchor turns it corner ↔ smooth, `12s` sets the segments per span. Each change is one
 //! undo step ([`varstotas_kernel::Mesh::set_spline`]); the drag shows a preview until release.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
 use crate::inference::{self, Constraint, InferenceEngine, InferenceResult};
@@ -291,7 +292,7 @@ impl Tool for EditCurveTool {
             if let Some((i, t)) = self.on_curve(ctx, &sp) {
                 let mut sp = sp;
                 let k = split_span(&mut sp, i, t);
-                if self.commit(ctx, &sp, "Add Curve Point") {
+                if self.commit(ctx, &sp, &tr!("tool-undo-add-curve-point")) {
                     self.sel = Some(k);
                 }
                 return;
@@ -318,7 +319,7 @@ impl Tool for EditCurveTool {
         let Some(d) = self.drag.take() else { return };
         self.cur = None;
         if d.moved {
-            self.commit(ctx, &d.spline, "Edit Curve");
+            self.commit(ctx, &d.spline, &tr!("tool-undo-edit-curve"));
         }
     }
 
@@ -342,7 +343,7 @@ impl Tool for EditCurveTool {
         }
         self.drag = None;
         self.sel = Some(i);
-        self.commit(ctx, &sp, "Edit Curve");
+        self.commit(ctx, &sp, &tr!("tool-undo-edit-curve"));
     }
 
     fn on_key(&mut self, ctx: &mut ToolContext, key: Key, pressed: bool) -> bool {
@@ -366,10 +367,10 @@ impl Tool for EditCurveTool {
                     && i < sp.anchors.len()
                 {
                     if sp.anchors.len() <= Self::min_anchors(&sp) {
-                        ctx.doc.last_error = Some("Edit Curve: too few points to remove one".into());
+                        ctx.doc.last_error = Some(tr!("tool-curve-edit-too-few"));
                     } else {
                         sp.anchors.remove(i);
-                        if self.commit(ctx, &sp, "Remove Curve Point") {
+                        if self.commit(ctx, &sp, &tr!("tool-undo-remove-curve-point")) {
                             self.sel = None;
                         }
                     }
@@ -383,11 +384,11 @@ impl Tool for EditCurveTool {
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
         let (Some(n), Some(mut sp)) = (parse_segments(input), self.spline(ctx.doc)) else { return false };
         sp.segs = n;
-        self.commit(ctx, &sp, "Edit Segments")
+        self.commit(ctx, &sp, &tr!("tool-undo-edit-segments"))
     }
 
-    fn vcb_label(&self) -> &str {
-        "Segments"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-segments")
     }
 
     fn vcb_value(&self) -> String {
@@ -396,17 +397,15 @@ impl Tool for EditCurveTool {
 
     fn status_text(&self) -> String {
         if self.cid.is_none() {
-            return "Click a curve drawn with Bezier Curve, Smooth Curve or Freehand.".into();
+            return tr!("tool-curve-edit-pick");
         }
         if self.drag.is_some() {
-            return "Drag to reshape; release to apply, Esc cancels.".into();
+            return tr!("tool-curve-edit-drag");
         }
         if self.insert_at.is_some() {
-            return "Click to add a point here (the curve keeps its shape).".into();
+            return tr!("tool-curve-edit-insert");
         }
-        "Drag points and handles; click the curve to add a point, Delete removes the selected point; \
-         double-click a point: corner / smooth. Enter finishes."
-            .into()
+        tr!("tool-curve-edit-idle")
     }
 
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

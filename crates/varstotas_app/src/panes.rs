@@ -73,24 +73,32 @@ pub fn pane_rects(full: Rect, count: usize) -> Vec<Rect> {
 /// A viewport preset: its name and each pane's view and projection (`true` = parallel), in
 /// pane order (2: left, right; 4: rows top-left, top-right / bottom-left, bottom-right).
 pub struct Preset {
+    /// Key of the preset's name.
     pub name: &'static str,
     pub panes: &'static [(StandardView, bool)],
 }
 
+impl Preset {
+    /// The shown name.
+    pub fn name(&self) -> String {
+        varstotas_i18n::tr(self.name)
+    }
+}
+
 pub const PRESETS: &[Preset] = &[
-    Preset { name: "Front + Iso", panes: &[(StandardView::Front, true), (StandardView::Iso, false)] },
-    Preset { name: "Top + Iso", panes: &[(StandardView::Top, true), (StandardView::Iso, false)] },
-    Preset { name: "Front + Right", panes: &[(StandardView::Front, true), (StandardView::Right, true)] },
+    Preset { name: "view-preset-front-iso", panes: &[(StandardView::Front, true), (StandardView::Iso, false)] },
+    Preset { name: "view-preset-top-iso", panes: &[(StandardView::Top, true), (StandardView::Iso, false)] },
+    Preset { name: "view-preset-front-right", panes: &[(StandardView::Front, true), (StandardView::Right, true)] },
     Preset {
-        name: "Front, Left, Top + Iso",
+        name: "view-preset-front-left-top-iso",
         panes: &[(StandardView::Front, true), (StandardView::Left, true), (StandardView::Top, true), (StandardView::Iso, false)],
     },
     Preset {
-        name: "Top, Front, Right + Iso",
+        name: "view-preset-top-front-right-iso",
         panes: &[(StandardView::Top, true), (StandardView::Front, true), (StandardView::Right, true), (StandardView::Iso, false)],
     },
     Preset {
-        name: "Front, Back, Left, Right",
+        name: "view-preset-front-back-left-right",
         panes: &[(StandardView::Front, true), (StandardView::Back, true), (StandardView::Left, true), (StandardView::Right, true)],
     },
 ];

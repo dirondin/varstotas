@@ -21,8 +21,8 @@ impl Text3dFont {
 
     pub fn name(self) -> &'static str {
         match self {
-            Text3dFont::Sans => "Ubuntu Light",
-            Text3dFont::Mono => "Hack",
+            Text3dFont::Sans => "Ubuntu Light", // i18n-ignore
+            Text3dFont::Mono => "Hack", // i18n-ignore
         }
     }
 
@@ -51,7 +51,7 @@ pub struct Text3dParams {
 impl Default for Text3dParams {
     /// 10" high, extruded 2" (here 250 / 50 mm).
     fn default() -> Self {
-        Self { text: "Enter text".into(), font: Text3dFont::Sans, height: 250.0, filled: true, extruded: true, depth: 50.0 }
+        Self { text: "Enter text".into() /* i18n-ignore */, font: Text3dFont::Sans, height: 250.0, filled: true, extruded: true, depth: 50.0 }
     }
 }
 

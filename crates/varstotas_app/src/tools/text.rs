@@ -4,6 +4,7 @@
 //! clicked: a point's coordinates, an edge's length or a face's area. Clicking empty space
 //! places a text without a leader. Edit the text in Entity Info.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -100,7 +101,7 @@ impl TextTool {
 
     fn place(ctx: &mut ToolContext, at: DVec3, offset: DVec3, text: String) {
         let path = ctx.doc.active_path.clone();
-        if let Some(Some(id)) = ctx.doc.commit("Text", |m| m.add_text_note_in(&path, at, offset, text)) {
+        if let Some(Some(id)) = ctx.doc.commit(&tr!("tool-undo-text"), |m| m.add_text_note_in(&path, at, offset, text)) {
             ctx.doc.set_selection_full(Vec::new(), Vec::new(), vec![id]);
         }
     }
@@ -114,7 +115,7 @@ impl TextTool {
                     Some(text) if r.kind != InferenceKind::Free || r.face.is_some() => {
                         self.stage = Stage::Leader { at: r.point, text };
                     }
-                    _ => Self::place(ctx, r.point, DVec3::ZERO, "Text".into()),
+                    _ => Self::place(ctx, r.point, DVec3::ZERO, "Text".into()) // i18n-ignore,
                 }
             }
             Stage::Leader { at, text } => {
@@ -157,8 +158,8 @@ impl Tool for TextTool {
     }
     fn status_text(&self) -> String {
         match self.stage {
-            Stage::Idle => "Click a point, edge or face to attach a text, or empty space for a text without a leader.".into(),
-            Stage::Leader { .. } => "Move to place the text and click. Edit the text in Entity Info.".into(),
+            Stage::Idle => tr!("tool-text-first"),
+            Stage::Leader { .. } => tr!("tool-text-place"),
         }
     }
     fn overlay(&self, _view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

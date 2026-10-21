@@ -1,5 +1,6 @@
 //! `VarstotasApp`: window layout, actions, input routing, file handling.
 
+use varstotas_i18n::tr;
 use crate::document::{Document, guarded};
 use crate::nav::{self, CameraAnimation};
 use crate::overlay::Marker2d;
@@ -837,8 +838,8 @@ impl VarstotasApp {
                     if let Some(g) = self.doc.model.dimension_in(&path, id) {
                         self.text_prompt = Some(TextPrompt {
                             kind: PromptKind::DimText(path, id),
-                            title: "Edit Dimension Text".into(),
-                            hint: "Empty restores the measured length; `<>` stands for it.".into(),
+                            title: tr!("app-edit-dimension-text"),
+                            hint: tr!("app-dimension-text-hint"),
                             value: g.text.unwrap_or_else(|| "<>".into()),
                             focused: false,
                         });
@@ -877,12 +878,12 @@ impl VarstotasApp {
                     self.prefs.grid.step = v;
                     crate::inference::settings::publish_grid(&self.prefs.grid);
                     self.vcb_error = false;
-                    let msg = format!("Grid step {}", crate::tools::common::fmt_len(&self.doc.model, v));
+                    let msg = tr!("app-grid-step", step = crate::tools::common::fmt_len(&self.doc.model, v));
                     self.flash(msg);
                 }
                 None => {
                     self.vcb_error = true;
-                    self.flash_error(format!("Invalid grid step: {input}"));
+                    self.flash_error(tr!("app-invalid-grid-step", input = input.as_str()));
                 }
             }
             return;
@@ -892,7 +893,7 @@ impl VarstotasApp {
         let ok = self.with_tool(p.clone(), |t, ctx| t.on_vcb(ctx, &input));
         if !ok {
             self.vcb_error = true;
-            self.flash_error(format!("Invalid value: {input}"));
+            self.flash_error(tr!("app-invalid-value", input = input.as_str()));
         } else {
             self.vcb_error = false;
             self.flash = None;
@@ -1178,7 +1179,7 @@ impl VarstotasApp {
             PromptKind::DimText(path, id) => {
                 let (path, id) = (path.clone(), *id);
                 let text = Some(p.value.trim().to_string()).filter(|t| !t.is_empty() && t != "<>");
-                self.doc.commit("Edit Dimension Text", |m| m.set_dimension_text_in(&path, id, text));
+                self.doc.commit(&tr!("app-edit-dimension-text"), |m| m.set_dimension_text_in(&path, id, text));
                 true
             }
             PromptKind::MoveAxes => {
@@ -1202,7 +1203,7 @@ impl VarstotasApp {
                 let r = ang.to_radians();
                 let x = a.x * r.cos() + a.y * r.sin();
                 let y = a.y * r.cos() - a.x * r.sin();
-                if self.doc.try_commit("Move Axes", |m| m.set_drawing_frame(origin, x, y)).is_some() {
+                if self.doc.try_commit(&tr!("app-undo-move-axes"), |m| m.set_drawing_frame(origin, x, y)).is_some() {
                     crate::axes::sync(&self.doc.model);
                 }
                 true
@@ -1246,7 +1247,7 @@ impl VarstotasApp {
                 self.save_as();
             }
             Action::ImportTexture => {
-                if let Some(path) = rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg"]).pick_file() {
+                if let Some(path) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
                     self.add_texture_material(&path, 1000.0);
                 }
             }
@@ -1258,7 +1259,7 @@ impl VarstotasApp {
             Action::ImportAs(ext) => {
                 let label = match ext {
                     "dae" => "COLLADA",
-                    "csv" => "Points",
+                    "csv" => "Points", // i18n-ignore
                     e => &e.to_ascii_uppercase(),
                 };
                 self.import(&[ext], label)
@@ -1273,7 +1274,7 @@ impl VarstotasApp {
             Action::ExportReport => self.export("csv"),
             Action::ExportAttributions => {
                 if self.doc.model.attributions().is_empty() {
-                    self.flash("No downloaded components with credits in this model".to_string());
+                    self.flash(tr!("app-no-credits"));
                 } else {
                     self.export("txt");
                 }
@@ -1288,7 +1289,7 @@ impl VarstotasApp {
             }
             Action::ModelLibrary => self.models.open = !self.models.open,
             Action::PreviewFromFile => {
-                if let Some(f) = rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() {
+                if let Some(f) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() {
                     self.preview_from_file(&f);
                 }
             }
@@ -1306,12 +1307,12 @@ impl VarstotasApp {
             Action::OpenDemoHouse => self.guard_dirty(Pending::DemoHouse),
             Action::OpenDemoGallery => self.guard_dirty(Pending::DemoGallery),
             Action::Undo => match self.doc.undo() {
-                Some(l) => self.flash(format!("Undo {l}")),
-                None => self.flash("Nothing to undo"),
+                Some(l) => self.flash(tr!("app-flash-undo", name = l)),
+                None => self.flash(tr!("app-nothing-to-undo")),
             },
             Action::Redo => match self.doc.redo() {
-                Some(l) => self.flash(format!("Redo {l}")),
-                None => self.flash("Nothing to redo"),
+                Some(l) => self.flash(tr!("app-flash-redo", name = l)),
+                None => self.flash(tr!("app-nothing-to-redo")),
             },
             Action::SelectAll => {
                 self.doc.select_all();
@@ -1320,7 +1321,7 @@ impl VarstotasApp {
             Action::Delete => self.doc.erase_selection(),
             Action::MakeGroup | Action::MakeComponent => {
                 if !self.doc.has_selection() {
-                    self.flash("Select something to group first");
+                    self.flash(tr!("app-select-to-group"));
                     return;
                 }
                 let sel = self.doc.selection.clone();
@@ -1328,11 +1329,11 @@ impl VarstotasApp {
                 let dims = self.doc.dim_sel.clone();
                 let path = self.doc.active_path.clone();
                 let r = if action == Action::MakeGroup {
-                    self.doc.try_commit("Make Group", |m| m.make_group_with(&path, &sel, &guides, &dims))
+                    self.doc.try_commit(&tr!("app-undo-make-group"), |m| m.make_group_with(&path, &sel, &guides, &dims))
                 } else {
                     let n = self.doc.model.defs.len();
-                    self.doc.try_commit("Make Component", |m| {
-                        m.make_component_with(&path, &sel, &guides, &dims, &format!("Component#{n}"))
+                    self.doc.try_commit(&tr!("app-undo-make-component"), |m| {
+                        m.make_component_with(&path, &sel, &guides, &dims, &format!("Component#{n}") /* i18n-ignore */)
                     })
                 };
                 if let Some(id) = r {
@@ -1348,10 +1349,10 @@ impl VarstotasApp {
                     .filter_map(|e| if let EntityRef::Instance(i) = e { Some(*i) } else { None })
                     .collect();
                 if insts.is_empty() {
-                    self.flash("Select a group or component to explode");
+                    self.flash(tr!("app-select-to-explode"));
                     return;
                 }
-                let r = self.doc.try_commit("Explode", |m| {
+                let r = self.doc.try_commit(&tr!("app-undo-explode"), |m| {
                     let mut out = Vec::new();
                     for i in insts {
                         out.extend(m.explode(&path, i)?);
@@ -1368,7 +1369,7 @@ impl VarstotasApp {
                 if sel.is_empty() {
                     return;
                 }
-                self.doc.commit("Hide", |m| {
+                self.doc.commit(&tr!("app-undo-hide"), |m| {
                     if let Some(mesh) = m.mesh_at_mut(&path) {
                         for e in sel {
                             match e {
@@ -1395,7 +1396,7 @@ impl VarstotasApp {
                 self.doc.clear_selection();
             }
             Action::UnhideAll => {
-                self.doc.commit("Unhide All", |m| {
+                self.doc.commit(&tr!("app-undo-unhide-all"), |m| {
                     for (_, d) in m.defs.iter_mut() {
                         d.mesh.faces.values_mut().for_each(|f| f.hidden = false);
                         d.mesh.edges.values_mut().for_each(|e| e.hidden = false);
@@ -1409,7 +1410,7 @@ impl VarstotasApp {
             Action::SetTool(id) => {
                 self.set_tool(id);
                 if !id.implemented() {
-                    self.flash(format!("{} is not implemented yet", id.name()));
+                    self.flash(tr!("app-not-implemented", name = id.name()));
                 }
             }
             Action::View(v) => {
@@ -1462,12 +1463,12 @@ impl VarstotasApp {
                     self.doc.set_active_path(path.clone());
                 }
                 self.doc.selection.retain(|e| *e != EntityRef::Instance(id));
-                self.doc.commit("Delete", |m| m.remove_instance(&path, id));
+                self.doc.commit(&tr!("app-undo-delete"), |m| m.remove_instance(&path, id));
                 self.doc.selection_version += 1;
             }
             Action::MoveInstance(from, id, to) => {
                 if !self.doc.model.can_move_instance(&from, id, &to) {
-                    self.flash("Can't move a group or component into itself");
+                    self.flash(tr!("app-cant-move-into-itself"));
                     return;
                 }
                 let mut inner = from.clone();
@@ -1475,14 +1476,14 @@ impl VarstotasApp {
                 if self.doc.active_path.starts_with(&inner) {
                     self.doc.set_active_path(Vec::new());
                 }
-                let label = if to.is_empty() { "Move Out of Group" } else { "Move into Group" };
-                if let Some(Some(nid)) = self.doc.commit(label, |m| m.move_instance(&from, id, &to)) {
+                let label = tr!(if to.is_empty() { "app-undo-move-out-of-group" } else { "app-undo-move-into-group" });
+                if let Some(Some(nid)) = self.doc.commit(&label, |m| m.move_instance(&from, id, &to)) {
                     self.doc.set_active_path(to);
                     self.doc.set_selection(vec![EntityRef::Instance(nid)]);
                 }
             }
             Action::ToggleInstanceHidden(path, id) => {
-                self.doc.commit("Hide", |m| {
+                self.doc.commit(&tr!("app-undo-hide"), |m| {
                     if let Some(i) = m.mesh_at_mut(&path).and_then(|mesh| mesh.instances.get_mut(id)) {
                         i.hidden = !i.hidden;
                     }
@@ -1490,21 +1491,21 @@ impl VarstotasApp {
             }
             Action::AddScene => {
                 let n = self.doc.model.scenes.len() + 1;
-                let scene = self.scene_from_camera(format!("Scene {n}"));
-                self.doc.commit("Add Scene", |m| m.scenes.push(scene));
+                let scene = self.scene_from_camera(format!("Scene {n}")); // i18n-ignore
+                self.doc.commit(&tr!("app-undo-add-scene"), |m| m.scenes.push(scene));
                 self.tray.selected_scene = Some(self.doc.model.scenes.len().saturating_sub(1));
             }
             Action::UpdateScene(i) => {
                 let name = self.doc.model.scenes.get(i).map(|s| s.name.clone()).unwrap_or_default();
                 let scene = self.scene_from_camera(name);
-                self.doc.commit("Update Scene", |m| {
+                self.doc.commit(&tr!("app-undo-update-scene"), |m| {
                     if let Some(s) = m.scenes.get_mut(i) {
                         *s = scene;
                     }
                 });
             }
             Action::DeleteScene(i) => {
-                self.doc.commit("Delete Scene", |m| {
+                self.doc.commit(&tr!("app-undo-delete-scene"), |m| {
                     if i < m.scenes.len() {
                         m.scenes.remove(i);
                     }
@@ -1518,7 +1519,7 @@ impl VarstotasApp {
             Action::MoveScene(i, right) => {
                 let j = if right { i + 1 } else { i.wrapping_sub(1) };
                 if i < self.doc.model.scenes.len() && j < self.doc.model.scenes.len() {
-                    self.doc.commit("Move Scene", |m| m.scenes.swap(i, j));
+                    self.doc.commit(&tr!("app-undo-move-scene"), |m| m.scenes.swap(i, j));
                     self.tray.selected_scene = Some(j);
                 }
             }
@@ -1540,13 +1541,13 @@ impl VarstotasApp {
             }
             Action::Cut => {
                 if self.copy(ctx) {
-                    self.doc.erase_selection_labeled("Cut");
+                    self.doc.erase_selection_labeled(&tr!("app-undo-cut"));
                 }
             }
             Action::Paste | Action::PasteInPlace => self.paste(action == Action::PasteInPlace),
             Action::DeleteGuides => {
                 if !self.doc.delete_all_guides() {
-                    self.flash("There are no guides");
+                    self.flash(tr!("app-no-guides"));
                 }
             }
             Action::SetPanes(n) => self.set_pane_count(n),
@@ -1555,7 +1556,7 @@ impl VarstotasApp {
                 self.prefs.snapping.enabled = !self.prefs.snapping.enabled;
                 crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);
-                self.flash(if self.prefs.snapping.enabled { "Snapping on" } else { "Snapping off" });
+                self.flash(tr!(if self.prefs.snapping.enabled { "app-snapping-on" } else { "app-snapping-off" }));
             }
             Action::ToggleSnap(k) => {
                 let on = !self.prefs.snapping.is_on(k);
@@ -1591,10 +1592,10 @@ impl VarstotasApp {
             Action::MakeUnique => {
                 let path = self.doc.active_path.clone();
                 let [EntityRef::Instance(id)] = self.doc.selection.as_slice() else {
-                    return self.flash("Select one component");
+                    return self.flash(tr!("app-select-one-component"));
                 };
                 let id = *id;
-                if self.doc.try_commit("Make Unique", |m| m.make_unique(&path, id)).is_none()
+                if self.doc.try_commit(&tr!("app-undo-make-unique"), |m| m.make_unique(&path, id)).is_none()
                     && let Some(e) = self.doc.last_error.clone()
                 {
                     self.flash_error(e);
@@ -1603,30 +1604,30 @@ impl VarstotasApp {
             Action::SaveToLibrary(name) => self.save_to_library(&name),
             Action::ShowComponents => {
                 self.prefs.tray_open = true;
-                self.prefs.tray_hidden.retain(|c| c != "Components");
+                self.prefs.tray_hidden.retain(|c| c != "Components") /* i18n-ignore */;
                 self.library.open_card = true;
             }
             Action::PluginImport(i) => self.plugin_file(i, false),
             Action::PluginExport(i) => self.plugin_file(i, true),
             Action::ReloadPlugins => {
                 self.load_plugins();
-                self.flash(format!("{} plugins loaded", self.plugins.list.len()));
+                self.flash(tr!("app-plugins-loaded", count = self.plugins.list.len()));
             }
             Action::RunScript => {
-                if let Some(p) = rfd::FileDialog::new().add_filter("Script", &["rhai", "py"]).pick_file() {
+                if let Some(p) = rfd::FileDialog::new().add_filter(tr!("app-filter-script"), &["rhai", "py"]).pick_file() {
                     self.run_script_file(&p);
                 }
             }
             Action::MakeParametric | Action::SetParams(_) => {
                 let path = self.doc.active_path.clone();
                 let [EntityRef::Instance(id)] = self.doc.selection.as_slice() else {
-                    self.flash("Select one group or component");
+                    self.flash(tr!("app-select-one-group-or-component"));
                     return;
                 };
                 let id = *id;
                 let r = match action {
-                    Action::SetParams(p) => self.doc.try_commit("Component Parameters", |m| m.set_instance_params(&path, id, p)),
-                    _ => self.doc.try_commit("Make Parametric", |m| m.make_parametric(&path, id).map(|_| ())),
+                    Action::SetParams(p) => self.doc.try_commit(&tr!("app-undo-component-parameters"), |m| m.set_instance_params(&path, id, p)),
+                    _ => self.doc.try_commit(&tr!("app-undo-make-parametric"), |m| m.make_parametric(&path, id).map(|_| ())),
                 };
                 if r.is_none()
                     && let Some(e) = self.doc.last_error.clone()
@@ -1652,7 +1653,7 @@ impl VarstotasApp {
                 }
             }
             Action::PickPbrMap(mid, map) => {
-                if let Some(path) = rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg"]).pick_file() {
+                if let Some(path) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
                     self.load_pbr_map(mid, map, &path);
                 }
             }
@@ -1670,7 +1671,7 @@ impl VarstotasApp {
             Action::ActiveCut => {
                 if let Some(i) = self.doc.section_sel {
                     let on = self.doc.model.sections.get(i).is_some_and(|s| s.active);
-                    self.doc.commit("Active Cut", |m| {
+                    self.doc.commit(&tr!("app-undo-active-cut"), |m| {
                         m.set_active_section((!on).then_some(i));
                         m.section_display.cuts = true;
                     });
@@ -1678,7 +1679,7 @@ impl VarstotasApp {
             }
             Action::ReverseSection => {
                 if let Some(i) = self.doc.section_sel {
-                    self.doc.commit("Reverse Section", |m| {
+                    self.doc.commit(&tr!("app-undo-reverse-section"), |m| {
                         if let Some(s) = m.sections.get_mut(i) {
                             *s = s.reversed();
                         }
@@ -1689,7 +1690,7 @@ impl VarstotasApp {
                 let edges = self.soften_targets();
                 if !edges.is_empty() {
                     let p = self.doc.active_path.clone();
-                    self.doc.commit("Soften Edges", |m| {
+                    self.doc.commit(&tr!("app-undo-soften-edges"), |m| {
                         m.mesh_at_mut(&p).map(|mesh| mesh.soften_by_angle(&edges, st.angle, st.smooth, st.coplanar))
                     });
                 }
@@ -1729,56 +1730,52 @@ impl VarstotasApp {
             Action::ReverseFaces => {
                 let faces = self.selected_faces();
                 if faces.is_empty() {
-                    self.flash("Select faces to reverse");
+                    self.flash(tr!("app-select-faces-to-reverse"));
                     return;
                 }
                 let path = self.doc.active_path.clone();
-                self.doc.commit("Reverse Faces", |m| m.mesh_at_mut(&path).map(|mesh| mesh.reverse_faces(&faces)));
+                self.doc.commit(&tr!("app-undo-reverse-faces"), |m| m.mesh_at_mut(&path).map(|mesh| mesh.reverse_faces(&faces)));
             }
             Action::OrientFaces => {
                 let Some(f) = self.selected_faces().first().copied() else {
-                    self.flash("Select a face to orient its neighbours like it");
+                    self.flash(tr!("app-select-face-to-orient"));
                     return;
                 };
                 let path = self.doc.active_path.clone();
                 let n = self
                     .doc
-                    .commit("Orient Faces", |m| m.mesh_at_mut(&path).map(|mesh| mesh.orient_faces_like(f)).unwrap_or(0));
+                    .commit(&tr!("app-undo-orient-faces"), |m| m.mesh_at_mut(&path).map(|mesh| mesh.orient_faces_like(f)).unwrap_or(0));
                 if let Some(n) = n {
-                    self.flash(match n {
-                        0 => "All connected faces already agree".to_string(),
-                        1 => "1 face reversed".to_string(),
-                        n => format!("{n} faces reversed"),
-                    });
+                    self.flash(if n == 0 { tr!("app-faces-agree") } else { tr!("app-faces-reversed", count = n) });
                 }
             }
             Action::PlaceAxes => self.set_tool(ToolId::Axes),
             Action::MoveAxes => {
                 self.text_prompt = Some(TextPrompt {
                     kind: PromptKind::MoveAxes,
-                    title: "Move Axes".into(),
-                    hint: "Offset along red, green, blue and an optional rotation about blue: `dx, dy, dz[, angle]`.".into(),
+                    title: tr!("app-undo-move-axes"),
+                    hint: tr!("app-move-axes-hint"),
                     value: "0, 0, 0".into(),
                     focused: false,
                 });
             }
             Action::ResetAxes => {
                 if self.doc.model.axes.is_some() {
-                    self.doc.commit("Reset Axes", |m| m.reset_axes());
+                    self.doc.commit(&tr!("app-undo-reset-axes"), |m| m.reset_axes());
                     crate::axes::sync(&self.doc.model);
                 }
             }
             Action::FlipAlong(axis) => {
                 let sel: Vec<EntityRef> = self.doc.selection.clone();
                 if sel.is_empty() {
-                    self.flash("Select something to flip");
+                    self.flash(tr!("app-select-to-flip"));
                     return;
                 }
                 let path = self.doc.active_path.clone();
                 // Drawing axes at the top level; inside a group its own (local) axes.
                 let a = if path.is_empty() { crate::axes::current().dir(axis) } else { [DVec3::X, DVec3::Y, DVec3::Z][axis.min(2)] };
-                let label = ["Flip Along Red", "Flip Along Green", "Flip Along Blue"][axis.min(2)];
-                self.doc.try_commit(label, |m| m.flip_along(&path, &sel, a));
+                let label = tr!(["app-undo-flip-red", "app-undo-flip-green", "app-undo-flip-blue"][axis.min(2)]);
+                self.doc.try_commit(&label, |m| m.flip_along(&path, &sel, a));
                 self.doc.prune_selection();
             }
         }
@@ -1792,31 +1789,27 @@ impl VarstotasApp {
         let sel = self.doc.selection.clone();
         let usable = sel.iter().any(|e| matches!(e, EntityRef::Face(_) | EntityRef::Instance(_)));
         if !usable {
-            self.flash("Select faces, groups or components to intersect");
+            self.flash(tr!("app-select-to-intersect"));
             return;
         }
         let path = self.doc.active_path.clone();
         let label = match scope {
-            IntersectScope::Model => "Intersect With Model",
-            IntersectScope::Selection => "Intersect With Selection",
-            IntersectScope::Context => "Intersect With Context",
+            IntersectScope::Model => tr!("app-undo-intersect-model"),
+            IntersectScope::Selection => tr!("app-undo-intersect-selection"),
+            IntersectScope::Context => tr!("app-undo-intersect-context"),
         };
         // Nothing created → no (empty) undo step.
-        let r = self.doc.try_commit_if(label, |m| m.intersect_faces(&path, &sel, scope), |e| !e.is_empty());
+        let r = self.doc.try_commit_if(&label, |m| m.intersect_faces(&path, &sel, scope), |e| !e.is_empty());
         if let Some(edges) = r {
             self.doc.prune_selection();
-            self.flash(match edges.len() {
-                0 => "No intersections found".to_string(),
-                1 => "1 intersection edge created".to_string(),
-                n => format!("{n} intersection edges created"),
-            });
+            self.flash(if edges.is_empty() { tr!("app-no-intersections") } else { tr!("app-intersections-created", count = edges.len()) });
         }
     }
 
     /// Edit → Copy: returns true when something was copied.
     fn copy(&mut self, ctx: &egui::Context) -> bool {
         if !self.doc.has_selection() {
-            self.flash("Nothing selected to copy");
+            self.flash(tr!("app-nothing-to-copy"));
             return false;
         }
         match guarded(|| crate::clipboard::Clipboard::from_selection(&self.doc)) {
@@ -1826,16 +1819,16 @@ impl VarstotasApp {
                 // The OS clipboard gets a text marker (other apps then don't paste stale text
                 // instead; Cmd+V only produces a paste event when the clipboard has text).
                 if !self.debug.script_active() {
-                    ctx.copy_text(format!("Varstotas: {n} entities"));
+                    ctx.copy_text(format!("Varstotas: {n} entities")); // i18n-ignore
                 }
                 true
             }
             Ok(Err(e)) => {
-                self.flash_error(format!("Copy failed: {e}"));
+                self.flash_error(tr!("app-copy-failed", error = e.to_string()));
                 false
             }
             Err(e) => {
-                self.flash_error(format!("Copy failed: {e}"));
+                self.flash_error(tr!("app-copy-failed", error = e.to_string()));
                 false
             }
         }
@@ -1844,7 +1837,7 @@ impl VarstotasApp {
     /// Start placing 3D text: it follows the cursor until a click (shown as the Move tool).
     pub(crate) fn place_text3d(&mut self, p: crate::text3d::Text3dParams) {
         if crate::text3d::outlines(&p).is_empty() {
-            self.flash_error("The text has no visible characters");
+            self.flash_error(tr!("app-text-no-characters"));
             return;
         }
         self.text3d_last = p.clone();
@@ -1873,7 +1866,7 @@ impl VarstotasApp {
 
     fn paste(&mut self, in_place: bool) {
         let Some(clip) = self.clipboard.clone() else {
-            self.flash("The clipboard is empty");
+            self.flash(tr!("app-clipboard-empty"));
             return;
         };
         if in_place {
@@ -1899,7 +1892,7 @@ impl VarstotasApp {
         if crate::tools::construct::resize_active(&mut self.doc, factor) {
             // The Tape's measurement is stale after resizing.
             self.set_tool(self.tool_id());
-            self.flash(format!("Resized ×{factor:.4}"));
+            self.flash(tr!("app-resized", factor = format!("{factor:.4}")));
         }
     }
 
@@ -1959,15 +1952,15 @@ impl VarstotasApp {
                             self.actions.push(a);
                         }
                     };
-                    item(ui, "Update", true, Action::UpdateScene(i));
-                    item(ui, "Add", true, Action::AddScene);
-                    item(ui, "Delete", true, Action::DeleteScene(i));
+                    item(ui, &tr!("app-scene-update"), true, Action::UpdateScene(i));
+                    item(ui, &tr!("app-scene-add"), true, Action::AddScene);
+                    item(ui, &tr!("app-scene-delete"), true, Action::DeleteScene(i));
                     ui.separator();
-                    item(ui, "Move Left", i > 0, Action::MoveScene(i, false));
-                    item(ui, "Move Right", i + 1 < n, Action::MoveScene(i, true));
+                    item(ui, &tr!("app-scene-move-left"), i > 0, Action::MoveScene(i, false));
+                    item(ui, &tr!("app-scene-move-right"), i + 1 < n, Action::MoveScene(i, true));
                     ui.separator();
-                    let play = if self.scene_player.is_some() { "Pause Animation" } else { "Play Animation" };
-                    item(ui, play, true, Action::ToggleAnimation);
+                    let play = tr!(if self.scene_player.is_some() { "app-pause-animation" } else { "app-play-animation" });
+                    item(ui, &play, true, Action::ToggleAnimation);
                 });
             }
         });
@@ -1979,7 +1972,7 @@ impl VarstotasApp {
         let (tex, decoded) = match crate::textures::load_file(path, width_mm) {
             Ok(t) => t,
             Err(e) => {
-                self.flash_error(format!("Can't use {}: {e}", path.display()));
+                self.flash_error(tr!("app-cant-use", path = path.display().to_string(), error = e.to_string()));
                 return;
             }
         };
@@ -1997,7 +1990,7 @@ impl VarstotasApp {
             pbr: None,
         };
         let p2 = pm.clone();
-        self.doc.commit("Add Material", |m| {
+        self.doc.commit(&tr!("app-undo-add-material"), |m| {
             p2.ensure_in(m);
         });
         self.doc.current_material = Some(pm);
@@ -2117,7 +2110,7 @@ impl VarstotasApp {
                 self.go_to_scene(i);
                 self.scene_player = Some(ScenePlayer { wait: self.doc.model.scene_settings.delay_secs });
             }
-            None => self.flash("No scenes to play. Add scenes in the Scenes panel."),
+            None => self.flash(tr!("app-no-scenes")),
         }
     }
 
@@ -2158,7 +2151,7 @@ impl VarstotasApp {
             Pending::NewFrom(t) => self.new_from_template(t),
             Pending::Open => {
                 if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Varstotas model", &["vrst"])
+                    .add_filter(tr!("app-filter-model"), &["vrst"])
                     .pick_file()
                 {
                     self.open_path(&path);
@@ -2168,12 +2161,12 @@ impl VarstotasApp {
             Pending::DemoHouse => {
                 self.replace_document(Document::from_model(crate::demo::country_house(), None));
                 self.go_to_scene(0);
-                self.flash("Demo: Country House — see the Scenes card and Window → Render…");
+                self.flash(tr!("app-demo-house"));
             }
             Pending::DemoGallery => {
                 self.replace_document(Document::from_model(crate::demo::material_gallery(), None));
                 self.go_to_scene(0);
-                self.flash("Demo: Material Gallery — see the Scenes card and Window → Render…");
+                self.flash(tr!("app-demo-gallery"));
             }
             Pending::Quit => {
                 self.allow_close = true;
@@ -2224,7 +2217,7 @@ impl VarstotasApp {
             Ok(Ok(model)) => {
                 self.replace_document(Document::from_model(model, Some(path.to_path_buf())));
                 self.add_recent(path);
-                self.flash(format!("Opened {}", path.display()));
+                self.flash(tr!("app-opened", path = path.display().to_string()));
                 if self.autosave.allowed
                     && let Some(r) = crate::autosave::find_recovery(Some(path), None)
                     && !self.autosave.recoveries.iter().any(|x| x.autosave == r.autosave)
@@ -2232,8 +2225,8 @@ impl VarstotasApp {
                     self.autosave.recoveries.insert(0, r);
                 }
             }
-            Ok(Err(e)) => self.flash(format!("Could not open {}: {e}", path.display())),
-            Err(e) => self.flash(format!("Could not open {}: {e}", path.display())),
+            Ok(Err(e)) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
         }
     }
 
@@ -2253,7 +2246,7 @@ impl VarstotasApp {
 
     fn save_as(&mut self) -> bool {
         let Some(mut path) = rfd::FileDialog::new()
-            .add_filter("Varstotas model", &["vrst"])
+            .add_filter(tr!("app-filter-model"), &["vrst"])
             .set_file_name(format!("{}.vrst", self.doc.display_name()))
             .save_file()
         else {
@@ -2282,15 +2275,15 @@ impl VarstotasApp {
                 self.autosave.version = self.doc.model_version;
                 self.autosave.last = self.now;
                 self.add_recent(path);
-                self.flash(format!("Saved {}", path.display()));
+                self.flash(tr!("app-saved", path = path.display().to_string()));
                 true
             }
             Ok(Err(e)) => {
-                self.flash(format!("Save failed: {e}"));
+                self.flash(tr!("app-save-failed", error = e.to_string()));
                 false
             }
             Err(e) => {
-                self.flash(format!("Save failed: {e}"));
+                self.flash(tr!("app-save-failed", error = e.to_string()));
                 false
             }
         }
@@ -2325,7 +2318,7 @@ impl VarstotasApp {
             "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
             "txt" => {
                 let lines: Vec<String> = model.attributions().iter().map(|a| a.line()).collect();
-                std::fs::write(path, format!("Credits of the 3D models in {}\n\n{}\n", self.doc.display_name(), lines.join("\n"))).map_err(Into::into)
+                std::fs::write(path, format!("Credits of the 3D models in {}\n\n{}\n", self.doc.display_name(), lines.join("\n"))).map_err(Into::into) // i18n-ignore
             }
             "svg" | "pdf" => {
                 let vp = self.viewport.size();
@@ -2338,11 +2331,11 @@ impl VarstotasApp {
         });
         match r {
             Ok(Ok(())) => match crate::downloads::licence_warning(&self.doc.model.attributions()) {
-                Some(w) if ext != "txt" => self.flash_error(format!("Exported {}. {w}", path.display())),
-                _ => self.flash(format!("Exported {}", path.display())),
+                Some(w) if ext != "txt" => self.flash_error(tr!("app-exported-warning", path = path.display().to_string(), warning = w.to_string())),
+                _ => self.flash(tr!("app-exported", path = path.display().to_string())),
             },
-            Ok(Err(e)) => self.flash(format!("Export failed: {e}")),
-            Err(e) => self.flash(format!("Export failed: {e}")),
+            Ok(Err(e)) => self.flash(tr!("app-export-failed", error = e.to_string())),
+            Err(e) => self.flash(tr!("app-export-failed", error = e.to_string())),
         }
     }
 
@@ -2356,7 +2349,7 @@ impl VarstotasApp {
     /// Import `path` (format by extension) as one undo step "Import <label>".
     pub(crate) fn import_from(&mut self, path: &std::path::Path, label: &str) {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-        let r = self.doc.try_commit(&format!("Import {label}"), |m| match ext.as_str() {
+        let r = self.doc.try_commit(&tr!("app-undo-import", format = label), |m| match ext.as_str() {
             "obj" => io::import_obj(m, path),
             "dxf" => io::import_dxf(m, path),
             "glb" | "gltf" => io::import_gltf(m, path),
@@ -2368,7 +2361,7 @@ impl VarstotasApp {
             _ => io::import_stl(m, path),
         });
         if r.is_some() {
-            self.flash(format!("Imported {}", path.display()));
+            self.flash(tr!("app-imported", path = path.display().to_string()));
             self.actions.push(Action::ZoomExtents);
         } else if let Some(e) = self.doc.last_error.clone() {
             self.flash_error(e);
@@ -2388,9 +2381,9 @@ impl VarstotasApp {
                 let _ = mesh.push_pull(f, if up { h } else { -h }, false);
             }
         }
-        let r = self.doc.commit("Insert Demo Geometry", |m: &mut Model| {
-            let brick = m.add_material("Brick", [0.70, 0.33, 0.24, 1.0]);
-            let wood = m.add_material("Wood", [0.78, 0.60, 0.40, 1.0]);
+        let r = self.doc.commit(&tr!("app-undo-insert-demo"), |m: &mut Model| {
+            let brick = m.add_material("Brick", [0.70, 0.33, 0.24, 1.0]); // i18n-ignore
+            let wood = m.add_material("Wood", [0.78, 0.60, 0.40, 1.0]); // i18n-ignore
             let mesh = m.root_mesh_mut();
             make_box(mesh, 0.0, 0.0, 3000.0, 2000.0, 2400.0);
             make_box(mesh, 4000.0, 0.0, 1000.0, 1000.0, 3200.0);
@@ -2400,7 +2393,7 @@ impl VarstotasApp {
             let new: Vec<EntityRef> = all_refs(m.root_mesh()).difference(&before).copied().collect();
             if let Ok(g) = m.make_group(&[], &new)
                 && let Some(i) = m.root_mesh_mut().instances.get_mut(g) {
-                    i.name = "Table".into();
+                    i.name = "Table".into(); // i18n-ignore
                     i.material = Some(wood);
                 }
             // Paint the tall box's faces.
@@ -2446,7 +2439,7 @@ impl VarstotasApp {
     fn autosave_tick(&mut self, ctx: &egui::Context) {
         for r in self.autosave.worker.poll() {
             if let Err(e) = r.result {
-                self.flash_error(format!("Autosave to {} failed: {e}", r.path.display()));
+                self.flash_error(tr!("app-autosave-failed", path = r.path.display().to_string(), error = e.to_string()));
             }
         }
         if !self.autosave.allowed || !self.prefs.autosave {
@@ -2491,10 +2484,10 @@ impl VarstotasApp {
                     // Keep the autosave until the recovered model is saved (or discarded).
                     self.autosave.written = Some(r.autosave.clone());
                     self.autosave.version = 0;
-                    self.flash(format!("Recovered {} from autosave", r.display_name()));
+                    self.flash(tr!("app-recovered", name = r.display_name()));
                 }
-                Ok(Err(e)) => self.flash_error(format!("Could not recover {}: {e}", r.display_name())),
-                Err(e) => self.flash_error(format!("Could not recover {}: {e}", r.display_name())),
+                Ok(Err(e)) => self.flash_error(tr!("app-could-not-recover", name = r.display_name(), error = e.to_string())),
+                Err(e) => self.flash_error(tr!("app-could-not-recover", name = r.display_name(), error = e.to_string())),
             },
             Some(false) => self.autosave.worker.delete(r.autosave),
             None => {}
@@ -2502,7 +2495,7 @@ impl VarstotasApp {
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
-        let title = format!("{}{} — Varstotas", self.doc.display_name(), if self.doc.dirty { "*" } else { "" });
+        let title = format!("{}{} — Varstotas", self.doc.display_name(), if self.doc.dirty { "*" } else { "" }); // i18n-ignore
         if title != self.last_title {
             ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
             self.last_title = title;
@@ -2808,13 +2801,13 @@ impl eframe::App for VarstotasApp {
             Some(Ok(p)) => {
                 log::info!("exported {}", p.display());
                 match crate::downloads::licence_warning(&self.doc.model.attributions()) {
-                    Some(w) => self.flash_error(format!("Exported {}. {w}", p.display())),
-                    None => self.flash(format!("Exported {}", p.display())),
+                    Some(w) => self.flash_error(tr!("app-exported-warning", path = p.display().to_string(), warning = w.to_string())),
+                    None => self.flash(tr!("app-exported", path = p.display().to_string())),
                 }
             }
             Some(Err(e)) => {
                 log::warn!("PNG export failed: {e}");
-                self.flash_error(format!("Export failed: {e}"));
+                self.flash_error(tr!("app-export-failed", error = e.to_string()));
             }
             None => {}
         }

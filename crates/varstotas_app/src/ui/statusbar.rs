@@ -4,6 +4,7 @@ use super::icons::{Icon, paint_icon};
 use super::theme;
 use crate::app::VarstotasApp;
 use egui::{Align, Color32, FontId, Layout, RichText, Sense, Stroke, Ui, vec2};
+use varstotas_i18n::tr;
 
 impl VarstotasApp {
     pub(crate) fn status_bar(&mut self, ui: &mut Ui) {
@@ -12,7 +13,7 @@ impl VarstotasApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 self.vcb_box(ui);
                 ui.add_space(6.0);
-                let label = if self.grid_vcb() { "Grid Step" } else { self.tool.vcb_label() };
+                let label: String = if self.grid_vcb() { tr!("status-grid-step") } else { self.tool.vcb_label() };
                 ui.label(RichText::new(label).color(theme::text_dim()));
                 ui.add_space(12.0);
                 self.log_badge(ui);
@@ -76,6 +77,6 @@ impl VarstotasApp {
             }
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
         }
-        resp.on_hover_text("Measurements: just type a value and press Enter (e.g. 2500, 2.5m, 300,200, 24s)");
+        resp.on_hover_text(tr!("status-measurements-tip"));
     }
 }

@@ -1,6 +1,7 @@
 //! Minimal Select tool: click / double / triple click, window & crossing selection,
 //! modifier semantics, entering/leaving group contexts.
 
+use varstotas_i18n::tr;
 use super::{OverlayView, Tool, ToolContext, ToolId};
 use super::common::DimPart;
 use crate::document::guarded;
@@ -43,11 +44,9 @@ pub fn sel_op(m: &egui::Modifiers) -> SelOp {
 }
 
 /// Modifier help for the status bar / Instructor (platform wording).
-pub const SEL_MODS_HELP: &str = if cfg!(target_os = "macos") {
-    "Option (or Cmd) = add, Shift = toggle, Shift+Option = remove"
-} else {
-    "Ctrl = add, Shift = toggle, Ctrl+Shift = remove"
-};
+pub fn sel_mods_help() -> String {
+    tr!("tool-select-mods")
+}
 
 /// What was clicked, relative to some context.
 struct Picked {
@@ -551,7 +550,7 @@ impl Tool for SelectTool {
             // One undo step from the light as it was before the drag.
             let Some(now) = ctx.doc.model.lights.get_mut(i).map(|l| std::mem::replace(l, orig.clone())) else { return };
             if now != orig {
-                ctx.commit("Aim Light", |m| m.lights[i] = now);
+                ctx.commit(&tr!("tool-undo-aim-light"), |m| m.lights[i] = now);
             }
             return;
         }
@@ -568,7 +567,7 @@ impl Tool for SelectTool {
             // Double-click a section plane: toggle its cut.
             if ctx.pointer.click_count == 2 {
                 let on = ctx.doc.model.sections.get(i).is_some_and(|s| s.active);
-                ctx.commit("Active Cut", |m| m.set_active_section((!on).then_some(i)));
+                ctx.commit(&tr!("tool-undo-active-cut"), |m| m.set_active_section((!on).then_some(i)));
                 ctx.doc.select_section(i);
             }
             return;
@@ -647,11 +646,11 @@ impl Tool for SelectTool {
 
     fn status_text(&self) -> String {
         if self.aim.is_some() {
-            "Aim the light: drop the handle on what it should shine at. Esc = cancel.".into()
+            tr!("tool-select-aim")
         } else if self.box_end.is_some() {
-            format!("Drag left→right for window selection, right→left for crossing selection. {SEL_MODS_HELP}.")
+            tr!("tool-select-box", mods = sel_mods_help())
         } else {
-            format!("Select objects. {SEL_MODS_HELP}. Drag to select multiple. Double-click a group to edit it.")
+            tr!("tool-select-idle", mods = sel_mods_help())
         }
     }
 

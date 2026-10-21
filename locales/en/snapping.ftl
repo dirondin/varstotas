@@ -41,3 +41,11 @@ inference-half-circle = Half Circle
 inference-tangent = Tangent at Vertex
 inference-grid-point = Grid Point
 inference-on-grid-line = On Grid Line
+
+## Snapping menu groups
+
+snap-group-points = Points
+snap-group-on-objects = On Objects
+snap-group-directions = Directions
+snap-group-shapes = Shapes
+snap-group-grid = Grid

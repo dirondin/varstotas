@@ -19,9 +19,11 @@ use std::fmt::Write as _;
 use glam::{DMat4, DVec2, DVec3, DVec4};
 use std::collections::HashMap;
 use std::path::Path;
+use varstotas_i18n::tr;
 
 fn bad(s: impl Into<String>) -> IoError {
-    IoError::Format(format!("COLLADA: {}", s.into()))
+    let msg: String = s.into();
+    IoError::Format(tr!("kernel-io-collada", msg = msg))
 }
 
 /// Elements by `id` (the whole document).
@@ -225,7 +227,7 @@ impl<'a> Doc<'a> {
     /// Walk node `n` (world `parent`), collecting placed geometries.
     fn node(&mut self, n: &'a El, parent: DMat4, out: &mut Vec<ImpMesh>, depth: usize) -> Result<(), IoError> {
         if depth > 64 {
-            return Err(bad("nodes nested too deep"));
+            return Err(bad(tr!("kernel-io-nodes-nested-too-deep")));
         }
         let m = parent * Self::node_matrix(n);
         for ig in n.all("instance_geometry") {
@@ -278,7 +280,7 @@ pub fn import_dae_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
 pub fn add_dae(model: &mut Model, text: &str, dir: Option<&Path>, opts: &ImportOptions) -> Result<(), IoError> {
     let root = El::parse(text)?;
     if root.name != "COLLADA" {
-        return Err(bad("not a COLLADA document"));
+        return Err(bad(tr!("kernel-io-not-a-collada-document")));
     }
     let mut ids = HashMap::new();
     index(&root, &mut ids);
@@ -420,20 +422,25 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
                 }
                 let _ = writeln!(images, "    <image id=\"{id}-image\" name=\"{}\"><init_from>{}</init_from></image>", xml_escape(name), xml_escape(&file));
                 files.push((file, img.bytes.clone()));
+                // i18n-ignore-next
                 format!("<texture texture=\"{id}-sampler\" texcoord=\"UVSET0\"/>")
             }
+            // i18n-ignore-next
             None => format!("<color sid=\"diffuse\">{} {} {} {}</color>", num(color[0] as f64), num(color[1] as f64), num(color[2] as f64), num(color[3] as f64)),
         };
         let params = if image.is_some() {
             format!(
+                // i18n-ignore-next
                 "        <newparam sid=\"{id}-surface\"><surface type=\"2D\"><init_from>{id}-image</init_from></surface></newparam>\n        <newparam sid=\"{id}-sampler\"><sampler2D><source>{id}-surface</source></sampler2D></newparam>\n"
             )
         } else {
             String::new()
         };
+        // i18n-ignore-next
         let transparency = if color[3] < 0.999 { format!("<transparent opaque=\"A_ONE\"><color>1 1 1 {}</color></transparent><transparency><float>1</float></transparency>", num(color[3] as f64)) } else { String::new() };
         let _ = writeln!(
             effects,
+            // i18n-ignore-next
             "    <effect id=\"{id}-effect\">\n      <profile_COMMON>\n{params}        <technique sid=\"common\"><lambert><diffuse>{diffuse}</diffuse>{transparency}</lambert></technique>\n      </profile_COMMON>\n    </effect>"
         );
         let _ = writeln!(materials, "    <material id=\"{id}\" name=\"{}\"><instance_effect url=\"#{id}-effect\"/></material>", xml_escape(name));
@@ -452,6 +459,7 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
         let name = match owner.and_then(|i| root.instances.get(i)) {
             Some(i) if !i.name.is_empty() => i.name.clone(),
             Some(i) => model.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default(),
+            // i18n-ignore-next
             None => "Model".into(),
         };
         names.push(name.clone());
@@ -459,9 +467,11 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
         let n = g.pos.len() / 3;
         let _ = writeln!(geometries, "    <geometry id=\"{id}\" name=\"{}\">\n      <mesh>", xml_escape(&name));
         for (suffix, vals, stride, params) in [("positions", &g.pos, 3, "XYZ"), ("normals", &g.nrm, 3, "XYZ"), ("uv", &g.uv, 2, "ST")] {
+            // i18n-ignore-next
             let ps: String = params.chars().map(|c| format!("<param name=\"{c}\" type=\"float\"/>")).collect();
             let _ = writeln!(
                 geometries,
+                // i18n-ignore-next
                 "        <source id=\"{id}-{suffix}\">\n          <float_array id=\"{id}-{suffix}-array\" count=\"{}\">{}</float_array>\n          <technique_common><accessor source=\"#{id}-{suffix}-array\" count=\"{}\" stride=\"{stride}\">{ps}</accessor></technique_common>\n        </source>",
                 vals.len(),
                 nums(vals),
@@ -476,6 +486,7 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
             let p: Vec<String> = idx.iter().map(|i| format!("{i} {i} {i}")).collect();
             let _ = writeln!(
                 geometries,
+                // i18n-ignore-next
                 "        <triangles{attr} count=\"{}\">\n          <input semantic=\"VERTEX\" source=\"#{id}-vertices\" offset=\"0\"/>\n          <input semantic=\"NORMAL\" source=\"#{id}-normals\" offset=\"1\"/>\n          <input semantic=\"TEXCOORD\" source=\"#{id}-uv\" offset=\"2\" set=\"0\"/>\n          <p>{}</p>\n        </triangles>",
                 idx.len() / 3,
                 p.join(" ")
@@ -492,6 +503,7 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
     let now = iso_time(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let lib = |tag: &str, body: &str| if body.is_empty() { String::new() } else { format!("  <{tag}>\n{body}  </{tag}>\n") };
     let text = format!(
+        // i18n-ignore-next
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<COLLADA xmlns=\"http://www.collada.org/2005/11/COLLADASchema\" version=\"1.4.1\">\n  <asset>\n    <contributor><authoring_tool>Varstotas</authoring_tool></contributor>\n    <created>{now}</created>\n    <modified>{now}</modified>\n    <unit name=\"millimeter\" meter=\"0.001\"/>\n    <up_axis>Z_UP</up_axis>\n  </asset>\n{}{}{}{}  <library_visual_scenes>\n    <visual_scene id=\"scene\" name=\"Scene\">\n{scene}    </visual_scene>\n  </library_visual_scenes>\n  <scene><instance_visual_scene url=\"#scene\"/></scene>\n</COLLADA>\n",
         lib("library_images", &images),
         lib("library_effects", &effects),

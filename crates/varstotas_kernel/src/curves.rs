@@ -16,6 +16,7 @@ use glam::{DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::f64::consts::TAU;
+use varstotas_i18n::tr;
 
 /// Upper bound for the segment count of one curve.
 pub const MAX_CURVE_SEGMENTS: u32 = 999;
@@ -424,18 +425,18 @@ impl Mesh {
     /// radius <= TOL; segments < 3 (closed) / < 1 (arc) or > [`MAX_CURVE_SEGMENTS`].
     pub fn set_curve(&mut self, cid: u32, radius: Option<f64>, segments: Option<u32>) -> OpResult<Vec<EdgeId>> {
         self.ensure();
-        let old = self.curve_info(cid).ok_or(OpError::Invalid("not an arc, circle or polygon".into()))?;
+        let old = self.curve_info(cid).ok_or(OpError::Invalid(tr!("kernel-err-not-an-arc-circle-or-polygon").into()))?;
         let mut new = old;
         if let Some(r) = radius {
             if !r.is_finite() || r <= TOL {
-                return Err(OpError::Invalid("radius must be positive".into()));
+                return Err(OpError::Invalid(tr!("kernel-err-radius-must-be-positive").into()));
             }
             new.radius = r;
         }
         if let Some(s) = segments {
             let min = if old.is_closed() { 3 } else { 1 };
             if s < min || s > MAX_CURVE_SEGMENTS {
-                return Err(OpError::Invalid(format!("segments must be {min}..{MAX_CURVE_SEGMENTS}")));
+                return Err(OpError::Invalid(tr!("kernel-err-segments-must-be-min-max-curve", min = min.to_string(), MAX_CURVE_SEGMENTS = MAX_CURVE_SEGMENTS.to_string())));
             }
             new.segments = s;
         }
@@ -480,19 +481,19 @@ impl Mesh {
         let eset: HashSet<EdgeId> = edges.iter().copied().collect();
         let k = chain.len();
         if pts.len() < 2 || (closed && pts.len() < 3) {
-            return Err(OpError::Invalid("too few points".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-too-few-points").into()));
         }
         let interior: Vec<VertexId> = if closed { chain.clone() } else { chain[1..k - 1].to_vec() };
         for v in &interior {
             let ves = self.vertex_edges(*v);
             if ves.len() != 2 || ves.iter().any(|e| !eset.contains(e)) {
-                return Err(OpError::Invalid("other edges are attached to the curve".into()));
+                return Err(OpError::Invalid(tr!("kernel-err-other-edges-are-attached-to-the").into()));
             }
         }
         let faces = self.curve_faces(cid);
         for f in &faces {
             if self.faces[*f].loops().flatten().any(|v| plane.distance(self.pos(*v)).abs() > PTOL * 10.0) {
-                return Err(OpError::Invalid("the curve bounds faces outside its plane".into()));
+                return Err(OpError::Invalid(tr!("kernel-err-the-curve-bounds-faces-outside-its").into()));
             }
         }
         let tmpl = self.edges[edges[0]].clone();

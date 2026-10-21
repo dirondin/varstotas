@@ -1,6 +1,7 @@
 //! The side bar: Entity Info, Materials, Tags, Outliner, Scenes, Instructor.
 
 use super::icons::{Icon, paint_icon};
+use varstotas_i18n::tr;
 use super::{color_f32, color32, fmt_area, fmt_len, fmt_volume, small_icon_button, swatch, theme};
 use crate::app::{Action, VarstotasApp};
 use crate::document::{PaletteMaterial, guarded};
@@ -75,30 +76,30 @@ struct SelSummary {
 
 /// Default palette (name, sRGB).
 pub(crate) const PALETTE: [(&str, [u8; 3]); 24] = [
-    ("White", [0xFF, 0xFF, 0xFF]),
-    ("Light Grey", [0xD4, 0xD6, 0xDA]),
-    ("Grey", [0x9A, 0x9E, 0xA6]),
-    ("Charcoal", [0x4A, 0x4E, 0x56]),
-    ("Black", [0x1C, 0x1D, 0x20]),
-    ("Concrete", [0xB8, 0xB4, 0xAA]),
-    ("Brick", [0xB4, 0x54, 0x3C]),
-    ("Terracotta", [0xD8, 0x7A, 0x52]),
-    ("Orange", [0xF0, 0x9A, 0x36]),
-    ("Sand", [0xE8, 0xD3, 0xA2]),
-    ("Yellow", [0xF6, 0xD8, 0x4A]),
-    ("Olive", [0x8E, 0x98, 0x48]),
-    ("Grass", [0x6E, 0xB0, 0x4C]),
-    ("Forest", [0x2F, 0x6E, 0x3E]),
-    ("Teal", [0x2E, 0x9A, 0x96]),
-    ("Sky", [0x8C, 0xC4, 0xEC]),
-    ("Water", [0x3A, 0x84, 0xC8]),
-    ("Navy", [0x24, 0x3C, 0x74]),
-    ("Lavender", [0xB4, 0xA8, 0xE0]),
-    ("Purple", [0x7A, 0x4E, 0xA8]),
-    ("Pink", [0xF0, 0xA0, 0xB8]),
-    ("Light Wood", [0xE2, 0xC2, 0x8E]),
-    ("Wood", [0xB8, 0x86, 0x52]),
-    ("Dark Wood", [0x6E, 0x48, 0x2C]),
+    ("White", [0xFF, 0xFF, 0xFF]), // i18n-ignore
+    ("Light Grey", [0xD4, 0xD6, 0xDA]), // i18n-ignore
+    ("Grey", [0x9A, 0x9E, 0xA6]), // i18n-ignore
+    ("Charcoal", [0x4A, 0x4E, 0x56]), // i18n-ignore
+    ("Black", [0x1C, 0x1D, 0x20]), // i18n-ignore
+    ("Concrete", [0xB8, 0xB4, 0xAA]), // i18n-ignore
+    ("Brick", [0xB4, 0x54, 0x3C]), // i18n-ignore
+    ("Terracotta", [0xD8, 0x7A, 0x52]), // i18n-ignore
+    ("Orange", [0xF0, 0x9A, 0x36]), // i18n-ignore
+    ("Sand", [0xE8, 0xD3, 0xA2]), // i18n-ignore
+    ("Yellow", [0xF6, 0xD8, 0x4A]), // i18n-ignore
+    ("Olive", [0x8E, 0x98, 0x48]), // i18n-ignore
+    ("Grass", [0x6E, 0xB0, 0x4C]), // i18n-ignore
+    ("Forest", [0x2F, 0x6E, 0x3E]), // i18n-ignore
+    ("Teal", [0x2E, 0x9A, 0x96]), // i18n-ignore
+    ("Sky", [0x8C, 0xC4, 0xEC]), // i18n-ignore
+    ("Water", [0x3A, 0x84, 0xC8]), // i18n-ignore
+    ("Navy", [0x24, 0x3C, 0x74]), // i18n-ignore
+    ("Lavender", [0xB4, 0xA8, 0xE0]), // i18n-ignore
+    ("Purple", [0x7A, 0x4E, 0xA8]), // i18n-ignore
+    ("Pink", [0xF0, 0xA0, 0xB8]), // i18n-ignore
+    ("Light Wood", [0xE2, 0xC2, 0x8E]), // i18n-ignore
+    ("Wood", [0xB8, 0x86, 0x52]), // i18n-ignore
+    ("Dark Wood", [0x6E, 0x48, 0x2C]), // i18n-ignore
 ];
 
 pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
@@ -107,7 +108,24 @@ pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
 
 /// Side bar cards in their order (Window menu checkboxes, `Prefs::tray_hidden`).
 pub(crate) const TRAY_CARDS: [&str; 10] =
-    ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"];
+    ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"]; // i18n-ignore
+
+/// The side bar card `title` (an id: preference values, spots) as shown to the user.
+pub(crate) fn card_label(title: &str) -> String {
+    match title {
+        "Entity Info" => tr!("tray-card-entity-info"), // i18n-ignore
+        "Materials" => tr!("tray-card-materials"), // i18n-ignore
+        "Components" => tr!("tray-card-components"), // i18n-ignore
+        "Tags" => tr!("tray-card-tags"), // i18n-ignore
+        "Outliner" => tr!("tray-card-outliner"), // i18n-ignore
+        "Scenes" => tr!("tray-card-scenes"), // i18n-ignore
+        "Shadows" => tr!("tray-card-shadows"), // i18n-ignore
+        "Environment" => tr!("tray-card-environment"), // i18n-ignore
+        "Soften Edges" => tr!("tray-card-soften-edges"), // i18n-ignore
+        "Instructor" => tr!("tray-card-instructor"), // i18n-ignore
+        other => other.to_string(),
+    }
+}
 
 fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl FnOnce(&mut Ui) -> R) {
     card_ex(ui, title, icon, default_open, false, None, body);
@@ -134,7 +152,7 @@ fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_op
                     let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     paint_icon(ui.painter(), rect, icon, false);
                     super::tray_lib::spot(format!("card:{title}"), rect.center());
-                    ui.label(RichText::new(title).strong());
+                    ui.label(RichText::new(card_label(title)).strong());
                     if let Some((icon, tip)) = button {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let r = super::icon_button(ui, icon, false, 22.0).on_hover_text(tip);
@@ -156,7 +174,7 @@ fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_op
 }
 
 fn tag_name(model: &Model, t: Option<TagId>) -> String {
-    t.and_then(|t| model.tags.get(t)).map(|t| t.name.clone()).unwrap_or_else(|| "Untagged".into())
+    t.and_then(|t| model.tags.get(t)).map(|t| t.name.clone()).unwrap_or_else(|| tr!("tray-untagged"))
 }
 
 /// Tag picker; returns Some(new) when changed.
@@ -166,7 +184,7 @@ fn tag_combo(ui: &mut Ui, model: &Model, current: Option<TagId>, salt: &str) -> 
         .selected_text(tag_name(model, current))
         .width(150.0)
         .show_ui(ui, |ui| {
-            if ui.selectable_label(current.is_none(), "Untagged").clicked() {
+            if ui.selectable_label(current.is_none(), tr!("tray-untagged")).clicked() {
                 out = Some(None);
             }
             for (id, t) in model.tags.iter() {
@@ -182,7 +200,7 @@ fn material_label(ui: &mut Ui, model: &Model, m: Option<varstotas_kernel::Materi
     ui.horizontal(|ui| {
         let (color, name) = match m.and_then(|id| model.materials.get(id)) {
             Some(mat) => (color32(mat.color), mat.name.clone()),
-            None => (Color32::WHITE, "Default".to_string()),
+            None => (Color32::WHITE, tr!("tray-default")),
         };
         let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
         ui.painter().rect(rect, 3.0, color, Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
@@ -200,7 +218,7 @@ fn instance_label(model: &Model, mesh: &Mesh, id: InstanceId) -> (String, bool) 
     let label = match (inst.name.is_empty(), is_group) {
         (false, true) => inst.name.clone(),
         (false, false) => format!("{} <{def_name}>", inst.name),
-        (true, true) => "Group".to_string(),
+        (true, true) => tr!("tray-info-group"),
         (true, false) => format!("<{def_name}>"),
     };
     (label, is_group)
@@ -222,42 +240,42 @@ impl VarstotasApp {
         let hidden = self.prefs.tray_hidden.clone();
         let on = |n: &str| !hidden.iter().any(|h| h == n);
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            if on("Entity Info") {
-                let tip = "Model Info: statistics of the document, Purge Unused";
-                if card_ex(ui, "Entity Info", Icon::Info, true, false, Some((Icon::ModelInfo, tip)), |ui| self.entity_info(ui)) {
+            if on("Entity Info") { // i18n-ignore
+                let tip = tr!("tray-card-model-info-tip");
+                if card_ex(ui, "Entity Info", Icon::Info, true, false, Some((Icon::ModelInfo, tip.as_str())), |ui| self.entity_info(ui)) { // i18n-ignore
                     self.actions.push(Action::ModelInfo);
                 }
             }
-            if on("Materials") {
-                card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui));
+            if on("Materials") { // i18n-ignore
+                card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui)); // i18n-ignore
             }
-            if on("Components") {
+            if on("Components") { // i18n-ignore
                 let open = self.library_open_requested();
-                card_ex(ui, "Components", Icon::Group, false, open, None, |ui| self.library_panel(ui));
+                card_ex(ui, "Components", Icon::Group, false, open, None, |ui| self.library_panel(ui)); // i18n-ignore
             }
-            if on("Tags") {
-                card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui));
+            if on("Tags") { // i18n-ignore
+                card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui)); // i18n-ignore
             }
-            if on("Outliner") {
-                card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui));
+            if on("Outliner") { // i18n-ignore
+                card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui)); // i18n-ignore
             }
-            if on("Scenes") {
-                card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui));
+            if on("Scenes") { // i18n-ignore
+                card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui)); // i18n-ignore
             }
-            if on("Shadows") {
-                card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui));
+            if on("Shadows") { // i18n-ignore
+                card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui)); // i18n-ignore
             }
-            if on("Environment") {
-                card(ui, "Environment", Icon::StyleRealistic, false, |ui| self.environment_panel(ui));
+            if on("Environment") { // i18n-ignore
+                card(ui, "Environment", Icon::StyleRealistic, false, |ui| self.environment_panel(ui)); // i18n-ignore
             }
-            if on("Soften Edges") {
-                card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui));
+            if on("Soften Edges") { // i18n-ignore
+                card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui)); // i18n-ignore
             }
-            if on("Instructor") {
-                card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui));
+            if on("Instructor") { // i18n-ignore
+                card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui)); // i18n-ignore
             }
             if hidden.len() >= TRAY_CARDS.len() {
-                ui.label(RichText::new("Every card is off: Window → Tray cards").color(theme::text_dim()));
+                ui.label(RichText::new(tr!("tray-cards-all-off")).color(theme::text_dim()));
             }
         });
     }
@@ -280,9 +298,9 @@ impl VarstotasApp {
 
     fn shadows_panel(&mut self, ui: &mut Ui) {
         let mut sh = self.doc.model.shadows;
-        ui.checkbox(&mut sh.enabled, "Show shadows");
+        ui.checkbox(&mut sh.enabled, tr!("tray-shadows-show"));
         egui::Grid::new("shadows").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-            ui.label("Time");
+            ui.label(tr!("tray-shadows-time"));
             ui.add(egui::Slider::new(&mut sh.minutes, 0..=24 * 60 - 1).step_by(5.0).custom_formatter(|v, _| {
                 let m = v as u32;
                 format!("{:02}:{:02}", m / 60, m % 60)
@@ -291,43 +309,43 @@ impl VarstotasApp {
                 Some((h.trim().parse::<u32>().ok()? * 60 + m.trim().parse::<u32>().ok()?) as f64)
             }));
             ui.end_row();
-            ui.label("Date");
+            ui.label(tr!("tray-shadows-date"));
             ui.add(egui::Slider::new(&mut sh.day, 1..=365).custom_formatter(|v, _| {
                 let (m, d) = varstotas_kernel::shadows::month_day(v as u32);
-                format!("{d} {}", varstotas_kernel::shadows::MONTH_NAMES[m as usize - 1])
+                format!("{d} {}", varstotas_kernel::shadows::month_name(m))
             }));
             ui.end_row();
-            ui.label("Light");
+            ui.label(tr!("tray-shadows-light"));
             ui.add(egui::Slider::new(&mut sh.light, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}", v * 100.0)));
             ui.end_row();
-            ui.label("Dark");
+            ui.label(tr!("tray-shadows-dark"));
             ui.add(egui::Slider::new(&mut sh.dark, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}", v * 100.0)));
             ui.end_row();
-            ui.label("Display");
+            ui.label(tr!("tray-shadows-display"));
             ui.horizontal(|ui| {
-                ui.checkbox(&mut sh.on_faces, "On faces");
-                ui.checkbox(&mut sh.on_ground, "On ground");
+                ui.checkbox(&mut sh.on_faces, tr!("tray-shadows-on-faces"));
+                ui.checkbox(&mut sh.on_ground, tr!("tray-shadows-on-ground"));
             });
             ui.end_row();
         });
-        egui::CollapsingHeader::new("Location").id_salt("shadow_location").show(ui, |ui| {
+        egui::CollapsingHeader::new(tr!("tray-shadows-location")).id_salt("shadow_location").show(ui, |ui| {
             egui::Grid::new("shadow_loc").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                ui.label("Latitude");
+                ui.label(tr!("tray-shadows-latitude"));
                 ui.add(egui::DragValue::new(&mut sh.latitude).range(-90.0..=90.0).speed(0.1).suffix("°"));
                 ui.end_row();
-                ui.label("Longitude");
+                ui.label(tr!("tray-shadows-longitude"));
                 ui.add(egui::DragValue::new(&mut sh.longitude).range(-180.0..=180.0).speed(0.1).suffix("°"));
                 ui.end_row();
-                ui.label("UTC offset");
+                ui.label(tr!("tray-shadows-utc-offset"));
                 ui.add(egui::DragValue::new(&mut sh.utc_offset).range(-12.0..=14.0).speed(0.05).fixed_decimals(1).suffix(" h"));
                 ui.end_row();
-                ui.label("North angle");
+                ui.label(tr!("tray-shadows-north-angle"));
                 ui.add(egui::DragValue::new(&mut sh.north_deg).range(0.0..=360.0).speed(0.5).suffix("°"));
                 ui.end_row();
             });
         });
         let alt = sh.sun_altitude_deg();
-        ui.label(RichText::new(if alt > 0.0 { format!("Sun {alt:.0}° above the horizon") } else { "Sun below the horizon".into() }).color(theme::text_dim()));
+        ui.label(RichText::new(if alt > 0.0 { tr!("tray-sun-above", alt = format!("{alt:.0}")) } else { tr!("tray-sun-below") }).color(theme::text_dim()));
         if sh != self.doc.model.shadows {
             self.actions.push(Action::SetShadows(sh));
         }
@@ -336,14 +354,14 @@ impl VarstotasApp {
     fn soften_panel(&mut self, ui: &mut Ui) {
         let n = self.soften_targets().len();
         let st = &mut self.tray.soften;
-        ui.label("Allow normals between");
+        ui.label(tr!("tray-soften-allow-normals"));
         let resp = ui.add_enabled(n > 0, egui::Slider::new(&mut st.angle, 0.0..=180.0).suffix("°").fixed_decimals(0));
-        let smooth = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.smooth, "Smooth normals"));
-        let coplanar = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.coplanar, "Soften coplanar"));
+        let smooth = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.smooth, tr!("tray-soften-smooth-normals")));
+        let coplanar = ui.add_enabled(n > 0, egui::Checkbox::new(&mut st.coplanar, tr!("tray-soften-coplanar")));
         if n == 0 {
-            ui.label(RichText::new("Select edges or faces").color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-soften-select")).color(theme::text_dim()));
         } else {
-            ui.label(RichText::new(format!("{n} edges")).color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-soften-edges-count", n = n)).color(theme::text_dim()));
         }
         // One undo step per slider drag (applied on release), clicks apply at once.
         let slider_done = resp.drag_stopped() || (resp.changed() && !resp.dragged());
@@ -441,25 +459,25 @@ impl VarstotasApp {
         let r = guarded(|| {
             let model = &self.doc.model;
             let Some(mesh) = model.mesh_at(&path) else {
-                ui.label("Invalid context");
+                ui.label(tr!("tray-info-invalid-context"));
                 return;
             };
             egui::Grid::new("entity_info").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
                 match sel.as_slice() {
                     [] => {
-                        ui.label(RichText::new("No Selection").strong());
+                        ui.label(RichText::new(tr!("tray-info-no-selection")).strong());
                         ui.end_row();
-                        ui.label("Units");
+                        ui.label(tr!("tray-info-units"));
                         let mut u = unit;
                         egui::ComboBox::from_id_salt("units")
                             .selected_text(super::unit_suffix(u))
                             .show_ui(ui, |ui| {
                                 for (v, n) in [
-                                    (LengthUnit::Millimeter, "Millimeters"),
-                                    (LengthUnit::Centimeter, "Centimeters"),
-                                    (LengthUnit::Meter, "Meters"),
-                                    (LengthUnit::Inch, "Inches"),
-                                    (LengthUnit::Foot, "Feet"),
+                                    (LengthUnit::Millimeter, tr!("tray-unit-millimeters")),
+                                    (LengthUnit::Centimeter, tr!("tray-unit-centimeters")),
+                                    (LengthUnit::Meter, tr!("tray-unit-meters")),
+                                    (LengthUnit::Inch, tr!("tray-unit-inches")),
+                                    (LengthUnit::Foot, tr!("tray-unit-feet")),
                                 ] {
                                     ui.selectable_value(&mut u, v, n);
                                 }
@@ -468,10 +486,10 @@ impl VarstotasApp {
                             set_unit = Some(u);
                         }
                         ui.end_row();
-                        ui.label("Faces");
+                        ui.label(tr!("tray-info-faces"));
                         ui.label(mesh.faces.len().to_string());
                         ui.end_row();
-                        ui.label("Edges");
+                        ui.label(tr!("tray-info-edges"));
                         ui.label(mesh.edges.len().to_string());
                         ui.end_row();
                         let groups = mesh
@@ -479,50 +497,50 @@ impl VarstotasApp {
                             .iter()
                             .filter(|(_, i)| model.defs.get(i.def).is_none_or(|d| d.is_group))
                             .count();
-                        ui.label("Groups");
+                        ui.label(tr!("tray-info-groups"));
                         ui.label(groups.to_string());
                         ui.end_row();
-                        ui.label("Components");
+                        ui.label(tr!("tray-info-components"));
                         ui.label((mesh.instances.len() - groups).to_string());
                         ui.end_row();
                     }
                     [EntityRef::Face(id)] => {
                         let Some(f) = mesh.faces.get(*id) else { return };
-                        ui.label(RichText::new("Face").strong());
+                        ui.label(RichText::new(tr!("tray-info-face")).strong());
                         ui.end_row();
-                        ui.label("Area");
+                        ui.label(tr!("tray-info-area"));
                         ui.label(fmt_area(mesh.face_area(*id), unit));
                         ui.end_row();
-                        ui.label("Front");
+                        ui.label(tr!("tray-info-front"));
                         material_label(ui, model, f.front);
                         ui.end_row();
-                        ui.label("Back");
+                        ui.label(tr!("tray-info-back"));
                         material_label(ui, model, f.back);
                         ui.end_row();
-                        ui.label("Tag");
+                        ui.label(tr!("tray-info-tag"));
                         set_tag = tag_combo(ui, model, f.tag, "face");
                         ui.end_row();
                     }
                     [EntityRef::Edge(id)] => {
                         let Some(e) = mesh.edges.get(*id) else { return };
-                        ui.label(RichText::new("Edge").strong());
+                        ui.label(RichText::new(tr!("tray-info-edge")).strong());
                         ui.end_row();
-                        ui.label("Length");
+                        ui.label(tr!("tray-info-length"));
                         ui.label(fmt_len(mesh.edge_length(*id), unit));
                         ui.end_row();
-                        ui.label("Soft");
+                        ui.label(tr!("tray-info-soft"));
                         let mut soft = e.soft;
                         if ui.checkbox(&mut soft, "").changed() {
                             toggle_edge_soft = Some((soft, soft));
                         }
                         ui.end_row();
-                        ui.label("Smooth");
+                        ui.label(tr!("tray-info-smooth"));
                         let mut smooth = e.smooth;
                         if ui.checkbox(&mut smooth, "").changed() {
                             toggle_edge_soft = Some((e.soft, smooth));
                         }
                         ui.end_row();
-                        ui.label("Tag");
+                        ui.label(tr!("tray-info-tag"));
                         set_tag = tag_combo(ui, model, e.tag, "edge");
                         ui.end_row();
                     }
@@ -531,22 +549,22 @@ impl VarstotasApp {
                         let (_, is_group) = instance_label(model, mesh, *id);
                         let solid = model.defs.get(inst.def).filter(|d| d.mesh.is_solid());
                         let parametric = model.defs.get(inst.def).is_some_and(|d| d.params.is_some());
-                        let kind = if parametric { "Parametric Group" } else if is_group { "Group" } else { "Component" };
-                        ui.label(RichText::new(if solid.is_some() { format!("Solid {kind}") } else { kind.into() }).strong());
+                        let kind = if parametric { tr!("tray-info-parametric-group") } else if is_group { tr!("tray-info-group") } else { tr!("tray-info-component") };
+                        ui.label(RichText::new(if solid.is_some() { tr!("tray-info-solid", kind = kind) } else { kind }).strong());
                         ui.end_row();
                         if let Some(d) = solid {
                             // Signed volume of the definition, scaled by the instance transform.
                             let v = d.mesh.volume() * inst.transform.determinant().abs();
-                            ui.label("Volume");
+                            ui.label(tr!("tray-info-volume"));
                             ui.label(fmt_volume(v.abs(), unit));
                             ui.end_row();
                         }
-                        ui.label("Instance");
+                        ui.label(tr!("tray-info-instance"));
                         if self.tray.inst_name.as_ref().map(|(i, _)| *i) != Some(*id) {
                             self.tray.inst_name = Some((*id, inst.name.clone()));
                         }
                         if let Some((_, buf)) = self.tray.inst_name.as_mut() {
-                            let resp = ui.add(egui::TextEdit::singleline(buf).hint_text("name").desired_width(150.0));
+                            let resp = ui.add(egui::TextEdit::singleline(buf).hint_text(tr!("tray-info-name-hint")).desired_width(150.0));
                             if !resp.has_focus() && !resp.lost_focus() && *buf != inst.name {
                                 // Model changed underneath (undo): resync.
                                 *buf = inst.name.clone();
@@ -556,22 +574,22 @@ impl VarstotasApp {
                         }
                         ui.end_row();
                         if !is_group {
-                            ui.label("Definition");
+                            ui.label(tr!("tray-info-definition"));
                             ui.add(egui::Label::new(model.defs.get(inst.def).map(|d| d.name.clone()).unwrap_or_default()).truncate());
                             ui.end_row();
                         }
-                        ui.label("Material");
+                        ui.label(tr!("tray-info-material"));
                         material_label(ui, model, inst.material);
                         ui.end_row();
-                        ui.label("Tag");
+                        ui.label(tr!("tray-info-tag"));
                         set_tag = tag_combo(ui, model, inst.tag, "inst");
                         ui.end_row();
                         // A downloaded model's credit (3D Library).
                         if let Some(c) = model.defs.get(inst.def).and_then(|d| d.source.as_ref()) {
-                            ui.label("Source");
-                            let lic = if c.license.is_empty() { "licence unknown" } else { &c.license };
+                            ui.label(tr!("tray-info-source"));
+                            let lic = if c.license.is_empty() { tr!("tray-info-licence-unknown") } else { c.license.clone() };
                             let who = if c.author.is_empty() { c.source.clone() } else { format!("{} · {}", c.author, c.source) };
-                            ui.add(egui::Label::new(format!("{who} · {lic}")).truncate()).on_hover_text(format!("{}\nFile → Export → Attributions lists the credits of the model", c.line()));
+                            ui.add(egui::Label::new(format!("{who} · {lic}")).truncate()).on_hover_text(tr!("tray-info-source-hover", line = c.line()));
                             ui.end_row();
                             // What the licence asks (an ND badge, NC / SA / unknown reminders).
                             let kind = c.license_kind();
@@ -587,44 +605,43 @@ impl VarstotasApp {
                         let SelSummary { count, faces, edges, groups, components, guides, dims, area } = summary;
                         let only_guides = guides + dims == count;
                         let title = if guides == count {
-                            format!("{count} Guides")
+                            tr!("tray-info-n-guides", count = count)
                         } else if dims == count {
-                            format!("{count} Dimensions")
+                            tr!("tray-info-n-dimensions", count = count)
                         } else {
-                            format!("{count} Entities")
+                            tr!("tray-info-n-entities", count = count)
                         };
                         ui.label(RichText::new(title).strong());
                         ui.end_row();
-                        let plural = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
-                        let mut parts = Vec::new();
+                                        let mut parts = Vec::new();
                         if faces > 0 {
-                            parts.push(plural(faces, "Face", "Faces"));
+                            parts.push(tr!("tray-count-faces", n = faces));
                         }
                         if edges > 0 {
-                            parts.push(plural(edges, "Edge", "Edges"));
+                            parts.push(tr!("tray-count-edges", n = edges));
                         }
                         if groups > 0 {
-                            parts.push(plural(groups, "Group", "Groups"));
+                            parts.push(tr!("tray-count-groups", n = groups));
                         }
                         if components > 0 {
-                            parts.push(plural(components, "Component", "Components"));
+                            parts.push(tr!("tray-count-components", n = components));
                         }
                         if guides > 0 {
-                            parts.push(plural(guides, "Guide", "Guides"));
+                            parts.push(tr!("tray-count-guides", n = guides));
                         }
                         if dims > 0 {
-                            parts.push(plural(dims, "Dimension", "Dimensions"));
+                            parts.push(tr!("tray-count-dimensions", n = dims));
                         }
-                        ui.label("Contains");
+                        ui.label(tr!("tray-info-contains"));
                         ui.add(egui::Label::new(parts.join(", ")).wrap());
                         ui.end_row();
                         if faces > 0 {
-                            ui.label("Area");
+                            ui.label(tr!("tray-info-area"));
                             ui.label(fmt_area(area, unit));
                             ui.end_row();
                         }
                         if !only_guides {
-                            ui.label("Tag");
+                            ui.label(tr!("tray-info-tag"));
                             set_tag = tag_combo(ui, model, None, "many");
                             ui.end_row();
                         }
@@ -633,7 +650,7 @@ impl VarstotasApp {
             });
         });
         if let Err(e) = r {
-            ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-kernel-not-ready", error = e.to_string())).color(theme::text_dim()));
         }
 
         if let Some(u) = set_unit {
@@ -641,7 +658,7 @@ impl VarstotasApp {
         }
         if let Some((id, name)) = rename {
             let p = path.clone();
-            self.doc.commit("Rename", |m| {
+            self.doc.commit(&tr!("tray-undo-rename"), |m| {
                 if let Some(i) = m.mesh_at_mut(&p).and_then(|mesh| mesh.instances.get_mut(id)) {
                     i.name = name;
                 }
@@ -650,7 +667,7 @@ impl VarstotasApp {
         if let Some((soft, smooth)) = toggle_edge_soft {
             let p = path.clone();
             let sel2 = sel.clone();
-            self.doc.commit(if soft { "Soften Edge" } else { "Unsoften Edge" }, |m| {
+            self.doc.commit(&tr!(if soft { "tray-undo-soften-edge" } else { "tray-undo-unsoften-edge" }), |m| {
                 if let Some(mesh) = m.mesh_at_mut(&p) {
                     for e in &sel2 {
                         if let EntityRef::Edge(id) = e
@@ -665,7 +682,7 @@ impl VarstotasApp {
         if let Some(tag) = set_tag {
             // All selected entities (`sel` only holds the first two, for the layout).
             let sel = self.doc.selection.clone();
-            self.doc.commit("Set Tag", |m| {
+            self.doc.commit(&tr!("tray-undo-set-tag"), |m| {
                 if let Some(mesh) = m.mesh_at_mut(&path) {
                     for e in &sel {
                         match *e {
@@ -710,7 +727,7 @@ impl VarstotasApp {
         let Some(p) = model.instance_params(&path, id).cloned() else {
             if model.mesh_at(&path).is_some_and(|m| m.instances.contains_key(id)) {
                 ui.add_space(6.0);
-                if ui.button("Make Parametric").on_hover_text("Size and copies set in Entity Info").clicked() {
+                if ui.button(tr!("tray-params-make")).on_hover_text(tr!("tray-params-make-hover")).clicked() {
                     self.actions.push(Action::MakeParametric);
                 }
             }
@@ -732,11 +749,11 @@ impl VarstotasApp {
         let mut bad = false;
         ui.add_space(6.0);
         egui::Grid::new("entity_info_params").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new("Parameters").strong());
+            ui.label(RichText::new(tr!("tray-params-title")).strong());
             ui.end_row();
             let Some((_, bufs)) = self.tray.params_edit.as_mut() else { return };
             for k in [0, 1, 2, 4, 3] {
-                ui.label(["Length (X)", "Width (Y)", "Height (Z)", "Gap", "Copies"][k]);
+                ui.label(&[tr!("tray-params-length"), tr!("tray-params-width"), tr!("tray-params-height"), tr!("tray-params-gap"), tr!("tray-params-copies")][k]);
                 let resp = ui.add(egui::TextEdit::singleline(&mut bufs[k]).desired_width(120.0));
                 if committed(ui, &resp) && bufs[k] != texts[k] {
                     let v = varstotas_kernel::units::parse_length(&bufs[k], unit);
@@ -754,7 +771,7 @@ impl VarstotasApp {
                 }
                 ui.end_row();
                 if k == 4 {
-                    ui.label("Along");
+                    ui.label(tr!("tray-params-along"));
                     ui.horizontal(|ui| {
                         for (a, n) in ["X", "Y", "Z"].into_iter().enumerate() {
                             ui.selectable_value(&mut next.axis, a as u8, n);
@@ -763,16 +780,16 @@ impl VarstotasApp {
                     ui.end_row();
                 }
             }
-            ui.label("Resize");
+            ui.label(tr!("tray-params-resize"));
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut next.stretch, true, "Stretch").on_hover_text("Move the far half: ends keep their size");
-                ui.selectable_value(&mut next.stretch, false, "Scale");
+                ui.selectable_value(&mut next.stretch, true, tr!("tray-params-stretch")).on_hover_text(tr!("tray-params-stretch-hover"));
+                ui.selectable_value(&mut next.stretch, false, tr!("tray-params-scale"));
             });
             ui.end_row();
         });
         if bad {
             self.tray.params_edit = None;
-            self.flash_error("Invalid value");
+            self.flash_error(tr!("tray-invalid-value"));
         } else if next != p {
             self.tray.params_edit = None;
             self.actions.push(Action::SetParams(next));
@@ -808,10 +825,10 @@ impl VarstotasApp {
         let mut bad = false;
         ui.add_space(6.0);
         egui::Grid::new("entity_info_texture").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new("Texture").strong());
+            ui.label(RichText::new(tr!("tray-tex-title")).strong());
             ui.end_row();
             let Some((_, bufs)) = self.tray.tex_pos.as_mut() else { return };
-            for (i, label) in ["Offset X", "Offset Y", "Rotation", "Scale X", "Scale Y"].into_iter().enumerate() {
+            for (i, label) in [tr!("tray-tex-offset-x"), tr!("tray-tex-offset-y"), tr!("tray-tex-rotation"), tr!("tray-tex-scale-x"), tr!("tray-tex-scale-y")].into_iter().enumerate() {
                 ui.label(label);
                 let resp = ui.add(egui::TextEdit::singleline(&mut bufs[i]).desired_width(120.0));
                 if committed(ui, &resp) && bufs[i] != texts[i] {
@@ -834,23 +851,23 @@ impl VarstotasApp {
             }
         });
         ui.horizontal(|ui| {
-            if ui.button("Position…").on_hover_text("Texture Position tool (pins)").clicked() {
+            if ui.button(tr!("tray-tex-position")).on_hover_text(tr!("tray-tex-position-hover")).clicked() {
                 self.actions.push(Action::SetTool(crate::tools::ToolId::TexturePosition));
             }
-            if ui.button("Rotate 90°").clicked() {
+            if ui.button(tr!("tray-tex-rotate")).clicked() {
                 new = Some(varstotas_kernel::TexPlacement { angle_deg: (pl.angle_deg + 90.0) % 360.0, ..pl });
             }
-            if ui.add_enabled(!pl.is_identity(), egui::Button::new("Reset")).clicked() {
+            if ui.add_enabled(!pl.is_identity(), egui::Button::new(tr!("tray-tex-reset"))).clicked() {
                 new = Some(Default::default());
             }
         });
         if bad {
             self.tray.tex_pos = None;
-            self.flash_error("Invalid value");
+            self.flash_error(tr!("tray-invalid-value"));
         }
         if let Some(p) = new {
             self.tray.tex_pos = None;
-            self.doc.commit("Texture Position", |m| {
+            self.doc.commit(&tr!("tray-undo-texture-position"), |m| {
                 if let Some(f) = m.mesh_at_mut(&path).and_then(|mesh| mesh.faces.get_mut(fid)) {
                     f.uv = (!p.is_identity()).then_some(p);
                 }
@@ -887,7 +904,7 @@ impl VarstotasApp {
         ui.add_space(4.0);
         egui::Grid::new("texture_size").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
             let Some((_, wb, hb)) = self.tray.tex_size.as_mut() else { return };
-            for (i, (label, buf, text)) in [("Texture width", wb, &wt), ("Texture height", hb, &ht)].into_iter().enumerate() {
+            for (i, (label, buf, text)) in [(tr!("tray-tex-width"), wb, &wt), (tr!("tray-tex-height"), hb, &ht)].into_iter().enumerate() {
                 ui.label(label);
                 let resp = ui.add(egui::TextEdit::singleline(buf).desired_width(100.0));
                 if committed(ui, &resp) && buf != text {
@@ -910,16 +927,16 @@ impl VarstotasApp {
             }
         });
         let mut keep = lock;
-        if ui.checkbox(&mut keep, "Keep aspect ratio").changed() {
+        if ui.checkbox(&mut keep, tr!("tray-tex-keep-aspect")).changed() {
             self.tray.tex_free_aspect = !keep;
         }
         if bad {
             self.tray.tex_size = None;
-            self.flash_error("Invalid value");
+            self.flash_error(tr!("tray-invalid-value"));
         }
         if let Some(sz) = new {
             self.tray.tex_size = None;
-            self.doc.commit("Edit Material", |m| {
+            self.doc.commit(&tr!("tray-undo-edit-material"), |m| {
                 if let Some(i) = m.materials.get_mut(mid).and_then(|m| m.image.as_mut()) {
                     i.size = sz;
                 }
@@ -973,14 +990,14 @@ impl VarstotasApp {
         let mut apply: Option<u32> = None;
         let mut bad = false;
         egui::Grid::new("entity_info_spline").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new(if sp.closed { "Closed Curve" } else { "Curve" }).strong());
+            ui.label(RichText::new(tr!(if sp.closed { "tray-curve-closed" } else { "tray-curve" })).strong());
             ui.end_row();
-            ui.label("Points");
+            ui.label(tr!("tray-curve-points"));
             let smooth = sp.anchors.iter().filter(|a| !a.is_corner()).count();
-            ui.label(format!("{} ({smooth} smooth)", sp.anchors.len()));
+            ui.label(tr!("tray-curve-points-value", count = sp.anchors.len(), smooth = smooth));
             ui.end_row();
             let Some((_, _, sb)) = self.tray.curve_edit.as_mut() else { return };
-            ui.label("Segments").on_hover_text("Edges per curved span between two points");
+            ui.label(tr!("tray-curve-segments")).on_hover_text(tr!("tray-curve-segments-hover"));
             let resp = ui.add(egui::TextEdit::singleline(sb).desired_width(120.0));
             if committed(ui, &resp) && *sb != s_text {
                 match sb.trim().trim_end_matches(['s', 'S']).trim().parse::<u32>() {
@@ -991,22 +1008,22 @@ impl VarstotasApp {
                 *sb = s_text.clone();
             }
             ui.end_row();
-            ui.label("Length");
+            ui.label(tr!("tray-info-length"));
             ui.label(fmt_len(sp.length(), unit));
             ui.end_row();
         });
-        let edit = ui.button("Edit Curve").on_hover_text("Drag its points and handles (or double-click the curve)");
+        let edit = ui.button(tr!("tray-curve-edit")).on_hover_text(tr!("tray-curve-edit-hover"));
         super::tray_lib::spot("entity_info:edit_curve", edit.rect.center());
         if edit.clicked() {
             self.actions.push(Action::SetTool(crate::tools::ToolId::EditCurve));
         }
         if bad {
             self.tray.curve_edit = None;
-            self.flash_error("Invalid value");
+            self.flash_error(tr!("tray-invalid-value"));
         }
         if let Some(n) = apply {
             let new = varstotas_kernel::Spline { segs: n, ..sp };
-            let edges = self.doc.try_commit("Edit Segments", |m| match m.mesh_at_mut(&path) {
+            let edges = self.doc.try_commit(&tr!("tray-undo-edit-segments"), |m| match m.mesh_at_mut(&path) {
                 Some(mesh) => mesh.set_spline(cid, &new),
                 None => Err(varstotas_kernel::OpError::NotFound),
             });
@@ -1033,14 +1050,14 @@ impl VarstotasApp {
         let mut bad = false;
         egui::Grid::new("entity_info_curve").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
             let title = match info.kind {
-                varstotas_kernel::CurveKind::Arc => "Arc",
-                varstotas_kernel::CurveKind::Circle => "Circle",
-                varstotas_kernel::CurveKind::Polygon => "Polygon",
+                varstotas_kernel::CurveKind::Arc => tr!("tray-curve-arc"),
+                varstotas_kernel::CurveKind::Circle => tr!("tray-curve-circle"),
+                varstotas_kernel::CurveKind::Polygon => tr!("tray-curve-polygon"),
             };
             ui.label(RichText::new(title).strong());
             ui.end_row();
             let Some((_, rb, sb)) = self.tray.curve_edit.as_mut() else { return };
-            ui.label("Radius");
+            ui.label(tr!("tray-curve-radius"));
             let resp = ui.add(egui::TextEdit::singleline(rb).desired_width(120.0));
             if committed(ui, &resp) && *rb != r_text {
                 match varstotas_kernel::units::parse_length(rb, unit).filter(|r| *r > 0.0) {
@@ -1051,7 +1068,7 @@ impl VarstotasApp {
                 *rb = r_text.clone();
             }
             ui.end_row();
-            ui.label(if info.kind == varstotas_kernel::CurveKind::Polygon { "Sides" } else { "Segments" });
+            ui.label(if info.kind == varstotas_kernel::CurveKind::Polygon { tr!("tray-curve-sides") } else { tr!("tray-curve-segments") });
             let resp = ui.add(egui::TextEdit::singleline(sb).desired_width(120.0));
             if committed(ui, &resp) && *sb != s_text {
                 match sb.trim().trim_end_matches(['s', 'S']).trim().parse::<u32>() {
@@ -1062,22 +1079,22 @@ impl VarstotasApp {
                 *sb = s_text.clone();
             }
             ui.end_row();
-            ui.label(if info.is_closed() { "Circumference" } else { "Arc Length" });
+            ui.label(if info.is_closed() { tr!("tray-curve-circumference") } else { tr!("tray-curve-arc-length") });
             ui.label(fmt_len(info.length(), unit));
             ui.end_row();
             if info.kind == varstotas_kernel::CurveKind::Arc {
-                ui.label("Angle");
+                ui.label(tr!("tray-curve-angle"));
                 ui.label(crate::tools::common::fmt_angle(info.sweep().to_degrees()));
                 ui.end_row();
             }
         });
         if bad {
             self.tray.curve_edit = None;
-            self.flash_error("Invalid value");
+            self.flash_error(tr!("tray-invalid-value"));
         }
         if let Some((r, n)) = apply {
-            let label = if r.is_some() { "Edit Radius" } else { "Edit Segments" };
-            let edges = self.doc.try_commit(label, |m| match m.mesh_at_mut(&path) {
+            let label = tr!(if r.is_some() { "tray-undo-edit-radius" } else { "tray-undo-edit-segments" });
+            let edges = self.doc.try_commit(&label, |m| match m.mesh_at_mut(&path) {
                 Some(mesh) => mesh.set_curve(cid, r, n),
                 None => Err(varstotas_kernel::OpError::NotFound),
             });
@@ -1102,15 +1119,15 @@ impl VarstotasApp {
         }
         let mut apply: Option<String> = None;
         egui::Grid::new("entity_info_dim").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new(if g.leader { "Text" } else { "Linear Dimension" }).strong());
+            ui.label(RichText::new(tr!(if g.leader { "tray-dim-text" } else { "tray-dim-linear" })).strong());
             ui.end_row();
             if !g.leader {
-                ui.label("Length");
+                ui.label(tr!("tray-info-length"));
                 ui.label(fmt_len(g.length(), unit));
                 ui.end_row();
             }
             let Some((_, buf)) = self.tray.dim_text.as_mut() else { return };
-            ui.label("Text");
+            ui.label(tr!("tray-dim-text"));
             let hint = if g.leader { "" } else { "<>" };
             let resp = ui.add(egui::TextEdit::singleline(buf).hint_text(hint).desired_width(150.0));
             if committed(ui, &resp) && *buf != text {
@@ -1122,8 +1139,8 @@ impl VarstotasApp {
         });
         if let Some(t) = apply {
             let t = Some(t.trim().to_string()).filter(|t| !t.is_empty());
-            let label = if g.leader { "Edit Text" } else { "Edit Dimension Text" };
-            self.doc.commit(label, |m| m.set_dimension_text_in(&path, id, t));
+            let label = tr!(if g.leader { "tray-undo-edit-text" } else { "tray-undo-edit-dimension-text" });
+            self.doc.commit(&label, |m| m.set_dimension_text_in(&path, id, t));
             self.tray.dim_text = None;
         }
     }
@@ -1135,17 +1152,17 @@ impl VarstotasApp {
         // Compared sanitized: re-normalizing the direction the aim handle wrote may change its
         // last bits, which must not count as an edit (it would take over the drag as "Edit Lights").
         let before = l.clone().sanitized();
-        ui.label(RichText::new("Light").strong());
+        ui.label(RichText::new(tr!("tray-light-title")).strong());
         crate::ui::render::light_editor(ui, "entity_info_light", &mut l, self.doc.model.unit, &self.camera);
         ui.horizontal(|ui| {
-            if ui.button("Render…").on_hover_text("Window → Render…").clicked() {
+            if ui.button(tr!("tray-light-render")).on_hover_text(tr!("tray-light-render-hover")).clicked() {
                 self.render_window.open = true;
             }
-            if ui.button("Delete").clicked() {
+            if ui.button(tr!("delete")).clicked() {
                 self.actions.push(Action::Delete);
             }
         });
-        ui.label(RichText::new("Move / Rotate move and turn it; drag the square handle to aim it.").small().weak());
+        ui.label(RichText::new(tr!("tray-light-hint")).small().weak());
         let l = l.sanitized();
         if l != before {
             self.edit_light(i, l);
@@ -1161,9 +1178,9 @@ impl VarstotasApp {
         let mut rename = None;
         let mut active = s.active;
         egui::Grid::new("entity_info_section").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new("Section Plane").strong());
+            ui.label(RichText::new(tr!("tray-section-title")).strong());
             ui.end_row();
-            ui.label("Name");
+            ui.label(tr!("tray-section-name"));
             if let Some((_, buf)) = self.tray.section_name.as_mut() {
                 let resp = ui.add(egui::TextEdit::singleline(buf).desired_width(150.0));
                 if committed(ui, &resp) && buf.trim() != s.name && !buf.trim().is_empty() {
@@ -1173,22 +1190,22 @@ impl VarstotasApp {
                 }
             }
             ui.end_row();
-            ui.label("Active Cut");
+            ui.label(tr!("tray-section-active-cut"));
             ui.checkbox(&mut active, "");
             ui.end_row();
             let p = s.origin;
-            ui.label("Through");
+            ui.label(tr!("tray-through"));
             ui.add(egui::Label::new(format!("{}, {}, {}", fmt_len(p.x, unit), fmt_len(p.y, unit), fmt_len(p.z, unit))).wrap());
             ui.end_row();
-            ui.label("Normal");
+            ui.label(tr!("tray-section-normal"));
             ui.label(format!("{:.3}, {:.3}, {:.3}", s.normal.x, s.normal.y, s.normal.z));
             ui.end_row();
         });
         ui.horizontal(|ui| {
-            if ui.button("Reverse").clicked() {
+            if ui.button(tr!("tray-section-reverse")).clicked() {
                 self.actions.push(Action::ReverseSection);
             }
-            if ui.button("Align View").clicked() {
+            if ui.button(tr!("tray-section-align-view")).clicked() {
                 self.actions.push(Action::AlignSectionView);
             }
         });
@@ -1197,7 +1214,7 @@ impl VarstotasApp {
         }
         if let Some(name) = rename {
             self.tray.section_name = None;
-            self.doc.commit("Rename Section", |m| {
+            self.doc.commit(&tr!("tray-undo-rename-section"), |m| {
                 if let Some(s) = m.sections.get_mut(i) {
                     s.name = name;
                 }
@@ -1214,20 +1231,20 @@ impl VarstotasApp {
         let geom = model.guide_geom_in(&self.doc.active_path, g);
         egui::Grid::new("entity_info_guide").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| match geom {
             Some(varstotas_kernel::GuideGeom::Line(l)) => {
-                ui.label(RichText::new("Guide Line").strong());
+                ui.label(RichText::new(tr!("tray-guide-line")).strong());
                 ui.end_row();
-                ui.label("Through");
+                ui.label(tr!("tray-through"));
                 ui.add(egui::Label::new(pt(l.origin)).wrap());
                 ui.end_row();
                 let d = l.dir.normalize_or_zero();
-                ui.label("Direction");
+                ui.label(tr!("tray-guide-direction"));
                 ui.label(format!("{:.3}, {:.3}, {:.3}", d.x, d.y, d.z));
                 ui.end_row();
             }
             Some(varstotas_kernel::GuideGeom::Point(p)) => {
-                ui.label(RichText::new("Guide Point").strong());
+                ui.label(RichText::new(tr!("tray-guide-point")).strong());
                 ui.end_row();
-                ui.label("Position");
+                ui.label(tr!("tray-guide-position"));
                 ui.add(egui::Label::new(pt(p)).wrap());
                 ui.end_row();
             }
@@ -1242,7 +1259,7 @@ impl VarstotasApp {
         ui.horizontal(|ui| {
             let (color, name) = match &self.doc.current_material {
                 Some(m) => (color32(m.color), m.name.clone()),
-                None => (Color32::WHITE, "Default".to_string()),
+                None => (Color32::WHITE, tr!("tray-default")),
             };
             let (rect, _) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::hover());
             ui.painter().rect(rect, 6.0, color, Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
@@ -1257,7 +1274,7 @@ impl VarstotasApp {
             }
             ui.vertical(|ui| {
                 ui.label(RichText::new(name).strong());
-                ui.label(RichText::new("Current paint material (B)").small().color(theme::text_dim()));
+                ui.label(RichText::new(tr!("tray-mat-current")).small().color(theme::text_dim()));
             });
         });
         ui.add_space(4.0);
@@ -1269,7 +1286,7 @@ impl VarstotasApp {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
             // "Default" swatch first.
-            let r = swatch(ui, Color32::WHITE, size, cur.is_none()).on_hover_text("Default");
+            let r = swatch(ui, Color32::WHITE, size, cur.is_none()).on_hover_text(tr!("tray-default"));
             ui.painter().add(egui::Shape::convex_polygon(
                 vec![r.rect.right_top() + vec2(-2.0, 2.0), r.rect.right_bottom() - vec2(2.0, 2.0), r.rect.left_bottom() + vec2(2.0, -2.0)],
                 color32(crate::scene_builder::BACK_DEFAULT),
@@ -1290,13 +1307,13 @@ impl VarstotasApp {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let mut c = self.tray.custom_color.unwrap_or(Color32::from_rgb(0x80, 0xA0, 0xC0));
-            ui.label("Custom");
+            ui.label(tr!("tray-mat-custom"));
             if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::OnlyBlend).changed() {
                 self.tray.custom_color = Some(c);
             }
-            if ui.button("Use").clicked() {
+            if ui.button(tr!("tray-mat-use")).clicked() {
                 let [r, g, b, _] = c.to_srgba_unmultiplied();
-                picked = Some(Some(PaletteMaterial::color(format!("Color #{r:02X}{g:02X}{b:02X}"), color_f32(c))));
+                picked = Some(Some(PaletteMaterial::color(format!("Color #{r:02X}{g:02X}{b:02X}"), color_f32(c)))); // i18n-ignore
             }
         });
 
@@ -1320,8 +1337,8 @@ impl VarstotasApp {
         if self.tray.tag_rename.as_ref().is_some_and(|(r, _)| *r == id) {
             self.tray.tag_rename = None;
         }
-        self.doc.commit("Delete Tag", |m| m.delete_tag(id));
-        self.flash(if uses > 0 { format!("Deleted tag “{name}”: {uses} item(s) are Untagged now") } else { format!("Deleted tag “{name}”") });
+        self.doc.commit(&tr!("tray-undo-delete-tag"), |m| m.delete_tag(id));
+        self.flash(if uses > 0 { tr!("tray-tag-deleted-uses", name = name.as_str(), uses = uses) } else { tr!("tray-tag-deleted", name = name.as_str()) });
     }
 
     fn tags_panel(&mut self, ui: &mut Ui) {
@@ -1330,20 +1347,20 @@ impl VarstotasApp {
         let mut delete: Option<TagId> = None;
         let mut add = false;
         ui.horizontal(|ui| {
-            if small_icon_button(ui, Icon::Plus, "Add tag").clicked() {
+            if small_icon_button(ui, Icon::Plus, &tr!("tray-tags-add")).clicked() {
                 add = true;
             }
-            ui.label(RichText::new("Visible · Name").small().color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-tags-header")).small().color(theme::text_dim()));
         });
         let un_shown = !self.doc.model.untagged_hidden;
         ui.horizontal(|ui| {
-            let r = small_icon_button(ui, if un_shown { Icon::Eye } else { Icon::EyeOff }, "Toggle visibility of untagged top-level geometry, groups and components (their contents belong to them)");
+            let r = small_icon_button(ui, if un_shown { Icon::Eye } else { Icon::EyeOff }, &tr!("tray-tags-untagged-hover"));
             super::tray_lib::spot("tag_eye:Untagged", r.rect.center());
             if r.clicked() {
                 self.doc.mutate_untracked(|m| m.untagged_hidden = !m.untagged_hidden);
             }
             ui.add_space(14.0);
-            ui.label(if un_shown { RichText::new("Untagged") } else { RichText::new("Untagged").color(theme::text_dim()) });
+            ui.label(if un_shown { RichText::new(tr!("tray-untagged")) } else { RichText::new(tr!("tray-untagged")).color(theme::text_dim()) });
         });
         let tags: Vec<(TagId, String, bool, [f32; 4])> = self
             .doc
@@ -1354,7 +1371,7 @@ impl VarstotasApp {
             .collect();
         for (id, name, visible, color) in tags {
             ui.horizontal(|ui| {
-                if small_icon_button(ui, if visible { Icon::Eye } else { Icon::EyeOff }, "Toggle visibility").clicked() {
+                if small_icon_button(ui, if visible { Icon::Eye } else { Icon::EyeOff }, &tr!("tray-tags-toggle")).clicked() {
                     toggle = Some(id);
                 }
                 let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
@@ -1370,16 +1387,16 @@ impl VarstotasApp {
                     }
                     _ => {
                         let text = if visible { RichText::new(&name) } else { RichText::new(&name).color(theme::text_dim()) };
-                        let r = ui.add(egui::Label::new(text).sense(Sense::click())).on_hover_text("Double-click to rename; right-click for more");
+                        let r = ui.add(egui::Label::new(text).sense(Sense::click())).on_hover_text(tr!("tray-tags-rename-hover"));
                         if r.double_clicked() {
                             self.tray.tag_rename = Some((id, name.clone()));
                         }
                         r.context_menu(|ui| {
-                            if ui.button("Rename").clicked() {
+                            if ui.button(tr!("tray-rename")).clicked() {
                                 self.tray.tag_rename = Some((id, name.clone()));
                                 ui.close();
                             }
-                            if ui.button("Delete Tag").clicked() {
+                            if ui.button(tr!("tray-undo-delete-tag")).clicked() {
                                 delete = Some(id);
                                 ui.close();
                             }
@@ -1387,7 +1404,7 @@ impl VarstotasApp {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let r = small_icon_button(ui, Icon::Trash, "Delete the tag (what it tags becomes Untagged)");
+                    let r = small_icon_button(ui, Icon::Trash, &tr!("tray-tags-delete-hover"));
                     super::tray_lib::spot("tag_delete", r.rect.center());
                     if r.clicked() {
                         delete = Some(id);
@@ -1405,7 +1422,7 @@ impl VarstotasApp {
         if let Some((id, name)) = rename_commit {
             self.tray.tag_rename = None;
             if !name.trim().is_empty() {
-                self.doc.commit("Rename Tag", |m| {
+                self.doc.commit(&tr!("tray-undo-rename-tag"), |m| {
                     if let Some(t) = m.tags.get_mut(id) {
                         t.name = name.trim().to_string();
                     }
@@ -1417,8 +1434,8 @@ impl VarstotasApp {
         }
         if add {
             let n = self.doc.model.tags.len() + 1;
-            let name = format!("Tag {n}");
-            if let Some(id) = self.doc.commit("Add Tag", |m| m.add_tag(&name)) {
+            let name = tr!("tray-tag-new-name", n = n);
+            if let Some(id) = self.doc.commit(&tr!("tray-undo-add-tag"), |m| m.add_tag(&name)) {
                 self.tray.tag_rename = Some((id, name));
             }
         }
@@ -1439,13 +1456,13 @@ impl VarstotasApp {
             // Drop on the document: move to the top level.
             drop_target(ui, model, &hdr.response, &Vec::new(), &mut actions);
             if root.instances.is_empty() {
-                ui.label(RichText::new("No groups or components yet.").color(theme::text_dim()));
+                ui.label(RichText::new(tr!("tray-outliner-empty")).color(theme::text_dim()));
             }
             outliner_level(ui, model, root, &Vec::new(), &self.doc.active_path, &self.doc.selection, &mut actions);
         });
         outliner_drag_label(ui.ctx());
         if let Err(e) = r {
-            ui.label(RichText::new(format!("(kernel not ready: {e})")).color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-kernel-not-ready", error = e.to_string())).color(theme::text_dim()));
         }
         self.actions.extend(actions);
     }
@@ -1455,32 +1472,32 @@ impl VarstotasApp {
     fn scenes_panel(&mut self, ui: &mut Ui) {
         let sel = self.tray.selected_scene;
         ui.horizontal(|ui| {
-            if small_icon_button(ui, Icon::Plus, "Add scene from current view").clicked() {
+            if small_icon_button(ui, Icon::Plus, &tr!("tray-scenes-add")).clicked() {
                 self.actions.push(Action::AddScene);
             }
             ui.add_enabled_ui(sel.is_some(), |ui| {
-                if small_icon_button(ui, Icon::Refresh, "Update selected scene to current view").clicked()
+                if small_icon_button(ui, Icon::Refresh, &tr!("tray-scenes-update")).clicked()
                     && let Some(i) = sel {
                         self.actions.push(Action::UpdateScene(i));
                     }
-                if small_icon_button(ui, Icon::Trash, "Delete selected scene").clicked()
+                if small_icon_button(ui, Icon::Trash, &tr!("tray-scenes-delete")).clicked()
                     && let Some(i) = sel {
                         self.actions.push(Action::DeleteScene(i));
                     }
-                if ui.small_button("↑").on_hover_text("Move scene up").clicked()
+                if ui.small_button("↑").on_hover_text(tr!("tray-scenes-up")).clicked()
                     && let Some(i) = sel {
                         self.actions.push(Action::MoveScene(i, false));
                     }
-                if ui.small_button("↓").on_hover_text("Move scene down").clicked()
+                if ui.small_button("↓").on_hover_text(tr!("tray-scenes-down")).clicked()
                     && let Some(i) = sel {
                         self.actions.push(Action::MoveScene(i, true));
                     }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let label = if self.scene_player.is_some() { "Pause" } else { "Play" };
+                let label = tr!(if self.scene_player.is_some() { "tray-scenes-pause" } else { "tray-scenes-play" });
                 if ui
                     .add_enabled(!self.doc.model.scenes.is_empty(), egui::Button::new(label).small())
-                    .on_hover_text("Play the scene animation (View → Animation)")
+                    .on_hover_text(tr!("tray-scenes-play-hover"))
                     .clicked()
                 {
                     self.actions.push(Action::ToggleAnimation);
@@ -1488,7 +1505,7 @@ impl VarstotasApp {
             });
         });
         if self.doc.model.scenes.is_empty() {
-            ui.label(RichText::new("No scenes. Click + to save the current view.").color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-scenes-empty")).color(theme::text_dim()));
         }
         let names: Vec<String> = self.doc.model.scenes.iter().map(|s| s.name.clone()).collect();
         let mut rename_commit = None;
@@ -1505,7 +1522,7 @@ impl VarstotasApp {
                 _ => {
                     let r = ui
                         .add(egui::Button::selectable(sel == Some(i), &name).min_size(vec2(ui.available_width(), 22.0)))
-                        .on_hover_text("Click to go to this scene, double-click to rename");
+                        .on_hover_text(tr!("tray-scenes-click-hover"));
                     if r.double_clicked() {
                         self.tray.scene_rename = Some((i, name.clone()));
                     } else if r.clicked() {
@@ -1516,21 +1533,21 @@ impl VarstotasApp {
         }
         if let Some(i) = sel.filter(|i| *i < self.doc.model.scenes.len()) {
             let mut inc = self.doc.model.scenes[i].in_animation;
-            if ui.checkbox(&mut inc, "Include in animation").changed() {
-                self.doc.commit("Scene Properties", |m| m.scenes[i].in_animation = inc);
+            if ui.checkbox(&mut inc, tr!("tray-scenes-include")).changed() {
+                self.doc.commit(&tr!("tray-undo-scene-properties"), |m| m.scenes[i].in_animation = inc);
             }
         }
-        egui::CollapsingHeader::new("Animation").id_salt("scene_anim_settings").show(ui, |ui| {
+        egui::CollapsingHeader::new(tr!("tray-scenes-animation")).id_salt("scene_anim_settings").show(ui, |ui| {
             let mut set = self.doc.model.scene_settings;
-            ui.checkbox(&mut set.transitions, "Scene transitions");
+            ui.checkbox(&mut set.transitions, tr!("tray-scenes-transitions"));
             ui.add_enabled_ui(set.transitions, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Transition");
+                    ui.label(tr!("tray-scenes-transition"));
                     ui.add(egui::DragValue::new(&mut set.transition_secs).range(0.0..=60.0).speed(0.05).suffix(" s"));
                 });
             });
             ui.horizontal(|ui| {
-                ui.label("Scene delay");
+                ui.label(tr!("tray-scenes-delay"));
                 ui.add(egui::DragValue::new(&mut set.delay_secs).range(0.0..=60.0).speed(0.05).suffix(" s"));
             });
             if set != self.doc.model.scene_settings {
@@ -1542,7 +1559,7 @@ impl VarstotasApp {
         if let Some((i, name)) = rename_commit {
             self.tray.scene_rename = None;
             if !name.trim().is_empty() {
-                self.doc.commit("Rename Scene", |m| {
+                self.doc.commit(&tr!("tray-undo-rename-scene"), |m| {
                     if let Some(s) = m.scenes.get_mut(i) {
                         s.name = name.trim().to_string();
                     }
@@ -1561,19 +1578,19 @@ impl VarstotasApp {
             ui.vertical(|ui| {
                 ui.label(RichText::new(id.name()).strong().size(14.0));
                 if let Some(s) = id.shortcut_label() {
-                    ui.label(RichText::new(format!("Shortcut: {s}")).small().color(theme::text_dim()));
+                    ui.label(RichText::new(tr!("tray-instructor-shortcut", key = s)).small().color(theme::text_dim()));
                 }
             });
         });
         ui.label(RichText::new(id.description()).italics());
         ui.add_space(2.0);
         ui.label(id.instructor());
-        if ui.link("More in the User Guide (F1)").clicked() {
+        if ui.link(tr!("tray-instructor-more")).clicked() {
             self.app_help_for_tool();
         }
         if !id.implemented() {
             ui.add_space(4.0);
-            ui.label(RichText::new("This tool is not implemented yet.").color(Color32::from_rgb(0xC0, 0x60, 0x20)));
+            ui.label(RichText::new(tr!("tray-instructor-not-implemented")).color(Color32::from_rgb(0xC0, 0x60, 0x20)));
         }
     }
 }
@@ -1595,7 +1612,7 @@ fn outliner_level(
         let mut child_path = path.clone();
         child_path.push(id);
         let row = |ui: &mut Ui, actions: &mut Vec<Action>| {
-            if small_icon_button(ui, if inst.hidden { Icon::EyeOff } else { Icon::Eye }, "Hide / show").clicked() {
+            if small_icon_button(ui, if inst.hidden { Icon::EyeOff } else { Icon::Eye }, &tr!("tray-outliner-hide-show")).clicked() {
                 actions.push(Action::ToggleInstanceHidden(path.clone(), id));
             }
             let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
@@ -1615,39 +1632,39 @@ fn outliner_level(
             }
             drop_target(ui, model, &resp, &child_path, actions);
             resp.context_menu(|ui| {
-                if ui.button("Zoom To").on_hover_text("Select it and frame it in the view (double-click)").clicked() {
+                if ui.button(tr!("tray-outliner-zoom")).on_hover_text(tr!("tray-outliner-zoom-hover")).clicked() {
                     actions.push(Action::FocusInstance(path.clone(), id));
                     ui.close();
                 }
-                if ui.button(if is_group { "Edit Group" } else { "Edit Component" }).clicked() {
+                if ui.button(tr!(if is_group { "tray-outliner-edit-group" } else { "tray-outliner-edit-component" })).clicked() {
                     actions.push(Action::EditInstance(path.clone(), id));
                     ui.close();
                 }
-                if ui.button(if inst.hidden { "Unhide" } else { "Hide" }).clicked() {
+                if ui.button(tr!(if inst.hidden { "tray-outliner-unhide" } else { "tray-outliner-hide" })).clicked() {
                     actions.push(Action::ToggleInstanceHidden(path.clone(), id));
                     ui.close();
                 }
-                if ui.button("Explode").clicked() {
+                if ui.button(tr!("tray-outliner-explode")).clicked() {
                     actions.push(Action::SelectInstance(path.clone(), id));
                     actions.push(Action::Explode);
                     ui.close();
                 }
                 if !is_group
                     && model.can_make_unique(&path, id)
-                    && ui.button("Make Unique").on_hover_text("Its own definition: editing it no longer changes the other copies").clicked()
+                    && ui.button(tr!("tray-outliner-make-unique")).on_hover_text(tr!("tray-outliner-make-unique-hover")).clicked()
                 {
                     actions.push(Action::SelectInstance(path.clone(), id));
                     actions.push(Action::MakeUnique);
                     ui.close();
                 }
                 if let Some((_, parent)) = path.split_last()
-                    && ui.button("Move Out of Group").on_hover_text("Into the group / component around this one (or drag the row)").clicked()
+                    && ui.button(tr!("tray-outliner-move-out")).on_hover_text(tr!("tray-outliner-move-out-hover")).clicked()
                 {
                     actions.push(Action::MoveInstance(path.clone(), id, parent.to_vec()));
                     ui.close();
                 }
                 ui.separator();
-                if ui.button("Delete").clicked() {
+                if ui.button(tr!("delete")).clicked() {
                     actions.push(Action::DeleteInstance(path.clone(), id));
                     ui.close();
                 }

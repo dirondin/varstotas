@@ -13,9 +13,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::SystemTime;
+use varstotas_i18n::tr;
 
 pub const SUFFIX: &str = "~autosave";
-pub const UNTITLED_FILE: &str = "Untitled.vrst~autosave";
+pub const UNTITLED_FILE: &str = "Untitled.vrst~autosave"; // i18n-ignore
 pub const DEFAULT_MINUTES: u32 = 5;
 
 /// Directory for untitled autosaves: `$VARSTOTAS_AUTOSAVE_DIR`, else the platform app-data dir.
@@ -23,7 +24,7 @@ pub fn data_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("VARSTOTAS_AUTOSAVE_DIR").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(d));
     }
-    eframe::storage_dir("Varstotas")
+    eframe::storage_dir("Varstotas") // i18n-ignore
 }
 
 /// Where the autosave of a document lives: next to the file, or in `data_dir` when untitled.
@@ -70,22 +71,22 @@ impl Recovery {
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Untitled".into())
+            .unwrap_or_else(|| tr!("dialog-untitled"))
     }
 
     /// "5 minutes ago"-style age of the autosave.
     pub fn age_text(&self) -> String {
         let Some(secs) = self.modified.and_then(|t| SystemTime::now().duration_since(t).ok()).map(|d| d.as_secs())
         else {
-            return "recently".into();
+            return tr!("dialog-age-recently");
         };
         match secs {
-            0..=59 => "less than a minute ago".into(),
-            60..=119 => "1 minute ago".into(),
-            120..=3599 => format!("{} minutes ago", secs / 60),
-            3600..=7199 => "1 hour ago".into(),
-            7200..=86_399 => format!("{} hours ago", secs / 3600),
-            _ => format!("{} days ago", secs / 86_400),
+            0..=59 => tr!("dialog-age-under-minute"),
+            60..=119 => tr!("dialog-age-minutes", n = 1),
+            120..=3599 => tr!("dialog-age-minutes", n = secs / 60),
+            3600..=7199 => tr!("dialog-age-hours", n = 1),
+            7200..=86_399 => tr!("dialog-age-hours", n = secs / 3600),
+            _ => tr!("dialog-age-days", n = secs / 86_400),
         }
     }
 }

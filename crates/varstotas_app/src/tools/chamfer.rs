@@ -5,6 +5,7 @@
 //! uses the last size. Typing a size while sizing applies it; typing right after an operation
 //! redoes it with the new size.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -116,8 +117,8 @@ impl ChamferTool {
         (v.is_finite() && v > 1e-6).then_some(v)
     }
 
-    fn label(&self) -> &'static str {
-        if self.round { "Fillet" } else { "Chamfer" }
+    fn label(&self) -> String {
+        tr!(if self.round { "tool-undo-fillet" } else { "tool-undo-chamfer" })
     }
 
     fn update(&mut self, ctx: &ToolContext) {
@@ -220,7 +221,7 @@ impl ChamferTool {
         }
         let path = ctx.doc.active_path.clone();
         let kind = self.kind();
-        let done = ctx.doc.try_commit(self.label(), |m| m.chamfer_edges_in(&path, &edges, kind)).is_some();
+        let done = ctx.doc.try_commit(&self.label(), |m| m.chamfer_edges_in(&path, &edges, kind)).is_some();
         if done {
             ctx.doc.set_selection_full(Vec::new(), Vec::new(), Vec::new());
             self.last = Some(edges);
@@ -305,8 +306,8 @@ impl Tool for ChamferTool {
         self.update(ctx);
         true
     }
-    fn vcb_label(&self) -> &str {
-        if self.round { "Radius" } else { "Distance" }
+    fn vcb_label(&self) -> String {
+        tr!(if self.round { "tool-vcb-radius" } else { "tool-vcb-distance" })
     }
     fn vcb_value(&self) -> String {
         let v = varstotas_kernel::units::format_length(self.size(), self.unit);
@@ -316,16 +317,16 @@ impl Tool for ChamferTool {
         if let Some(e) = &self.preview.borrow().error
             && self.hover.is_some()
         {
-            return format!("Can't {} this edge: {e}", self.label().to_lowercase());
+            return tr!("tool-chamfer-cant", what = tr!(if self.round { "tool-chamfer-what-fillet" } else { "tool-chamfer-what-chamfer" }), error = e);
         }
         match (self.sizing.is_some(), self.round) {
-            (true, true) => "Move away from the edge to set the radius, click to finish. Type a radius or `12s`; Esc cancels.".into(),
-            (true, false) => "Move away from the edge to set the size, click to finish. Type a distance; Esc cancels.".into(),
+            (true, true) => tr!("tool-fillet-sizing"),
+            (true, false) => tr!("tool-chamfer-sizing"),
             (false, true) => {
-                "Click an edge between two faces to round it (selected edges: all of them); double-click = last radius.".into()
+                tr!("tool-fillet-hover")
             }
             (false, false) => {
-                "Click an edge between two faces to bevel it (selected edges: all of them); double-click = last size.".into()
+                tr!("tool-chamfer-hover")
             }
         }
     }

@@ -1,6 +1,7 @@
 //! Placing 3D Text (Tools → 3D Text…): the text follows the cursor, lying on the face under
 //! it (on the ground otherwise); a click adds it as a group. Shown as the Move tool.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
@@ -77,7 +78,7 @@ impl Tool for Text3dPlaceTool {
         false
     }
     fn status_text(&self) -> String {
-        "Click to place the 3D text (Esc cancels).".into()
+        tr!("tool-text3d-status")
     }
     fn overlay(&self, _view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(xf) = self.placement() {

@@ -9,6 +9,7 @@ use crate::ui::unfold::scale_label;
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::layout::{LayoutSheet, SheetTable, SheetViewport};
 use varstotas_kernel::{LengthUnit, Model, Scene};
+use varstotas_i18n::tr;
 use varstotas_render::{Camera, StandardView};
 
 /// Border inset from the paper edge, mm.
@@ -63,7 +64,7 @@ pub const CREDITS: &str = "{credits}";
 /// "Credits:" and a line per downloaded model the model uses.
 pub fn credits_text(model: &Model) -> String {
     let lines: Vec<String> = model.attributions().iter().map(|a| a.line()).collect();
-    if lines.is_empty() { "Credits: no downloaded models".into() } else { format!("Credits:\n{}", lines.join("\n")) }
+    if lines.is_empty() { tr!("layout-credits-none") } else { tr!("layout-credits", lines = lines.join("\n")) }
 }
 
 /// Clip segment `a`–`b` to the box (Liang–Barsky).
@@ -203,7 +204,7 @@ fn overall_dims(d: &mut Drawing, lo: DVec2, hi: DVec2, world: DVec2, unit: Lengt
 /// Rows of a parts table (header first) from the model's groups and components.
 pub fn table_rows(model: &Model) -> Vec<[String; 5]> {
     let (parts, _) = varstotas_kernel::report::model_report(model);
-    let mut rows = vec![["#", "Name", "Qty", "Size", "Material"].map(String::from)];
+    let mut rows = vec![["#".to_string(), tr!("layout-col-name"), tr!("layout-col-qty"), tr!("layout-col-size"), tr!("layout-col-material")]]; // i18n-ignore
     for (i, p) in parts.iter().enumerate() {
         let size = p.size.map(|v| dim_text(v, model.unit)).join(" × ");
         let name = format!("{}{}", "  ".repeat(p.depth), p.name);
@@ -211,7 +212,7 @@ pub fn table_rows(model: &Model) -> Vec<[String; 5]> {
         rows.push([(i + 1).to_string(), name, p.count.to_string(), size, material]);
     }
     if parts.is_empty() {
-        rows.push(["".into(), "No groups or components".into(), "".into(), "".into(), "".into()]);
+        rows.push(["".into(), tr!("layout-no-parts"), "".into(), "".into(), "".into()]);
     }
     rows
 }
@@ -285,14 +286,14 @@ pub fn standard_views(model: &Model, sheet: &LayoutSheet, scale: Option<f64>) ->
         vp
     };
     let mut out = vec![
-        make(lo, front, view("Front", StandardView::Front, true)),
-        make(lo + DVec2::new(0.0, front.y), top, view("Top", StandardView::Top, true)),
-        make(lo + DVec2::new(front.x, 0.0), left, view("Left", StandardView::Left, true)),
+        make(lo, front, view("Front", StandardView::Front, true)), // i18n-ignore
+        make(lo + DVec2::new(0.0, front.y), top, view("Top", StandardView::Top, true)), // i18n-ignore
+        make(lo + DVec2::new(front.x, 0.0), left, view("Left", StandardView::Left, true)), // i18n-ignore
     ];
     let iso_min = lo + front;
     let iso_size = DVec2::new(lo.x + room.x - iso_min.x, top.y.min(lo.y + room.y - iso_min.y));
     if iso_size.min_element() >= 30.0 {
-        out.push(SheetViewport::new(iso_min, iso_size, view("Iso", StandardView::Iso, true)));
+        out.push(SheetViewport::new(iso_min, iso_size, view("Iso", StandardView::Iso, true))); // i18n-ignore
     }
     out
 }
@@ -306,7 +307,7 @@ fn sheet_scale(model: &Model, sheet: &LayoutSheet) -> String {
     match scales.as_slice() {
         [] => "-".into(),
         [n] => scale_label(*n),
-        _ => "As shown".into(),
+        _ => tr!("layout-scale-as-shown"),
     }
 }
 
@@ -342,10 +343,10 @@ pub fn sheet_drawing(model: &Model, sheet: &LayoutSheet, index: usize, total: us
         let title = if tb.title.trim().is_empty() { file.to_string() } else { tb.title.clone() };
         d.texts.push(text(DVec2::new(x0 + 3.0, y0 + 7.0), 5.0, title));
         let small = |x: f64, y: f64, label: &str, v: &str| text(DVec2::new(x + 3.0, y - 2.2), 2.8, format!("{label}: {v}"));
-        d.texts.push(small(x0, yb, "Author", &tb.author));
-        d.texts.push(small(xm, yb, "Date", &tb.date));
-        d.texts.push(small(x0, y1, "Scale", &sheet_scale(model, sheet)));
-        d.texts.push(small(xm, y1, "Sheet", &format!("{} of {total}", index + 1)));
+        d.texts.push(small(x0, yb, &tr!("layout-tb-author"), &tb.author));
+        d.texts.push(small(xm, yb, &tr!("layout-tb-date"), &tb.date));
+        d.texts.push(small(x0, y1, &tr!("layout-tb-scale"), &sheet_scale(model, sheet)));
+        d.texts.push(small(xm, y1, &tr!("layout-tb-sheet"), &tr!("layout-tb-sheet-of", n = index + 1, total = total)));
     }
     d
 }

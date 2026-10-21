@@ -7,6 +7,7 @@ use crate::{DefId, Model};
 use glam::{DMat3, DMat4, DVec3};
 use serde_json::{Value, json};
 use std::path::Path;
+use varstotas_i18n::tr;
 
 /// Points of CSV text: `x,y[,z]` per line in mm (`;` or tabs also separate; lines that
 /// aren't numbers — headers, comments — are skipped).
@@ -24,7 +25,7 @@ pub fn parse_points_csv(text: &str) -> Vec<DVec3> {
 pub fn import_points_csv(model: &mut Model, path: &Path) -> Result<usize, IoError> {
     let mut pts = parse_points_csv(&std::fs::read_to_string(path)?);
     if pts.len() < 2 {
-        return Err(IoError::Format(format!("no points in {}", path.display())));
+        return Err(IoError::Format(tr!("kernel-io-no-points-in-display", display = path.display().to_string())));
     }
     let closed = pts.len() > 3 && pts[0].distance(pts[pts.len() - 1]) < 1e-9;
     if closed {

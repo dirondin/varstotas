@@ -8,6 +8,7 @@ use varstotas_kernel::{ContextPath, EntityRef, Model};
 use rhai::{Array, Dynamic, Map};
 use serde_json::{Value, json};
 use slotmap::{Key, KeyData};
+use varstotas_i18n::tr;
 
 /// Result of [`eval_json`].
 #[derive(Clone, Debug, Default)]
@@ -80,7 +81,7 @@ pub(crate) fn from_json(v: &Value) -> Result<Dynamic, String> {
         Value::Object(o) => {
             if let Some(id) = o.get("$entity") {
                 let s = id.as_str().ok_or("$entity must be a string")?;
-                let (path, r) = parse_entity_id(s).ok_or_else(|| format!("bad entity id {s}"))?;
+                let (path, r) = parse_entity_id(s).ok_or_else(|| tr!("script-err-bad-entity-id-s", s = s.to_string()))?;
                 return Ok(Dynamic::from(Entity { path, r }));
             }
             if let Some(Value::Array(a)) = o.get("$vec") {

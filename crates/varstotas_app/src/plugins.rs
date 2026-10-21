@@ -27,6 +27,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use varstotas_i18n::tr;
 
 pub const EXAMPLES: &[(&str, &str)] = &[
     ("stairs.rhai", include_str!("../../../examples/plugins/stairs.rhai")),
@@ -108,7 +109,7 @@ impl Plugin {
 pub fn param_value(q: &Param, v: &str, unit: varstotas_kernel::LengthUnit) -> Result<serde_json::Value, String> {
     use serde_json::json;
     let t = v.trim();
-    let bad = || format!("{}: not a valid value: {t}", q.label);
+    let bad = || tr!("ext-param-invalid", label = q.label.clone(), value = t);
     Ok(match q.kind {
         ParamKind::Length => json!(varstotas_kernel::units::parse_length(t, unit).ok_or_else(bad)?),
         ParamKind::Int => json!(t.parse::<i64>().map_err(|_| bad())?),
@@ -136,18 +137,18 @@ fn split_label(s: &str) -> (&str, Option<String>) {
 }
 
 fn parse_param(s: &str) -> Result<Param, String> {
-    let (decl, default) = s.split_once('=').ok_or_else(|| format!("@param needs `name = default`: {s}"))?;
+    let (decl, default) = s.split_once('=').ok_or_else(|| tr!("ext-param-needs-default", text = s))?;
     let (key, ty) = match decl.trim().split_once(':') {
         Some((k, t)) => (k.trim(), Some(t.trim())),
         None => (decl.trim(), None),
     };
     if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || key.starts_with(|c: char| c.is_ascii_digit()) {
-        return Err(format!("bad parameter name `{key}`"));
+        return Err(tr!("ext-param-bad-name", key = key));
     }
     // `= "text" "Label"`: the first quoted string is the default.
     let d = default.trim();
     let (default, label) = if let Some(rest) = d.strip_prefix('"') {
-        let end = rest.find('"').ok_or_else(|| format!("unclosed quote: {s}"))?;
+        let end = rest.find('"').ok_or_else(|| tr!("ext-param-unclosed-quote", text = s))?;
         let (_, label) = split_label(&rest[end + 1..]);
         (rest[..end].to_string(), label)
     } else {
@@ -161,7 +162,7 @@ fn parse_param(s: &str) -> Result<Param, String> {
         Some("text") => ParamKind::Text,
         Some("bool") => ParamKind::Bool,
         Some("length") => ParamKind::Length,
-        Some(t) => return Err(format!("unknown parameter type `{t}` (length, int, number, text, bool)")),
+        Some(t) => return Err(tr!("ext-param-unknown-type", ty = t)),
         None if default == "true" || default == "false" => ParamKind::Bool,
         None if quoted => ParamKind::Text,
         None => ParamKind::Length,
@@ -242,13 +243,13 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             "param" => p.params.push(parse_param(rest)?),
             "pick" => {
                 let (n, label) = split_label(rest);
-                let n: usize = n.parse().map_err(|_| format!("@pick needs a number of points: {rest}"))?;
+                let n: usize = n.parse().map_err(|_| tr!("ext-pick-needs-number", text = rest))?;
                 if !(1..=16).contains(&n) {
-                    return Err("@pick: 1 to 16 points".into());
+                    return Err(tr!("ext-pick-range"));
                 }
-                p.pick = Some((n, label.unwrap_or_else(|| format!("Click {n} point(s)"))));
+                p.pick = Some((n, label.unwrap_or_else(|| tr!("ext-pick-default", n = n))));
             }
-            "select" => p.select = Some(split_label(rest).1.unwrap_or_else(|| "Select objects".into())),
+            "select" => p.select = Some(split_label(rest).1.unwrap_or_else(|| tr!("ext-select-default"))),
             "import" => p.import = exts(),
             "export" => p.export = exts(),
             "material_import" => p.material_import = exts(),
@@ -295,7 +296,7 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         }
     }
     if p.name.trim().is_empty() {
-        return Err("empty @name".into());
+        return Err(tr!("ext-empty-name"));
     }
     if p.menu.is_empty() {
         p.menu = vec![p.name.clone()];

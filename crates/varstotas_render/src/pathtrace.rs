@@ -329,7 +329,7 @@ pub(crate) struct ShaderTest<'a> {
 /// The tracing module with ray queries: `src` (the scene module) with its BVH traversal
 /// replaced by `pathtrace_rq.wgsl`.
 pub(crate) fn rq_source(src: &str) -> String {
-    let (a, b) = ("// ---- bvh traversal", "// ---- end bvh traversal ----");
+    let (a, b) = ("// ---- bvh traversal", "// ---- end bvh traversal ----"); // i18n-ignore
     let (i, j) = (src.find(a).expect("bvh section"), src.find(b).expect("bvh section end"));
     format!("enable wgpu_ray_query;\n{}{}{}", &src[..i], include_str!("pathtrace_rq.wgsl"), &src[j..])
 }

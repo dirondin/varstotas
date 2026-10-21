@@ -5,6 +5,7 @@
 use super::theme;
 use crate::app::VarstotasApp;
 use egui::{Color32, Context, Key, Modifiers, RichText, ScrollArea};
+use varstotas_i18n::tr;
 
 /// One line of the console log.
 #[derive(Clone, Debug, PartialEq)]
@@ -33,7 +34,7 @@ impl ConsoleState {
     /// Add a line to the output; errors go to Window → Log too.
     pub fn push(&mut self, line: LogLine) {
         if let LogLine::Error(e) = &line {
-            crate::applog::error("Script Console", e);
+            crate::applog::error("Script Console", e); // i18n-ignore
         }
         self.log.push(line);
     }
@@ -56,7 +57,7 @@ impl VarstotasApp {
             |r: &varstotas_script::ScriptRun| r.changed,
         );
         let Some(run) = run else {
-            let e = self.doc.last_error.take().unwrap_or_else(|| "script failed".into());
+            let e = self.doc.last_error.take().unwrap_or_else(|| tr!("console-script-failed"));
             self.console.push(LogLine::Error(e.clone()));
             self.console.last = Some((false, e));
             return;
@@ -70,7 +71,7 @@ impl VarstotasApp {
         match run.error {
             Some(e) => {
                 self.console.push(LogLine::Error(e.clone()));
-                self.flash_error_quiet(format!("Script error: {e}"));
+                self.flash_error_quiet(tr!("console-script-error", error = e.to_string()));
                 self.console.last = Some((false, e));
             }
             None => self.console.last = Some((true, run.output.trim_end().to_string())),
@@ -89,9 +90,9 @@ impl VarstotasApp {
         match std::fs::read_to_string(path) {
             Ok(src) => {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                self.run_script_source(&src, &format!("Script {name}"));
+                self.run_script_source(&src, &tr!("console-script-undo", name = name));
             }
-            Err(e) => self.flash_error(format!("Cannot read {}: {e}", path.display())),
+            Err(e) => self.flash_error(tr!("console-cannot-read", path = path.display().to_string(), error = e.to_string())),
         }
     }
 
@@ -105,7 +106,7 @@ impl VarstotasApp {
         let mut help: Option<Option<String>> = None;
         let pos = self.viewport.view_rect.min + egui::vec2(16.0, 16.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(theme::card_bg());
-        let mut win = egui::Window::new("Script Console").open(&mut open).default_pos(pos);
+        let mut win = egui::Window::new(tr!("console-title")).id(egui::Id::new("Script Console")).open(&mut open).default_pos(pos);
         if self.debug.script_active() {
             // Scripted runs: a fixed place (egui remembers window positions between runs).
             win = win.fixed_pos(pos);
@@ -127,7 +128,7 @@ impl VarstotasApp {
                     |ui| {
                         if self.console.log.is_empty() {
                             ui.label(
-                                RichText::new(varstotas_i18n::platform_keys("Rhai scripts over the model. Try: box(ORIGIN, 1000, 600, 18)  — %CMD%+Enter runs"))
+                                RichText::new(tr!("console-hint"))
                                     .color(theme::text_dim()),
                             );
                         }
@@ -172,35 +173,35 @@ impl VarstotasApp {
             }
             self.console.editor.show(ui, &mut self.prefs.console_code, code_h);
             ui.horizontal(|ui| {
-                if ui.button("Run").on_hover_text(varstotas_i18n::platform_keys("%CMD%+Enter")).clicked() {
+                if ui.button(tr!("console-run")).on_hover_text(tr!("console-run-hint")).clicked() {
                     run = Some(self.prefs.console_code.clone());
                 }
-                if ui.button("Open…").clicked()
-                    && let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).pick_file()
+                if ui.button(tr!("console-open")).clicked()
+                    && let Some(p) = rfd::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).pick_file()
                 {
                     match std::fs::read_to_string(&p) {
                         Ok(s) => self.prefs.console_code = s,
                         Err(e) => self.console.push(LogLine::Error(format!("{}: {e}", p.display()))),
                     }
                 }
-                if ui.button("Save…").clicked()
-                    && let Some(p) = rfd::FileDialog::new().add_filter("Rhai script", &["rhai"]).set_file_name("script.rhai").save_file()
+                if ui.button(tr!("console-save")).clicked()
+                    && let Some(p) = rfd::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).set_file_name("script.rhai").save_file()
                     && let Err(e) = std::fs::write(&p, &self.prefs.console_code)
                 {
                     self.console.push(LogLine::Error(format!("{}: {e}", p.display())));
                 }
-                if self.bridge.python.is_some() && ui.button("Stop Python").clicked() {
+                if self.bridge.python.is_some() && ui.button(tr!("console-stop-python")).clicked() {
                     self.stop_python();
                 }
-                if ui.button("Clear Output").clicked() {
+                if ui.button(tr!("console-clear")).clicked() {
                     self.console.log.clear();
                 }
                 if super::script_help::help_button(ui) {
                     help = Some(None);
                 }
                 if let Some(b) = &self.bridge.server {
-                    ui.label(RichText::new(format!("Python / MCP bridge: 127.0.0.1:{}", b.port)).color(theme::text_dim()))
-                        .on_hover_text("import varstotas; m = varstotas.connect()  — see ~/.varstotas/python");
+                    ui.label(RichText::new(tr!("console-bridge", port = b.port)).color(theme::text_dim()))
+                        .on_hover_text(tr!("console-bridge-hint"));
                 }
             });
         });

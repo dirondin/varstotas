@@ -1,5 +1,6 @@
 //! Menu bar: File Edit View Camera Draw Tools Window Help.
 
+use varstotas_i18n::tr;
 use crate::app::{Action, FaceStylePref, VarstotasApp};
 use crate::templates::Template;
 use varstotas_kernel::EntityRef;
@@ -106,7 +107,7 @@ impl VarstotasApp {
     /// Intersect / Reverse / Orient / Flip entries (Edit menu and the viewport context menu).
     fn face_ops_items(&mut self, ui: &mut Ui) {
         ui.add_enabled_ui(Cmd::IntersectModel.enabled(self), |ui| {
-            icon_menu(ui, Some(Icon::Intersect(0)), "Intersect Faces", |ui| {
+            icon_menu(ui, Some(Icon::Intersect(0)), &tr!("menu-intersect-faces"), |ui| {
                 for c in [Cmd::IntersectModel, Cmd::IntersectSelection, Cmd::IntersectContext] {
                     self.cmd_item(ui, c);
                 }
@@ -115,7 +116,7 @@ impl VarstotasApp {
         self.cmd_item(ui, Cmd::ReverseFaces);
         self.cmd_item(ui, Cmd::OrientFaces);
         ui.add_enabled_ui(Cmd::FlipRed.enabled(self), |ui| {
-            icon_menu(ui, Some(Icon::Flip(0)), "Flip Along", |ui| {
+            icon_menu(ui, Some(Icon::Flip(0)), &tr!("menu-flip-along"), |ui| {
                 for c in [Cmd::FlipRed, Cmd::FlipGreen, Cmd::FlipBlue] {
                     self.cmd_item(ui, c);
                 }
@@ -132,13 +133,13 @@ impl VarstotasApp {
     /// Right-click menu of the 3D view.
     pub(crate) fn viewport_context_menu(&mut self, ui: &mut Ui) {
         if self.ctx_on_axes {
-            self.item(ui, "Place", None, true, Action::PlaceAxes);
-            self.item(ui, "Move…", None, true, Action::MoveAxes);
-            self.item(ui, "Reset", None, self.doc.model.axes.is_some(), Action::ResetAxes);
+            self.item(ui, &tr!("menu-axes-place"), None, true, Action::PlaceAxes);
+            self.item(ui, &tr!("menu-axes-move"), None, true, Action::MoveAxes);
+            self.item(ui, &tr!("menu-axes-reset"), None, self.doc.model.axes.is_some(), Action::ResetAxes);
             return;
         }
         self.clipboard_items(ui);
-        self.cmd_item_as(ui, Cmd::Delete, "Erase");
+        self.cmd_item_as(ui, Cmd::Delete, &tr!("menu-erase"));
         ui.separator();
         for c in [Cmd::Hide, Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode] {
             self.cmd_item(ui, c);
@@ -150,23 +151,23 @@ impl VarstotasApp {
         ui.separator();
         if let Some(i) = self.doc.section_sel {
             let on = self.doc.model.sections.get(i).is_some_and(|s| s.active);
-            let b = Button::new("Active Cut").selected(on);
+            let b = Button::new(tr!("menu-active-cut")).selected(on);
             if ui.add(b).clicked() {
                 self.actions.push(Action::ActiveCut);
                 ui.close();
             }
-            self.item(ui, "Reverse", None, true, Action::ReverseSection);
-            self.item(ui, "Align View", None, true, Action::AlignSectionView);
+            self.item(ui, &tr!("menu-reverse"), None, true, Action::ReverseSection);
+            self.item(ui, &tr!("menu-align-view"), None, true, Action::AlignSectionView);
             ui.separator();
         }
         self.face_ops_items(ui);
         let can_unfold = self.doc.selection.iter().any(|e| matches!(e, EntityRef::Face(_) | EntityRef::Instance(_)));
-        if icon_row(ui, Some(Icon::Unfold), "Unfold…", None, can_unfold, false).clicked() {
+        if icon_row(ui, Some(Icon::Unfold), &tr!("menu-unfold"), None, can_unfold, false).clicked() {
             self.actions.push(Action::Unfold);
         }
         if self.selected_textured_face() {
-            ui.menu_button("Texture", |ui| {
-                self.item(ui, "Position", None, true, Action::SetTool(ToolId::TexturePosition));
+            ui.menu_button(tr!("menu-texture"), |ui| {
+                self.item(ui, &tr!("menu-texture-position"), None, true, Action::SetTool(ToolId::TexturePosition));
             });
         }
         if !self.doc.active_path.is_empty() {
@@ -186,9 +187,9 @@ impl VarstotasApp {
 
     pub(crate) fn menu_bar(&mut self, ui: &mut Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
+            ui.menu_button(tr!("menu-file"), |ui| {
                 self.cmd_item(ui, Cmd::New);
-                icon_menu(ui, None, "New from Template", |ui| {
+                icon_menu(ui, None, &tr!("menu-new-from-template"), |ui| {
                     for t in Template::ALL {
                         let b = Button::new(t.name()).selected(self.prefs.template == Some(t));
                         if ui.add(b).on_hover_text(t.description()).clicked() {
@@ -199,7 +200,7 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::Open);
                 let recent = self.prefs.recent.clone();
                 ui.add_enabled_ui(!recent.is_empty(), |ui| {
-                    icon_menu(ui, None, "Open Recent", |ui| {
+                    icon_menu(ui, None, &tr!("menu-open-recent"), |ui| {
                         for p in recent {
                             let name = p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
                             if ui.button(name).on_hover_text(p.display().to_string()).clicked() {
@@ -211,16 +212,16 @@ impl VarstotasApp {
                 ui.separator();
                 self.cmd_item(ui, Cmd::Save);
                 self.cmd_item(ui, Cmd::SaveAs);
-                icon_menu(ui, Some(Icon::Picture(0)), "Preview Image", |ui| {
+                icon_menu(ui, Some(Icon::Picture(0)), &tr!("menu-preview-image"), |ui| {
                     self.cmd_item(ui, Cmd::PreviewShow);
                     ui.separator();
                     for c in [Cmd::PreviewFromFile, Cmd::PreviewFromView, Cmd::PreviewRemove] {
                         self.cmd_item(ui, c);
                     }
                 })
-                .on_hover_text("The picture the Components library shows for this file (else it draws the model)");
+                .on_hover_text(tr!("menu-preview-image-hint"));
                 ui.separator();
-                icon_menu(ui, Some(Icon::Import("")), "Import", |ui| {
+                icon_menu(ui, Some(Icon::Import("")), &tr!("menu-import"), |ui| {
                     use Cmd::*;
                     for c in [ImportObj, ImportStl, ImportDxf, ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv] {
                         self.cmd_item(ui, c);
@@ -228,7 +229,7 @@ impl VarstotasApp {
                     self.plugin_file_items(ui, false);
                     self.model_import_items(ui);
                 });
-                icon_menu(ui, Some(Icon::Export("")), "Export", |ui| {
+                icon_menu(ui, Some(Icon::Export("")), &tr!("menu-export"), |ui| {
                     use Cmd::*;
                     self.cmd_item(ui, ExportImage);
                     self.cmd_item(ui, ExportAnimation);
@@ -236,7 +237,7 @@ impl VarstotasApp {
                     for c in [ExportObj, ExportStl, ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing] {
                         self.cmd_item(ui, c);
                     }
-                    self.cmd_item_as(ui, Unfold, "Unfold (SVG / PDF / DXF)…");
+                    self.cmd_item_as(ui, Unfold, &tr!("menu-unfold-export"));
                     self.cmd_item(ui, Sheets);
                     ui.separator();
                     for c in [ExportReport, ExportFacesJson, ExportAttributions] {
@@ -250,11 +251,11 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::Quit);
             });
 
-            ui.menu_button("Edit", |ui| {
-                let undo = self.doc.history.undo_label().map(|l| format!("Undo {l}"));
-                let redo = self.doc.history.redo_label().map(|l| format!("Redo {l}"));
-                self.cmd_item_as(ui, Cmd::Undo, undo.as_deref().unwrap_or("Undo"));
-                self.cmd_item_as(ui, Cmd::Redo, redo.as_deref().unwrap_or("Redo"));
+            ui.menu_button(tr!("menu-edit"), |ui| {
+                let undo = self.doc.history.undo_label().map(|l| tr!("menu-undo-named", name = l)).unwrap_or_else(|| Cmd::Undo.menu_label());
+                let redo = self.doc.history.redo_label().map(|l| tr!("menu-redo-named", name = l)).unwrap_or_else(|| Cmd::Redo.menu_label());
+                self.cmd_item_as(ui, Cmd::Undo, &undo);
+                self.cmd_item_as(ui, Cmd::Redo, &redo);
                 ui.separator();
                 self.clipboard_items(ui);
                 for c in [Cmd::Delete, Cmd::PurgeUnused, Cmd::DeleteGuides] {
@@ -274,104 +275,104 @@ impl VarstotasApp {
                 self.face_ops_items(ui);
             });
 
-            ui.menu_button("View", |ui| {
-                ui.label(egui::RichText::new("Face Style").small().weak());
+            ui.menu_button(tr!("menu-view"), |ui| {
+                ui.label(egui::RichText::new(tr!("menu-face-style")).small().weak());
                 for (st, icon, label) in [
-                    (FaceStylePref::ShadedColor, Icon::StyleShaded, "Shaded"),
-                    (FaceStylePref::Shaded, Icon::StyleTextured, "Shaded with Textures"),
-                    (FaceStylePref::Monochrome, Icon::StyleMonochrome, "Monochrome"),
-                    (FaceStylePref::HiddenLine, Icon::StyleHiddenLine, "Hidden Line"),
-                    (FaceStylePref::Wireframe, Icon::StyleWireframe, "Wireframe"),
-                    (FaceStylePref::Realistic, Icon::StyleRealistic, "Realistic"),
+                    (FaceStylePref::ShadedColor, Icon::StyleShaded, tr!("menu-shaded")),
+                    (FaceStylePref::Shaded, Icon::StyleTextured, tr!("menu-shaded-textures")),
+                    (FaceStylePref::Monochrome, Icon::StyleMonochrome, tr!("menu-monochrome")),
+                    (FaceStylePref::HiddenLine, Icon::StyleHiddenLine, tr!("menu-hidden-line")),
+                    (FaceStylePref::Wireframe, Icon::StyleWireframe, tr!("menu-wireframe")),
+                    (FaceStylePref::Realistic, Icon::StyleRealistic, tr!("menu-realistic")),
                 ] {
-                    if icon_radio(ui, self.prefs.face_style == st, icon, label).clicked() {
+                    if icon_radio(ui, self.prefs.face_style == st, icon, &label).clicked() {
                         self.prefs.face_style = st;
                     }
                 }
-                icon_check(ui, &mut self.prefs.xray, Icon::StyleXRay, "X-Ray");
+                icon_check(ui, &mut self.prefs.xray, Icon::StyleXRay, &tr!("menu-x-ray"));
                 ui.separator();
-                ui.label(egui::RichText::new("Edge Style").small().weak());
-                icon_check(ui, self.prefs.edges_mut(), Icon::StyleEdges, "Edges").on_hover_text("Edges in this face style (Realistic has its own switch)");
-                icon_check(ui, &mut self.prefs.profiles, Icon::StyleProfiles, "Profiles");
+                ui.label(egui::RichText::new(tr!("menu-edge-style")).small().weak());
+                icon_check(ui, self.prefs.edges_mut(), Icon::StyleEdges, &tr!("menu-edges")).on_hover_text(tr!("menu-edges-hint"));
+                icon_check(ui, &mut self.prefs.profiles, Icon::StyleProfiles, &tr!("menu-profiles"));
                 ui.separator();
                 let mut guides = !self.doc.model.guides_hidden;
-                if icon_check(ui, &mut guides, Icon::Guides, "Guides").clicked() {
+                if icon_check(ui, &mut guides, Icon::Guides, &tr!("menu-guides")).clicked() {
                     self.actions.push(Action::ToggleGuides);
                 }
-                icon_check(ui, &mut self.prefs.show_axes, Icon::Axes, "Axes");
-                icon_check(ui, &mut self.prefs.show_ground, Icon::Ground, "Ground");
-                icon_check(ui, &mut self.prefs.show_sky, Icon::Sky, "Sky").on_hover_text("The sky gradient behind the model; off = a plain light background");
+                icon_check(ui, &mut self.prefs.show_axes, Icon::Axes, &tr!("menu-axes"));
+                icon_check(ui, &mut self.prefs.show_ground, Icon::Ground, &tr!("menu-ground"));
+                icon_check(ui, &mut self.prefs.show_sky, Icon::Sky, &tr!("menu-sky")).on_hover_text(tr!("menu-sky-hint"));
                 let mut grid = self.prefs.grid.show;
-                if icon_check(ui, &mut grid, Icon::Grid, "Grid").clicked() {
+                if icon_check(ui, &mut grid, Icon::Grid, &tr!("menu-grid")).clicked() {
                     self.actions.push(Action::ToggleGrid);
                 }
                 ui.separator();
                 let mut shadows = self.doc.model.shadows.enabled;
-                if icon_check(ui, &mut shadows, Icon::Shadows, "Shadows").clicked() {
+                if icon_check(ui, &mut shadows, Icon::Shadows, &tr!("menu-shadows")).clicked() {
                     self.actions.push(Action::ToggleShadows);
                 }
                 ui.separator();
                 let d = self.doc.model.section_display;
                 for (k, mut on, icon, label) in [
-                    (0u8, d.planes, Icon::Section, "Section Planes"),
-                    (1, d.cuts, Icon::SectionCut, "Section Cuts"),
-                    (2, d.fill, Icon::SectionFill, "Section Fill"),
+                    (0u8, d.planes, Icon::Section, tr!("menu-section-planes")),
+                    (1, d.cuts, Icon::SectionCut, tr!("menu-section-cuts")),
+                    (2, d.fill, Icon::SectionFill, tr!("menu-section-fill")),
                 ] {
-                    if icon_check(ui, &mut on, icon, label).clicked() {
+                    if icon_check(ui, &mut on, icon, &label).clicked() {
                         self.actions.push(Action::ToggleSectionDisplay(k));
                     }
                 }
                 ui.separator();
                 let panes = [Icon::Panes1, Icon::Panes2, Icon::Panes2, Icon::Panes4, Icon::Panes4];
-                icon_menu(ui, Some(panes[self.pane_count.min(4)]), "Viewports", |ui| {
-                    for (n, label) in [(1, "One"), (2, "Two (side by side)"), (4, "Four (2 × 2)")] {
-                        if icon_radio(ui, self.pane_count == n, panes[n], label).clicked() {
+                icon_menu(ui, Some(panes[self.pane_count.min(4)]), &tr!("menu-viewports"), |ui| {
+                    for (n, label) in [(1, tr!("menu-viewports-one")), (2, tr!("menu-viewports-two")), (4, tr!("menu-viewports-four"))] {
+                        if icon_radio(ui, self.pane_count == n, panes[n], &label).clicked() {
                             self.actions.push(Action::SetPanes(n));
                             ui.close();
                         }
                     }
                     ui.separator();
-                    ui.label(egui::RichText::new("Presets").small().weak());
+                    ui.label(egui::RichText::new(tr!("menu-presets")).small().weak());
                     for (i, p) in crate::panes::PRESETS.iter().enumerate() {
-                        if icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), p.name, None, true, false).clicked() {
+                        if icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), &p.name(), None, true, false).clicked() {
                             self.actions.push(Action::ViewPreset(i));
                             ui.close();
                         }
                     }
                 });
                 ui.separator();
-                icon_menu(ui, Some(Icon::Film), "Animation", |ui| {
+                icon_menu(ui, Some(Icon::Film), &tr!("menu-animation"), |ui| {
                     let has = !self.doc.model.scenes.is_empty();
-                    let (play, icon) = if self.scene_player.is_some() { ("Pause", Icon::Pause) } else { ("Play", Icon::Play) };
-                    self.icon_item(ui, Some(icon), play, None, has, Action::ToggleAnimation);
+                    let (play, icon) = if self.scene_player.is_some() { (tr!("menu-pause"), Icon::Pause) } else { (tr!("menu-play"), Icon::Play) };
+                    self.icon_item(ui, Some(icon), &play, None, has, Action::ToggleAnimation);
                     ui.separator();
-                    self.icon_item(ui, Some(Icon::NextScene), "Next Scene", crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
-                    self.icon_item(ui, Some(Icon::PrevScene), "Previous Scene", crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
+                    self.icon_item(ui, Some(Icon::NextScene), &tr!("menu-next-scene"), crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
+                    self.icon_item(ui, Some(Icon::PrevScene), &tr!("menu-previous-scene"), crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
                     ui.separator();
-                    self.icon_item(ui, Some(Icon::AddScene), "Add Scene", None, true, Action::AddScene);
+                    self.icon_item(ui, Some(Icon::AddScene), &tr!("menu-add-scene"), None, true, Action::AddScene);
                 });
             });
 
-            ui.menu_button("Camera", |ui| {
-                ui.menu_button("Standard Views", |ui| {
+            ui.menu_button(tr!("menu-camera"), |ui| {
+                ui.menu_button(tr!("menu-standard-views"), |ui| {
                     for (name, v) in [
-                        ("Iso", StandardView::Iso),
-                        ("Top", StandardView::Top),
-                        ("Bottom", StandardView::Bottom),
-                        ("Front", StandardView::Front),
-                        ("Back", StandardView::Back),
-                        ("Left", StandardView::Left),
-                        ("Right", StandardView::Right),
+                        (tr!("view-iso"), StandardView::Iso),
+                        (tr!("view-top"), StandardView::Top),
+                        (tr!("view-bottom"), StandardView::Bottom),
+                        (tr!("view-front"), StandardView::Front),
+                        (tr!("view-back"), StandardView::Back),
+                        (tr!("view-left"), StandardView::Left),
+                        (tr!("view-right"), StandardView::Right),
                     ] {
-                        self.icon_item(ui, Some(super::view_hud::view_icon(v)), name, None, true, Action::View(v));
+                        self.icon_item(ui, Some(super::view_hud::view_icon(v)), &name, None, true, Action::View(v));
                     }
                 });
                 ui.separator();
                 let ortho = self.camera.ortho;
-                if ui.radio(ortho, "Parallel Projection").clicked() {
+                if ui.radio(ortho, tr!("menu-parallel-projection")).clicked() {
                     self.actions.push(Action::SetParallel(true));
                 }
-                if ui.radio(!ortho, "Perspective").clicked() {
+                if ui.radio(!ortho, tr!("menu-perspective")).clicked() {
                     self.actions.push(Action::SetParallel(false));
                 }
                 ui.separator();
@@ -385,7 +386,7 @@ impl VarstotasApp {
                 self.tool_item(ui, ToolId::Walk);
             });
 
-            ui.menu_button("Draw", |ui| {
+            ui.menu_button(tr!("menu-draw"), |ui| {
                 self.tool_item(ui, ToolId::Line);
                 ui.separator();
                 for id in [ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie, ToolId::Bezier, ToolId::SmoothCurve, ToolId::Freehand, ToolId::EditCurve] {
@@ -396,13 +397,13 @@ impl VarstotasApp {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
-                ui.label(egui::RichText::new("Shapes").small().weak());
+                ui.label(egui::RichText::new(tr!("menu-shapes")).small().weak());
                 for id in crate::tools::SHAPES {
                     self.tool_item(ui, id);
                 }
             });
 
-            ui.menu_button("Tools", |ui| {
+            ui.menu_button(tr!("menu-tools"), |ui| {
                 for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section, ToolId::GuidePlane, ToolId::Slice] {
                     self.tool_item(ui, id);
                 }
@@ -419,7 +420,7 @@ impl VarstotasApp {
                 ] {
                     self.tool_item(ui, id);
                 }
-                icon_menu(ui, Some(Icon::Solids(2)), "Solid Tools", |ui| {
+                icon_menu(ui, Some(Icon::Solids(2)), &tr!("menu-solid-tools"), |ui| {
                     for op in varstotas_kernel::SolidOp::ALL {
                         self.cmd_item(ui, Cmd::Solid(op));
                     }
@@ -432,22 +433,22 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::Text3d);
             });
 
-            ui.menu_button("Snapping", |ui| self.snapping_menu(ui));
+            ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));
 
-            ui.menu_button("Extensions", |ui| self.extensions_menu(ui));
+            ui.menu_button(tr!("menu-extensions"), |ui| self.extensions_menu(ui));
 
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
-            egui::containers::menu::MenuButton::new("Window").config(keep).ui(ui, |ui| {
+            egui::containers::menu::MenuButton::new(tr!("menu-window")).config(keep).ui(ui, |ui| {
                 let mut open = self.prefs.tray_open;
-                if icon_check(ui, &mut open, Icon::SideBar, "Side Bar").clicked() {
+                if icon_check(ui, &mut open, Icon::SideBar, &tr!("menu-side-bar")).clicked() {
                     self.actions.push(Action::ToggleTray);
                 }
                 // The tray's cards: a checkbox each (turning one on opens the tray).
                 ui.indent("tray_cards", |ui| {
                     for c in crate::ui::tray::TRAY_CARDS {
                         let mut shown = Cmd::Card(c).checked(self).unwrap_or(true);
-                        if icon_check(ui, &mut shown, Cmd::Card(c).icon(), c).clicked() {
+                        if icon_check(ui, &mut shown, Cmd::Card(c).icon(), &crate::ui::tray::card_label(c)).clicked() {
                             self.actions.push(Action::ToggleCard(c));
                         }
                     }
@@ -460,7 +461,7 @@ impl VarstotasApp {
                         ui.separator();
                         continue;
                     };
-                    let label = if c == Sheets { "Sheets…".to_string() } else { c.menu_label() };
+                    let label = if c == Sheets { tr!("menu-sheets") } else { c.menu_label() };
                     let on = c.checked(self).unwrap_or(false);
                     if icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), true, on).on_hover_text(c.description()).clicked() {
                         self.actions.push(c.action());
@@ -469,35 +470,35 @@ impl VarstotasApp {
                 }
             });
 
-            ui.menu_button("Help", |ui| {
-                ui.menu_button("Demos", |ui| {
-                    ui.label(egui::RichText::new("Open as a new document").small().weak());
-                    self.item(ui, "Country House", None, true, Action::OpenDemoHouse);
-                    self.item(ui, "Material Gallery", None, true, Action::OpenDemoGallery);
+            ui.menu_button(tr!("menu-help"), |ui| {
+                ui.menu_button(tr!("menu-demos"), |ui| {
+                    ui.label(egui::RichText::new(tr!("menu-demos-open")).small().weak());
+                    self.item(ui, &tr!("menu-demo-house"), None, true, Action::OpenDemoHouse);
+                    self.item(ui, &tr!("menu-demo-gallery"), None, true, Action::OpenDemoGallery);
                     ui.separator();
-                    ui.label(egui::RichText::new("Add to this document").small().weak());
-                    self.item(ui, "Demo Geometry", None, true, Action::InsertDemo);
+                    ui.label(egui::RichText::new(tr!("menu-demos-add")).small().weak());
+                    self.item(ui, &tr!("menu-demo-geometry"), None, true, Action::InsertDemo);
                 })
                 .response
-                .on_hover_text("Demo models: furnished house and material gallery with scenes for Window → Render…, test geometry");
+                .on_hover_text(tr!("menu-demos-hint"));
                 if ui
-                    .add(egui::Button::new("User Guide").shortcut_text("F1").selected(self.app_help.open))
-                    .on_hover_text("How to use Varstotas: tools, menus, files, keys (F1 over the model: the active tool)")
+                    .add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open))
+                    .on_hover_text(tr!("menu-user-guide-hint"))
                     .clicked()
                 {
                     self.open_app_help(crate::ui::app_help::Topic::Start);
                     ui.close();
                 }
-                if ui.add(egui::Button::new("Script Reference").selected(self.script_help.open)).on_hover_text("Scripts, generators and component scripts: functions, properties, examples").clicked() {
+                if ui.add(egui::Button::new(tr!("menu-script-reference")).selected(self.script_help.open)).on_hover_text(tr!("menu-script-reference-hint")).clicked() {
                     self.open_script_help(crate::ui::script_help::Topic::Basics, None);
                     ui.close();
                 }
                 ui.separator();
-                if ui.add(egui::Button::new("Licences…").selected(self.licences.open)).on_hover_text("Varstotas's licence, the open-source components, file formats and online libraries with their terms").clicked() {
+                if ui.add(egui::Button::new(tr!("menu-licences")).selected(self.licences.open)).on_hover_text(tr!("menu-licences-hint")).clicked() {
                     self.open_licences(crate::ui::licences::Tab::Varstotas);
                     ui.close();
                 }
-                self.item(ui, "About Varstotas", None, true, Action::About);
+                self.item(ui, &tr!("menu-about"), None, true, Action::About);
             });
         });
     }
@@ -506,14 +507,14 @@ impl VarstotasApp {
     pub(crate) fn snapping_menu(&mut self, ui: &mut Ui) {
         use crate::inference::settings::GROUPS;
         let mut on = self.prefs.snapping.enabled;
-        if icon_check(ui, &mut on, Icon::Magnet, "Snapping").on_hover_text(crate::keymap::label(crate::keymap::KeyCmd::ToggleSnapping).unwrap_or_default()).clicked() {
+        if icon_check(ui, &mut on, Icon::Magnet, &tr!("menu-snapping")).on_hover_text(crate::keymap::label(crate::keymap::KeyCmd::ToggleSnapping).unwrap_or_default()).clicked() {
             self.actions.push(Action::ToggleSnapping);
         }
         ui.horizontal(|ui| {
-            if ui.small_button("All On").clicked() {
+            if ui.small_button(tr!("menu-all-on")).clicked() {
                 self.prefs.snapping.off.clear();
             }
-            if ui.small_button("All Off").clicked() {
+            if ui.small_button(tr!("menu-all-off")).clicked() {
                 for k in crate::inference::settings::all_kinds() {
                     self.prefs.snapping.set(k, false);
                 }
@@ -521,10 +522,10 @@ impl VarstotasApp {
         });
         for (group, kinds) in GROUPS {
             ui.separator();
-            ui.label(egui::RichText::new(group).small().weak());
-            if group == "Grid" {
+            ui.label(egui::RichText::new(crate::inference::settings::group_label(group)).small().weak());
+            if group == "Grid" { // i18n-ignore
                 let mut grid = self.prefs.grid.show;
-                if icon_check(ui, &mut grid, Icon::Grid, "Show Grid").clicked() {
+                if icon_check(ui, &mut grid, Icon::Grid, &tr!("menu-show-grid")).clicked() {
                     self.actions.push(Action::ToggleGrid);
                 }
             }
@@ -540,12 +541,12 @@ impl VarstotasApp {
             });
         }        // Increments: round free moves, angles and scale factors to a step.
         ui.separator();
-        ui.label(egui::RichText::new("Increments").small().weak());
+        ui.label(egui::RichText::new(tr!("menu-increments")).small().weak());
         let unit = self.doc.model.unit;
         ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
             let inc = &mut self.prefs.snapping.increments;
             egui::Grid::new("snap_increments").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
-                ui.checkbox(&mut inc.move_on, "Move");
+                ui.checkbox(&mut inc.move_on, tr!("menu-increments-move"));
                 ui.add(
                     egui::DragValue::new(&mut inc.move_step)
                         .range(0.001..=1.0e6)
@@ -554,10 +555,10 @@ impl VarstotasApp {
                         .custom_parser(move |t| varstotas_kernel::units::parse_length(t, unit)),
                 );
                 ui.end_row();
-                ui.checkbox(&mut inc.rotate_on, "Rotate");
+                ui.checkbox(&mut inc.rotate_on, tr!("menu-increments-rotate"));
                 ui.add(egui::DragValue::new(&mut inc.angle_step).range(0.01..=180.0).speed(0.5).suffix("°"));
                 ui.end_row();
-                ui.checkbox(&mut inc.scale_on, "Scale");
+                ui.checkbox(&mut inc.scale_on, tr!("menu-increments-scale"));
                 ui.add(egui::DragValue::new(&mut inc.scale_step).range(0.001..=10.0).speed(0.01).max_decimals(3));
                 ui.end_row();
             });

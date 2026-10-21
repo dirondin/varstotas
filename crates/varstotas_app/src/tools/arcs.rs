@@ -1,6 +1,7 @@
 //! Arc (centre + two points), Pie, 3 Point Arc and Rotated Rectangle tools.
 //! The 2 Point Arc lives in `draw.rs`.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::{Clicker, plane_point, shape_normal};
 use super::transform::draw_protractor;
@@ -92,8 +93,8 @@ impl ArcCenterTool {
         }
     }
 
-    fn label(&self) -> &'static str {
-        if self.pie { "Pie" } else { "Arc" }
+    fn label(&self) -> String {
+        tr!(if self.pie { "tool-undo-pie" } else { "tool-undo-arc" })
     }
 
     fn update(&mut self, ctx: &ToolContext) {
@@ -167,11 +168,11 @@ impl ArcCenterTool {
     fn commit(&mut self, ctx: &mut ToolContext, s: CenterArcSpec) {
         let label = self.label();
         if let Some(info) = s.info()
-            && commit_curve(ctx, label, &info, self.pie)
+            && commit_curve(ctx, &label, &info, self.pie)
         {
             self.last = Some(s);
         } else if ctx.doc.last_error.is_none() {
-            ctx.doc.last_error = Some(format!("{label}: degenerate input"));
+            ctx.doc.last_error = Some(tr!("tool-degenerate", label = label));
         }
         self.reset();
     }
@@ -271,12 +272,12 @@ impl Tool for ArcCenterTool {
             }
         }
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         match self.stage {
-            CStage::Center { .. } => "Radius",
-            CStage::Start { .. } => "Angle",
-            CStage::Idle if self.last.is_some() => "Angle",
-            CStage::Idle => "Segments",
+            CStage::Center { .. } => tr!("tool-vcb-radius"),
+            CStage::Start { .. } => tr!("tool-vcb-angle"),
+            CStage::Idle if self.last.is_some() => tr!("tool-vcb-angle"),
+            CStage::Idle => tr!("tool-vcb-segments"),
         }
     }
     fn vcb_value(&self) -> String {
@@ -288,14 +289,11 @@ impl Tool for ArcCenterTool {
         }
     }
     fn status_text(&self) -> String {
-        let what = if self.pie { "pie" } else { "arc" };
+        let what = tr!(if self.pie { "tool-arc-what-pie" } else { "tool-arc-what-arc" });
         match self.stage {
-            CStage::Idle => format!(
-                "Select the center of the {what} (a face orients it; arrows lock the plane). Type `{}s` for segments.",
-                self.segs
-            ),
-            CStage::Center { .. } => "Select the start point (radius) or type a radius.".into(),
-            CStage::Start { .. } => format!("Move around the center and click to end the {what}, or type an angle."),
+            CStage::Idle => tr!("tool-arc-center-first", what = what, segs = self.segs),
+            CStage::Center { .. } => tr!("tool-arc-center-start"),
+            CStage::Start { .. } => tr!("tool-arc-center-end", what = what),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -329,7 +327,7 @@ impl Tool for ArcCenterTool {
                     line(out3d, c, start, Color32::from_gray(90), 1.0);
                 }
                 if self.snapped {
-                    out2d.push(Marker2d::CursorTooltip { text: "Angle".into() });
+                    out2d.push(Marker2d::CursorTooltip { text: tr!("tool-cursor-angle") });
                 }
             }
         }
@@ -411,7 +409,7 @@ impl Arc3Tool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, info: CurveInfo) {
-        if commit_curve(ctx, "3 Point Arc", &info, false) {
+        if commit_curve(ctx, &tr!("tool-undo-arc3"), &info, false) {
             self.last = Some(info);
         }
         self.reset();
@@ -499,12 +497,12 @@ impl Tool for Arc3Tool {
             }
         }
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         match (self.p1, self.p2) {
-            (Some(_), None) => "Length",
-            (Some(_), Some(_)) => "Angle",
-            (None, _) if self.last.is_some() => "Angle",
-            _ => "Segments",
+            (Some(_), None) => tr!("tool-vcb-length"),
+            (Some(_), Some(_)) => tr!("tool-vcb-angle"),
+            (None, _) if self.last.is_some() => tr!("tool-vcb-angle"),
+            _ => tr!("tool-vcb-segments"),
         }
     }
     fn vcb_value(&self) -> String {
@@ -517,9 +515,9 @@ impl Tool for Arc3Tool {
     }
     fn status_text(&self) -> String {
         match (self.p1, self.p2) {
-            (None, _) => "Select the start point of the arc.".into(),
-            (Some(_), None) => "Select a second point the arc passes through, or type a length.".into(),
-            _ => "Select the end point, or type the arc's angle.".into(),
+            (None, _) => tr!("tool-arc3-first"),
+            (Some(_), None) => tr!("tool-arc3-second"),
+            _ => tr!("tool-arc3-third"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -652,10 +650,10 @@ impl RotatedRectTool {
 
     fn commit(&mut self, ctx: &mut ToolContext, s: RotRectSpec) {
         let pts: Vec<DVec3> = s.corners().iter().map(|p| to_local(ctx.doc, *p)).collect();
-        if commit_mesh(ctx, "Rotated Rectangle", |m| m.add_face(&pts)).flatten().is_some() {
+        if commit_mesh(ctx, &tr!("tool-undo-rotated-rectangle"), |m| m.add_face(&pts)).flatten().is_some() {
             self.last = Some(s);
         } else if ctx.doc.last_error.is_none() {
-            ctx.doc.last_error = Some("Rotated Rectangle: degenerate input".into());
+            ctx.doc.last_error = Some(tr!("tool-degenerate", label = tr!("tool-undo-rotated-rectangle")));
         }
         self.reset();
     }
@@ -769,12 +767,12 @@ impl Tool for RotatedRectTool {
             }
         }
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         match (self.p1, self.p2) {
-            (Some(_), None) => "Length",
-            (Some(_), Some(_)) => "Width, Angle",
-            (None, _) if self.last.is_some() => "Width, Angle",
-            _ => "Measurements",
+            (Some(_), None) => tr!("tool-vcb-length"),
+            (Some(_), Some(_)) => tr!("tool-vcb-width-angle"),
+            (None, _) if self.last.is_some() => tr!("tool-vcb-width-angle"),
+            _ => tr!("tool-vcb-measurements"),
         }
     }
     fn vcb_value(&self) -> String {
@@ -789,9 +787,9 @@ impl Tool for RotatedRectTool {
     }
     fn status_text(&self) -> String {
         match (self.p1, self.p2) {
-            (None, _) => "Select the first corner of the rectangle.".into(),
-            (Some(_), None) => "Select the second corner (the first edge), or type a length (`l,w`).".into(),
-            _ => "Move to set the width and angle and click, or type `width` or `width,angle`.".into(),
+            (None, _) => tr!("tool-rotrect-first"),
+            (Some(_), None) => tr!("tool-rotrect-second"),
+            _ => tr!("tool-rotrect-third"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -820,7 +818,7 @@ impl Tool for RotatedRectTool {
         if let Some(k) = self.snap.filter(|_| self.p2.is_some()) {
             out2d.push(Marker2d::CursorTooltip { text: k.label().into() });
         } else if self.snapped_angle {
-            out2d.push(Marker2d::CursorTooltip { text: "Angle".into() });
+            out2d.push(Marker2d::CursorTooltip { text: tr!("tool-cursor-angle") });
         } else if let Some(r) = &self.cur {
             inference::draw_result(r, out3d, out2d);
         }

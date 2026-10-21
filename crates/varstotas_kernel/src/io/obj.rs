@@ -6,6 +6,7 @@ use glam::DVec3;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::path::Path;
+use varstotas_i18n::tr;
 
 fn key(p: DVec3) -> [u64; 3] {
     [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()]
@@ -41,6 +42,7 @@ pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String
             None => groups.push((m, vec![i])),
         }
     }
+    // i18n-ignore-next
     let mut mtl = String::from("# Varstotas MTL\n");
     let mut used: HashSet<String> = HashSet::new();
     for (m, _) in &groups {
@@ -70,6 +72,7 @@ pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String
         }
         names.insert(*m, name);
     }
+    // i18n-ignore-next
     let mut obj = format!("# Varstotas OBJ export (units: mm, Z axis up)\nmtllib {mtl_file}\n");
     let mut vidx: HashMap<[u64; 3], usize> = HashMap::new();
     let mut nidx: HashMap<[u64; 3], usize> = HashMap::new();
@@ -210,7 +213,7 @@ pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
         let line = line.split('#').next().unwrap_or("").trim();
         let mut it = line.split_whitespace();
         let Some(tag) = it.next() else { continue };
-        let bad = || IoError::Format(format!("OBJ line {}: {line}", ln + 1));
+        let bad = || IoError::Format(tr!("kernel-io-obj-line-ln-line", ln = (ln + 1).to_string(), line = line.to_string()));
         match tag {
             "v" => {
                 let c: Vec<f64> = it.take(3).map(|s| s.parse::<f64>()).collect::<Result<_, _>>().map_err(|_| bad())?;
@@ -290,11 +293,13 @@ pub(crate) fn parse_mtl(text: &str) -> Vec<MtlMaterial> {
         }
         let Some(m) = out.last_mut() else { continue };
         match tag {
+            // i18n-ignore-next
             "Kd" if nums.len() >= 3 => m.color[..3].copy_from_slice(&[nums[0], nums[1], nums[2]].map(|c| c.clamp(0.0, 1.0))),
             "d" if !nums.is_empty() => {
                 m.color[3] = nums[0].clamp(0.0, 1.0);
                 has_d = true;
             }
+            // i18n-ignore-next
             "Tr" if !nums.is_empty() && !has_d => m.color[3] = (1.0 - nums[0]).clamp(0.0, 1.0),
             // The file name is the last token (options such as `-s 1 1 1` come first).
             "map_Kd" => m.texture = line.split_whitespace().last().filter(|t| *t != "map_Kd").map(str::to_string),

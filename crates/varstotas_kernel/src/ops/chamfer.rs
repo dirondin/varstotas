@@ -10,6 +10,7 @@ use crate::geom;
 use crate::mesh::Mesh;
 use crate::{EdgeId, FaceId, OpError, OpResult, TOL, VertexId};
 use glam::DVec3;
+use varstotas_i18n::tr;
 
 /// Flat bevel (setback along both faces) or a round of a given radius.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -48,39 +49,39 @@ impl Mesh {
         let ed = self.edges.get(e).ok_or(OpError::NotFound)?.clone();
         let faces = self.edge_faces(e);
         let [f1, f2] = faces[..] else {
-            return Err(OpError::Invalid("the edge must be shared by exactly two faces".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-edge-must-be-shared-by").into()));
         };
         let (a, b) = (ed.v[0], ed.v[1]);
         let (pa, pb) = (self.pos(a), self.pos(b));
         let len = pa.distance(pb);
         if len < TOL {
-            return Err(OpError::Invalid("the edge is too short".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-edge-is-too-short").into()));
         }
         let d = (pb - pa) / len;
         // In-face directions perpendicular to the edge, pointing into each face (the inside of a
         // loop is on its left seen from the front).
         let into = |m: &Mesh, f: FaceId| -> OpResult<DVec3> {
-            let fwd = m.face_traverses(f, a, b).ok_or(OpError::Invalid("broken face loop".into()))?;
+            let fwd = m.face_traverses(f, a, b).ok_or(OpError::Invalid(tr!("kernel-err-broken-face-loop").into()))?;
             let dir = if fwd { d } else { -d };
             Ok(m.faces[f].normal.cross(dir).normalize_or_zero())
         };
         let (t1, t2) = (into(self, f1)?, into(self, f2)?);
         let cos_phi = t1.dot(t2).clamp(-1.0, 1.0);
         if cos_phi < -1.0 + 1e-6 || t1 == DVec3::ZERO || t2 == DVec3::ZERO {
-            return Err(OpError::Invalid("the faces are coplanar".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-faces-are-coplanar").into()));
         }
         let phi = cos_phi.acos();
         // Profile: offsets from the edge in its perpendicular plane, from face 1 to face 2.
         let (profile, setback) = match kind {
             ChamferKind::Flat { distance } => {
                 if !distance.is_finite() || distance <= TOL {
-                    return Err(OpError::Invalid("the distance must be positive".into()));
+                    return Err(OpError::Invalid(tr!("kernel-err-the-distance-must-be-positive").into()));
                 }
                 (vec![t1 * distance, t2 * distance], distance)
             }
             ChamferKind::Round { radius, segments } => {
                 if !radius.is_finite() || radius <= TOL {
-                    return Err(OpError::Invalid("the radius must be positive".into()));
+                    return Err(OpError::Invalid(tr!("kernel-err-the-radius-must-be-positive").into()));
                 }
                 let n = segments.clamp(1, 64) as usize;
                 let half = phi * 0.5;
@@ -113,7 +114,7 @@ impl Mesh {
             let p = self.pos(end.v);
             let dn = end.n.dot(d);
             if dn.abs() < 1e-6 {
-                return Err(OpError::Invalid("an end lies along the edge".into()));
+                return Err(OpError::Invalid(tr!("kernel-err-an-end-lies-along-the-edge").into()));
             }
             let pts: Vec<DVec3> = profile.iter().map(|o| p + *o - d * (end.n.dot(*o) / dn)).collect();
             // The first / last point must land inside the shortened edges.
@@ -122,7 +123,7 @@ impl Mesh {
                 let (dist, t) = geom::point_seg_dist(pts[k], p, x);
                 // Landing exactly on the far vertex is fine (two equal chamfers meet there).
                 if dist > 1e-6 * (1.0 + setback) || (t > 1.0 - TOL / p.distance(x).max(TOL) && pts[k].distance(x) > TOL) {
-                    return Err(OpError::Invalid("the chamfer is too big for the neighbouring edges".into()));
+                    return Err(OpError::Invalid(tr!("kernel-err-the-chamfer-is-too-big-for-2").into()));
                 }
             }
             sections.push(pts);
@@ -130,7 +131,7 @@ impl Mesh {
         // Each end must stay inside the edge: sections must not cross each other.
         for (p0, p1) in sections[0].iter().zip(&sections[1]) {
             if (*p1 - *p0).dot(d) <= TOL {
-                return Err(OpError::Invalid("the chamfer is too big for the edge".into()));
+                return Err(OpError::Invalid(tr!("kernel-err-the-chamfer-is-too-big-for").into()));
             }
         }
 
@@ -258,7 +259,7 @@ impl Mesh {
 
     /// The end of edge `e` at `v` (see [`End`]).
     fn chamfer_end(&self, v: VertexId, e: EdgeId, f1: FaceId, f2: FaceId) -> OpResult<End> {
-        let bad = || OpError::Invalid("a corner of the edge is not simple (too many edges or faces)".into());
+        let bad = || OpError::Invalid(tr!("kernel-err-a-corner-of-the-edge-is").into());
         let edges: Vec<EdgeId> = self.vertex_edges(v).into_iter().filter(|x| *x != e).collect();
         let in_face = |f: FaceId| -> OpResult<EdgeId> {
             let fe = self.face_edges(f);
@@ -289,7 +290,7 @@ impl Mesh {
         let p = self.pos(v);
         let n = (self.pos(x[0]) - p).cross(self.pos(x[1]) - p);
         if n.length() < 1e-9 {
-            return Err(OpError::Invalid("the edges at a corner are collinear".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-edges-at-a-corner-are").into()));
         }
         let n = match g {
             Some(g) => self.faces[g].normal,

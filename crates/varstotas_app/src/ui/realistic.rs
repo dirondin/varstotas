@@ -7,19 +7,21 @@ use crate::document::PaletteMaterial;
 use egui::{Color32, RichText, Sense, Ui, vec2};
 use varstotas_kernel::{CustomShader, EFFECT_PRESETS, Effects, Environment, MaterialId, PBR_MAPS, Pbr, SkyKind, Stylize, TextureImage, Tonemap, shader_params};
 use std::path::Path;
+use varstotas_i18n::tr;
 
 /// Starting points of the material editor: (name, metallic, roughness, transmission, emission).
 pub(crate) const PBR_PRESETS: [(&str, f32, f32, f32, f32); 7] = [
-    ("Matte", 0.0, 0.9, 0.0, 0.0),
-    ("Satin", 0.0, 0.5, 0.0, 0.0),
-    ("Glossy", 0.0, 0.15, 0.0, 0.0),
-    ("Metal", 1.0, 0.35, 0.0, 0.0),
-    ("Chrome", 1.0, 0.05, 0.0, 0.0),
-    ("Glass", 0.0, 0.03, 1.0, 0.0),
-    ("Light", 0.0, 0.6, 0.0, 5.0),
+    ("Matte", 0.0, 0.9, 0.0, 0.0), // i18n-ignore
+    ("Satin", 0.0, 0.5, 0.0, 0.0), // i18n-ignore
+    ("Glossy", 0.0, 0.15, 0.0, 0.0), // i18n-ignore
+    ("Metal", 1.0, 0.35, 0.0, 0.0), // i18n-ignore
+    ("Chrome", 1.0, 0.05, 0.0, 0.0), // i18n-ignore
+    ("Glass", 0.0, 0.03, 1.0, 0.0), // i18n-ignore
+    ("Light", 0.0, 0.6, 0.0, 5.0), // i18n-ignore
 ];
 
-const MAP_LABELS: [&str; 5] = ["Normal", "Roughness", "Metallic", "Occlusion", "Emission"];
+/// Keys of the map names, in the order of `PBR_MAPS`.
+const MAP_LABELS: [&str; 5] = ["realistic-map-normal", "realistic-map-roughness", "realistic-map-metallic", "realistic-map-occlusion", "realistic-map-emission"];
 
 impl VarstotasApp {
     /// The current paint material if it is in the model.
@@ -40,7 +42,7 @@ impl VarstotasApp {
                 .unwrap_or_else(|| PaletteMaterial::color(name, [1.0; 4])),
         };
         let mut f = Some(f);
-        self.doc.commit("Edit Material", |m| {
+        self.doc.commit(&tr!("realistic-undo-material"), |m| {
             let id = pm.ensure_in(m);
             let mat = &mut m.materials[id];
             let mut p = mat.pbr_or_default();
@@ -62,7 +64,7 @@ impl VarstotasApp {
         let name = mat.name.clone();
         match crate::textures::load_file(path, width) {
             Ok((tex, _)) => self.set_pbr_map(&name, map, Some(tex)),
-            Err(e) => self.flash_error(format!("Can't use {}: {e}", path.display())),
+            Err(e) => self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e.to_string())),
         }
     }
 
@@ -88,12 +90,12 @@ impl VarstotasApp {
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
-                self.flash_error(format!("Can't read {}: {e}", path.display()));
+                self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string()));
                 return;
             }
         };
         if let Err(e) = crate::pbr::decode_hdri(&bytes) {
-            self.flash_error(format!("Can't use {}: {e}", path.display()));
+            self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e.to_string()));
             return;
         }
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("environment.hdr").to_string();
@@ -108,29 +110,29 @@ impl VarstotasApp {
         let mut e = self.doc.model.environment;
         if self.prefs.face_style != FaceStylePref::Realistic {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Used by the Realistic style").color(theme::text_dim()));
-                if ui.button("Realistic").clicked() {
+                ui.label(RichText::new(tr!("realistic-used-by")).color(theme::text_dim()));
+                if ui.button(tr!("view-style-realistic")).clicked() {
                     self.prefs.face_style = FaceStylePref::Realistic;
                 }
             });
         }
         let mut clear_hdri = false;
         egui::Grid::new("environment").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-            ui.label("Background");
+            ui.label(tr!("realistic-background"));
             ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt("env_sky")
                     .selected_text(match e.sky {
-                        SkyKind::Sky => "Sky",
-                        SkyKind::Color => "Color",
-                        SkyKind::Hdri => "HDRI",
-                        SkyKind::Physical => "Physical sky",
+                        SkyKind::Sky => tr!("realistic-sky-sky"),
+                        SkyKind::Color => tr!("realistic-sky-color"),
+                        SkyKind::Hdri => tr!("realistic-sky-hdri"),
+                        SkyKind::Physical => tr!("realistic-sky-physical"),
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut e.sky, SkyKind::Sky, "Sky");
-                        ui.selectable_value(&mut e.sky, SkyKind::Color, "Color");
-                        ui.selectable_value(&mut e.sky, SkyKind::Hdri, "HDRI");
-                        ui.selectable_value(&mut e.sky, SkyKind::Physical, "Physical sky")
-                            .on_hover_text("Daylight for the sun's position in the Shadows card");
+                        ui.selectable_value(&mut e.sky, SkyKind::Sky, tr!("realistic-sky-sky"));
+                        ui.selectable_value(&mut e.sky, SkyKind::Color, tr!("realistic-sky-color"));
+                        ui.selectable_value(&mut e.sky, SkyKind::Hdri, tr!("realistic-sky-hdri"));
+                        ui.selectable_value(&mut e.sky, SkyKind::Physical, tr!("realistic-sky-physical"))
+                            .on_hover_text(tr!("realistic-sky-physical-tip"));
                     });
                 if e.sky == SkyKind::Color {
                     let mut c = color32([e.color[0], e.color[1], e.color[2], 1.0]);
@@ -142,39 +144,39 @@ impl VarstotasApp {
             });
             ui.end_row();
             if e.sky == SkyKind::Physical {
-                ui.label("Haze");
+                ui.label(tr!("realistic-haze"));
                 ui.add(egui::Slider::new(&mut e.turbidity, 1.7..=10.0).fixed_decimals(1))
-                    .on_hover_text("Turbidity: 2 = clear blue sky, 10 = hazy; the sun's time and date are in the Shadows card");
+                    .on_hover_text(tr!("realistic-haze-tip"));
                 ui.end_row();
             }
             if e.sky == SkyKind::Hdri {
-                ui.label("HDRI");
+                ui.label(tr!("realistic-sky-hdri"));
                 ui.horizontal(|ui| {
-                    let name = self.doc.model.hdri.as_ref().map_or("none (sky)".to_string(), |h| h.file_name.clone());
+                    let name = self.doc.model.hdri.as_ref().map_or_else(|| tr!("realistic-hdri-none"), |h| h.file_name.clone());
                     ui.label(RichText::new(name).small());
-                    if ui.button("Load…").on_hover_text("An equirectangular panorama (.hdr)").clicked() {
+                    if ui.button(tr!("realistic-load")).on_hover_text(tr!("realistic-hdri-tip")).clicked() {
                         self.actions.push(Action::PickHdri);
                     }
-                    if self.doc.model.hdri.is_some() && ui.button("Clear").clicked() {
+                    if self.doc.model.hdri.is_some() && ui.button(tr!("realistic-clear")).clicked() {
                         clear_hdri = true;
                     }
                 });
                 ui.end_row();
             }
-            ui.label("Rotation");
+            ui.label(tr!("realistic-rotation"));
             ui.add(egui::Slider::new(&mut e.rotation_deg, -180.0..=180.0).suffix("°").fixed_decimals(0));
             ui.end_row();
-            ui.label("Intensity");
+            ui.label(tr!("realistic-intensity"));
             ui.add(egui::Slider::new(&mut e.intensity, 0.0..=4.0).fixed_decimals(2));
             ui.end_row();
-            ui.label("Sun");
+            ui.label(tr!("realistic-sun"));
             ui.add(egui::Slider::new(&mut e.sun, 0.0..=10.0).fixed_decimals(1))
-                .on_hover_text("Sun strength; its direction comes from the Shadows card when shadows are on");
+                .on_hover_text(tr!("realistic-sun-tip"));
             ui.end_row();
-            ui.label("Exposure");
+            ui.label(tr!("realistic-exposure"));
             ui.add(egui::Slider::new(&mut e.exposure, -5.0..=5.0).suffix(" EV").fixed_decimals(1));
             ui.end_row();
-            ui.label("Tone mapping");
+            ui.label(tr!("realistic-tone-mapping"));
             egui::ComboBox::from_id_salt("env_tonemap")
                 .selected_text(tonemap_name(e.tonemap))
                 .show_ui(ui, |ui| {
@@ -184,11 +186,11 @@ impl VarstotasApp {
                 });
             ui.end_row();
         });
-        ui.checkbox(&mut e.background, "Show the environment behind the model");
-        egui::CollapsingHeader::new("Effects").id_salt("env_effects").default_open(e.effects.needs_post()).show(ui, |ui| {
+        ui.checkbox(&mut e.background, tr!("realistic-show-env"));
+        egui::CollapsingHeader::new(tr!("realistic-effects")).id_salt("env_effects").default_open(e.effects.needs_post()).show(ui, |ui| {
             effects_ui(ui, &mut e.effects);
         });
-        if ui.small_button("Reset").clicked() {
+        if ui.small_button(tr!("realistic-reset")).clicked() {
             e = Environment::default();
         }
         if clear_hdri {
@@ -212,17 +214,17 @@ impl VarstotasApp {
         };
         let mut commit = false;
         let mut dragging = false;
-        let header = egui::CollapsingHeader::new("Physical (Realistic)").id_salt("pbr_editor").default_open(stored.is_some()).show(ui, |ui| {
+        let header = egui::CollapsingHeader::new(tr!("realistic-physical")).id_salt("pbr_editor").default_open(stored.is_some()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let tex = self.pbr_preview(ui.ctx(), &cur, &p);
                 let (rect, _) = ui.allocate_exact_size(vec2(84.0, 84.0), Sense::hover());
                 ui.painter().image(tex, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Preset").small().color(theme::text_dim()));
+                    ui.label(RichText::new(tr!("realistic-preset")).small().color(theme::text_dim()));
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
                         for (name, metal, rough, glass, light) in PBR_PRESETS {
-                            if ui.small_button(name).clicked() {
+                            if ui.small_button(pbr_preset_label(name)).clicked() {
                                 p.metallic = metal;
                                 p.roughness = rough;
                                 p.transmission = glass;
@@ -241,18 +243,18 @@ impl VarstotasApp {
             });
             egui::Grid::new("pbr_values").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
                 ui.spacing_mut().slider_width = 120.0;
-                let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, label: &str, tip: &str| {
+                let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, label: String, tip: String| {
                     ui.label(label).on_hover_text(tip);
                     let resp = ui.add(egui::Slider::new(v, r).fixed_decimals(2));
                     dragging |= resp.dragged();
                     commit |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
                     ui.end_row();
                 };
-                slider(ui, &mut p.metallic, 0.0..=1.0, "Metallic", "0 = paint, plastic, wood; 1 = bare metal");
-                slider(ui, &mut p.roughness, 0.0..=1.0, "Roughness", "0 = mirror-like, 1 = matte");
-                slider(ui, &mut p.transmission, 0.0..=1.0, "Glass", "How much light passes through");
-                slider(ui, &mut p.ior, 1.0..=2.5, "IOR", "Index of refraction (glass 1.5, water 1.33)");
-                ui.label("Emission").on_hover_text("Light the surface gives off: colour and strength");
+                slider(ui, &mut p.metallic, 0.0..=1.0, tr!("realistic-metallic"), tr!("realistic-metallic-tip"));
+                slider(ui, &mut p.roughness, 0.0..=1.0, tr!("realistic-roughness"), tr!("realistic-roughness-tip"));
+                slider(ui, &mut p.transmission, 0.0..=1.0, tr!("realistic-glass"), tr!("realistic-glass-tip"));
+                slider(ui, &mut p.ior, 1.0..=2.5, tr!("realistic-ior"), tr!("realistic-ior-tip"));
+                ui.label(tr!("realistic-emission")).on_hover_text(tr!("realistic-emission-tip"));
                 ui.horizontal(|ui| {
                     let mut c = color32([p.emission[0], p.emission[1], p.emission[2], 1.0]);
                     if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::Opaque).changed() {
@@ -266,47 +268,47 @@ impl VarstotasApp {
                 });
                 ui.end_row();
             });
-            egui::CollapsingHeader::new("Coat, Sheen, Edges").id_salt("pbr_more").default_open(
+            egui::CollapsingHeader::new(tr!("realistic-coat-sheen")).id_salt("pbr_more").default_open(
                 p.clearcoat > 0.0 || p.sheen > 0.0 || p.anisotropy != 0.0 || p.anti_tiling > 0.0 || p.bevel > 0.0,
             ).show(ui, |ui| {
                 egui::Grid::new("pbr_more_values").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
                     ui.spacing_mut().slider_width = 120.0;
-                    let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, label: &str, tip: &str, log: bool| {
+                    let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, id: &str, label: String, tip: String, log: bool| {
                         ui.label(label).on_hover_text(tip);
                         let resp = ui.add(egui::Slider::new(v, r).fixed_decimals(2).logarithmic(log));
-                        super::tray_lib::spot(format!("pbr:{label}"), resp.rect.left_center());
+                        super::tray_lib::spot(format!("pbr:{id}"), resp.rect.left_center());
                         dragging |= resp.dragged();
                         commit |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
                         ui.end_row();
                     };
-                    slider(ui, &mut p.clearcoat, 0.0..=1.0, "Clear coat", "A glossy varnish layer: lacquered wood, car paint, glazed tiles", false);
-                    slider(ui, &mut p.clearcoat_roughness, 0.0..=1.0, "Coat rough", "Roughness of the varnish (0 = glossy)", false);
-                    slider(ui, &mut p.sheen, 0.0..=1.0, "Sheen", "A soft glow at grazing angles: velvet, cloth, upholstery", false);
-                    slider(ui, &mut p.sheen_tint, 0.0..=1.0, "Sheen tint", "0 = white sheen, 1 = the colour of the material", false);
-                    slider(ui, &mut p.anisotropy, -1.0..=1.0, "Anisotropy", "Stretched highlights along the texture (+) or across it (−): brushed metal", false);
-                    slider(ui, &mut p.anti_tiling, 0.0..=1.0, "Anti-tiling", "Breaks up the visible repetition of the textures", false);
-                    slider(ui, &mut p.bevel, 0.0..=100.0, "Bevel, mm", "Rounds the edges of faces in the render (path tracing only)", true);
+                    slider(ui, &mut p.clearcoat, 0.0..=1.0, "Clear coat", tr!("realistic-clearcoat"), tr!("realistic-clearcoat-tip"), false); // i18n-ignore
+                    slider(ui, &mut p.clearcoat_roughness, 0.0..=1.0, "Coat rough", tr!("realistic-coat-rough"), tr!("realistic-coat-rough-tip"), false); // i18n-ignore
+                    slider(ui, &mut p.sheen, 0.0..=1.0, "Sheen", tr!("realistic-sheen"), tr!("realistic-sheen-tip"), false); // i18n-ignore
+                    slider(ui, &mut p.sheen_tint, 0.0..=1.0, "Sheen tint", tr!("realistic-sheen-tint"), tr!("realistic-sheen-tint-tip"), false); // i18n-ignore
+                    slider(ui, &mut p.anisotropy, -1.0..=1.0, "Anisotropy", tr!("realistic-anisotropy"), tr!("realistic-anisotropy-tip"), false); // i18n-ignore
+                    slider(ui, &mut p.anti_tiling, 0.0..=1.0, "Anti-tiling", tr!("realistic-anti-tiling"), tr!("realistic-anti-tiling-tip"), false); // i18n-ignore
+                    slider(ui, &mut p.bevel, 0.0..=100.0, "Bevel, mm", tr!("realistic-bevel"), tr!("realistic-bevel-tip"), true); // i18n-ignore
                 });
             });
             ui.horizontal(|ui| {
-                ui.label("Shader").on_hover_text("A WGSL surface program (docs/SHADERS.md): procedural patterns, waves, glow");
-                let shown = match &p.shader {
-                    None => "None",
-                    Some(sh) => crate::shaders::preset_name(&sh.source).unwrap_or("Custom"),
+                ui.label(tr!("realistic-shader")).on_hover_text(tr!("realistic-shader-tip"));
+                let shown: String = match &p.shader {
+                    None => tr!("realistic-shader-none"),
+                    Some(sh) => crate::shaders::preset_name(&sh.source).map_or_else(|| tr!("realistic-shader-custom"), str::to_string),
                 };
-                egui::ComboBox::from_id_salt("pbr_shader").selected_text(shown).show_ui(ui, |ui| {
-                    if ui.selectable_label(p.shader.is_none(), "None").clicked() {
+                egui::ComboBox::from_id_salt("pbr_shader").selected_text(crate::shaders::label(&shown)).show_ui(ui, |ui| {
+                    if ui.selectable_label(p.shader.is_none(), tr!("realistic-shader-none")).clicked() {
                         p.shader = None;
                         commit = true;
                     }
                     for (name, src) in crate::shaders::PRESETS {
-                        if ui.selectable_label(shown == name, name).clicked() {
+                        if ui.selectable_label(shown == name, crate::shaders::label(name)).clicked() {
                             p.shader = Some(CustomShader::new(src));
                             commit = true;
                         }
                     }
                 });
-                if ui.small_button("Edit…").on_hover_text("Write or change the shader").clicked() {
+                if ui.small_button(tr!("realistic-shader-edit")).on_hover_text(tr!("realistic-shader-edit-tip")).clicked() {
                     let code = p.shader.as_ref().map_or_else(|| NEW_SHADER.to_string(), |sh| sh.source.clone());
                     self.tray.shader_edit = Some(ShaderEdit::new(cur.name.clone(), code));
                 }
@@ -341,17 +343,17 @@ impl VarstotasApp {
             ui.add_space(2.0);
             egui::Grid::new("pbr_maps").num_columns(3).spacing([6.0, 3.0]).show(ui, |ui| {
                 for (map, label) in PBR_MAPS.iter().zip(MAP_LABELS) {
-                    ui.label(label);
-                    let name = p.map(map).map_or("—".to_string(), |t| t.file_name.clone());
+                    ui.label(tr(label));
+                    let name = p.map(map).map_or("—".to_string(), |t| t.file_name.clone()); // i18n-ignore
                     ui.label(RichText::new(name).small().color(theme::text_dim()));
                     ui.horizontal(|ui| {
-                        if ui.small_button("Load…").clicked() {
+                        if ui.small_button(tr!("realistic-load")).clicked() {
                             match mid {
                                 Some(id) => self.actions.push(Action::PickPbrMap(id, map)),
-                                None => self.flash("Paint something with the material first"),
+                                None => self.flash(tr!("realistic-paint-first")),
                             }
                         }
-                        if p.map(map).is_some() && ui.small_button("Clear").clicked() {
+                        if p.map(map).is_some() && ui.small_button(tr!("realistic-clear")).clicked() {
                             self.set_pbr_map(&cur.name, map, None);
                         }
                     });
@@ -359,13 +361,13 @@ impl VarstotasApp {
                 }
             });
             if map_normal_scale(&p) {
-                let resp = ui.add(egui::Slider::new(&mut p.normal_scale, 0.0..=4.0).text("Normal strength").fixed_decimals(2));
+                let resp = ui.add(egui::Slider::new(&mut p.normal_scale, 0.0..=4.0).text(tr!("realistic-normal-strength")).fixed_decimals(2));
                 dragging |= resp.dragged();
                 commit |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
             }
-            if stored.is_some() && ui.small_button("Remove physical properties").clicked() {
+            if stored.is_some() && ui.small_button(tr!("realistic-remove-physical")).clicked() {
                 let name = cur.name.clone();
-                self.doc.commit("Edit Material", |m| {
+                self.doc.commit(&tr!("realistic-undo-material"), |m| {
                     if let Some(mat) = m.materials.values_mut().find(|x| x.name == name) {
                         mat.pbr = None;
                     }
@@ -391,24 +393,25 @@ impl VarstotasApp {
         let Some(mut ed) = self.tray.shader_edit.take() else { return };
         let mut open = true;
         let mut apply = false;
-        egui::Window::new(format!("Shader — {}", ed.material))
+        egui::Window::new(tr!("realistic-shader-window", material = ed.material.clone()))
             .id(egui::Id::new("shader_editor"))
             .open(&mut open)
             .default_pos(self.viewport.view_rect.min + vec2(60.0, 40.0))
             .default_size(vec2(760.0, 480.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("shader_start").selected_text("Start from…").show_ui(ui, |ui| {
-                        for (name, src) in crate::shaders::PRESETS.iter().copied().chain([("Checker (new)", NEW_SHADER)]) {
-                            if ui.selectable_label(false, name).on_hover_text("Replace the code with this shader").clicked() {
+                    egui::ComboBox::from_id_salt("shader_start").selected_text(tr!("realistic-start-from")).show_ui(ui, |ui| {
+                        for (name, src) in crate::shaders::PRESETS.iter().copied().chain([("Checker (new)", NEW_SHADER)]) { // i18n-ignore
+                            let name = if src == NEW_SHADER { tr!("realistic-checker-new") } else { crate::shaders::label(name) };
+                            if ui.selectable_label(false, name).on_hover_text(tr!("realistic-start-from-tip")).clicked() {
                                 ed.code = src.to_string();
                                 ed.changed = Some(std::time::Instant::now());
                             }
                         }
                     });
-                    ui.toggle_value(&mut ed.reference, "Reference").on_hover_text("Surface fields, helpers and built-ins");
+                    ui.toggle_value(&mut ed.reference, tr!("realistic-reference")).on_hover_text(tr!("realistic-reference-tip"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Apply").clicked() {
+                        if ui.button(tr!("apply")).clicked() {
                             apply = true;
                         }
                     });
@@ -435,7 +438,7 @@ impl VarstotasApp {
                 }
                 match &ed.error {
                     Some(e) => ui.label(RichText::new(e).color(ERROR_RED)),
-                    None => ui.label(RichText::new("Compiles; the material uses it").small().color(theme::text_dim())),
+                    None => ui.label(RichText::new(tr!("realistic-compiles")).small().color(theme::text_dim())),
                 };
             });
         if let Some(t) = ed.changed {
@@ -485,12 +488,35 @@ fn map_normal_scale(p: &Pbr) -> bool {
     p.normal_map.is_some()
 }
 
-pub(crate) fn tonemap_name(t: Tonemap) -> &'static str {
-    match t {
-        Tonemap::Aces => "ACES (filmic)",
-        Tonemap::Agx => "AgX (soft)",
-        Tonemap::Clamp => "None",
-    }
+pub(crate) fn tonemap_name(t: Tonemap) -> String {
+    tr(match t {
+        Tonemap::Aces => "realistic-tonemap-aces",
+        Tonemap::Agx => "realistic-tonemap-agx",
+        Tonemap::Clamp => "realistic-tonemap-none",
+    })
+}
+
+/// The shown name of a material preset (`PBR_PRESETS` id).
+fn pbr_preset_label(id: &str) -> String {
+    tr(match id {
+        "Matte" => "realistic-preset-matte", // i18n-ignore
+        "Satin" => "realistic-preset-satin", // i18n-ignore
+        "Glossy" => "realistic-preset-glossy", // i18n-ignore
+        "Metal" => "realistic-preset-metal", // i18n-ignore
+        "Chrome" => "realistic-preset-chrome", // i18n-ignore
+        "Glass" => "realistic-preset-glass", // i18n-ignore
+        _ => "realistic-preset-light",
+    })
+}
+
+/// The shown name of an effects preset (`EFFECT_PRESETS` id).
+fn effect_preset_label(id: &str) -> String {
+    tr(match id {
+        "off" => "realistic-fx-off",
+        "fast" => "realistic-fx-fast",
+        "balanced" => "realistic-fx-balanced",
+        _ => "realistic-fx-quality",
+    })
 }
 
 fn srgb_lin(x: f32) -> f32 {
@@ -618,17 +644,17 @@ impl ShaderEdit {
 fn shader_reference(ui: &mut Ui, h: f32) {
     use crate::shader_help as sh;
     egui::ScrollArea::vertical().id_salt("shader_ref").max_height(h).auto_shrink([false, false]).show(ui, |ui| {
-        ui.label(RichText::new("Surface (s, o)").strong());
+        ui.label(RichText::new(tr!("realistic-ref-surface")).strong());
         for (name, ty, doc) in sh::SURFACE {
-            ui.label(RichText::new(format!("{name}: {ty}")).monospace().small()).on_hover_text(*doc);
+            ui.label(RichText::new(format!("{name}: {ty}")).monospace().small()).on_hover_text(sh::text(doc));
         }
         ui.add_space(4.0);
-        ui.label(RichText::new("Parameters").strong());
-        ui.label(RichText::new(sh::PARAM_TAG.1).monospace().small()).on_hover_text(sh::PARAM_TAG.2);
+        ui.label(RichText::new(tr!("realistic-ref-parameters")).strong());
+        ui.label(RichText::new(sh::PARAM_TAG.1).monospace().small()).on_hover_text(sh::text(sh::PARAM_TAG.2));
         ui.add_space(4.0);
-        ui.label(RichText::new("Functions").strong());
+        ui.label(RichText::new(tr!("realistic-ref-functions")).strong());
         for (_, sig, doc) in sh::FNS {
-            ui.label(RichText::new(*sig).monospace().small()).on_hover_text(*doc);
+            ui.label(RichText::new(*sig).monospace().small()).on_hover_text(sh::text(doc));
         }
     });
 }
@@ -665,11 +691,9 @@ fn rebased(old: Option<CustomShader>, code: String) -> CustomShader {
 fn effects_ui(ui: &mut Ui, x: &mut Effects) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-        ui.label(RichText::new("Preset").small().color(theme::text_dim()));
+        ui.label(RichText::new(tr!("realistic-preset")).small().color(theme::text_dim()));
         for name in EFFECT_PRESETS {
-            let mut label = name.to_string();
-            label[..1].make_ascii_uppercase();
-            if ui.small_button(label).clicked()
+            if ui.small_button(effect_preset_label(name)).clicked()
                 && let Some(n) = x.with_preset(name)
             {
                 *x = n;
@@ -682,47 +706,47 @@ fn effects_ui(ui: &mut Ui, x: &mut Effects) {
             egui::Grid::new(id).num_columns(2).spacing([6.0, 2.0]).show(ui, |ui| rows(ui));
         });
     };
-    let slider = |ui: &mut Ui, label: &str, v: &mut f32, r: std::ops::RangeInclusive<f32>, log: bool, dec: usize| {
+    let slider = |ui: &mut Ui, label: String, v: &mut f32, r: std::ops::RangeInclusive<f32>, log: bool, dec: usize| {
         ui.label(RichText::new(label).small());
         ui.add(egui::Slider::new(v, r).logarithmic(log).fixed_decimals(dec));
         ui.end_row();
     };
-    ui.checkbox(&mut x.soft_shadows, "Soft shadows").on_hover_text("Shadows blur away from what casts them");
+    ui.checkbox(&mut x.soft_shadows, tr!("realistic-fx-soft-shadows")).on_hover_text(tr!("realistic-fx-soft-shadows-tip"));
     if x.soft_shadows {
-        settings(ui, "fx_soft", &mut |ui| slider(ui, "Sun size", &mut x.shadow_softness, 0.1..=5.0, false, 1));
+        settings(ui, "fx_soft", &mut |ui| slider(ui, tr!("realistic-fx-sun-size"), &mut x.shadow_softness, 0.1..=5.0, false, 1));
     }
-    ui.checkbox(&mut x.ao, "Ambient occlusion").on_hover_text("Darker creases and contact shadows");
+    ui.checkbox(&mut x.ao, tr!("realistic-fx-ao")).on_hover_text(tr!("realistic-fx-ao-tip"));
     if x.ao {
         settings(ui, "fx_ao", &mut |ui| {
-            slider(ui, "Radius, mm", &mut x.ao_radius, 50.0..=5000.0, true, 0);
-            slider(ui, "Strength", &mut x.ao_strength, 0.0..=3.0, false, 2);
+            slider(ui, tr!("realistic-fx-radius"), &mut x.ao_radius, 50.0..=5000.0, true, 0);
+            slider(ui, tr!("realistic-fx-strength"), &mut x.ao_strength, 0.0..=3.0, false, 2);
         });
     }
-    ui.checkbox(&mut x.reflections, "Reflections").on_hover_text("The model mirrored in glossy surfaces (screen space)");
+    ui.checkbox(&mut x.reflections, tr!("realistic-fx-reflections")).on_hover_text(tr!("realistic-fx-reflections-tip"));
     if x.reflections {
-        settings(ui, "fx_ssr", &mut |ui| slider(ui, "Strength", &mut x.reflection_strength, 0.0..=2.0, false, 2));
+        settings(ui, "fx_ssr", &mut |ui| slider(ui, tr!("realistic-fx-strength"), &mut x.reflection_strength, 0.0..=2.0, false, 2));
     }
-    ui.checkbox(&mut x.bloom, "Bloom").on_hover_text("Bright light glows");
+    ui.checkbox(&mut x.bloom, tr!("realistic-fx-bloom")).on_hover_text(tr!("realistic-fx-bloom-tip"));
     if x.bloom {
         settings(ui, "fx_bloom", &mut |ui| {
-            slider(ui, "Strength", &mut x.bloom_strength, 0.0..=2.0, false, 2);
-            slider(ui, "Threshold", &mut x.bloom_threshold, 0.0..=8.0, false, 2);
+            slider(ui, tr!("realistic-fx-strength"), &mut x.bloom_strength, 0.0..=2.0, false, 2);
+            slider(ui, tr!("realistic-fx-threshold"), &mut x.bloom_threshold, 0.0..=8.0, false, 2);
         });
     }
-    ui.checkbox(&mut x.dof, "Depth of field").on_hover_text("Blur in front of and behind the focus distance");
+    ui.checkbox(&mut x.dof, tr!("realistic-fx-dof")).on_hover_text(tr!("realistic-fx-dof-tip"));
     if x.dof {
         settings(ui, "fx_dof", &mut |ui| {
-            slider(ui, "Blur", &mut x.aperture, 0.0..=4.0, false, 2);
-            ui.label(RichText::new("Focus, mm").small()).on_hover_text("0 = the point at the centre of the view");
+            slider(ui, tr!("realistic-fx-blur"), &mut x.aperture, 0.0..=4.0, false, 2);
+            ui.label(RichText::new(tr!("realistic-fx-focus")).small()).on_hover_text(tr!("realistic-fx-focus-tip"));
             ui.add(egui::Slider::new(&mut x.focus_distance, 0.0..=100000.0).logarithmic(true).fixed_decimals(0));
             ui.end_row();
         });
     }
-    ui.checkbox(&mut x.fog, "Fog").on_hover_text("Haze growing with distance");
+    ui.checkbox(&mut x.fog, tr!("realistic-fx-fog")).on_hover_text(tr!("realistic-fx-fog-tip"));
     if x.fog {
         settings(ui, "fx_fog", &mut |ui| {
-            slider(ui, "Distance, mm", &mut x.fog_distance, 1000.0..=1_000_000.0, true, 0);
-            ui.label(RichText::new("Height, mm").small()).on_hover_text("0 = even fog; else it thins out over this height");
+            slider(ui, tr!("realistic-fx-fog-distance"), &mut x.fog_distance, 1000.0..=1_000_000.0, true, 0);
+            ui.label(RichText::new(tr!("realistic-fx-fog-height")).small()).on_hover_text(tr!("realistic-fx-fog-height-tip"));
             ui.horizontal(|ui| {
                 ui.add(egui::DragValue::new(&mut x.fog_height).speed(50.0).range(0.0..=1_000_000.0));
                 let mut c = color32([x.fog_color[0], x.fog_color[1], x.fog_color[2], 1.0]);
@@ -735,10 +759,10 @@ fn effects_ui(ui: &mut Ui, x: &mut Effects) {
         });
     }
     egui::Grid::new("env_look").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-        ui.label("Vignette");
+        ui.label(tr!("realistic-vignette"));
         ui.add(egui::Slider::new(&mut x.vignette, 0.0..=1.0).fixed_decimals(2));
         ui.end_row();
-        ui.label("Style");
+        ui.label(tr!("realistic-style"));
         egui::ComboBox::from_id_salt("env_stylize").selected_text(stylize_name(x.stylize)).show_ui(ui, |ui| {
             for s in Stylize::ALL {
                 ui.selectable_value(&mut x.stylize, s, stylize_name(s));
@@ -747,18 +771,18 @@ fn effects_ui(ui: &mut Ui, x: &mut Effects) {
         ui.end_row();
     });
     ui.horizontal(|ui| {
-        ui.checkbox(&mut x.clay, "Clay").on_hover_text("Every material as plain clay (a massing model)");
-        ui.checkbox(&mut x.high_quality, "High quality").on_hover_text("More samples for soft shadows, occlusion and reflections");
+        ui.checkbox(&mut x.clay, tr!("realistic-fx-clay")).on_hover_text(tr!("realistic-fx-clay-tip"));
+        ui.checkbox(&mut x.high_quality, tr!("realistic-fx-high-quality")).on_hover_text(tr!("realistic-fx-high-quality-tip"));
     });
 }
 
-fn stylize_name(s: Stylize) -> &'static str {
-    match s {
-        Stylize::None => "Photo",
-        Stylize::Pencil => "Pencil",
-        Stylize::Watercolor => "Watercolor",
-        Stylize::Technical => "Technical",
-    }
+fn stylize_name(s: Stylize) -> String {
+    tr(match s {
+        Stylize::None => "realistic-stylize-photo",
+        Stylize::Pencil => "realistic-stylize-pencil",
+        Stylize::Watercolor => "realistic-stylize-watercolor",
+        Stylize::Technical => "realistic-stylize-technical",
+    })
 }
 
 pub(crate) const ERROR_RED: Color32 = Color32::from_rgb(0xC6, 0x28, 0x28);

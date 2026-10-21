@@ -20,6 +20,7 @@ use glam::{DMat4, DQuat, DVec2, DVec3};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use varstotas_i18n::tr;
 
 const GLB_MAGIC: u32 = 0x4654_6C67;
 const CHUNK_JSON: u32 = 0x4E4F_534A;
@@ -234,13 +235,16 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
                         if p.emissive() {
                             v["emissiveFactor"] = json!(p.emission.map(srgb_to_linear));
                             if p.emission_strength != 1.0 {
+                                // i18n-ignore-next
                                 ext.insert("KHR_materials_emissive_strength".into(), json!({"emissiveStrength": p.emission_strength}));
                             }
                         }
                         if p.transmission > 0.0 {
+                            // i18n-ignore-next
                             ext.insert("KHR_materials_transmission".into(), json!({"transmissionFactor": p.transmission}));
                         }
                         if (p.ior - 1.5).abs() > 1e-4 {
+                            // i18n-ignore-next
                             ext.insert("KHR_materials_ior".into(), json!({"ior": p.ior}));
                         }
                         for k in ext.keys() {
@@ -267,12 +271,14 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
         let name = match owner.and_then(|i| root.instances.get(i)) {
             Some(i) if !i.name.is_empty() => i.name.clone(),
             Some(i) => model.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default(),
+            // i18n-ignore-next
             None => "Model".into(),
         };
         meshes.push(json!({"name": name, "primitives": out}));
         node_list.push(json!({"name": name, "mesh": meshes.len() - 1}));
     }
     let mut doc = json!({
+        // i18n-ignore-next
         "asset": {"version": "2.0", "generator": "Varstotas"},
         "scene": 0,
         "scenes": [{"nodes": (0..node_list.len()).collect::<Vec<_>>()}],
@@ -346,17 +352,17 @@ fn split(data: &[u8]) -> Result<(Value, Option<Vec<u8>>), IoError> {
         while at + 8 <= data.len() {
             let len = u32::from_le_bytes(data[at..at + 4].try_into().unwrap()) as usize;
             let ty = u32::from_le_bytes(data[at + 4..at + 8].try_into().unwrap());
-            let body = data.get(at + 8..at + 8 + len).ok_or_else(|| bad("truncated GLB chunk"))?;
+            let body = data.get(at + 8..at + 8 + len).ok_or_else(|| bad(tr!("kernel-io-truncated-glb-chunk")))?;
             match ty {
-                CHUNK_JSON => json = Some(serde_json::from_slice(body).map_err(|e| bad(format!("GLB JSON: {e}")))?),
+                CHUNK_JSON => json = Some(serde_json::from_slice(body).map_err(|e| bad(tr!("kernel-io-glb-json-e", e = e.to_string())))?),
                 CHUNK_BIN => bin = Some(body.to_vec()),
                 _ => {}
             }
             at += 8 + len;
         }
-        return Ok((json.ok_or_else(|| bad("GLB without JSON"))?, bin));
+        return Ok((json.ok_or_else(|| bad(tr!("kernel-io-glb-without-json")))?, bin));
     }
-    let doc: Value = serde_json::from_slice(data).map_err(|e| bad(format!("not a glTF file: {e}")))?;
+    let doc: Value = serde_json::from_slice(data).map_err(|e| bad(tr!("kernel-io-not-a-gltf-file-e", e = e.to_string())))?;
     Ok((doc, None))
 }
 
@@ -364,9 +370,9 @@ fn split(data: &[u8]) -> Result<(Value, Option<Vec<u8>>), IoError> {
 fn load_uri(uri: &str, dir: Option<&Path>) -> Result<Vec<u8>, IoError> {
     if let Some(rest) = uri.strip_prefix("data:") {
         let (_, b64) = rest.split_once(";base64,").ok_or_else(|| bad("unsupported data URI"))?;
-        return base64_decode(b64).ok_or_else(|| bad("bad base64 in data URI"));
+        return base64_decode(b64).ok_or_else(|| bad(tr!("kernel-io-bad-base-in-data-uri")));
     }
-    let dir = dir.ok_or_else(|| bad(format!("external file {uri} needs a path")))?;
+    let dir = dir.ok_or_else(|| bad(tr!("kernel-io-external-file-uri-needs-a-path", uri = uri.to_string())))?;
     let name = uri.replace("%20", " ");
     Ok(std::fs::read(dir.join(name))?)
 }
@@ -375,12 +381,13 @@ impl Gltf {
     fn parse(data: &[u8], dir: Option<&Path>) -> Result<Self, IoError> {
         let (doc, bin) = split(data)?;
         if doc["asset"]["version"].as_str().is_some_and(|v| !v.starts_with('2')) {
-            return Err(bad("only glTF 2.0 is supported"));
+            return Err(bad(tr!("kernel-io-only-gltf-is-supported")));
         }
         // Draco is decoded (`draco`); meshopt needs a decoder this importer has not.
         for e in doc["extensionsRequired"].as_array().into_iter().flatten().filter_map(|e| e.as_str()) {
+            // i18n-ignore-next
             if matches!(e, "EXT_meshopt_compression" | "KHR_meshopt_compression") {
-                return Err(bad(format!("compressed glTF ({e}) is not supported")));
+                return Err(bad(tr!("kernel-io-compressed-gltf-e-is-not-supported", e = e.to_string())));
             }
         }
         let mut buffers = Vec::new();
@@ -388,7 +395,7 @@ impl Gltf {
         for b in doc["buffers"].as_array().into_iter().flatten() {
             buffers.push(match b["uri"].as_str() {
                 Some(uri) => load_uri(uri, dir)?,
-                None => bin.take().ok_or_else(|| bad("buffer without data"))?,
+                None => bin.take().ok_or_else(|| bad(tr!("kernel-io-buffer-without-data")))?,
             });
         }
         Ok(Self { doc, buffers })
@@ -396,31 +403,31 @@ impl Gltf {
 
     fn view_bytes(&self, view: usize) -> Result<(&[u8], usize), IoError> {
         let v = &self.doc["bufferViews"][view];
-        let buf = self.buffers.get(v["buffer"].as_u64().unwrap_or(0) as usize).ok_or_else(|| bad("bad buffer index"))?;
+        let buf = self.buffers.get(v["buffer"].as_u64().unwrap_or(0) as usize).ok_or_else(|| bad(tr!("kernel-io-bad-buffer-index")))?;
         let off = v["byteOffset"].as_u64().unwrap_or(0) as usize;
-        let len = v["byteLength"].as_u64().ok_or_else(|| bad("bufferView without byteLength"))? as usize;
+        let len = v["byteLength"].as_u64().ok_or_else(|| bad(tr!("kernel-io-bufferview-without-bytelength")))? as usize;
         let stride = v["byteStride"].as_u64().unwrap_or(0) as usize;
-        Ok((buf.get(off..off + len).ok_or_else(|| bad("bufferView out of range"))?, stride))
+        Ok((buf.get(off..off + len).ok_or_else(|| bad(tr!("kernel-io-bufferview-out-of-range")))?, stride))
     }
 
     /// Accessor values as f64 vectors of its component count (normalized integers scaled).
     fn read(&self, acc: usize) -> Result<Vec<Vec<f64>>, IoError> {
         let a = &self.doc["accessors"][acc];
-        let count = a["count"].as_u64().ok_or_else(|| bad("accessor without count"))? as usize;
+        let count = a["count"].as_u64().ok_or_else(|| bad(tr!("kernel-io-accessor-without-count")))? as usize;
         let n = match a["type"].as_str() {
             Some("SCALAR") => 1,
             Some("VEC2") => 2,
             Some("VEC3") => 3,
             Some("VEC4") => 4,
             Some("MAT4") => 16,
-            _ => return Err(bad("unsupported accessor type")),
+            _ => return Err(bad(tr!("kernel-io-unsupported-accessor-type"))),
         };
         let ct = a["componentType"].as_u64().unwrap_or(5126);
         let size = match ct {
             5120 | 5121 => 1,
             5122 | 5123 => 2,
             5125 | 5126 => 4,
-            _ => return Err(bad("unsupported component type")),
+            _ => return Err(bad(tr!("kernel-io-unsupported-component-type"))),
         };
         let norm = a["normalized"].as_bool().unwrap_or(false);
         let Some(view) = a["bufferView"].as_u64() else {
@@ -435,7 +442,7 @@ impl Gltf {
             let mut v = Vec::with_capacity(n);
             for k in 0..n {
                 let o = base + k * size;
-                let b = bytes.get(o..o + size).ok_or_else(|| bad("accessor out of range"))?;
+                let b = bytes.get(o..o + size).ok_or_else(|| bad(tr!("kernel-io-accessor-out-of-range")))?;
                 let x = match ct {
                     5120 => b[0] as i8 as f64 / if norm { 127.0 } else { 1.0 },
                     5121 => b[0] as f64 / if norm { 255.0 } else { 1.0 },
@@ -455,11 +462,11 @@ impl Gltf {
     /// coordinates and triangle indices.
     #[allow(clippy::type_complexity)]
     fn draco(&self, ext: &Value) -> Result<(Vec<[f64; 3]>, Option<Vec<[f64; 2]>>, Vec<usize>), IoError> {
-        let view = ext["bufferView"].as_u64().ok_or_else(|| bad("Draco primitive without bufferView"))?;
+        let view = ext["bufferView"].as_u64().ok_or_else(|| bad(tr!("kernel-io-draco-primitive-without-bufferview")))?;
         let (bytes, _) = self.view_bytes(view as usize)?;
         let mut buf = draco_core::DecoderBuffer::new(bytes);
         let mut mesh = draco_core::Mesh::new();
-        draco_core::MeshDecoder::new().decode(&mut buf, &mut mesh).map_err(|e| bad(format!("Draco: {e:?}")))?;
+        draco_core::MeshDecoder::new().decode(&mut buf, &mut mesh).map_err(|e| bad(tr!("kernel-io-draco-e", e = format!("{e:?}"))))?;
         let n = mesh.num_points();
         let attr = |name: &str| ext["attributes"][name].as_u64().and_then(|id| mesh.attribute_by_unique_id(id as u32));
         let pos = attr("POSITION").ok_or_else(|| bad("Draco primitive without POSITION"))?.read_f32s(n, 3);
@@ -534,7 +541,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
     while let Some((i, parent, depth)) = stack.pop() {
         let Some(n) = nodes.get(i) else { continue };
         if depth > 64 {
-            return Err(bad("node hierarchy too deep"));
+            return Err(bad(tr!("kernel-io-node-hierarchy-too-deep")));
         }
         let m = parent * node_matrix(n);
         if let Some(mesh) = n["mesh"].as_u64() {
@@ -545,7 +552,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
         }
     }
     if placed.is_empty() {
-        return Err(bad("no meshes in the glTF scene"));
+        return Err(bad(tr!("kernel-io-no-meshes-in-the-gltf-scene")));
     }
     placed.reverse();
     // Materials (created when first used).
@@ -562,6 +569,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 .map(|a| a.iter().map(|x| x.as_f64().unwrap_or(1.0) as f32).collect())
                 .unwrap_or_else(|| vec![1.0; 4]);
             let c = [linear_to_srgb(f[0]), linear_to_srgb(f[1]), linear_to_srgb(f[2]), f.get(3).copied().unwrap_or(1.0)];
+            // i18n-ignore-next
             let name = m["name"].as_str().filter(|s| !s.is_empty()).map(str::to_string).unwrap_or_else(|| format!("Material {i}"));
             let img = pbr["baseColorTexture"]["index"].as_u64().and_then(|t| g.image(t as usize, dir));
             let id = model.add_material(&name, c);
@@ -585,8 +593,11 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 metallic: num(&pbr["metallicFactor"], 1.0),
                 roughness: num(&pbr["roughnessFactor"], 1.0),
                 emission: if e.len() >= 3 { [linear_to_srgb(e[0]), linear_to_srgb(e[1]), linear_to_srgb(e[2])] } else { [0.0; 3] },
+                // i18n-ignore-next
                 emission_strength: num(&ext["KHR_materials_emissive_strength"]["emissiveStrength"], 1.0),
+                // i18n-ignore-next
                 transmission: num(&ext["KHR_materials_transmission"]["transmissionFactor"], 0.0),
+                // i18n-ignore-next
                 ior: num(&ext["KHR_materials_ior"]["ior"], 1.5),
                 normal_scale: num(&m["normalTexture"]["scale"], 1.0),
                 normal_map: tex(&m["normalTexture"]),
@@ -595,11 +606,15 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 ao_map: tex(&m["occlusionTexture"]),
                 emission_map: tex(&m["emissiveTexture"]),
                 shader: None,
+                // i18n-ignore-next
                 clearcoat: num(&ext["KHR_materials_clearcoat"]["clearcoatFactor"], 0.0),
+                // i18n-ignore-next
                 clearcoat_roughness: num(&ext["KHR_materials_clearcoat"]["clearcoatRoughnessFactor"], 0.0),
                 // A coloured sheen: its brightest channel as the strength.
+                // i18n-ignore-next
                 sheen: ext["KHR_materials_sheen"]["sheenColorFactor"].as_array().map_or(0.0, |a| a.iter().filter_map(|x| x.as_f64()).fold(0.0, f64::max) as f32),
                 sheen_tint: 0.0,
+                // i18n-ignore-next
                 anisotropy: num(&ext["KHR_materials_anisotropy"]["anisotropyStrength"], 0.0),
                 anti_tiling: 0.0,
                 bevel: 0.0,
@@ -617,6 +632,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             if !matches!(mode, 4..=6) {
                 continue;
             }
+            // i18n-ignore-next
             let draco = &p["extensions"]["KHR_draco_mesh_compression"];
             let (pos, uv, idx): (Vec<DVec3>, Option<Vec<DVec2>>, Vec<usize>) = if draco.is_object() {
                 let (pos, uv, idx) = g.draco(draco)?;
@@ -650,7 +666,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             let tile = mat.and_then(|id| uv_image(&model.materials[id])).map(|i| i.size);
             for t in tris {
                 if t.iter().any(|&k| k >= pos.len()) {
-                    return Err(bad("index out of range"));
+                    return Err(bad(tr!("kernel-io-index-out-of-range")));
                 }
                 let t = if flip { [t[0], t[2], t[1]] } else { t };
                 let pts = [pos[t[0]], pos[t[1]], pos[t[2]]];
@@ -673,6 +689,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             let made = new_faces(&mesh, &HashSet::<FaceId>::new());
             mesh.merge_coplanar_faces(&made);
         }
+        // i18n-ignore-next
         let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         let inst = Instance { def, transform: DMat4::IDENTITY, name, material: None, tag: None, hidden: false, locked: false };
         model.defs[pd].mesh.instances.insert(inst);

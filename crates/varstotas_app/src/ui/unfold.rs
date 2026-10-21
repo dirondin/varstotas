@@ -6,6 +6,7 @@ use crate::document::guarded;
 use crate::ui::theme;
 use crate::vector_export::{Drawing, Pen, Text2};
 use egui::{Color32, Context, RichText, Sense, Stroke, pos2, vec2};
+use varstotas_i18n::tr;
 use varstotas_kernel::glam::DVec2;
 use varstotas_kernel::unfold::{FlatLine, Sheet, UnfoldInput, UnfoldOptions, Unfolding, to_dxf, unfold};
 use std::path::Path;
@@ -158,7 +159,7 @@ impl VarstotasApp {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let footer = if n > 1 { format!("{name} - unfold {scale} - sheet {} of {n}", i + 1) } else { format!("{name} - unfold {scale}") };
+                let footer = if n > 1 { tr!("unfold-footer-sheet", name = name.clone(), scale = scale.clone(), n = i + 1, total = n) } else { tr!("unfold-footer", name = name.clone(), scale = scale.clone()) };
                 sheet_drawing(s, page, &footer)
             })
             .collect()
@@ -168,7 +169,7 @@ impl VarstotasApp {
     pub(crate) fn export_unfold(&mut self, path: &Path) {
         let u = self.unfolding();
         if u.faces == 0 {
-            self.flash("Unfold: nothing to unfold (select faces or groups)".to_string());
+            self.flash(tr!("unfold-nothing"));
             return;
         }
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
@@ -179,10 +180,9 @@ impl VarstotasApp {
         };
         match std::fs::write(path, bytes) {
             Ok(()) => {
-                let more = if u.oversize > 0 { format!(" ({} larger than the sheet)", u.oversize) } else { String::new() };
-                self.flash(format!("Unfolded {} faces into {} pieces on {} sheets{more}: {}", u.faces, u.pieces, u.sheets.len(), path.display()));
+                self.flash(tr!("unfold-done", faces = u.faces, pieces = u.pieces, sheets = u.sheets.len(), oversize = u.oversize, path = path.display().to_string()));
             }
-            Err(e) => self.flash(format!("Export failed: {e}")),
+            Err(e) => self.flash(tr!("unfold-export-failed", error = e.to_string())),
         }
     }
 
@@ -211,42 +211,42 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(40.0, 40.0);
         let mut open = true;
         let mut save: Option<&str> = None;
-        let mut win = egui::Window::new("Unfold").id(egui::Id::new("unfold_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        let mut win = egui::Window::new(tr!("unfold-title")).id(egui::Id::new("unfold_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
         let selection = !self.doc.selection.is_empty();
         win.show(ctx, |ui| {
             ui.set_width(560.0);
-            let what = if selection { "Selection" } else { "Everything in the context" };
+            let what = tr(if selection { "unfold-selection" } else { "unfold-everything" });
             let summary = if u.faces == 0 {
-                format!("{what}: no faces. Select faces, groups or components.")
+                tr!("unfold-no-faces", what = what.clone())
             } else {
-                format!("{what}: {} faces → {} pieces on {} sheet(s)", u.faces, u.pieces, u.sheets.len())
+                tr!("unfold-summary", what = what.clone(), faces = u.faces, pieces = u.pieces, sheets = u.sheets.len())
             };
             ui.label(RichText::new(summary).strong());
             if u.oversize > 0 {
-                ui.label(RichText::new(format!("{} piece(s) larger than the sheet: choose a larger paper or scale.", u.oversize)).color(Color32::from_rgb(0xC0, 0x60, 0x00)));
+                ui.label(RichText::new(tr!("unfold-oversize", n = u.oversize)).color(Color32::from_rgb(0xC0, 0x60, 0x00)));
             }
             ui.add_space(4.0);
             let s = &mut self.unfold;
             egui::Grid::new("unfold_opts").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
-                ui.label("Scale 1:");
+                ui.label(tr!("unfold-scale"));
                 ui.add(egui::DragValue::new(&mut s.scale_n).range(0.01..=10000.0).speed(0.1));
-                ui.label("Paper");
+                ui.label(tr!("unfold-paper"));
                 ui.horizontal(|ui| {
                     egui::ComboBox::from_id_salt("unfold_paper").selected_text(s.paper.name()).show_ui(ui, |ui| {
                         for p in Paper::ALL {
                             ui.selectable_value(&mut s.paper, p, p.name());
                         }
                     });
-                    ui.add_enabled(s.paper != Paper::Fit, egui::Checkbox::new(&mut s.landscape, "Landscape"));
+                    ui.add_enabled(s.paper != Paper::Fit, egui::Checkbox::new(&mut s.landscape, tr!("unfold-landscape")));
                 });
                 ui.end_row();
-                ui.checkbox(&mut s.opts.tabs, "Glue tabs");
+                ui.checkbox(&mut s.opts.tabs, tr!("unfold-glue-tabs"));
                 ui.add_enabled(s.opts.tabs, egui::DragValue::new(&mut s.opts.tab_width).range(1.0..=50.0).speed(0.2).suffix(" mm"));
-                ui.checkbox(&mut s.opts.numbers, "Edge numbers");
-                ui.checkbox(&mut s.opts.soft_folds, "Folds on soft edges");
+                ui.checkbox(&mut s.opts.numbers, tr!("unfold-edge-numbers"));
+                ui.checkbox(&mut s.opts.soft_folds, tr!("unfold-soft-folds"));
                 ui.end_row();
             });
             ui.add_space(6.0);
@@ -309,15 +309,15 @@ impl VarstotasApp {
                     if ui.add_enabled(s.page > 0, egui::Button::new("◀")).clicked() {
                         s.page -= 1;
                     }
-                    ui.label(format!("Sheet {} of {}", s.page + 1, pages.len()));
+                    ui.label(tr!("unfold-sheet-of", n = s.page + 1, total = pages.len()));
                     if ui.add_enabled(s.page + 1 < pages.len(), egui::Button::new("▶")).clicked() {
                         s.page += 1;
                     }
                     ui.separator();
                 }
-                ui.label(RichText::new("━ cut").color(Color32::GRAY));
-                ui.label(RichText::new("╍ valley").color(Color32::from_rgb(70, 130, 230)));
-                ui.label(RichText::new("━·━ mountain").color(Color32::from_rgb(220, 60, 60)));
+                ui.label(RichText::new(tr!("unfold-legend-cut")).color(Color32::GRAY));
+                ui.label(RichText::new(tr!("unfold-legend-valley")).color(Color32::from_rgb(70, 130, 230)));
+                ui.label(RichText::new(tr!("unfold-legend-mountain")).color(Color32::from_rgb(220, 60, 60)));
             });
             ui.add_space(6.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -328,7 +328,7 @@ impl VarstotasApp {
                         }
                     }
                 });
-                ui.label(RichText::new("Export:").color(theme::text_dim()));
+                ui.label(RichText::new(tr!("unfold-export")).color(theme::text_dim()));
             });
         });
         if !open {

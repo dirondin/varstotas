@@ -240,7 +240,7 @@ fn ser_b64<S: Serializer>(b: &Arc<[u8]>, s: S) -> Result<S::Ok, S::Error> {
 
 fn de_b64<'de, D: Deserializer<'de>>(d: D) -> Result<Arc<[u8]>, D::Error> {
     let s = String::deserialize(d)?;
-    base64_decode(&s).map(Into::into).ok_or_else(|| serde::de::Error::custom("bad base64 texture"))
+    base64_decode(&s).map(Into::into).ok_or_else(|| serde::de::Error::custom("bad base64 texture")) // i18n-ignore
 }
 
 #[cfg(test)]

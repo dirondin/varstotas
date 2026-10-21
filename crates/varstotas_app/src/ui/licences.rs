@@ -5,6 +5,7 @@
 
 use crate::app::VarstotasApp;
 use egui::{Color32, Context, RichText, Ui};
+use varstotas_i18n::tr;
 use serde::Deserialize;
 use std::sync::OnceLock;
 
@@ -77,42 +78,47 @@ pub fn crates() -> &'static [Crate] {
     &third_party().crates
 }
 
-/// File formats: (format, what Varstotas does, how, notes on the format).
-pub const FORMATS: &[(&str, &str, &str, &str)] = &[
-    (".varstotas", "open, save", "Varstotas's own format", "MIT, like Varstotas"),
-    ("glTF / GLB", "import, export", "own reader / writer; Draco meshes via draco-core (Apache-2.0)", "Khronos open standard, royalty-free"),
-    ("OBJ + MTL", "import, export", "own reader / writer", "open, public specification"),
-    ("STL", "import, export", "own reader / writer", "open, public specification"),
-    ("PLY", "import, export", "own reader / writer", "open, public specification"),
-    ("3MF", "import, export", "own reader / writer (zip + XML)", "3MF Consortium specification, royalty-free"),
-    ("COLLADA (.dae)", "import, export", "own reader / writer (images as files next to it)", "Khronos open standard, royalty-free"),
-    ("FBX", "import", "ufbx (MIT / Unlicense), an independent reader", "Autodesk's format; FBX is an Autodesk trademark, Varstotas is not affiliated"),
-    ("DXF", "import, export", "own reader / writer", "Autodesk's openly published format; DXF is an Autodesk trademark"),
-    ("SVG, PDF", "export (drawings, unfolds, sheets)", "own writers", "W3C / ISO open standards"),
-    ("PNG, JPEG, HDR, TGA, BMP", "textures, images, environments", "image crate (MIT / Apache-2.0)", "open formats"),
-    ("OpenEXR", "render export", "own writer", "Academy Software Foundation, BSD-3-Clause"),
-    ("CSV, JSON", "points import, faces export (plugins)", "own code", "open formats"),
-    ("MP4 / video", "animation export", "ffmpeg, installed by you and run as a separate program (not shipped)", "ffmpeg is LGPL / GPL; its licence applies to your copy"),
+/// File formats: (format name, id of its texts). A format name is not translated.
+const FORMATS: &[(&str, &str)] = &[
+    (".varstotas", "varstotas"), // i18n-ignore
+    ("glTF / GLB", "gltf"), // i18n-ignore
+    ("OBJ + MTL", "obj"), // i18n-ignore
+    ("STL", "stl"), // i18n-ignore
+    ("PLY", "ply"), // i18n-ignore
+    ("3MF", "3mf"), // i18n-ignore
+    ("COLLADA (.dae)", "collada"), // i18n-ignore
+    ("FBX", "fbx"), // i18n-ignore
+    ("DXF", "dxf"), // i18n-ignore
+    ("SVG, PDF", "svg-pdf"), // i18n-ignore
+    ("PNG, JPEG, HDR, TGA, BMP", "images"), // i18n-ignore
+    ("OpenEXR", "openexr"), // i18n-ignore
+    ("CSV, JSON", "csv-json"), // i18n-ignore
+    ("MP4 / video", "video"), // i18n-ignore
 ];
 
-/// Online libraries: (name, what, licence of the assets, terms of the service).
-pub const LIBRARIES: &[(&str, &str, &str, &str)] = &[
-    ("Poly Haven", "models, materials", "CC0", "Free public API, also for commercial apps; asks to show «Powered by Poly Haven» (done above its assets) and a unique User-Agent (Varstotas)."),
-    ("ambientCG", "materials", "CC0", "Free API and downloads; credit appreciated, not required."),
-    ("Smithsonian Open Access 3D", "models", "mostly CC0; some «Usage conditions apply» (non-commercial)", "The API does not say which: a model's page has to be checked. Varstotas marks these models as «check the usage» and warns when they are placed or exported."),
-    ("NASA 3D Resources", "models", "not copyrighted (US public domain)", "NASA insignia and logos are protected; no use may suggest NASA endorsement."),
-    ("Kenney", "model packs", "CC0", "Read from the public asset pages of kenney.nl; Kenney's logo is not CC0."),
-    ("Quaternius", "model packs", "CC0", "Downloaded by you in the browser."),
-    ("Search on sites (Printables, Thingiverse, Sketchfab, …)", "models", "each model its own", "Varstotas only opens the site's search in your browser; you download yourself and set the licence in the import card."),
-    ("Plugins", "models, materials", "per plugin", "A source plugin shows its terms (its @notice line) above its assets; e.g. Sketchfab needs your own account token and a credit to the author and Sketchfab."),
+/// Online libraries: (name, id of its texts). A name of "" is a text (`licence-lib-<id>-name`).
+const LIBRARIES: &[(&str, &str)] = &[
+    ("Poly Haven", "poly-haven"), // i18n-ignore
+    ("ambientCG", "ambientcg"), // i18n-ignore
+    ("Smithsonian Open Access 3D", "smithsonian"), // i18n-ignore
+    ("NASA 3D Resources", "nasa"), // i18n-ignore
+    ("Kenney", "kenney"), // i18n-ignore
+    ("Quaternius", "quaternius"), // i18n-ignore
+    ("", "search"), // i18n-ignore
+    ("", "plugins"), // i18n-ignore
 ];
 
-/// External programs used when installed: (name, use, licence).
-pub const PROGRAMS: &[(&str, &str, &str)] = &[
-    ("ffmpeg", "animation video export", "LGPL-2.1+ / GPL — not shipped, run as a separate program"),
-    ("Open Image Denoise", "AI denoiser of the renderer", "Apache-2.0 — not shipped, loaded from your installation"),
-    ("Python", "Python plugins and scripts", "PSF licence — not shipped, your installation"),
+/// External programs used when installed: (name, id of its texts).
+const PROGRAMS: &[(&str, &str)] = &[
+    ("ffmpeg", "ffmpeg"), // i18n-ignore
+    ("Open Image Denoise", "oidn"), // i18n-ignore
+    ("Python", "python"), // i18n-ignore
 ];
+
+/// A text of a table row: `licence-<what>-<id>-<field>`.
+fn cell(what: &str, id: &str, field: &str) -> String {
+    varstotas_i18n::tr(&format!("licence-{what}-{id}-{field}"))
+}
 
 /// The terms of an online source above its assets (nothing when `text` is empty).
 pub fn terms_notice(ui: &mut Ui, text: &str) {
@@ -137,7 +143,7 @@ impl VarstotasApp {
             return;
         }
         let mut open = true;
-        let mut win = egui::Window::new("Licences").id(egui::Id::new("licences")).open(&mut open).default_size([680.0, 520.0]).resizable(true);
+        let mut win = egui::Window::new(tr!("licences-title")).id(egui::Id::new("licences")).open(&mut open).default_size([680.0, 520.0]).resizable(true);
         if self.debug.script_active() {
             win = win.fixed_pos([140.0, 160.0]);
         }
@@ -161,13 +167,14 @@ impl VarstotasApp {
     fn components_tab(&mut self, ui: &mut Ui) {
         let tp = third_party();
         ui.horizontal(|ui| {
-            ui.label(format!("{} components", tp.crates.len()));
-            ui.add(egui::TextEdit::singleline(&mut self.licences.filter).hint_text("Filter: name or licence").desired_width(200.0).id_salt("licences_filter"));
-            if ui.button("Save as Text…").on_hover_text("All components and their licence texts in one file").clicked()
-                && let Some(p) = rfd::FileDialog::new().set_file_name("THIRD-PARTY-LICENSES.txt").save_file()
+            ui.label(tr!("licences-count", n = tp.crates.len()));
+            ui.add(egui::TextEdit::singleline(&mut self.licences.filter).hint_text(tr!("licences-filter")).desired_width(200.0).id_salt("licences_filter"));
+            if ui.button(tr!("licences-save")).on_hover_text(tr!("licences-save-hint")).clicked()
+                && let Some(p) = rfd::FileDialog::new().set_file_name("THIRD-PARTY-LICENSES.txt") // i18n-ignore
+.save_file()
             {
                 match std::fs::write(&p, all_text()) {
-                    Ok(()) => self.flash(format!("Saved {}", p.display())),
+                    Ok(()) => self.flash(tr!("licences-saved", path = p.display().to_string())),
                     Err(e) => self.flash_error(format!("{}: {e}", p.display())),
                 }
             }
@@ -204,7 +211,7 @@ impl VarstotasApp {
                     }
                 }
                 None => {
-                    ui.label(RichText::new("Pick a component to see its licence.").weak());
+                    ui.label(RichText::new(tr!("licences-pick")).weak());
                 }
             }));
         });
@@ -213,36 +220,36 @@ impl VarstotasApp {
 
 fn varstotas_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_varstotas").show(ui, |ui| {
-        ui.label("Varstotas is free software under the MIT licence: you may use it for personal and commercial work, copy, change and share it.");
+        ui.label(tr!("licences-own"));
         ui.add_space(6.0);
         ui.label(RichText::new(LICENSE).monospace().small());
         ui.add_space(8.0);
-        ui.label(RichText::new("Programs used when you have them").strong());
+        ui.label(RichText::new(tr!("licences-programs")).strong());
         egui::Grid::new("licences_programs").striped(true).num_columns(3).show(ui, |ui| {
-            for (n, what, lic) in PROGRAMS {
+            for (n, id) in PROGRAMS {
                 ui.label(*n);
-                ui.label(*what);
-                ui.label(RichText::new(*lic).small());
+                ui.label(cell("program", id, "use"));
+                ui.label(RichText::new(cell("program", id, "licence")).small());
                 ui.end_row();
             }
         });
         ui.add_space(8.0);
-        ui.label(RichText::new("Your models are yours. Models and materials downloaded from online libraries keep their own licences (Online Libraries; File → Export → Attributions).").small().weak());
+        ui.label(RichText::new(tr!("licences-yours")).small().weak());
     });
 }
 
 fn formats_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_formats").show(ui, |ui| {
         egui::Grid::new("licences_formats_grid").striped(true).num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
-            for h in ["Format", "Varstotas", "How", "The format"] {
+            for h in [tr!("licence-formats-col-format"), tr!("licence-formats-col-varstotas"), tr!("licence-formats-col-how"), tr!("licence-formats-col-note")] {
                 ui.label(RichText::new(h).strong());
             }
             ui.end_row();
-            for (f, what, how, note) in FORMATS {
+            for (f, id) in FORMATS {
                 ui.label(*f);
-                ui.label(RichText::new(*what).small());
-                ui.label(RichText::new(*how).small());
-                ui.label(RichText::new(*note).small());
+                ui.label(RichText::new(cell("format", id, "what")).small());
+                ui.label(RichText::new(cell("format", id, "how")).small());
+                ui.label(RichText::new(cell("format", id, "note")).small());
                 ui.end_row();
             }
         });
@@ -251,18 +258,18 @@ fn formats_tab(ui: &mut Ui) {
 
 fn libraries_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_libraries").show(ui, |ui| {
-        ui.label(RichText::new("Every downloaded model keeps its source, author and licence; Varstotas warns when a placed or exported model's licence limits its use (non-commercial, no derivatives, share-alike, a site's own licence, unknown).").small());
+        ui.label(RichText::new(tr!("licence-libs-intro")).small());
         ui.add_space(6.0);
         egui::Grid::new("licences_libraries_grid").striped(true).num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
-            for h in ["Library", "Assets", "Licence", "Terms"] {
+            for h in [tr!("licence-libs-col-library"), tr!("licence-libs-col-assets"), tr!("licence-libs-col-licence"), tr!("licence-libs-col-terms")] {
                 ui.label(RichText::new(h).strong());
             }
             ui.end_row();
-            for (n, what, lic, terms) in LIBRARIES {
-                ui.label(*n);
-                ui.label(RichText::new(*what).small());
-                ui.label(RichText::new(*lic).small());
-                ui.add(egui::Label::new(RichText::new(*terms).small()).wrap());
+            for (n, id) in LIBRARIES {
+                ui.label(if n.is_empty() { cell("lib", id, "name") } else { n.to_string() });
+                ui.label(RichText::new(cell("lib", id, "what")).small());
+                ui.label(RichText::new(cell("lib", id, "licence")).small());
+                ui.add(egui::Label::new(RichText::new(cell("lib", id, "terms")).small()).wrap());
                 ui.end_row();
             }
         });
@@ -272,13 +279,13 @@ fn libraries_tab(ui: &mut Ui) {
 /// Every component and its licence texts (Save as Text…).
 pub fn all_text() -> String {
     let tp = third_party();
-    let mut s = String::from("Varstotas uses the following open-source components.\n\n");
+    let mut s = tr!("licences-all-text-title") + "\n\n";
     for c in &tp.crates {
         s.push_str(&format!("{} {} — {} {}\n", c.name, c.version, c.license, c.repository));
     }
     for (i, t) in tp.texts.iter().enumerate() {
         let users: Vec<String> = tp.crates.iter().filter(|c| c.texts.iter().any(|(_, j)| *j == i)).map(|c| format!("{} {}", c.name, c.version)).collect();
-        s.push_str(&format!("\n{}\nApplies to: {}\n\n{t}\n", "=".repeat(78), users.join(", ")));
+        s.push_str(&format!("\n{}\n{}\n\n{t}\n", "=".repeat(78), tr!("licences-applies-to", users = users.join(", "))));
     }
     s
 }

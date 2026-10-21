@@ -6,6 +6,7 @@ use crate::app::VarstotasApp;
 use crate::downloads::{Expect, Offer, SavedAsset, Watcher, import_offer, search_url};
 use crate::ui::online_mats::open_url;
 use egui::{Color32, RichText, Ui};
+use varstotas_i18n::tr;
 use varstotas_kernel::{Attribution, LicenseKind};
 use std::path::{Path, PathBuf};
 
@@ -42,7 +43,7 @@ impl VarstotasApp {
         }
         let o = self.models.dl.offer(p, &self.models.state);
         if o.models.is_empty() {
-            self.flash_error(format!("{}: no model files in it", p.display()));
+            self.flash_error(tr!("downloads-no-models", path = p.display().to_string()));
             return;
         }
         self.models.dl.offers.push(o);
@@ -53,7 +54,7 @@ impl VarstotasApp {
         let ext = p.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
         if ext == "webloc" || ext == "url" {
             let Some(url) = link_file_url(p) else {
-                self.flash_error(format!("{}: no web address in it", p.display()));
+                self.flash_error(tr!("downloads-no-address", path = p.display().to_string()));
                 return;
             };
             self.downloads_link(&url, ctx);
@@ -64,7 +65,7 @@ impl VarstotasApp {
             self.models.dl.offered.remove(p);
             self.downloads_offer(p);
         } else {
-            self.flash_error(format!("{}: not a model file (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas, zip)", p.display()));
+            self.flash_error(tr!("downloads-not-model", path = p.display().to_string()));
         }
     }
 
@@ -78,7 +79,7 @@ impl VarstotasApp {
         let mut q = std::collections::HashMap::new();
         q.insert("url".to_string(), url.to_string());
         if let Some(e) = Expect::from_page(&q, &sites) {
-            self.flash(format!("Waiting for a file from {}: download it in the browser", e.credit.source));
+            self.flash(tr!("downloads-waiting-site", site = e.credit.source.as_str()));
             self.downloads_expect(e);
             self.models.open = true;
         }
@@ -116,7 +117,7 @@ impl VarstotasApp {
         let sites = self.models.dl.sites().to_vec();
         match Expect::from_page(q, &sites) {
             Some(e) => {
-                self.flash(format!("Waiting for the file of {} ({}): download it in the browser", e.credit.title, e.credit.source));
+                self.flash(tr!("downloads-waiting-file", title = e.credit.title.as_str(), site = e.credit.source.as_str()));
                 self.downloads_expect(e);
                 self.models.open = true;
             }
@@ -130,7 +131,7 @@ impl VarstotasApp {
             return;
         }
         let Some(lib) = self.library_dir() else {
-            self.flash_error("No components library folder".to_string());
+            self.flash_error(tr!("downloads-no-library"));
             return;
         };
         let o = self.models.dl.offers.remove(0);
@@ -178,16 +179,16 @@ impl VarstotasApp {
                     let i = self.library.items.iter().position(|i| i.path == path);
                     match i {
                         Some(i) if o.place => self.place_component(i),
-                        _ => self.flash(format!("Imported {name} to Components → {}", folder.trim_end_matches(".vrst"))),
+                        _ => self.flash(tr!("downloads-imported", name = name.as_str(), folder = folder.trim_end_matches(".vrst"))),
                     }
                 } else {
-                    self.flash(format!("Imported {n} models of {name} to Components → {folder}"));
+                    self.flash(tr!("downloads-imported-many", n = n, name = name.as_str(), folder = folder.as_str()));
                     self.show_library_folder(&folder);
                 }
             }
             Err(e) => {
                 self.models.dl.last = Some(format!("error {e}"));
-                self.flash_error(format!("Import {name}: {e}"));
+                self.flash_error(tr!("downloads-import-failed", name = name.as_str(), error = e));
             }
         }
     }
@@ -198,16 +199,16 @@ impl VarstotasApp {
         let query = self.models.query.clone();
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            ui.label(RichText::new("Search on:").small());
+            ui.label(RichText::new(tr!("downloads-search-on")).small());
             for s in &sites {
-                if ui.small_button(&s.name).on_hover_text(format!("Open {}'s search for «{}» in the browser", s.name, query.trim())).clicked() {
+                if ui.small_button(&s.name).on_hover_text(tr!("downloads-search-hover", site = s.name.as_str(), query = query.trim())).clicked() {
                     open_url(&search_url(s, &query));
                 }
             }
             if let Some(Err(e)) = &self.models.dl.sites {
                 ui.colored_label(Color32::from_rgb(200, 60, 40), RichText::new(e).small());
             }
-            if ui.small_button("Edit…").on_hover_text("Edit the sites (~/.varstotas/sources.toml); the list is read again").clicked() {
+            if ui.small_button(tr!("downloads-edit")).on_hover_text(tr!("downloads-edit-hover")).clicked() {
                 if let Some(p) = crate::downloads::sites_path() {
                     open_url(&p.to_string_lossy());
                 }
@@ -215,22 +216,22 @@ impl VarstotasApp {
             }
         });
         let waiting = self.models.dl.expects.len();
-        let title = if waiting > 0 { format!("Other Sites — waiting for {waiting} download(s)") } else { "Other Sites".to_string() };
+        let title = if waiting > 0 { tr!("downloads-other-waiting", waiting = waiting) } else { tr!("downloads-other") };
         egui::CollapsingHeader::new(title).id_salt("models_other").default_open(waiting > 0).show(ui, |ui| {
-            ui.label(RichText::new("Download from any site in your browser: Varstotas doesn't visit the sites itself. It takes the file from your Downloads folder and keeps the page as the credit.").small().weak());
+            ui.label(RichText::new(tr!("downloads-other-text")).small().weak());
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.prefs.watch_downloads, "Watch Downloads").on_hover_text("Offer every new model file or archive of the Downloads folder for import (always on while a page waits)");
+                ui.checkbox(&mut self.prefs.watch_downloads, tr!("downloads-watch")).on_hover_text(tr!("downloads-watch-hover"));
                 match &self.models.dl.watcher {
                     Some(w) => {
-                        ui.label(RichText::new(format!("watching {}", w.dir.display())).small().weak());
+                        ui.label(RichText::new(tr!("downloads-watching", dir = w.dir.display().to_string())).small().weak());
                     }
                     None => {
-                        ui.label(RichText::new("off").small().weak());
+                        ui.label(RichText::new(tr!("downloads-off")).small().weak());
                     }
                 }
-                if ui.button("Import File…").on_hover_text("Import a model file or an archive you downloaded").clicked() {
+                if ui.button(tr!("downloads-import-file")).on_hover_text(tr!("downloads-import-file-hover")).clicked() {
                     let exts = crate::downloads::FILE_EXTS;
-                    if let Some(p) = rfd::FileDialog::new().add_filter("Models", &exts).pick_file() {
+                    if let Some(p) = rfd::FileDialog::new().add_filter(tr!("downloads-models-filter"), &exts).pick_file() {
                         self.models.dl.offered.remove(&p);
                         self.downloads_offer(&p);
                     }
@@ -240,18 +241,18 @@ impl VarstotasApp {
             for e in &self.models.dl.expects {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    let lic = if e.credit.license.is_empty() { "licence unknown" } else { &e.credit.license };
-                    ui.label(RichText::new(format!("Waiting for a file from this page: {} ({}, {lic})", e.credit.title, e.credit.source)).small()).on_hover_text(&e.credit.url);
-                    if ui.small_button("Page").clicked() {
+                    let lic = if e.credit.license.is_empty() { tr!("tray-info-licence-unknown") } else { e.credit.license.clone() };
+                    ui.label(RichText::new(tr!("downloads-waiting-card", title = e.credit.title.as_str(), site = e.credit.source.as_str(), licence = lic)).small()).on_hover_text(&e.credit.url);
+                    if ui.small_button(tr!("downloads-page")).clicked() {
                         open_url(&e.credit.url);
                     }
                     for (i, f) in e.files.iter().enumerate().take(4) {
                         let n = crate::online_models::url_file(f);
-                        if ui.small_button(format!("⬇ {}", if n.is_empty() { (i + 1).to_string() } else { n })).on_hover_text(format!("Download in the browser: {f}")).clicked() {
+                        if ui.small_button(format!("⬇ {}", if n.is_empty() { (i + 1).to_string() } else { n })).on_hover_text(tr!("downloads-browser-file", file = f.as_str())).clicked() {
                             open_url(f);
                         }
                     }
-                    if ui.small_button("✖").on_hover_text("Stop waiting").clicked() {
+                    if ui.small_button("✖").on_hover_text(tr!("downloads-stop")).clicked() {
                         close = Some(e.id);
                     }
                 });
@@ -270,11 +271,11 @@ impl VarstotasApp {
         let lib = self.library_dir();
         let mut act: Option<bool> = None;
         let mut show: Option<PathBuf> = None;
-        egui::Window::new("Import Download").id(egui::Id::new("import_download")).default_pos([220.0, 180.0]).default_width(440.0).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(tr!("downloads-import-title")).id(egui::Id::new("import_download")).default_pos([220.0, 180.0]).default_width(440.0).collapsible(false).resizable(false).show(ctx, |ui| {
             if self.models.dl.importing.is_some() {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label("Importing…");
+                    ui.label(tr!("downloads-importing"));
                 });
                 return;
             }
@@ -282,26 +283,31 @@ impl VarstotasApp {
             let o = &mut self.models.dl.offers[0];
             let name = o.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
             let size = std::fs::metadata(&o.path).map(|m| m.len()).unwrap_or(0);
-            ui.label(RichText::new(format!("{name}  ({:.1} MB)", size as f64 / 1_048_576.0)).strong());
+            ui.label(RichText::new(tr!("downloads-file-size", name = name.as_str(), mb = format!("{:.1}", size as f64 / 1_048_576.0))).strong());
             if o.expect.is_some() {
-                ui.label(RichText::new("✔ The credit is from the page you sent").small().weak());
+                ui.label(RichText::new(tr!("downloads-credit-from-page")).small().weak());
             }
             if let Some(d) = &o.duplicate {
                 ui.horizontal(|ui| {
-                    ui.colored_label(WARN, RichText::new("⚠ The same file was imported before").small());
-                    if ui.small_button("Show").clicked() {
+                    ui.colored_label(WARN, RichText::new(tr!("downloads-duplicate")).small());
+                    if ui.small_button(tr!("model-lib-show")).clicked() {
                         show = Some(d.clone());
                     }
                 });
             }
             egui::Grid::new("offer_credit").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
                 let c = &mut o.credit;
-                for (label, v) in [("Title", &mut c.title), ("Author", &mut c.author), ("Site", &mut c.source), ("Page", &mut c.url)] {
-                    ui.label(label);
+                for (label, v) in [("Title", &mut c.title), ("Author", &mut c.author), ("Site", &mut c.source), ("Page", &mut c.url)] { // i18n-ignore
+                    ui.label(tr!(match label {
+                        "Title" => "downloads-field-title", // i18n-ignore
+                        "Author" => "downloads-field-author", // i18n-ignore
+                        "Site" => "downloads-field-site", // i18n-ignore
+                        _ => "downloads-page",
+                    }));
                     ui.add(egui::TextEdit::singleline(v).desired_width(300.0).id_salt(("offer", label)));
                     ui.end_row();
                 }
-                ui.label("Licence");
+                ui.label(tr!("downloads-licence"));
                 ui.horizontal(|ui| {
                     let before = o.kind;
                     egui::ComboBox::from_id_salt("offer_lic").selected_text(o.kind.label()).show_ui(ui, |ui| {
@@ -315,7 +321,7 @@ impl VarstotasApp {
                     if o.credit.license_kind() != o.kind {
                         o.kind = o.credit.license_kind();
                     }
-                    ui.add(egui::TextEdit::singleline(&mut o.credit.license).desired_width(140.0).hint_text("as the page says").id_salt("offer_lic_text"));
+                    ui.add(egui::TextEdit::singleline(&mut o.credit.license).desired_width(140.0).hint_text(tr!("downloads-licence-hint")).id_salt("offer_lic_text"));
                 });
                 ui.end_row();
             });
@@ -324,15 +330,15 @@ impl VarstotasApp {
             }
             ui.separator();
             if o.models.len() == 1 {
-                ui.checkbox(&mut o.place, "Place it in the model");
+                ui.checkbox(&mut o.place, tr!("downloads-place"));
             } else {
                 let on = o.models.iter().filter(|m| m.1).count();
                 ui.horizontal(|ui| {
-                    ui.label(format!("{on} of {} models (each becomes a component)", o.models.len()));
-                    if ui.small_button("All").clicked() {
+                    ui.label(tr!("downloads-models-count", on = on, n = o.models.len()));
+                    if ui.small_button(tr!("downloads-all")).clicked() {
                         o.models.iter_mut().for_each(|m| m.1 = true);
                     }
-                    if ui.small_button("None").clicked() {
+                    if ui.small_button(tr!("downloads-none")).clicked() {
                         o.models.iter_mut().for_each(|m| m.1 = false);
                     }
                 });
@@ -343,20 +349,20 @@ impl VarstotasApp {
                 });
             }
             let dest = |c: &Attribution| {
-                let s = if c.source.trim().is_empty() { "Downloads" } else { c.source.trim() };
-                format!("Components → {s}")
+                let s = if c.source.trim().is_empty() { "Downloads" } else { c.source.trim() }; // i18n-ignore
+                tr!("downloads-destination", folder = s)
             };
             ui.label(RichText::new(dest(&o.credit)).small().weak());
             ui.horizontal(|ui| {
                 let can = lib.is_some() && o.models.iter().any(|m| m.1);
-                if ui.add_enabled(can, egui::Button::new("Import")).clicked() {
+                if ui.add_enabled(can, egui::Button::new(tr!("model-lib-import"))).clicked() {
                     act = Some(true);
                 }
-                if ui.button("Ignore").clicked() {
+                if ui.button(tr!("downloads-ignore")).clicked() {
                     act = Some(false);
                 }
                 if more > 0 {
-                    ui.label(RichText::new(format!("{more} more waiting")).small().weak());
+                    ui.label(RichText::new(tr!("downloads-more-waiting", n = more)).small().weak());
                 }
             });
         });

@@ -1,5 +1,6 @@
 //! Dimension tool (linear dimensions).
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -150,7 +151,7 @@ impl DimensionTool {
             Stage::Offset { a, b } => {
                 let path = ctx.doc.active_path.clone();
                 let off = self.offset;
-                ctx.doc.commit("Dimension", |m| m.add_dimension_in(&path, a, b, off));
+                ctx.doc.commit(&tr!("tool-undo-dimension"), |m| m.add_dimension_in(&path, a, b, off));
                 self.stage = Stage::Idle;
             }
         }
@@ -192,9 +193,9 @@ impl Tool for DimensionTool {
     }
     fn status_text(&self) -> String {
         match self.stage {
-            Stage::Idle => "Select the start point of the dimension, or click an edge to dimension its length.".into(),
-            Stage::Start { .. } => "Select the end point of the dimension.".into(),
-            Stage::Offset { .. } => "Move to offset the dimension line and click to place it.".into(),
+            Stage::Idle => tr!("tool-dimension-first"),
+            Stage::Start { .. } => tr!("tool-dimension-second"),
+            Stage::Offset { .. } => tr!("tool-dimension-third"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

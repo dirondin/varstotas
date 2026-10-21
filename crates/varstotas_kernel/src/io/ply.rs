@@ -9,9 +9,11 @@ use crate::{Model, tessellate};
 use glam::{DMat4, DVec3};
 use std::collections::HashMap;
 use std::path::Path;
+use varstotas_i18n::tr;
 
 fn bad(s: impl Into<String>) -> IoError {
-    IoError::Format(format!("PLY: {}", s.into()))
+    let msg: String = s.into();
+    IoError::Format(tr!("kernel-io-ply", msg = msg))
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -36,7 +38,7 @@ fn ty(s: &str) -> Result<Ty, IoError> {
         "uint" | "uint32" => Ty::U32,
         "float" | "float32" => Ty::F32,
         "double" | "float64" => Ty::F64,
-        _ => return Err(bad(format!("unknown type {s}"))),
+        _ => return Err(bad(tr!("kernel-io-unknown-type-s", s = s.to_string()))),
     })
 }
 
@@ -79,10 +81,10 @@ enum Body<'a> {
 impl Body<'_> {
     fn read(&mut self, t: Ty) -> Result<f64, IoError> {
         match self {
-            Body::Ascii(it) => it.next().and_then(|s| s.parse::<f64>().ok()).ok_or_else(|| bad("truncated data")),
+            Body::Ascii(it) => it.next().and_then(|s| s.parse::<f64>().ok()).ok_or_else(|| bad(tr!("kernel-io-truncated-data"))),
             Body::Bin { data, at, big } => {
                 let n = t.size();
-                let b = data.get(*at..*at + n).ok_or_else(|| bad("truncated data"))?;
+                let b = data.get(*at..*at + n).ok_or_else(|| bad(tr!("kernel-io-truncated-data")))?;
                 *at += n;
                 let mut a = [0u8; 8];
                 a[..n].copy_from_slice(b);
@@ -129,9 +131,9 @@ pub fn import_ply_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
 /// Add PLY bytes to the model as one group `name`.
 pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions) -> Result<(), IoError> {
     if !data.starts_with(b"ply") {
-        return Err(bad("not a PLY file"));
+        return Err(bad(tr!("kernel-io-not-a-ply-file")));
     }
-    let end = data.windows(10).position(|w| w == b"end_header").ok_or_else(|| bad("no end_header"))?;
+    let end = data.windows(10).position(|w| w == b"end_header").ok_or_else(|| bad(tr!("kernel-io-no-end-header")))?;
     let body_at = data[end..].iter().position(|b| *b == b'\n').map(|p| end + p + 1).unwrap_or(data.len());
     let header = String::from_utf8_lossy(&data[..end]);
     let (mut format, mut elements, mut k) = (String::from("ascii"), Vec::<Element>::new(), 1000.0);
@@ -139,13 +141,13 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
         let w: Vec<&str> = line.split_whitespace().collect();
         match w.as_slice() {
             ["format", f, ..] => format = f.to_string(),
-            ["element", n, c] => elements.push(Element { name: n.to_string(), count: c.parse().map_err(|_| bad("bad element count"))?, props: Vec::new() }),
+            ["element", n, c] => elements.push(Element { name: n.to_string(), count: c.parse().map_err(|_| bad(tr!("kernel-io-bad-element-count")))?, props: Vec::new() }),
             ["property", "list", lt, it, n] => {
-                let e = elements.last_mut().ok_or_else(|| bad("property before element"))?;
+                let e = elements.last_mut().ok_or_else(|| bad(tr!("kernel-io-property-before-element")))?;
                 e.props.push(Prop { name: n.to_string(), ty: ty(it)?, list: Some(ty(lt)?) });
             }
             ["property", t, n] => {
-                let e = elements.last_mut().ok_or_else(|| bad("property before element"))?;
+                let e = elements.last_mut().ok_or_else(|| bad(tr!("kernel-io-property-before-element")))?;
                 e.props.push(Prop { name: n.to_string(), ty: ty(t)?, list: None });
             }
             ["comment", "units", u, ..] => k = unit_mm(u).unwrap_or(k),
@@ -160,7 +162,7 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
         }
         "binary_little_endian" => Body::Bin { data: &data[body_at..], at: 0, big: false },
         "binary_big_endian" => Body::Bin { data: &data[body_at..], at: 0, big: true },
-        f => return Err(bad(format!("unknown format {f}"))),
+        f => return Err(bad(tr!("kernel-io-unknown-format-f", f = f.to_string()))),
     };
     let mut verts: Vec<(DVec3, Option<[u8; 3]>)> = Vec::new();
     let mut faces: Vec<(Vec<usize>, Option<[u8; 3]>)> = Vec::new();
@@ -176,7 +178,7 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
                     Some(lt) => {
                         let n = body.read(lt)? as usize;
                         if n > 1 << 20 {
-                            return Err(bad("list too long"));
+                            return Err(bad(tr!("kernel-io-list-too-long")));
                         }
                         let mut l = Vec::with_capacity(n);
                         for _ in 0..n {
@@ -203,7 +205,7 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
         }
     }
     if faces.is_empty() {
-        return Err(bad("no faces (a point cloud can't be imported)"));
+        return Err(bad(tr!("kernel-io-no-faces-a-point-cloud-can")));
     }
     // Colours (the face's, else its first vertex's) → materials, at most 64 (then grey).
     let mut mats: Vec<ImpMat> = Vec::new();
@@ -221,6 +223,7 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
             if mats.len() >= 64 {
                 return None;
             }
+            // i18n-ignore-next
             mats.push(ImpMat { name: format!("Color {:02X}{:02X}{:02X}", c[0], c[1], c[2]), color: [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0], image: None });
             by_color.insert(c, mats.len() - 1);
             Some(mats.len() - 1)
@@ -252,6 +255,7 @@ pub fn write_ply(model: &Model) -> Vec<u8> {
         }
     }
     let mut out = format!(
+        // i18n-ignore-next
         "ply\nformat binary_little_endian 1.0\ncomment Varstotas\ncomment units mm\nelement vertex {}\nproperty float x\nproperty float y\nproperty float z\nelement face {}\nproperty list uchar uint vertex_indices\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n",
         verts.len(),
         tris.len()

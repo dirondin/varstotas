@@ -22,6 +22,7 @@
 use crate::mat_plugins::call;
 use crate::online_mats::{Msg, Online, PluginSource, cached, fetch, file_safe, unzip};
 use crate::plugins::Plugin;
+use varstotas_i18n::tr;
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{Attribution, EntityRef, Model};
 use serde_json::{Value, json};
@@ -30,7 +31,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// The licence text of Smithsonian models (read as a site's own licence: a warning on use).
-pub const SMITHSONIAN_LICENCE: &str = "Smithsonian Open Access: check the usage on the object's page";
+pub const SMITHSONIAN_LICENCE: &str = "Smithsonian Open Access: check the usage on the object's page"; // i18n-ignore
 
 #[derive(Clone, Debug)]
 pub enum ModelSource {
@@ -75,17 +76,27 @@ impl std::hash::Hash for ModelSource {
 impl ModelSource {
     pub const BUILT_IN: [ModelSource; 5] = [ModelSource::PolyHaven, ModelSource::Smithsonian, ModelSource::Nasa, ModelSource::Kenney, ModelSource::Quaternius];
 
+    /// The source's name as an id (folders, credits, harness); [`Self::display`] is the shown one.
     pub fn label(&self) -> &str {
         match self {
-            ModelSource::PolyHaven => "Poly Haven",
-            ModelSource::Smithsonian => "Smithsonian",
-            ModelSource::Nasa => "NASA",
-            ModelSource::Kenney => "Kenney",
-            ModelSource::Quaternius => "Quaternius",
-            ModelSource::Web => "Web",
-            ModelSource::Favourites => "Favourites",
-            ModelSource::History => "Downloaded",
+            ModelSource::PolyHaven => "Poly Haven", // i18n-ignore
+            ModelSource::Smithsonian => "Smithsonian", // i18n-ignore
+            ModelSource::Nasa => "NASA", // i18n-ignore
+            ModelSource::Kenney => "Kenney", // i18n-ignore
+            ModelSource::Quaternius => "Quaternius", // i18n-ignore
+            ModelSource::Web => "Web", // i18n-ignore
+            ModelSource::Favourites => "Favourites", // i18n-ignore
+            ModelSource::History => "Downloaded", // i18n-ignore
             ModelSource::Plugin(p) => &p.plugin.name,
+        }
+    }
+
+    /// The name shown in the UI.
+    pub fn display(&self) -> String {
+        match self {
+            ModelSource::Favourites => tr!("model-lib-source-favourites"),
+            ModelSource::History => tr!("model-lib-source-downloaded"),
+            other => other.label().to_string(),
         }
     }
 
@@ -130,30 +141,30 @@ impl ModelSource {
 
     /// The source's terms, shown above its models (empty when none): the models' licence and
     /// what using the source asks for. A plugin's comes from its `@notice` line.
-    pub fn terms(&self) -> &str {
+    pub fn terms(&self) -> String {
         match self {
-            ModelSource::PolyHaven => "Powered by Poly Haven (polyhaven.com). The models are CC0: free for any use, also commercial; no credit needed.",
-            ModelSource::Smithsonian => "Most objects are CC0, but some are marked «Usage conditions apply» (non-commercial only). Check the object's page before commercial use; trademarks and other rights in the objects themselves are not covered.",
-            ModelSource::Nasa => "NASA media are generally not copyrighted, but the NASA insignia and logos on models are protected, and nothing may suggest NASA endorses your product.",
-            ModelSource::Kenney => "Kenney's packs are CC0: free for any use, also commercial; credit optional. Kenney's logo is not part of it.",
-            ModelSource::Quaternius => "Quaternius' packs are CC0: free for any use, also commercial; credit optional.",
-            ModelSource::Web => "",
-            ModelSource::Favourites | ModelSource::History => "Each model keeps the licence it came with (its details; File → Export → Attributions). Varstotas warns when a placed or exported model's licence limits its use.",
-            ModelSource::Plugin(p) => &p.plugin.notice,
+            ModelSource::PolyHaven => tr!("model-lib-terms-polyhaven"),
+            ModelSource::Smithsonian => tr!("model-lib-terms-smithsonian"),
+            ModelSource::Nasa => tr!("model-lib-terms-nasa"),
+            ModelSource::Kenney => tr!("model-lib-terms-kenney"),
+            ModelSource::Quaternius => tr!("model-lib-terms-quaternius"),
+            ModelSource::Web => String::new(),
+            ModelSource::Favourites | ModelSource::History => tr!("model-lib-terms-saved"),
+            ModelSource::Plugin(p) => p.plugin.notice.clone(),
         }
     }
 
-    pub fn description(&self) -> &str {
+    pub fn description(&self) -> String {
         match self {
-            ModelSource::PolyHaven => "Free CC0 models (glTF, 1K textures) at their real size.",
-            ModelSource::Smithsonian => "Smithsonian Open Access 3D: scans of museum objects. Type a search and press Enter.",
-            ModelSource::Nasa => "NASA 3D Resources: spacecraft, rovers, planets (GLB).",
-            ModelSource::Kenney => "Kenney's game asset packs (CC0): a pack downloads whole, each model becomes a component in Components → Kenney → <pack>.",
-            ModelSource::Quaternius => "Quaternius' low-poly packs (CC0). They are downloaded in your browser (Google Drive): Varstotas opens the page and imports the archive from Downloads.",
-            ModelSource::Web => "",
-            ModelSource::Favourites => "Models you marked ☆ (click ☆ in a model's details).",
-            ModelSource::History => "Everything downloaded or imported from Downloads, newest first. Type to search.",
-            ModelSource::Plugin(p) => &p.plugin.description,
+            ModelSource::PolyHaven => tr!("model-lib-desc-polyhaven"),
+            ModelSource::Smithsonian => tr!("model-lib-desc-smithsonian"),
+            ModelSource::Nasa => tr!("model-lib-desc-nasa"),
+            ModelSource::Kenney => tr!("model-lib-desc-kenney"),
+            ModelSource::Quaternius => tr!("model-lib-desc-quaternius"),
+            ModelSource::Web => String::new(),
+            ModelSource::Favourites => tr!("model-lib-desc-favourites"),
+            ModelSource::History => tr!("model-lib-desc-history"),
+            ModelSource::Plugin(p) => p.plugin.description.clone(),
         }
     }
 }
@@ -229,14 +240,14 @@ impl ModelAsset {
 /// Percent-encode a URL path (keeps `/`).
 fn encode_path(p: &str) -> String {
     p.bytes()
-        .map(|b| if b.is_ascii_alphanumeric() || b"/-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
+        .map(|b| if b.is_ascii_alphanumeric() || b"/-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }) // i18n-ignore
         .collect()
 }
 
 /// Poly Haven's `assets?t=models` (most downloaded first).
 pub fn parse_polyhaven(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
     let v: Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
-    let obj = v.as_object().ok_or("not a catalogue")?;
+    let obj = v.as_object().ok_or_else(|| tr!("model-lib-err-not-catalogue"))?;
     let mut out: Vec<(i64, ModelAsset)> = obj
         .iter()
         .map(|(id, a)| {
@@ -274,7 +285,7 @@ fn k_count(name: &str) -> u64 {
 /// "Low_resolution" GLB (Draco-compressed files are left out: no decoder here).
 pub fn parse_smithsonian(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
     let v: Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
-    let rows = v["rows"].as_array().ok_or("not a search answer")?;
+    let rows = v["rows"].as_array().ok_or_else(|| tr!("model-lib-err-not-search"))?;
     let mut out: Vec<ModelAsset> = Vec::new();
     for r in rows {
         let c = &r["content"];
@@ -285,11 +296,11 @@ pub fn parse_smithsonian(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
             None => {
                 let mut m = ModelAsset::blank(ModelSource::Smithsonian, id.clone());
                 m.name = r["title"].as_str().unwrap_or(&id).to_string();
-                m.author = "Smithsonian Institution".into();
+                m.author = "Smithsonian Institution".into(); // i18n-ignore
                 // Most 3D objects are CC0, some "Usage conditions apply" (non-commercial); the
                 // API doesn't say which, so the model's page has to be checked.
                 m.license = SMITHSONIAN_LICENCE.into();
-                m.category = "Smithsonian".into();
+                m.category = "Smithsonian".into(); // i18n-ignore
                 m.format = "GLB".into();
                 out.push(m);
                 out.len() - 1
@@ -298,11 +309,11 @@ pub fn parse_smithsonian(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
         let uri = c["uri"].as_str().unwrap_or_default();
         let (ty, quality, usage) = (c["file_type"].as_str().unwrap_or_default(), c["quality"].as_str().unwrap_or_default(), c["usage"].as_str().unwrap_or_default());
         let a = &mut out[i];
-        if ty == "jpg" && quality == "Thumb" {
+        if ty == "jpg" && quality == "Thumb" { // i18n-ignore
             a.thumb = uri.to_string();
         }
         let draco = c["draco_compressed"].as_bool() == Some(true) || uri.contains("draco");
-        if ty == "glb" && usage == "Download3D" && !draco && (a.file.is_empty() || quality == "Low_resolution") {
+        if ty == "glb" && usage == "Download3D" && !draco && (a.file.is_empty() || quality == "Low_resolution") { // i18n-ignore
             a.file = uri.to_string();
             a.polycount = k_count(uri.rsplit('/').next().unwrap_or_default());
         }
@@ -333,10 +344,10 @@ pub fn parse_nasa(json: &[u8]) -> Result<Vec<ModelAsset>, String> {
         let several = blobs.iter().filter(|(p, _)| p.starts_with(&dir) && p.to_lowercase().ends_with(".glb")).count() > 1;
         let mut m = ModelAsset::blank(ModelSource::Nasa, path.to_string());
         m.name = if several { file.trim_end_matches(".glb").trim_end_matches(".GLB").to_string() } else { folder.to_string() };
-        m.category = "Space".into();
+        m.category = "Space".into(); // i18n-ignore
         m.keywords = folder.to_string();
         m.author = "NASA".into();
-        m.license = "NASA media guidelines".into();
+        m.license = "NASA media guidelines".into(); // i18n-ignore
         m.format = "GLB".into();
         m.thumb = thumb.map(|t| format!("{RAW}{}", encode_path(t))).unwrap_or_default();
         m.page = format!("https://github.com/nasa/NASA-3D-Resources/tree/master/{}", encode_path(&dir));
@@ -386,11 +397,11 @@ pub fn parse_kenney(html: &str) -> Vec<ModelAsset> {
             m.thumb = between(c, "url(\"", "\")").unwrap_or_default().to_string();
             m.category = between(c, "series:", "'").map(|s| s.replace("%20", " ")).unwrap_or_default();
             m.keywords = slug.replace('-', " ");
-            m.author = "Kenney".into();
+            m.author = "Kenney".into(); // i18n-ignore
             m.license = "CC0".into();
             m.page = page;
             m.pack = true;
-            m.format = "GLB · FBX · OBJ".into();
+            m.format = "GLB · FBX · OBJ".into(); // i18n-ignore
             Some(m)
         })
         .collect()
@@ -412,16 +423,16 @@ pub fn parse_quaternius(html: &str) -> Vec<ModelAsset> {
             continue;
         }
         let mut m = ModelAsset::blank(ModelSource::Quaternius, id.clone());
-        m.name = between(c, "<div class=\"PackText\">", "<").map(html_text).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
+        m.name = between(c, "<div class=\"PackText\">", "<").map(html_text).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone()); // i18n-ignore
         m.thumb = between(c, "src=\"", "\"").map(|s| if s.starts_with('/') { format!("{SITE}{s}") } else { s.to_string() }).unwrap_or_default();
         let tags: Vec<String> = c.split("<div class=\"viewtag tags\">").skip(1).filter_map(|t| t.split('<').next()).map(html_text).filter(|t| !t.is_empty()).collect();
         m.category = tags.first().cloned().unwrap_or_default();
         m.keywords = format!("{} {id}", tags.join(" "));
-        m.author = "Quaternius".into();
+        m.author = "Quaternius".into(); // i18n-ignore
         m.license = "CC0".into();
         m.page = format!("{SITE}{href}");
         m.pack = true;
-        m.format = "FBX · OBJ · glTF".into();
+        m.format = "FBX · OBJ · glTF".into(); // i18n-ignore
         out.push(m);
     }
     out
@@ -444,7 +455,7 @@ fn text(v: &Value) -> Option<String> {
 /// A plugin's catalogue / search answer: `[{ id, name, category, tags, author, license,
 /// thumb, page, polycount, size: [x, y, z] mm }]`.
 pub fn parse_plugin_catalogue(source: &ModelSource, v: &Value) -> Result<Vec<ModelAsset>, String> {
-    let list = v.as_array().or_else(|| v["models"].as_array()).ok_or("the plugin must return an array of models")?;
+    let list = v.as_array().or_else(|| v["models"].as_array()).ok_or_else(|| tr!("model-lib-err-plugin-array"))?;
     Ok(list
         .iter()
         .filter_map(|a| {
@@ -521,7 +532,7 @@ fn catalogue_raw(source: &ModelSource, query: &str) -> Result<Vec<ModelAsset>, S
                 }
             }
             if out.is_empty() {
-                return Err("no packs found on kenney.nl (the page changed?)".into());
+                return Err(tr!("model-lib-err-kenney-packs"));
             }
             Ok(out)
         }
@@ -529,7 +540,7 @@ fn catalogue_raw(source: &ModelSource, query: &str) -> Result<Vec<ModelAsset>, S
             let html = cached("https://quaternius.com/", "quaternius.html", Some(Duration::from_secs(7 * 24 * 3600)))?;
             let list = parse_quaternius(&String::from_utf8_lossy(&html));
             if list.is_empty() {
-                return Err("no packs found on quaternius.com (the page changed?)".into());
+                return Err(tr!("model-lib-err-quaternius-packs"));
             }
             Ok(list)
         }
@@ -586,10 +597,10 @@ fn fetch_asset(asset: &ModelAsset, dir: &Path) -> Result<Value, String> {
         ModelSource::Smithsonian | ModelSource::Nasa | ModelSource::Web | ModelSource::Favourites | ModelSource::History => Ok(json!({ "url": asset.file })),
         ModelSource::Kenney => {
             let html = fetch(&asset.page)?;
-            let zip = kenney_zip(&String::from_utf8_lossy(&html)).ok_or("no download on the pack's page")?;
+            let zip = kenney_zip(&String::from_utf8_lossy(&html)).ok_or_else(|| tr!("model-lib-err-no-download"))?;
             Ok(json!({ "url": zip }))
         }
-        ModelSource::Quaternius => Err("Quaternius packs are downloaded in the browser: use Download in Browser".into()),
+        ModelSource::Quaternius => Err(tr!("model-lib-err-quaternius-browser")),
         ModelSource::Plugin(p) => call(&p.plugin, "download", vec![("id", json!(asset.id)), ("dir", json!(dir.to_string_lossy())), ("params", Value::Object(p.params.clone()))]),
     }
 }
@@ -650,7 +661,7 @@ pub fn import_file(path: &Path, importers: &[Plugin], depth: usize) -> Result<(M
 /// Import a model file with the `@model_import` plugin `p` (even for a format read natively).
 pub fn import_with_plugin(path: &Path, p: &Plugin, importers: &[Plugin], depth: usize) -> Result<(Model, DMat4), String> {
     if depth > 3 {
-        return Err("importer plugins call each other too deep".into());
+        return Err(tr!("model-lib-err-importer-depth"));
     }
     let params = crate::plugins::param_values(p, &[], varstotas_kernel::LengthUnit::Millimeter)?;
     let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
@@ -663,11 +674,11 @@ pub fn import_with_plugin(path: &Path, p: &Plugin, importers: &[Plugin], depth: 
 pub fn model_from_spec(spec: &Value, base: &Path, importers: &[Plugin], depth: usize) -> Result<(Model, DMat4), String> {
     let spec = match spec {
         Value::String(s) => json!({ "file": s }),
-        Value::Array(a) => a.first().cloned().ok_or("an empty answer")?,
-        Value::Null => return Err("the plugin returned nothing".into()),
+        Value::Array(a) => a.first().cloned().ok_or_else(|| tr!("model-lib-err-empty-answer"))?,
+        Value::Null => return Err(tr!("model-lib-err-plugin-nothing")),
         v => v.clone(),
     };
-    let o = spec.as_object().ok_or("a model spec must be an object")?;
+    let o = spec.as_object().ok_or_else(|| tr!("model-lib-err-spec-object"))?;
     let path = |k: &str| -> Option<PathBuf> {
         let s = o.get(k)?.as_str().filter(|s| !s.is_empty())?;
         let p = PathBuf::from(s.trim_start_matches("file://"));
@@ -684,7 +695,7 @@ pub fn model_from_spec(spec: &Value, base: &Path, importers: &[Plugin], depth: u
     } else if let Some(meshes) = o.get("meshes").and_then(Value::as_array) {
         (from_meshes(meshes, o.get("materials"), base)?, DMat4::IDENTITY)
     } else {
-        return Err("the model spec has no file, url, zip or meshes".into());
+        return Err(tr!("model-lib-err-spec-empty"));
     };
     let k = match o.get("unit").and_then(Value::as_str).map(str::to_ascii_lowercase).as_deref() {
         Some("m") => 1000.0,
@@ -710,7 +721,7 @@ fn from_zip(zip: &Path, base: &Path, importers: &[Plugin], depth: usize) -> Resu
     let dir = base.join(format!("{}_files", zip.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
     let _ = std::fs::remove_dir_all(&dir);
     extract(zip, &dir)?;
-    let f = find_model(&dir, importers).ok_or("no model file (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf) in the archive")?;
+    let f = find_model(&dir, importers).ok_or_else(|| tr!("model-lib-err-archive-no-model"))?;
     import_file(&f, importers, depth)
 }
 
@@ -719,7 +730,7 @@ fn from_meshes(meshes: &[Value], materials: Option<&Value>, base: &Path) -> Resu
     let mut m = Model::new();
     let mut mats = std::collections::HashMap::new();
     for spec in materials.and_then(Value::as_array).into_iter().flatten() {
-        let mat = crate::mat_plugins::material_from_spec(spec, base, "Material", 1000.0)?;
+        let mat = crate::mat_plugins::material_from_spec(spec, base, "Material", 1000.0)?; // i18n-ignore
         let id = m.add_material(&mat.name, mat.color);
         mats.insert(mat.name.clone(), id);
         m.materials[id] = mat;
@@ -727,7 +738,7 @@ fn from_meshes(meshes: &[Value], materials: Option<&Value>, base: &Path) -> Resu
     for (k, mesh) in meshes.iter().enumerate() {
         let pts: Vec<DVec3> = mesh["vertices"]
             .as_array()
-            .ok_or_else(|| format!("mesh {k}: no vertices"))?
+            .ok_or_else(|| tr!("model-lib-err-mesh-vertices", k = k))?
             .iter()
             .map(|p| {
                 let c = |i: usize| p.get(i).and_then(Value::as_f64).unwrap_or(0.0);
@@ -736,7 +747,7 @@ fn from_meshes(meshes: &[Value], materials: Option<&Value>, base: &Path) -> Resu
             .collect();
         let mat = mesh["material"].as_str().and_then(|n| mats.get(n).copied());
         let mut new = Vec::new();
-        for f in mesh["faces"].as_array().ok_or_else(|| format!("mesh {k}: no faces"))? {
+        for f in mesh["faces"].as_array().ok_or_else(|| tr!("model-lib-err-mesh-faces", k = k))? {
             let idx: Vec<usize> = f.as_array().into_iter().flatten().filter_map(Value::as_u64).map(|i| i as usize).collect();
             if idx.len() < 3 || idx.iter().any(|i| *i >= pts.len()) {
                 continue;
@@ -767,7 +778,7 @@ fn from_meshes(meshes: &[Value], materials: Option<&Value>, base: &Path) -> Resu
         }
     }
     if m.root_mesh().instances.is_empty() && m.root_mesh().faces.is_empty() {
-        return Err("no faces in the meshes".into());
+        return Err(tr!("model-lib-err-no-faces"));
     }
     Ok(m)
 }
@@ -789,14 +800,14 @@ pub fn library_model(mut m: Model, xf: DMat4, name: &str, credit: Option<Attribu
         .chain(root.instances.keys().map(EntityRef::Instance))
         .collect();
     if ents.is_empty() {
-        return Err("the model is empty".into());
+        return Err(tr!("model-lib-err-model-empty"));
     }
     let inst = crate::document::guarded(|| m.make_component(&[], &ents, name))?.map_err(|e| e.to_string())?;
     let def = m.root_mesh().instances[inst].def;
     m.defs[def].name = name.to_string();
     m.defs[def].source = credit;
     m.root_mesh_mut().instances[inst].transform = xf;
-    let b = m.bounds().ok_or("the model has no size")?;
+    let b = m.bounds().ok_or_else(|| tr!("model-lib-err-no-size"))?;
     m.root_mesh_mut().instances[inst].transform = DMat4::from_translation(-b.min) * xf;
     m.guides.clear();
     m.guide_points.clear();
@@ -806,7 +817,7 @@ pub fn library_model(mut m: Model, xf: DMat4, name: &str, credit: Option<Attribu
 /// Download `asset`, import it and save it into the library folder `lib` (`<lib>/<source>/`).
 pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<(PathBuf, usize), String> {
     let id = if asset.id.len() > 80 { format!("{:016x}", fxhash(&asset.id)) } else { file_safe(&asset.id) };
-    let dir = downloads_dir().ok_or("no home folder")?.join(asset.source.key()).join(id);
+    let dir = downloads_dir().ok_or_else(|| tr!("model-lib-err-no-home"))?.join(asset.source.key()).join(id);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let spec = fetch_asset(asset, &dir)?;
     if asset.pack {
@@ -866,7 +877,7 @@ pub fn import_pack(dir: &Path, out: &Path, credit: &Attribution, importers: &[Pl
     }
     let images: std::collections::HashMap<String, &PathBuf> = files.iter().filter(|f| ["png", "jpg", "jpeg"].contains(&ext_of(f).as_str())).map(|f| (stem(f), f)).collect();
     if best.is_empty() {
-        return Err("no model files in the archive".into());
+        return Err(tr!("model-lib-err-archive-none"));
     }
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let (mut n, mut first_err) = (0, None);
@@ -894,7 +905,7 @@ pub fn import_pack(dir: &Path, out: &Path, credit: &Attribution, importers: &[Pl
         }
     }
     if n == 0 {
-        return Err(first_err.unwrap_or_else(|| "no models could be read".into()));
+        return Err(first_err.unwrap_or_else(|| tr!("model-lib-err-none-read")));
     }
     Ok(n)
 }
@@ -931,7 +942,7 @@ fn fxhash(s: &str) -> u64 {
 /// An asset for a file URL (Import from URL).
 pub fn url_asset(url: &str) -> ModelAsset {
     let file = url_file(url);
-    let name = Path::new(&file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Model".into());
+    let name = Path::new(&file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Model".into()); // i18n-ignore
     let mut a = ModelAsset::blank(ModelSource::Web, format!("{:016x}", fxhash(url)));
     a.name = name;
     a.file = url.to_string();
@@ -946,7 +957,7 @@ pub fn format_of(file: &str) -> String {
     match e.as_str() {
         "gltf" => "glTF".into(),
         "dae" => "COLLADA".into(),
-        "vrst" => "Varstotas".into(),
+        "vrst" => "Varstotas".into(), // i18n-ignore
         "glb" | "fbx" | "obj" | "3mf" | "ply" | "stl" | "dxf" | "zip" => e.to_uppercase(),
         _ => String::new(),
     }

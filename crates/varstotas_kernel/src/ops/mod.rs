@@ -22,6 +22,7 @@ use crate::topology::interior_sample;
 use crate::{Aabb, EdgeId, EntityRef, FaceId, InstanceId, OpError, OpResult, TOL, VertexId};
 use glam::{DMat3, DMat4, DVec2, DVec3};
 use std::collections::{HashMap, HashSet, VecDeque};
+use varstotas_i18n::tr;
 
 impl Mesh {
     /// Vertices referenced by a set of entities (for Move/Rotate/Scale).
@@ -376,7 +377,7 @@ impl Model {
         let d = self.def_at(path).ok_or(OpError::NotFound)?;
         let n = axis.normalize_or_zero();
         if n == DVec3::ZERO || !n.is_finite() {
-            return Err(OpError::Invalid("flip axis is zero".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-flip-axis-is-zero").into()));
         }
         let mesh = &self.defs[d].mesh;
         let verts = mesh.vertices_of(sel);
@@ -403,7 +404,7 @@ impl Model {
                 }
             }
         }
-        let Some((lo, hi)) = ext else { return Err(OpError::Invalid("nothing to flip".into())) };
+        let Some((lo, hi)) = ext else { return Err(OpError::Invalid(tr!("kernel-err-nothing-to-flip").into())) };
         let m = reflection(n, (lo + hi) * 0.5);
         let mesh = &mut self.defs[d].mesh;
         for i in insts {

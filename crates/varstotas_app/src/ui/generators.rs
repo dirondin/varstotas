@@ -9,6 +9,7 @@ use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{EntityRef, GenKind, GenParam, GenValue, GenValues, Generator, InstanceId, Model};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use varstotas_i18n::tr;
 
 pub const EXAMPLES: &[(&str, &str)] = &[
     ("shelf.rhai", include_str!("../../../../examples/generators/shelf.rhai")),
@@ -80,9 +81,9 @@ pub(crate) fn kept_values(g: &Generator, values: &GenValues) -> GenValues {
 }
 
 /// The folder of the bundled examples in the Components list.
-pub const EXAMPLES_FOLDER: &str = "Examples";
+pub const EXAMPLES_FOLDER: &str = "Examples"; // i18n-ignore
 /// The Components list folder of generators found only in the open document.
-pub const DOCUMENT_FOLDER: &str = "Document";
+pub const DOCUMENT_FOLDER: &str = "Document"; // i18n-ignore
 
 /// `~/.varstotas/generators`, where generators lived before they joined the components.
 fn legacy_dir() -> Option<PathBuf> {
@@ -202,7 +203,7 @@ pub(crate) fn param_field(
             if super::tray::committed(ui, &resp) && buf != shown {
                 return match varstotas_kernel::units::parse_length(buf, unit) {
                     Some(x) => Ok(Some(GenValue::Num(x))),
-                    None => Err(format!("{}: not a length", p.label)),
+                    None => Err(tr!("gen-not-length", label = p.label.clone())),
                 };
             } else if !resp.has_focus() && buf != shown {
                 *buf = shown.to_string();
@@ -297,7 +298,7 @@ pub(crate) fn formula_rows(ui: &mut Ui, g: &Generator, values: &GenValues, unit:
             }
         }
         Err(e) => {
-            ui.label(RichText::new("Formulas").color(theme::text_dim()));
+            ui.label(RichText::new(tr!("gen-formulas")).color(theme::text_dim()));
             ui.label(RichText::new(e).color(egui::Color32::from_rgb(200, 50, 40)).small());
             ui.end_row();
         }
@@ -357,11 +358,11 @@ impl VarstotasApp {
         }
         let mut note = it.description.clone();
         let origin = if it.bundled {
-            "Bundled example (Edit → Save to Library makes your copy)"
+            tr!("gen-origin-bundled")
         } else if it.file.is_none() {
-            "In this document"
+            tr!("gen-origin-document")
         } else {
-            ""
+            String::new()
         };
         if !origin.is_empty() {
             note += &format!("{}{origin}", if note.is_empty() { "" } else { "\n" });
@@ -369,7 +370,7 @@ impl VarstotasApp {
         let (thumb, size) = match &self.library.gens.thumbs[&it.source] {
             Ok((t, s)) => (t.as_slice(), *s),
             Err(e) => {
-                note += &format!("\nError: {e}");
+                note += &format!("\n{}", tr!("gen-tile-error", error = e.to_string()));
                 (&[][..], DVec3::ZERO)
             }
         };
@@ -386,26 +387,26 @@ impl VarstotasApp {
         } else {
             self.thumbs.get(ui.ctx(), &key, || None, || build_preview(model, &it.source, &GenValues::new()).ok().and_then(|(_, c)| c.to_model(unit).ok()))
         };
-        let resp = crate::ui::library::tile_ex(ui, tiles, &it.name, thumb, pic, size, unit, true, &format!("Generator — parameters in Entity Info\n{note}"));
+        let resp = crate::ui::library::tile_ex(ui, tiles, &it.name, thumb, pic, size, unit, true, &tr!("gen-tile-tip", note = note));
         let (mut place, mut edit, mut delete, mut lib) = (resp.clicked(), false, false, None);
         resp.context_menu(|ui| {
-            if ui.button("Edit Generator…").clicked() {
+            if ui.button(tr!("gen-edit")).clicked() {
                 edit = true;
                 ui.close();
             }
-            if ui.button("Place").clicked() {
+            if ui.button(tr!("gen-place")).clicked() {
                 place = true;
                 ui.close();
             }
             if let Some(f) = &it.file
-                && ui.button("Show in Finder").clicked()
+                && ui.button(tr!("gen-show-in-finder")).clicked()
             {
                 crate::ui::extensions::reveal(f);
                 ui.close();
             }
             crate::ui::tray_lib::lib_menu(ui, favourite, folders, &mut lib);
             let only_doc = it.file.is_none() && !it.bundled && it.folder == DOCUMENT_FOLDER;
-            if (it.file.is_some() || only_doc) && ui.button("Delete…").clicked() {
+            if (it.file.is_some() || only_doc) && ui.button(tr!("gen-delete")).clicked() {
                 delete = true;
                 ui.close();
             }
@@ -420,7 +421,7 @@ impl VarstotasApp {
             Ok((name, clip)) => {
                 // A changed source replaces the document's (its components are rebuilt).
                 if self.doc.model.generators.get(&name).is_some_and(|g| g.source != src)
-                    && self.doc.try_commit(&format!("Update Generator {name}"), |m| varstotas_script::generator::add(m, src)).is_none()
+                    && self.doc.try_commit(&tr!("gen-undo-update", name = name.clone()), |m| varstotas_script::generator::add(m, src)).is_none()
                 {
                     let e = self.doc.last_error.take().unwrap_or_default();
                     return self.flash_error(e);
@@ -428,7 +429,7 @@ impl VarstotasApp {
                 let tool = crate::tools::transform::PasteTool::named(std::rc::Rc::new(clip), name);
                 self.install_tool(Box::new(tool));
             }
-            Err(e) => self.flash_error(format!("Generator: {e}")),
+            Err(e) => self.flash_error(tr!("gen-error", error = e.to_string())),
         }
     }
 
@@ -463,18 +464,18 @@ impl VarstotasApp {
     pub(crate) fn generator_info(&mut self, ui: &mut Ui) -> bool {
         let Some((ids, g, values)) = self.selected_generated() else { return false };
         ui.add_space(6.0);
-        let title = if ids.len() > 1 { format!("{} — {} components", g.name, ids.len()) } else { g.name.clone() };
+        let title = if ids.len() > 1 { tr!("gen-info-components", name = g.name.clone(), n = ids.len()) } else { g.name.clone() };
         ui.label(RichText::new(title).strong()).on_hover_text(&g.description);
         let change = self.value_fields(ui, "entity_info_generator", &ids, &g, &values);
         ui.horizontal(|ui| {
-            let r = ui.button("Reset").on_hover_text("Back to the generator's defaults");
+            let r = ui.button(tr!("rig-reset")).on_hover_text(tr!("gen-reset-hint"));
             crate::ui::tray_lib::spot("gen_reset", r.rect.center());
             if r.clicked() {
                 self.actions.push(Action::SetGenValues(GenValues::new(), true));
             }
             self.make_unique_button(ui, &ids);
         });
-        ui.label(RichText::new(format!("Generator: {}", g.name)).small().color(theme::text_dim()));
+        ui.label(RichText::new(tr!("gen-info-generator", name = g.name.clone())).small().color(theme::text_dim()));
         if let Some(change) = change {
             self.actions.push(Action::SetGenValues(change, false));
         }
@@ -485,13 +486,13 @@ impl VarstotasApp {
     pub(crate) fn make_unique_button(&mut self, ui: &mut Ui, ids: &[InstanceId]) {
         let generated = ids.first().is_some_and(|i| self.doc.model.instance_generated(&self.doc.active_path, *i).is_some());
         let tip = match ids {
-            [_] if self.doc.can_make_unique() && generated => "A copy of its generator for this component (\"Shelf 2\" under In Model): editing that script changes only it",
-            [_] if self.doc.can_make_unique() => "Give this component its own definition: editing it no longer changes the other copies",
-            [_] => "This copy is already unique: nothing else shares its definition or generator",
-            _ => "Select one component",
+            [_] if self.doc.can_make_unique() && generated => tr!("gen-unique-generated"),
+            [_] if self.doc.can_make_unique() => tr!("gen-unique-hint"),
+            [_] => tr!("gen-unique-already"),
+            _ => tr!("gen-unique-select"),
         };
-        let r = ui.add_enabled(self.doc.can_make_unique(), egui::Button::new("Make Unique"));
-        if r.on_hover_text(tip).on_disabled_hover_text(tip).clicked() {
+        let r = ui.add_enabled(self.doc.can_make_unique(), egui::Button::new(tr!("gen-make-unique")));
+        if r.on_hover_text(&tip).on_disabled_hover_text(&tip).clicked() {
             self.actions.push(Action::MakeUnique);
         }
     }
@@ -518,7 +519,7 @@ impl VarstotasApp {
                 let mixed = values.iter().any(|x| x.get(&p.key) != Some(&v));
                 let label = ui.label(&p.label);
                 if mixed {
-                    label.on_hover_text("The selected components differ; a change sets them all");
+                    label.on_hover_text(tr!("gen-mixed"));
                 }
                 let buf = bufs.entry(p.key.clone()).or_default();
                 match param_field(ui, p, &v, unit, &materials, buf, &texts[&p.key], &mut drag) {
@@ -549,11 +550,11 @@ impl VarstotasApp {
     /// Apply generator values to every selected generated component (one undo step).
     pub(crate) fn set_gen_values(&mut self, values: GenValues, reset: bool) {
         let Some((ids, _, _)) = self.selected_generated() else {
-            return self.flash("Select generated components");
+            return self.flash(tr!("gen-select-generated"));
         };
         let path = self.doc.active_path.clone();
-        let label = if reset { "Reset Parameters" } else { "Component Parameters" };
-        let r = self.doc.try_commit(label, |m| {
+        let label = tr!(if reset { "rig-undo-reset" } else { "rig-title" });
+        let r = self.doc.try_commit(&label, |m| {
             for id in &ids {
                 varstotas_script::generator::set_values(m, &path, *id, &values, reset)?;
             }

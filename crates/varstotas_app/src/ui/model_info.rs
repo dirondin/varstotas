@@ -5,6 +5,7 @@
 
 use crate::app::VarstotasApp;
 use egui::{Color32, Context, RichText, vec2};
+use varstotas_i18n::tr;
 use varstotas_kernel::stats::ModelStats;
 
 pub struct ModelInfoWindow {
@@ -51,7 +52,7 @@ fn bytes(b: u64) -> String {
 
 /// "used of all" with the unused part marked.
 fn used_of(used: usize, all: usize) -> RichText {
-    if used == all { RichText::new(n(all)) } else { RichText::new(format!("{} of {} ({} unused)", n(used), n(all), n(all - used))).color(Color32::from_rgb(190, 110, 20)) }
+    if used == all { RichText::new(n(all)) } else { RichText::new(tr!("model-info-used-of", used = n(used), all = n(all), unused = n(all - used))).color(Color32::from_rgb(190, 110, 20)) }
 }
 
 impl VarstotasApp {
@@ -76,24 +77,24 @@ impl VarstotasApp {
         let s = self.model_stats();
         let has = (defs && (s.component_defs_used < s.component_defs || s.group_defs_used < s.group_defs)) || (mats && s.materials_used < s.materials);
         let msg = if !has {
-            "Nothing unused to purge".to_string()
+            tr!("model-info-nothing-to-purge")
         } else {
-            match self.doc.commit("Purge Unused", |m| m.purge_unused(defs, mats)) {
+            match self.doc.commit(&tr!("model-info-purge"), |m| m.purge_unused(defs, mats)) {
                 Some(p) => {
                     self.library.def_thumbs.clear();
                     let mut parts = Vec::new();
                     if p.components > 0 {
-                        parts.push(format!("{} component(s)", p.components));
+                        parts.push(tr!("model-info-purged-components", n = p.components));
                     }
                     if p.groups > 0 {
-                        parts.push(format!("{} group(s)", p.groups));
+                        parts.push(tr!("model-info-purged-groups", n = p.groups));
                     }
                     if p.materials > 0 {
-                        parts.push(format!("{} material(s)", p.materials));
+                        parts.push(tr!("model-info-purged-materials", n = p.materials));
                     }
-                    format!("Purged {}", parts.join(", "))
+                    tr!("model-info-purged", parts = parts.join(", "))
                 }
-                None => "Purge failed".to_string(),
+                None => tr!("model-info-purge-failed"),
             }
         };
         self.flash(msg.clone());
@@ -135,7 +136,7 @@ impl VarstotasApp {
         let mut open = true;
         let mut action = None;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 60.0);
-        let mut win = egui::Window::new("Preview Image").id(egui::Id::new("doc_preview_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        let mut win = egui::Window::new(tr!("model-info-preview-title")).id(egui::Id::new("doc_preview_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -150,18 +151,18 @@ impl VarstotasApp {
                 None => {
                     let (r, _) = ui.allocate_exact_size(vec2(360.0, 160.0), egui::Sense::hover());
                     ui.painter().rect_filled(r, 4.0, ui.visuals().faint_bg_color);
-                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "No preview image — the Components library draws the model", egui::FontId::proportional(12.0), ui.visuals().weak_text_color());
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, &tr!("model-info-no-preview"), egui::FontId::proportional(12.0), ui.visuals().weak_text_color());
                 }
             }
-            ui.label(RichText::new("Saved with the file; the Components library shows it for this file.").weak().small());
+            ui.label(RichText::new(tr!("model-info-preview-note")).weak().small());
             ui.horizontal(|ui| {
-                if ui.button("From Image File…").clicked() {
+                if ui.button(tr!("model-info-from-file")).clicked() {
                     action = Some(crate::app::Action::PreviewFromFile);
                 }
-                if ui.button("From Current View").clicked() {
+                if ui.button(tr!("model-info-from-view")).clicked() {
                     action = Some(crate::app::Action::PreviewFromView);
                 }
-                if ui.add_enabled(tex.is_some(), egui::Button::new("Remove")).clicked() {
+                if ui.add_enabled(tex.is_some(), egui::Button::new(tr!("sheets-remove"))).clicked() {
                     action = Some(crate::app::Action::PreviewRemove);
                 }
             });
@@ -193,7 +194,7 @@ impl VarstotasApp {
         let mut open = true;
         let mut purge = false;
         let pos = self.viewport.view_rect.left_top() + vec2(40.0, 40.0);
-        let mut win = egui::Window::new("Model Info").id(egui::Id::new("model_info_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        let mut win = egui::Window::new(tr!("model-info-title")).id(egui::Id::new("model_info_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -204,73 +205,73 @@ impl VarstotasApp {
                 ui.label(v);
                 ui.end_row();
             };
-            ui.label(RichText::new("In the scene").strong()).on_hover_text("What is drawn: the content of every placed copy counted");
+            ui.label(RichText::new(tr!("model-info-scene")).strong()).on_hover_text(tr!("model-info-scene-hint"));
             egui::Grid::new("mi_scene").num_columns(2).spacing([16.0, 3.0]).show(ui, |ui| {
-                row(ui, "Polygons (faces)", RichText::new(n(s.scene.faces)));
-                row(ui, "Triangles", RichText::new(n(s.scene.triangles)));
-                row(ui, "Edges", RichText::new(n(s.scene.edges)));
-                row(ui, "Groups placed", RichText::new(n(s.scene.groups)));
-                row(ui, "Components placed", RichText::new(n(s.scene.components)));
+                row(ui, &tr!("model-info-row-polygons"), RichText::new(n(s.scene.faces)));
+                row(ui, &tr!("model-info-row-triangles"), RichText::new(n(s.scene.triangles)));
+                row(ui, &tr!("model-info-row-edges"), RichText::new(n(s.scene.edges)));
+                row(ui, &tr!("model-info-row-groups-placed"), RichText::new(n(s.scene.groups)));
+                row(ui, &tr!("model-info-row-components-placed"), RichText::new(n(s.scene.components)));
             });
             ui.add_space(6.0);
-            ui.label(RichText::new("In the file").strong()).on_hover_text("What the document stores: each definition once, used or not");
+            ui.label(RichText::new(tr!("model-info-file")).strong()).on_hover_text(tr!("model-info-file-hint"));
             egui::Grid::new("mi_file").num_columns(2).spacing([16.0, 3.0]).show(ui, |ui| {
-                row(ui, "Polygons (faces)", RichText::new(n(s.stored.faces)));
-                row(ui, "Triangles", RichText::new(n(s.stored.triangles)));
-                row(ui, "Components", used_of(s.component_defs_used, s.component_defs));
-                row(ui, "Groups", used_of(s.group_defs_used, s.group_defs));
-                row(ui, "Materials", used_of(s.materials_used, s.materials));
+                row(ui, &tr!("model-info-row-polygons"), RichText::new(n(s.stored.faces)));
+                row(ui, &tr!("model-info-row-triangles"), RichText::new(n(s.stored.triangles)));
+                row(ui, &tr!("model-info-row-components"), used_of(s.component_defs_used, s.component_defs));
+                row(ui, &tr!("model-info-row-groups"), used_of(s.group_defs_used, s.group_defs));
+                row(ui, &tr!("model-info-row-materials"), used_of(s.materials_used, s.materials));
                 if s.textures > 0 {
-                    row(ui, "Textures", RichText::new(format!("{} ({})", n(s.textures), bytes(s.texture_bytes as u64))));
+                    row(ui, &tr!("model-info-row-textures"), RichText::new(format!("{} ({})", n(s.textures), bytes(s.texture_bytes as u64))));
                 }
-                row(ui, "Tags", RichText::new(n(s.tags)));
-                row(ui, "Scenes", RichText::new(n(s.scenes)));
+                row(ui, &tr!("model-info-row-tags"), RichText::new(n(s.tags)));
+                row(ui, &tr!("model-info-row-scenes"), RichText::new(n(s.scenes)));
                 if s.sheets > 0 {
-                    row(ui, "Layout sheets", RichText::new(n(s.sheets)));
+                    row(ui, &tr!("model-info-row-sheets"), RichText::new(n(s.sheets)));
                 }
                 if s.generators > 0 {
-                    row(ui, "Generators", RichText::new(n(s.generators)));
+                    row(ui, &tr!("model-info-row-generators"), RichText::new(n(s.generators)));
                 }
                 if s.lights > 0 {
-                    row(ui, "Lights", RichText::new(n(s.lights)));
+                    row(ui, &tr!("model-info-row-lights"), RichText::new(n(s.lights)));
                 }
                 if s.guides + s.dims > 0 {
-                    row(ui, "Guides / dimensions", RichText::new(format!("{} / {}", n(s.guides), n(s.dims))));
+                    row(ui, &tr!("model-info-row-guides"), RichText::new(format!("{} / {}", n(s.guides), n(s.dims))));
                 }
                 if let Some(b) = file_size {
-                    row(ui, "File size (saved)", RichText::new(bytes(b)));
+                    row(ui, &tr!("model-info-row-file-size"), RichText::new(bytes(b)));
                 }
-                ui.label("Preview image");
+                ui.label(tr!("model-info-preview-image"));
                 ui.horizontal(|ui| {
                     if let Some((id, size)) = preview {
                         let k = 48.0 / size[0].max(size[1]) as f32;
                         ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
                         ui.label(RichText::new(preview_label.unwrap_or_default()).weak());
                     } else {
-                        ui.label(RichText::new("none").weak());
+                        ui.label(RichText::new(tr!("model-info-none")).weak());
                     }
-                    show_preview = ui.link("Show…").on_hover_text("File → Preview Image → Show…").clicked();
+                    show_preview = ui.link(tr!("model-info-show")).on_hover_text(tr!("model-info-show-hint")).clicked();
                 });
                 ui.end_row();
             });
             ui.add_space(6.0);
-            ui.label(RichText::new("Libraries").strong());
+            ui.label(RichText::new(tr!("model-info-libraries")).strong());
             egui::Grid::new("mi_libs").num_columns(2).spacing([16.0, 3.0]).show(ui, |ui| {
-                row(ui, "Components library", RichText::new(format!("{} file(s)", n(lib_components))));
-                row(ui, "Materials library", RichText::new(format!("{} file(s)", n(lib_materials))));
+                row(ui, &tr!("model-info-row-lib-components"), RichText::new(tr!("model-info-files", n = n(lib_components))));
+                row(ui, &tr!("model-info-row-lib-materials"), RichText::new(tr!("model-info-files", n = n(lib_materials))));
             });
             ui.separator();
-            ui.label(RichText::new("Purge Unused").strong());
-            ui.label(RichText::new("Removes what nothing in the scene uses (Edit → Undo brings it back).").weak());
+            ui.label(RichText::new(tr!("model-info-purge")).strong());
+            ui.label(RichText::new(tr!("model-info-purge-note")).weak());
             let unused_defs = s.component_defs - s.component_defs_used + s.group_defs - s.group_defs_used;
             let unused_mats = s.materials - s.materials_used;
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.model_info.purge_defs, format!("Components and groups ({unused_defs})"));
-                ui.checkbox(&mut self.model_info.purge_mats, format!("Materials ({unused_mats})"));
+                ui.checkbox(&mut self.model_info.purge_defs, tr!("model-info-purge-defs", n = unused_defs));
+                ui.checkbox(&mut self.model_info.purge_mats, tr!("model-info-purge-mats", n = unused_mats));
             });
             ui.horizontal(|ui| {
                 let can = (self.model_info.purge_defs && unused_defs > 0) || (self.model_info.purge_mats && unused_mats > 0);
-                let r = ui.add_enabled(can, egui::Button::new("Purge Unused"));
+                let r = ui.add_enabled(can, egui::Button::new(tr!("model-info-purge")));
                 crate::ui::tray_lib::spot("purge", r.rect.center());
                 if r.clicked() {
                     purge = true;

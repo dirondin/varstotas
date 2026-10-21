@@ -8,17 +8,18 @@
 use super::icons::{Icon, paint_icon};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
 use egui::{Align, Color32, Layout, Rect, Response, Stroke, Ui, UiBuilder, vec2};
+use varstotas_i18n::tr;
 use varstotas_render::StandardView;
 
-/// The display styles in the order of the View menu: a short label for the button, the
-/// menu's name and the toolbar's icon.
+/// The display styles in the order of the View menu: keys of a short label for the button and
+/// of the menu's name, and the toolbar's icon.
 pub const STYLES: [(FaceStylePref, &str, &str, Icon); 6] = [
-    (FaceStylePref::ShadedColor, "Shaded", "Shaded", Icon::StyleShaded),
-    (FaceStylePref::Shaded, "Textured", "Shaded with Textures", Icon::StyleTextured),
-    (FaceStylePref::Monochrome, "Monochrome", "Monochrome", Icon::StyleMonochrome),
-    (FaceStylePref::HiddenLine, "Hidden Line", "Hidden Line", Icon::StyleHiddenLine),
-    (FaceStylePref::Wireframe, "Wireframe", "Wireframe", Icon::StyleWireframe),
-    (FaceStylePref::Realistic, "Realistic", "Realistic", Icon::StyleRealistic),
+    (FaceStylePref::ShadedColor, "view-style-shaded", "view-style-shaded", Icon::StyleShaded),
+    (FaceStylePref::Shaded, "view-style-textured", "view-style-textured-menu", Icon::StyleTextured),
+    (FaceStylePref::Monochrome, "view-style-monochrome", "view-style-monochrome", Icon::StyleMonochrome),
+    (FaceStylePref::HiddenLine, "view-style-hidden-line", "view-style-hidden-line", Icon::StyleHiddenLine),
+    (FaceStylePref::Wireframe, "view-style-wireframe", "view-style-wireframe", Icon::StyleWireframe),
+    (FaceStylePref::Realistic, "view-style-realistic", "view-style-realistic", Icon::StyleRealistic),
 ];
 
 pub fn view_icon(v: StandardView) -> Icon {
@@ -77,16 +78,16 @@ fn pill(ui: &mut Ui, icon: Icon, name: &str, content: impl FnOnce(&mut Ui)) -> R
 }
 
 /// The short name of a style.
-pub fn style_label(s: FaceStylePref) -> &'static str {
-    STYLES.iter().find(|x| x.0 == s).map(|x| x.1).unwrap_or("Shaded")
+pub fn style_label(s: FaceStylePref) -> String {
+    tr(STYLES.iter().find(|x| x.0 == s).map(|x| x.1).unwrap_or("view-style-shaded"))
 }
 
 /// "Top · Parallel", "Perspective" (a free view) …
 pub fn view_label(view: Option<StandardView>, ortho: bool) -> String {
-    let proj = if ortho { "Parallel" } else { "Perspective" };
+    let proj = tr(if ortho { "view-parallel" } else { "view-perspective" });
     match view {
-        Some(v) => format!("{} · {proj}", v.name()),
-        None => proj.to_string(),
+        Some(v) => tr!("view-label", view = v.name(), projection = proj),
+        None => proj,
     }
 }
 
@@ -138,97 +139,98 @@ impl VarstotasApp {
                 }
             }
             ui.separator();
-            if item(ui, Icon::Perspective, "Perspective", !ortho, None).clicked() {
+            if item(ui, Icon::Perspective, &tr!("view-perspective"), !ortho, None).clicked() {
                 self.actions.push(Action::SetParallel(false));
                 ui.close();
             }
-            if item(ui, Icon::Parallel, "Parallel Projection", ortho, None).clicked() {
+            if item(ui, Icon::Parallel, &tr!("view-parallel-projection"), ortho, None).clicked() {
                 self.actions.push(Action::SetParallel(true));
                 ui.close();
             }
             ui.add_enabled_ui(!ortho, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(ICON + 8.0);
-                    ui.label("Field of View");
+                    ui.label(tr!("view-fov"));
                     ui.add(egui::DragValue::new(&mut self.camera.fov_y_deg).range(10.0..=120.0).speed(0.5).suffix("°").max_decimals(0));
                 })
                 .response
-                .on_hover_text("The vertical angle the perspective camera sees (also: type it in the Zoom tool)");
+                .on_hover_text(tr!("view-fov-tip"));
             });
             ui.separator();
-            if item(ui, Icon::ZoomExtents, "Zoom Extents", false, Some("Shift+Z")).clicked() {
+            if item(ui, Icon::ZoomExtents, &tr!("view-zoom-extents"), false, Some("Shift+Z")) // i18n-ignore
+            .clicked() {
                 self.actions.push(Action::ZoomExtents);
                 ui.close();
             }
             ui.separator();
             ui.horizontal(|ui| {
-                ui.label("Viewports");
-                for (n, icon, tip) in [(1, Icon::Panes1, "One view"), (2, Icon::Panes2, "Two views side by side"), (4, Icon::Panes4, "Four views (2 × 2)")] {
-                    if icon_button(ui, icon, self.pane_count == n, tip).clicked() {
+                ui.label(tr!("view-viewports"));
+                for (n, icon, tip) in [(1, Icon::Panes1, tr!("view-panes-1")), (2, Icon::Panes2, tr!("view-panes-2")), (4, Icon::Panes4, tr!("view-panes-4"))] {
+                    if icon_button(ui, icon, self.pane_count == n, &tip).clicked() {
                         self.actions.push(Action::SetPanes(n));
                         ui.close();
                     }
                 }
             });
-            ui.menu_button("Viewport Presets", |ui| {
+            ui.menu_button(tr!("view-presets"), |ui| {
                 for (i, p) in crate::panes::PRESETS.iter().enumerate() {
                     let icon = if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 };
-                    if item(ui, icon, p.name, false, None).clicked() {
+                    if item(ui, icon, &p.name(), false, None).clicked() {
                         self.actions.push(Action::ViewPreset(i));
                         ui.close();
                     }
                 }
             });
         })
-        .on_hover_text(format!("View: {} — standard views, perspective or parallel projection, field of view, viewports", view_label(view, ortho)));
+        .on_hover_text(tr!("view-hud-view-tip", label = view_label(view, ortho)));
     }
 
     fn hud_style_menu(&mut self, ui: &mut Ui) {
         let style = self.prefs.face_style;
-        let mut label = style_label(style).to_string();
+        let mut label = style_label(style);
         if self.prefs.xray {
-            label.push_str(" · X-Ray");
+            label = tr!("view-style-xray-suffix", label = label);
         }
         let icon = STYLES.iter().find(|x| x.0 == style).map(|x| x.3).unwrap_or(Icon::StyleShaded);
         pill(ui, icon, "style", |ui| {
             self.hud_open = Some((self.active_pane, "style"));
             for (s, _, name, icon) in STYLES {
-                if item(ui, icon, name, style == s, None).clicked() {
+                if item(ui, icon, &tr(name), style == s, None).clicked() {
                     self.prefs.face_style = s;
                     ui.close();
                 }
             }
             ui.separator();
             // switches: a click toggles, the menu stays open
-            if item(ui, Icon::StyleXRay, "X-Ray", self.prefs.xray, None).clicked() {
+            if item(ui, Icon::StyleXRay, &tr!("view-xray"), self.prefs.xray, None).clicked() {
                 self.prefs.xray = !self.prefs.xray;
             }
             let edges = *self.prefs.edges_mut();
-            if item(ui, Icon::StyleEdges, "Edges", edges, None).clicked() {
+            if item(ui, Icon::StyleEdges, &tr!("view-edges"), edges, None).clicked() {
                 *self.prefs.edges_mut() = !edges;
             }
-            if item(ui, Icon::StyleProfiles, "Profiles", self.prefs.profiles, None).clicked() {
+            if item(ui, Icon::StyleProfiles, &tr!("view-profiles"), self.prefs.profiles, None).clicked() {
                 self.prefs.profiles = !self.prefs.profiles;
             }
         })
-        .on_hover_text(format!("Style: {label} — how faces and edges are drawn (also View → Face Style)"));
+        .on_hover_text(tr!("view-hud-style-tip", label = label));
     }
 
     /// What the Show drop-down switches: icon, name, on. The first four are the view's own,
     /// the rest the model's (every view).
-    pub(crate) fn hud_show_items(&self) -> [(Icon, &'static str, bool); 9] {
+    pub(crate) fn hud_show_items(&self) -> [(Icon, String, bool); 9] {
         let m = &self.doc.model;
         let d = m.section_display;
         [
-            (Icon::Axes, "Axes", self.prefs.show_axes),
-            (Icon::Ground, "Ground", self.prefs.show_ground),
-            (Icon::Sky, "Sky", self.prefs.show_sky),
-            (Icon::Grid, "Grid", self.prefs.grid.show),
-            (Icon::Guides, "Guides", !m.guides_hidden),
-            (Icon::Shadows, "Shadows", m.shadows.enabled),
-            (Icon::Section, "Section Planes", d.planes),
-            (Icon::SectionCut, "Section Cuts", d.cuts),
-            (Icon::SectionFill, "Section Fill", d.fill),
+            (Icon::Axes, tr!("view-show-axes"), self.prefs.show_axes),
+            (Icon::Ground, tr!("view-show-ground"), self.prefs.show_ground),
+            (Icon::Sky, tr!("view-show-sky"), self.prefs.show_sky),
+            (Icon::Grid, tr!("view-show-grid"), self.prefs.grid.show),
+            (Icon::Guides, tr!("view-show-guides"), !m.guides_hidden),
+            (Icon::Shadows, tr!("view-show-shadows"), m.shadows.enabled),
+            (Icon::Section, tr!("view-show-section-planes"), d.planes),
+            (Icon::SectionCut, tr!("view-show-section-cuts"), d.cuts),
+            (Icon::SectionFill, tr!("view-show-section-fill"), d.fill),
         ]
     }
 
@@ -240,12 +242,12 @@ impl VarstotasApp {
             for (k, (icon, name, on)) in items.into_iter().enumerate() {
                 if k == 4 {
                     ui.separator();
-                    ui.label(egui::RichText::new("The model (every view)").small().weak());
+                    ui.label(egui::RichText::new(tr!("view-show-model-header")).small().weak());
                 }
                 if k == 6 {
                     ui.separator();
                 }
-                if item(ui, icon, name, on, None).clicked() {
+                if item(ui, icon, &name, on, None).clicked() {
                     match k {
                         0 => self.prefs.show_axes = !on,
                         1 => self.prefs.show_ground = !on,
@@ -258,7 +260,7 @@ impl VarstotasApp {
                 }
             }
         })
-        .on_hover_text("Show: axes, ground, sky, grid in this view; guides, shadows, section planes / cuts / fill in every view (also the View menu)");
+        .on_hover_text(tr!("view-hud-show-tip"));
     }
 }
 

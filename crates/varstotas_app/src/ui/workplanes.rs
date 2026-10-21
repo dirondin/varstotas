@@ -4,6 +4,7 @@
 
 use crate::app::VarstotasApp;
 use egui::{Context, RichText, vec2};
+use varstotas_i18n::tr;
 use varstotas_kernel::WorkPlane;
 
 type PlanesState = (Vec<WorkPlane>, Option<usize>);
@@ -39,7 +40,7 @@ impl VarstotasApp {
         let mut remove: Option<usize> = None;
         let mut open = true;
         let pos = self.viewport.view_rect.right_top() + vec2(-380.0, 40.0);
-        let mut win = egui::Window::new("Work Planes")
+        let mut win = egui::Window::new(tr!("workplane-title"))
             .id(egui::Id::new("work_planes_window"))
             .open(&mut open)
             .collapsible(false)
@@ -51,45 +52,45 @@ impl VarstotasApp {
         win.show(ctx, |ui| {
             ui.set_width(340.0);
             if planes.is_empty() {
-                ui.label("No work planes. Use Tools → Guide Plane to add one.");
+                ui.label(tr!("workplane-none"));
             }
             egui::Grid::new("work_planes_list").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
                 for (i, p) in planes.iter_mut().enumerate() {
-                    if ui.radio(active == Some(i), "").on_hover_text("Active: draw on this plane").clicked() {
+                    if ui.radio(active == Some(i), "").on_hover_text(tr!("workplane-active-tip")).clicked() {
                         active = Some(i);
                     }
                     let mut shown = !p.hidden;
-                    if ui.checkbox(&mut shown, "").on_hover_text("Visible").changed() {
+                    if ui.checkbox(&mut shown, "").on_hover_text(tr!("workplane-visible")).changed() {
                         p.hidden = !shown;
                     }
                     ui.add_sized([190.0, 20.0], egui::TextEdit::singleline(&mut p.name));
-                    if ui.small_button("Delete").clicked() {
+                    if ui.small_button(tr!("delete")).clicked() {
                         remove = Some(i);
                     }
                     ui.end_row();
                 }
             });
             ui.horizontal(|ui| {
-                if ui.add_enabled(active.is_some(), egui::Button::new("Deactivate")).clicked() {
+                if ui.add_enabled(active.is_some(), egui::Button::new(tr!("workplane-deactivate"))).clicked() {
                     active = None;
                 }
-                ui.label(RichText::new("Without an active plane the drawing axes are used.").small().weak());
+                ui.label(RichText::new(tr!("workplane-no-active-hint")).small().weak());
             });
             if let Some(p) = active.and_then(|i| planes.get_mut(i)) {
                 ui.separator();
-                ui.label(RichText::new(format!("{} (world)", p.name)).strong());
+                ui.label(RichText::new(tr!("workplane-world", name = p.name.clone())).strong());
                 egui::Grid::new("work_plane_fields").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
-                    ui.label("Origin");
+                    ui.label(tr!("workplane-origin"));
                     ui.add(len_drag(&mut p.origin.x, unit));
                     ui.add(len_drag(&mut p.origin.y, unit));
                     ui.add(len_drag(&mut p.origin.z, unit));
                     ui.end_row();
                     let (mut t, mut a, mut s) = p.angles();
                     let (t0, a0, s0) = (t, a, s);
-                    ui.label("Tilt / azimuth / spin");
-                    ui.add(deg_drag(&mut t)).on_hover_text("Tilt: the normal's angle from blue");
-                    ui.add(deg_drag(&mut a)).on_hover_text("Azimuth: direction of the tilt, from red");
-                    ui.add(deg_drag(&mut s)).on_hover_text("Spin around the normal");
+                    ui.label(tr!("workplane-angles"));
+                    ui.add(deg_drag(&mut t)).on_hover_text(tr!("workplane-tilt-tip"));
+                    ui.add(deg_drag(&mut a)).on_hover_text(tr!("workplane-azimuth-tip"));
+                    ui.add(deg_drag(&mut s)).on_hover_text(tr!("workplane-spin-tip"));
                     ui.end_row();
                     if (t, a, s) != (t0, a0, s0) {
                         p.set_angles(t, a, s);
@@ -103,7 +104,7 @@ impl VarstotasApp {
         if let Some(i) = remove {
             // Deleting is a discrete action: commit it at once (after any pending edit).
             self.finish_planes_edit_now();
-            self.doc.commit("Delete Work Plane", |m| m.remove_work_plane(i));
+            self.doc.commit(&tr!("workplane-undo-delete"), |m| m.remove_work_plane(i));
             crate::axes::sync(&self.doc.model);
             return;
         }
@@ -130,7 +131,7 @@ impl VarstotasApp {
         let m = &mut self.doc.model;
         let now = (std::mem::replace(&mut m.work_planes, planes), std::mem::replace(&mut m.active_plane, active));
         if now != (m.work_planes.clone(), m.active_plane) {
-            self.doc.commit("Edit Work Planes", |m| {
+            self.doc.commit(&tr!("workplane-undo-edit"), |m| {
                 m.work_planes = now.0;
                 m.active_plane = now.1;
             });

@@ -1,5 +1,6 @@
 //! Orbit / Pan / Zoom tools (left-drag camera navigation).
 
+use varstotas_i18n::tr;
 use super::{Tool, ToolContext, ToolId};
 use crate::nav::dvec2;
 use egui::{CursorIcon, PointerButton};
@@ -32,7 +33,7 @@ impl Tool for OrbitTool {
         self.pivot = None;
     }
     fn status_text(&self) -> String {
-        "Drag to orbit. Shift = pan.".into()
+        tr!("tool-orbit-status")
     }
     fn cursor(&self) -> CursorIcon {
         if self.pivot.is_some() { CursorIcon::Grabbing } else { CursorIcon::Grab }
@@ -62,7 +63,7 @@ impl Tool for PanTool {
         self.anchor = None;
     }
     fn status_text(&self) -> String {
-        "Drag to pan.".into()
+        tr!("tool-pan-status")
     }
     fn cursor(&self) -> CursorIcon {
         if self.anchor.is_some() { CursorIcon::Grabbing } else { CursorIcon::Grab }
@@ -110,14 +111,14 @@ impl Tool for ZoomTool {
             _ => false,
         }
     }
-    fn vcb_label(&self) -> &str {
-        "Field of View"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-fov")
     }
     fn vcb_value(&self) -> String {
         format!("{:.1} deg", self.fov)
     }
     fn status_text(&self) -> String {
-        "Drag up/down to zoom. Type a field of view and press Enter.".into()
+        tr!("tool-zoom-status")
     }
     fn cursor(&self) -> CursorIcon {
         CursorIcon::ZoomIn

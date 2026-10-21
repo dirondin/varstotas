@@ -10,6 +10,7 @@
 use crate::app::{Action, VarstotasApp};
 use super::tray_lib::{DragItem, FolderAct, LibMenuAct, TrayDrag, file_key};
 use crate::document::PaletteMaterial;
+use varstotas_i18n::tr;
 use egui::{Color32, RichText, Ui};
 use varstotas_kernel::io::MATERIAL_EXT;
 use varstotas_kernel::{Material, MaterialId};
@@ -17,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 /// The folder of the bundled examples (not files).
-pub const EXAMPLES: &str = "Examples";
+pub const EXAMPLES: &str = "Examples"; // i18n-ignore
 
 pub struct MatItem {
     /// `None` for a bundled example.
@@ -129,7 +130,7 @@ fn scan(root: &Path, old: Vec<MatItem>) -> (Vec<MatItem>, Vec<String>) {
 pub(crate) fn safe_name(s: &str) -> String {
     let n: String = s.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
     let n = n.trim().trim_matches('.').to_string();
-    if n.is_empty() { "Material".into() } else { n }
+    if n.is_empty() { "Material".into() } else { n } // i18n-ignore
 }
 
 /// The materials of the Material Gallery demo (its floor and backdrop left out).
@@ -137,7 +138,7 @@ fn examples() -> Vec<MatItem> {
     let m = crate::demo::material_gallery();
     m.materials
         .values()
-        .filter(|x| !matches!(x.name.as_str(), "Showroom Floor" | "Backdrop"))
+        .filter(|x| !matches!(x.name.as_str(), "Showroom Floor" | "Backdrop")) // i18n-ignore
         .map(|x| MatItem { path: None, folder: EXAMPLES.into(), mat: x.clone(), mtime: None })
         .collect()
 }
@@ -152,21 +153,21 @@ pub(crate) fn describe(m: &Material) -> String {
     let p = m.pbr_or_default();
     let mut kind = Vec::new();
     if p.metallic > 0.5 {
-        kind.push("metal".to_string());
+        kind.push(tr!("mat-kind-metal"));
     }
     if p.transmission > 0.5 {
-        kind.push("glass".into());
+        kind.push(tr!("mat-kind-glass"));
     }
     if p.emission_strength > 0.0 && p.emission.iter().any(|c| *c > 0.0) {
-        kind.push("emissive".into());
+        kind.push(tr!("mat-kind-emissive"));
     }
     if m.image.is_some() {
-        kind.push("texture".into());
+        kind.push(tr!("mat-kind-texture"));
     }
     if let Some(sh) = &p.shader {
-        kind.push(format!("shader {}", crate::shaders::preset_name(&sh.source).unwrap_or("custom")));
+        kind.push(tr!("mat-kind-shader", name = crate::shaders::preset_name(&sh.source).map(str::to_string).unwrap_or_else(|| tr!("mat-kind-shader-custom"))));
     }
-    kind.push(format!("roughness {:.2}", p.roughness));
+    kind.push(tr!("mat-kind-roughness", value = format!("{:.2}", p.roughness)));
     format!("{}\n{}", m.name, kind.join(", "))
 }
 
@@ -224,7 +225,7 @@ impl VarstotasApp {
                 }
                 let name = mat.name.clone();
                 self.doc
-                    .commit(&format!("Add Material {name}"), |m| {
+                    .commit(&tr!("mat-undo-add", name = name.as_str()), |m| {
                         let id = m.add_material(&mat.name, mat.color);
                         m.materials[id] = mat;
                         id
@@ -256,10 +257,10 @@ impl VarstotasApp {
         let path = dir.join(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name)));
         match varstotas_kernel::io::save_material(mat, &path) {
             Ok(()) => {
-                self.flash(format!("Saved to the materials library: {}", mat.name));
+                self.flash(tr!("mat-saved", name = mat.name.as_str()));
                 self.refresh_materials();
             }
-            Err(e) => self.flash_error(format!("Save material failed: {e}")),
+            Err(e) => self.flash_error(tr!("mat-save-failed", error = e.to_string())),
         }
     }
 
@@ -267,7 +268,7 @@ impl VarstotasApp {
     pub(crate) fn export_material(&mut self, id: MaterialId) {
         let Some(mat) = self.doc.model.materials.get(id).cloned() else { return };
         let Some(mut path) = rfd::FileDialog::new()
-            .add_filter("Varstotas material", &[MATERIAL_EXT])
+            .add_filter(tr!("mat-file-filter"), &[MATERIAL_EXT])
             .set_file_name(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name)))
             .save_file()
         else {
@@ -282,8 +283,8 @@ impl VarstotasApp {
     pub(crate) fn export_material_to(&mut self, id: MaterialId, path: &Path) {
         let Some(mat) = self.doc.model.materials.get(id) else { return };
         match varstotas_kernel::io::save_material(mat, path) {
-            Ok(()) => self.flash(format!("Exported {}", path.display())),
-            Err(e) => self.flash_error(format!("Export material failed: {e}")),
+            Ok(()) => self.flash(tr!("mat-exported", path = path.display().to_string())),
+            Err(e) => self.flash_error(tr!("mat-export-failed", error = e.to_string())),
         }
     }
 
@@ -295,9 +296,9 @@ impl VarstotasApp {
         all.extend(importers.iter().flat_map(|p| p.material_import.iter().map(String::as_str)));
         let mut d = rfd::FileDialog::new();
         if !importers.is_empty() {
-            d = d.add_filter("All materials", &all);
+            d = d.add_filter(tr!("mat-all-filter"), &all);
         }
-        d = d.add_filter("Varstotas material", &[MATERIAL_EXT]);
+        d = d.add_filter(tr!("mat-file-filter"), &[MATERIAL_EXT]);
         for p in &importers {
             let exts: Vec<&str> = p.material_import.iter().map(String::as_str).collect();
             d = d.add_filter(p.name.clone(), &exts);
@@ -320,19 +321,19 @@ impl VarstotasApp {
                         self.use_material(m);
                     }
                     let names: Vec<&str> = mats.iter().map(|m| m.name.as_str()).collect();
-                    self.flash(format!("Imported {} with {}", names.join(", "), p.name));
+                    self.flash(tr!("mat-imported-with", names = names.join(", "), plugin = p.name.as_str()));
                 }
-                Ok(_) => self.flash_error(format!("{}: no materials in {}", p.name, path.display())),
-                Err(e) => self.flash_error(format!("Can't import {} with {}: {e}", path.display(), p.name)),
+                Ok(_) => self.flash_error(tr!("mat-import-empty", plugin = p.name.as_str(), path = path.display().to_string())),
+                Err(e) => self.flash_error(tr!("mat-import-failed-with", path = path.display().to_string(), plugin = p.name.as_str(), error = e)),
             }
             return;
         }
         match varstotas_kernel::io::load_material(path) {
             Ok(mat) => {
                 self.use_material(&mat);
-                self.flash(format!("Imported material {}", mat.name));
+                self.flash(tr!("mat-imported", name = mat.name.as_str()));
             }
-            Err(e) => self.flash_error(format!("Can't import {}: {e}", path.display())),
+            Err(e) => self.flash_error(tr!("mat-import-failed", path = path.display().to_string(), error = e.to_string())),
         }
     }
 
@@ -359,37 +360,37 @@ impl VarstotasApp {
             "m:",
             &mut self.mat_library.filter,
             &mut self.prefs.lib_tiles,
-            "New material from an image, import material files",
-            "Online Materials: free PBR materials (Poly Haven, ambientCG, plugins)",
+            &tr!("mat-plus-hover"),
+            &tr!("mat-online-hover"),
             |ui| {
-                if ui.button("New from Texture…").on_hover_text("A material from an image file (PNG, JPEG)").clicked() {
+                if ui.button(tr!("mat-new-from-texture")).on_hover_text(tr!("mat-new-from-texture-hover")).clicked() {
                     texture = true;
                     ui.close();
                 }
-                if ui.button("Import…").on_hover_text("Add material files (.vrstmat, plugin formats) to the document").clicked() {
+                if ui.button(tr!("mat-import")).on_hover_text(tr!("mat-import-hover")).clicked() {
                     import = true;
                     ui.close();
                 }
             },
             |ui| {
-                if ui.button("Choose Folder…").clicked() {
+                if ui.button(tr!("mat-choose-folder")).clicked() {
                     choose = true;
                     ui.close();
                 }
-                if custom && ui.button("Default Folder").on_hover_text("Back to ~/.varstotas/materials").clicked() {
+                if custom && ui.button(tr!("mat-default-folder")).on_hover_text(tr!("mat-default-folder-hover")).clicked() {
                     default_dir = true;
                     ui.close();
                 }
-                if ui.button("Show in Finder").clicked() {
+                if ui.button(tr!("library-show-in-finder")).clicked() {
                     reveal_root = true;
                     ui.close();
                 }
-                if ui.add_enabled(unused > 0, egui::Button::new("Purge Unused Materials")).on_hover_text("Remove the materials nothing in the model uses").clicked() {
+                if ui.add_enabled(unused > 0, egui::Button::new(tr!("mat-purge"))).on_hover_text(tr!("mat-purge-hover")).clicked() {
                     purge = true;
                     ui.close();
                 }
                 ui.separator();
-                ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The materials bundled with Varstotas (the Material Gallery demo)");
+                ui.checkbox(&mut show_ex, tr!("library-show-examples")).on_hover_text(tr!("mat-show-examples-hover"));
             },
         );
         self.prefs.hide_mat_examples = !show_ex;
@@ -427,7 +428,7 @@ impl VarstotasApp {
         self.mat_library.shown.clear();
         // In Model
         let model: Vec<(MaterialId, Material)> = self.doc.model.materials.iter().filter(|(_, m)| found(m)).map(|(id, m)| (id, m.clone())).collect();
-        let (folded, _, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", "In Model", "The materials of the open document", false, false, Some(model.len()), |ui| {
+        let (folded, _, _) = section(ui, &mut self.prefs.library_collapsed, "mat:In Model", &tr!("library-in-model"), &tr!("mat-in-model-hover"), false, false, Some(model.len()), |ui| { // i18n-ignore
             purge |= super::tray_lib::purge_button(ui, "mat", "materials", unused);
         });
         if purge {
@@ -446,23 +447,23 @@ impl VarstotasApp {
                     drag = Some(TrayDrag { item: DragItem::Mat(Box::new(m.clone()), false), name: m.name.clone(), recent: None, entered: false });
                 }
                 r.context_menu(|ui| {
-                    if ui.button("Use").clicked() {
+                    if ui.button(tr!("mat-use")).clicked() {
                         act = Some(MatAct::Paint(m.clone()));
                         ui.close();
                     }
-                    if ui.button("Rename…").clicked() {
+                    if ui.button(tr!("library-rename-ellipsis")).clicked() {
                         act = Some(MatAct::Rename(super::library::RenameTarget::Mat(*id), m.name.clone()));
                         ui.close();
                     }
-                    if ui.button("Save to Library").on_hover_text("Write it to the materials library folder, for any document").clicked() {
+                    if ui.button(tr!("library-save-to-library")).on_hover_text(tr!("mat-save-hover")).clicked() {
                         act = Some(MatAct::Save(m.clone()));
                         ui.close();
                     }
-                    if ui.button("Export…").clicked() {
+                    if ui.button(tr!("mat-export")).clicked() {
                         act = Some(MatAct::Export(*id));
                         ui.close();
                     }
-                    if ui.button("Delete").on_hover_text("Remove it from the model: what it paints gets the default material (Undo brings it back)").clicked() {
+                    if ui.button(tr!("delete")).on_hover_text(tr!("mat-delete-model-hover")).clicked() {
                         act = Some(MatAct::DeleteModel(*id));
                         ui.close();
                     }
@@ -498,12 +499,12 @@ impl VarstotasApp {
             examples: bool,
             list: Vec<(Option<PathBuf>, String, Material)>,
         }
-        let shown_in = |d: &Option<PathBuf>| d.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default();
+        let shown_in = |d: &Option<PathBuf>| d.as_ref().map(|d| tr!("library-folder-reveal-hover", path = d.display().to_string())).unwrap_or_default();
         let mut secs = vec![
             Sec {
                 key: "mat:\u{1}Favourites".into(),
-                title: "Favourites".into(),
-                tip: "Right-click a library material → Add to Favourites".into(),
+                title: tr!("library-favourites"),
+                tip: tr!("mat-favourites-hover"),
                 dir: None,
                 folder: None,
                 fold_default: false,
@@ -512,8 +513,8 @@ impl VarstotasApp {
             },
             Sec {
                 key: "mat:\u{1}Recent".into(),
-                title: "Recent".into(),
-                tip: "Library materials used last".into(),
+                title: tr!("library-recent"),
+                tip: tr!("mat-recent-hover"),
                 dir: None,
                 folder: None,
                 fold_default: false,
@@ -525,7 +526,7 @@ impl VarstotasApp {
             let dir = root.as_ref().map(|r| if f.is_empty() { r.clone() } else { r.join(&f) });
             secs.push(Sec {
                 key: format!("mat:{f}"),
-                title: if f.is_empty() { "My Library".into() } else { f.clone() },
+                title: if f.is_empty() { tr!("tray-my-library") } else { f.clone() },
                 tip: shown_in(&dir),
                 dir,
                 folder: Some(f.clone()),
@@ -537,8 +538,8 @@ impl VarstotasApp {
         if !self.prefs.hide_mat_examples {
             secs.push(Sec {
                 key: format!("mat:{EXAMPLES}"),
-                title: EXAMPLES.into(),
-                tip: "Materials bundled with Varstotas (the Material Gallery demo)".into(),
+                title: tr!("library-examples"),
+                tip: tr!("mat-examples-hover"),
                 dir: None,
                 folder: None,
                 // the examples start folded (many large tiles)
@@ -556,7 +557,7 @@ impl VarstotasApp {
             let mut hide = false;
             let (folded, clicked, title) = section(ui, &mut self.prefs.library_collapsed, &sec.key, &sec.title, &sec.tip, sec.dir.is_some(), sec.fold_default, Some(sec.list.len()), |ui| {
                 if sec.examples {
-                    let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text("Hide the bundled examples (… → Show Examples brings them back)");
+                    let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text(tr!("library-hide-examples"));
                     super::tray_lib::spot("hide:mat:Examples", r.rect.center());
                     hide = r.clicked();
                 }
@@ -571,7 +572,7 @@ impl VarstotasApp {
                 crate::ui::extensions::reveal(d);
             }
             if sec.folder.as_deref() == Some("") && self.mat_library.items.is_empty() && !folded {
-                ui.label(RichText::new("Empty: right-click a model material → Save to Library").small().weak());
+                ui.label(RichText::new(tr!("mat-empty")).small().weak());
             }
             if folded {
                 continue;
@@ -597,23 +598,23 @@ impl VarstotasApp {
                     drag = Some(TrayDrag { item: DragItem::Mat(Box::new(m.clone()), true), name: m.name.clone(), recent: Some((true, key.clone())), entered: false });
                 }
                 r.context_menu(|ui| {
-                    if ui.button("Use").on_hover_text("Paint with it (it is added to the model when something is painted)").clicked() {
+                    if ui.button(tr!("mat-use")).on_hover_text(tr!("mat-use-hover")).clicked() {
                         act = Some(MatAct::Use(m.clone(), key.clone()));
                         ui.close();
                     }
                     match path {
                         Some(p) => {
-                            if ui.button("Rename…").clicked() {
+                            if ui.button(tr!("library-rename-ellipsis")).clicked() {
                                 act = Some(MatAct::Rename(super::library::RenameTarget::MatFile(p.clone()), m.name.clone()));
                                 ui.close();
                             }
-                            if ui.button("Show in Finder").clicked() {
+                            if ui.button(tr!("library-show-in-finder")).clicked() {
                                 crate::ui::extensions::reveal(p);
                                 ui.close();
                             }
                         }
                         None => {
-                            if ui.button("Save to Library").on_hover_text("Copy it to your materials library").clicked() {
+                            if ui.button(tr!("library-save-to-library")).on_hover_text(tr!("mat-copy-hover")).clicked() {
                                 act = Some(MatAct::Save(m.clone()));
                                 ui.close();
                             }
@@ -627,7 +628,7 @@ impl VarstotasApp {
                         None => {}
                     }
                     if let Some(p) = path
-                        && ui.button("Delete…").clicked()
+                        && ui.button(tr!("library-delete-ellipsis")).clicked()
                     {
                         act = Some(MatAct::Delete(p.clone()));
                         ui.close();
@@ -636,7 +637,7 @@ impl VarstotasApp {
             });
         }
         if !self.mat_library.errors.is_empty() {
-            ui.label(RichText::new(format!("{} file(s) could not be read", self.mat_library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
+            ui.label(RichText::new(tr!("library-unreadable-files", n = self.mat_library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.mat_library.errors.join("\n"));
         }
         if drag.is_some() {
@@ -669,7 +670,7 @@ impl VarstotasApp {
                             super::tray_lib::rekey([&mut self.prefs.mat_favourites, &mut self.prefs.mat_recent], "m:", &p, &to);
                             self.refresh_materials();
                         }
-                        Err(e) => self.flash_error(format!("Move to Folder: {e}")),
+                        Err(e) => self.flash_error(tr!("library-move-failed", error = e)),
                     }
                 }
             }
@@ -706,15 +707,14 @@ impl VarstotasApp {
     /// default material.
     pub(crate) fn delete_model_material(&mut self, id: MaterialId) {
         let Some(name) = self.doc.model.materials.get(id).map(|m| m.name.clone()) else { return };
-        match self.doc.commit(&format!("Delete Material {name}"), |m| m.delete_material(id)) {
+        match self.doc.commit(&tr!("mat-undo-delete", name = name.as_str()), |m| m.delete_material(id)) {
             Some(Ok(n)) => {
                 if self.doc.current_material.as_ref().is_some_and(|c| c.name == name) {
                     self.doc.current_material = None;
                 }
-                let uses = if n > 0 { format!(", {n} use(s) back to the default") } else { String::new() };
-                self.flash(format!("Deleted material {name}{uses} (Undo brings it back)"));
+                self.flash(if n > 0 { tr!("mat-deleted-uses", name = name.as_str(), n = n) } else { tr!("mat-deleted", name = name.as_str()) });
             }
-            _ => self.flash_error(format!("Can't delete material {name}")),
+            _ => self.flash_error(tr!("mat-delete-failed", name = name.as_str())),
         }
     }
 
@@ -739,13 +739,13 @@ impl VarstotasApp {
     pub(crate) fn rename_material(&mut self, id: MaterialId, name: &str) {
         let Some(old) = self.doc.model.materials.get(id).map(|m| m.name.clone()) else { return };
         if self.doc.model.materials.iter().any(|(i, m)| i != id && m.name == name) {
-            return self.flash_error(format!("There is a material “{name}” already"));
+            return self.flash_error(tr!("mat-rename-exists", name = name));
         }
-        self.doc.commit(&format!("Rename Material {name}"), |m| m.materials[id].name = name.to_string());
+        self.doc.commit(&tr!("mat-undo-rename", name = name), |m| m.materials[id].name = name.to_string());
         if let Some(c) = self.doc.current_material.as_mut().filter(|c| c.name == old) {
             c.name = name.to_string();
         }
-        self.flash(format!("Renamed to {name}"));
+        self.flash(tr!("library-renamed", name = name));
     }
 
     /// Rename a library material: the material in the file and the file itself.
@@ -755,7 +755,7 @@ impl VarstotasApp {
             mat.name = name.to_string();
             let to = path.with_file_name(format!("{}.{MATERIAL_EXT}", safe_name(name)));
             if to != path && to.exists() {
-                return Err(format!("{} exists already", to.display()));
+                return Err(tr!("mat-file-exists", path = to.display().to_string()));
             }
             varstotas_kernel::io::save_material(&mat, &to).map_err(|e| e.to_string())?;
             if to != path {
@@ -765,10 +765,10 @@ impl VarstotasApp {
         })();
         match r {
             Ok(_) => {
-                self.flash(format!("Renamed to {name}"));
+                self.flash(tr!("library-renamed", name = name));
                 self.refresh_materials();
             }
-            Err(e) => self.flash_error(format!("Rename {}: {e}", path.display())),
+            Err(e) => self.flash_error(tr!("library-rename-failed", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -779,17 +779,17 @@ impl VarstotasApp {
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("material_delete")).show(ctx, |ui| {
             ui.set_width(360.0);
-            ui.heading("Delete from the materials library?");
+            ui.heading(tr!("mat-delete-title"));
             ui.add_space(4.0);
-            ui.label(format!("“{name}” will be deleted from the library folder:"));
+            ui.label(tr!("library-delete-text", name = name.as_str()));
             ui.label(RichText::new(path.display().to_string()).small().weak());
-            ui.label(RichText::new("This cannot be undone. Documents using it keep their copy.").weak());
+            ui.label(RichText::new(tr!("mat-delete-undone")).weak());
             ui.add_space(10.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new("Delete").strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
+                if ui.add(egui::Button::new(RichText::new(tr!("delete")).strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
                     choice = Some(true);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr!("cancel")).clicked() {
                     choice = Some(false);
                 }
             });
@@ -802,10 +802,10 @@ impl VarstotasApp {
                 self.mat_library.delete_ask = None;
                 match std::fs::remove_file(&path) {
                     Ok(()) => {
-                        self.flash(format!("Deleted from the materials library: {name}"));
+                        self.flash(tr!("mat-deleted-from-library", name = name.as_str()));
                         self.refresh_materials();
                     }
-                    Err(e) => self.flash_error(format!("Delete {}: {e}", path.display())),
+                    Err(e) => self.flash_error(tr!("library-delete-failed", path = path.display().to_string(), error = e.to_string())),
                 }
             }
             Some(false) => self.mat_library.delete_ask = None,

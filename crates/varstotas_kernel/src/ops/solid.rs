@@ -13,6 +13,7 @@ use crate::tessellate::triangulate_face;
 use crate::{EntityRef, FaceId, Instance, InstanceId, MaterialId, OpError, OpResult, TOL, VertexId};
 use glam::{DMat4, DVec2, DVec3};
 use std::collections::HashMap;
+use varstotas_i18n::tr;
 
 /// A Solid Tools operation. "First" and "second" are in the order the solids were picked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -326,9 +327,9 @@ impl Model {
         let i = mesh.instances.get(inst).ok_or(OpError::NotFound)?.clone();
         let def = self.defs.get(i.def).ok_or(OpError::NotFound)?;
         if !def.mesh.is_solid() {
-            return Err(OpError::Invalid(format!(
-                "“{}” is not a solid (every edge must bound exactly two faces, no nested groups)",
-                if i.name.is_empty() { def.name.as_str() } else { i.name.as_str() }
+            return Err(OpError::Invalid(tr!(
+                "kernel-err-is-not-a-solid-every-edge",
+                name = if i.name.is_empty() { def.name.as_str() } else { i.name.as_str() }
             )));
         }
         Ok((def.mesh.clone(), i.transform, i))
@@ -339,7 +340,7 @@ impl Model {
     /// second solid's frame). Returns the new instances.
     pub fn solid_op_in(&mut self, path: &[InstanceId], op: SolidOp, first: InstanceId, second: InstanceId) -> OpResult<Vec<InstanceId>> {
         if first == second {
-            return Err(OpError::Invalid("pick two different solids".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-pick-two-different-solids").into()));
         }
         let (ma, ta, ia) = self.solid_of(path, first)?;
         let (mb, tb, ib) = self.solid_of(path, second)?;
@@ -353,11 +354,11 @@ impl Model {
         };
         let results: Vec<Mesh> = results.into_iter().filter(|m| !m.faces.is_empty()).collect();
         if results.is_empty() {
-            return Err(OpError::Invalid("the solids do not overlap".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-solids-do-not-overlap").into()));
         }
         let inv = tb.inverse();
         if !inv.is_finite() {
-            return Err(OpError::Invalid("the second solid has a degenerate transform".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-second-solid-has-a-degenerate").into()));
         }
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let mut out = Vec::new();
@@ -371,6 +372,7 @@ impl Model {
                 f.normal = inv.transform_vector3(f.normal).normalize_or(f.normal);
             }
             r.rebuild_caches();
+            // i18n-ignore-next
             let def = self.defs.insert(Definition { name: "Group".into(), mesh: r, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
             let inst = Instance { def, transform: tb, name: ib.name.clone(), material: None, tag: ib.tag, hidden: false, locked: false };
             out.push(self.defs[pd].mesh.instances.insert(inst));
@@ -388,7 +390,7 @@ impl Model {
     pub fn solid_union_all_in(&mut self, path: &[InstanceId], insts: &[InstanceId]) -> OpResult<InstanceId> {
         let (&first, rest) = insts.split_first().ok_or(OpError::Invalid("no solids".into()))?;
         if rest.is_empty() {
-            return Err(OpError::Invalid("pick at least two solids".into()));
+            return Err(OpError::Invalid(tr!("kernel-err-pick-at-least-two-solids").into()));
         }
         let mut acc = first;
         for &next in rest {

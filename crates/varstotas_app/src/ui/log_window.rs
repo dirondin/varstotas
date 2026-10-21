@@ -7,6 +7,7 @@ use super::theme;
 use crate::app::VarstotasApp;
 use crate::applog::{self, Entry, Level};
 use egui::{Color32, Context, RichText, ScrollArea};
+use varstotas_i18n::tr;
 
 pub struct LogWindow {
     pub open: bool,
@@ -67,7 +68,7 @@ impl VarstotasApp {
         }
         let mut open = true;
         let pos = self.viewport.view_rect.left_bottom() + egui::vec2(20.0, -340.0);
-        let mut win = egui::Window::new("Log").id(egui::Id::new("log_window")).open(&mut open).default_pos(pos).default_size([640.0, 300.0]).resizable(true);
+        let mut win = egui::Window::new(tr!("log-title")).id(egui::Id::new("log_window")).open(&mut open).default_pos(pos).default_size([640.0, 300.0]).resizable(true);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -75,14 +76,14 @@ impl VarstotasApp {
             let lw = &mut self.log_window;
             let (n_err, n_warn) = lw.cache.1.iter().fold((0, 0), |(a, b), e| if e.level == Level::Error { (a + 1, b) } else { (a, b + 1) });
             ui.horizontal(|ui| {
-                ui.toggle_value(&mut lw.errors, RichText::new(format!("Errors {n_err}")).color(ERR));
-                ui.toggle_value(&mut lw.warnings, RichText::new(format!("Warnings {n_warn}")).color(WARN));
-                ui.add(egui::TextEdit::singleline(&mut lw.filter).hint_text("filter").desired_width(160.0));
+                ui.toggle_value(&mut lw.errors, RichText::new(tr!("log-errors", n = n_err)).color(ERR));
+                ui.toggle_value(&mut lw.warnings, RichText::new(tr!("log-warnings", n = n_warn)).color(WARN));
+                ui.add(egui::TextEdit::singleline(&mut lw.filter).hint_text(tr!("log-filter")).desired_width(160.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Clear").clicked() {
+                    if ui.button(tr!("log-clear")).clicked() {
                         applog::clear();
                     }
-                    if ui.button("Copy").on_hover_text("Copy the entries shown").clicked() {
+                    if ui.button(tr!("log-copy")).on_hover_text(tr!("log-copy-hint")).clicked() {
                         let text: Vec<String> = lw.shown().into_iter().map(line).collect();
                         ui.ctx().copy_text(text.join("\n"));
                     }
@@ -93,7 +94,7 @@ impl VarstotasApp {
             egui::Frame::new().fill(theme::tray_bg()).inner_margin(6.0).show(ui, |ui| {
                 ScrollArea::vertical().stick_to_bottom(true).auto_shrink([false, false]).show(ui, |ui| {
                     if shown.is_empty() {
-                        let msg = if lw.cache.1.is_empty() { "No errors or warnings in this session." } else { "Nothing matches the filters." };
+                        let msg = if lw.cache.1.is_empty() { tr!("log-empty") } else { tr!("log-no-match") };
                         ui.label(RichText::new(msg).color(theme::text_dim()));
                     }
                     for e in shown {
@@ -107,7 +108,7 @@ impl VarstotasApp {
                             let n = if e.count > 1 { format!("  ×{}", e.count) } else { String::new() };
                             let r = ui.add(egui::Label::new(RichText::new(format!("{}{n}", e.text)).color(c)).wrap().sense(egui::Sense::click()));
                             r.context_menu(|ui| {
-                                if ui.button("Copy").clicked() {
+                                if ui.button(tr!("log-copy")).clicked() {
                                     ui.ctx().copy_text(line(e));
                                     ui.close();
                                 }
@@ -127,12 +128,12 @@ impl VarstotasApp {
     pub(crate) fn log_badge(&mut self, ui: &mut egui::Ui) {
         let n = applog::unseen();
         let resp = if n > 0 {
-            let text = RichText::new(format!("● {n} error{}", if n == 1 { "" } else { "s" })).color(Color32::WHITE).small().strong();
+            let text = RichText::new(tr!("log-badge-errors", n = n)).color(Color32::WHITE).small().strong();
             ui.add(egui::Button::new(text).fill(ERR).corner_radius(8.0))
         } else {
-            ui.add(egui::Button::new(RichText::new("Log").small().color(theme::text_dim())).frame(false))
+            ui.add(egui::Button::new(RichText::new(tr!("log-badge")).small().color(theme::text_dim())).frame(false))
         };
-        if resp.on_hover_text("Window → Log: errors and warnings from everywhere (scripts, import / export, libraries …)").clicked() {
+        if resp.on_hover_text(tr!("log-badge-hint")).clicked() {
             self.toggle_log(!self.log_window.open || n > 0);
         }
     }

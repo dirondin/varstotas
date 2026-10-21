@@ -6,6 +6,7 @@ use crate::{FaceId, Model, tessellate};
 use glam::DVec3;
 use std::collections::HashSet;
 use std::path::Path;
+use varstotas_i18n::tr;
 
 /// Binary STL bytes of the visible model (world space, millimetres).
 pub fn write_stl_binary(model: &Model) -> Vec<u8> {
@@ -58,9 +59,9 @@ pub(crate) fn parse_stl(data: &[u8]) -> Result<Vec<[DVec3; 3]>, IoError> {
             return Ok(tris);
         }
     }
-    let text = std::str::from_utf8(data).map_err(|_| IoError::Format("not a valid STL".into()))?;
+    let text = std::str::from_utf8(data).map_err(|_| IoError::Format(tr!("kernel-io-not-a-valid-stl").into()))?;
     if !text.trim_start().starts_with("solid") {
-        return Err(IoError::Format("not a valid STL".into()));
+        return Err(IoError::Format(tr!("kernel-io-not-a-valid-stl").into()));
     }
     let mut verts = Vec::new();
     for line in text.lines() {
@@ -70,15 +71,15 @@ pub(crate) fn parse_stl(data: &[u8]) -> Result<Vec<[DVec3; 3]>, IoError> {
                 .take(3)
                 .map(|s| s.parse::<f64>())
                 .collect::<Result<_, _>>()
-                .map_err(|_| IoError::Format(format!("bad STL vertex: {line}")))?;
+                .map_err(|_| IoError::Format(tr!("kernel-io-bad-stl-vertex-line", line = line.to_string())))?;
             if c.len() != 3 {
-                return Err(IoError::Format(format!("bad STL vertex: {line}")));
+                return Err(IoError::Format(tr!("kernel-io-bad-stl-vertex-line", line = line.to_string())));
             }
             verts.push(DVec3::new(c[0], c[1], c[2]));
         }
     }
     if verts.len() % 3 != 0 {
-        return Err(IoError::Format("STL vertex count not a multiple of 3".into()));
+        return Err(IoError::Format(tr!("kernel-io-stl-vertex-count-not-a-multiple").into()));
     }
     Ok(verts.as_chunks::<3>().0.iter().map(|c| [c[0], c[1], c[2]]).collect())
 }

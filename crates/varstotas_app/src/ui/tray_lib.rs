@@ -7,6 +7,7 @@
 use super::icons::{Icon, paint_icon};
 use egui::{Color32, Rect, Response, RichText, Sense, Stroke, Ui, pos2, vec2};
 use serde::{Deserialize, Serialize};
+use varstotas_i18n::tr;
 use std::path::{Path, PathBuf};
 
 /// Tile size of both library cards (… menu).
@@ -21,7 +22,17 @@ pub enum TileSize {
     List,
 }
 
-pub const TILE_SIZES: [(TileSize, &str); 3] = [(TileSize::Small, "Small Tiles"), (TileSize::Large, "Large Tiles"), (TileSize::List, "List")];
+/// The tile sizes with their ids (QA spots, English); [`tile_label`] is the shown name.
+pub const TILE_SIZES: [(TileSize, &str); 3] = [(TileSize::Small, "Small Tiles"), (TileSize::Large, "Large Tiles"), (TileSize::List, "List")]; // i18n-ignore
+
+/// The shown name of a tile size id of [`TILE_SIZES`].
+pub fn tile_label(id: &str) -> String {
+    match id {
+        "Small Tiles" => tr!("tray-tiles-small"), // i18n-ignore
+        "Large Tiles" => tr!("tray-tiles-large"), // i18n-ignore
+        _ => tr!("tray-tiles-list"),
+    }
+}
 
 /// Side of a large tile's picture (a small one: `SMALL`, a list row's: `LIST`).
 pub const LARGE: f32 = 78.0;
@@ -57,8 +68,8 @@ pub fn top_row(ui: &mut Ui, tag: &str, filter: &mut String, tiles: &mut TileSize
     let mut out = TopRow::default();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        ui.add(egui::TextEdit::singleline(filter).hint_text("Search").desired_width(ui.available_width() - 4.0 * 24.0));
-        let r = super::small_icon_button(ui, Icon::Refresh, "Refresh: read the library folder again");
+        ui.add(egui::TextEdit::singleline(filter).hint_text(tr!("tray-lib-search")).desired_width(ui.available_width() - 4.0 * 24.0));
+        let r = super::small_icon_button(ui, Icon::Refresh, &tr!("tray-lib-refresh"));
         spot(format!("{tag}refresh"), r.rect.center());
         if r.clicked() {
             out.refresh = true;
@@ -70,11 +81,11 @@ pub fn top_row(ui: &mut Ui, tag: &str, filter: &mut String, tiles: &mut TileSize
         if r.clicked() {
             out.online = true;
         }
-        let r = icon_menu(ui, Icon::More, "Library folder, what to show, tile size", |ui| {
+        let r = icon_menu(ui, Icon::More, &tr!("tray-lib-more"), |ui| {
             more(ui);
             ui.separator();
             for (s, name) in TILE_SIZES {
-                if ui.radio(*tiles == s, name).clicked() {
+                if ui.radio(*tiles == s, tile_label(name)).clicked() {
                     *tiles = s;
                     ui.close();
                 }
@@ -99,7 +110,7 @@ pub fn section(ui: &mut Ui, collapsed: &mut Vec<String>, key: &str, title: &str,
         ui.spacing_mut().item_spacing.x = 4.0;
         let arrow = ui
             .add_sized([14.0, 18.0], egui::Button::new(if folded { "⏵" } else { "⏷" }).frame(false))
-            .on_hover_text(if folded { "Show the section" } else { "Fold the section" });
+            .on_hover_text(tr!(if folded { "tray-lib-section-show" } else { "tray-lib-section-fold" }));
         spot(format!("▸{key}"), arrow.rect.center());
         if arrow.clicked() {
             if listed {
@@ -125,7 +136,12 @@ pub fn section(ui: &mut Ui, collapsed: &mut Vec<String>, key: &str, title: &str,
 /// The Purge button of an In Model heading: removes the `unused` items nothing in the model
 /// uses (`what`: "materials" / "components"); greyed out when there are none.
 pub fn purge_button(ui: &mut Ui, key: &str, what: &str, unused: usize) -> bool {
-    let tip = if unused > 0 { format!("Purge Unused: remove the {unused} {what} nothing in the model uses") } else { format!("Purge Unused: no unused {what}") };
+    let tip = match (what == "materials", unused > 0) {
+        (true, true) => tr!("tray-purge-materials", unused = unused),
+        (true, false) => tr!("tray-purge-materials-none"),
+        (false, true) => tr!("tray-purge-components", unused = unused),
+        (false, false) => tr!("tray-purge-components-none"),
+    };
     let r = ui.add_enabled_ui(unused > 0, |ui| super::icon_button(ui, Icon::Purge, false, 18.0)).inner;
     let r = r.on_hover_text(&tip).on_disabled_hover_text(&tip);
     spot(format!("purge:{key}"), r.rect.center());
@@ -292,7 +308,7 @@ pub enum LibMenuAct {
 /// `favourite` is known) and Move to Folder ▸ (a file in `current` of the `folders`).
 pub fn lib_menu(ui: &mut Ui, favourite: Option<bool>, folders: Option<(&[String], &str)>, act: &mut Option<LibMenuAct>) {
     if let Some(fav) = favourite {
-        let label = if fav { "Remove from Favourites" } else { "Add to Favourites" };
+        let label = tr!(if fav { "tray-lib-fav-remove" } else { "tray-lib-fav-add" });
         let r = ui.button(label);
         spot("menu:favourite", r.rect.center());
         if r.clicked() {
@@ -301,10 +317,11 @@ pub fn lib_menu(ui: &mut Ui, favourite: Option<bool>, folders: Option<(&[String]
         }
     }
     if let Some((folders, current)) = folders {
-        let r = ui.menu_button("Move to Folder", |ui| {
+        let r = ui.menu_button(tr!("tray-lib-move-to-folder"), |ui| {
             for f in std::iter::once("").chain(folders.iter().map(String::as_str)) {
-                let name = if f.is_empty() { "My Library" } else { f };
-                let r = ui.add_enabled(f != current, egui::Button::new(name));
+                let name = if f.is_empty() { "My Library" } else { f }; // i18n-ignore
+                let shown = if f.is_empty() { tr!("tray-my-library") } else { f.to_string() };
+                let r = ui.add_enabled(f != current, egui::Button::new(shown));
                 spot(format!("move:{name}"), r.rect.center());
                 if r.clicked() {
                     *act = Some(LibMenuAct::Move(f.to_string()));
@@ -324,7 +341,7 @@ pub fn move_file(file: &Path, root: &Path, folder: &str) -> Result<PathBuf, Stri
         return Ok(to);
     }
     if to.exists() {
-        return Err(format!("{} already exists", to.display()));
+        return Err(tr!("tray-lib-exists", path = to.display().to_string()));
     }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::rename(file, &to).map_err(|e| e.to_string())?;
@@ -374,7 +391,7 @@ pub enum FolderAct {
 pub fn folder_menu(title: &Response, folder: &str, dir: Option<&Path>, act: &mut Option<FolderAct>) {
     let Some(dir) = dir else { return };
     title.context_menu(|ui| {
-        let r = ui.button("New Folder…");
+        let r = ui.button(tr!("tray-folder-new"));
         spot("menu:new_folder", r.rect.center());
         if r.clicked() {
             *act = Some(FolderAct::New);
@@ -383,14 +400,14 @@ pub fn folder_menu(title: &Response, folder: &str, dir: Option<&Path>, act: &mut
         if folder.is_empty() {
             return;
         }
-        let r = ui.button("Rename Folder…");
+        let r = ui.button(tr!("tray-folder-rename"));
         spot("menu:rename_folder", r.rect.center());
         if r.clicked() {
             *act = Some(FolderAct::Rename(folder.to_string()));
             ui.close();
         }
         let empty = std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none());
-        let r = ui.button(if empty { "Delete Folder…" } else { "Delete Folder and Its Files…" });
+        let r = ui.button(tr!(if empty { "tray-folder-delete" } else { "tray-folder-delete-files" }));
         spot("menu:delete_folder", r.rect.center());
         if r.clicked() {
             *act = Some(FolderAct::Delete(dir.to_path_buf()));

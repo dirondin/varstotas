@@ -1,5 +1,6 @@
 //! Construction tools: Tape Measure (measure + guides), Protractor (angled guides), Axes.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::transform::draw_protractor;
@@ -50,9 +51,9 @@ pub(crate) fn resize_active(doc: &mut crate::document::Document, factor: f64) ->
     let path = doc.active_path.clone();
     let root = path.is_empty();
     let m = DMat4::from_scale(DVec3::splat(factor));
-    let label = if root { "Resize Model" } else { "Resize" };
+    let label = tr!(if root { "tool-undo-resize-model" } else { "tool-undo-resize" });
     doc
-        .commit(label, |model| {
+        .commit(&label, |model| {
             let mesh = model.mesh_at_mut(&path)?;
             let vs: std::collections::HashSet<_> = mesh.vertices.keys().collect();
             if !vs.is_empty() {
@@ -124,7 +125,7 @@ impl TapeTool {
         }
         // Guides belong to the open group / component (stored in its local coordinates).
         let path = ctx.doc.active_path.clone();
-        ctx.doc.commit("Create Guide", |model| {
+        ctx.doc.commit(&tr!("tool-undo-create-guide"), |model| {
             if let Some(g) = gl {
                 model.add_guide_in(&path, GuideGeom::Line(g));
             }
@@ -218,8 +219,8 @@ impl Tool for TapeTool {
         }
         true
     }
-    fn vcb_label(&self) -> &str {
-        "Length"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-length")
     }
     fn vcb_value(&self) -> String {
         match (self.unit, self.measure().map(|m| m.0).or(self.last_measure)) {
@@ -228,14 +229,14 @@ impl Tool for TapeTool {
         }
     }
     fn status_text(&self) -> String {
-        let g = if self.guides { "guides on" } else { "measure only" };
+        let g = tr!(if self.guides { "tool-tape-guides-on" } else { "tool-tape-measure-only" });
         if self.start.is_none() && self.resize_base.is_some() {
-            return format!("Type a new length to resize the model, or select a start point ({g}).");
+            return tr!("tool-tape-status-resize", g = g);
         }
         if self.start.is_none() {
-            format!("Select a start point (an edge for a parallel guide). %COPY% toggles guides ({g}).")
+            tr!("tool-tape-status-start", g = g)
         } else {
-            format!("Select the end point or type a distance ({g}).")
+            tr!("tool-tape-status-end", g = g)
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -319,7 +320,7 @@ impl ProtractorTool {
         self.stage = None;
         let dir = DMat4::from_axis_angle(n, deg.to_radians()).transform_vector3(zero);
         let path = ctx.doc.active_path.clone();
-        ctx.doc.commit("Create Guide", |m| m.add_guide_in(&path, GuideGeom::Line(GuideLine { origin: c, dir })));
+        ctx.doc.commit(&tr!("tool-undo-create-guide"), |m| m.add_guide_in(&path, GuideGeom::Line(GuideLine { origin: c, dir })));
     }
 
     fn click(&mut self, ctx: &mut ToolContext) {
@@ -393,17 +394,17 @@ impl Tool for ProtractorTool {
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Angle"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-angle")
     }
     fn vcb_value(&self) -> String {
         if matches!(self.stage, Some(ProStage::Angle { .. })) { fmt_angle(self.angle) } else { String::new() }
     }
     fn status_text(&self) -> String {
         match self.stage {
-            None => "Select the protractor center (arrows lock its axis).".into(),
-            Some(ProStage::Center { .. }) => "Select the base direction.".into(),
-            Some(ProStage::Angle { .. }) => "Select the angle (snaps every 15°) or type degrees.".into(),
+            None => tr!("tool-protractor-center"),
+            Some(ProStage::Center { .. }) => tr!("tool-protractor-base"),
+            Some(ProStage::Angle { .. }) => tr!("tool-protractor-angle"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -523,7 +524,7 @@ impl AxesTool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, a: crate::axes::Axes) {
-        if ctx.doc.try_commit("Place Axes", |m| m.set_drawing_frame(a.origin, a.x, a.y)).is_some() {
+        if ctx.doc.try_commit(&tr!("tool-undo-place-axes"), |m| m.set_drawing_frame(a.origin, a.x, a.y)).is_some() {
             crate::axes::set_current(a);
             ctx.requests.push(super::ToolRequest::SwitchTool(ToolId::Select));
         }
@@ -575,17 +576,17 @@ impl Tool for AxesTool {
         self.update(ctx);
         true
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         match self.stage {
-            AxStage::Idle => "Origin",
-            _ => "Measurements",
+            AxStage::Idle => tr!("tool-vcb-origin"),
+            _ => tr!("tool-vcb-measurements"),
         }
     }
     fn status_text(&self) -> String {
         match self.stage {
-            AxStage::Idle => "Select the new origin, or type x,y,z.".into(),
-            AxStage::Origin { .. } => "Select a point along the new red axis.".into(),
-            AxStage::Red { .. } => "Select a point toward the new green axis.".into(),
+            AxStage::Idle => tr!("tool-axes-origin"),
+            AxStage::Origin { .. } => tr!("tool-axes-red"),
+            AxStage::Red { .. } => tr!("tool-axes-green"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

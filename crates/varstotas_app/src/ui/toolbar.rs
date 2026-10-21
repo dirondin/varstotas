@@ -7,6 +7,7 @@ use super::{icon_button, theme};
 use crate::app::{Action, VarstotasApp};
 use crate::tools::ToolId;
 use egui::{RichText, Ui};
+use varstotas_i18n::tr;
 
 /// Side of a toolbar button (Preferences → Interface → Toolbar icons).
 static BTN_SIDE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(36);
@@ -16,8 +17,30 @@ fn BTN() -> f32 {
     BTN_SIDE.load(std::sync::atomic::Ordering::Relaxed) as f32
 }
 
-/// Toolbar icon sizes: name and button side.
-pub const ICON_SIZES: [(&str, u32); 3] = [("Small", 28), ("Medium", 36), ("Large", 44)];
+/// Toolbar icon sizes: id and button side.
+pub const ICON_SIZES: [(&str, u32); 3] = [("Small", 28), ("Medium", 36), ("Large", 44)]; // i18n-ignore
+
+/// The shown name of an icon size id (`ICON_SIZES`).
+pub fn icon_size_label(id: &str) -> String {
+    tr(match id {
+        "Small" => "toolbar-size-small", // i18n-ignore
+        "Medium" => "toolbar-size-medium", // i18n-ignore
+        _ => "toolbar-size-large",
+    })
+}
+
+/// The shown heading of a reserve group id (`GROUPS`).
+pub fn group_label(id: &str) -> String {
+    tr(match id {
+        "Draw" => "toolbar-group-draw", // i18n-ignore
+        "Tools" => "toolbar-group-tools", // i18n-ignore
+        "Camera" => "toolbar-group-camera", // i18n-ignore
+        "File" => "toolbar-group-file", // i18n-ignore
+        "Edit" => "toolbar-group-edit", // i18n-ignore
+        "Snapping" => "toolbar-group-snapping", // i18n-ignore
+        _ => "toolbar-group-window",
+    })
+}
 
 pub fn set_button_side(side: u32) {
     BTN_SIDE.store(side.clamp(20, 64), std::sync::atomic::Ordering::Relaxed);
@@ -41,14 +64,14 @@ impl Item {
         match self {
             Item::Tool(id) => format!("{id:?}"),
             Item::Cmd(c) => c.key(),
-            Item::Snapping => "Snapping".into(),
+            Item::Snapping => "Snapping".into(), // i18n-ignore
             Item::Sep => "|".into(),
         }
     }
 
     pub fn from_key(k: &str) -> Option<Item> {
         match k {
-            "Snapping" => Some(Item::Snapping),
+            "Snapping" => Some(Item::Snapping), // i18n-ignore
             "|" => Some(Item::Sep),
             _ => ToolId::ALL.iter().copied().find(|t| format!("{t:?}") == k).map(Item::Tool).or_else(|| Cmd::from_key(k).map(Item::Cmd)),
         }
@@ -58,8 +81,8 @@ impl Item {
         match self {
             Item::Tool(id) => id.name().into(),
             Item::Cmd(c) => c.name(),
-            Item::Snapping => "Snapping Menu".into(),
-            Item::Sep => "Separator".into(),
+            Item::Snapping => tr!("toolbar-snapping-menu"),
+            Item::Sep => tr!("toolbar-separator"),
         }
     }
 
@@ -76,15 +99,15 @@ impl Item {
     pub fn group(self) -> Option<&'static str> {
         use ToolId as T;
         match self {
-            Item::Tool(T::Orbit | T::Pan | T::Zoom | T::PositionCamera | T::LookAround | T::Walk) => Some("Camera"),
+            Item::Tool(T::Orbit | T::Pan | T::Zoom | T::PositionCamera | T::LookAround | T::Walk) => Some("Camera"), // i18n-ignore
             Item::Tool(
                 T::Line | T::Arc | T::ArcCenter | T::Arc3 | T::Pie | T::Bezier | T::SmoothCurve | T::Freehand | T::EditCurve | T::Rectangle | T::RotatedRectangle | T::Circle | T::Polygon,
-            ) => Some("Draw"),
+            ) => Some("Draw"), // i18n-ignore
             Item::Tool(id) if crate::tools::SHAPES.contains(&id) => Some("Draw"),
-            Item::Tool(_) => Some("Tools"),
-            Item::Cmd(Cmd::ZoomExtents) => Some("Camera"),
+            Item::Tool(_) => Some("Tools"), // i18n-ignore
+            Item::Cmd(Cmd::ZoomExtents) => Some("Camera"), // i18n-ignore
             Item::Cmd(c) => Some(c.group()),
-            Item::Snapping => Some("Snapping"),
+            Item::Snapping => Some("Snapping"), // i18n-ignore
             Item::Sep => None,
         }
     }
@@ -101,7 +124,7 @@ impl Item {
 }
 
 /// The reserve's headings, in order.
-pub const GROUPS: [&str; 7] = ["Draw", "Tools", "Camera", "File", "Edit", "Snapping", "Window"];
+pub const GROUPS: [&str; 7] = ["Draw", "Tools", "Camera", "File", "Edit", "Snapping", "Window"]; // i18n-ignore
 
 /// The toolbar out of the box. 3 Point Arc, Pie, Rotated Rectangle, Smooth Curve, Freehand,
 /// Protractor … wait in reserve (the toolbar stays short at the default window width).
@@ -199,11 +222,11 @@ impl VarstotasApp {
             p.circle_filled(r.right_top() + egui::vec2(2.0, -2.0), 3.5, egui::Color32::from_rgb(0xE8, 0x7A, 0x1E));
         }
         let state = match (on, partial) {
-            (false, _) => "Snapping is off.",
-            (true, true) => "Some snaps are off.",
-            _ => "All snaps are on.",
+            (false, _) => "off",
+            (true, true) => "some",
+            _ => "on",
         };
-        let resp = tip(resp, "Snapping", Some("Shift+S"), &format!("Choose which points and directions the cursor snaps to. {state}"));
+        let resp = tip(resp, &tr!("toolbar-snapping"), Some("Shift+S"), &tr!("toolbar-snapping-tip", state = state)); // i18n-ignore
         egui::Popup::menu(&resp)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| self.snapping_menu(ui));

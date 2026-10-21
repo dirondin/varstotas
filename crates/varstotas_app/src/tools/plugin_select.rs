@@ -2,6 +2,7 @@
 //! groups of the open context in the selection, Enter hands the selection to the script as
 //! `objects`, Esc cancels.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
 use crate::overlay::Marker2d;
@@ -70,7 +71,7 @@ impl Tool for PluginSelectTool {
         true
     }
     fn status_text(&self) -> String {
-        format!("{} — click to add / remove, Enter to continue, Esc cancels.", self.prompt)
+        tr!("tool-plugin-select", prompt = self.prompt.as_str())
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, _out2d: &mut Vec<Marker2d>) {
         match self.hover {

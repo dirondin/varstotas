@@ -7,7 +7,26 @@ use std::f64::consts::{PI, TAU};
 /// Days before the first of each month (non-leap year).
 const MONTH_START: [u32; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 const MONTH_DAYS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-pub const MONTH_NAMES: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+pub const MONTH_NAMES: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; // i18n-ignore
+
+/// The shown short name of month `m` (1..=12).
+pub fn month_name(m: u32) -> String {
+    const KEYS: [&str; 12] = [
+        "render-month-jan",
+        "render-month-feb",
+        "render-month-mar",
+        "render-month-apr",
+        "render-month-may",
+        "render-month-jun",
+        "render-month-jul",
+        "render-month-aug",
+        "render-month-sep",
+        "render-month-oct",
+        "render-month-nov",
+        "render-month-dec",
+    ];
+    varstotas_i18n::tr(KEYS[(m as usize).clamp(1, 12) - 1])
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -70,7 +89,7 @@ impl ShadowSettings {
     /// "8 Nov".
     pub fn date_label(&self) -> String {
         let (m, d) = month_day(self.day);
-        format!("{d} {}", MONTH_NAMES[m as usize - 1])
+        format!("{d} {}", month_name(m))
     }
 
     /// "13:30".

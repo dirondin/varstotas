@@ -133,9 +133,11 @@ impl Model {
     pub fn add_work_plane(&mut self, mut p: WorkPlane) -> usize {
         if p.name.trim().is_empty() {
             let mut k = self.work_planes.len() + 1;
+            // i18n-ignore-next
             while self.work_planes.iter().any(|q| q.name == format!("Plane {k}")) {
                 k += 1;
             }
+            // i18n-ignore-next
             p.name = format!("Plane {k}");
         }
         self.work_planes.push(p);

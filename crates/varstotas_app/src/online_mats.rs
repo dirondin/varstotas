@@ -7,6 +7,7 @@
 
 use varstotas_kernel::{Material, Pbr, TextureImage};
 use serde_json::Value;
+use varstotas_i18n::tr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -54,18 +55,18 @@ impl Source {
 
     pub fn label(&self) -> &str {
         match self {
-            Source::PolyHaven => "Poly Haven",
+            Source::PolyHaven => "Poly Haven", // i18n-ignore
             Source::AmbientCg => "ambientCG",
             Source::Plugin(p) => &p.plugin.name,
         }
     }
 
     /// The source's terms, shown above its materials (a plugin's `@notice`).
-    pub fn terms(&self) -> &str {
+    pub fn terms(&self) -> String {
         match self {
-            Source::PolyHaven => "Powered by Poly Haven (polyhaven.com). The textures are CC0: free for any use, also commercial; no credit needed.",
-            Source::AmbientCg => "ambientCG materials are CC0: free for any use, also commercial; credit optional.",
-            Source::Plugin(p) => &p.plugin.notice,
+            Source::PolyHaven => tr!("mat-terms-polyhaven"),
+            Source::AmbientCg => tr!("mat-terms-ambientcg"),
+            Source::Plugin(p) => p.plugin.notice.clone(),
         }
     }
 
@@ -210,7 +211,7 @@ pub fn fetch(url: &str) -> Result<Vec<u8>, String> {
         return Err("cancelled".into());
     }
     let mut child = std::process::Command::new(curl())
-        .args(["-sSfL", "--max-time", "600", "--retry", "2", "--user-agent", "Varstotas"])
+        .args(["-sSfL", "--max-time", "600", "--retry", "2", "--user-agent", "Varstotas"]) // i18n-ignore
         .arg(url)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -290,7 +291,7 @@ pub(crate) fn file_safe(s: &str) -> String {
 /// Poly Haven's `assets?t=textures` (most downloaded first).
 pub fn parse_polyhaven(json: &[u8]) -> Result<Vec<Asset>, String> {
     let v: Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
-    let obj = v.as_object().ok_or("not a catalogue")?;
+    let obj = v.as_object().ok_or_else(|| tr!("mat-err-not-catalogue"))?;
     let mut out: Vec<(i64, Asset)> = obj
         .iter()
         .map(|(id, a)| {
@@ -321,13 +322,13 @@ pub fn parse_polyhaven(json: &[u8]) -> Result<Vec<Asset>, String> {
 /// get a typical size for the kind of material.
 pub fn parse_ambientcg(json: &[u8]) -> Result<Vec<Asset>, String> {
     let v: Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
-    let list = v["foundAssets"].as_array().ok_or("not a catalogue")?;
+    let list = v["foundAssets"].as_array().ok_or_else(|| tr!("mat-err-not-catalogue"))?;
     Ok(list
         .iter()
         .filter_map(|a| {
             let id = a["assetId"].as_str()?.to_string();
             let category = a["displayCategory"].as_str().unwrap_or_default().to_string();
-            let small = ["Wood", "Fabric", "Leather", "Plastic", "Metal", "Paint", "Wicker", "Carpet"].iter().any(|k| category.contains(k));
+            let small = ["Wood", "Fabric", "Leather", "Plastic", "Metal", "Paint", "Wicker", "Carpet"].iter().any(|k| category.contains(k)); // i18n-ignore
             let width_mm = a["dimensionX"].as_f64().filter(|w| *w > 0.0).map_or(if small { 1000.0 } else { 2000.0 }, |cm| cm * 10.0);
             let tags = a["tags"].as_array().map(|l| l.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default();
             Some(Asset {
@@ -348,10 +349,10 @@ pub fn parse_ambientcg(json: &[u8]) -> Result<Vec<Asset>, String> {
 /// The 1K JPG maps of a Poly Haven asset (its `files` JSON).
 pub fn polyhaven_maps(json: &[u8]) -> Result<Vec<(MapKind, String)>, String> {
     let v: Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
-    let keys = [("Diffuse", MapKind::Color), ("nor_gl", MapKind::Normal), ("Rough", MapKind::Roughness), ("AO", MapKind::Ao), ("Metal", MapKind::Metal)];
+    let keys = [("Diffuse", MapKind::Color), ("nor_gl", MapKind::Normal), ("Rough", MapKind::Roughness), ("AO", MapKind::Ao), ("Metal", MapKind::Metal)]; // i18n-ignore
     let maps: Vec<(MapKind, String)> = keys.iter().filter_map(|(k, kind)| Some((*kind, v[*k]["1k"]["jpg"]["url"].as_str()?.to_string()))).collect();
     if !maps.iter().any(|(k, _)| *k == MapKind::Color) {
-        return Err("no colour map".into());
+        return Err(tr!("mat-err-no-colour-map"));
     }
     Ok(maps)
 }
@@ -361,11 +362,11 @@ pub fn ambientcg_map(file: &str) -> Option<MapKind> {
     let stem = file.rsplit_once('.')?.0;
     let suffix = stem.rsplit_once('_')?.1;
     Some(match suffix {
-        "Color" => MapKind::Color,
-        "NormalGL" => MapKind::Normal,
-        "Roughness" => MapKind::Roughness,
-        "AmbientOcclusion" => MapKind::Ao,
-        "Metalness" => MapKind::Metal,
+        "Color" => MapKind::Color, // i18n-ignore
+        "NormalGL" => MapKind::Normal, // i18n-ignore
+        "Roughness" => MapKind::Roughness, // i18n-ignore
+        "AmbientOcclusion" => MapKind::Ao, // i18n-ignore
+        "Metalness" => MapKind::Metal, // i18n-ignore
         _ => return None,
     })
 }
@@ -385,7 +386,7 @@ fn average_color(bytes: &[u8]) -> Option<[f32; 3]> {
 pub fn build_material(name: &str, width_mm: f64, maps: Vec<(MapKind, String, Vec<u8>)>) -> Result<Material, String> {
     let m = material_from_maps(name, width_mm, maps);
     if m.image.is_none() {
-        return Err("no colour map".into());
+        return Err(tr!("mat-err-no-colour-map"));
     }
     Ok(m)
 }

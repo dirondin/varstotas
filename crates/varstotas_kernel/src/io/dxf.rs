@@ -12,6 +12,7 @@ use glam::DVec3;
 use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::path::Path;
+use varstotas_i18n::tr;
 
 /// Segments of a full imported circle (arcs: proportionally, at least 2).
 const CIRCLE_SEGMENTS: usize = 24;
@@ -163,7 +164,7 @@ fn bulge_points(verts: &[(DVec3, f64)], closed: bool) -> Vec<DVec3> {
 pub fn parse_dxf(text: &str) -> Result<DxfData, IoError> {
     let lines: Vec<&str> = text.lines().collect();
     if lines.len() < 2 {
-        return Err(IoError::Format("not a DXF file".into()));
+        return Err(IoError::Format(tr!("kernel-io-not-a-dxf-file").into()));
     }
     let mut pairs = Vec::with_capacity(lines.len() / 2);
     for ch in lines.chunks(2) {
@@ -173,7 +174,7 @@ pub fn parse_dxf(text: &str) -> Result<DxfData, IoError> {
         pairs.push((code, v.trim_end_matches('\r').to_string()));
     }
     if !pairs.iter().any(|(c, v)| *c == 0 && v.trim() == "SECTION") {
-        return Err(IoError::Format("not a DXF file (no SECTION)".into()));
+        return Err(IoError::Format(tr!("kernel-io-not-a-dxf-file-no-section").into()));
     }
     // Units (header) and the entities, split at group code 0.
     let mut scale = 1.0;
@@ -296,7 +297,7 @@ pub fn import_dxf_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
 /// Add parsed DXF geometry to the root mesh.
 pub fn add_dxf(model: &mut Model, data: &DxfData, opts: &ImportOptions) -> Result<(), IoError> {
     if data.polylines.is_empty() && data.faces.is_empty() {
-        return Err(IoError::Format("no supported entities (LINE, POLYLINE, 3DFACE, CIRCLE, ARC)".into()));
+        return Err(IoError::Format(tr!("kernel-io-no-supported-entities-line-polyline-dface").into()));
     }
     let mesh = model.root_mesh_mut();
     let before: HashSet<FaceId> = mesh.faces.keys().collect();

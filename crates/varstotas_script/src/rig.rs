@@ -19,6 +19,7 @@ use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{DefId, GenKind, GenValues, Generator, InstanceId, JointKind, Mesh, Model, PartOp, Rig, Rigged};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
+use varstotas_i18n::tr;
 
 /// The rig as a generator (for normalizing values, formulas and Entity Info's fields).
 pub fn generator_of(name: &str, rig: &Rig) -> Generator {
@@ -73,7 +74,7 @@ pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> R
             };
             match &j.kind {
                 JointKind::Rotate { .. } | JointKind::Slide { .. } => {
-                    let x = number(&v).ok_or_else(|| format!("{}: the value is not a number", what()))?;
+                    let x = number(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-a-3", what = what().to_string()))?;
                     let amount = match g.param(&j.param).filter(|_| j.expr.is_empty()) {
                         Some(pp) if pp.min.zip(pp.max).is_some_and(|(a, b)| b > a) => {
                             let (a, b) = (pp.min.unwrap(), pp.max.unwrap());
@@ -89,15 +90,15 @@ pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> R
                     ops.push(PartOp::Transform(j.part.clone(), m));
                 }
                 JointKind::Visible => {
-                    let on = flag(&v).ok_or_else(|| format!("{}: the value is not true / false", what()))?;
+                    let on = flag(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-true", what = what().to_string()))?;
                     ops.push(PartOp::Visible(j.part.clone(), on));
                 }
                 JointKind::Material => {
-                    let s = v.clone().into_string().map_err(|_| format!("{}: the value is not a material name", what()))?;
+                    let s = v.clone().into_string().map_err(|_| tr!("script-err-what-the-value-is-not-a-2", what = what().to_string()))?;
                     ops.push(PartOp::Paint(j.part.clone(), s));
                 }
                 JointKind::Param { key } => {
-                    let x = to_value(&v).ok_or_else(|| format!("{}: the value is not a number, flag or text", what()))?;
+                    let x = to_value(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-a", what = what().to_string()))?;
                     ops.push(PartOp::Values(j.part.clone(), GenValues::from([(key.clone(), x)])));
                 }
             }
@@ -109,7 +110,7 @@ pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> R
 /// [`rig_ops`] with the master's own rig, unresolved (parameters of parts as
 /// [`PartOp::Values`]).
 fn raw_ops(model: &Model, master: DefId, values: &GenValues) -> Result<Vec<PartOp>, String> {
-    let rig = model.defs.get(master).and_then(|d| d.rig.clone()).ok_or("not a component with parameters")?;
+    let rig = model.defs.get(master).and_then(|d| d.rig.clone()).ok_or_else(|| tr!("script-err-not-a-component-with-parameters"))?;
     rig_ops(model, master, &rig, values)
 }
 
@@ -167,9 +168,9 @@ fn resolve(model: &mut Model, master: DefId, ops: Vec<PartOp>) -> Result<Vec<Par
     let parts = model.rig_parts(master);
     let mut swaps = Vec::new();
     for (part, over) in merged {
-        let (id, _) = parts.iter().find(|(_, n)| *n == part).ok_or_else(|| format!("{part}: no such part"))?;
-        let def = model.defs.get(master).and_then(|d| d.mesh.instances.get(*id)).map(|i| i.def).ok_or("no such component")?;
-        let (kind, mut values) = part_kind(model, def).ok_or_else(|| format!("{part}: the part has no parameters"))?;
+        let (id, _) = parts.iter().find(|(_, n)| *n == part).ok_or_else(|| tr!("script-err-part-no-such-part", part = part.to_string()))?;
+        let def = model.defs.get(master).and_then(|d| d.mesh.instances.get(*id)).map(|i| i.def).ok_or_else(|| tr!("script-err-no-such-component"))?;
+        let (kind, mut values) = part_kind(model, def).ok_or_else(|| tr!("script-err-part-the-part-has-no-parameters-2", part = part.to_string()))?;
         values.extend(over);
         let d = match kind {
             PartKind::Generated(name) => crate::generator::def_for(model, &name, &values),
@@ -334,7 +335,7 @@ fn unscript(model: &mut Model, v: DefId, master: DefId, values: &GenValues) -> R
     let p = derive(&generator_of(&model.defs[master].name, &rig), values)?;
     // The joints' pose (J) and the script's (P), in a copy.
     let mut tmp = model.clone();
-    let t = tmp.new_rig_variant(master, values.clone(), &[]).ok_or("no such component")?;
+    let t = tmp.new_rig_variant(master, values.clone(), &[]).ok_or_else(|| tr!("script-err-no-such-component"))?;
     let o = ops(&mut tmp, master, values)?;
     tmp.pose_rig(t, master, &o);
     let j = tmp.defs[t].mesh.clone();
@@ -373,7 +374,7 @@ fn unscript(model: &mut Model, v: DefId, master: DefId, values: &GenValues) -> R
 
 /// Values over the rig's defaults, normalized.
 pub fn normalize(model: &Model, master: DefId, values: &GenValues) -> Result<GenValues, String> {
-    generator(model, master).ok_or("not a component with parameters")?.normalize(values)
+    generator(model, master).ok_or_else(|| tr!("script-err-not-a-component-with-parameters"))?.normalize(values)
 }
 
 /// The variant of `master` for `values` (over the defaults): the shared one, else a new one.
@@ -382,7 +383,7 @@ pub fn variant_for(model: &mut Model, master: DefId, values: &GenValues) -> Resu
     if let Some(v) = model.rig_variant(master, &values) {
         return Ok(v);
     }
-    let v = model.new_rig_variant(master, values.clone(), &[]).ok_or("no such component")?;
+    let v = model.new_rig_variant(master, values.clone(), &[]).ok_or_else(|| tr!("script-err-no-such-component"))?;
     pose(model, v, master, &values)?;
     Ok(v)
 }
@@ -391,7 +392,7 @@ pub fn variant_for(model: &mut Model, master: DefId, values: &GenValues) -> Resu
 /// with `reset`): it moves to the variant with the new values — the shared one, its own posed
 /// again when nothing else uses it, else a new one.
 pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, values: &GenValues, reset: bool) -> Result<(), String> {
-    let (old, cur) = model.instance_rigged(path, inst).map(|(d, r)| (d, r.clone())).ok_or("not a component with parameters")?;
+    let (old, cur) = model.instance_rigged(path, inst).map(|(d, r)| (d, r.clone())).ok_or_else(|| tr!("script-err-not-a-component-with-parameters"))?;
     let mut merged = if reset { GenValues::new() } else { cur.values.clone() };
     merged.extend(values.iter().map(|(k, v)| (k.clone(), v.clone())));
     let values = normalize(model, cur.master, &merged)?;
@@ -419,7 +420,7 @@ pub fn set_values(model: &mut Model, path: &[InstanceId], inst: InstanceId, valu
 /// Pose every variant of `master` again (after its rig or content changed). Values the rig
 /// rejects now fall back to the defaults; variants that end up equal are merged.
 pub fn rebuild_all(model: &mut Model, master: DefId) -> Result<(), String> {
-    let g = generator(model, master).ok_or("not a component with parameters")?;
+    let g = generator(model, master).ok_or_else(|| tr!("script-err-not-a-component-with-parameters"))?;
     let mut seen: Vec<(GenValues, DefId)> = Vec::new();
     let mut merged: HashMap<DefId, DefId> = HashMap::new();
     for (v, old) in model.rig_variants(master) {
@@ -517,12 +518,12 @@ pub fn after_edit(model: &mut Model, path: &[InstanceId]) -> Result<(), String> 
 /// drawn). Returns the master.
 pub fn set_rig(model: &mut Model, d: DefId, rig: Option<Rig>) -> Result<DefId, String> {
     let master = model.rig_master(d).unwrap_or(d);
-    let def = model.defs.get(master).ok_or("no such component")?;
+    let def = model.defs.get(master).ok_or_else(|| tr!("script-err-no-such-component"))?;
     if def.is_group {
-        return Err("groups can't have parameters: make it a component first".into());
+        return Err(tr!("script-err-groups-can-t-have-parameters-make").into());
     }
     if def.generated.is_some() || def.params.is_some() || def.rigged.is_some() {
-        return Err("this component is built by a generator or a parametric group".into());
+        return Err(tr!("script-err-this-component-is-built-by-a").into());
     }
     let (had, name) = (def.rig.is_some(), def.name.clone());
     match rig {
@@ -540,7 +541,7 @@ pub fn set_rig(model: &mut Model, d: DefId, rig: Option<Rig>) -> Result<DefId, S
                 let mut t = model.clone();
                 t.defs[master].rig = Some(rig.clone());
                 let values = g.defaults();
-                let v = t.new_rig_variant(master, values.clone(), &[]).ok_or("no such component")?;
+                let v = t.new_rig_variant(master, values.clone(), &[]).ok_or_else(|| tr!("script-err-no-such-component"))?;
                 pose(&mut t, v, master, &values)?;
             }
             model.defs[master].rig = Some(rig);
@@ -568,33 +569,33 @@ fn validate(rig: &Rig) -> Result<(), String> {
     let mut keys = HashSet::new();
     for k in rig.params.iter().map(|p| &p.key).chain(rig.formulas.iter().map(|f| &f.key)) {
         if !keys.insert(k.as_str()) {
-            return Err(format!("`{k}` twice (parameters and formulas share names)"));
+            return Err(tr!("script-err-k-twice-parameters-and-formulas-share", k = k.to_string()));
         }
     }
     for j in &rig.joints {
         if j.part.trim().is_empty() {
-            return Err("a joint without a part".into());
+            return Err(tr!("script-err-a-joint-without-a-part").into());
         }
         if j.expr.trim().is_empty() && !keys.contains(j.param.as_str()) {
-            return Err(format!("{}: choose a parameter or write an expression", j.part));
+            return Err(tr!("script-err-part-choose-a-parameter-or-write", part = j.part.to_string()));
         }
         if let JointKind::Rotate { axis, .. } = j.kind
             && axis.length() < 1e-9
         {
-            return Err(format!("{}: the axis has no direction", j.part));
+            return Err(tr!("script-err-part-the-axis-has-no-direction", part = j.part.to_string()));
         }
         if let JointKind::Slide { dir } = j.kind
             && dir.length() < 1e-9
         {
-            return Err(format!("{}: the direction is zero", j.part));
+            return Err(tr!("script-err-part-the-direction-is-zero", part = j.part.to_string()));
         }
         if let JointKind::Param { key } = &j.kind
             && key.trim().is_empty()
         {
-            return Err(format!("{}: choose the part's parameter", j.part));
+            return Err(tr!("script-err-part-choose-the-part-s-parameter", part = j.part.to_string()));
         }
         if matches!(j.kind, JointKind::Visible) && j.expr.is_empty() && rig.params.iter().find(|p| p.key == j.param).is_some_and(|p| matches!(p.kind, GenKind::Material | GenKind::Choice(_))) {
-            return Err(format!("{}: show / hide needs a yes / no or number parameter", j.part));
+            return Err(tr!("script-err-part-show-hide-needs-a-yes", part = j.part.to_string()));
         }
     }
     Ok(())
@@ -604,10 +605,10 @@ fn validate(rig: &Rig) -> Result<(), String> {
 fn check_part_params(model: &Model, master: DefId, ops: &[PartOp]) -> Result<(), String> {
     for op in ops {
         if let PartOp::Values(part, v) = op {
-            let g = part_generator(model, master, part).ok_or_else(|| format!("{part}: the part has no parameters (only generated components and components with parameters have)"))?;
+            let g = part_generator(model, master, part).ok_or_else(|| tr!("script-err-part-the-part-has-no-parameters", part = part.to_string()))?;
             for k in v.keys() {
                 if g.param(k).is_none() {
-                    return Err(format!("{part}: no parameter `{k}` (it has {})", g.params.iter().map(|p| p.key.as_str()).collect::<Vec<_>>().join(", ")));
+                    return Err(tr!("script-err-part-no-parameter-k-it-has", part = part.to_string(), k = k.to_string(), keys = g.params.iter().map(|p| p.key.as_str()).collect::<Vec<_>>().join(", ")));
                 }
             }
         }
@@ -621,15 +622,15 @@ pub fn warnings(model: &Model, master: DefId, rig: &Rig) -> Vec<String> {
     let parts: HashSet<String> = model.rig_parts(master).into_iter().map(|(_, n)| n).collect();
     let mut seen = HashSet::new();
     let mut out: Vec<String> =
-        rig.joints.iter().filter(|j| !parts.contains(&j.part) && seen.insert(j.part.clone())).map(|j| format!("no part `{}` in the component", j.part)).collect();
+        rig.joints.iter().filter(|j| !parts.contains(&j.part) && seen.insert(j.part.clone())).map(|j| tr!("script-err-no-part-part-in-the-component", part = j.part.to_string())).collect();
     for j in &rig.joints {
         let JointKind::Param { key } = &j.kind else { continue };
         if !parts.contains(&j.part) {
             continue;
         }
         match part_generator(model, master, &j.part) {
-            None => out.push(format!("`{}` has no parameters", j.part)),
-            Some(g) if g.param(key).is_none() => out.push(format!("`{}` has no parameter `{key}`", j.part)),
+            None => out.push(tr!("script-err-part-has-no-parameters", part = j.part.to_string())),
+            Some(g) if g.param(key).is_none() => out.push(tr!("script-err-part-has-no-parameter-key", part = j.part.to_string(), key = key.to_string())),
             _ => {}
         }
     }

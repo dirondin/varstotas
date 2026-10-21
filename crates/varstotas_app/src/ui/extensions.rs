@@ -14,6 +14,7 @@ use varstotas_kernel::glam::DVec3;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use varstotas_i18n::tr;
 
 /// Plugin index of the Script Console's code (see [`PluginState::console`]).
 pub const CONSOLE: usize = usize::MAX;
@@ -69,14 +70,14 @@ impl VarstotasApp {
     /// Console code: with a header asking for parameters, points or objects it runs like a
     /// plugin (dialog, picking, then the run); else directly.
     pub(crate) fn run_console_code(&mut self, src: &str) {
-        match crate::plugins::parse(src, std::path::Path::new("Script.rhai")) {
+        match crate::plugins::parse(src, std::path::Path::new("Script.rhai") /* i18n-ignore */) {
             Ok(p) if !p.params.is_empty() || p.pick.is_some() || p.select.is_some() => {
                 self.plugins.console = Some((p, src.to_string()));
                 self.start_plugin(CONSOLE, None);
             }
-            Ok(_) => self.run_script_source(src, "Script"),
+            Ok(_) => self.run_script_source(src, &tr!("ext-script-undo")),
             Err(e) => {
-                self.console.push(LogLine::Error(format!("header: {e}")));
+                self.console.push(LogLine::Error(tr!("ext-header-error", error = e.to_string())));
                 self.console.last = Some((false, e));
             }
         }
@@ -97,13 +98,13 @@ impl VarstotasApp {
             .map(|(i, p)| (i, p.menu.clone()))
             .collect();
         if entries.is_empty() {
-            ui.label(RichText::new("No plugins").weak());
+            ui.label(RichText::new(tr!("ext-no-plugins")).weak());
         }
         self.menu_level(ui, &entries, 0);
         ui.separator();
         if !self.plugins.errors.is_empty() {
             let n = self.plugins.errors.len();
-            if ui.button(format!("{n} plugin(s) failed to load…")).on_hover_text(self.plugins.errors.join("\n")).clicked() {
+            if ui.button(tr!("ext-failed-to-load", n = n)).on_hover_text(self.plugins.errors.join("\n")).clicked() {
                 for e in self.plugins.errors.clone() {
                     self.console.push(LogLine::Error(e));
                 }
@@ -111,11 +112,11 @@ impl VarstotasApp {
                 ui.close();
             }
         }
-        if ui.button("Reload Plugins").clicked() {
+        if ui.button(tr!("ext-reload")).clicked() {
             self.actions.push(Action::ReloadPlugins);
             ui.close();
         }
-        if ui.button("Open Plugins Folder").clicked() {
+        if ui.button(tr!("ext-open-folder")).clicked() {
             if let Some(d) = crate::plugins::plugins_dir() {
                 reveal(&d);
             }
@@ -232,7 +233,7 @@ impl VarstotasApp {
 
     /// Values of the dialog as script variables.
     fn plugin_vars(&self, d: &ParamDialog) -> Result<Map<String, Value>, String> {
-        let Some(p) = self.plugin_at(d.idx) else { return Err("the script is gone".into()) };
+        let Some(p) = self.plugin_at(d.idx) else { return Err(tr!("ext-script-gone")) };
         let mut vars = Map::new();
         for (q, v) in p.params.iter().zip(&d.values) {
             vars.insert(q.key.clone(), crate::plugins::param_value(q, v, self.doc.model.unit)?);
@@ -291,15 +292,14 @@ impl VarstotasApp {
         } else {
             match std::fs::read_to_string(&p.path) {
                 Ok(s) => s,
-                Err(e) => return self.flash_error(format!("Cannot read {}: {e}", p.path.display())),
+                Err(e) => return self.flash_error(tr!("console-cannot-read", path = p.path.display().to_string(), error = e.to_string())),
             }
         };
         let ctx = varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None };
-        let what = if idx == CONSOLE { "script" } else { "plugin" };
-        self.console.push(LogLine::Input(format!("{what} {}", p.name)));
+        self.console.push(LogLine::Input(if idx == CONSOLE { tr!("ext-run-script", name = p.name.clone()) } else { tr!("ext-run-plugin", name = p.name.clone()) }));
         let r = self.doc.try_commit_if(&p.name, |m| Ok::<_, String>(varstotas_script::eval_json(m, &ctx, &src, &vars)), |r| r.run.changed);
         let Some(r) = r else {
-            let e = self.doc.last_error.take().unwrap_or_else(|| "plugin failed".into());
+            let e = self.doc.last_error.take().unwrap_or_else(|| tr!("ext-plugin-failed"));
             crate::applog::error(&p.name, &e);
             self.console.log.push(LogLine::Error(e.clone()));
             self.console.last = Some((false, e.clone()));
@@ -320,7 +320,7 @@ impl VarstotasApp {
             }
             None => {
                 let out = r.run.output.trim_end().to_string();
-                self.flash(out.lines().last().map_or_else(|| format!("{} done", p.name), str::to_string));
+                self.flash(out.lines().last().map_or_else(|| tr!("ext-done", name = p.name.clone()), str::to_string));
                 self.console.last = Some((true, out));
                 if !p.import.is_empty() {
                     self.actions.push(Action::ZoomExtents);
@@ -376,14 +376,14 @@ impl VarstotasApp {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 let label = if p.pick.is_some() {
-                    "Pick Points"
+                    tr!("ext-pick-points")
                 } else if p.select.is_some() {
-                    "Select Objects"
+                    tr!("ext-select-objects")
                 } else {
-                    "Run"
+                    tr!("ext-run")
                 };
                 run |= ui.button(label).clicked();
-                cancel = ui.button("Cancel").clicked();
+                cancel = ui.button(tr!("cancel")).clicked();
             });
         });
         if cancel || !open {

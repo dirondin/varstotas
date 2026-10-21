@@ -5,6 +5,7 @@
 //! before offering a snap. Explicit constraints (arrow keys, a tool's own line) still work
 //! with snapping off.
 
+use varstotas_i18n::tr;
 use super::InferenceKind;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -13,13 +14,24 @@ use std::cell::Cell;
 pub const GROUPS: [(&str, &[InferenceKind]); 5] = {
     use InferenceKind::*;
     [
-        ("Points", &[Endpoint, Midpoint, Center, Intersection, Origin]),
-        ("On Objects", &[OnEdge, OnFace, OnGuide, GuidePoint]),
-        ("Directions", &[OnRedAxis, OnGreenAxis, OnBlueAxis, ParallelToEdge, PerpendicularToEdge, FromPoint, Tangent]),
-        ("Shapes", &[Square, GoldenSection, HalfCircle]),
-        ("Grid", &[GridPoint, OnGridLine]),
+        ("Points", &[Endpoint, Midpoint, Center, Intersection, Origin]), // i18n-ignore
+        ("On Objects", &[OnEdge, OnFace, OnGuide, GuidePoint]), // i18n-ignore
+        ("Directions", &[OnRedAxis, OnGreenAxis, OnBlueAxis, ParallelToEdge, PerpendicularToEdge, FromPoint, Tangent]), // i18n-ignore
+        ("Shapes", &[Square, GoldenSection, HalfCircle]), // i18n-ignore
+        ("Grid", &[GridPoint, OnGridLine]), // i18n-ignore
     ]
 };
+
+/// The menu title of a group of [`GROUPS`] (the group name is its id).
+pub fn group_label(group: &str) -> String {
+    tr!(match group {
+        "Points" => "snap-group-points", // i18n-ignore
+        "On Objects" => "snap-group-on-objects", // i18n-ignore
+        "Directions" => "snap-group-directions", // i18n-ignore
+        "Shapes" => "snap-group-shapes", // i18n-ignore
+        _ => "snap-group-grid",
+    })
+}
 
 /// Every kind that can be turned off.
 pub fn all_kinds() -> impl Iterator<Item = InferenceKind> {

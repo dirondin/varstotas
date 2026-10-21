@@ -20,6 +20,7 @@
 
 use crate::online_mats::{Asset, MapKind, PluginSource, Source, embeddable, guess_map, material_from_maps, unzip};
 use crate::plugins::{Lang, Plugin};
+use varstotas_i18n::tr;
 use varstotas_kernel::Material;
 use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
@@ -70,10 +71,10 @@ pub fn call(p: &Plugin, func: &str, args: Vec<(&str, Value)>) -> Result<Value, S
             }
             if !out.status.success() {
                 let err = String::from_utf8_lossy(&out.stderr);
-                return Err(err.trim().lines().last().unwrap_or("the plugin failed").to_string());
+                return Err(err.trim().lines().last().map(str::to_string).unwrap_or_else(|| tr!("ext-mat-plugin-failed")));
             }
-            let last = last.ok_or("the plugin printed no answer")?;
-            serde_json::from_str(last).map_err(|e| format!("its answer is not JSON ({e}): {}", last.chars().take(120).collect::<String>()))
+            let last = last.ok_or_else(|| tr!("ext-mat-no-answer"))?;
+            serde_json::from_str(last).map_err(|e| tr!("ext-mat-not-json", error = e.to_string(), answer = last.chars().take(120).collect::<String>()))
         }
     }
 }
@@ -100,7 +101,7 @@ fn text(v: &Value) -> Option<String> {
 /// The catalogue answer: an array of `{ id, name, category, keywords, width, thumb, page,
 /// license }` (only `id` needed).
 pub fn parse_catalogue(source: &Source, v: &Value) -> Result<Vec<Asset>, String> {
-    let list = v.as_array().or_else(|| v["assets"].as_array()).ok_or("catalogue() must return an array of materials")?;
+    let list = v.as_array().or_else(|| v["assets"].as_array()).ok_or_else(|| tr!("ext-mat-catalogue-array"))?;
     Ok(list
         .iter()
         .filter_map(|a| {
@@ -130,7 +131,7 @@ pub fn catalogue(src: &Arc<PluginSource>) -> Result<Vec<Asset>, String> {
 fn work_dir(p: &Plugin, id: &str) -> Result<PathBuf, String> {
     let safe = |s: &str| s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' }).collect::<String>();
     let stem = p.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-    let d = crate::online_mats::cache_dir().ok_or("no home folder")?.join(safe(&stem)).join(safe(id).trim_matches('.'));
+    let d = crate::online_mats::cache_dir().ok_or_else(|| tr!("ext-mat-no-home"))?.join(safe(&stem)).join(safe(id).trim_matches('.'));
     std::fs::create_dir_all(&d).map_err(|e| format!("{}: {e}", d.display()))?;
     Ok(d)
 }
@@ -152,10 +153,10 @@ pub fn import(p: &Plugin, path: &Path, params: Map<String, Value>) -> Result<Vec
     let path = abs.as_path();
     let v = call(p, "import_material", vec![("path", json!(path.to_string_lossy())), ("params", Value::Object(params))])?;
     let base = path.parent().unwrap_or(Path::new("."));
-    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Material".into());
+    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| tr!("ext-mat-default-name"));
     let specs = match v {
         Value::Array(a) => a,
-        Value::Null => return Err("import_material() returned nothing".into()),
+        Value::Null => return Err(tr!("ext-mat-import-nothing")),
         v => vec![v],
     };
     specs.iter().map(|s| material_from_spec(s, base, &stem, 1000.0)).collect()
@@ -235,7 +236,7 @@ fn file_name(p: &Path) -> String {
 ///   `emission_strength`, `normal_scale`, `clearcoat`, `clearcoat_roughness`, `sheen`,
 ///   `sheen_tint`, `anisotropy`, `anti_tiling`, `bevel` (mm).
 pub fn material_from_spec(spec: &Value, base: &Path, name: &str, width_mm: f64) -> Result<Material, String> {
-    let o = spec.as_object().ok_or("a material spec must be an object")?;
+    let o = spec.as_object().ok_or_else(|| tr!("ext-mat-spec-object"))?;
     let path = |v: &Value| -> Option<PathBuf> {
         let s = v.as_str().filter(|s| !s.is_empty())?;
         let p = PathBuf::from(s.trim_start_matches("file://"));

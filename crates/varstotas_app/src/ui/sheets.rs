@@ -13,6 +13,7 @@ use varstotas_kernel::Model;
 use varstotas_kernel::layout::{LayoutSheet, PAPERS, SheetTable, SheetText, SheetViewport, TitleBlock};
 use std::path::Path;
 use std::rc::Rc;
+use varstotas_i18n::tr;
 
 /// Preview size, points.
 const PREVIEW: egui::Vec2 = vec2(620.0, 440.0);
@@ -48,8 +49,8 @@ pub struct SheetsState {
 }
 
 /// Paper name of a size, either way round.
-fn paper_name(size: DVec2) -> &'static str {
-    PAPERS.iter().find(|(_, s)| s.distance(size) < 0.5 || DVec2::new(s.y, s.x).distance(size) < 0.5).map_or("Custom", |p| p.0)
+fn paper_name(size: DVec2) -> String {
+    PAPERS.iter().find(|(_, s)| s.distance(size) < 0.5 || DVec2::new(s.y, s.x).distance(size) < 0.5).map_or_else(|| tr!("sheets-custom"), |p| p.0.to_string())
 }
 
 /// Rough box of a text on paper (top-left, size).
@@ -149,7 +150,7 @@ impl VarstotasApp {
             let off = DVec2::splat(8.0 * ((n - 1) % 6) as f64);
             (lo + off, room * 0.5)
         };
-        SheetViewport::new(min, size.max(DVec2::splat(20.0)), self.current_view_scene(&format!("Viewport {}", n + 1)))
+        SheetViewport::new(min, size.max(DVec2::splat(20.0)), self.current_view_scene(&format!("Viewport {}", n + 1))) // i18n-ignore
     }
 
     /// A new landscape sheet (A3 unless `paper` names another).
@@ -157,8 +158,8 @@ impl VarstotasApp {
         let size = PAPERS.iter().find(|(n, _)| n.eq_ignore_ascii_case(paper)).map_or(PAPERS[1].1, |p| p.1);
         let size = if portrait { size } else { DVec2::new(size.y, size.x) };
         let n = self.doc.model.sheets.len();
-        let sheet = LayoutSheet::new(format!("Sheet {}", n + 1), size);
-        self.doc.commit("Add Sheet", |m| m.sheets.push(sheet));
+        let sheet = LayoutSheet::new(format!("Sheet {}", n + 1), size); // i18n-ignore
+        self.doc.commit(&tr!("sheets-undo-add"), |m| m.sheets.push(sheet));
         self.sheets.current = n;
         self.sheets.selected = None;
         self.sheets.work = None;
@@ -169,7 +170,7 @@ impl VarstotasApp {
         self.sheets.work = None;
         let cur = self.sheets.current;
         if cur >= self.doc.model.sheets.len() {
-            self.flash("No sheet: add one first (Window → Sheets…)");
+            self.flash(tr!("sheets-none-first"));
             return;
         }
         self.doc.commit(label, |m| f(&mut m.sheets[cur]));
@@ -224,7 +225,7 @@ impl VarstotasApp {
     pub(crate) fn export_sheets(&mut self, path: &Path) {
         let n = self.doc.model.sheets.len();
         if n == 0 {
-            self.flash("Sheets: nothing to export (add a sheet first)");
+            self.flash(tr!("sheets-nothing-to-export"));
             return;
         }
         let name = self.doc.display_name();
@@ -239,9 +240,9 @@ impl VarstotasApp {
             }
         });
         match bytes.map_err(|e| e.to_string()).and_then(|b| std::fs::write(path, b).map_err(|e| e.to_string())) {
-            Ok(()) if svg => self.flash(format!("Exported sheet {} of {n}: {}", cur + 1, path.display())),
-            Ok(()) => self.flash(format!("Exported {n} sheet(s): {}", path.display())),
-            Err(e) => self.flash(format!("Export failed: {e}")),
+            Ok(()) if svg => self.flash(tr!("sheets-exported-one", i = cur + 1, n = n, path = path.display().to_string())),
+            Ok(()) => self.flash(tr!("sheets-exported-all", n = n, path = path.display().to_string())),
+            Err(e) => self.flash(tr!("sheets-export-failed", error = e)),
         }
     }
 
@@ -275,12 +276,12 @@ impl VarstotasApp {
         let page = sheet.as_ref().map(|s| self.sheet_page(cur, s));
         let names: Vec<String> = self.doc.model.sheets.iter().map(|s| s.name.clone()).collect();
         let scenes: Vec<(String, bool)> = self.doc.model.scenes.iter().map(|s| (s.name.clone(), s.ortho)).collect();
-        let current_view = self.current_view_scene("View");
+        let current_view = self.current_view_scene("View"); // i18n-ignore
         let new_vp = sheet.as_ref().map(|s| self.new_viewport(s));
         let pos = self.viewport.view_rect.min + vec2(20.0, 20.0);
         let mut open = true;
         let (mut add, mut delete, mut duplicate, mut goto, mut save) = (false, false, false, None, None);
-        let mut win = egui::Window::new("Sheets").id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        let mut win = egui::Window::new(tr!("sheets-title")).id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -291,7 +292,7 @@ impl VarstotasApp {
                 // Left column: sheets, paper, title block, the selected item.
                 ui.vertical(|ui| {
                     ui.set_width(270.0);
-                    ui.label(RichText::new("Sheets").strong());
+                    ui.label(RichText::new(tr!("sheets-title")).strong());
                     egui::ScrollArea::vertical().id_salt("sheet_list").max_height(110.0).show(ui, |ui| {
                         for (i, name) in names.iter().enumerate() {
                             if ui.selectable_label(i == cur, name).clicked() {
@@ -299,21 +300,21 @@ impl VarstotasApp {
                             }
                         }
                         if names.is_empty() {
-                            ui.label(RichText::new("No sheets yet.").color(theme::text_dim()));
+                            ui.label(RichText::new(tr!("sheets-none-yet")).color(theme::text_dim()));
                         }
                     });
                     ui.horizontal(|ui| {
-                        add = ui.button("+ Sheet").clicked();
-                        duplicate = ui.add_enabled(n > 0, egui::Button::new("Duplicate")).clicked();
-                        delete = ui.add_enabled(n > 0, egui::Button::new("Delete")).clicked();
+                        add = ui.button(tr!("sheets-add")).clicked();
+                        duplicate = ui.add_enabled(n > 0, egui::Button::new(tr!("sheets-duplicate"))).clicked();
+                        delete = ui.add_enabled(n > 0, egui::Button::new(tr!("delete"))).clicked();
                     });
                     let Some(sheet) = sheet.as_mut() else { return };
                     ui.separator();
                     egui::Grid::new("sheet_props").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                        ui.label("Name");
+                        ui.label(tr!("sheets-name"));
                         ui.text_edit_singleline(&mut sheet.name);
                         ui.end_row();
-                        ui.label("Paper");
+                        ui.label(tr!("sheets-paper"));
                         ui.horizontal(|ui| {
                             let landscape = sheet.size.x > sheet.size.y;
                             egui::ComboBox::from_id_salt("sheet_paper").selected_text(paper_name(sheet.size)).show_ui(ui, |ui| {
@@ -324,19 +325,19 @@ impl VarstotasApp {
                                 }
                             });
                             let mut l = landscape;
-                            if ui.checkbox(&mut l, "Landscape").changed() && l != landscape {
+                            if ui.checkbox(&mut l, tr!("sheets-landscape")).changed() && l != landscape {
                                 sheet.size = DVec2::new(sheet.size.y, sheet.size.x);
                             }
                         });
                         ui.end_row();
                         let mut has_title = sheet.title.is_some();
-                        ui.label("Title block");
+                        ui.label(tr!("sheets-title-block"));
                         if ui.checkbox(&mut has_title, "").changed() {
                             sheet.title = has_title.then(TitleBlock::default);
                         }
                         ui.end_row();
                         if let Some(tb) = sheet.title.as_mut() {
-                            for (label, v) in [("Title", &mut tb.title), ("Author", &mut tb.author), ("Date", &mut tb.date)] {
+                            for (label, v) in [(tr!("sheets-tb-title"), &mut tb.title), (tr!("sheets-tb-author"), &mut tb.author), (tr!("sheets-tb-date"), &mut tb.date)] {
                                 ui.label(label);
                                 ui.text_edit_singleline(v);
                                 ui.end_row();
@@ -345,23 +346,23 @@ impl VarstotasApp {
                     });
                     ui.separator();
                     ui.horizontal(|ui| {
-                        if ui.button("+ Viewport").on_hover_text("The current view of the model").clicked()
+                        if ui.button(tr!("sheets-add-viewport")).on_hover_text(tr!("sheets-add-viewport-hint")).clicked()
                             && let Some(vp) = new_vp.clone()
                         {
                             sheet.viewports.push(vp);
                             st.selected = Some(SheetItem::Viewport(sheet.viewports.len() - 1));
                         }
-                        if ui.button("+ Text").clicked() {
+                        if ui.button(tr!("sheets-add-text")).clicked() {
                             let at = DVec2::new(BORDER + 10.0, sheet.size.y - BORDER - 12.0);
-                            sheet.texts.push(SheetText { at, size: 4.0, text: "Text".into() });
+                            sheet.texts.push(SheetText { at, size: 4.0, text: "Text".into() /* i18n-ignore */ });
                             st.selected = Some(SheetItem::Text(sheet.texts.len() - 1));
                         }
-                        if ui.button("+ Credits").on_hover_text("The credits of the downloaded models (title, author, site, licence): a text with {credits}, filled when drawn").clicked() {
+                        if ui.button(tr!("sheets-add-credits")).on_hover_text(tr!("sheets-add-credits-hint")).clicked() {
                             let at = DVec2::new(BORDER + 6.0, sheet.size.y - BORDER - 30.0);
                             sheet.texts.push(SheetText { at, size: 2.5, text: crate::layout::CREDITS.into() });
                             st.selected = Some(SheetItem::Text(sheet.texts.len() - 1));
                         }
-                        if ui.add_enabled(st.selected.is_some(), egui::Button::new("Remove")).clicked() {
+                        if ui.add_enabled(st.selected.is_some(), egui::Button::new(tr!("sheets-remove"))).clicked() {
                             match st.selected.take() {
                                 Some(SheetItem::Viewport(i)) if i < sheet.viewports.len() => {
                                     sheet.viewports.remove(i);
@@ -377,12 +378,12 @@ impl VarstotasApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        let views = ui.add_enabled(model.bounds().is_some(), egui::Button::new("+ Standard Views"));
-                        if views.on_hover_text("Front, top and left at a standard scale with overall dimensions, and an iso view").clicked() {
+                        let views = ui.add_enabled(model.bounds().is_some(), egui::Button::new(tr!("sheets-add-views")));
+                        if views.on_hover_text(tr!("sheets-add-views-hint")).clicked() {
                             sheet.viewports.extend(standard_views(model, sheet, None));
                             st.selected = None;
                         }
-                        if ui.button("+ Parts Table").on_hover_text("Groups and components with sizes").clicked() {
+                        if ui.button(tr!("sheets-add-table")).on_hover_text(tr!("sheets-add-table-hint")).clicked() {
                             let mut t = SheetTable { at: DVec2::ZERO, size: 3.0 };
                             let h = table_size(model, &t).y;
                             t.at = DVec2::new(BORDER + 5.0, sheet.size.y - BORDER - 5.0 - h);
@@ -393,12 +394,12 @@ impl VarstotasApp {
                     match st.selected {
                         Some(SheetItem::Viewport(i)) if i < sheet.viewports.len() => {
                             let vp = &mut sheet.viewports[i];
-                            ui.label(RichText::new(format!("Viewport {}", i + 1)).strong());
+                            ui.label(RichText::new(tr!("sheets-viewport-n", n = i + 1)).strong());
                             egui::Grid::new("vp_props").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                                ui.label("Shows");
-                                let shown = vp.scene.clone().unwrap_or_else(|| "Captured view".into());
+                                ui.label(tr!("sheets-shows"));
+                                let shown = vp.scene.clone().unwrap_or_else(|| tr!("sheets-captured"));
                                 egui::ComboBox::from_id_salt("vp_scene").selected_text(shown).show_ui(ui, |ui| {
-                                    if ui.selectable_label(vp.scene.is_none(), "Captured view").clicked() {
+                                    if ui.selectable_label(vp.scene.is_none(), tr!("sheets-captured")).clicked() {
                                         vp.scene = None;
                                     }
                                     for (name, _) in &scenes {
@@ -409,7 +410,7 @@ impl VarstotasApp {
                                 });
                                 ui.end_row();
                                 ui.label("");
-                                if ui.button("Update to Current View").clicked() {
+                                if ui.button(tr!("sheets-update-view")).clicked() {
                                     let name = vp.view.name.clone();
                                     vp.view = current_view.clone();
                                     vp.view.name = name;
@@ -417,7 +418,7 @@ impl VarstotasApp {
                                 }
                                 ui.end_row();
                                 let ortho = model.viewport_scene(vp).ortho;
-                                ui.label("Scale");
+                                ui.label(tr!("sheets-scale"));
                                 ui.horizontal(|ui| {
                                     let mut to_scale = vp.scale.is_some();
                                     if ui.add_enabled(ortho, egui::Checkbox::new(&mut to_scale, "1:")).changed() {
@@ -428,15 +429,15 @@ impl VarstotasApp {
                                     }
                                 })
                                 .response
-                                .on_hover_text("Scale needs Parallel Projection");
+                                .on_hover_text(tr!("sheets-scale-hint"));
                                 ui.end_row();
-                                ui.label("Position");
+                                ui.label(tr!("sheets-position"));
                                 ui.horizontal(|ui| {
                                     ui.add(egui::DragValue::new(&mut vp.min.x).speed(0.5).suffix(" mm"));
                                     ui.add(egui::DragValue::new(&mut vp.min.y).speed(0.5).suffix(" mm"));
                                 });
                                 ui.end_row();
-                                ui.label("Size");
+                                ui.label(tr!("sheets-size"));
                                 ui.horizontal(|ui| {
                                     ui.add(egui::DragValue::new(&mut vp.size.x).range(5.0..=2000.0).speed(0.5).suffix(" mm"));
                                     ui.add(egui::DragValue::new(&mut vp.size.y).range(5.0..=2000.0).speed(0.5).suffix(" mm"));
@@ -444,44 +445,44 @@ impl VarstotasApp {
                                 ui.end_row();
                             });
                             ui.horizontal_wrapped(|ui| {
-                                ui.checkbox(&mut vp.profiles, "Profiles");
-                                ui.checkbox(&mut vp.hidden, "Hidden lines");
-                                ui.checkbox(&mut vp.dims, "Dimensions");
-                                ui.checkbox(&mut vp.sections, "Sections");
-                                ui.checkbox(&mut vp.frame, "Frame");
-                                ui.checkbox(&mut vp.caption, "Caption");
-                                ui.add_enabled(model.viewport_scene(vp).ortho, egui::Checkbox::new(&mut vp.auto_dims, "Overall dimensions"));
+                                ui.checkbox(&mut vp.profiles, tr!("sheets-profiles"));
+                                ui.checkbox(&mut vp.hidden, tr!("sheets-hidden"));
+                                ui.checkbox(&mut vp.dims, tr!("sheets-dims"));
+                                ui.checkbox(&mut vp.sections, tr!("sheets-sections"));
+                                ui.checkbox(&mut vp.frame, tr!("sheets-frame"));
+                                ui.checkbox(&mut vp.caption, tr!("sheets-caption"));
+                                ui.add_enabled(model.viewport_scene(vp).ortho, egui::Checkbox::new(&mut vp.auto_dims, tr!("sheets-overall")));
                             });
                         }
                         Some(SheetItem::Text(i)) if i < sheet.texts.len() => {
                             let t = &mut sheet.texts[i];
-                            ui.label(RichText::new(format!("Text {}", i + 1)).strong());
+                            ui.label(RichText::new(tr!("sheets-text-n", n = i + 1)).strong());
                             ui.add(egui::TextEdit::multiline(&mut t.text).desired_rows(3).desired_width(260.0));
                             ui.horizontal(|ui| {
-                                ui.label("Height");
+                                ui.label(tr!("sheets-height"));
                                 ui.add(egui::DragValue::new(&mut t.size).range(1.0..=100.0).speed(0.1).suffix(" mm"));
                             });
                             ui.horizontal(|ui| {
-                                ui.label("Position");
+                                ui.label(tr!("sheets-position"));
                                 ui.add(egui::DragValue::new(&mut t.at.x).speed(0.5).suffix(" mm"));
                                 ui.add(egui::DragValue::new(&mut t.at.y).speed(0.5).suffix(" mm"));
                             });
                         }
                         Some(SheetItem::Table(i)) if i < sheet.tables.len() => {
                             let t = &mut sheet.tables[i];
-                            ui.label(RichText::new(format!("Parts table {}", i + 1)).strong());
+                            ui.label(RichText::new(tr!("sheets-table-n", n = i + 1)).strong());
                             ui.horizontal(|ui| {
-                                ui.label("Text height");
+                                ui.label(tr!("sheets-text-height"));
                                 ui.add(egui::DragValue::new(&mut t.size).range(1.0..=20.0).speed(0.1).suffix(" mm"));
                             });
                             ui.horizontal(|ui| {
-                                ui.label("Position");
+                                ui.label(tr!("sheets-position"));
                                 ui.add(egui::DragValue::new(&mut t.at.x).speed(0.5).suffix(" mm"));
                                 ui.add(egui::DragValue::new(&mut t.at.y).speed(0.5).suffix(" mm"));
                             });
                         }
                         _ => {
-                            ui.label(RichText::new("Click an item in the preview to edit it; drag to move, drag the corner to resize.").color(theme::text_dim()));
+                            ui.label(RichText::new(tr!("sheets-hint")).color(theme::text_dim()));
                         }
                     }
                 });
@@ -492,7 +493,7 @@ impl VarstotasApp {
                     painter.rect_filled(rect, 4.0, theme::border());
                     let (Some(sheet), Some(page)) = (sheet.as_mut(), page.as_ref()) else {
                         st.preview = None;
-                        painter.text(rect.center(), egui::Align2::CENTER_CENTER, "Add a sheet to start", egui::FontId::proportional(15.0), theme::text_dim());
+                        painter.text(rect.center(), egui::Align2::CENTER_CENTER, &tr!("sheets-add-first"), egui::FontId::proportional(15.0), theme::text_dim());
                         return;
                     };
                     let k = ((rect.width() - 24.0) / sheet.size.x as f32).min((rect.height() - 24.0) / sheet.size.y as f32);
@@ -565,15 +566,15 @@ impl VarstotasApp {
                     }
                     ui.horizontal(|ui| {
                         let scale = sheet.viewports.iter().filter(|v| viewport_scale(model, v).is_some()).count();
-                        ui.label(RichText::new(format!("{} — {} viewport(s), {} to scale, {} text(s)", paper_name(sheet.size), sheet.viewports.len(), scale, sheet.texts.len())).color(theme::text_dim()));
+                        ui.label(RichText::new(tr!("sheets-summary", paper = paper_name(sheet.size), viewports = sheet.viewports.len(), scaled = scale, texts = sheet.texts.len())).color(theme::text_dim()));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button(RichText::new("SVG…").strong()).on_hover_text("This sheet").clicked() {
+                            if ui.button(RichText::new(tr!("dialog-drawing-svg")).strong()).on_hover_text(tr!("sheets-svg-hint")).clicked() {
                                 save = Some("svg");
                             }
-                            if ui.button(RichText::new("PDF…").strong()).on_hover_text("All sheets, a page each").clicked() {
+                            if ui.button(RichText::new(tr!("dialog-drawing-pdf")).strong()).on_hover_text(tr!("sheets-pdf-hint")).clicked() {
                                 save = Some("pdf");
                             }
-                            ui.label(RichText::new("Export:").color(theme::text_dim()));
+                            ui.label(RichText::new(tr!("sheets-export")).color(theme::text_dim()));
                         });
                     });
                 });
@@ -589,7 +590,7 @@ impl VarstotasApp {
         }
         let busy = ctx.text_edit_focused() || ctx.input(|i| i.pointer.any_down());
         if !busy && let Some((i, s)) = self.sheets.work.take() {
-            self.doc.commit("Edit Sheet", |m| {
+            self.doc.commit(&tr!("sheets-undo-edit"), |m| {
                 if let Some(slot) = m.sheets.get_mut(i) {
                     *slot = s;
                 }
@@ -603,14 +604,14 @@ impl VarstotasApp {
         }
         if duplicate && cur < n {
             let mut s = self.doc.model.sheets[cur].clone();
-            s.name = format!("{} copy", s.name);
+            s.name = format!("{} copy", s.name); // i18n-ignore
             self.sheets.work = None;
-            self.doc.commit("Duplicate Sheet", |m| m.sheets.insert(cur + 1, s));
+            self.doc.commit(&tr!("sheets-undo-duplicate"), |m| m.sheets.insert(cur + 1, s));
             self.sheets.current = cur + 1;
         }
         if delete && cur < n {
             self.sheets.work = None;
-            self.doc.commit("Delete Sheet", |m| {
+            self.doc.commit(&tr!("sheets-undo-delete"), |m| {
                 m.sheets.remove(cur);
             });
             self.sheets.selected = None;

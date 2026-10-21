@@ -7,6 +7,7 @@
 //! and the grid follow its frame. With the tool idle the active plane shows a gizmo: drag the
 //! origin, the normal arrow tip (tilt) or the red handle (spin); each drag is one undo step.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
@@ -185,7 +186,7 @@ impl GuidePlaneTool {
     }
 
     fn create(&mut self, ctx: &mut ToolContext, p: WorkPlane) {
-        if ctx.commit("Add Guide Plane", |m| m.add_work_plane(p)).is_some() {
+        if ctx.commit(&tr!("tool-undo-add-guide-plane"), |m| m.add_work_plane(p)).is_some() {
             crate::axes::sync(&ctx.doc.model);
         }
         self.stage = Stage::Idle;
@@ -254,7 +255,7 @@ impl GuidePlaneTool {
         let Some(now) = ctx.doc.model.work_planes.get(i).cloned() else { return };
         ctx.doc.model.work_planes[i] = orig.clone();
         if now != orig {
-            ctx.commit("Edit Guide Plane", |m| m.work_planes[i] = now);
+            ctx.commit(&tr!("tool-undo-edit-guide-plane"), |m| m.work_planes[i] = now);
         }
         crate::axes::sync(&ctx.doc.model);
     }
@@ -358,26 +359,20 @@ impl Tool for GuidePlaneTool {
         self.update(ctx);
         true
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         match self.stage {
-            Stage::Idle => "Point",
-            _ => "Measurements",
+            Stage::Idle => tr!("tool-vcb-point"),
+            _ => tr!("tool-vcb-measurements"),
         }
     }
     fn status_text(&self) -> String {
         match &self.stage {
-            Stage::Idle => {
-                "Click the plane's origin (or type x,y,z). Drag the active plane's handles: origin, normal tip, red spin handle."
-                    .into()
-            }
-            Stage::A { .. } => {
-                "Click a point along the new red axis. Double-click / Enter: plane of the face; arrows: normal along red / green / blue / edge."
-                    .into()
-            }
-            Stage::B { .. } => "Click a third point on the plane.".into(),
-            Stage::Drag { h: Handle::Origin, .. } => "Move the plane's origin.".into(),
-            Stage::Drag { h: Handle::Normal, .. } => "Tilt the plane: move its normal.".into(),
-            Stage::Drag { h: Handle::Spin, .. } => "Spin the plane around its normal.".into(),
+            Stage::Idle => tr!("tool-workplane-origin"),
+            Stage::A { .. } => tr!("tool-workplane-red"),
+            Stage::B { .. } => tr!("tool-workplane-third"),
+            Stage::Drag { h: Handle::Origin, .. } => tr!("tool-workplane-drag-origin"),
+            Stage::Drag { h: Handle::Normal, .. } => tr!("tool-workplane-drag-normal"),
+            Stage::Drag { h: Handle::Spin, .. } => tr!("tool-workplane-drag-spin"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

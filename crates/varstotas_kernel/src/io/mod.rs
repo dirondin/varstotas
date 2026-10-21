@@ -45,8 +45,15 @@ impl Default for ImportOptions {
 
 #[derive(thiserror::Error, Debug)]
 pub enum IoError {
-    #[error("io: {0}")]
     Io(#[from] std::io::Error),
-    #[error("format: {0}")]
     Format(String),
+}
+
+impl std::fmt::Display for IoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IoError::Io(e) => f.write_str(&varstotas_i18n::tr!("kernel-io-error-io", why = e.to_string())),
+            IoError::Format(why) => f.write_str(&varstotas_i18n::tr!("kernel-io-error-format", why = why.as_str())),
+        }
+    }
 }

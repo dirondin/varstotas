@@ -1,6 +1,7 @@
 //! Point picking for plugins with `@pick N`: N clicks (with inference), then the app runs
 //! the plugin with `points`.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::Clicker;
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
@@ -66,7 +67,7 @@ impl Tool for PluginPickTool {
         r
     }
     fn status_text(&self) -> String {
-        format!("{} ({} of {}; Esc cancels).", self.prompt, self.points.len() + 1, self.n)
+        tr!("tool-plugin-pick", prompt = self.prompt.as_str(), index = self.points.len() + 1, total = self.n)
     }
     fn overlay(&self, _view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         for w in self.points.windows(2) {

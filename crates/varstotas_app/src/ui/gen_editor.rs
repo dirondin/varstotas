@@ -13,6 +13,7 @@ use varstotas_kernel::glam::DVec3;
 use varstotas_kernel::{GenValue, GenValues, Generator};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use varstotas_i18n::tr;
 
 /// Seconds after the last edit before the preview is rebuilt.
 const SETTLE: f64 = 0.4;
@@ -194,7 +195,7 @@ impl VarstotasApp {
         let mut open = true;
         let pos = self.viewport.view_rect.min + vec2(40.0, 30.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(super::theme::card_bg());
-        let mut win = egui::Window::new("Generator Editor").open(&mut open).default_pos(pos);
+        let mut win = egui::Window::new(tr!("gen-editor-title")).id(egui::Id::new("Generator Editor")).open(&mut open).default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -228,38 +229,38 @@ impl VarstotasApp {
         let unit = self.doc.model.unit;
         let name = self.gen_editor.parsed.as_ref().ok().map(|g| g.name.clone());
         ui.horizontal(|ui| {
-            if ui.button("New").on_hover_text("Start from a template").clicked() {
+            if ui.button(tr!("gen-new")).on_hover_text(tr!("gen-new-hint")).clicked() {
                 self.gen_editor.new_generator();
             }
-            if ui.button("Open…").clicked()
+            if ui.button(tr!("gen-open")).clicked()
                 && let Some(p) = rfd::FileDialog::new()
-                    .add_filter("Generator", &["rhai"])
+                    .add_filter(tr!("gen-filter"), &["rhai"])
                     .set_directory(self.library_dir().unwrap_or_default())
                     .pick_file()
             {
                 match std::fs::read_to_string(&p) {
                     Ok(s) => self.gen_editor.edit(&s, Some(p)),
-                    Err(e) => self.gen_editor.status = format!("Cannot read {}: {e}", p.display()),
+                    Err(e) => self.gen_editor.status = tr!("console-cannot-read", path = p.display().to_string(), error = e.to_string()),
                 }
             }
             ui.separator();
             let ok = name.is_some();
             if ui
-                .add_enabled(ok, egui::Button::new("Save to Library"))
-                .on_hover_text("Write the generator to ~/.varstotas/generators (it shows in the Components tray)")
+                .add_enabled(ok, egui::Button::new(tr!("gen-save")))
+                .on_hover_text(tr!("gen-save-hint"))
                 .clicked()
             {
                 self.actions.push(Action::GenEditorSave);
             }
             let (apply, tip) = match &self.gen_editor.doc {
-                Some(_) => ("Apply", "Update this generator of the document: all its components are rebuilt (one undo step)"),
-                None => ("Apply to Document", "Use this source in the document: its components are rebuilt (one undo step)"),
+                Some(_) => (tr!("apply"), tr!("gen-apply-hint")),
+                None => (tr!("gen-apply-doc"), tr!("gen-apply-doc-hint")),
             };
             if ui.add_enabled(ok, egui::Button::new(apply)).on_hover_text(tip).clicked()
             {
                 self.actions.push(Action::GenEditorApply);
             }
-            if ui.add_enabled(ok, egui::Button::new("Place")).on_hover_text("Place a component with the preview values").clicked() {
+            if ui.add_enabled(ok, egui::Button::new(tr!("gen-place"))).on_hover_text(tr!("gen-place-hint")).clicked() {
                 self.actions.push(Action::PlaceGenerator(self.gen_editor.source.clone(), self.gen_editor.values.clone()));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -302,9 +303,9 @@ impl VarstotasApp {
             _ => (self.gen_editor.status.clone(), theme::text_dim()),
         };
         let file = match (&self.gen_editor.doc, &self.gen_editor.file) {
-            (Some(n), _) => format!("In Model: {n}"),
+            (Some(n), _) => tr!("gen-in-model", name = n.clone()),
             (None, Some(f)) => f.display().to_string(),
-            (None, None) => "not saved".into(),
+            (None, None) => tr!("gen-not-saved"),
         };
         ui.label(RichText::new(if msg.is_empty() { file } else { msg }).small().color(colour));
     }
@@ -333,16 +334,16 @@ impl VarstotasApp {
                 );
             }
             Some(Err(_)) => {
-                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Build failed", egui::FontId::proportional(13.0), Color32::from_rgb(200, 50, 40));
+                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, &tr!("gen-build-failed"), egui::FontId::proportional(13.0), Color32::from_rgb(200, 50, 40));
             }
             None => {}
         }
-        resp.on_hover_text("Drag to turn");
+        resp.on_hover_text(tr!("gen-drag-turn"));
         let Ok(g) = self.gen_editor.parsed.clone() else { return };
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.label(RichText::new(&g.name).strong()).on_hover_text(&g.description);
-            if ui.small_button("Defaults").clicked() {
+            if ui.small_button(tr!("gen-defaults")).clicked() {
                 self.gen_editor.values.clear();
                 self.gen_editor.bufs.clear();
             }
@@ -384,15 +385,15 @@ impl VarstotasApp {
     /// Save to Library: write the source and rescan the tray.
     pub(crate) fn gen_editor_save(&mut self) {
         let Ok(g) = &self.gen_editor.parsed else { return };
-        let Some(dir) = self.library_dir() else { return self.flash_error("No home directory") };
+        let Some(dir) = self.library_dir() else { return self.flash_error(tr!("gen-no-home")) };
         let path = save_path(&dir, self.gen_editor.file.as_deref(), &g.name);
         match std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, &self.gen_editor.source)) {
             Ok(()) => {
-                self.gen_editor.status = format!("Saved to {}", path.display());
+                self.gen_editor.status = tr!("gen-saved", path = path.display().to_string());
                 self.gen_editor.file = Some(path);
                 self.refresh_library();
             }
-            Err(e) => self.gen_editor.status = format!("Cannot save {}: {e}", path.display()),
+            Err(e) => self.gen_editor.status = tr!("gen-cannot-save", path = path.display().to_string(), error = e.to_string()),
         }
     }
 
@@ -403,18 +404,18 @@ impl VarstotasApp {
         // The document's generator renamed in its header: it and its components follow.
         if let Some(old) = self.gen_editor.doc.clone().filter(|o| *o != name && self.doc.model.generators.contains_key(o)) {
             if self.doc.model.generators.contains_key(&name) {
-                self.gen_editor.status = format!("The document already has a generator named {name}");
+                self.gen_editor.status = tr!("gen-name-taken", name = name.clone());
                 return;
             }
             let g = g.clone();
-            let r = self.doc.try_commit(&format!("Update Generator {name}"), |m| {
+            let r = self.doc.try_commit(&tr!("gen-undo-update", name = name.clone()), |m| {
                 m.rename_generator(&old, g);
                 varstotas_script::generator::rebuild_all(m, &name)
             });
             self.gen_editor.status = match r {
                 Some(_) => {
                     self.gen_editor.doc = Some(name.clone());
-                    format!("{old} → {name}: applied to the document")
+                    tr!("gen-renamed-applied", old = old.clone(), name = name.clone())
                 }
                 None => self.doc.last_error.take().unwrap_or_default(),
             };
@@ -422,16 +423,16 @@ impl VarstotasApp {
             return;
         }
         if self.doc.model.generators.get(&name).is_some_and(|x| x.source == self.gen_editor.source) {
-            self.gen_editor.status = format!("{name}: the document already uses this source");
+            self.gen_editor.status = tr!("gen-same-source", name = name.clone());
             return;
         }
         let src = self.gen_editor.source.clone();
-        let r = self.doc.try_commit(&format!("Update Generator {name}"), |m| varstotas_script::generator::add(m, &src));
+        let r = self.doc.try_commit(&tr!("gen-undo-update", name = name.clone()), |m| varstotas_script::generator::add(m, &src));
         self.gen_editor.status = match r {
-            Some(_) => format!("{name}: applied to the document"),
+            Some(_) => tr!("gen-applied", name = name.clone()),
             None => {
                 let e = self.doc.last_error.take().unwrap_or_default();
-                crate::applog::error("Generator Editor", &e);
+                crate::applog::error("Generator Editor", &e); // i18n-ignore
                 e
             }
         };

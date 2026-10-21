@@ -7,7 +7,9 @@ use crate::{MaterialId, Model, tessellate};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
+use varstotas_i18n::tr;
 
+// i18n-ignore-next
 const CONTENT_TYPES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -15,6 +17,7 @@ const CONTENT_TYPES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 </Types>
 "#;
 
+// i18n-ignore-next
 const RELS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
@@ -77,6 +80,7 @@ pub fn write_3mf_model(model: &Model) -> String {
     }
     let mut s = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<model unit=\"millimeter\" xml:lang=\"en-US\" \
+         // i18n-ignore-next
          xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n <metadata name=\"Application\">Varstotas</metadata>\n <resources>\n",
     );
     let has_mats = !mat_ids.is_empty();
@@ -87,6 +91,7 @@ pub fn write_3mf_model(model: &Model) -> String {
             let c = mm.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
             let _ = writeln!(
                 s,
+                // i18n-ignore-next
                 "   <base name=\"{}\" displaycolor=\"#{:02X}{:02X}{:02X}{:02X}\"/>",
                 xml_escape(&mm.name),
                 c[0],
@@ -106,6 +111,7 @@ pub fn write_3mf_model(model: &Model) -> String {
         let name = match owner.and_then(|i| root.instances.get(i)) {
             Some(i) if !i.name.is_empty() => i.name.clone(),
             Some(i) => model.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default(),
+            // i18n-ignore-next
             None => "Model".into(),
         };
         let _ = writeln!(s, "  <object id=\"{id}\" name=\"{}\" type=\"model\">\n   <mesh>\n    <vertices>", xml_escape(&name));
@@ -260,7 +266,7 @@ impl Reader3mf {
             return Ok(());
         }
         let key = path.trim_start_matches('/');
-        let bytes = self.files.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v.clone()).ok_or_else(|| IoError::Format(format!("3MF: no part {path}")))?;
+        let bytes = self.files.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v.clone()).ok_or_else(|| IoError::Format(tr!("kernel-io-mf-no-part-path", path = path.to_string())))?;
         let root = super::xml::El::parse(&String::from_utf8_lossy(&bytes))?;
         let mut part = Part { unit_mm: unit_mm(root.attr("unit")), objects: HashMap::new(), colors: HashMap::new() };
         if let Some(res) = root.child("resources") {
@@ -297,11 +303,11 @@ impl Reader3mf {
     /// The triangles of object `id` of part `path` (components followed), into `out`.
     fn object(&mut self, path: &str, id: &str, xf: glam::DMat4, out: &mut super::meshes::ImpMesh, depth: usize) -> Result<(), IoError> {
         if depth > 32 {
-            return Err(IoError::Format("3MF: components nested too deep".into()));
+            return Err(IoError::Format(tr!("kernel-io-mf-components-nested-too-deep").into()));
         }
         self.part(path)?;
         let part = &self.parts[path];
-        let Some(obj) = part.objects.get(id) else { return Err(IoError::Format(format!("3MF: no object {id}"))) };
+        let Some(obj) = part.objects.get(id) else { return Err(IoError::Format(tr!("kernel-io-mf-no-object-id", id = id.to_string()))) };
         if let Some(mesh) = obj.child("mesh") {
             let verts: Vec<glam::DVec3> = mesh
                 .child("vertices")
@@ -357,9 +363,10 @@ pub fn add_3mf(model: &mut Model, data: &[u8], opts: &super::ImportOptions) -> R
     let start = files
         .get("_rels/.rels")
         .and_then(|r| super::xml::El::parse(&String::from_utf8_lossy(r)).ok())
+        // i18n-ignore-next
         .and_then(|r| r.all("Relationship").find(|x| x.attr("Type").is_some_and(|t| t.ends_with("/3dmodel"))).and_then(|x| x.attr("Target").map(str::to_string)))
         .or_else(|| files.keys().find(|k| k.ends_with(".model")).map(|k| format!("/{k}")))
-        .ok_or_else(|| IoError::Format("3MF: no 3D model part".into()))?;
+        .ok_or_else(|| IoError::Format(tr!("kernel-io-mf-no-d-model-part").into()))?;
     let mut rd = Reader3mf { files, parts: HashMap::new(), mats: Vec::new() };
     rd.part(&start)?;
     let bytes = rd.files.iter().find(|(k, _)| k.eq_ignore_ascii_case(start.trim_start_matches('/'))).map(|(_, v)| v.clone()).unwrap_or_default();

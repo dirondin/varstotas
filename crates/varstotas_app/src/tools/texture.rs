@@ -2,6 +2,7 @@
 //! Texture → Position. Red pin (or dragging the face) moves the texture, green rotates and
 //! scales it uniformly about the red pin, blue scales its height.
 
+use varstotas_i18n::tr;
 use super::common::{Hover, context_xf, pick_face};
 use super::{OverlayView, Tool, ToolContext, ToolId, ToolRequest};
 use crate::overlay::{Marker2d, MarkerShape};
@@ -240,7 +241,7 @@ impl Tool for TexturePositionTool {
         }
         // One undo step: back to the original, then commit the result.
         Self::set_untracked(ctx, face, d.orig);
-        ctx.commit("Texture Position", |m| {
+        ctx.commit(&tr!("tool-undo-texture-position"), |m| {
             if let Some(f) = m.mesh_at_mut(&path).and_then(|mesh| mesh.faces.get_mut(face)) {
                 f.uv = now;
             }
@@ -266,11 +267,11 @@ impl Tool for TexturePositionTool {
 
     fn status_text(&self) -> String {
         match (self.face, self.drag.as_ref().map(|d| d.grab)) {
-            (None, _) => "Click a textured face to position its texture.".into(),
-            (_, Some(Grab::Move)) => "Moving the texture. Esc cancels.".into(),
-            (_, Some(Grab::Green)) => "Rotating and scaling the texture about the red pin.".into(),
-            (_, Some(Grab::Blue)) => "Scaling the texture height.".into(),
-            _ => "Drag the face or the red pin to move, the green pin to rotate/scale, the blue pin to stretch. Enter or click outside when done.".into(),
+            (None, _) => tr!("tool-texture-pick"),
+            (_, Some(Grab::Move)) => tr!("tool-texture-move"),
+            (_, Some(Grab::Green)) => tr!("tool-texture-green"),
+            (_, Some(Grab::Blue)) => tr!("tool-texture-blue"),
+            _ => tr!("tool-texture-idle"),
         }
     }
 

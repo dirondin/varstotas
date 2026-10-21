@@ -1,6 +1,7 @@
 //! Drawing tools: Line, Rectangle, Circle / Polygon, Arc (2-point).
 //! Arc (centre), 3-point arc, Pie and Rotated Rectangle live in `arcs.rs`.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::{OverlayView, Tool, ToolContext, ToolId};
 use crate::inference::{self, Constraint, InferenceEngine, InferenceKind, InferenceResult};
@@ -96,7 +97,7 @@ impl LineTool {
     fn commit_segment(&mut self, ctx: &mut ToolContext, a: DVec3, b: DVec3) {
         let faces_before = ctx.doc.active_mesh().map(|m| m.faces.len()).unwrap_or(0);
         let (la, lb) = (to_local(ctx.doc, a), to_local(ctx.doc, b));
-        if commit_mesh(ctx, "Line", |m| m.add_line(la, lb)).is_none() {
+        if commit_mesh(ctx, &tr!("tool-undo-line"), |m| m.add_line(la, lb)).is_none() {
             return;
         }
         self.last_seg = Some((a, b));
@@ -183,8 +184,8 @@ impl Tool for LineTool {
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Length"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-length")
     }
     fn vcb_value(&self) -> String {
         match (self.unit, self.cur_len()) {
@@ -194,10 +195,9 @@ impl Tool for LineTool {
     }
     fn status_text(&self) -> String {
         if self.start.is_none() {
-            "Select start point. Arrow keys lock an axis.".into()
+            tr!("tool-line-first")
         } else {
-            "Select end point or type a length. Shift = lock inference, arrows = lock axis, Esc/double-click = finish."
-                .into()
+            tr!("tool-line-next")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -345,10 +345,10 @@ impl RectangleTool {
 
     fn commit(&mut self, ctx: &mut ToolContext, s: RectSpec) {
         let pts: Vec<DVec3> = s.corners().iter().map(|p| to_local(ctx.doc, *p)).collect();
-        if commit_mesh(ctx, "Rectangle", |m| m.add_face(&pts)).flatten().is_some() {
+        if commit_mesh(ctx, &tr!("tool-undo-rectangle"), |m| m.add_face(&pts)).flatten().is_some() {
             self.last = Some(s);
         } else if ctx.doc.last_error.is_none() {
-            ctx.doc.last_error = Some("Rectangle: degenerate input".into());
+            ctx.doc.last_error = Some(tr!("tool-degenerate", label = tr!("tool-undo-rectangle")));
         }
         self.c1 = None;
         self.spec = None;
@@ -427,8 +427,8 @@ impl Tool for RectangleTool {
         }
         false
     }
-    fn vcb_label(&self) -> &str {
-        "Dimensions"
+    fn vcb_label(&self) -> String {
+        tr!("tool-vcb-dimensions")
     }
     fn vcb_value(&self) -> String {
         match (self.unit, self.spec.or(self.last)) {
@@ -442,9 +442,9 @@ impl Tool for RectangleTool {
     }
     fn status_text(&self) -> String {
         if self.c1.is_none() {
-            "Select first corner. Arrow keys pick the plane (→ red, ← green, ↑ blue normal).".into()
+            tr!("tool-rectangle-first")
         } else {
-            "Select opposite corner or type width,height. Esc = cancel.".into()
+            tr!("tool-rectangle-second")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -547,14 +547,14 @@ impl CircleTool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, s: CircleSpec) {
-        let label = if self.polygon { "Polygon" } else { "Circle" };
+        let label = tr!(if self.polygon { "tool-undo-polygon" } else { "tool-undo-circle" });
         let info = if self.polygon {
             CurveInfo::polygon(s.c, s.n, s.start, s.r, s.segs)
         } else {
             CurveInfo::circle(s.c, s.n, s.start, s.r, s.segs)
         };
         if let Some(info) = info
-            && commit_curve(ctx, label, &info, false)
+            && commit_curve(ctx, &label, &info, false)
         {
             self.last = Some(s);
         }
@@ -636,13 +636,13 @@ impl Tool for CircleTool {
         }
         false
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         if self.center.is_some() || self.last.is_some() {
-            "Radius"
+            tr!("tool-vcb-radius")
         } else if self.polygon {
-            "Sides"
+            tr!("tool-vcb-sides")
         } else {
-            "Segments"
+            tr!("tool-vcb-segments")
         }
     }
     fn vcb_value(&self) -> String {
@@ -652,11 +652,11 @@ impl Tool for CircleTool {
         self.spec.map(|s| format!("{:.1}", s.r)).unwrap_or_default()
     }
     fn status_text(&self) -> String {
-        let what = if self.polygon { "polygon" } else { "circle" };
+        let what = tr!(if self.polygon { "tool-circle-what-polygon" } else { "tool-circle-what-circle" });
         if self.center.is_none() {
-            format!("Select the {what} center (face under cursor orients it; arrows lock the normal). Type `{}s` for {}.", self.segs, if self.polygon { "sides" } else { "segments" })
+            tr!("tool-circle-first", what = what, segs = self.segs, kind = tr!(if self.polygon { "tool-circle-for-sides" } else { "tool-circle-for-segments" }))
         } else {
-            "Select a point on the radius or type a radius.".into()
+            tr!("tool-circle-radius")
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
@@ -858,7 +858,7 @@ impl ArcTool {
 
     fn commit(&mut self, ctx: &mut ToolContext, s: ArcSpec) {
         if let Some(info) = s.info()
-            && commit_curve(ctx, "Arc", &info, false)
+            && commit_curve(ctx, &tr!("tool-undo-arc"), &info, false)
         {
             self.last = Some(s);
         }
@@ -967,17 +967,15 @@ impl Tool for ArcTool {
             }
         }
     }
-    fn vcb_label(&self) -> &str {
-        if self.b.is_some() || (self.a.is_none() && self.last.is_some()) { "Bulge" } else { "Length" }
+    fn vcb_label(&self) -> String {
+        if self.b.is_some() || (self.a.is_none() && self.last.is_some()) { tr!("tool-vcb-bulge") } else { tr!("tool-vcb-length") }
     }
     fn status_text(&self) -> String {
         match (self.a, self.b) {
-            (None, _) => "Select the start point of the arc. Start at the end of an edge to draw tangent to it.".into(),
-            (Some(_), None) if self.tangent.is_some() => {
-                "Select the end point (double-click it for the cyan tangent arc) or type the chord length.".into()
-            }
-            (Some(_), None) => "Select the end point or type the chord length.".into(),
-            _ => "Move to set the bulge and click, or type a bulge (`500r` for a radius). Type `12s` for segments.".into(),
+            (None, _) => tr!("tool-arc-first"),
+            (Some(_), None) if self.tangent.is_some() => tr!("tool-arc-end-tangent"),
+            (Some(_), None) => tr!("tool-arc-end"),
+            _ => tr!("tool-arc-bulge"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

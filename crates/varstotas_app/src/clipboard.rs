@@ -7,6 +7,7 @@
 //! target context and explodes it, so loose geometry merges with the context.
 //! Guides are copied in world space.
 
+use varstotas_i18n::tr;
 use crate::document::Document;
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{
@@ -106,14 +107,14 @@ impl Clipboard {
     /// Copy the document's selection (entities of the active context + selected guides).
     pub fn from_selection(doc: &Document) -> OpResult<Clipboard> {
         if !doc.has_selection() {
-            return Err(OpError::Invalid("nothing selected".into()));
+            return Err(OpError::Invalid(tr!("edit-nothing-selected")));
         }
         let dims: Vec<varstotas_kernel::DimGeom> =
             doc.dim_sel.iter().filter_map(|d| doc.model.dimension_in(&doc.active_path, *d)).collect();
         if doc.selection.is_empty() && doc.guide_sel.is_empty() {
             // Dimensions only.
             let pts: Vec<DVec3> = dims.iter().flat_map(|g| [g.a, g.b, g.line().0, g.line().1]).collect();
-            let bounds = Aabb::from_points(pts).ok_or(OpError::Invalid("nothing to copy".into()))?;
+            let bounds = Aabb::from_points(pts).ok_or(OpError::Invalid(tr!("edit-nothing-to-copy")))?;
             let preview = dims.iter().map(|g| g.line()).collect();
             let mut model = doc.model.clone();
             let root = model.root;
@@ -200,7 +201,7 @@ impl Clipboard {
         if pts.is_empty() {
             pts.extend(guides.iter().map(|g| g.origin));
         }
-        let bounds = Aabb::from_points(pts).ok_or(OpError::Invalid("nothing to copy".into()))?;
+        let bounds = Aabb::from_points(pts).ok_or(OpError::Invalid(tr!("edit-nothing-to-copy")))?;
         let mut preview = Vec::new();
         if let Some(d) = def {
             collect_edges(&model, d, src_xf, &mut preview, 0);
@@ -232,7 +233,7 @@ impl Clipboard {
             .chain(root.instances.keys().map(EntityRef::Instance))
             .collect();
         if ents.is_empty() {
-            return Err(OpError::Invalid("the component file is empty".into()));
+            return Err(OpError::Invalid(tr!("edit-component-file-empty")));
         }
         // A file holding just one component: place that one.
         let inst = match (ents.as_slice(), root.faces.is_empty() && root.edges.is_empty()) {

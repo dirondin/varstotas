@@ -7,6 +7,7 @@ use crate::texture::{TexPlacement, TextureImage};
 use crate::{Definition, FaceId, Instance, MaterialId, Mesh, Model};
 use glam::{DMat4, DVec2, DVec3};
 use std::collections::{HashMap, HashSet};
+use varstotas_i18n::tr;
 
 /// A material of an imported file: its colour (sRGB, alpha) and a colour image.
 #[derive(Clone, Debug)]
@@ -84,13 +85,14 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
             let made = new_faces(&mesh, &HashSet::<FaceId>::new());
             mesh.merge_coplanar_faces(&made);
         }
+        // i18n-ignore-next
         let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         let root = model.root;
         model.defs[root].mesh.instances.insert(Instance { def, transform: DMat4::IDENTITY, name: m.name, material: None, tag: None, hidden: false, locked: false });
         groups += 1;
     }
     if groups == 0 {
-        return Err(IoError::Format("no faces in the file".into()));
+        return Err(IoError::Format(tr!("kernel-io-no-faces-in-the-file").into()));
     }
     Ok(groups)
 }

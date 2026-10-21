@@ -3,6 +3,7 @@
 
 use super::IoError;
 use quick_xml::events::Event;
+use varstotas_i18n::tr;
 
 #[derive(Debug, Default)]
 pub(crate) struct El {
@@ -46,7 +47,7 @@ impl El {
         let mut r = quick_xml::Reader::from_str(text);
         let mut stack: Vec<El> = vec![El::default()];
         loop {
-            match r.read_event().map_err(|e| IoError::Format(format!("XML: {e}")))? {
+            match r.read_event().map_err(|e| IoError::Format(tr!("kernel-io-xml-e", e = e.to_string())))? {
                 Event::Start(e) => stack.push(El::open(&e)),
                 Event::Empty(e) => {
                     let el = El::open(&e);
@@ -56,7 +57,7 @@ impl El {
                     let el = stack.pop().unwrap();
                     match stack.last_mut() {
                         Some(p) => p.children.push(el),
-                        None => return Err(IoError::Format("XML: unbalanced tags".into())),
+                        None => return Err(IoError::Format(tr!("kernel-io-xml-unbalanced-tags").into())),
                     }
                 }
                 Event::Text(t) => {
@@ -75,11 +76,11 @@ impl El {
                 _ => {}
             }
             if stack.is_empty() {
-                return Err(IoError::Format("XML: unbalanced tags".into()));
+                return Err(IoError::Format(tr!("kernel-io-xml-unbalanced-tags").into()));
             }
         }
         let mut top = stack.swap_remove(0);
-        top.children.pop().ok_or_else(|| IoError::Format("XML: no root element".into()))
+        top.children.pop().ok_or_else(|| IoError::Format(tr!("kernel-io-xml-no-root-element").into()))
     }
 
     pub fn attr(&self, k: &str) -> Option<&str> {

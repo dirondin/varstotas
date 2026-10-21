@@ -8,6 +8,7 @@
 use super::tray_lib::{DragItem, FolderAct, FolderAsk, LibMenuAct, TrayDrag, file_key};
 use crate::app::{Action, VarstotasApp};
 use crate::clipboard::Clipboard;
+use varstotas_i18n::tr;
 use egui::{Color32, RichText, Stroke, Ui, pos2, vec2};
 use varstotas_kernel::glam::DVec3;
 use std::path::{Path, PathBuf};
@@ -244,7 +245,7 @@ fn scan(root: &Path, old: Vec<LibItem>) -> (Vec<LibItem>, Vec<String>) {
 fn safe_name(s: &str) -> String {
     let n: String = s.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
     let n = n.trim().trim_matches('.').to_string();
-    if n.is_empty() { "Component".into() } else { n }
+    if n.is_empty() { "Component".into() } else { n } // i18n-ignore
 }
 
 /// Rename the library file `path` to `<name>.vrst` in its folder; a file holding one
@@ -256,7 +257,7 @@ fn rename_library_file(path: &Path, name: &str) -> Result<PathBuf, String> {
         return Ok(to);
     }
     if to.exists() && !to.to_string_lossy().eq_ignore_ascii_case(&path.to_string_lossy()) {
-        return Err(format!("{} already exists", to.display()));
+        return Err(tr!("library-exists", path = to.display().to_string()));
     }
     let old = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let mut model = crate::document::guarded(|| varstotas_kernel::io::load(path)).and_then(|r| r.map_err(|e| e.to_string()))?;
@@ -326,7 +327,7 @@ impl VarstotasApp {
                 return d.name.clone();
             }
         }
-        "Component".into()
+        "Component".into() // i18n-ignore
     }
 
     /// Write the selection to `<library>/<name>.vrst` (a new name when it exists).
@@ -347,7 +348,7 @@ impl VarstotasApp {
         let Some(dir) = self.library_dir() else { return };
         let model = match model {
             Ok(m) => m,
-            Err(e) => return self.flash_error(format!("Save to Library: {e}")),
+            Err(e) => return self.flash_error(tr!("library-save-error", error = e.to_string())),
         };
         let base = safe_name(name);
         let mut path = dir.join(format!("{base}.vrst"));
@@ -359,10 +360,10 @@ impl VarstotasApp {
         let _ = std::fs::create_dir_all(&dir);
         match varstotas_kernel::io::save(&model, &path) {
             Ok(()) => {
-                self.flash(format!("Saved to the library: {}", path.display()));
+                self.flash(tr!("library-saved", path = path.display().to_string()));
                 self.refresh_library();
             }
-            Err(e) => self.flash_error(format!("Save to Library failed: {e}")),
+            Err(e) => self.flash_error(tr!("library-save-failed", error = e.to_string())),
         }
     }
 
@@ -374,13 +375,13 @@ impl VarstotasApp {
         use super::generators::{DOCUMENT_FOLDER, EXAMPLES_FOLDER};
         let special = matches!(folder, DOCUMENT_FOLDER | EXAMPLES_FOLDER | FAVOURITES | RECENT);
         let dir = root.filter(|_| !special).map(|r| if folder.is_empty() { r.to_path_buf() } else { r.join(folder) });
-        let shown = |d: &Option<PathBuf>| d.as_ref().map(|d| format!("{}\nClick to show in the Finder", d.display())).unwrap_or_default();
+        let shown = |d: &Option<PathBuf>| d.as_ref().map(|d| tr!("library-folder-reveal-hover", path = d.display().to_string())).unwrap_or_default();
         let (title, tip, link) = match folder {
-            EXAMPLES_FOLDER => (folder.to_string(), "Generators bundled with Varstotas (not files)".to_string(), false),
-            DOCUMENT_FOLDER => ("In Model".to_string(), "Components and generators of the open document (Save to Library makes a file)".to_string(), false),
-            FAVOURITES => ("Favourites".to_string(), "Right-click a library tile → Add to Favourites".to_string(), false),
-            RECENT => ("Recent".to_string(), "Library components placed last".to_string(), false),
-            "" => ("My Library".to_string(), shown(&dir), dir.is_some()),
+            EXAMPLES_FOLDER => (tr!("library-examples"), tr!("library-examples-hover"), false),
+            DOCUMENT_FOLDER => (tr!("library-in-model"), tr!("library-in-model-hover"), false),
+            FAVOURITES => (tr!("library-favourites"), tr!("library-favourites-hover"), false),
+            RECENT => (tr!("library-recent"), tr!("library-recent-hover"), false),
+            "" => (tr!("tray-my-library"), shown(&dir), dir.is_some()),
             f => (f.to_string(), shown(&dir), dir.is_some()),
         };
         let mut hide = None;
@@ -391,8 +392,8 @@ impl VarstotasApp {
                 purge = super::tray_lib::purge_button(ui, "doc", "components", unused);
             }
             if folder == EXAMPLES_FOLDER || folder == DOCUMENT_FOLDER {
-                let tip = if folder == EXAMPLES_FOLDER { "Hide the bundled examples (… → Show Examples brings them back)" } else { "Hide the document's components (… → Show In Model brings them back)" };
-                let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text(tip);
+                let tip = tr!(if folder == EXAMPLES_FOLDER { "library-hide-examples" } else { "library-hide-in-model" });
+                let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text(&tip);
                 super::tray_lib::spot(format!("hide:{folder}"), r.rect.center());
                 if r.clicked() {
                     hide = Some(folder == EXAMPLES_FOLDER);
@@ -443,14 +444,13 @@ impl VarstotasApp {
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("library_folder_delete")).show(ctx, |ui| {
             ui.set_width(380.0);
-            ui.heading("Delete Folder?");
+            ui.heading(tr!("library-folder-delete-title"));
             ui.add_space(4.0);
-            let lib = if del.materials { "materials" } else { "components" };
-            ui.label(format!("The folder “{name}” will be deleted from the {lib} library:"));
+            ui.label(tr!(if del.materials { "library-folder-delete-text-materials" } else { "library-folder-delete-text-components" }, name = name.as_str()));
             ui.label(RichText::new(del.dir.display().to_string()).small().weak());
             ui.add_space(6.0);
             if del.is_empty() {
-                ui.label("The folder is empty.");
+                ui.label(tr!("library-folder-empty"));
             } else {
                 let warn = Color32::from_rgb(200, 50, 40);
                 egui::Frame::new()
@@ -460,30 +460,27 @@ impl VarstotasApp {
                     .inner_margin(8.0)
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        let mut what = format!("{} file(s)", del.files);
-                        if del.dirs > 0 {
-                            what.push_str(&format!(" in {} subfolder(s)", del.dirs));
-                        }
-                        ui.label(RichText::new(format!("⚠ The folder is not empty: {what} will be deleted with it.")).strong().color(warn));
+                        let what = if del.dirs > 0 { tr!("library-folder-what-dirs", files = del.files, dirs = del.dirs) } else { tr!("library-folder-what", files = del.files) };
+                        ui.label(RichText::new(tr!("library-folder-not-empty", what = what)).strong().color(warn));
                         for f in &del.sample {
                             ui.label(RichText::new(format!("• {f}")).small());
                         }
                         if del.files > del.sample.len() {
-                            ui.label(RichText::new(format!("… and {} more", del.files - del.sample.len())).small().weak());
+                            ui.label(RichText::new(tr!("library-folder-more", n = del.files - del.sample.len())).small().weak());
                         }
                     });
             }
             ui.add_space(4.0);
-            ui.label(RichText::new("This cannot be undone. Copies already placed in documents stay.").weak());
+            ui.label(RichText::new(tr!("library-undone-copies-stay")).weak());
             ui.add_space(10.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let label = if del.is_empty() { "Delete".to_string() } else { format!("Delete with {} file(s)", del.files) };
+                let label = if del.is_empty() { tr!("delete") } else { tr!("library-folder-delete-with", files = del.files) };
                 let r = ui.add(egui::Button::new(RichText::new(label).strong().color(Color32::from_rgb(200, 50, 40))));
                 super::tray_lib::spot("folder_delete:ok", r.rect.center());
                 if r.clicked() {
                     choice = Some(true);
                 }
-                let r = ui.button("Cancel");
+                let r = ui.button(tr!("cancel"));
                 super::tray_lib::spot("folder_delete:cancel", r.rect.center());
                 if r.clicked() {
                     choice = Some(false);
@@ -510,9 +507,9 @@ impl VarstotasApp {
                 for list in lists {
                     list.retain(|k| !k.strip_prefix(&key).is_some_and(|r| r.starts_with(std::path::MAIN_SEPARATOR)));
                 }
-                self.flash(if del.is_empty() { format!("Deleted folder {name}") } else { format!("Deleted folder {name} and {} file(s)", del.files) });
+                self.flash(if del.is_empty() { tr!("library-folder-deleted", name = name.as_str()) } else { tr!("library-folder-deleted-files", name = name.as_str(), files = del.files) });
             }
-            Err(e) => self.flash_error(format!("Delete Folder: {e}")),
+            Err(e) => self.flash_error(tr!("library-folder-delete-failed", error = e.to_string())),
         }
         self.refresh_library_of(del.materials);
     }
@@ -521,12 +518,12 @@ impl VarstotasApp {
     pub(crate) fn folder_dialog(&mut self, ctx: &egui::Context) {
         let Some(ask) = self.library.folder_ask.as_mut() else { return };
         let mut choice = None;
-        let heading = if ask.rename.is_some() { "Rename Folder" } else { "New Folder" };
+        let heading = tr!(if ask.rename.is_some() { "library-folder-rename-title" } else { "library-folder-new-title" });
         let resp = egui::Modal::new(egui::Id::new("library_folder")).show(ctx, |ui| {
             ui.set_width(320.0);
-            ui.heading(heading);
+            ui.heading(&heading);
             ui.add_space(4.0);
-            let r = ui.add(egui::TextEdit::singleline(&mut ask.name).hint_text("Folder name").desired_width(f32::INFINITY));
+            let r = ui.add(egui::TextEdit::singleline(&mut ask.name).hint_text(tr!("library-folder-name")).desired_width(f32::INFINITY));
             super::tray_lib::spot("folder_name", r.rect.center());
             if !r.has_focus() && !r.lost_focus() {
                 r.request_focus();
@@ -537,10 +534,10 @@ impl VarstotasApp {
             }
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add_enabled(ok, egui::Button::new(if ask.rename.is_some() { "Rename" } else { "Create" })).clicked() {
+                if ui.add_enabled(ok, egui::Button::new(tr!(if ask.rename.is_some() { "library-rename" } else { "library-create" }))).clicked() {
                     choice = Some(true);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr!("cancel")).clicked() {
                     choice = Some(false);
                 }
             });
@@ -562,7 +559,7 @@ impl VarstotasApp {
                 let from = root.join(old);
                 let to = from.parent().unwrap_or(&root).join(&name);
                 if to.exists() {
-                    Err(format!("{} already exists", to.display()))
+                    Err(tr!("library-exists", path = to.display().to_string()))
                 } else {
                     std::fs::rename(&from, &to).map_err(|e| e.to_string()).map(|()| {
                         let (prefix, lists) = if ask.materials {
@@ -584,8 +581,8 @@ impl VarstotasApp {
             }
         };
         match r {
-            Ok(()) => self.flash(format!("{heading}: {name}")),
-            Err(e) => self.flash_error(format!("{heading}: {e}")),
+            Ok(()) => self.flash(tr!("library-folder-done", heading = heading.as_str(), name = name.as_str())),
+            Err(e) => self.flash_error(tr!("library-folder-failed", heading = heading.as_str(), error = e)),
         }
         self.refresh_library_of(ask.materials);
     }
@@ -598,30 +595,30 @@ impl VarstotasApp {
             ui.set_width(360.0);
             match &path {
                 Some(path) => {
-                    ui.heading("Delete from the library?");
+                    ui.heading(tr!("library-delete-title"));
                     ui.add_space(4.0);
-                    ui.label(format!("“{name}” will be deleted from the library folder:"));
+                    ui.label(tr!("library-delete-text", name = name.as_str()));
                     ui.label(RichText::new(path.display().to_string()).small().weak());
-                    ui.label(RichText::new("This cannot be undone. Copies already placed in documents stay.").weak());
+                    ui.label(RichText::new(tr!("library-undone-copies-stay")).weak());
                 }
                 None => {
-                    ui.heading("Delete from the document?");
+                    ui.heading(tr!("library-delete-doc-title"));
                     ui.add_space(4.0);
-                    ui.label(format!("The generator “{name}” will be removed from this document."));
+                    ui.label(tr!("library-delete-gen-text", name = name.as_str()));
                     let uses = self.doc.model.generator_uses(&name);
                     if uses > 0 {
-                        ui.label(RichText::new(format!("{uses} placed component(s) stay as plain components, without parameters.")).weak());
+                        ui.label(RichText::new(tr!("library-delete-gen-uses", uses = uses)).weak());
                     }
-                    ui.label(RichText::new("Edit → Undo brings it back.").weak());
+                    ui.label(RichText::new(tr!("library-undo-brings-back")).weak());
                 }
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(RichText::new("Delete").strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(tr!("delete")).strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -633,8 +630,8 @@ impl VarstotasApp {
         match choice {
             Some(true) if path.is_none() => {
                 self.library.delete_ask = None;
-                if let Some(Some(n)) = self.doc.commit(&format!("Delete Generator {name}"), |m| m.remove_generator(&name)) {
-                    self.flash(if n > 0 { format!("Removed the generator {name}: {n} component(s) stay without parameters") } else { format!("Removed the generator {name}") });
+                if let Some(Some(n)) = self.doc.commit(&tr!("library-undo-delete-generator", name = name.as_str()), |m| m.remove_generator(&name)) {
+                    self.flash(if n > 0 { tr!("library-generator-removed-uses", name = name.as_str(), n = n) } else { tr!("library-generator-removed", name = name.as_str()) });
                 }
                 self.library.gens.thumbs.clear();
             }
@@ -643,10 +640,10 @@ impl VarstotasApp {
                 let path = path.unwrap_or_default();
                 match std::fs::remove_file(&path) {
                     Ok(()) => {
-                        self.flash(format!("Deleted from the library: {name}"));
+                        self.flash(tr!("library-deleted", name = name.as_str()));
                         self.refresh_library();
                     }
-                    Err(e) => self.flash_error(format!("Delete {}: {e}", path.display())),
+                    Err(e) => self.flash_error(tr!("library-delete-failed", path = path.display().to_string(), error = e.to_string())),
                 }
             }
             Some(false) => self.library.delete_ask = None,
@@ -667,9 +664,9 @@ impl VarstotasApp {
     /// Remove component `d` and its placed copies (one undo step).
     pub(crate) fn delete_definition(&mut self, d: varstotas_kernel::DefId) {
         let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
-        if let Some(n) = self.doc.try_commit(&format!("Delete Component {name}"), |m| m.delete_definition(d)) {
+        if let Some(n) = self.doc.try_commit(&tr!("library-undo-delete-component", name = name.as_str()), |m| m.delete_definition(d)) {
             self.library.def_thumbs.remove(&d);
-            self.flash(if n > 0 { format!("Deleted {name} and {n} placed copy(ies)") } else { format!("Deleted {name} from the document") });
+            self.flash(if n > 0 { tr!("library-component-deleted-copies", name = name.as_str(), n = n) } else { tr!("library-component-deleted", name = name.as_str()) });
         }
     }
 
@@ -684,17 +681,17 @@ impl VarstotasApp {
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("def_delete")).show(ctx, |ui| {
             ui.set_width(360.0);
-            ui.heading("Delete from the document?");
+            ui.heading(tr!("library-delete-doc-title"));
             ui.add_space(4.0);
-            ui.label(format!("“{name}” is placed {uses} time(s). The component and all its copies will be removed."));
-            ui.label(RichText::new("Edit → Undo brings them back.").weak());
+            ui.label(tr!("library-delete-def-text", name = name.as_str(), uses = uses));
+            ui.label(RichText::new(tr!("library-undo-brings-them-back")).weak());
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(RichText::new("Delete").strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(tr!("delete")).strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -717,11 +714,11 @@ impl VarstotasApp {
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("component_rename")).show(ctx, |ui| {
             ui.set_width(340.0);
-            ui.heading(if matches!(target, RenameTarget::Mat(_) | RenameTarget::MatFile(_)) { "Rename Material" } else { "Rename Component" });
+            ui.heading(tr!(if matches!(target, RenameTarget::Mat(_) | RenameTarget::MatFile(_)) { "library-rename-material" } else { "library-rename-component" }));
             ui.add_space(4.0);
             if let RenameTarget::File(path) | RenameTarget::MatFile(path) = &target {
                 let file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                ui.label(RichText::new(format!("The library file {file} is renamed too.")).small().weak()).on_hover_text(path.display().to_string());
+                ui.label(RichText::new(tr!("library-rename-file-too", file = file.as_str())).small().weak()).on_hover_text(path.display().to_string());
             }
             let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(f32::INFINITY));
             if !r.has_focus() && !r.lost_focus() {
@@ -733,10 +730,10 @@ impl VarstotasApp {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_enabled(!text.trim().is_empty(), egui::Button::new(RichText::new("Rename").strong())).clicked() {
+                    if ui.add_enabled(!text.trim().is_empty(), egui::Button::new(RichText::new(tr!("library-rename")).strong())).clicked() {
                         choice = Some(true);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr!("cancel")).clicked() {
                         choice = Some(false);
                     }
                 });
@@ -761,16 +758,16 @@ impl VarstotasApp {
         match target {
             RenameTarget::Def(d) => {
                 let d = *d;
-                if self.doc.try_commit(&format!("Rename Component {name}"), |m| m.rename_definition(d, name)).is_some() {
-                    self.flash(format!("Renamed to {name}"));
+                if self.doc.try_commit(&tr!("library-undo-rename-component", name = name), |m| m.rename_definition(d, name)).is_some() {
+                    self.flash(tr!("library-renamed", name = name));
                 }
             }
             RenameTarget::File(path) => match rename_library_file(path, name) {
                 Ok(to) => {
-                    self.flash(format!("Renamed to {}", to.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
+                    self.flash(tr!("library-renamed", name = to.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
                     self.refresh_library();
                 }
-                Err(e) => self.flash_error(format!("Rename {}: {e}", path.display())),
+                Err(e) => self.flash_error(tr!("library-rename-failed", path = path.display().to_string(), error = e)),
             },
             RenameTarget::Mat(id) => self.rename_material(*id, name),
             RenameTarget::MatFile(path) => self.rename_material_file(path, name),
@@ -791,7 +788,7 @@ impl VarstotasApp {
             .defs
             .iter()
             .filter(|(id, d)| *id != m.root && !d.is_group && d.generated.is_none() && d.rigged.is_none() && !internal.contains(id))
-            .map(|(id, d)| (id, if d.name.is_empty() { "Component".to_string() } else { d.name.clone() }))
+            .map(|(id, d)| (id, if d.name.is_empty() { "Component".to_string() } else { d.name.clone() })) // i18n-ignore
             .collect();
         out.sort_by_key(|a| a.1.to_lowercase());
         out
@@ -842,22 +839,22 @@ impl VarstotasApp {
         let name = m.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
         let uses = m.defs.values().flat_map(|x| x.mesh.instances.values()).filter(|i| i.def == d).count();
         let t = &self.library.def_thumbs[&d];
-        let note = format!("In this document: {uses} placed");
+        let note = tr!("library-in-document", uses = uses);
         tile_ex(ui, tiles, &name, &t.thumb, own.or(t.pic), t.size, m.unit, false, &note)
     }
 
     /// Set or remove the open document's preview picture (undoable; saved with the file).
     pub(crate) fn set_doc_preview(&mut self, bytes: Option<Vec<u8>>) {
         let set = bytes.is_some();
-        self.doc.commit(if set { "Set Preview Image" } else { "Remove Preview Image" }, |m| m.set_preview(bytes));
-        self.flash(if set { "Preview image set (saved with the file)" } else { "Preview image removed" });
+        self.doc.commit(&tr!(if set { "library-undo-set-preview" } else { "library-undo-remove-preview" }), |m| m.set_preview(bytes));
+        self.flash(tr!(if set { "library-preview-set-file" } else { "library-preview-removed" }));
     }
 
     /// The document's preview picture from an image file.
     pub(crate) fn preview_from_file(&mut self, f: &Path) {
         match std::fs::read(f).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b)) {
             Ok(b) => self.set_doc_preview(Some(b)),
-            Err(e) => self.flash_error(format!("Preview image: {}: {e}", f.display())),
+            Err(e) => self.flash_error(tr!("library-preview-error-file", path = f.display().to_string(), error = e)),
         }
     }
 
@@ -884,7 +881,7 @@ impl VarstotasApp {
                 let _ = std::fs::remove_file(p);
                 match res {
                     Ok(b) => self.set_preview_of(&target, Some(b)),
-                    Err(e) => self.flash_error(format!("Preview image: {e}")),
+                    Err(e) => self.flash_error(tr!("library-preview-error", error = e)),
                 }
                 true
             }
@@ -893,7 +890,7 @@ impl VarstotasApp {
                 false
             }
             Err(e) => {
-                self.flash_error(format!("Preview image: {e}"));
+                self.flash_error(tr!("library-preview-error", error = e));
                 true
             }
         }
@@ -908,12 +905,12 @@ impl VarstotasApp {
             PreviewTarget::Def(d) => {
                 let (d, set) = (*d, bytes.is_some());
                 let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
-                self.doc.commit(if set { "Set Component Preview" } else { "Remove Component Preview" }, |m| {
+                self.doc.commit(&tr!(if set { "library-undo-set-def-preview" } else { "library-undo-remove-def-preview" }), |m| {
                     if let Some(def) = m.defs.get_mut(d) {
                         def.preview = bytes.map(|b| varstotas_kernel::texture::TextureImage::new(b, "preview", 0.0));
                     }
                 });
-                self.flash(if set { format!("Preview image of {name} set (saved with the document)") } else { format!("Preview image of {name} removed") });
+                self.flash(if set { tr!("library-preview-set-def", name = name.as_str()) } else { tr!("library-preview-removed-def", name = name.as_str()) });
             }
         }
     }
@@ -923,7 +920,7 @@ impl VarstotasApp {
         let bytes = match image {
             Some(f) => match std::fs::read(f).map_err(|e| format!("{}: {e}", f.display())).and_then(|b| crate::textures::preview_bytes(&b)) {
                 Ok(b) => Some(b),
-                Err(e) => return self.flash_error(format!("Preview image: {e}")),
+                Err(e) => return self.flash_error(tr!("library-preview-error", error = e)),
             },
             None => None,
         };
@@ -941,7 +938,7 @@ impl VarstotasApp {
             Ok(()) => self.refresh_library(),
             Err(e) => {
                 log::warn!("preview image of {}: {e}", path.display());
-                self.flash_error(format!("Preview image: {e}"));
+                self.flash_error(tr!("library-preview-error", error = e));
             }
         }
     }
@@ -954,7 +951,7 @@ impl VarstotasApp {
                 let tool = crate::tools::transform::PasteTool::named(Rc::new(clip), name);
                 self.install_tool(Box::new(tool));
             }
-            Err(e) => self.flash_error(format!("Place {name}: {e}")),
+            Err(e) => self.flash_error(tr!("library-place-failed", name = name.as_str(), error = e.to_string())),
         }
     }
 
@@ -963,7 +960,7 @@ impl VarstotasApp {
         let m = &self.doc.model;
         let ids: Vec<_> = m.root_mesh().instances.iter().filter(|(_, i)| i.def == d || m.rig_master(i.def) == Some(d)).map(|(id, _)| varstotas_kernel::EntityRef::Instance(id)).collect();
         if ids.is_empty() {
-            self.flash("No copies of this component at the top level of the model".to_string());
+            self.flash(tr!("library-no-copies"));
             return;
         }
         while self.doc.exit_context() {}
@@ -988,38 +985,38 @@ impl VarstotasApp {
             "",
             &mut self.library.filter,
             &mut self.prefs.lib_tiles,
-            "Save the selection to the library, new generator",
-            "3D Library: free models from the web (Poly Haven, Smithsonian, NASA, Kenney, plugins)",
+            &tr!("library-plus-hover"),
+            &tr!("library-online-hover"),
             |ui| {
-                if ui.add_enabled(can_save, egui::Button::new("Save Selection to Library…")).on_disabled_hover_text("Select something first").clicked() {
+                if ui.add_enabled(can_save, egui::Button::new(tr!("library-save-selection"))).on_disabled_hover_text(tr!("library-select-first")).clicked() {
                     save = true;
                     ui.close();
                 }
-                if ui.button("New Generator…").on_hover_text("A component built by a script with parameters (Window → Generator Editor)").clicked() {
+                if ui.button(tr!("library-new-generator")).on_hover_text(tr!("library-new-generator-hover")).clicked() {
                     new_gen = true;
                     ui.close();
                 }
             },
             |ui| {
-                if ui.button("Choose Folder…").clicked() {
+                if ui.button(tr!("library-choose-folder")).clicked() {
                     choose = true;
                     ui.close();
                 }
-                if custom && ui.button("Default Folder").on_hover_text("Back to ~/.varstotas/components").clicked() {
+                if custom && ui.button(tr!("library-default-folder")).on_hover_text(tr!("library-default-folder-hover")).clicked() {
                     default_dir = true;
                     ui.close();
                 }
-                if ui.button("Show in Finder").clicked() {
+                if ui.button(tr!("library-show-in-finder")).clicked() {
                     reveal_root = true;
                     ui.close();
                 }
-                if ui.add_enabled(unused > 0, egui::Button::new("Purge Unused Components")).on_hover_text("Remove the components (and group definitions) nothing in the model uses").clicked() {
+                if ui.add_enabled(unused > 0, egui::Button::new(tr!("library-purge"))).on_hover_text(tr!("library-purge-hover")).clicked() {
                     purge = true;
                     ui.close();
                 }
                 ui.separator();
-                ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The bundled example generators");
-                ui.checkbox(&mut show_doc, "Show In Model").on_hover_text("The open document's components and generators");
+                ui.checkbox(&mut show_ex, tr!("library-show-examples")).on_hover_text(tr!("library-show-examples-hover"));
+                ui.checkbox(&mut show_doc, tr!("library-show-in-model")).on_hover_text(tr!("library-show-in-model-hover"));
             },
         );
         self.prefs.hide_examples = !show_ex;
@@ -1101,9 +1098,9 @@ impl VarstotasApp {
             secs.push((EXAMPLES_FOLDER.to_string(), in_folder(EXAMPLES_FOLDER), true));
         }
         if all.is_empty() && filter.is_empty() {
-            ui.label(RichText::new("No components yet: select something and use + → Save Selection to Library.").weak());
+            ui.label(RichText::new(tr!("library-empty")).weak());
         } else if all.is_empty() {
-            ui.label(RichText::new("Nothing found").weak());
+            ui.label(RichText::new(tr!("library-nothing-found")).weak());
         }
         let (mut place, mut place_gen, mut edit, mut delete, mut place_def, mut select_def) = (None, None, None, None, None, None);
         let mut delete_def = None;
@@ -1157,28 +1154,28 @@ impl VarstotasApp {
                             drag = Some(TrayDrag { item: DragItem::Comp(it.path.clone()), name: it.name.clone(), recent: key.clone().map(|k| (false, k)), entered: false });
                         }
                         resp.context_menu(|ui| {
-                            if ui.button("Place").clicked() {
+                            if ui.button(tr!("library-place")).clicked() {
                                 place = Some(i);
                                 recent = key.clone();
                                 ui.close();
                             }
-                            if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the picture (saved in the file): frame the model first").clicked() {
+                            if ui.button(tr!("library-preview-from-view")).on_hover_text(tr!("library-preview-from-view-file-hover")).clicked() {
                                 preview_view = Some(PreviewTarget::File(it.path.clone()));
                                 ui.close();
                             }
-                            if ui.button("Set Preview Image…").on_hover_text("A picture shown here instead of the drawn model (saved in the file)").clicked() {
+                            if ui.button(tr!("library-preview-image")).on_hover_text(tr!("library-preview-image-file-hover")).clicked() {
                                 set_preview = Some((PreviewTarget::File(it.path.clone()), true));
                                 ui.close();
                             }
-                            if it.preview.is_some() && ui.button("Remove Preview Image").clicked() {
+                            if it.preview.is_some() && ui.button(tr!("library-undo-remove-preview")).clicked() {
                                 set_preview = Some((PreviewTarget::File(it.path.clone()), false));
                                 ui.close();
                             }
-                            if ui.button("Rename…").clicked() {
+                            if ui.button(tr!("library-rename-ellipsis")).clicked() {
                                 rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
                                 ui.close();
                             }
-                            if ui.button("Show in Finder").clicked() {
+                            if ui.button(tr!("library-show-in-finder")).clicked() {
                                 crate::ui::extensions::reveal(&it.path);
                                 ui.close();
                             }
@@ -1187,7 +1184,7 @@ impl VarstotasApp {
                             if let (Some(a), Some(k)) = (a, &key) {
                                 lib_act = Some((k.clone(), Some(it.path.clone()), a));
                             }
-                            if ui.button("Delete…").clicked() {
+                            if ui.button(tr!("library-delete-ellipsis")).clicked() {
                                 delete = Some((Some(it.path.clone()), it.name.clone()));
                                 ui.close();
                             }
@@ -1203,40 +1200,40 @@ impl VarstotasApp {
                             drag = Some(TrayDrag { item: DragItem::Def(d), name, recent: None, entered: false });
                         }
                         resp.context_menu(|ui| {
-                            if ui.button("Place").clicked() {
+                            if ui.button(tr!("library-place")).clicked() {
                                 place_def = Some(d);
                                 ui.close();
                             }
-                            if ui.button("Select Instances").clicked() {
+                            if ui.button(tr!("library-select-instances")).clicked() {
                                 select_def = Some(d);
                                 ui.close();
                             }
-                            if ui.button("Set Preview from View").on_hover_text("The viewport as it is now becomes the tile's picture (saved with the document): frame the component first").clicked() {
+                            if ui.button(tr!("library-preview-from-view")).on_hover_text(tr!("library-preview-from-view-def-hover")).clicked() {
                                 preview_view = Some(PreviewTarget::Def(d));
                                 ui.close();
                             }
-                            if ui.button("Set Preview Image…").on_hover_text("A picture shown on the tile instead of the rendered model").clicked() {
+                            if ui.button(tr!("library-preview-image")).on_hover_text(tr!("library-preview-image-def-hover")).clicked() {
                                 set_preview = Some((PreviewTarget::Def(d), true));
                                 ui.close();
                             }
-                            if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button("Remove Preview Image").clicked() {
+                            if self.doc.model.defs.get(d).is_some_and(|x| x.preview.is_some()) && ui.button(tr!("library-undo-remove-preview")).clicked() {
                                 set_preview = Some((PreviewTarget::Def(d), false));
                                 ui.close();
                             }
-                            if ui.button("Rename…").clicked() {
+                            if ui.button(tr!("library-rename-ellipsis")).clicked() {
                                 let name = self.doc.model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
                                 rename = Some((RenameTarget::Def(d), name));
                                 ui.close();
                             }
-                            if ui.button("Save to Library").on_hover_text("Write it to the library folder, for any document").clicked() {
+                            if ui.button(tr!("library-save-to-library")).on_hover_text(tr!("library-save-to-library-hover")).clicked() {
                                 save_def = Some(d);
                                 ui.close();
                             }
-                            if ui.button("Parameters…").on_hover_text("Window → Component Parameters: values that move, show or paint its parts").clicked() {
+                            if ui.button(tr!("library-parameters")).on_hover_text(tr!("library-parameters-hover")).clicked() {
                                 rig_def = Some(d);
                                 ui.close();
                             }
-                            if ui.button("Delete from Document…").on_hover_text("The component and all its placed copies").clicked() {
+                            if ui.button(tr!("library-delete-from-document")).on_hover_text(tr!("library-delete-from-document-hover")).clicked() {
                                 delete_def = Some(d);
                                 ui.close();
                             }
@@ -1287,7 +1284,7 @@ impl VarstotasApp {
                             super::tray_lib::rekey([&mut self.prefs.lib_favourites, &mut self.prefs.lib_recent], "c:", &file, &to);
                             self.refresh_library();
                         }
-                        Err(e) => self.flash_error(format!("Move to Folder: {e}")),
+                        Err(e) => self.flash_error(tr!("library-move-failed", error = e)),
                     }
                 }
             }
@@ -1300,7 +1297,7 @@ impl VarstotasApp {
             self.library.rename = rename;
         }
         if let Some((target, set)) = set_preview {
-            let image = if set { rfd::FileDialog::new().add_filter("Image", &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
+            let image = if set { rfd::FileDialog::new().add_filter(tr!("library-image-filter"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
             if !set || image.is_some() {
                 self.preview_of_from_file(&target, image.as_deref());
             }
@@ -1333,11 +1330,11 @@ impl VarstotasApp {
             }
         }
         if !self.library.errors.is_empty() {
-            ui.label(RichText::new(format!("{} file(s) could not be read", self.library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
+            ui.label(RichText::new(tr!("library-unreadable-files", n = self.library.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.library.errors.join("\n"));
         }
         if !self.library.gens.errors.is_empty() {
-            ui.label(RichText::new(format!("{} generator(s) could not be read", self.library.gens.errors.len())).color(Color32::from_rgb(200, 50, 40)))
+            ui.label(RichText::new(tr!("library-unreadable-generators", n = self.library.gens.errors.len())).color(Color32::from_rgb(200, 50, 40)))
                 .on_hover_text(self.library.gens.errors.join("\n"));
         }
         if let Some(i) = place {
@@ -1350,14 +1347,14 @@ impl VarstotasApp {
         let Some(name) = self.library.save_name.as_mut() else { return };
         let mut done = None;
         ui.horizontal(|ui| {
-            let r = ui.add(egui::TextEdit::singleline(name).hint_text("Name").desired_width(ui.available_width() - 110.0));
+            let r = ui.add(egui::TextEdit::singleline(name).hint_text(tr!("library-name")).desired_width(ui.available_width() - 110.0));
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 done = Some(true);
             }
-            if ui.button("Save").clicked() {
+            if ui.button(tr!("library-save")).clicked() {
                 done = Some(true);
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr!("cancel")).clicked() {
                 done = Some(false);
             }
         });
@@ -1406,7 +1403,7 @@ pub(crate) fn tile_ex(
     });
     let f = |v: f64| varstotas_kernel::units::format_length(v, unit);
     let note = if note.is_empty() { String::new() } else { format!("{note}\n") };
-    resp.on_hover_text(format!("{name}\n{note}{} × {} × {}\nClick to place", f(size.x), f(size.y), f(size.z)))
+    resp.on_hover_text(tr!("library-tile-hover", name = name, note = note, x = f(size.x), y = f(size.y), z = f(size.z)))
 }
 
 impl VarstotasApp {

@@ -9,132 +9,124 @@ pub struct FnDoc {
     pub doc: &'static str,
 }
 
+impl FnDoc {
+    /// The description in the UI language (`doc` is its key).
+    pub fn text(&self) -> String {
+        varstotas_i18n::tr(self.doc)
+    }
+}
+
 const fn f(name: &'static str, sigs: &'static [&'static str], doc: &'static str) -> FnDoc {
     FnDoc { name, sigs, doc }
 }
 
 /// Every API function (the names of [`crate::api_names`]) plus the Rhai built-ins scripts use most.
 pub const FNS: &[FnDoc] = &[
-    f("vec3", &["vec3(x, y, z)", "vec3(x, y)"], "A point / vector (an array [x, y, z] works too)."),
-    f("line", &["line(a, b)"], "Edges from a to b."),
-    f("polyline", &["polyline(points)", "polyline(points, closed)"], "Edges through points; closed and planar → a face."),
-    f("face", &["face(points)"], "A face through the points."),
-    f("rect", &["rect(origin, w, d)"], "A rectangular face in the XY plane."),
-    f(
-        "circle",
-        &["circle(center, r)", "circle(center, r, segments)", "circle(center, r, segments, normal)"],
-        "A circle face (or edges).",
+    f("vec3", &["vec3(x, y, z)", "vec3(x, y)"], "script-fn-vec3"),
+    f("line", &["line(a, b)"], "script-fn-line"),
+    f("polyline", &["polyline(points)", "polyline(points, closed)"], "script-fn-polyline"),
+    f("face", &["face(points)"], "script-fn-face"),
+    f("rect", &["rect(origin, w, d)"], "script-fn-rect"),
+    f("circle", &["circle(center, r)", "circle(center, r, segments)", "circle(center, r, segments, normal)"], "script-fn-circle",
     ),
-    f("polygon", &["polygon(center, r, sides)", "polygon(center, r, sides, normal)"], "A regular polygon face."),
-    f(
-        "arc",
-        &["arc(center, start_point, degrees)", "arc(center, start_point, degrees, segments)", "arc(center, start_point, degrees, segments, normal)"],
-        "Arc edges around center.",
+    f("polygon", &["polygon(center, r, sides)", "polygon(center, r, sides, normal)"], "script-fn-polygon"),
+    f("arc", &["arc(center, start_point, degrees)", "arc(center, start_point, degrees, segments)", "arc(center, start_point, degrees, segments, normal)"], "script-fn-arc",
     ),
-    f("box", &["box(origin, sx, sy, sz)"], "A new box group (origin = min corner)."),
-    f("cylinder", &["cylinder(center, r, h)", "cylinder(center, r, h, segments)"], "A new cylinder group (bottom at center)."),
-    f("cone", &["cone(center, r, h)", "cone(center, r, h, segments)"], "A new cone group (base at center, apex h above it)."),
-    f("pyramid", &["pyramid(origin, w, d, h)"], "A new pyramid group: a w × d base from origin, the apex h above its middle."),
-    f("sphere", &["sphere(center, r)", "sphere(center, r, segments)"], "A new sphere group around center."),
-    f("torus", &["torus(center, r, tube)", "torus(center, r, tube, segments, sides)"], "A new torus group around center: r to the middle of the tube, tube = its radius."),
-    f("pushpull", &["pushpull(face, distance)"], "Push / pull a face; returns the cap face."),
-    f("offset", &["offset(face, distance)"], "Offset a face's loop (d < 0 inward); returns the new face."),
-    f("follow_me", &["follow_me(face, edges)"], "Sweep a profile face along a path."),
-    f("erase", &["erase(x)"], "Erase an entity or an array of them."),
-    f("move", &["move(x, vector)"], "Move entities by a vector."),
-    f("copy", &["copy(x, vector)"], "Copy entities by a vector; returns the copies."),
-    f("rotate", &["rotate(x, center, axis, degrees)"], "Rotate entities about an axis."),
-    f("scale", &["scale(x, center, k)", "scale(x, center, vec3(kx, ky, kz))"], "Scale entities about a point."),
-    f("group", &["group(x)"], "Group entities; returns the group."),
-    f("component", &["component(x, name)"], "Make a component; returns its instance."),
-    f("explode", &["explode(g)"], "Explode a group / component."),
-    f("make_unique", &["make_unique(g)"], "Give a component instance its own definition."),
-    f("union", &["union(a, b)"], "Solid union of two solid groups."),
-    f("subtract", &["subtract(a, b)"], "Solid a minus b."),
-    f("intersect", &["intersect(a, b)"], "Solid intersection."),
-    f("trim", &["trim(a, b)"], "a minus b, b stays."),
-    f("split", &["split(a, b)"], "Split two solids into three."),
-    f("outer_shell", &["outer_shell(groups)"], "Outer shell of solids."),
-    f("reverse", &["reverse(faces)"], "Reverse faces."),
-    f("soften", &["soften(x, degrees)"], "Soften edges up to the fold angle."),
-    f("material", &["material(name, \"#RRGGBB\")", "material(name, [r, g, b])"], "Create / recolour a material; returns its name."),
-    f("paint", &["paint(x, material)", "paint(x, ())"], "Paint faces / groups (() removes)."),
-    f("tag", &["tag(x, name)"], "Assign a tag (created when missing)."),
-    f("make_parametric", &["make_parametric(g)"], "Make a group parametric."),
-    f(
-        "set_params",
-        &["set_params(g, #{ key: value, ... })", "set_params(g, #{ x, y, z, count, axis, gap, stretch })"],
-        "Set a generated component's values, or a parametric group's size / copies.",
+    f("box", &["box(origin, sx, sy, sz)"], "script-fn-box"),
+    f("cylinder", &["cylinder(center, r, h)", "cylinder(center, r, h, segments)"], "script-fn-cylinder"),
+    f("cone", &["cone(center, r, h)", "cone(center, r, h, segments)"], "script-fn-cone"),
+    f("pyramid", &["pyramid(origin, w, d, h)"], "script-fn-pyramid"),
+    f("sphere", &["sphere(center, r)", "sphere(center, r, segments)"], "script-fn-sphere"),
+    f("torus", &["torus(center, r, tube)", "torus(center, r, tube, segments, sides)"], "script-fn-torus"),
+    f("pushpull", &["pushpull(face, distance)"], "script-fn-pushpull"),
+    f("offset", &["offset(face, distance)"], "script-fn-offset"),
+    f("follow_me", &["follow_me(face, edges)"], "script-fn-follow-me"),
+    f("erase", &["erase(x)"], "script-fn-erase"),
+    f("move", &["move(x, vector)"], "script-fn-move"),
+    f("copy", &["copy(x, vector)"], "script-fn-copy"),
+    f("rotate", &["rotate(x, center, axis, degrees)"], "script-fn-rotate"),
+    f("scale", &["scale(x, center, k)", "scale(x, center, vec3(kx, ky, kz))"], "script-fn-scale"),
+    f("group", &["group(x)"], "script-fn-group"),
+    f("component", &["component(x, name)"], "script-fn-component"),
+    f("explode", &["explode(g)"], "script-fn-explode"),
+    f("make_unique", &["make_unique(g)"], "script-fn-make-unique"),
+    f("union", &["union(a, b)"], "script-fn-union"),
+    f("subtract", &["subtract(a, b)"], "script-fn-subtract"),
+    f("intersect", &["intersect(a, b)"], "script-fn-intersect"),
+    f("trim", &["trim(a, b)"], "script-fn-trim"),
+    f("split", &["split(a, b)"], "script-fn-split"),
+    f("outer_shell", &["outer_shell(groups)"], "script-fn-outer-shell"),
+    f("reverse", &["reverse(faces)"], "script-fn-reverse"),
+    f("soften", &["soften(x, degrees)"], "script-fn-soften"),
+    f("material", &["material(name, \"#RRGGBB\")", "material(name, [r, g, b])"], "script-fn-material"),
+    f("paint", &["paint(x, material)", "paint(x, ())"], "script-fn-paint"),
+    f("tag", &["tag(x, name)"], "script-fn-tag"),
+    f("make_parametric", &["make_parametric(g)"], "script-fn-make-parametric"),
+    f("set_params", &["set_params(g, #{ key: value, ... })", "set_params(g, #{ x, y, z, count, axis, gap, stretch })"], "script-fn-set-params",
     ),
-    f("params", &["params(g)"], "Values of a generated component / parameters of a parametric group, or ()."),
-    f("reset_params", &["reset_params(g)"], "A generated component back to its generator's defaults."),
-    f("generators", &["generators()"], "Names of the document's generators."),
-    f("add_generator", &["add_generator(source)"], "Add / update a generator from its source; returns its name."),
-    f("generate", &["generate(name, at)", "generate(name, at, #{ key: value, ... })"], "Place a generated component at a point."),
-    f("dimension", &["dimension(a, b, offset)"], "A linear dimension between points."),
-    f("note", &["note(at, offset, text)"], "A text note with a leader."),
-    f("enter", &["enter(g)"], "Build inside a group from now on."),
-    f("exit", &["exit()"], "Leave the group entered last."),
-    f("faces", &["faces()"], "Faces of the current context."),
-    f("edges", &["edges()"], "Edges of the current context."),
-    f("groups", &["groups()"], "Groups / components of the current context."),
-    f("all", &["all()"], "Everything in the current context."),
-    f("entities", &["entities(g)"], "Everything inside a group."),
-    f(
-        "child",
-        &["child(name)", "child(name, deep)", "child(g, name)", "child(g, name, deep)"],
-        "The group / component named name in the current context (or inside g); deep = search nested groups too. () when none.",
+    f("params", &["params(g)"], "script-fn-params"),
+    f("reset_params", &["reset_params(g)"], "script-fn-reset-params"),
+    f("generators", &["generators()"], "script-fn-generators"),
+    f("add_generator", &["add_generator(source)"], "script-fn-add-generator"),
+    f("generate", &["generate(name, at)", "generate(name, at, #{ key: value, ... })"], "script-fn-generate"),
+    f("dimension", &["dimension(a, b, offset)"], "script-fn-dimension"),
+    f("note", &["note(at, offset, text)"], "script-fn-note"),
+    f("enter", &["enter(g)"], "script-fn-enter"),
+    f("exit", &["exit()"], "script-fn-exit"),
+    f("faces", &["faces()"], "script-fn-faces"),
+    f("edges", &["edges()"], "script-fn-edges"),
+    f("groups", &["groups()"], "script-fn-groups"),
+    f("all", &["all()"], "script-fn-all"),
+    f("entities", &["entities(g)"], "script-fn-entities"),
+    f("child", &["child(name)", "child(name, deep)", "child(g, name)", "child(g, name, deep)"], "script-fn-child",
     ),
-    f(
-        "children",
-        &["children()", "children(deep)", "children(g)", "children(g, deep)"],
-        "Groups / components of the current context (or inside g); deep = nested ones too.",
+    f("children", &["children()", "children(deep)", "children(g)", "children(g, deep)"], "script-fn-children",
     ),
-    f("show", &["show(x)", "show(x, on)"], "Show (on = false: hide) entities."),
-    f("hide", &["hide(x)"], "Hide entities."),
-    f("selection", &["selection()"], "The selection."),
-    f("select", &["select(x)", "select(())"], "Set the selection (() clears)."),
-    f("bounds", &["bounds(x)"], "#{ min, max, size, center } in world coordinates."),
-    f("model_bounds", &["model_bounds()"], "Bounds of the whole model."),
-    f("length", &["length(text)"], "Parse a length with units (\"1.2m\") → mm."),
-    f("units", &["units()"], "The model's length unit."),
-    f("materials", &["materials()"], "Material names."),
-    f("all_faces", &["all_faces()"], "Every face, nested groups included."),
-    f("read_text", &["read_text(path)"], "Read a text file."),
-    f("lang", &["lang()"], "The UI language code (\"en\", \"ru\", …): pick the texts a plugin prints or shows."),
-    f("platform", &["platform()"], "\"macos\", \"windows\" or \"linux\"."),
-    f("write_text", &["write_text(path, text)"], "Write a text file."),
-    f("file_exists", &["file_exists(path)"], "A file or folder is there."),
-    f("list_files", &["list_files(dir, ext)"], "Files under dir (subfolders too) with the extension (\"\" = any), sorted."),
-    f("list_dirs", &["list_dirs(dir)"], "The folders in dir, sorted."),
-    f("parse_json", &["parse_json(text)"], "JSON text → maps, arrays, numbers, strings."),
-    f("fetch_text", &["fetch_text(url)", "fetch_text(url, headers)"], "Download a web page / API answer as text (system curl); headers: #{ \"X-Auth-Token\": key }."),
-    f("fetch_file", &["fetch_file(url, path)", "fetch_file(url, path, headers)"], "Download url into the file path."),
-    f("url_encode", &["url_encode(text)"], "Percent-encode text for a URL (a search query)."),
-    f("print", &["print(value)"], "Write to the console log."),
-    f("len", &["len(array)"], "Length of an array / string."),
-    f("range", &["range(from, to)", "range(from, to, step)"], "Integers from..to (to excluded), for loops."),
-    f("min", &["min(a, b)"], "The smaller number."),
-    f("max", &["max(a, b)"], "The larger number."),
-    f("clamp", &["clamp(x, lo, hi)"], "x kept within lo..hi."),
-    f("ceil", &["ceil(x)"], "Round up to a whole number (as a float)."),
+    f("show", &["show(x)", "show(x, on)"], "script-fn-show"),
+    f("hide", &["hide(x)"], "script-fn-hide"),
+    f("selection", &["selection()"], "script-fn-selection"),
+    f("select", &["select(x)", "select(())"], "script-fn-select"),
+    f("bounds", &["bounds(x)"], "script-fn-bounds"),
+    f("model_bounds", &["model_bounds()"], "script-fn-model-bounds"),
+    f("length", &["length(text)"], "script-fn-length"),
+    f("units", &["units()"], "script-fn-units"),
+    f("materials", &["materials()"], "script-fn-materials"),
+    f("all_faces", &["all_faces()"], "script-fn-all-faces"),
+    f("read_text", &["read_text(path)"], "script-fn-read-text"),
+    f("lang", &["lang()"], "script-fn-lang"),
+    f("platform", &["platform()"], "script-fn-platform"),
+    f("write_text", &["write_text(path, text)"], "script-fn-write-text"),
+    f("file_exists", &["file_exists(path)"], "script-fn-file-exists"),
+    f("list_files", &["list_files(dir, ext)"], "script-fn-list-files"),
+    f("list_dirs", &["list_dirs(dir)"], "script-fn-list-dirs"),
+    f("parse_json", &["parse_json(text)"], "script-fn-parse-json"),
+    f("fetch_text", &["fetch_text(url)", "fetch_text(url, headers)"], "script-fn-fetch-text"),
+    f("fetch_file", &["fetch_file(url, path)", "fetch_file(url, path, headers)"], "script-fn-fetch-file"),
+    f("url_encode", &["url_encode(text)"], "script-fn-url-encode"),
+    f("print", &["print(value)"], "script-fn-print"),
+    f("len", &["len(array)"], "script-fn-len"),
+    f("range", &["range(from, to)", "range(from, to, step)"], "script-fn-range"),
+    f("min", &["min(a, b)"], "script-fn-min"),
+    f("max", &["max(a, b)"], "script-fn-max"),
+    f("clamp", &["clamp(x, lo, hi)"], "script-fn-clamp"),
+    f("ceil", &["ceil(x)"], "script-fn-ceil"),
 ];
 
 /// Sections of the in-app reference: a title and the [`FNS`] names in it (every function is
 /// in one).
 pub const GROUPS: &[(&str, &[&str])] = &[
-    ("Points and vectors", &["vec3", "length", "units"]),
-    ("Drawing", &["line", "polyline", "face", "rect", "circle", "polygon", "arc"]),
-    ("Solids", &["box", "cylinder", "cone", "pyramid", "sphere", "torus"]),
-    ("Editing", &["pushpull", "offset", "follow_me", "erase", "move", "copy", "rotate", "scale", "reverse", "soften"]),
-    ("Groups and components", &["group", "component", "explode", "make_unique", "enter", "exit"]),
-    ("Finding objects", &["child", "children", "faces", "edges", "groups", "all", "entities", "all_faces", "selection", "select", "bounds", "model_bounds"]),
-    ("Visibility, materials, tags", &["show", "hide", "material", "paint", "materials", "tag"]),
-    ("Solid tools", &["union", "subtract", "intersect", "trim", "split", "outer_shell"]),
-    ("Parameters and generators", &["make_parametric", "set_params", "params", "reset_params", "generators", "add_generator", "generate"]),
-    ("Dimensions and notes", &["dimension", "note"]),
-    ("Files and network", &["read_text", "write_text", "file_exists", "list_files", "list_dirs", "parse_json", "fetch_text", "fetch_file", "url_encode"]),
-    ("Output and numbers", &["print", "lang", "platform", "len", "range", "min", "max", "clamp", "ceil"]),
+    ("script-group-points-and-vectors", &["vec3", "length", "units"]),
+    ("script-group-drawing", &["line", "polyline", "face", "rect", "circle", "polygon", "arc"]),
+    ("script-group-solids", &["box", "cylinder", "cone", "pyramid", "sphere", "torus"]),
+    ("script-group-editing", &["pushpull", "offset", "follow_me", "erase", "move", "copy", "rotate", "scale", "reverse", "soften"]),
+    ("script-group-groups-and-components", &["group", "component", "explode", "make_unique", "enter", "exit"]),
+    ("script-group-finding-objects", &["child", "children", "faces", "edges", "groups", "all", "entities", "all_faces", "selection", "select", "bounds", "model_bounds"]),
+    ("script-group-visibility-materials-tags", &["show", "hide", "material", "paint", "materials", "tag"]),
+    ("script-group-solid-tools", &["union", "subtract", "intersect", "trim", "split", "outer_shell"]),
+    ("script-group-parameters-and-generators", &["make_parametric", "set_params", "params", "reset_params", "generators", "add_generator", "generate"]),
+    ("script-group-dimensions-and-notes", &["dimension", "note"]),
+    ("script-group-files-and-network", &["read_text", "write_text", "file_exists", "list_files", "list_dirs", "parse_json", "fetch_text", "fetch_file", "url_encode"]),
+    ("script-group-output-and-numbers", &["print", "lang", "platform", "len", "range", "min", "max", "clamp", "ceil"]),
 ];
 
 /// What a script expression is, as far as the editor can tell (for completion after a dot).
@@ -181,6 +173,13 @@ pub struct Member {
     pub ty: Ty,
 }
 
+impl Member {
+    /// The description in the UI language (`doc` is its key).
+    pub fn text(&self) -> String {
+        varstotas_i18n::tr(self.doc)
+    }
+}
+
 const fn prop(name: &'static str, doc: &'static str, on: &'static [Ty], ty: Ty) -> Member {
     Member { name, sig: None, doc, on, ty }
 }
@@ -195,55 +194,55 @@ const ARR: &[Ty] = &[Faces, Edges, Groups, Vecs, Array];
 
 /// Properties and methods of entities, vectors, arrays, strings and bounds.
 pub const MEMBERS: &[Member] = &[
-    prop("kind", "\"face\", \"edge\", \"group\", \"component\" …", ENT, Str),
-    prop("valid", "the entity still exists", ENT, Bool),
-    prop("area", "face area, mm²", &[Face], Num),
-    prop("normal", "face normal (world)", &[Face], Vector),
-    prop("edges", "edges of the face", &[Face], Edges),
-    prop("faces", "faces of the edge / neighbours of the face", &[Face, Edge], Faces),
-    prop("length", "edge length, mm", &[Edge], Num),
-    prop("soft", "the edge is soft", &[Edge], Bool),
-    prop("center", "centre of the bounds (world)", &[Face, Edge, Group], Vector),
-    prop("vertices", "points of the face / edge (world)", &[Face, Edge], Vecs),
-    prop("name", "group / component name (assignable)", &[Group], Str),
-    prop("hidden", "the entity is hidden (assignable)", ENT, Bool),
-    prop("bounds", "#{ min, max, size, center } (world)", ENT, Bounds),
-    prop("size", "size of the bounds along x, y, z", ENT, Vector),
-    prop("min", "minimum corner of the bounds (world)", ENT, Vector),
-    prop("max", "maximum corner of the bounds (world)", ENT, Vector),
-    prop("definition", "component definition name", &[Group], Str),
-    prop("material", "material name or ()", &[Face, Group], Str),
-    prop("tag", "tag name or ()", ENT, Str),
-    prop("x", "x coordinate (assignable)", &[Vector], Num),
-    prop("y", "y coordinate (assignable)", &[Vector], Num),
-    prop("z", "z coordinate (assignable)", &[Vector], Num),
-    meth("length", "length()", "vector length", &[Vector], Num),
-    meth("normalize", "normalize()", "unit vector", &[Vector], Vector),
-    meth("dot", "dot(b)", "dot product", &[Vector], Num),
-    meth("cross", "cross(b)", "cross product", &[Vector], Vector),
-    meth("distance", "distance(b)", "distance to b", &[Vector], Num),
-    prop("min", "minimum corner", &[Bounds], Vector),
-    prop("max", "maximum corner", &[Bounds], Vector),
-    prop("size", "size along x, y, z", &[Bounds], Vector),
-    prop("center", "centre", &[Bounds], Vector),
-    meth("len", "len()", "number of items", ARR, Num),
-    meth("is_empty", "is_empty()", "no items", ARR, Bool),
-    meth("push", "push(value)", "append an item", ARR, Any),
-    meth("pop", "pop()", "remove and return the last item", ARR, Any),
-    meth("insert", "insert(index, value)", "insert an item", ARR, Any),
-    meth("remove", "remove(index)", "remove and return an item", ARR, Any),
-    meth("contains", "contains(value)", "the array / string contains the value", &[Faces, Edges, Groups, Vecs, Array, Str], Bool),
-    meth("index_of", "index_of(value)", "index of the value or -1", ARR, Num),
-    meth("filter", "filter(|x| condition)", "items where the closure is true", ARR, Any),
-    meth("map", "map(|x| value)", "a new array of the closure results", ARR, Array),
-    meth("reduce", "reduce(|sum, x| sum + x, start)", "fold the items", ARR, Any),
-    meth("len", "len()", "number of characters", &[Str], Num),
-    meth("to_upper", "to_upper()", "upper case (in place)", &[Str], Any),
-    meth("to_lower", "to_lower()", "lower case (in place)", &[Str], Any),
-    meth("trim", "trim()", "strip spaces (in place)", &[Str], Any),
-    meth("split", "split(separator)", "split into an array", &[Str], Array),
-    meth("starts_with", "starts_with(text)", "the string starts with text", &[Str], Bool),
-    meth("to_string", "to_string()", "as text", &[Face, Edge, Group, Vector, Num], Str),
+    prop("kind", "script-member-kind", ENT, Str),
+    prop("valid", "script-member-valid", ENT, Bool),
+    prop("area", "script-member-area", &[Face], Num),
+    prop("normal", "script-member-normal", &[Face], Vector),
+    prop("edges", "script-member-edges", &[Face], Edges),
+    prop("faces", "script-member-faces", &[Face, Edge], Faces),
+    prop("length", "script-member-length", &[Edge], Num),
+    prop("soft", "script-member-soft", &[Edge], Bool),
+    prop("center", "script-member-center", &[Face, Edge, Group], Vector),
+    prop("vertices", "script-member-vertices", &[Face, Edge], Vecs),
+    prop("name", "script-member-name", &[Group], Str),
+    prop("hidden", "script-member-hidden", ENT, Bool),
+    prop("bounds", "script-member-bounds", ENT, Bounds),
+    prop("size", "script-member-size", ENT, Vector),
+    prop("min", "script-member-min", ENT, Vector),
+    prop("max", "script-member-max", ENT, Vector),
+    prop("definition", "script-member-definition", &[Group], Str),
+    prop("material", "script-member-material", &[Face, Group], Str),
+    prop("tag", "script-member-tag", ENT, Str),
+    prop("x", "script-member-x", &[Vector], Num),
+    prop("y", "script-member-y", &[Vector], Num),
+    prop("z", "script-member-z", &[Vector], Num),
+    meth("length", "length()", "script-member-length-2", &[Vector], Num),
+    meth("normalize", "normalize()", "script-member-normalize", &[Vector], Vector),
+    meth("dot", "dot(b)", "script-member-dot", &[Vector], Num),
+    meth("cross", "cross(b)", "script-member-cross", &[Vector], Vector),
+    meth("distance", "distance(b)", "script-member-distance", &[Vector], Num),
+    prop("min", "script-member-min-2", &[Bounds], Vector),
+    prop("max", "script-member-max-2", &[Bounds], Vector),
+    prop("size", "script-member-size-2", &[Bounds], Vector),
+    prop("center", "script-member-center-2", &[Bounds], Vector),
+    meth("len", "len()", "script-member-len", ARR, Num),
+    meth("is_empty", "is_empty()", "script-member-is-empty", ARR, Bool),
+    meth("push", "push(value)", "script-member-push", ARR, Any),
+    meth("pop", "pop()", "script-member-pop", ARR, Any),
+    meth("insert", "insert(index, value)", "script-member-insert", ARR, Any),
+    meth("remove", "remove(index)", "script-member-remove", ARR, Any),
+    meth("contains", "contains(value)", "script-member-contains", &[Faces, Edges, Groups, Vecs, Array, Str], Bool),
+    meth("index_of", "index_of(value)", "script-member-index-of", ARR, Num),
+    meth("filter", "filter(|x| condition)", "script-member-filter", ARR, Any),
+    meth("map", "map(|x| value)", "script-member-map", ARR, Array),
+    meth("reduce", "reduce(|sum, x| sum + x, start)", "script-member-reduce", ARR, Any),
+    meth("len", "len()", "script-member-len-2", &[Str], Num),
+    meth("to_upper", "to_upper()", "script-member-to-upper", &[Str], Any),
+    meth("to_lower", "to_lower()", "script-member-to-lower", &[Str], Any),
+    meth("trim", "trim()", "script-member-trim", &[Str], Any),
+    meth("split", "split(separator)", "script-member-split", &[Str], Array),
+    meth("starts_with", "starts_with(text)", "script-member-starts-with", &[Str], Bool),
+    meth("to_string", "to_string()", "script-member-to-string", &[Face, Edge, Group, Vector, Num], Str),
 ];
 
 /// What a function returns.
@@ -433,54 +432,70 @@ fn var_ty(chars: &[char], name: &str, before: usize, depth: usize) -> Ty {
 }
 
 impl Ty {
-    pub fn label(self) -> &'static str {
-        match self {
-            Face => "face",
-            Edge => "edge",
-            Group => "group",
-            Vector => "vector",
-            Num => "number",
-            Bool => "bool",
-            Str => "string",
-            Bounds => "bounds",
-            Faces => "array of faces",
-            Edges => "array of edges",
-            Groups => "array of groups",
-            Vecs => "array of points",
-            Array => "array",
-            Any => "entity / vector",
-        }
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            Face => "script-type-face",
+            Edge => "script-type-edge",
+            Group => "script-type-group",
+            Vector => "script-type-vector",
+            Num => "script-type-num",
+            Bool => "script-type-bool",
+            Str => "script-type-str",
+            Bounds => "script-type-bounds",
+            Faces => "script-type-faces",
+            Edges => "script-type-edges",
+            Groups => "script-type-groups",
+            Vecs => "script-type-vecs",
+            Array => "script-type-array",
+            Any => "script-type-any",
+        })
     }
 }
 
 /// Header tags of plugins and console scripts (`// @tag …`, see `docs/PLUGINS.md`): name,
 /// syntax, what it does.
 pub const TAGS: &[(&str, &str, &str)] = &[
-    ("name", "@name Title", "name in the menu and the dialog title"),
-    ("menu", "@menu Folder / Item", "path under Extensions"),
-    ("description", "@description Text", "tooltip and text of the dialog"),
-    ("param", "@param key[:type] = default \"Label\"", "a value asked in the dialog before the run"),
-    ("pick", "@pick N \"Prompt\"", "N points clicked before the run → points"),
-    ("select", "@select \"Prompt\"", "objects selected before the run → objects"),
-    ("import", "@import ext, ext", "a File → Import entry; the file in path"),
-    ("export", "@export ext", "a File → Export entry; the file in path"),
-    ("generator", "@generator Name", "generator: makes this file a generator (see docs/GENERATORS.md)"),
-    ("formula", "@formula key[:type] = expression \"Label\"", "generator: a value computed from the parameters, in p"),
-    ("check", "@check expression \"Message\"", "generator: values for which it is false are refused"),
+    ("name", "@name Title", "script-tag-name"), // i18n-ignore
+    ("menu", "@menu Folder / Item", "script-tag-menu"), // i18n-ignore
+    ("description", "@description Text", "script-tag-description"), // i18n-ignore
+    ("param", "@param key[:type] = default \"Label\"", "script-tag-param"), // i18n-ignore
+    ("pick", "@pick N \"Prompt\"", "script-tag-pick"), // i18n-ignore
+    ("select", "@select \"Prompt\"", "script-tag-select"), // i18n-ignore
+    ("import", "@import ext, ext", "script-tag-import"), // i18n-ignore
+    ("export", "@export ext", "script-tag-export"), // i18n-ignore
+    ("generator", "@generator Name", "script-tag-generator"), // i18n-ignore
+    ("formula", "@formula key[:type] = expression \"Label\"", "script-tag-formula"), // i18n-ignore
+    ("check", "@check expression \"Message\"", "script-tag-check"), // i18n-ignore
 ];
 
 /// Types of `@param key:type`.
 pub const PARAM_TYPES: &[(&str, &str)] = &[
-    ("length", "length with units (\"1.2m\"), mm in the script — the default for numbers"),
-    ("int", "whole number"),
-    ("number", "fractional number"),
-    ("text", "text — the default for a quoted value"),
-    ("bool", "check box — the default for true / false"),
-    ("choice", "generator: one of choice(a|b|c)"),
-    ("angle", "generator: degrees, a slider"),
-    ("percent", "generator: 0–100, a slider"),
-    ("material", "generator: a material name of the document"),
+    ("length", "script-param-type-length"),
+    ("int", "script-param-type-int"),
+    ("number", "script-param-type-number"),
+    ("text", "script-param-type-text"),
+    ("bool", "script-param-type-bool"),
+    ("choice", "script-param-type-choice"),
+    ("angle", "script-param-type-angle"),
+    ("percent", "script-param-type-percent"),
+    ("material", "script-param-type-material"),
 ];
+
+/// `@param` types that only generators understand.
+pub fn is_generator_type(name: &str) -> bool {
+    matches!(name, "choice" | "angle" | "percent" | "material")
+}
+
+/// The description of a `@param` type (`key` from [`PARAM_TYPES`]); `plain` drops the
+/// "generator: " lead of a generator-only type.
+pub fn param_type_text(key: &str, plain: bool) -> String {
+    let plain_key = format!("{key}-plain");
+    if plain && varstotas_i18n::has(&plain_key) {
+        varstotas_i18n::tr(&plain_key)
+    } else {
+        varstotas_i18n::tr(key)
+    }
+}
 
 /// Completion in a header comment line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

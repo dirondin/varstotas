@@ -77,7 +77,7 @@ fn main() -> eframe::Result<()> {
     let mut options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
-            .with_title("Varstotas")
+            .with_title("Varstotas") // i18n-ignore
             .with_icon(app_icon())
             .with_inner_size([1400.0, 900.0])
             .with_min_inner_size([800.0, 500.0])
@@ -95,7 +95,7 @@ fn main() -> eframe::Result<()> {
         }));
     }
     eframe::run_native(
-        "Varstotas",
+        "Varstotas", // i18n-ignore
         options,
         Box::new(|cc| Ok(Box::new(app::VarstotasApp::new(cc)))),
     )

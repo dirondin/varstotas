@@ -65,10 +65,10 @@ pub enum ThemePref {
 
 /// System fonts with arrows / ⌘ ⇧ etc., appended as fallbacks (egui's bundled fonts lack them).
 const SYMBOL_FONTS: &[&str] = &[
-    "/System/Library/Fonts/Apple Symbols.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "C:\\Windows\\Fonts\\seguisym.ttf",
-    "C:\\Windows\\Fonts\\segoeui.ttf",
+    "/System/Library/Fonts/Apple Symbols.ttf", // i18n-ignore
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", // i18n-ignore
+    "C:\\Windows\\Fonts\\seguisym.ttf", // i18n-ignore
+    "C:\\Windows\\Fonts\\segoeui.ttf", // i18n-ignore
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ];
 

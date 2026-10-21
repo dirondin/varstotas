@@ -40,6 +40,7 @@ fn rename(src: &str, names: &[String], i: usize) -> String {
     let mut word = String::new();
     let flush = |word: &mut String, out: &mut String| {
         if !word.is_empty() {
+            // i18n-ignore-next
             if word == "Params" || names.iter().any(|n| n == word.as_str()) {
                 out.push_str(&format!("{word}_c{i}"));
             } else {
@@ -112,7 +113,7 @@ pub(crate) fn validate(src: &str) -> Result<(), (Option<usize>, String)> {
 /// Check one shader alone: `None` = fine, else a message with its own line number.
 pub fn check(sh: &CustomSurface) -> Option<String> {
     if !declared_names(&sh.source).iter().any(|n| n == "surface") {
-        return Some("define fn surface(s: Surface, p: Params) -> Surface".into());
+        return Some(varstotas_i18n::tr!("render-shader-define-surface"));
     }
     let (src, starts) = compose(&[Some(sh)]);
     match validate(&src) {
@@ -120,7 +121,7 @@ pub fn check(sh: &CustomSurface) -> Option<String> {
         Err((line, msg)) => {
             let msg = msg.replace("_c0", "");
             Some(match line {
-                Some(l) if l >= starts[0] && l < starts[0] + sh.source.lines().count() => format!("line {}: {msg}", l - starts[0] + 1),
+                Some(l) if l >= starts[0] && l < starts[0] + sh.source.lines().count() => varstotas_i18n::tr!("render-shader-line", line = l - starts[0] + 1, msg = msg.clone()),
                 _ => msg,
             })
         }

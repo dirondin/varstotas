@@ -68,7 +68,7 @@ pub use model::{
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
 pub use params::Parametric;
 pub use rig::{Joint, JointKind, PartOp, Rig, Rigged, SceneRig};
-pub use lights::{Light, LightKind, RENDER_PRESETS, RENDER_SIZES, RenderDof, RenderSettings};
+pub use lights::{Light, LightKind, RENDER_PRESETS, RENDER_SIZES, RenderDof, RenderSettings, render_preset_label, render_size_label};
 pub use pbr::{
     CustomShader, EFFECT_PRESETS, Effects, Environment, MAX_SHADER_PARAMS, PBR_MAPS, Pbr, ShaderParam, SkyKind, Stylize, Tonemap,
     shader_params,
@@ -95,12 +95,19 @@ slotmap::new_key_type! {
 
 #[derive(thiserror::Error, Debug, Clone, PartialEq)]
 pub enum OpError {
-    #[error("entity not found")]
     NotFound,
-    #[error("degenerate geometry")]
     Degenerate,
-    #[error("operation not possible: {0}")]
     Invalid(String),
+}
+
+impl std::fmt::Display for OpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpError::NotFound => f.write_str(&varstotas_i18n::tr("kernel-err-entity-not-found")),
+            OpError::Degenerate => f.write_str(&varstotas_i18n::tr("kernel-err-degenerate-geometry")),
+            OpError::Invalid(why) => f.write_str(&varstotas_i18n::tr!("kernel-err-operation-not-possible", why = why.as_str())),
+        }
+    }
 }
 pub type OpResult<T> = Result<T, OpError>;
 

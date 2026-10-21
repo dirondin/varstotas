@@ -3,6 +3,7 @@
 //! the tube) is set; the result is a component of the bundled generator of that shape
 //! ([`SOURCES`]), so its sizes stay editable in Entity Info.
 
+use varstotas_i18n::tr;
 use super::common::*;
 use super::draw::{Clicker, plane_point, shape_normal};
 use super::{OverlayView, Tool, ToolContext, ToolId};
@@ -17,12 +18,12 @@ use varstotas_render::Overlay3d;
 /// The shape tools' generators: (tool, generator name, source). Each puts the shape's base on
 /// the component's red–green plane at the origin (round shapes centred on it).
 pub const SOURCES: [(ToolId, &str, &str); 6] = [
-    (ToolId::Box, "Box", include_str!("../../../../examples/generators/primitives/box.rhai")),
-    (ToolId::Cylinder, "Cylinder", include_str!("../../../../examples/generators/primitives/cylinder.rhai")),
-    (ToolId::Cone, "Cone", include_str!("../../../../examples/generators/primitives/cone.rhai")),
-    (ToolId::Pyramid, "Pyramid", include_str!("../../../../examples/generators/primitives/pyramid.rhai")),
-    (ToolId::Sphere, "Sphere", include_str!("../../../../examples/generators/primitives/sphere.rhai")),
-    (ToolId::Torus, "Torus", include_str!("../../../../examples/generators/primitives/torus.rhai")),
+    (ToolId::Box, "Box", include_str!("../../../../examples/generators/primitives/box.rhai")), // i18n-ignore
+    (ToolId::Cylinder, "Cylinder", include_str!("../../../../examples/generators/primitives/cylinder.rhai")), // i18n-ignore
+    (ToolId::Cone, "Cone", include_str!("../../../../examples/generators/primitives/cone.rhai")), // i18n-ignore
+    (ToolId::Pyramid, "Pyramid", include_str!("../../../../examples/generators/primitives/pyramid.rhai")), // i18n-ignore
+    (ToolId::Sphere, "Sphere", include_str!("../../../../examples/generators/primitives/sphere.rhai")), // i18n-ignore
+    (ToolId::Torus, "Torus", include_str!("../../../../examples/generators/primitives/torus.rhai")), // i18n-ignore
 ];
 
 /// Torus tube sides per ring segment.
@@ -85,7 +86,7 @@ impl PrimitiveTool {
     }
 
     fn name(&self) -> &'static str {
-        SOURCES.iter().find(|s| s.0 == self.id).map(|s| s.1).unwrap_or("Box")
+        SOURCES.iter().find(|s| s.0 == self.id).map(|s| s.1).unwrap_or("Box") // i18n-ignore
     }
 
     fn source(&self) -> &'static str {
@@ -342,12 +343,12 @@ impl Tool for PrimitiveTool {
             }
         }
     }
-    fn vcb_label(&self) -> &str {
+    fn vcb_label(&self) -> String {
         match (self.stage, self.id) {
-            (Stage::Height(_), ToolId::Torus) => "Tube",
-            (Stage::Height(_), _) => "Height",
-            (_, ToolId::Box | ToolId::Pyramid) => "Dimensions",
-            _ => "Radius",
+            (Stage::Height(_), ToolId::Torus) => tr!("tool-vcb-tube"),
+            (Stage::Height(_), _) => tr!("tool-vcb-height"),
+            (_, ToolId::Box | ToolId::Pyramid) => tr!("tool-vcb-dimensions"),
+            _ => tr!("tool-vcb-radius"),
         }
     }
     fn vcb_value(&self) -> String {
@@ -361,16 +362,16 @@ impl Tool for PrimitiveTool {
         }
     }
     fn status_text(&self) -> String {
-        let what = self.name().to_lowercase();
+        let what = self.id.name().to_lowercase();
         match (self.stage, self.id) {
-            (Stage::Idle, ToolId::Box | ToolId::Pyramid) => format!("Click the first corner of the {what}'s base (a face under the cursor orients it; arrows set the plane)."),
-            (Stage::Idle, _) => format!("Click the centre of the {what}'s base (a face under the cursor orients it). Type `{}s` for segments.", self.segs),
-            (Stage::Base { .. }, ToolId::Box | ToolId::Pyramid) => "Click the opposite corner, or type `width, depth` (`width, depth, height` places it at once).".into(),
-            (Stage::Base { .. }, ToolId::Sphere) => "Move to set the radius and click, or type it.".into(),
-            (Stage::Base { .. }, ToolId::Torus) => "Click the radius (to the middle of the tube), or type `radius, tube`.".into(),
-            (Stage::Base { .. }, _) => "Click the radius, or type `radius` (`radius, height` places it at once).".into(),
-            (Stage::Height(_), ToolId::Torus) => "Move to set the tube's radius and click, or type it.".into(),
-            (Stage::Height(_), _) => "Move up or down to set the height and click, or type it.".into(),
+            (Stage::Idle, ToolId::Box | ToolId::Pyramid) => tr!("tool-prim-box-first", what = what),
+            (Stage::Idle, _) => tr!("tool-prim-round-first", what = what, segs = self.segs),
+            (Stage::Base { .. }, ToolId::Box | ToolId::Pyramid) => tr!("tool-prim-box-second"),
+            (Stage::Base { .. }, ToolId::Sphere) => tr!("tool-prim-sphere-radius"),
+            (Stage::Base { .. }, ToolId::Torus) => tr!("tool-prim-torus-radius"),
+            (Stage::Base { .. }, _) => tr!("tool-prim-round-radius"),
+            (Stage::Height(_), ToolId::Torus) => tr!("tool-prim-torus-tube"),
+            (Stage::Height(_), _) => tr!("tool-prim-height"),
         }
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {

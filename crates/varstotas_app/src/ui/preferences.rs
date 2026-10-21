@@ -12,6 +12,7 @@ use crate::app::{FaceStylePref, VarstotasApp};
 use crate::keymap::{self, KeyCmd, Shortcut};
 use crate::templates::Template;
 use varstotas_i18n::tr;
+use varstotas_kernel::{render_preset_label, render_size_label};
 
 /// The sections, in the order of the list.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -61,17 +62,34 @@ impl Section {
     /// What the search finds a section by (besides its name): the labels of its settings.
     fn words(self) -> &'static str {
         match self {
-            Section::General => "auto-save autosave minutes template new document units undo steps history",
-            Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise",
-            Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle",
-            Section::Libraries => "components materials folder examples in model tiles small large list",
-            Section::Downloads => "watch downloads folder browser",
-            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons language translation",
-            Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
-            Section::Shortcuts => "keyboard shortcuts hotkeys keys",
-            Section::Toolbar => "toolbar buttons order reserve separator customize tools",
-            Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera",
+            Section::General => "auto-save autosave minutes template new document units undo steps history", // i18n-ignore
+            Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise", // i18n-ignore
+            Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle", // i18n-ignore
+            Section::Libraries => "components materials folder examples in model tiles small large list", // i18n-ignore
+            Section::Downloads => "watch downloads folder browser", // i18n-ignore
+            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons language translation", // i18n-ignore
+            Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture", // i18n-ignore
+            Section::Shortcuts => "keyboard shortcuts hotkeys keys", // i18n-ignore
+            Section::Toolbar => "toolbar buttons order reserve separator customize tools", // i18n-ignore
+            Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera", // i18n-ignore
         }
+    }
+
+    /// The search words in the UI language (a translation may list its own).
+    fn words_translated(self) -> String {
+        varstotas_i18n::tr(match self {
+            Section::General => "prefs-words-general",
+            Section::Drawing => "prefs-words-drawing",
+            Section::Libraries => "prefs-words-libraries",
+            Section::Downloads => "prefs-words-downloads",
+            Section::View => "prefs-words-view",
+            Section::Navigation => "prefs-words-navigation",
+            Section::Interface => "prefs-words-interface",
+            Section::Shortcuts => "prefs-words-shortcuts",
+            Section::Toolbar => "prefs-words-toolbar",
+            Section::Render => "prefs-words-render",
+        })
+        .to_lowercase()
     }
 
     pub fn matches(self, search: &str) -> bool {
@@ -79,6 +97,7 @@ impl Section {
         s.is_empty()
             || self.name().to_lowercase().contains(&s)
             || self.words().contains(&s)
+            || self.words_translated().contains(&s)
             || (self == Section::Shortcuts && shortcut_rows(&s).len() < KeyCmd::all().len())
     }
 }
@@ -145,21 +164,21 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
     ui.horizontal(|ui| {
         let text = match (&custom, &shown) {
             (Some(p), _) => p.display().to_string(),
-            (None, Some(p)) => format!("{} (default)", p.display()),
+            (None, Some(p)) => tr!("prefs-folder-default", path = p.display().to_string()),
             (None, None) => "—".to_string(),
         };
         ui.add(egui::Label::new(RichText::new(text).small().color(theme::text_dim())).truncate());
     });
     ui.horizontal(|ui| {
-        if ui.button("Choose…").clicked()
+        if ui.button(tr!("prefs-choose")).clicked()
             && let Some(d) = rfd::FileDialog::new().pick_folder()
         {
             *custom = Some(d);
         }
-        if ui.add_enabled(custom.is_some(), egui::Button::new("Default")).clicked() {
+        if ui.add_enabled(custom.is_some(), egui::Button::new(tr!("prefs-default"))).clicked() {
             *custom = None;
         }
-        if ui.add_enabled(shown.as_deref().is_some_and(Path::is_dir), egui::Button::new("Show in Finder")).clicked()
+        if ui.add_enabled(shown.as_deref().is_some_and(Path::is_dir), egui::Button::new(tr!("prefs-show-in-finder"))).clicked()
             && let Some(d) = &shown
         {
             crate::ui::extensions::reveal(d);
@@ -172,18 +191,18 @@ fn file_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, found: Optio
     ui.label(label);
     let text = match (&custom, &found) {
         (Some(c), Some(f)) if c == f => c.display().to_string(),
-        (Some(c), _) => format!("{} (not usable)", c.display()),
-        (None, Some(f)) => format!("{} (found)", f.display()),
+        (Some(c), _) => tr!("prefs-file-not-usable", path = c.display().to_string()),
+        (None, Some(f)) => tr!("prefs-file-found", path = f.display().to_string()),
         (None, None) => missing.to_string(),
     };
     ui.add(egui::Label::new(RichText::new(text).small().color(theme::text_dim())).truncate());
     ui.horizontal(|ui| {
-        if ui.button("Choose…").clicked()
+        if ui.button(tr!("prefs-choose")).clicked()
             && let Some(f) = rfd::FileDialog::new().pick_file()
         {
             *custom = Some(f);
         }
-        if ui.add_enabled(custom.is_some(), egui::Button::new("Default")).clicked() {
+        if ui.add_enabled(custom.is_some(), egui::Button::new(tr!("prefs-default"))).clicked() {
             *custom = None;
         }
     });
@@ -205,7 +224,7 @@ impl VarstotasApp {
         }
         let mut open = true;
         let pos = self.viewport.view_rect.min + egui::vec2(60.0, 40.0);
-        let mut win = egui::Window::new("Preferences")
+        let mut win = egui::Window::new(tr!("prefs-title"))
             .id(egui::Id::new("preferences_window"))
             .open(&mut open)
             .collapsible(false)
@@ -220,7 +239,7 @@ impl VarstotasApp {
                 // the list of sections and the search
                 ui.vertical(|ui| {
                     ui.set_width(140.0);
-                    let r = ui.add(egui::TextEdit::singleline(&mut self.prefs_win.search).hint_text("Search").desired_width(140.0));
+                    let r = ui.add(egui::TextEdit::singleline(&mut self.prefs_win.search).hint_text(tr!("prefs-search")).desired_width(140.0));
                     super::tray_lib::spot("prefs_search", r.rect.center());
                     ui.add_space(4.0);
                     let search = self.prefs_win.search.clone();
@@ -236,7 +255,7 @@ impl VarstotasApp {
                         }
                     }
                     if shown.is_empty() {
-                        note(ui, "Nothing found");
+                        note(ui, &tr!("prefs-nothing-found"));
                     }
                 });
                 ui.separator();
@@ -246,7 +265,7 @@ impl VarstotasApp {
                         ui.horizontal(|ui| {
                             ui.heading(section.name());
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let r = ui.button("Reset").on_hover_text("This section's settings back to the defaults");
+                                let r = ui.button(tr!("prefs-reset")).on_hover_text(tr!("prefs-reset-tip"));
                                 super::tray_lib::spot("prefs_reset", r.rect.center());
                                 if r.clicked() {
                                     self.reset_prefs_section(section);
@@ -321,18 +340,18 @@ impl VarstotasApp {
                 p.toolbar_icons = d.toolbar_icons;
             }
         }
-        self.flash(format!("Preferences → {}: defaults", s.name()));
+        self.flash(tr!("prefs-defaults-flash", section = s.name()));
     }
 
     fn prefs_general(&mut self, ui: &mut Ui) {
-        heading(ui, "Auto-save");
+        heading(ui, &tr!("prefs-autosave"));
         ui.horizontal(|ui| {
-            ui.checkbox(&mut self.prefs.autosave, "Auto-save every");
+            ui.checkbox(&mut self.prefs.autosave, tr!("prefs-autosave-every"));
             ui.add_enabled(self.prefs.autosave, egui::DragValue::new(&mut self.prefs.autosave_minutes).range(1..=120).speed(0.2));
-            ui.label("minutes");
+            ui.label(tr!("prefs-minutes"));
         });
-        note(ui, "Unsaved changes are written to <name>.vrst~autosave next to the file.");
-        heading(ui, "New document");
+        note(ui, &tr!("prefs-autosave-note"));
+        heading(ui, &tr!("prefs-new-document"));
         let cur = self.prefs.template.unwrap_or(Template::ArchitecturalMm);
         let mut t = cur;
         egui::ComboBox::from_id_salt("default_template").selected_text(t.name()).width(260.0).show_ui(ui, |ui| {
@@ -343,43 +362,43 @@ impl VarstotasApp {
         if t != cur || self.prefs.template.is_none() {
             self.prefs.template = Some(t);
         }
-        note(ui, "The template of File → New (units and scale); its view is set in the View section.");
-        heading(ui, "Undo");
+        note(ui, &tr!("prefs-template-note"));
+        heading(ui, &tr!("prefs-undo"));
         ui.horizontal(|ui| {
-            ui.label("Keep");
+            ui.label(tr!("prefs-keep"));
             let r = ui.add(egui::DragValue::new(&mut self.prefs.undo_steps).range(10..=1000).speed(1.0));
             super::tray_lib::spot("undo_steps", r.rect.center());
-            ui.label("undo steps per document");
+            ui.label(tr!("prefs-undo-steps"));
         });
-        note(ui, "Each step keeps a copy of the model: big models with many steps take more memory.");
+        note(ui, &tr!("prefs-undo-note"));
     }
 
     fn prefs_render(&mut self, ui: &mut Ui) {
         use varstotas_kernel::{RENDER_PRESETS, RENDER_SIZES};
-        heading(ui, "New documents");
+        heading(ui, &tr!("prefs-new-documents"));
         let r = &mut self.prefs.new_render;
         ui.horizontal(|ui| {
-            ui.label("Size");
+            ui.label(tr!("render-size"));
             let name = RENDER_SIZES
                 .iter()
                 .find(|s| s.1 == r.width && s.2 == r.height)
-                .map(|s| s.0.to_string())
+                .map(|s| render_size_label(s.0))
                 .unwrap_or_else(|| format!("{} × {}", r.width, r.height));
             egui::ComboBox::from_id_salt("new_render_size").selected_text(name).width(200.0).show_ui(ui, |ui| {
                 for (n, w, h) in RENDER_SIZES {
-                    if ui.selectable_label(r.width == w && r.height == h, n).clicked() {
+                    if ui.selectable_label(r.width == w && r.height == h, render_size_label(n)).clicked() {
                         r.width = w;
                         r.height = h;
                     }
                 }
             });
-            ui.checkbox(&mut r.match_view, "Match the view").on_hover_text("The height follows the viewport's shape");
+            ui.checkbox(&mut r.match_view, tr!("prefs-match-view")).on_hover_text(tr!("prefs-match-view-tip"));
         });
         ui.horizontal(|ui| {
-            ui.label("Quality");
+            ui.label(tr!("render-quality"));
             for (n, samples, bounces, clamp) in RENDER_PRESETS {
                 let on = r.samples == samples && r.bounces == bounces;
-                let b = ui.add(egui::Button::selectable(on, n));
+                let b = ui.add(egui::Button::selectable(on, render_preset_label(n)));
                 super::tray_lib::spot(format!("rq:{n}"), b.rect.center());
                 if b.clicked() {
                     r.samples = samples;
@@ -389,52 +408,52 @@ impl VarstotasApp {
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Samples");
+            ui.label(tr!("render-samples"));
             ui.add(egui::DragValue::new(&mut r.samples).range(1..=65536));
-            ui.label("Bounces");
+            ui.label(tr!("render-bounces"));
             ui.add(egui::DragValue::new(&mut r.bounces).range(1..=32));
-            ui.label("Time limit");
+            ui.label(tr!("render-time-limit"));
             ui.add(egui::DragValue::new(&mut r.time_limit).range(0.0..=3600.0).suffix(" s"));
         });
-        ui.checkbox(&mut r.denoise, "Denoise when the render stops");
-        ui.add_enabled(r.denoise, egui::Checkbox::new(&mut r.ai_denoise, "With Open Image Denoise when installed"));
+        ui.checkbox(&mut r.denoise, tr!("prefs-denoise"));
+        ui.add_enabled(r.denoise, egui::Checkbox::new(&mut r.ai_denoise, tr!("prefs-denoise-ai")));
         ui.horizontal(|ui| {
-            let b = ui.button("Use Current Document's").on_hover_text("Take the render settings of the open document");
+            let b = ui.button(tr!("prefs-use-current-doc")).on_hover_text(tr!("prefs-use-current-doc-tip"));
             super::tray_lib::spot("render_use", b.rect.center());
             if b.clicked() {
                 self.prefs.new_render = self.doc.model.render;
             }
-            let b = ui.button("Apply to Current Document").on_hover_text("The open document gets these settings (Undo puts them back)");
+            let b = ui.button(tr!("prefs-apply-current-doc")).on_hover_text(tr!("prefs-apply-current-doc-tip"));
             super::tray_lib::spot("render_apply", b.rect.center());
             if b.clicked() {
                 let r = self.prefs.new_render;
-                self.doc.commit("Render Settings", |m| m.render = r);
+                self.doc.commit(&tr!("render-undo-settings"), |m| m.render = r);
             }
         });
-        note(ui, "File → New starts with these; Window → Render… changes the open document's.");
+        note(ui, &tr!("prefs-render-note"));
 
-        heading(ui, "Programs");
+        heading(ui, &tr!("prefs-programs"));
         let ffmpeg = crate::animation::ffmpeg(self.prefs.ffmpeg_path.as_deref());
-        file_row(ui, "ffmpeg (videos of File → Export → Animation)", &mut self.prefs.ffmpeg_path, ffmpeg, "not found: install it (brew install ffmpeg) or choose the program");
+        file_row(ui, &tr!("prefs-ffmpeg"), &mut self.prefs.ffmpeg_path, ffmpeg, &tr!("prefs-ffmpeg-missing"));
         let oidn = varstotas_render::oidn_library();
         file_row(
             ui,
-            "Open Image Denoise library (the render's denoiser)",
+            &tr!("prefs-oidn"),
             &mut self.prefs.oidn_path,
             oidn,
-            "not found: the built-in filter denoises (brew install open-image-denoise, or choose the library)",
+            &tr!("prefs-oidn-missing"),
         );
     }
 
     fn prefs_drawing(&mut self, ui: &mut Ui) {
-        heading(ui, "Grid");
+        heading(ui, &tr!("prefs-grid"));
         let unit = self.doc.model.unit;
         ui.horizontal(|ui| {
             let mut grid = self.prefs.grid.show;
-            if ui.checkbox(&mut grid, "Show grid").clicked() {
+            if ui.checkbox(&mut grid, tr!("prefs-show-grid")).clicked() {
                 self.actions.push(crate::app::Action::ToggleGrid);
             }
-            ui.label("step");
+            ui.label(tr!("prefs-grid-step"));
             ui.add(
                 egui::DragValue::new(&mut self.prefs.grid.step)
                     .range(0.01..=1.0e6)
@@ -442,46 +461,45 @@ impl VarstotasApp {
                     .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
                     .custom_parser(move |t| varstotas_kernel::units::parse_length(t, unit)),
             );
-            ui.label("major every");
+            ui.label(tr!("prefs-grid-major"));
             ui.add(egui::DragValue::new(&mut self.prefs.grid.major).range(2..=20).speed(0.1));
         });
-        note(ui, "Zooming out multiplies the step by the major count. With Select active, typing a length sets the step.");
-        heading(ui, "Snapping and increments");
-        note(ui, "The same switches as the Snapping menu.");
+        note(ui, &tr!("prefs-grid-note"));
+        heading(ui, &tr!("prefs-snapping"));
+        note(ui, &tr!("prefs-snapping-note"));
         self.snapping_menu(ui);
     }
 
     fn prefs_libraries(&mut self, ui: &mut Ui) {
         let home = crate::bridge::home_dir();
-        heading(ui, "Components");
-        folder_row(ui, "Library folder", &mut self.prefs.library_dir, home.as_ref().map(|h| h.join("components")), "Components (.vrst) and generators (.rhai) of the Components card");
+        heading(ui, &tr!("prefs-components"));
+        folder_row(ui, &tr!("prefs-library-folder"), &mut self.prefs.library_dir, home.as_ref().map(|h| h.join("components")), &tr!("prefs-components-folder-tip"));
         let mut show_ex = !self.prefs.hide_examples;
-        ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The bundled example generators");
+        ui.checkbox(&mut show_ex, tr!("prefs-show-examples")).on_hover_text(tr!("prefs-show-examples-tip"));
         self.prefs.hide_examples = !show_ex;
         let mut show_doc = !self.prefs.hide_document;
-        ui.checkbox(&mut show_doc, "Show In Model").on_hover_text("The open document's components and generators");
+        ui.checkbox(&mut show_doc, tr!("prefs-show-in-model")).on_hover_text(tr!("prefs-show-in-model-tip"));
         self.prefs.hide_document = !show_doc;
-        heading(ui, "Materials");
-        folder_row(ui, "Library folder", &mut self.prefs.mat_library_dir, home.as_ref().map(|h| h.join("materials")), "Materials (.vrstmat) of the Materials card; subfolders are categories");
+        heading(ui, &tr!("prefs-materials"));
+        folder_row(ui, &tr!("prefs-library-folder"), &mut self.prefs.mat_library_dir, home.as_ref().map(|h| h.join("materials")), &tr!("prefs-materials-folder-tip"));
         let mut show_ex = !self.prefs.hide_mat_examples;
-        ui.checkbox(&mut show_ex, "Show Examples").on_hover_text("The materials bundled with Varstotas (the Material Gallery demo)");
+        ui.checkbox(&mut show_ex, tr!("prefs-show-examples")).on_hover_text(tr!("prefs-show-mat-examples-tip"));
         self.prefs.hide_mat_examples = !show_ex;
-        heading(ui, "Tiles");
+        heading(ui, &tr!("prefs-tiles"));
         ui.horizontal(|ui| {
             for (s, label) in super::tray_lib::TILE_SIZES {
-                let r = ui.radio_value(&mut self.prefs.lib_tiles, s, label);
+                let r = ui.radio_value(&mut self.prefs.lib_tiles, s, super::tray_lib::tile_label(label));
                 super::tray_lib::spot(format!("tiles:{label}"), r.rect.center());
             }
         });
-        note(ui, "Both cards; also in their … menus.");
+        note(ui, &tr!("prefs-tiles-note"));
     }
 
     fn prefs_downloads(&mut self, ui: &mut Ui) {
-        heading(ui, "Watch Downloads");
-        ui.checkbox(&mut self.prefs.watch_downloads, "Offer new model files for import")
-            .on_hover_text("Every new model file or archive in the folder is offered for import (always on while a page of Other Sites waits)");
-        folder_row(ui, "Watched folder", &mut self.prefs.downloads_watch_dir, crate::downloads::downloads_folder(), "Where your browser saves files");
-        note(ui, "Also in Window → 3D Library… → Other Sites.");
+        heading(ui, &tr!("prefs-watch-downloads"));
+        ui.checkbox(&mut self.prefs.watch_downloads, tr!("prefs-watch-offer")).on_hover_text(tr!("prefs-watch-offer-tip"));
+        folder_row(ui, &tr!("prefs-watched-folder"), &mut self.prefs.downloads_watch_dir, crate::downloads::downloads_folder(), &tr!("prefs-watched-folder-tip"));
+        note(ui, &tr!("prefs-downloads-note"));
     }
 
     /// The toolbar's buttons in order (↑ ↓, → to the reserve) and the reserve (← back).
@@ -492,7 +510,7 @@ impl VarstotasApp {
         // (index on the toolbar, -1 up / 1 down / 0 to the reserve) or an item to add
         let mut op: Option<(usize, i32)> = None;
         let mut add: Option<Item> = None;
-        note(ui, "The buttons of the toolbar, in order; the others wait in reserve (they stay in the menus).");
+        note(ui, &tr!("prefs-toolbar-note"));
         // a row: the icon (a line for a separator) and the name
         let label = |ui: &mut Ui, it: Item| {
             let (r, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
@@ -510,7 +528,7 @@ impl VarstotasApp {
         // the lists down to the bottom of the window (less the column headings)
         let list_h = (ui.clip_rect().bottom() - ui.cursor().top() - 40.0).max(160.0);
         ui.columns(2, |cols| {
-            heading(&mut cols[0], "On the toolbar");
+            heading(&mut cols[0], &tr!("prefs-toolbar-on"));
             egui::ScrollArea::vertical().id_salt("tb_on").max_height(list_h).auto_shrink([false, true]).show(&mut cols[0], |ui| {
                 let n = items.len();
                 for (i, &it) in items.iter().enumerate() {
@@ -521,7 +539,7 @@ impl VarstotasApp {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             // room for the scroll bar
                             ui.add_space(14.0);
-                            for (glyph, d, tip, ok) in [("→", 0, "To the reserve", true), ("⏷", 1, "Down", i + 1 < n), ("⏶", -1, "Up", i > 0)] {
+                            for (glyph, d, tip, ok) in [("→", 0, tr!("prefs-toolbar-to-reserve"), true), ("⏷", 1, tr!("prefs-toolbar-down"), i + 1 < n), ("⏶", -1, tr!("prefs-toolbar-up"), i > 0)] {
                                 let r = ui.add_enabled(ok, egui::Button::new(glyph).small()).on_hover_text(tip);
                                 let name = match d {
                                     0 => "out",
@@ -537,17 +555,17 @@ impl VarstotasApp {
                     });
                 }
             });
-            heading(&mut cols[1], "Reserve");
+            heading(&mut cols[1], &tr!("prefs-toolbar-reserve"));
             egui::ScrollArea::vertical().id_salt("tb_off").max_height(list_h).auto_shrink([false, true]).show(&mut cols[1], |ui| {
                 let mut group = None;
                 for it in std::iter::once(Item::Sep).chain(spare) {
                     if it.group().is_some() && it.group() != group {
                         group = it.group();
                         ui.add_space(4.0);
-                        ui.label(RichText::new(group.unwrap_or_default()).small().color(theme::text_dim()));
+                        ui.label(RichText::new(super::toolbar::group_label(group.unwrap_or_default())).small().color(theme::text_dim()));
                     }
                     ui.horizontal(|ui| {
-                        let r = ui.add(egui::Button::new("←").small()).on_hover_text("To the end of the toolbar");
+                        let r = ui.add(egui::Button::new("←").small()).on_hover_text(tr!("prefs-toolbar-to-end"));
                         super::tray_lib::spot(format!("tb_in:{}", it.key()), r.rect.center());
                         if r.clicked() {
                             add = Some(it);
@@ -595,15 +613,19 @@ impl VarstotasApp {
             self.load_plugins();
         }
         note(ui, &tr!("prefs-language-note"));
-        heading(ui, "Theme");
+        heading(ui, &tr!("prefs-theme"));
         ui.horizontal(|ui| {
-            for (t, label) in [(ThemePref::Light, "Light"), (ThemePref::Dark, "Dark"), (ThemePref::System, "As the System")] {
-                let r = ui.radio_value(&mut self.prefs.theme, t, label);
+            for (t, label) in [(ThemePref::Light, "Light"), (ThemePref::Dark, "Dark"), (ThemePref::System, "As the System")] { // i18n-ignore
+                let r = ui.radio_value(&mut self.prefs.theme, t, tr(match t {
+                    ThemePref::Light => "prefs-theme-light",
+                    ThemePref::Dark => "prefs-theme-dark",
+                    ThemePref::System => "prefs-theme-system",
+                }));
                 super::tray_lib::spot(format!("theme:{label}"), r.rect.center());
             }
         });
-        note(ui, "The viewport keeps its own colours (sky, ground); sheets and unfold patterns stay white paper.");
-        heading(ui, "Scale");
+        note(ui, &tr!("prefs-theme-note"));
+        heading(ui, &tr!("prefs-scale"));
         ui.horizontal(|ui| {
             for pct in [80, 90, 100, 110, 125, 150] {
                 let on = (self.prefs.ui_scale * 100.0).round() as i32 == pct;
@@ -614,11 +636,11 @@ impl VarstotasApp {
                 }
             }
         });
-        note(ui, &varstotas_i18n::platform_keys("Menus, panels and windows; %CMDK%+ / %CMDK%− / %CMDK%0 change it too."));
-        heading(ui, "Toolbar icons");
+        note(ui, &tr!("prefs-scale-note"));
+        heading(ui, &tr!("prefs-toolbar-icons"));
         ui.horizontal(|ui| {
             for (label, side) in super::toolbar::ICON_SIZES {
-                let r = ui.radio_value(&mut self.prefs.toolbar_icons, side, label);
+                let r = ui.radio_value(&mut self.prefs.toolbar_icons, side, super::toolbar::icon_size_label(label));
                 super::tray_lib::spot(format!("icons:{label}"), r.rect.center());
             }
         });
@@ -643,7 +665,7 @@ impl VarstotasApp {
     }
 
     fn prefs_shortcuts(&mut self, ui: &mut Ui) {
-        note(ui, "Click a shortcut, then press the new keys: Esc cancels, Backspace removes the shortcut. A key another command had is taken from it.");
+        note(ui, &tr!("prefs-shortcuts-note"));
         if let Some(cmd) = self.prefs_win.capture {
             let press = ui.input(|i| {
                 i.events.iter().find_map(|e| match e {
@@ -660,15 +682,15 @@ impl VarstotasApp {
                     egui::Key::Escape => {}
                     egui::Key::Backspace | egui::Key::Delete if !sc.cmd && !sc.alt && !sc.shift => {
                         keymap::assign(&mut self.prefs.shortcuts, cmd, None);
-                        self.flash(format!("{}: no shortcut", cmd.name()));
+                        self.flash(tr!("prefs-shortcut-removed", command = cmd.name()));
                     }
                     _ => match sc.reserved() {
-                        Some(why) => self.flash_error(format!("{} can't be a shortcut: {why}", sc.label())),
+                        Some(why) => self.flash_error(tr!("prefs-shortcut-reserved", keys = sc.label(), why = why)),
                         None => {
                             let taken = keymap::assign(&mut self.prefs.shortcuts, cmd, Some(sc));
                             self.flash(match taken {
-                                Some(o) => format!("{}: {} (taken from {o})", cmd.name(), sc.label()),
-                                None => format!("{}: {}", cmd.name(), sc.label()),
+                                Some(o) => tr!("prefs-shortcut-taken", command = cmd.name(), keys = sc.label(), other = o.to_string()),
+                                None => tr!("prefs-shortcut-set", command = cmd.name(), keys = sc.label()),
                             });
                         }
                     },
@@ -683,14 +705,14 @@ impl VarstotasApp {
             for cmd in rows {
                 if matches!(cmd, KeyCmd::Tool(_)) && !tools_heading {
                     tools_heading = true;
-                    ui.label(RichText::new("Tools").strong());
+                    ui.label(RichText::new(tr!("prefs-shortcuts-tools")).strong());
                     ui.end_row();
                 }
                 ui.label(cmd.name());
                 let waiting = self.prefs_win.capture == Some(cmd);
                 let keys = keymap::labels(cmd);
                 let text = if waiting {
-                    RichText::new("Press keys…").italics()
+                    RichText::new(tr!("prefs-press-keys")).italics()
                 } else if keys.is_empty() {
                     RichText::new("—").color(theme::text_dim())
                 } else {
@@ -704,7 +726,7 @@ impl VarstotasApp {
                 }
                 if changed {
                     let def: Vec<String> = cmd.defaults().iter().map(|k| k.label()).collect();
-                    let tip = if def.is_empty() { "Default: none".to_string() } else { format!("Default: {}", def.join(", ")) };
+                    let tip = if def.is_empty() { tr!("prefs-default-none") } else { tr!("prefs-default-keys", keys = def.join(", ")) };
                     let r = ui.small_button("↺").on_hover_text(tip);
                     super::tray_lib::spot(format!("keyreset:{}", cmd.id()), r.rect.center());
                     if r.clicked() {
@@ -721,57 +743,58 @@ impl VarstotasApp {
     fn prefs_navigation(&mut self, ui: &mut Ui) {
         use crate::nav::NavGesture;
         let n = &mut self.prefs.nav;
-        heading(ui, "Speed");
+        heading(ui, &tr!("prefs-speed"));
         egui::Grid::new("nav_speed").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
-            ui.label("Orbit");
+            ui.label(tr!("prefs-nav-orbit"));
             let r = ui.add(egui::Slider::new(&mut n.orbit_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
             super::tray_lib::spot("nav:orbit", r.rect.center());
             ui.end_row();
-            ui.label("Zoom");
+            ui.label(tr!("prefs-nav-zoom"));
             let r = ui.add(egui::Slider::new(&mut n.zoom_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
             super::tray_lib::spot("nav:zoom", r.rect.center());
             ui.end_row();
         });
-        heading(ui, "Zoom");
-        let r = ui.checkbox(&mut n.invert_zoom, "Invert the wheel").on_hover_text("Wheel away from you zooms out");
+        heading(ui, &tr!("prefs-nav-zoom"));
+        let r = ui.checkbox(&mut n.invert_zoom, tr!("prefs-invert-wheel")).on_hover_text(tr!("prefs-invert-wheel-tip"));
         super::tray_lib::spot("nav:invert", r.rect.center());
-        let r = ui.checkbox(&mut n.zoom_to_cursor, "Zoom toward the cursor").on_hover_text("Off: toward the middle of the view");
+        let r = ui.checkbox(&mut n.zoom_to_cursor, tr!("prefs-zoom-cursor")).on_hover_text(tr!("prefs-zoom-cursor-tip"));
         super::tray_lib::spot("nav:cursor", r.rect.center());
-        heading(ui, "Mouse");
+        heading(ui, &tr!("prefs-mouse"));
         ui.horizontal(|ui| {
-            ui.label("Middle button drag:");
-            ui.radio_value(&mut n.middle, NavGesture::Orbit, "Orbit");
-            let r = ui.radio_value(&mut n.middle, NavGesture::Pan, "Pan");
+            ui.label(tr!("prefs-middle-drag"));
+            ui.radio_value(&mut n.middle, NavGesture::Orbit, tr!("prefs-nav-orbit"));
+            let r = ui.radio_value(&mut n.middle, NavGesture::Pan, tr!("prefs-nav-pan"));
             super::tray_lib::spot("nav:middle_pan", r.rect.center());
         });
-        note(ui, "Shift gives the other one.");
-        heading(ui, "Trackpad");
+        note(ui, &tr!("prefs-shift-other"));
+        heading(ui, &tr!("prefs-trackpad"));
         ui.horizontal(|ui| {
-            ui.label("Two fingers:");
-            ui.radio_value(&mut n.two_finger, NavGesture::Orbit, "Orbit");
-            let r = ui.radio_value(&mut n.two_finger, NavGesture::Pan, "Pan");
+            ui.label(tr!("prefs-two-fingers"));
+            ui.radio_value(&mut n.two_finger, NavGesture::Orbit, tr!("prefs-nav-orbit"));
+            let r = ui.radio_value(&mut n.two_finger, NavGesture::Pan, tr!("prefs-nav-pan"));
             super::tray_lib::spot("nav:two_pan", r.rect.center());
-            let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, "Zoom");
+            let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, tr!("prefs-nav-zoom"));
             super::tray_lib::spot("nav:two_zoom", r.rect.center());
         });
-        note(ui, &varstotas_i18n::platform_keys("Shift: Pan (Orbit when two fingers pan). Pinch and %CMD% + two fingers always zoom."));
+        note(ui, &tr!("prefs-trackpad-note"));
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {
-        note(ui, "How a new document looks (File → New, New from Template). The View menu and the viewport's buttons change the current view.");
+        note(ui, &tr!("prefs-view-note"));
         let v = &mut self.prefs.new_view;
-        heading(ui, "Style");
-        let name = super::view_hud::STYLES.iter().find(|s| s.0 == v.face_style).map(|s| s.2).unwrap_or("?");
+        heading(ui, &tr!("realistic-style"));
+        let name = super::view_hud::STYLES.iter().find(|s| s.0 == v.face_style).map(|s| tr(s.2)).unwrap_or_else(|| "?".to_string()); // i18n-ignore
         let r = egui::ComboBox::from_id_salt("new_view_style").selected_text(name).width(200.0).show_ui(ui, |ui| {
             for (s, _, label, _) in super::view_hud::STYLES {
-                let r = ui.selectable_value(&mut v.face_style, s, label);
+                let label = tr(label);
+                let r = ui.selectable_value(&mut v.face_style, s, label.clone());
                 super::tray_lib::spot(format!("pstyle:{label}"), r.rect.center());
             }
         });
         super::tray_lib::spot("prefs_style", r.response.rect.center());
         egui::Grid::new("new_view_show").num_columns(4).spacing([16.0, 2.0]).show(ui, |ui| {
-            for (k, (on, label)) in [(&mut v.edges, "Edges"), (&mut v.profiles, "Profiles"), (&mut v.axes, "Axes"), (&mut v.ground, "Ground"), (&mut v.sky, "Sky"), (&mut v.grid, "Grid"), (&mut v.shadows, "Shadows")].into_iter().enumerate() {
-                let r = ui.checkbox(on, label);
+            for (k, (on, label, key)) in [(&mut v.edges, "Edges", "view-edges"), (&mut v.profiles, "Profiles", "view-profiles"), (&mut v.axes, "Axes", "view-show-axes"), (&mut v.ground, "Ground", "view-show-ground"), (&mut v.sky, "Sky", "view-show-sky"), (&mut v.grid, "Grid", "view-show-grid"), (&mut v.shadows, "Shadows", "view-show-shadows")].into_iter().enumerate() { // i18n-ignore
+                let r = ui.checkbox(on, tr(key));
                 super::tray_lib::spot(format!("pv:{label}"), r.rect.center());
                 if k == 3 {
                     ui.end_row();
@@ -779,22 +802,22 @@ impl VarstotasApp {
             }
             ui.end_row();
         });
-        heading(ui, "Camera");
+        heading(ui, &tr!("prefs-camera"));
         ui.horizontal(|ui| {
-            ui.radio_value(&mut v.perspective, true, "Perspective");
-            let r = ui.radio_value(&mut v.perspective, false, "Parallel Projection");
+            ui.radio_value(&mut v.perspective, true, tr!("view-perspective"));
+            let r = ui.radio_value(&mut v.perspective, false, tr!("view-parallel-projection"));
             super::tray_lib::spot("pv:Parallel", r.rect.center());
         });
         ui.horizontal(|ui| {
-            ui.label("Field of view");
+            ui.label(tr!("prefs-fov"));
             ui.add_enabled(v.perspective, egui::DragValue::new(&mut v.fov).range(10.0..=120.0).speed(0.5).suffix("°"));
         });
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if ui.button("Use Current View").on_hover_text("Take the style, switches and camera of the active viewport").clicked() {
+            if ui.button(tr!("prefs-use-current-view")).on_hover_text(tr!("prefs-use-current-view-tip")).clicked() {
                 self.prefs.new_view = self.current_view_defaults();
             }
-            if ui.button("Apply to Current View").on_hover_text("Set the active viewport like a new document").clicked() {
+            if ui.button(tr!("prefs-apply-current-view")).on_hover_text(tr!("prefs-apply-current-view-tip")).clicked() {
                 self.apply_view_defaults();
             }
         });

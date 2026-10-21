@@ -28,6 +28,15 @@ impl LightKind {
         }
     }
 
+    /// The shown name.
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            Self::Point => "render-light-point",
+            Self::Spot => "render-light-spot",
+            Self::Area => "render-light-area",
+        })
+    }
+
     pub fn from_key(k: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|l| l.key() == k)
     }
@@ -60,7 +69,7 @@ pub struct Light {
 impl Default for Light {
     fn default() -> Self {
         Self {
-            name: "Light".into(),
+            name: "Light".into(), // i18n-ignore
             kind: LightKind::Point,
             position: DVec3::new(0.0, 0.0, 2500.0),
             direction: DVec3::NEG_Z,
@@ -79,9 +88,9 @@ impl Light {
     /// A light of `kind` at `position` with its defaults.
     pub fn new(kind: LightKind, position: DVec3) -> Self {
         let name = match kind {
-            LightKind::Point => "Point Light",
-            LightKind::Spot => "Spot Light",
-            LightKind::Area => "Area Light",
+            LightKind::Point => "Point Light", // i18n-ignore
+            LightKind::Spot => "Spot Light", // i18n-ignore
+            LightKind::Area => "Area Light", // i18n-ignore
         };
         Self { name: name.into(), kind, position, ..Default::default() }
     }
@@ -212,16 +221,38 @@ impl Default for RenderSettings {
 
 /// Quality presets of the Render window: name, samples, bounces, firefly clamp.
 pub const RENDER_PRESETS: [(&str, u32, u32, f32); 4] =
-    [("Draft", 32, 3, 10.0), ("Preview", 128, 5, 20.0), ("Final", 512, 8, 30.0), ("Best", 2048, 12, 60.0)];
+    [("Draft", 32, 3, 10.0), ("Preview", 128, 5, 20.0), ("Final", 512, 8, 30.0), ("Best", 2048, 12, 60.0)]; // i18n-ignore
+
+/// The shown name of a quality preset (`RENDER_PRESETS` id).
+pub fn render_preset_label(id: &str) -> String {
+    varstotas_i18n::tr(match id {
+        "Draft" => "render-preset-draft", // i18n-ignore
+        "Preview" => "render-preset-preview", // i18n-ignore
+        "Final" => "render-preset-final", // i18n-ignore
+        _ => "render-preset-best",
+    })
+}
+
+/// The shown name of an image size (`RENDER_SIZES` id).
+pub fn render_size_label(id: &str) -> String {
+    varstotas_i18n::tr(match id {
+        "HD 1280 × 720" => "render-size-hd", // i18n-ignore
+        "Full HD 1920 × 1080" => "render-size-full-hd", // i18n-ignore
+        "QHD 2560 × 1440" => "render-size-qhd", // i18n-ignore
+        "4K 3840 × 2160" => "render-size-4k", // i18n-ignore
+        "Square 1080" => "render-size-square", // i18n-ignore
+        _ => "render-size-portrait",
+    })
+}
 
 /// Image sizes of the Render window: name, width, height.
 pub const RENDER_SIZES: [(&str, u32, u32); 6] = [
-    ("HD 1280 × 720", 1280, 720),
-    ("Full HD 1920 × 1080", 1920, 1080),
-    ("QHD 2560 × 1440", 2560, 1440),
+    ("HD 1280 × 720", 1280, 720), // i18n-ignore
+    ("Full HD 1920 × 1080", 1920, 1080), // i18n-ignore
+    ("QHD 2560 × 1440", 2560, 1440), // i18n-ignore
     ("4K 3840 × 2160", 3840, 2160),
-    ("Square 1080", 1080, 1080),
-    ("Portrait 1080 × 1350", 1080, 1350),
+    ("Square 1080", 1080, 1080), // i18n-ignore
+    ("Portrait 1080 × 1350", 1080, 1350), // i18n-ignore
 ];
 
 impl RenderSettings {
