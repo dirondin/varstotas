@@ -1,8 +1,10 @@
 // @name Points from CSV (plugin)
 // @name.ru Точки из CSV (плагин)
+// @name.lt Taškai iš CSV (įskiepis)
 // @import csv
 // @description An example importer (Varstotas has it built in: File → Import → Points (CSV)…). Lines through the points of a CSV file (x,y[,z] per line, mm; other lines are skipped); a closed planar outline becomes a face.
 // @description.ru Пример импортёра (встроен в Varstotas: Файл → Импорт → Точки (CSV)…). Линии через точки CSV-файла (x,y[,z] в строке, мм; прочие строки пропускаются); замкнутый плоский контур становится гранью.
+// @description.lt Importo pavyzdys (integruotas į Varstotas: Failas → Importuoti → Taškai (CSV)…). Linijos per CSV failo taškus (x,y[,z] eilutėje, mm; kitos eilutės praleidžiamos); uždaras plokščias kontūras tampa paviršiumi.
 fn num(s) {
     let t = s;
     t.trim();

@@ -1,10 +1,13 @@
 # @name PLY Import (Python) (plugin)
 # @name.ru Импорт PLY (Python) (плагин)
+# @name.lt PLY importas (Python) (įskiepis)
 # @model_import ply
 # @description An example model importer in Python (Varstotas reads PLY itself: File → Import → PLY…; this plugin stays as an example): Stanford PLY meshes (ASCII or binary) for File → Import and the 3D Library. The protocol: `plugin.py import_model`, the arguments ({path, params}) as JSON on stdin, a model spec as JSON on the last line of stdout ({meshes: [{name, vertices, faces}], unit}).
 # @description.ru Пример импортёра моделей на Python (Varstotas читает PLY сам: Файл → Импорт → PLY…; плагин оставлен как пример): сетки Stanford PLY (ASCII или двоичные) для Файл → Импорт и 3D-библиотеки. Протокол: `plugin.py import_model`, аргументы ({path, params}) — JSON в stdin, описание модели — JSON в последней строке stdout ({meshes: [{name, vertices, faces}], unit}).
+# @description.lt Python modelių importo pavyzdys (Varstotas PLY skaito pats: Failas → Importuoti → PLY…; įskiepis paliktas kaip pavyzdys): Stanford PLY tinklai (ASCII arba dvejetainiai) komandai Failas → Importuoti ir 3D bibliotekai. Protokolas: `plugin.py import_model`, argumentai ({path, params}) – JSON per stdin, modelio aprašas – JSON paskutinėje stdout eilutėje ({meshes: [{name, vertices, faces}], unit}).
 # @param unit:text = "m" "Unit of the file (m, cm, mm, in, ft)"
 # @param.ru unit "Единицы файла (m, cm, mm, in, ft)"
+# @param.lt unit "Failo vienetai (m, cm, mm, in, ft)"
 import json
 import os
 import struct

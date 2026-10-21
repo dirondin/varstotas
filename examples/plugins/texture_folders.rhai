@@ -1,12 +1,16 @@
 // @name Texture Folders
 // @name.ru Папки текстур
+// @name.lt Tekstūrų aplankai
 // @material_source
 // @description Materials from texture sets on this computer: every subfolder of the folder is one material, its images sorted by their names (…_color / _diff, _normal / _nor_gl, _rough, _ao, _metal, _emission).
 // @description.ru Материалы из наборов текстур на этом компьютере: каждая подпапка — один материал, изображения различаются по именам (…_color / _diff, _normal / _nor_gl, _rough, _ao, _metal, _emission).
+// @description.lt Medžiagos iš tekstūrų rinkinių šiame kompiuteryje: kiekvienas poaplankis – viena medžiaga, paveikslėliai atskiriami pagal pavadinimus (…_color / _diff, _normal / _nor_gl, _rough, _ao, _metal, _emission).
 // @param folder:text = "" "Folder"
 // @param.ru folder "Папка"
+// @param.lt folder "Aplankas"
 // @param width = 1000 "Texture width"
 // @param.ru width "Ширина текстуры"
+// @param.lt width "Tekstūros plotis"
 
 fn is_image(f) {
     let l = f.to_lower();

@@ -63,7 +63,7 @@ library-items = { $count ->
     }
 ```
 
-Russian uses `[one]`, `[few]`, `[many]`, `*[other]`. A comment line `#` above a message tells
+Russian and Lithuanian use `[one]`, `[few]`, `[many]`, `*[other]` (in Lithuanian `[other]` is 0 and 10–20: „11 elementų“). A comment line `#` above a message tells
 translators what its arguments are.
 
 ## Translators

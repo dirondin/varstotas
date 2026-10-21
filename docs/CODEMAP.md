@@ -4,7 +4,7 @@ Varstotas: a 3D modeller in Rust (eframe/egui 0.36 + wgpu, glam f64, slotmap). U
 Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-changes.md`. QA reports: `docs/qa/`.
 
 ## Crates
-- `varstotas_i18n`: localization (Fluent): `tr!` / `tr_args`, `set_language`, `languages`, `platform_keys` (modifier markers), `pick_variant` (plugin header variants), `with_language` (tests); `build.rs` embeds `locales/*.ftl`. Texts: `locales/en.ftl` (base), `locales/ru.ftl`; rules in `docs/LOCALIZATION.md`.
+- `varstotas_i18n`: localization (Fluent): `tr!` / `tr_args`, `set_language`, `languages`, `platform_keys` (modifier markers), `pick_variant` (plugin header variants), `with_language` (tests); `build.rs` embeds `locales/*.ftl`. Texts: `locales/en.ftl` (base), `locales/ru.ftl`, `locales/lt.ftl`; rules in `docs/LOCALIZATION.md`.
 - `varstotas_kernel`: geometry and document. It has no UI or GPU code.
 - `varstotas_render`: camera and wgpu renderer.
 - `varstotas_script`: Rhai scripting API over the kernel (no UI); used by the Script Console and the bridge.

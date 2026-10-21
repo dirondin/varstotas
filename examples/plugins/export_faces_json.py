@@ -1,8 +1,10 @@
 # @name Faces as JSON (plugin)
 # @name.ru Грани в JSON (плагин)
+# @name.lt Paviršiai į JSON (įskiepis)
 # @export json
 # @description An example exporter (built in: File → Export → Faces (JSON)…). Every face of the model (world coordinates, mm) with its normal, area and material: an example exporter in Python.
 # @description.ru Пример экспортёра на Python (встроен: Файл → Экспорт → Грани (JSON)…): каждая грань модели (мировые координаты, мм) с нормалью, площадью и материалом.
+# @description.lt Python eksporto pavyzdys (integruotas: Failas → Eksportuoti → Paviršiai (JSON)…): kiekvienas modelio paviršius (pasaulio koordinatės, mm) su normale, plotu ir medžiaga.
 import json
 
 import varstotas

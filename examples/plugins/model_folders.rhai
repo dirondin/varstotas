@@ -1,12 +1,16 @@
 // @name Model Folders
 // @name.ru Папки моделей
+// @name.lt Modelių aplankai
 // @model_source
 // @description 3D models on this computer: every model file in the folder and its subfolders (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas, and what importer plugins read); an image with the same name is its thumbnail, the subfolder its category.
 // @description.ru 3D-модели на этом компьютере: каждый файл модели в папке и её подпапках (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas и то, что читают плагины-импортёры); изображение с тем же именем — его миниатюра, подпапка — категория.
+// @description.lt 3D modeliai šiame kompiuteryje: kiekvienas modelio failas aplanke ir jo poaplankiuose (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas ir tai, ką skaito importo įskiepiai); to paties pavadinimo paveikslėlis – jo miniatiūra, poaplankis – kategorija.
 // @param folder:text = "" "Folder"
 // @param.ru folder "Папка"
+// @param.lt folder "Aplankas"
 // @param unit:text = "" "Unit (empty: the file's own)"
 // @param.ru unit "Единицы (пусто: как в файле)"
+// @param.lt unit "Vienetai (tuščia: kaip faile)"
 
 fn name_of(p) {
     let s = p;

@@ -180,7 +180,7 @@ Items 2 and 4 agreed with the owner on 2026-10-19.
    - ✅ Slice tool: a plane by three points / face / axis cuts the selection or context (edges along the cut, a shared component made unique), Split (copy modifier) — two closed groups (2026-10-20).
    - ✅ The Model Info button in the top right corner of Entity Info (2026-10-20).
    - ✅ Hide in Components / Materials — a crossed-out eye icon instead of the word (2026-10-20).
-   - ✅ Localization: crate `varstotas_i18n` (Fluent, `locales/en.ftl` / `ru.ftl`), every UI text by key, platform variants, plural forms, Preferences → Interface → Language, user translations in `~/.varstotas/locales/`, localized plugin headers (`@name.ru` …); Russian translation (2026-10-21).
+   - ✅ Localization: crate `varstotas_i18n` (Fluent, `locales/en.ftl` / `ru.ftl` / `lt.ftl`), every UI text by key, platform variants, plural forms, Preferences → Interface → Language, user translations in `~/.varstotas/locales/`, localized plugin headers (`@name.ru` …); Russian and Lithuanian translations (2026-10-21).
    - ✅ Make Unique: a component with parameters has its own wizard, unique generated ones, an item in the context menus; re-inserting from the library after a model edit gives the original (2026-10-20).
    - ✅ Document generators are always in In Model with their own script (Apply rebuilds all instances), Make Unique copies the generator ("Shelf 2") (2026-10-20).
 
