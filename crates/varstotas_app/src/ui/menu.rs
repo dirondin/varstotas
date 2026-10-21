@@ -77,11 +77,11 @@ fn icon_menu<R>(ui: &mut Ui, icon: Option<Icon>, label: &str, add_contents: impl
 impl VarstotasApp {
     /// A command's row: its icon, name, shortcut and state.
     fn cmd_item(&mut self, ui: &mut Ui, c: Cmd) {
-        self.cmd_item_as(ui, c, c.menu_label());
+        self.cmd_item_as(ui, c, &c.menu_label());
     }
 
     fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
-        if icon_row(ui, Some(c.icon()), label, c.shortcut().as_deref(), c.enabled(self), false).clicked() {
+        if icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), false).clicked() {
             self.actions.push(c.action());
         }
     }
@@ -98,7 +98,7 @@ impl VarstotasApp {
 
     fn tool_item(&mut self, ui: &mut Ui, id: ToolId) {
         let sel = self.tool_id() == id;
-        if icon_row(ui, Some(id.icon()), id.name(), id.shortcut_label().as_deref(), true, sel).clicked() {
+        if icon_row(ui, Some(id.icon()), &id.name(), id.shortcut_label().as_deref(), true, sel).clicked() {
             self.actions.push(Action::SetTool(id));
         }
     }
@@ -460,9 +460,9 @@ impl VarstotasApp {
                         ui.separator();
                         continue;
                     };
-                    let label = if c == Sheets { "Sheets…" } else { c.menu_label() };
+                    let label = if c == Sheets { "Sheets…".to_string() } else { c.menu_label() };
                     let on = c.checked(self).unwrap_or(false);
-                    if icon_row(ui, Some(c.icon()), label, c.shortcut().as_deref(), true, on).on_hover_text(c.description()).clicked() {
+                    if icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), true, on).on_hover_text(c.description()).clicked() {
                         self.actions.push(c.action());
                         ui.close();
                     }
@@ -531,7 +531,7 @@ impl VarstotasApp {
             ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
                 for &k in kinds {
                     let mut v = self.prefs.snapping.is_on(k);
-                    let r = icon_check(ui, &mut v, Icon::Snap(k), k.menu_label());
+                    let r = icon_check(ui, &mut v, Icon::Snap(k), &k.menu_label());
                     super::tray_lib::spot(format!("snap:{}", k.menu_label()), r.rect.center());
                     if r.changed() {
                         self.prefs.snapping.set(k, v);

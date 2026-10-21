@@ -127,7 +127,7 @@ impl VarstotasApp {
                     |ui| {
                         if self.console.log.is_empty() {
                             ui.label(
-                                RichText::new(crate::keys::tr("Rhai scripts over the model. Try: box(ORIGIN, 1000, 600, 18)  — %CMD%+Enter runs"))
+                                RichText::new(varstotas_i18n::platform_keys("Rhai scripts over the model. Try: box(ORIGIN, 1000, 600, 18)  — %CMD%+Enter runs"))
                                     .color(theme::text_dim()),
                             );
                         }
@@ -172,7 +172,7 @@ impl VarstotasApp {
             }
             self.console.editor.show(ui, &mut self.prefs.console_code, code_h);
             ui.horizontal(|ui| {
-                if ui.button("Run").on_hover_text(crate::keys::tr("%CMD%+Enter")).clicked() {
+                if ui.button("Run").on_hover_text(varstotas_i18n::platform_keys("%CMD%+Enter")).clicked() {
                     run = Some(self.prefs.console_code.clone());
                 }
                 if ui.button("Open…").clicked()

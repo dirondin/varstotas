@@ -17,7 +17,6 @@ mod document;
 mod downloads;
 mod inference;
 mod keymap;
-mod keys;
 mod layout;
 mod nav;
 mod mat_plugins;

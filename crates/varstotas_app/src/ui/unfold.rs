@@ -26,13 +26,13 @@ pub enum Paper {
 impl Paper {
     pub const ALL: [Paper; 4] = [Paper::Fit, Paper::A4, Paper::A3, Paper::A2];
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Paper::Fit => "Fit to pieces",
-            Paper::A4 => "A4",
-            Paper::A3 => "A3",
-            Paper::A2 => "A2",
-        }
+    pub fn name(self) -> String {
+        varstotas_i18n::tr(match self {
+            Paper::Fit => "unfold-paper-fit",
+            Paper::A4 => "unfold-paper-a4",
+            Paper::A3 => "unfold-paper-a3",
+            Paper::A2 => "unfold-paper-a2",
+        })
     }
 
     /// Portrait size, mm.

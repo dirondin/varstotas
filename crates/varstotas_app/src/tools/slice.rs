@@ -13,6 +13,7 @@ use crate::overlay::{Marker2d, MarkerShape};
 use egui::{Color32, CursorIcon, Key};
 use varstotas_kernel::glam::DVec3;
 use varstotas_kernel::{Plane, SectionPlane, TOL, WorkPlane};
+use varstotas_i18n::tr;
 use varstotas_render::{Overlay3d, OverlayPolygon};
 
 const COLOR: Color32 = Color32::from_rgb(0xD6, 0x3A, 0x2A);
@@ -86,7 +87,7 @@ impl SliceTool {
         let sel = ctx.doc.selection.clone();
         let split = self.split.on;
         let r = ctx.doc.try_commit_if(
-            if split { "Slice and Split" } else { "Slice" },
+            &if split { tr!("tool-slice-undo-split") } else { tr!("tool-slice-undo") },
             |m| m.slice(&path, &sel, local, split),
             |r| r.edges > 0 || !r.parts.is_empty(),
         );
@@ -97,7 +98,7 @@ impl SliceTool {
                 ctx.doc.prune_selection();
             }
             if r.edges == 0 && r.parts.is_empty() {
-                ctx.doc.last_error = Some("Slice: the plane cuts nothing".into());
+                ctx.doc.last_error = Some(tr!("tool-slice-nothing"));
             }
         }
         self.stage = Stage::Idle;
@@ -195,14 +196,12 @@ impl Tool for SliceTool {
         r
     }
     fn status_text(&self) -> String {
-        let what = "Cuts the selection, or everything in the active context.";
-        let split = if self.split.on { "Split ON: parts become two groups" } else { "Split OFF: only edges are added" };
         let step = match self.stage {
-            Stage::Idle => "Click a point on the cutting plane.",
-            Stage::A { .. } => "Click a second point. Double-click / Enter: plane of the face; arrows: normal along red / green / blue / edge.",
-            Stage::B { .. } => "Click a third point to cut.",
+            Stage::Idle => "tool-slice-status-first",
+            Stage::A { .. } => "tool-slice-status-second",
+            Stage::B { .. } => "tool-slice-status-third",
         };
-        format!("{step} {what} %COPY%: {split}.")
+        tr!("tool-slice-status", step = tr!(step), split = if self.split.on { "on" } else { "off" })
     }
     fn overlay(&self, view: &OverlayView, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
         if let Some(p) = self.preview() {

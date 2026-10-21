@@ -141,10 +141,10 @@ impl BezierTool {
             // In the active context's frame; the anchors are kept, so the curve can be reshaped.
             let sp = Spline { anchors, closed, segs: self.span_segs(), normal }.transformed(&context_xf(ctx.doc).inverse());
             if sp.is_curved() {
-                commit_mesh(ctx, self.id().name(), |m| m.add_spline(&sp));
+                commit_mesh(ctx, &self.id().name(), |m| m.add_spline(&sp));
             } else {
                 let pts = sp.points();
-                commit_mesh(ctx, self.id().name(), |m| m.add_polyline(&pts, closed, false));
+                commit_mesh(ctx, &self.id().name(), |m| m.add_polyline(&pts, closed, false));
             }
         }
         self.reset();

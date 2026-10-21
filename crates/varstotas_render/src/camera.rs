@@ -30,16 +30,16 @@ impl StandardView {
     pub const ALL: [StandardView; 7] =
         [StandardView::Iso, StandardView::Top, StandardView::Bottom, StandardView::Front, StandardView::Back, StandardView::Left, StandardView::Right];
 
-    pub fn name(self) -> &'static str {
-        match self {
-            StandardView::Iso => "Iso",
-            StandardView::Top => "Top",
-            StandardView::Bottom => "Bottom",
-            StandardView::Front => "Front",
-            StandardView::Back => "Back",
-            StandardView::Left => "Left",
-            StandardView::Right => "Right",
-        }
+    pub fn name(self) -> String {
+        varstotas_i18n::tr(match self {
+            StandardView::Iso => "view-iso",
+            StandardView::Top => "view-top",
+            StandardView::Bottom => "view-bottom",
+            StandardView::Front => "view-front",
+            StandardView::Back => "view-back",
+            StandardView::Left => "view-left",
+            StandardView::Right => "view-right",
+        })
     }
 
     /// Direction from the target toward the eye, and the up direction.

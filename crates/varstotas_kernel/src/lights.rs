@@ -133,12 +133,12 @@ pub enum RenderDof {
 impl RenderDof {
     pub const ALL: [RenderDof; 3] = [RenderDof::View, RenderDof::Off, RenderDof::On];
 
-    pub fn label(self) -> &'static str {
-        match self {
-            RenderDof::View => "As view",
-            RenderDof::Off => "Off",
-            RenderDof::On => "On",
-        }
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            RenderDof::View => "render-dof-view",
+            RenderDof::Off => "render-dof-off",
+            RenderDof::On => "render-dof-on",
+        })
     }
 }
 

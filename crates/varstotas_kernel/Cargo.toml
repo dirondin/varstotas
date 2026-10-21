@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+varstotas_i18n = { workspace = true }
 glam.workspace = true
 slotmap.workspace = true
 serde.workspace = true

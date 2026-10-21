@@ -23,13 +23,13 @@ pub enum Tab {
 impl Tab {
     pub const ALL: [Tab; 4] = [Tab::Varstotas, Tab::Components, Tab::Formats, Tab::Libraries];
 
-    pub fn label(self) -> &'static str {
-        match self {
-            Tab::Varstotas => "Varstotas",
-            Tab::Components => "Open Source",
-            Tab::Formats => "File Formats",
-            Tab::Libraries => "Online Libraries",
-        }
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            Tab::Varstotas => "licences-tab-varstotas",
+            Tab::Components => "licences-tab-components",
+            Tab::Formats => "licences-tab-formats",
+            Tab::Libraries => "licences-tab-libraries",
+        })
     }
 
     pub fn key(self) -> &'static str {

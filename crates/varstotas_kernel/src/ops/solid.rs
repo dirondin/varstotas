@@ -35,15 +35,15 @@ impl SolidOp {
     pub const ALL: [SolidOp; 6] =
         [SolidOp::OuterShell, SolidOp::Intersect, SolidOp::Union, SolidOp::Subtract, SolidOp::Trim, SolidOp::Split];
 
-    pub fn name(self) -> &'static str {
-        match self {
-            SolidOp::Union => "Union",
-            SolidOp::Intersect => "Intersect",
-            SolidOp::Subtract => "Subtract",
-            SolidOp::Trim => "Trim",
-            SolidOp::Split => "Split",
-            SolidOp::OuterShell => "Outer Shell",
-        }
+    pub fn name(self) -> String {
+        varstotas_i18n::tr(match self {
+            SolidOp::Union => "solid-union",
+            SolidOp::Intersect => "solid-intersect",
+            SolidOp::Subtract => "solid-subtract",
+            SolidOp::Trim => "solid-trim",
+            SolidOp::Split => "solid-split",
+            SolidOp::OuterShell => "solid-outer-shell",
+        })
     }
 }
 

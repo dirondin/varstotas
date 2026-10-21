@@ -129,6 +129,8 @@ pub struct Prefs {
     pub nav: crate::nav::NavPrefs,
     /// Light / dark / as the system (Preferences → Interface).
     pub theme: crate::ui::theme::ThemePref,
+    /// The UI language (Preferences → Interface): a locale code, None = as the system.
+    pub language: Option<String>,
     /// Interface scale (1 = 100 %).
     pub ui_scale: f32,
     /// Side of a toolbar button, points.
@@ -195,6 +197,7 @@ impl Default for Prefs {
             new_view: Default::default(),
             nav: Default::default(),
             theme: Default::default(),
+            language: None,
             ui_scale: 1.0,
             toolbar_icons: 36,
             toolbar: Vec::new(),
@@ -624,6 +627,11 @@ impl VarstotasApp {
             .storage
             .and_then(|s| eframe::get_value(s, PREFS_KEY))
             .unwrap_or_default();
+        varstotas_i18n::set_user_dir(crate::bridge::home_dir().map(|d| d.join("locales")));
+        varstotas_i18n::set_language(prefs.language.as_deref());
+        for e in varstotas_i18n::load_errors() {
+            log::warn!("locales: {e}");
+        }
         let base_style = guarded(RenderStyle::default).unwrap_or_else(|_| fallback_style());
         let mut actions = Vec::new();
         if crate::debug_capture::DebugCapture::demo_requested() {
@@ -2654,7 +2662,7 @@ impl VarstotasApp {
             .as_ref()
             .filter(|f| f.1 > self.now)
             .map(|f| (f.0.clone(), f.2));
-        (crate::keys::tr(&self.tool.status_text()).into_owned(), flash)
+        (varstotas_i18n::platform_keys(&self.tool.status_text()).into_owned(), flash)
     }
 
 }

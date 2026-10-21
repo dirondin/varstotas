@@ -13,7 +13,7 @@ for n in $names; do
   cd $out
   rm -rf $out/home/.varstotas/cache/thumbs $out/home/.varstotas/components $out/home/.varstotas/materials $out/home/.varstotas/library_state.json $out/home/.varstotas/downloads/manual   # the libraries (favourites, history) start empty in every script
   [[ -d $root/qa/fixtures/$n/components ]] && cp -R $root/qa/fixtures/$n/components $out/home/.varstotas/   # or with the script's fixture
-  HOME=$out/home RUST_LOG=info VARSTOTAS_SCRIPT=$root/qa/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
+  HOME=$out/home VARSTOTAS_LANG=en RUST_LOG=info VARSTOTAS_SCRIPT=$root/qa/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
   code=$?
   bad=$(grep -cE 'expect FAIL|panicked' $out/$n.log)
   ok=$(grep -c 'expect ok' $out/$n.log)

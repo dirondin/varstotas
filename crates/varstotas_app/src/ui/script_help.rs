@@ -265,7 +265,7 @@ fn topic_ui(ui: &mut Ui, topic: Topic) {
                 ui.add_space(6.0);
                 ui.label(RichText::new(*t).strong().size(15.0));
             }
-            B::P(t) => rich(ui, &crate::keys::tr(t)),
+            B::P(t) => rich(ui, &varstotas_i18n::platform_keys(t)),
             B::Code(c) => code_block(ui, c),
             B::Row(a, b) => row(ui, a, b),
         }

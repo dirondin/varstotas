@@ -16,9 +16,16 @@
 //! // @notice Models are CC-BY: credit …      (terms shown above a source's assets; repeatable)
 //! ```
 //!
+//! Texts the user reads have localized variants: the tag with a suffix of language codes and /
+//! or platform names (`@name.ru Лестница`, `@menu.ru …`, `@description.ru …`,
+//! `@param.ru width "Ширина"`, `@pick.ru "…"`, `@select.ru "…"`, `@notice.ru …`,
+//! `@menu.macos …`); the most specific match for the UI language and platform wins
+//! (`varstotas_i18n::pick_variant`), the plain tag is the fallback.
+//!
 //! The header ends at the first line that is not a comment. Examples ship in `examples/plugins`
 //! and are installed (refreshed on every start) to `~/.varstotas/plugins/examples`.
 
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 pub const EXAMPLES: &[(&str, &str)] = &[
@@ -186,6 +193,9 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         model_source: None,
         notice: String::new(),
     };
+    // Localized variants: tag → suffix → text; `@param.<suffix> key "Label"`: key → suffix → label.
+    let mut variants: HashMap<&str, BTreeMap<String, String>> = HashMap::new();
+    let mut param_labels: HashMap<String, BTreeMap<String, String>> = HashMap::new();
     for line in src.lines() {
         let t = line.trim();
         if t.is_empty() {
@@ -196,6 +206,34 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         let Some(tag) = c.strip_prefix('@') else { continue };
         let (key, rest) = tag.split_once(char::is_whitespace).unwrap_or((tag, ""));
         let rest = rest.trim();
+        if let Some((base, suffix)) = key.split_once('.') {
+            let suffix = suffix.to_ascii_lowercase();
+            match base {
+                "name" | "menu" | "description" | "notice" => {
+                    let base = match base {
+                        "name" => "name",
+                        "menu" => "menu",
+                        "description" => "description",
+                        _ => "notice",
+                    };
+                    let v = variants.entry(base).or_default().entry(suffix).or_default();
+                    if !v.is_empty() {
+                        v.push(' ');
+                    }
+                    v.push_str(rest);
+                }
+                "pick" | "select" => {
+                    let label = split_label(rest).1.unwrap_or_else(|| rest.to_string());
+                    variants.entry(if base == "pick" { "pick" } else { "select" }).or_default().insert(suffix, label);
+                }
+                "param" => {
+                    let (k, label) = split_label(rest);
+                    param_labels.entry(k.to_string()).or_default().insert(suffix, label.unwrap_or_default());
+                }
+                _ => {}
+            }
+            continue;
+        }
         let exts = || rest.split([',', ' ']).map(|e| e.trim().trim_start_matches('.').to_ascii_lowercase()).filter(|e| !e.is_empty()).collect();
         match key {
             "name" => p.name = rest.to_string(),
@@ -225,6 +263,35 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             }
             // Unknown tags are ignored (room for later additions).
             _ => {}
+        }
+    }
+    let has_menu = variants.contains_key("menu");
+    let mut pick = |tag: &str, plain: String| -> String {
+        match variants.remove(tag) {
+            Some(mut v) => {
+                v.insert(String::new(), plain.clone());
+                varstotas_i18n::pick_variant(&v).map(str::to_string).unwrap_or(plain)
+            }
+            None => plain,
+        }
+    };
+    p.name = pick("name", p.name.clone());
+    p.description = pick("description", p.description.clone());
+    p.notice = pick("notice", p.notice.clone());
+    if has_menu {
+        let menu = pick("menu", p.menu.join("/"));
+        p.menu = menu.split('/').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    }
+    if let Some((n, label)) = p.pick.take() {
+        p.pick = Some((n, pick("pick", label)));
+    }
+    if let Some(label) = p.select.take() {
+        p.select = Some(pick("select", label));
+    }
+    for q in &mut p.params {
+        if let Some(mut v) = param_labels.remove(&q.key) {
+            v.insert(String::new(), q.label.clone());
+            q.label = varstotas_i18n::pick_variant(&v).unwrap_or(&q.label).to_string();
         }
     }
     if p.name.trim().is_empty() {
@@ -285,6 +352,19 @@ pub fn scan(dir: &Path) -> (Vec<Plugin>, Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn localized_header_texts() {
+        let src = "// @name Stairs\n// @name.ru Лестница\n// @menu Build/Stairs\n// @menu.ru Построение/Лестница\n// @param width = 900 \"Width\"\n// @param.ru width \"Ширина\"\n// @pick 1 \"Click\"\n// @pick.ru \"Щёлкните\"\n// @description.zz Other\n";
+        let p = varstotas_i18n::with_language("en", || parse(src, Path::new("s.rhai")).unwrap());
+        assert_eq!((p.name.as_str(), p.params[0].label.as_str()), ("Stairs", "Width"));
+        let p = varstotas_i18n::with_language("ru", || parse(src, Path::new("s.rhai")).unwrap());
+        assert_eq!(p.name, "Лестница");
+        assert_eq!(p.menu, ["Построение", "Лестница"]);
+        assert_eq!(p.params[0].label, "Ширина");
+        assert_eq!(p.pick.as_ref().unwrap().1, "Щёлкните");
+        assert_eq!(p.description, "");
+    }
 
     #[test]
     fn parses_the_header() {

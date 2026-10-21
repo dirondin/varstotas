@@ -1424,6 +1424,8 @@ fn register_context(e: &mut Engine) {
             Ok(out)
         })
     });
+    e.register_fn("lang", || varstotas_i18n::language());
+    e.register_fn("platform", || varstotas_i18n::platform().to_string());
     e.register_fn("read_text", |path: ImmutableString| -> R<String> {
         std::fs::read_to_string(path.as_str()).or_else(|e| err(format!("{path}: {e}")))
     });

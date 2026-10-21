@@ -158,24 +158,24 @@ impl KeyCmd {
         }
     }
 
-    pub fn name(self) -> &'static str {
-        match self {
-            KeyCmd::New => "New",
-            KeyCmd::Open => "Open…",
-            KeyCmd::Save => "Save",
-            KeyCmd::SaveAs => "Save As…",
-            KeyCmd::Quit => "Quit",
-            KeyCmd::Undo => "Undo",
-            KeyCmd::Redo => "Redo",
-            KeyCmd::SelectAll => "Select All",
-            KeyCmd::SelectNone => "Select None",
-            KeyCmd::MakeGroup => "Make Group",
-            KeyCmd::ZoomExtents => "Zoom Extents",
-            KeyCmd::ToggleSnapping => "Snapping On / Off",
-            KeyCmd::NextScene => "Next Scene",
-            KeyCmd::PrevScene => "Previous Scene",
-            KeyCmd::Tool(t) => t.name(),
-        }
+    pub fn name(self) -> String {
+        varstotas_i18n::tr(match self {
+            KeyCmd::New => "key-new",
+            KeyCmd::Open => "key-open",
+            KeyCmd::Save => "key-save",
+            KeyCmd::SaveAs => "key-save-as",
+            KeyCmd::Quit => "key-quit",
+            KeyCmd::Undo => "key-undo",
+            KeyCmd::Redo => "key-redo",
+            KeyCmd::SelectAll => "key-select-all",
+            KeyCmd::SelectNone => "key-select-none",
+            KeyCmd::MakeGroup => "key-make-group",
+            KeyCmd::ZoomExtents => "key-zoom-extents",
+            KeyCmd::ToggleSnapping => "key-toggle-snapping",
+            KeyCmd::NextScene => "key-next-scene",
+            KeyCmd::PrevScene => "key-prev-scene",
+            KeyCmd::Tool(t) => return t.name(),
+        })
     }
 
     pub fn defaults(self) -> Vec<Shortcut> {
@@ -234,7 +234,7 @@ fn store(keys: &[Shortcut]) -> String {
 
 /// Give `cmd` the single shortcut `sc` (None = no shortcut). The command that had `sc` loses
 /// it; its name is returned. Entries equal to the defaults are dropped from the map.
-pub fn assign(map: &mut BTreeMap<String, String>, cmd: KeyCmd, sc: Option<Shortcut>) -> Option<&'static str> {
+pub fn assign(map: &mut BTreeMap<String, String>, cmd: KeyCmd, sc: Option<Shortcut>) -> Option<String> {
     let mut taken = None;
     if let Some(sc) = sc {
         for other in KeyCmd::all() {
@@ -335,7 +335,7 @@ mod tests {
         let mut map = BTreeMap::new();
         // L belongs to Line: giving it to Rectangle takes it from Line
         let taken = assign(&mut map, KeyCmd::Tool(ToolId::Rectangle), Some(Shortcut::plain(Key::L)));
-        assert_eq!(taken, Some("Line"));
+        assert_eq!(taken.as_deref(), Some("Line"));
         assert!(keys_in(&map, KeyCmd::Tool(ToolId::Line)).is_empty());
         assert_eq!(keys_in(&map, KeyCmd::Tool(ToolId::Rectangle)), vec![Shortcut::plain(Key::L)]);
         // Redo keeps ⌘Y when ⇧⌘Z goes to Save As

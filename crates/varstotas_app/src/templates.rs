@@ -16,22 +16,22 @@ impl Template {
     pub const ALL: [Template; 4] =
         [Template::ArchitecturalMm, Template::ArchitecturalM, Template::WoodworkingMm, Template::Imperial];
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Template::ArchitecturalMm => "Architectural — Millimeters",
-            Template::ArchitecturalM => "Architectural — Meters",
-            Template::WoodworkingMm => "Woodworking — Millimeters",
-            Template::Imperial => "Imperial — Inches",
-        }
+    pub fn name(self) -> String {
+        varstotas_i18n::tr(match self {
+            Template::ArchitecturalMm => "template-architectural-mm",
+            Template::ArchitecturalM => "template-architectural-m",
+            Template::WoodworkingMm => "template-woodworking-mm",
+            Template::Imperial => "template-imperial",
+        })
     }
 
-    pub fn description(self) -> &'static str {
-        match self {
-            Template::ArchitecturalMm => "Buildings and interiors, lengths in millimeters.",
-            Template::ArchitecturalM => "Buildings and sites, lengths in meters.",
-            Template::WoodworkingMm => "Furniture and small objects: a close-up view, lengths in millimeters.",
-            Template::Imperial => "Lengths in inches.",
-        }
+    pub fn description(self) -> String {
+        varstotas_i18n::tr(match self {
+            Template::ArchitecturalMm => "template-architectural-mm-desc",
+            Template::ArchitecturalM => "template-architectural-m-desc",
+            Template::WoodworkingMm => "template-woodworking-mm-desc",
+            Template::Imperial => "template-imperial-desc",
+        })
     }
 
     pub fn unit(self) -> LengthUnit {

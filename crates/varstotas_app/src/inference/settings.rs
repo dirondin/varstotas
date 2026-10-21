@@ -60,31 +60,31 @@ impl InferenceKind {
     }
 
     /// Name in the Snapping menu.
-    pub fn menu_label(self) -> &'static str {
-        match self {
-            Self::Endpoint => "Endpoints",
-            Self::Midpoint => "Midpoints",
-            Self::Center => "Centers",
-            Self::Intersection => "Intersections",
-            Self::Origin => "Origin",
-            Self::OnEdge => "On Edge",
-            Self::OnFace => "On Face",
-            Self::OnGuide => "On Guide Lines",
-            Self::GuidePoint => "Guide Points",
-            Self::OnRedAxis => "Red Axis",
-            Self::OnGreenAxis => "Green Axis",
-            Self::OnBlueAxis => "Blue Axis",
-            Self::ParallelToEdge => "Parallel to Edge",
-            Self::PerpendicularToEdge => "Perpendicular to Edge",
-            Self::FromPoint => "From Point",
-            Self::Tangent => "Tangent at Vertex",
-            Self::Square => "Square",
-            Self::GoldenSection => "Golden Section",
-            Self::HalfCircle => "Half Circle",
-            Self::GridPoint => "Grid Points",
-            Self::OnGridLine => "Grid Lines",
-            Self::Free => "",
-        }
+    pub fn menu_label(self) -> String {
+        varstotas_i18n::tr(match self {
+            Self::Endpoint => "snap-endpoint",
+            Self::Midpoint => "snap-midpoint",
+            Self::Center => "snap-center",
+            Self::Intersection => "snap-intersection",
+            Self::Origin => "snap-origin",
+            Self::OnEdge => "snap-on-edge",
+            Self::OnFace => "snap-on-face",
+            Self::OnGuide => "snap-on-guide",
+            Self::GuidePoint => "snap-guide-point",
+            Self::OnRedAxis => "snap-on-red-axis",
+            Self::OnGreenAxis => "snap-on-green-axis",
+            Self::OnBlueAxis => "snap-on-blue-axis",
+            Self::ParallelToEdge => "snap-parallel-to-edge",
+            Self::PerpendicularToEdge => "snap-perpendicular-to-edge",
+            Self::FromPoint => "snap-from-point",
+            Self::Tangent => "snap-tangent",
+            Self::Square => "snap-square",
+            Self::GoldenSection => "snap-golden-section",
+            Self::HalfCircle => "snap-half-circle",
+            Self::GridPoint => "snap-grid-point",
+            Self::OnGridLine => "snap-on-grid-line",
+            Self::Free => return String::new(),
+        })
     }
 }
 

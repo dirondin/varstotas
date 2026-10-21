@@ -1,0 +1,14 @@
+key-new = New
+key-open = Open…
+key-save = Save
+key-save-as = Save As…
+key-quit = Quit
+key-undo = Undo
+key-redo = Redo
+key-select-all = Select All
+key-select-none = Select None
+key-make-group = Make Group
+key-zoom-extents = Zoom Extents
+key-toggle-snapping = Snapping On / Off
+key-next-scene = Next Scene
+key-prev-scene = Previous Scene

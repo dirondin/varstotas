@@ -1,0 +1,12 @@
+[package]
+name = "varstotas_i18n"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Localization of the Varstotas UI: Fluent (.ftl) messages looked up by key"
+
+[dependencies]
+fluent-bundle = "0.16"
+fluent-syntax = "0.12"
+unic-langid = "0.9"
+sys-locale = "0.3"

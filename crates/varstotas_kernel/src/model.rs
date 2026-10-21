@@ -95,28 +95,28 @@ impl LicenseKind {
     pub const ALL: [LicenseKind; 7] = [LicenseKind::Cc0, LicenseKind::CcBy, LicenseKind::CcBySa, LicenseKind::CcByNc, LicenseKind::CcByNd, LicenseKind::Standard, LicenseKind::Unknown];
 
     /// Its short name (also the text stored when chosen from a list).
-    pub fn label(self) -> &'static str {
-        match self {
-            LicenseKind::Cc0 => "CC0",
-            LicenseKind::CcBy => "CC-BY",
-            LicenseKind::CcBySa => "CC-BY-SA",
-            LicenseKind::CcByNc => "CC-BY-NC",
-            LicenseKind::CcByNd => "CC-BY-ND",
-            LicenseKind::Standard => "Standard / personal use",
-            LicenseKind::Unknown => "Unknown",
-        }
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            LicenseKind::Cc0 => "licence-cc0",
+            LicenseKind::CcBy => "licence-cc-by",
+            LicenseKind::CcBySa => "licence-cc-by-sa",
+            LicenseKind::CcByNc => "licence-cc-by-nc",
+            LicenseKind::CcByNd => "licence-cc-by-nd",
+            LicenseKind::Standard => "licence-standard",
+            LicenseKind::Unknown => "licence-unknown",
+        })
     }
 
     /// The reminder for models under it (empty for CC0 / CC-BY).
-    pub fn note(self) -> &'static str {
-        match self {
-            LicenseKind::CcByNc => "non-commercial: don't sell what you make with it",
-            LicenseKind::CcByNd => "no derivatives: don't share a changed copy",
-            LicenseKind::CcBySa => "share-alike: share changed copies under the same licence",
-            LicenseKind::Standard => "the site's own licence (royalty-free / personal use / usage conditions): often no commercial use or no sharing of the model file itself — check it",
-            LicenseKind::Unknown => "licence unknown: for your own use only",
-            _ => "",
-        }
+    pub fn note(self) -> String {
+        varstotas_i18n::tr(match self {
+            LicenseKind::CcByNc => "licence-cc-by-nc-note",
+            LicenseKind::CcByNd => "licence-cc-by-nd-note",
+            LicenseKind::CcBySa => "licence-cc-by-sa-note",
+            LicenseKind::Standard => "licence-standard-note",
+            LicenseKind::Unknown => "licence-unknown-note",
+            _ => return String::new(),
+        })
     }
 
     /// Read a licence text ("CC BY-NC 4.0", "Creative Commons Attribution-ShareAlike",

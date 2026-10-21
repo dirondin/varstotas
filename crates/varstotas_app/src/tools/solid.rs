@@ -58,9 +58,9 @@ pub fn apply_to_selection(doc: &mut Document, op: SolidOp) -> Option<bool> {
     }
     let path = doc.active_path.clone();
     let out = if matches!(op, SolidOp::Union | SolidOp::OuterShell) {
-        doc.try_commit(op.name(), |m| m.solid_union_all_in(&path, &insts).map(|i| vec![i]))
+        doc.try_commit(&op.name(), |m| m.solid_union_all_in(&path, &insts).map(|i| vec![i]))
     } else {
-        doc.try_commit(op.name(), |m| m.solid_op_in(&path, op, insts[0], insts[1]))
+        doc.try_commit(&op.name(), |m| m.solid_op_in(&path, op, insts[0], insts[1]))
     };
     let done = out.is_some();
     if let Some(out) = out {
@@ -100,7 +100,7 @@ impl Tool for SolidTool {
         }
         let path = ctx.doc.active_path.clone();
         let op = self.op;
-        if let Some(out) = ctx.doc.try_commit(op.name(), |m| m.solid_op_in(&path, op, first, id)) {
+        if let Some(out) = ctx.doc.try_commit(&op.name(), |m| m.solid_op_in(&path, op, first, id)) {
             self.first = if self.accumulates() { out.first().copied() } else { None };
             let sel = if self.accumulates() { out } else { Vec::new() };
             ctx.doc.set_selection_full(sel.into_iter().map(EntityRef::Instance).collect(), Vec::new(), Vec::new());

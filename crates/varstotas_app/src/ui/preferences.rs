@@ -11,6 +11,7 @@ use super::theme;
 use crate::app::{FaceStylePref, VarstotasApp};
 use crate::keymap::{self, KeyCmd, Shortcut};
 use crate::templates::Template;
+use varstotas_i18n::tr;
 
 /// The sections, in the order of the list.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -42,19 +43,19 @@ impl Section {
         Section::Toolbar,
     ];
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Section::General => "General",
-            Section::Drawing => "Drawing",
-            Section::Libraries => "Libraries",
-            Section::Downloads => "Downloads",
-            Section::View => "View",
-            Section::Navigation => "Navigation",
-            Section::Interface => "Interface",
-            Section::Shortcuts => "Shortcuts",
-            Section::Toolbar => "Toolbar",
-            Section::Render => "Render",
-        }
+    pub fn name(self) -> String {
+        varstotas_i18n::tr(match self {
+            Section::General => "prefs-section-general",
+            Section::Drawing => "prefs-section-drawing",
+            Section::Libraries => "prefs-section-libraries",
+            Section::Downloads => "prefs-section-downloads",
+            Section::View => "prefs-section-view",
+            Section::Navigation => "prefs-section-navigation",
+            Section::Interface => "prefs-section-interface",
+            Section::Shortcuts => "prefs-section-shortcuts",
+            Section::Toolbar => "prefs-section-toolbar",
+            Section::Render => "prefs-section-render",
+        })
     }
 
     /// What the search finds a section by (besides its name): the labels of its settings.
@@ -65,7 +66,7 @@ impl Section {
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle",
             Section::Libraries => "components materials folder examples in model tiles small large list",
             Section::Downloads => "watch downloads folder browser",
-            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons",
+            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons language translation",
             Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture",
             Section::Shortcuts => "keyboard shortcuts hotkeys keys",
             Section::Toolbar => "toolbar buttons order reserve separator customize tools",
@@ -98,6 +99,8 @@ pub struct PrefsWindow {
     pub search: String,
     /// Shortcuts: the command waiting for its new keys.
     pub capture: Option<KeyCmd>,
+    /// Interface: the available languages (code, own name), read when the section is shown.
+    pub languages: Option<Vec<(String, String)>>,
 }
 
 /// The view of a new document (File → New, New from Template) — Preferences → View.
@@ -572,6 +575,26 @@ impl VarstotasApp {
 
     fn prefs_interface(&mut self, ui: &mut Ui) {
         use super::theme::ThemePref;
+        heading(ui, &tr!("prefs-language"));
+        let langs = self.prefs_win.languages.get_or_insert_with(varstotas_i18n::languages).clone();
+        let name_of = |code: &str| langs.iter().find(|(c, _)| c == code).map(|(_, n)| n.clone()).unwrap_or_else(|| code.to_string());
+        let system = tr!("prefs-language-system", language = name_of(&varstotas_i18n::system_language()));
+        let mut lang = self.prefs.language.clone();
+        let shown = lang.as_deref().map(name_of).unwrap_or_else(|| system.clone());
+        let r = egui::ComboBox::from_id_salt("ui_language").selected_text(shown).width(260.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut lang, None, &system);
+            for (code, name) in &langs {
+                ui.selectable_value(&mut lang, Some(code.clone()), name);
+            }
+        });
+        super::tray_lib::spot("language", r.response.rect.center());
+        if lang != self.prefs.language {
+            varstotas_i18n::set_language(lang.as_deref());
+            self.prefs.language = lang;
+            // Plugin headers carry their texts per language.
+            self.load_plugins();
+        }
+        note(ui, &tr!("prefs-language-note"));
         heading(ui, "Theme");
         ui.horizontal(|ui| {
             for (t, label) in [(ThemePref::Light, "Light"), (ThemePref::Dark, "Dark"), (ThemePref::System, "As the System")] {
@@ -591,7 +614,7 @@ impl VarstotasApp {
                 }
             }
         });
-        note(ui, &crate::keys::tr("Menus, panels and windows; %CMDK%+ / %CMDK%− / %CMDK%0 change it too."));
+        note(ui, &varstotas_i18n::platform_keys("Menus, panels and windows; %CMDK%+ / %CMDK%− / %CMDK%0 change it too."));
         heading(ui, "Toolbar icons");
         ui.horizontal(|ui| {
             for (label, side) in super::toolbar::ICON_SIZES {
@@ -731,7 +754,7 @@ impl VarstotasApp {
             let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, "Zoom");
             super::tray_lib::spot("nav:two_zoom", r.rect.center());
         });
-        note(ui, &crate::keys::tr("Shift: Pan (Orbit when two fingers pan). Pinch and %CMD% + two fingers always zoom."));
+        note(ui, &varstotas_i18n::platform_keys("Shift: Pan (Orbit when two fingers pan). Pinch and %CMD% + two fingers always zoom."));
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {

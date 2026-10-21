@@ -35,13 +35,13 @@ pub enum LicFilter {
 impl LicFilter {
     pub const ALL: [LicFilter; 4] = [LicFilter::Any, LicFilter::Commercial, LicFilter::Cc0, LicFilter::Known];
 
-    pub fn label(self) -> &'static str {
-        match self {
-            LicFilter::Any => "Any licence",
-            LicFilter::Commercial => "Commercial use OK",
-            LicFilter::Cc0 => "CC0 only",
-            LicFilter::Known => "Known licence",
-        }
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            LicFilter::Any => "model-lib-licence-any",
+            LicFilter::Commercial => "model-lib-licence-commercial",
+            LicFilter::Cc0 => "model-lib-licence-cc0",
+            LicFilter::Known => "model-lib-licence-known",
+        })
     }
 
     pub fn key(self) -> &'static str {

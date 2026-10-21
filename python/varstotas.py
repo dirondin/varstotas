@@ -306,6 +306,11 @@ def params():
     return json.loads(os.environ.get("VARSTOTAS_PARAMS") or "{}", object_hook=dec)
 
 
+def lang():
+    """The UI language code of Varstotas ("en", "ru", …) for the texts a plugin prints or shows."""
+    return os.environ.get("VARSTOTAS_UI_LANG") or "en"
+
+
 def connect(host=None, port=None, token=None, timeout=None):
     """Connect to the running Varstotas (VARSTOTAS_BRIDGE / VARSTOTAS_TOKEN or ~/.varstotas/bridge.json)."""
     if port is None and os.environ.get("VARSTOTAS_BRIDGE"):

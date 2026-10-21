@@ -101,6 +101,8 @@ pub const FNS: &[FnDoc] = &[
     f("materials", &["materials()"], "Material names."),
     f("all_faces", &["all_faces()"], "Every face, nested groups included."),
     f("read_text", &["read_text(path)"], "Read a text file."),
+    f("lang", &["lang()"], "The UI language code (\"en\", \"ru\", …): pick the texts a plugin prints or shows."),
+    f("platform", &["platform()"], "\"macos\", \"windows\" or \"linux\"."),
     f("write_text", &["write_text(path, text)"], "Write a text file."),
     f("file_exists", &["file_exists(path)"], "A file or folder is there."),
     f("list_files", &["list_files(dir, ext)"], "Files under dir (subfolders too) with the extension (\"\" = any), sorted."),
@@ -132,7 +134,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("Parameters and generators", &["make_parametric", "set_params", "params", "reset_params", "generators", "add_generator", "generate"]),
     ("Dimensions and notes", &["dimension", "note"]),
     ("Files and network", &["read_text", "write_text", "file_exists", "list_files", "list_dirs", "parse_json", "fetch_text", "fetch_file", "url_encode"]),
-    ("Output and numbers", &["print", "len", "range", "min", "max", "clamp", "ceil"]),
+    ("Output and numbers", &["print", "lang", "platform", "len", "range", "min", "max", "clamp", "ceil"]),
 ];
 
 /// What a script expression is, as far as the editor can tell (for completion after a dot).
@@ -255,7 +257,7 @@ fn fn_ty(name: &str) -> Ty {
         "all" | "entities" | "selection" | "copy" | "materials" | "range" | "list_files" | "list_dirs" => Array,
         "vec3" => Vector,
         "bounds" | "model_bounds" => Bounds,
-        "material" | "units" | "read_text" | "fetch_text" => Str,
+        "material" | "units" | "read_text" | "fetch_text" | "lang" | "platform" => Str,
         "length" | "len" => Num,
         _ => Any,
     }

@@ -70,31 +70,31 @@ pub enum InferenceKind {
 
 impl InferenceKind {
     /// Tooltip text shown near the cursor.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Endpoint => "Endpoint",
-            Self::Midpoint => "Midpoint",
-            Self::Center => "Center",
-            Self::Intersection => "Intersection",
-            Self::OnEdge => "On Edge",
-            Self::OnRedAxis => "On Red Axis",
-            Self::OnGreenAxis => "On Green Axis",
-            Self::OnBlueAxis => "On Blue Axis",
-            Self::ParallelToEdge => "Parallel to Edge",
-            Self::PerpendicularToEdge => "Perpendicular to Edge",
-            Self::FromPoint => "From Point",
-            Self::OnFace => "On Face",
-            Self::GuidePoint => "Guide Point",
-            Self::OnGuide => "On Line",
-            Self::Origin => "Origin",
-            Self::Square => "Square",
-            Self::GoldenSection => "Golden Section",
-            Self::HalfCircle => "Half Circle",
-            Self::Tangent => "Tangent at Vertex",
-            Self::GridPoint => "Grid Point",
-            Self::OnGridLine => "On Grid Line",
-            Self::Free => "",
-        }
+    pub fn label(self) -> String {
+        varstotas_i18n::tr(match self {
+            Self::Endpoint => "inference-endpoint",
+            Self::Midpoint => "inference-midpoint",
+            Self::Center => "inference-center",
+            Self::Intersection => "inference-intersection",
+            Self::OnEdge => "inference-on-edge",
+            Self::OnRedAxis => "inference-on-red-axis",
+            Self::OnGreenAxis => "inference-on-green-axis",
+            Self::OnBlueAxis => "inference-on-blue-axis",
+            Self::ParallelToEdge => "inference-parallel-to-edge",
+            Self::PerpendicularToEdge => "inference-perpendicular-to-edge",
+            Self::FromPoint => "inference-from-point",
+            Self::OnFace => "inference-on-face",
+            Self::GuidePoint => "inference-guide-point",
+            Self::OnGuide => "inference-on-guide",
+            Self::Origin => "inference-origin",
+            Self::Square => "inference-square",
+            Self::GoldenSection => "inference-golden-section",
+            Self::HalfCircle => "inference-half-circle",
+            Self::Tangent => "inference-tangent",
+            Self::GridPoint => "inference-grid-point",
+            Self::OnGridLine => "inference-on-grid-line",
+            Self::Free => return String::new(),
+        })
     }
 
     /// Marker colour per the UX spec.

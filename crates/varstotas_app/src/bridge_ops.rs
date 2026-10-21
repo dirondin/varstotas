@@ -461,6 +461,7 @@ impl VarstotasApp {
             .env("VARSTOTAS_TOKEN", &b.token)
             .env("PYTHONPATH", pypath)
             .env("VARSTOTAS_PARAMS", params.unwrap_or_default())
+            .env("VARSTOTAS_UI_LANG", varstotas_i18n::language())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

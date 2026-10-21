@@ -132,7 +132,7 @@ impl VarstotasApp {
         pill(ui, icon, "view", |ui| {
             self.hud_open = Some((self.active_pane, "view"));
             for v in StandardView::ALL {
-                if item(ui, view_icon(v), v.name(), view == Some(v), None).clicked() {
+                if item(ui, view_icon(v), &v.name(), view == Some(v), None).clicked() {
                     self.actions.push(Action::View(v));
                     ui.close();
                 }

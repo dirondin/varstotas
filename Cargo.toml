@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/varstotas_kernel", "crates/varstotas_render", "crates/varstotas_script", "crates/varstotas_app"]
+members = ["crates/varstotas_i18n", "crates/varstotas_kernel", "crates/varstotas_render", "crates/varstotas_script", "crates/varstotas_app"]
 exclude = ["vendor"]
 
 [workspace.package]
@@ -23,6 +23,7 @@ log = "0.4"
 env_logger = "0.11"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "hdr", "tga", "bmp"] }
 
+varstotas_i18n = { path = "crates/varstotas_i18n" }
 varstotas_kernel = { path = "crates/varstotas_kernel" }
 varstotas_render = { path = "crates/varstotas_render" }
 varstotas_script = { path = "crates/varstotas_script" }

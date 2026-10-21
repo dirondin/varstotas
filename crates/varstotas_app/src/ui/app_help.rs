@@ -312,17 +312,17 @@ pub fn topic_of(tool: ToolId) -> Topic {
 }
 
 /// Keys other than the tools' own.
-fn keys() -> Vec<(String, &'static str)> {
+fn keys() -> Vec<(String, String)> {
     use crate::keymap::KeyCmd;
     let c = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl+" };
     // reassignable ones (Preferences → Shortcuts), then the fixed keys
-    let mut v: Vec<(String, &'static str)> = KeyCmd::all()
+    let mut v: Vec<(String, String)> = KeyCmd::all()
         .into_iter()
         .filter(|k| !matches!(k, KeyCmd::Tool(_)))
         .map(|k| (crate::keymap::labels(k), k.name()))
         .filter(|(k, _)| !k.is_empty())
         .collect();
-    v.push((format!("{c}X / {c}C / {c}V"), "Cut / Copy / Paste"));
+    v.push((format!("{c}X / {c}C / {c}V"), "Cut / Copy / Paste".to_string()));
     v.extend(
         [
             ("Delete, Backspace", "erase the selection"),
@@ -333,7 +333,7 @@ fn keys() -> Vec<(String, &'static str)> {
             ("F1", "this guide on the active tool; in a script editor — the Script Reference"),
         ]
         .into_iter()
-        .map(|(k, w)| (k.to_string(), w)),
+        .map(|(k, w)| (k.to_string(), w.to_string())),
     );
     v
 }
@@ -392,8 +392,8 @@ fn blocks_ui(ui: &mut Ui, blocks: &[B], ask: &mut Option<Ask>) {
                 ui.add_space(6.0);
                 ui.label(RichText::new(*t).strong().size(15.0));
             }
-            B::P(t) => rich(ui, &crate::keys::tr(t)),
-            B::Row(a, b) => row(ui, &crate::keys::tr(a), &crate::keys::tr(b)),
+            B::P(t) => rich(ui, &varstotas_i18n::platform_keys(t)),
+            B::Row(a, b) => row(ui, &varstotas_i18n::platform_keys(a), &varstotas_i18n::platform_keys(b)),
             B::Tools(ids) => {
                 ui.add_space(2.0);
                 for id in *ids {
@@ -418,13 +418,13 @@ fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
         ui.label(RichText::new("Tools").strong().size(15.0));
         for id in ToolId::ALL {
             if id.shortcut_label().is_some() {
-                row(ui, &crate::keymap::labels(crate::keymap::KeyCmd::Tool(id)), id.name());
+                row(ui, &crate::keymap::labels(crate::keymap::KeyCmd::Tool(id)), &id.name());
             }
         }
         ui.add_space(6.0);
         ui.label(RichText::new("Commands").strong().size(15.0));
         for (k, w) in keys() {
-            row(ui, &k, w);
+            row(ui, &k, &w);
         }
         ui.add_space(6.0);
         rich(ui, "Change them in Window → Preferences → Shortcuts. Mouse and trackpad: see Navigating the view. Selection modifiers: see Selecting.");
@@ -434,8 +434,8 @@ fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
 /// The text of a block that a search looks at.
 fn block_text(b: &B) -> Option<String> {
     match b {
-        B::H(t) | B::P(t) => Some(crate::keys::tr(t).into_owned()),
-        B::Row(a, b) => Some(crate::keys::tr(&format!("{a} {b}")).into_owned()),
+        B::H(t) | B::P(t) => Some(varstotas_i18n::platform_keys(t).into_owned()),
+        B::Row(a, b) => Some(varstotas_i18n::platform_keys(&format!("{a} {b}")).into_owned()),
         B::Script(_, l) => Some(l.to_string()),
         B::Tools(_) => None,
     }
