@@ -3,12 +3,15 @@
 # @description Downloadable models of Sketchfab (Creative Commons; the credit goes with the component). Searching is open; downloading needs your API token (sketchfab.com/settings/password). Type a search and press Enter. The protocol: `plugin.py search | download`, the arguments as JSON on stdin, the answer as JSON on the last line of stdout.
 # @description.ru Скачиваемые модели Sketchfab (Creative Commons; указание автора сохраняется в компоненте). Поиск открыт; для загрузки нужен ваш API-токен (sketchfab.com/settings/password). Введите запрос и нажмите Enter. Протокол: `plugin.py search | download`, аргументы — JSON в stdin, ответ — JSON в последней строке stdout.
 # @description.lt Atsisiunčiami Sketchfab modeliai (Creative Commons; autorystė išsaugoma komponente). Paieška atvira; atsisiuntimui reikia jūsų API žetono (sketchfab.com/settings/password). Įveskite užklausą ir paspauskite Enter. Protokolas: `plugin.py search | download`, argumentai – JSON per stdin, atsakymas – JSON paskutinėje stdout eilutėje.
+# @description.be Мадэлі Sketchfab, даступныя для спампоўкі (Creative Commons; звесткі пра аўтара захоўваюцца ў кампаненце). Пошук адкрыты; для спампоўкі патрэбны ваш API-токен (sketchfab.com/settings/password). Увядзіце запыт і націсніце Enter. Пратакол: `plugin.py search | download`, аргументы — JSON у stdin, адказ — JSON у апошнім радку stdout.
 # @param token:text = "" "API token"
 # @param.ru token "API-токен"
 # @param.lt token "API žetonas"
+# @param.be token "API-токен"
 # @notice Models provided by Sketchfab (sketchfab.com). Each has its own licence (CC0, CC-BY, CC-BY-NC, Standard…): it goes with the component; credit the author and Sketchfab, and check NC / ND / Standard licences before commercial use.
 # @notice.ru Модели предоставлены Sketchfab (sketchfab.com). У каждой своя лицензия (CC0, CC-BY, CC-BY-NC, Standard…): она сохраняется в компоненте; указывайте автора и Sketchfab и проверяйте лицензии NC / ND / Standard перед коммерческим использованием.
 # @notice.lt Modelius teikia Sketchfab (sketchfab.com). Kiekvienas turi savo licenciją (CC0, CC-BY, CC-BY-NC, Standard…): ji išsaugoma komponente; nurodykite autorių ir Sketchfab ir prieš komercinį naudojimą patikrinkite NC / ND / Standard licencijas.
+# @notice.be Мадэлі прадастаўлены Sketchfab (sketchfab.com). У кожнай свая ліцэнзія (CC0, CC-BY, CC-BY-NC, Standard…): яна захоўваецца ў кампаненце; указвайце аўтара і Sketchfab і правярайце ліцэнзіі NC / ND / Standard перад камерцыйным выкарыстаннем.
 import json
 import os
 import subprocess

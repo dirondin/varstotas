@@ -1,30 +1,39 @@
 // @name Stairs
 // @name.ru Лестница
 // @name.lt Laiptai
+// @name.be Лесвіца
 // @menu Construction/Stairs…
 // @menu.ru Построение/Лестница…
 // @menu.lt Konstrukcija/Laiptai…
+// @menu.be Пабудова/Лесвіца…
 // @description A straight flight of treads rising along +Y from the clicked point, as one group.
 // @description.ru Прямой марш ступеней, поднимающийся вдоль +Y от указанной точки, одной группой.
 // @description.lt Tiesus laiptų maršas, kylantis +Y kryptimi nuo nurodyto taško, viena grupe.
+// @description.be Прамы марш прыступак, што падымаецца ўздоўж +Y ад указанага пункта, адной групай.
 // @param width = 900 "Width"
 // @param.ru width "Ширина"
 // @param.lt width "Plotis"
+// @param.be width "Шырыня"
 // @param rise = 2700 "Total rise"
 // @param.ru rise "Общая высота"
 // @param.lt rise "Bendras aukštis"
+// @param.be rise "Агульная вышыня"
 // @param going = 250 "Step depth"
 // @param.ru going "Глубина ступени"
 // @param.lt going "Pakopos gylis"
+// @param.be going "Глыбіня прыступкі"
 // @param steps:int = 15 "Steps"
 // @param.ru steps "Ступени"
 // @param.lt steps "Pakopos"
+// @param.be steps "Прыступкі"
 // @param tread = 40 "Tread thickness"
 // @param.ru tread "Толщина проступи"
 // @param.lt tread "Pakopos storis"
+// @param.be tread "Таўшчыня праступі"
 // @pick 1 "Click the bottom front corner of the stairs"
 // @pick.ru "Щёлкните нижний передний угол лестницы"
 // @pick.lt "Spustelėkite apatinį priekinį laiptų kampą"
+// @pick.be "Пстрыкніце ніжні пярэдні вугал лесвіцы"
 let p0 = points[0];
 let h = rise / steps;
 let parts = [];
