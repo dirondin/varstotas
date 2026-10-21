@@ -1,8 +1,8 @@
 # Localization
 
-Every text the user reads comes from `locales/<lang>/*.ftl` files in the
+Every text the user reads comes from one file per language, `locales/<lang>.ftl`, in the
 [Fluent](https://projectfluent.org/fluent/guide/) format; the code only holds keys. English
-(`locales/en`) is the base: every key exists there, other languages fall back to it key by key.
+(`locales/en.ftl`) is the base: every key exists there, other languages fall back to it key by key.
 The crate `varstotas_i18n` loads the files (embedded at build time) and looks texts up.
 
 ## In the code
@@ -18,8 +18,9 @@ let what = tr!(if on { "tool-x-on" } else { "tool-x-off" });   // a computed key
 
 - `tr!` returns a `String`. A function that used to return `&'static str` for a display text
   returns `String` (`varstotas_i18n::tr(match self { A => "area-a", … })`).
-- Keys are kebab case: `<area>-<thing>[-<detail>]`; the area is the first word and tells the
-  file (`tool-…` → `tools.ftl`, `cmd-…` → `commands.ftl`, `prefs-…` → `prefs.ftl`, …).
+- Keys are kebab case: `<area>-<thing>[-<detail>]`; the area is the first word (`tool-…`,
+  `cmd-…`, `prefs-…`) and the section of the file where the key lives. Sections are comments:
+  `## ======== Tools ========`, with `## …` subsections inside.
 - Never build a sentence from pieces in the code: pass the varying parts as arguments, so a
   translation can reorder them. Numbers that choose a word form go as numbers
   (`count = n`), not preformatted.
@@ -67,10 +68,10 @@ translators what its arguments are.
 
 ## Translators
 
-- A language is a folder `locales/<code>/` (ISO 639-1: `ru`, `de`, …) with the same file names as
-  `locales/en`, and a `language-name` message (its own name: `Deutsch`). Keys missing in a
-  translation show in English.
-- Without rebuilding: put `.ftl` files into `~/.varstotas/locales/<code>/`. They add a language
+- A language is a file `locales/<code>.ftl` (ISO 639-1: `ru`, `de`, …) with the keys of
+  `locales/en.ftl` in the same sections, and a `language-name` message (its own name:
+  `Deutsch`). Keys missing in a translation show in English.
+- Without rebuilding: put `<code>.ftl` into `~/.varstotas/locales/`. It adds a language
   (it appears in Preferences → Interface → Language) or override single messages of a built-in
   one. Syntax errors go to Window → Log.
 - `cargo test -p varstotas_i18n` checks the syntax of every file, that translations hold no keys

@@ -1,4 +1,4 @@
-//! Localization of everything the user reads: Fluent messages (`locales/<lang>/*.ftl`) looked
+//! Localization of everything the user reads: Fluent messages (`locales/<lang>.ftl`) looked
 //! up by key. See docs/LOCALIZATION.md.
 //!
 //! - `tr!("menu-file-open")`, `tr!("status-faces", count = n)` — the text in the current
@@ -8,7 +8,7 @@
 //!   `.linux`) replaces its value there; inside a pattern `{ PLATFORM() -> [macos] … *[other] … }`
 //!   selects per platform too.
 //! - The locales of the repository are embedded at build time; `.ftl` files in the user's
-//!   folder (`~/.varstotas/locales/<lang>/`) add languages or override single messages.
+//!   folder (`~/.varstotas/locales/<lang>.ftl`) add languages or override single messages.
 //! - Modifier markers in texts are named for the platform: `%COPY%` (Option on macOS, Ctrl
 //!   elsewhere), `%CMD%` (Cmd / Ctrl), `%ALT%` (Option / Alt), `%CMDK%` (`⌘` / `Ctrl+`, a
 //!   shortcut prefix) — see [`platform_keys`].
@@ -117,21 +117,12 @@ fn sources(lang: &str, user_dir: Option<&Path>) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = embedded::EMBEDDED
         .iter()
         .filter(|(l, _, _)| *l == lang)
-        .map(|(l, f, text)| (format!("{l}/{f}"), text.to_string()))
+        .map(|(_, f, text)| (f.to_string(), text.to_string()))
         .collect();
     if let Some(dir) = user_dir {
-        let mut files: Vec<PathBuf> = std::fs::read_dir(dir.join(lang))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e == "ftl"))
-            .collect();
-        files.sort();
-        for p in files {
-            if let Ok(text) = std::fs::read_to_string(&p) {
-                out.push((p.display().to_string(), text));
-            }
+        let p = dir.join(format!("{lang}.ftl"));
+        if let Ok(text) = std::fs::read_to_string(&p) {
+            out.push((p.display().to_string(), text));
         }
     }
     out
@@ -299,7 +290,7 @@ pub fn load_errors() -> Vec<String> {
     state().errors.clone()
 }
 
-/// The folder of the user's own translations (`<dir>/<lang>/*.ftl`); reloads the language.
+/// The folder of the user's own translations (`<dir>/<lang>.ftl`); reloads the language.
 pub fn set_user_dir(dir: Option<PathBuf>) {
     let mut s = state();
     s.user_dir = dir;
@@ -337,8 +328,11 @@ pub fn languages() -> Vec<(String, String)> {
     let mut codes: Vec<String> = embedded::EMBEDDED.iter().map(|(l, _, _)| l.to_string()).collect();
     if let Some(dir) = &user_dir {
         for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-            if e.path().is_dir() {
-                codes.push(e.file_name().to_string_lossy().into_owned());
+            let p = e.path();
+            if p.extension().is_some_and(|x| x == "ftl") {
+                if let Some(stem) = p.file_stem() {
+                    codes.push(stem.to_string_lossy().into_owned());
+                }
             }
         }
     }
@@ -412,9 +406,9 @@ pub fn embedded_keys(lang: &str) -> BTreeMap<String, String> {
 /// Syntax errors of the embedded files (tests).
 pub fn embedded_errors() -> Vec<String> {
     let mut out = Vec::new();
-    for (l, file, text) in embedded::EMBEDDED {
+    for (_, file, text) in embedded::EMBEDDED {
         if let Err((_, errs)) = fluent_syntax::parser::parse(*text) {
-            out.extend(errs.iter().map(|e| format!("{l}/{file}: {e:?}")));
+            out.extend(errs.iter().map(|e| format!("{file}: {e:?}")));
         }
     }
     out

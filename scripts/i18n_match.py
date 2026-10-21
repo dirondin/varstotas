@@ -2,7 +2,7 @@
 """Moves the texts of a `fn …(self) -> &'static str { match self { A::B => "Text", … } }` to a
 locale file: the arms get keys `<prefix>-<variant>` (kebab case), the function returns
 `String` through `varstotas_i18n::tr`, and `key = Text` lines are appended to
-locales/en/<area>.ftl. Arms that are not a plain string literal are reported and left alone.
+locales/en.ftl (under a `## AREA` comment: move them into their section). Arms that are not a plain string literal are reported and left alone.
 
 usage: scripts/i18n_match.py FILE FN PREFIX AREA [--suffix SUFFIX] [--keep-sig]
 """
@@ -68,12 +68,9 @@ else:
     indent = re.match(r'\n([ \t]*)', m.group(1)).group(1)
     out = (src[:m.start()] + m.group(1) + 'String' + m.group(2) + '\n' + indent + '    varstotas_i18n::tr(' + inner + ')\n' + indent + src[i - 1:])
 pathlib.Path(path).write_text(out)
-ftl = pathlib.Path('locales/en') / f'{area}.ftl'
-old = ftl.read_text() if ftl.exists() else ''
+ftl = pathlib.Path('locales/en.ftl')
 with ftl.open('a') as f:
-    if old and not old.endswith('\n\n'):
-        f.write('\n')
-    f.write('\n'.join(lines) + '\n')
+    f.write(f'\n## {area}\n\n' + '\n'.join(lines) + '\n')
 print(f'{fn}: {len(lines)} keys → {ftl}')
 for l in left:
     print('  left alone:', l)
