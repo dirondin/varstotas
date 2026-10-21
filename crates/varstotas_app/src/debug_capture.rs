@@ -1,5 +1,4 @@
 //! Debug helpers driven by env vars (used for automated visual checks):
-//! - `VARSTOTAS_DEMO=1` inserts demo geometry on startup.
 //! - `VARSTOTAS_SELECT_ALL=1` selects everything after ~20 frames.
 //! - `VARSTOTAS_SCREENSHOT=<file.bmp>` captures the window after ~40 frames, writes a BMP, quits.
 //! - `VARSTOTAS_SCRIPT=<file>` drives tools with scripted input (see [`ScriptCmd`] for the
@@ -85,10 +84,6 @@ impl DebugCapture {
         if let Some(inj) = self.script.as_mut().and_then(|s| s.raw.as_mut()) {
             inj.apply(raw);
         }
-    }
-
-    pub fn demo_requested() -> bool {
-        std::env::var("VARSTOTAS_DEMO").is_ok_and(|v| v == "1")
     }
 
     /// Returns true on the frame when the debug "select all" should happen.
@@ -2086,8 +2081,15 @@ impl VarstotasApp {
             "next_scene" => Action::NextScene,
             "prev_scene" => Action::PrevScene,
             "play_animation" | "toggle_animation" => Action::ToggleAnimation,
-            "demo_house" => Action::OpenDemoHouse,
-            "demo_gallery" => Action::OpenDemoGallery,
+            // the demo models as installed to ~/.varstotas/examples
+            "demo_house" | "demo_gallery" => {
+                let file = if name == "demo_house" { "country_house.vrst" } else { "material_gallery.vrst" }; // i18n-ignore
+                self.doc.dirty = false;
+                match crate::demo::examples_dir() {
+                    Some(d) => Action::OpenPath(d.join(file)),
+                    None => return,
+                }
+            }
             "scene_right" => Action::MoveScene(self.tray.selected_scene.unwrap_or(0), true),
             "reverse_faces" => Action::ReverseFaces,
             "orient_faces" => Action::OrientFaces,

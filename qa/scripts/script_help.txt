@@ -3,7 +3,7 @@
 wait 10
 raw click 456 -105
 wait 5
-raw click 499 -22
+raw click 499 -49
 wait 5
 expect help=(true Basics "")
 screenshot shots/help_basics.bmp

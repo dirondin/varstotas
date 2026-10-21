@@ -1,8 +1,8 @@
-# File → Open Demo: Country House — the furnished demo model (procedural textures, PBR
+# The Country House demo (~/.varstotas/examples/country_house.vrst) — the furnished demo model (procedural textures, PBR
 # materials, lights, scenes) in the Realistic style and path traced
 action demo_house
 wait 30
-expect scenes=["Exterior", "Terrace", "Living Room", "Kitchen", "Bedroom", "Bathroom", "Dusk", "Plan(-)"] scene=Some(0)
+expect scenes=["Exterior", "Terrace", "Living Room", "Kitchen", "Bedroom", "Bathroom", "Dusk", "Plan(-)"] scene=None
 expect style=realistic
 screenshot shots/demo_exterior.bmp
 # cuts between scenes (the demo's own transitions take 3 s)

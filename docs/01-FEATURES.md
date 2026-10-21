@@ -125,8 +125,8 @@ Status: ⬜ not started · 🟨 in progress · ✅ done.
 | Path-traced render (track R): Window → Render… — a progressive GPU path tracer (BVH, PBR, glass with refraction, emission, HDRI / physical sky with sun, ground), point / spot / area lights, denoising (Intel OIDN, if installed), hardware ray query where available, PNG / EXR, rendering all scenes | P2 | ✅ |
 | Light sources in the scene: always visible (marker, spotlight cone, area-light rectangle), selected by click, Move / Rotate (with axis locking, VCB, copying), an aiming handle (drag onto an object), properties in Entity Info, Delete, undo | P2 | ✅ |
 | Render settings: quality presets (Draft / Preview / Final / Best), frame sizes, transparent background, firefly clamp, denoiser choice, depth of field (aperture f/, focus), sun / sky / exposure, on-the-fly colour correction (exposure, tone curve, white balance, tint, saturation, contrast, vignette) | P2 | ✅ |
-| Demo model "country house" (Help → Demos → Country House): a furnished house with PBR materials, procedural textures, light sources and scenes for checking visualisation | P2 | ✅ |
-| Demo "material gallery" (Help → Demos → Material Gallery): 24 cubes of different materials (metals, glass, neon, textures, shaders) and 8 scenes with different environments and render styles | P2 | ✅ |
+| Demo model "country house" (`~/.varstotas/examples/country_house.vrst`, File → Open): a furnished house with PBR materials, procedural textures, light sources and scenes for checking visualisation | P2 | ✅ |
+| Demo "material gallery" (`~/.varstotas/examples/material_gallery.vrst`): 24 cubes of different materials (metals, glass, neon, textures, shaders) and 8 scenes with different environments and render styles | P2 | ✅ |
 | Shader editor: WGSL highlighting, hints for Surface fields / parameters / swizzles, call hint, reference, templates | P2 | ✅ |
 | Animation export (File → Export → Animation…): a walk through the scenes or a fly-around to MP4 (ffmpeg) or a PNG sequence; frames as a view or path-traced | P2 | ✅ |
 | Front/back side of faces (white/grey-blue) | P0 | ✅ |

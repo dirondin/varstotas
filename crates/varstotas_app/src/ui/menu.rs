@@ -471,16 +471,6 @@ impl VarstotasApp {
             });
 
             ui.menu_button(tr!("menu-help"), |ui| {
-                ui.menu_button(tr!("menu-demos"), |ui| {
-                    ui.label(egui::RichText::new(tr!("menu-demos-open")).small().weak());
-                    self.item(ui, &tr!("menu-demo-house"), None, true, Action::OpenDemoHouse);
-                    self.item(ui, &tr!("menu-demo-gallery"), None, true, Action::OpenDemoGallery);
-                    ui.separator();
-                    ui.label(egui::RichText::new(tr!("menu-demos-add")).small().weak());
-                    self.item(ui, &tr!("menu-demo-geometry"), None, true, Action::InsertDemo);
-                })
-                .response
-                .on_hover_text(tr!("menu-demos-hint"));
                 if ui
                     .add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open))
                     .on_hover_text(tr!("menu-user-guide-hint"))

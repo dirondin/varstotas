@@ -1,24 +1,45 @@
-//! Help → Demos: the demo models are ordinary `.vrst` files in `examples/demos/`, embedded at
-//! build time and opened as untitled documents.
+//! The demo models: ordinary `.vrst` files in `examples/demos/`, embedded at build time and
+//! installed (refreshed on every start) to `~/.varstotas/examples`, where File → Open finds them.
 //! - Country House: a furnished one-storey house on a lawn (walls with openings, a gable roof,
 //!   rooms, a terrace and a garden), PBR materials with textures, lights, render settings and
 //!   scenes (day, dusk, rooms, plan).
 //! - Material Gallery: 24 bevelled cubes in different materials on a studio cove; its materials
 //!   are also the Examples folder of the materials library.
 
+use std::path::PathBuf;
 use varstotas_kernel::Model;
 
 const COUNTRY_HOUSE: &str = include_str!("../../../examples/demos/country_house.vrst");
 const MATERIAL_GALLERY: &str = include_str!("../../../examples/demos/material_gallery.vrst");
+const FILES: [(&str, &str); 2] = [("country_house.vrst", COUNTRY_HOUSE), ("material_gallery.vrst", MATERIAL_GALLERY)];
+
+/// `~/.varstotas/examples`.
+pub fn examples_dir() -> Option<PathBuf> {
+    crate::bridge::home_dir().map(|d| d.join("examples"))
+}
+
+/// Write the demo models to `~/.varstotas/examples` (replacing changed or older copies).
+pub fn install_examples() {
+    let Some(dir) = examples_dir() else { return };
+    let r = std::fs::create_dir_all(&dir).and_then(|_| {
+        for (name, text) in FILES {
+            let p = dir.join(name);
+            if std::fs::read(&p).ok().as_deref() != Some(text.as_bytes()) {
+                std::fs::write(p, text)?;
+            }
+        }
+        Ok(())
+    });
+    if let Err(e) = r {
+        log::warn!("demos: cannot install the examples to {}: {e}", dir.display());
+    }
+}
 
 fn load(text: &str) -> Model {
     varstotas_kernel::io::from_json(text).expect("embedded demo model")
 }
 
-pub fn country_house() -> Model {
-    load(COUNTRY_HOUSE)
-}
-
+/// The Material Gallery model (its materials fill the library's Examples folder).
 pub fn material_gallery() -> Model {
     load(MATERIAL_GALLERY)
 }
@@ -29,7 +50,7 @@ mod tests {
 
     #[test]
     fn the_demo_house_is_complete() {
-        let m = country_house();
+        let m = load(COUNTRY_HOUSE);
         assert!(m.materials.len() > 40);
         assert!(m.materials.values().filter(|x| x.image.is_some()).count() >= 18);
         assert_eq!(m.scenes.len(), 8);

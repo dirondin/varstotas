@@ -10,7 +10,7 @@ use crate::viewport::Viewport;
 use egui::{Key, Modifiers, PointerButton, Pos2, Response, ViewportCommand};
 use varstotas_kernel::glam::DVec3;
 use crate::templates::Template;
-use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, IntersectScope, Model, Scene, SceneStyle, io};
+use varstotas_kernel::{ContextPath, EntityRef, FaceId, InstanceId, IntersectScope, Scene, SceneStyle, io};
 use std::rc::Rc;
 use varstotas_render::{Camera, FaceStyle, Overlay3d, RenderStyle, StandardView};
 use serde::{Deserialize, Serialize};
@@ -259,10 +259,6 @@ pub enum Action {
     /// Window → Sheets…: layout sheets.
     Sheets,
     WorkPlanes,
-    InsertDemo,
-    /// File → Open Demo: Country House (a new, unsaved document).
-    OpenDemoHouse,
-    OpenDemoGallery,
     Quit,
     Undo,
     Redo,
@@ -461,8 +457,6 @@ pub enum Pending {
     NewFrom(Template),
     Open,
     OpenPath(PathBuf),
-    DemoHouse,
-    DemoGallery,
     Quit,
 }
 
@@ -634,10 +628,7 @@ impl VarstotasApp {
             log::warn!("locales: {e}");
         }
         let base_style = guarded(RenderStyle::default).unwrap_or_else(|_| fallback_style());
-        let mut actions = Vec::new();
-        if crate::debug_capture::DebugCapture::demo_requested() {
-            actions.push(Action::InsertDemo);
-        }
+        let actions = Vec::new();
         let debug = crate::debug_capture::DebugCapture::from_env();
         let autosave_dir = crate::autosave::data_dir();
         let allowed = !debug.script_active() || std::env::var_os("VARSTOTAS_AUTOSAVE_DIR").is_some_and(|v| !v.is_empty());
@@ -733,6 +724,7 @@ impl VarstotasApp {
         };
         app.show_templates = show_templates;
         app.start_bridge(&cc.egui_ctx);
+        crate::demo::install_examples();
         app.load_plugins();
         app
     }
@@ -1303,9 +1295,6 @@ impl VarstotasApp {
             Action::Unfold => self.unfold.open = true,
             Action::Sheets => self.sheets.open = true,
             Action::WorkPlanes => self.planes_window.open = true,
-            Action::InsertDemo => self.insert_demo(),
-            Action::OpenDemoHouse => self.guard_dirty(Pending::DemoHouse),
-            Action::OpenDemoGallery => self.guard_dirty(Pending::DemoGallery),
             Action::Undo => match self.doc.undo() {
                 Some(l) => self.flash(tr!("app-flash-undo", name = l)),
                 None => self.flash(tr!("app-nothing-to-undo")),
@@ -2034,9 +2023,8 @@ impl VarstotasApp {
 
     /// Make scene `i` current: style and tags switch at once, the camera moves with the
     /// model's transition settings (a cut when transitions are off).
-    pub(crate) fn go_to_scene(&mut self, i: usize) {
-        let Some(s) = self.doc.model.scenes.get(i).cloned() else { return };
-        self.tray.selected_scene = Some(i);
+    /// The face style, X-ray, edges and profiles a scene stores.
+    fn apply_scene_style(&mut self, s: &Scene) {
         if let Some(st) = &s.style {
             if let Some(fs) = FaceStylePref::from_key(&st.face_style) {
                 self.prefs.face_style = fs;
@@ -2045,6 +2033,12 @@ impl VarstotasApp {
             *self.prefs.edges_mut() = st.edges;
             self.prefs.profiles = st.profiles;
         }
+    }
+
+    pub(crate) fn go_to_scene(&mut self, i: usize) {
+        let Some(s) = self.doc.model.scenes.get(i).cloned() else { return };
+        self.tray.selected_scene = Some(i);
+        self.apply_scene_style(&s);
         if let Some(hidden) = &s.hidden_tags {
             let changes = self.doc.model.tags.iter().any(|(id, t)| t.visible == hidden.contains(&id));
             if changes {
@@ -2158,16 +2152,6 @@ impl VarstotasApp {
                 }
             }
             Pending::OpenPath(path) => self.open_path(&path),
-            Pending::DemoHouse => {
-                self.replace_document(Document::from_model(crate::demo::country_house(), None));
-                self.go_to_scene(0);
-                self.flash(tr!("app-demo-house"));
-            }
-            Pending::DemoGallery => {
-                self.replace_document(Document::from_model(crate::demo::material_gallery(), None));
-                self.go_to_scene(0);
-                self.flash(tr!("app-demo-gallery"));
-            }
             Pending::Quit => {
                 self.allow_close = true;
                 self.tray.close_requested = true;
@@ -2196,8 +2180,9 @@ impl VarstotasApp {
         self.vcb.clear();
         self.tray = TrayState::default();
         let mut cam = nav::startup_camera();
-        if !self.doc.model.scenes.is_empty() {
-            let s = &self.doc.model.scenes[0];
+        // A document with scenes opens with the camera and the style of the first one.
+        if let Some(s) = self.doc.model.scenes.first().cloned() {
+            self.apply_scene_style(&s);
             cam.eye = s.eye;
             cam.target = s.target;
             cam.up = s.up;
@@ -2362,52 +2347,6 @@ impl VarstotasApp {
         });
         if r.is_some() {
             self.flash(tr!("app-imported", path = path.display().to_string()));
-            self.actions.push(Action::ZoomExtents);
-        } else if let Some(e) = self.doc.last_error.clone() {
-            self.flash_error(e);
-        }
-    }
-
-    fn insert_demo(&mut self) {
-        fn make_box(mesh: &mut varstotas_kernel::Mesh, x: f64, y: f64, w: f64, d: f64, h: f64) {
-            let pts = [
-                DVec3::new(x, y, 0.0),
-                DVec3::new(x + w, y, 0.0),
-                DVec3::new(x + w, y + d, 0.0),
-                DVec3::new(x, y + d, 0.0),
-            ];
-            if let Some(f) = mesh.add_face(&pts) {
-                let up = mesh.faces.get(f).map(|f| f.normal.z >= 0.0).unwrap_or(true);
-                let _ = mesh.push_pull(f, if up { h } else { -h }, false);
-            }
-        }
-        let r = self.doc.commit(&tr!("app-undo-insert-demo"), |m: &mut Model| {
-            let brick = m.add_material("Brick", [0.70, 0.33, 0.24, 1.0]); // i18n-ignore
-            let wood = m.add_material("Wood", [0.78, 0.60, 0.40, 1.0]); // i18n-ignore
-            let mesh = m.root_mesh_mut();
-            make_box(mesh, 0.0, 0.0, 3000.0, 2000.0, 2400.0);
-            make_box(mesh, 4000.0, 0.0, 1000.0, 1000.0, 3200.0);
-            // A painted group.
-            let before: std::collections::HashSet<EntityRef> = all_refs(m.root_mesh());
-            make_box(m.root_mesh_mut(), 0.0, 3000.0, 1800.0, 900.0, 750.0);
-            let new: Vec<EntityRef> = all_refs(m.root_mesh()).difference(&before).copied().collect();
-            if let Ok(g) = m.make_group(&[], &new)
-                && let Some(i) = m.root_mesh_mut().instances.get_mut(g) {
-                    i.name = "Table".into(); // i18n-ignore
-                    i.material = Some(wood);
-                }
-            // Paint the tall box's faces.
-            let mesh = m.root_mesh_mut();
-            let ids: Vec<_> = mesh.faces.iter().filter(|(_, f)| {
-                f.outer.iter().all(|v| mesh.vertices[*v].pos.x >= 4000.0 - 1e-6)
-            }).map(|(id, _)| id).collect();
-            for id in ids {
-                if let Some(f) = mesh.faces.get_mut(id) {
-                    f.front = Some(brick);
-                }
-            }
-        });
-        if r.is_some() {
             self.actions.push(Action::ZoomExtents);
         } else if let Some(e) = self.doc.last_error.clone() {
             self.flash_error(e);
@@ -2658,13 +2597,6 @@ impl VarstotasApp {
         (varstotas_i18n::platform_keys(&self.tool.status_text()).into_owned(), flash)
     }
 
-}
-
-fn all_refs(mesh: &varstotas_kernel::Mesh) -> std::collections::HashSet<EntityRef> {
-    let mut s = std::collections::HashSet::new();
-    s.extend(mesh.faces.keys().map(EntityRef::Face));
-    s.extend(mesh.edges.keys().map(EntityRef::Edge));
-    s
 }
 
 impl eframe::App for VarstotasApp {

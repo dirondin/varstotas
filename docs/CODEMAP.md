@@ -139,7 +139,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `clipboard.rs` | copy, cut, paste; library placement (`from_library`) reuses a model definition only with the library's content (`Model::content_hash`, `same_or_numbered`), else the original comes in as "<name> 2" |
 | `autosave.rs` | autosave and recovery |
 | `templates.rs` | File → New templates |
-| `demo.rs` | Help → Demos — `country_house()` / `material_gallery()` load the embedded `examples/demos/*.vrst` (ordinary model files; edit them in the app and save over); the gallery's materials also fill the materials library's Examples folder |
+| `demo.rs` | the demo models `examples/demos/*.vrst`, embedded and installed on every start to `~/.varstotas/examples` (`install_examples`, `examples_dir`); `material_gallery()` fills the materials library's Examples folder; QA actions `demo_house` / `demo_gallery` open the installed files |
 | `debug_capture.rs` | `VARSTOTAS_SCRIPT` harness, including the `raw` and `rawp` real-input commands (`raw scroll` = a trackpad swipe) |
 | `tools/mod.rs` | `Tool` trait and tool registry (`SHAPES` — Draw → Shapes) |
 | `tools/primitives.rs` | `PrimitiveTool`: Draw → Shapes (base, then height / tube; Measurements `w,d[,h]` / `r[,h]`, `Ns`) → `generator::add` + `place` of the bundled `examples/generators/primitives/*.rhai` (`SOURCES`) |

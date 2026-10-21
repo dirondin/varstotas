@@ -1,9 +1,9 @@
-# File → Open Demo: Material Gallery — 24 bevelled cubes in different materials (metals, glass,
+# The Material Gallery demo (~/.varstotas/examples/material_gallery.vrst) — 24 bevelled cubes in different materials (metals, glass,
 # emissive, textures, custom shaders) and scenes in different environments / render styles,
 # each shown in the viewport and path traced
 action demo_gallery
 wait 30
-expect scenes=["Studio", "Noon", "Sunset", "Neon Night", "Foggy Morning", "Clay", "Watercolor", "Plan(-)"] scene=Some(0)
+expect scenes=["Studio", "Noon", "Sunset", "Neon Night", "Foggy Morning", "Clay", "Watercolor", "Plan(-)"] scene=None
 expect tags_hidden=0
 expect style=realistic
 action scene_timing_0_1

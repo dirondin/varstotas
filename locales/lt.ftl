@@ -116,8 +116,6 @@ app-play-animation = Paleisti animaciją
 app-cant-use = Negalima naudoti { $path }: { $error }
 app-undo-add-material = Pridėti medžiagą
 app-no-scenes = Nėra scenų, kurias būtų galima paleisti. Pridėkite scenų skydelyje „Scenos“.
-app-demo-house = Demonstracija: kaimo namas – žr. kortelę „Scenos“ ir Langas → Atvaizdavimas…
-app-demo-gallery = Demonstracija: medžiagų galerija – žr. kortelę „Scenos“ ir Langas → Atvaizdavimas…
 # { $path } yra failo kelias.
 app-opened = Atidaryta: { $path }
 app-could-not-open = Nepavyko atidaryti { $path }: { $error }
@@ -130,7 +128,6 @@ app-export-failed = Eksportuoti nepavyko: { $error }
 # { $format } yra formato pavadinimas.
 app-undo-import = Importuoti { $format }
 app-imported = Importuota: { $path }
-app-undo-insert-demo = Įterpti demonstracinę geometriją
 app-autosave-failed = Automatinis išsaugojimas į { $path } nepavyko: { $error }
 # { $name } yra failo vardas.
 app-recovered = Atkurta { $name } iš automatinio išsaugojimo
@@ -212,13 +209,6 @@ menu-window = Langas
 menu-side-bar = Šoninė juosta
 menu-sheets = Lapai…
 menu-help = Pagalba
-menu-demos = Demonstracijos
-menu-demos-open = Atidaryti kaip naują dokumentą
-menu-demo-house = Kaimo namas
-menu-demo-gallery = Medžiagų galerija
-menu-demos-add = Pridėti prie šio dokumento
-menu-demo-geometry = Demonstracinė geometrija
-menu-demos-hint = Demonstraciniai modeliai: apstatytas namas ir medžiagų galerija su scenomis skirtoms Langas → Atvaizdavimas…, bandomoji geometrija
 menu-user-guide = Vartotojo vadovas
 menu-user-guide-hint = Kaip naudotis Varstotas: įrankiai, meniu, failai, klavišai (F1 virš modelio: aktyvus įrankis)
 menu-script-reference = Scenarijų žinynas
@@ -3349,7 +3339,7 @@ help-start-16 = 3. Paspauskite `Space` (Žymėti), tris kartus spustelėkite dė
 help-start-17 = 4. Paspauskite `B` (Dažų kibiras), Medžiagų kortelėje pasirinkite medžiagą, spustelėkite paviršius.
 help-start-18 = 5. `Shift+Z` sutalpina modelį rodinyje; Failas → Išsaugoti įrašo `.vrst` failą.
 help-start-19 = Pagalba dirbant
-help-start-20 = Instruktoriaus kortelė paaiškina aktyvų įrankį; F1 virš modelio atveria šį vadovą ties juo. Pagalba → Demonstracijos atveria baigtus modelius apžiūrai (apstatytas namas, medžiagų galerija).
+help-start-20 = Instruktoriaus kortelė paaiškina aktyvų įrankį; F1 virš modelio atveria šį vadovą ties juo. Baigti modeliai apžiūrai (apstatytas namas, medžiagų galerija) yra aplanke ~/.varstotas/examples: Failas → Atidaryti.
 ## navigation
 help-navigation-1 = Pelė ir jutiklinis kilimėlis
 help-navigation-2 = Vidurinio mygtuko vilkimas

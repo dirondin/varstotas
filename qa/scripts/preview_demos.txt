@@ -1,14 +1,7 @@
-# Track U: Help → Demos (the demos in one submenu) opens Material Gallery as a new document;
+# The Material Gallery demo (installed to ~/.varstotas/examples) opened as a document;
 # File → Preview Image → Show… opens the Preview Image window with the picture set from the
 # current view (menus clicked with the real mouse; the menu bar is above the viewport: y < 0).
-wait 10
-raw click 456 -105
-wait 5
-raw move 405 -76
-wait 10
-raw move 500 -76
-wait 5
-raw click 592 -33
+action demo_gallery
 wait 30
 expect defs=30 model_faces=660
 screenshot shots/prevdemo_1.bmp

@@ -112,8 +112,6 @@ app-play-animation = Play Animation
 app-cant-use = Can't use { $path }: { $error }
 app-undo-add-material = Add Material
 app-no-scenes = No scenes to play. Add scenes in the Scenes panel.
-app-demo-house = Demo: Country House — see the Scenes card and Window → Render…
-app-demo-gallery = Demo: Material Gallery — see the Scenes card and Window → Render…
 # { $path } is a file path.
 app-opened = Opened { $path }
 app-could-not-open = Could not open { $path }: { $error }
@@ -126,7 +124,6 @@ app-export-failed = Export failed: { $error }
 # { $format } is the format name.
 app-undo-import = Import { $format }
 app-imported = Imported { $path }
-app-undo-insert-demo = Insert Demo Geometry
 app-autosave-failed = Autosave to { $path } failed: { $error }
 # { $name } is a file name.
 app-recovered = Recovered { $name } from autosave
@@ -208,13 +205,6 @@ menu-window = Window
 menu-side-bar = Side Bar
 menu-sheets = Sheets…
 menu-help = Help
-menu-demos = Demos
-menu-demos-open = Open as a new document
-menu-demo-house = Country House
-menu-demo-gallery = Material Gallery
-menu-demos-add = Add to this document
-menu-demo-geometry = Demo Geometry
-menu-demos-hint = Demo models: furnished house and material gallery with scenes for Window → Render…, test geometry
 menu-user-guide = User Guide
 menu-user-guide-hint = How to use Varstotas: tools, menus, files, keys (F1 over the model: the active tool)
 menu-script-reference = Script Reference
@@ -3330,7 +3320,7 @@ help-start-16 = 3. Press `Space` (Select), triple-click the box to select it all
 help-start-17 = 4. Press `B` (Paint Bucket), pick a material in the Materials card, click faces.
 help-start-18 = 5. `Shift+Z` fits the model in the view; File → Save writes a `.vrst` file.
 help-start-19 = Help while working
-help-start-20 = The Instructor card explains the active tool; F1 over the model opens this guide on it. Help → Demos opens finished models to look at (a furnished house, a material gallery).
+help-start-20 = The Instructor card explains the active tool; F1 over the model opens this guide on it. Finished models to look at (a furnished house, a material gallery) are in the folder ~/.varstotas/examples: File → Open.
 ## navigation
 help-navigation-1 = Mouse and trackpad
 help-navigation-2 = Middle button drag
