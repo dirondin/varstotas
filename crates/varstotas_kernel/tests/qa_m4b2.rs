@@ -1,5 +1,4 @@
-//! QA regression tests for M4 batch 2 (curves, dimensions). Tests marked `#[ignore]` (if any) reproduce
-//! open QA findings (see docs/qa/M4-batch2-report.md) and fail on the current code.
+//! QA regression tests for M4 batch 2 (curves, dimensions).
 
 mod common;
 use common::*;

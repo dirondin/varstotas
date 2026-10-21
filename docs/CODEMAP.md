@@ -1,7 +1,7 @@
 # Code map (read this first instead of sweeping the code)
 
 Varstotas: a 3D modeller in Rust (eframe/egui 0.36 + wgpu, glam f64, slotmap). Units are millimetres, Z is up.
-Status: `docs/06-STATUS.md`. API notes: `docs/requests/{kernel,render}-api-changes.md`. QA reports: `docs/qa/`.
+Status: `docs/06-STATUS.md`. UI regression scripts: `qa/scripts/` (run by `qa/run_all.sh`).
 
 ## Crates
 - `varstotas_i18n`: localization (Fluent): `tr!` / `tr_args`, `set_language`, `languages`, `platform_keys` (modifier markers), `pick_variant` (plugin header variants), `with_language` (tests); `build.rs` embeds `locales/*.ftl`. Texts: `locales/en.ftl` (base), `locales/ru.ftl`, `locales/lt.ftl`, `locales/be.ftl`; rules in `docs/LOCALIZATION.md`.

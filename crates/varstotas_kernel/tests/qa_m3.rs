@@ -1,5 +1,4 @@
-//! QA M3 regression/edge-case tests (owner: QA). Each test documents an expected classic
-//! behaviour. Tests that currently fail are reported in docs/qa/M3-report.md.
+//! QA M3 regression/edge-case tests. Each test documents an expected classic behaviour.
 mod common;
 use common::*;
 use varstotas_kernel::glam::{DMat4, DVec3};

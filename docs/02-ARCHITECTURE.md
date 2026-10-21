@@ -17,11 +17,15 @@ Axes: X — red, Y — green, **Z — blue (up)**, right-handed system.
 ## Crates (workspace)
 ```
 crates/
+  varstotas_i18n/     # localization: Fluent messages from locales/<lang>.ftl, tr!("key"), platform variants.
   varstotas_kernel/   # geometry kernel + document. No GPU, no UI. 100% unit-testable.
   varstotas_render/   # wgpu renderer + Camera. Does not know about the kernel: takes flat buffers.
-  varstotas_app/      # binary: window, UI panels, tools, inference, VCB, input.
+  varstotas_script/   # Rhai scripting API over the kernel (Script Console, script files, generators, the bridge).
+  varstotas_app/      # binary: window, UI panels, tools, inference, VCB, input, plugins.
+locales/              # en.ftl (base), ru.ftl, lt.ftl, be.ftl — every UI text, see LOCALIZATION.md.
+python/               # Python client of the local bridge + MCP server, embedded into the app.
 ```
-Dependencies: `app → kernel`, `app → render`. `kernel` and `render` do **not** depend on each other.
+Dependencies: `app → kernel, render, script`, `script → kernel`; every crate → `i18n`. `kernel` and `render` do **not** depend on each other.
 
 ## varstotas_kernel
 - `Model` — the document: a tree of `Definition` (root + groups/components), materials, tags, scenes, unit settings.
@@ -59,8 +63,8 @@ Model ──scene_builder (if version changed)──→ Renderer.set_geometry
 Tool.overlay() ─→ Overlay3d + 2D markers ──→ Renderer.render → egui image + painter
 ```
 
-## Rules of joint development
-1. Each crate has an owner (see `04-TEAM.md`). We do not edit another's crate — we write a request in `docs/requests/`.
-2. A crate's public API is described in its `lib.rs`; breaking changes — only with an update of this document.
-3. `cargo build`, `cargo test`, `cargo clippy` — green before handing off a task.
-4. The kernel is covered by unit tests for every operation (especially face topology).
+## Rules
+1. A crate's public API is described in its `lib.rs`; breaking changes — only with an update of this document.
+2. `cargo build`, `cargo test`, `cargo clippy` — green before a commit; UI changes also pass their `qa/scripts/` regressions (`qa/run_all.sh <name>`).
+3. The kernel is covered by unit tests for every operation (especially face topology).
+4. Every UI text comes from `locales/<lang>.ftl` by key (`tr!`), see `LOCALIZATION.md`.

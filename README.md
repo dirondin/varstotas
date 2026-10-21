@@ -5,23 +5,34 @@ A lightweight native classic-style 3D editor for macOS and Windows. Rust + egui 
 ```bash
 cargo run --release -p varstotas_app     # run
 cargo test --workspace                 # tests
+qa/run_all.sh [name …]                 # UI regression scripts (qa/scripts/*.txt, debug build)
 ```
+
+UI languages: English, Russian, Lithuanian, Belarusian (Preferences → Interface → Language).
 
 ## Documents
 - [Vision and UX principles](docs/00-VISION.md)
 - [Features → plan and statuses](docs/01-FEATURES.md)
 - [Architecture](docs/02-ARCHITECTURE.md)
+- [Code map](docs/CODEMAP.md)
 - [Roadmap](docs/03-ROADMAP.md)
-- [Team and process](docs/04-TEAM.md)
 - [**Current status and progress**](docs/06-STATUS.md)
 - [UX specification of the tools](docs/05-UX-SPEC.md)
-- [M3 QA report](docs/qa/M3-report.md)
+- [Scripting (Rhai, Python, bridge)](docs/SCRIPTING.md) · [Generators](docs/GENERATORS.md) · [Plugins](docs/PLUGINS.md) · [Shaders](docs/SHADERS.md)
+- [Localization](docs/LOCALIZATION.md)
 
 ## Structure
 ```
 crates/varstotas_kernel  — geometry kernel (sticky geometry, push/pull, offset, follow me, IO)
-crates/varstotas_render  — wgpu renderer and camera
-crates/varstotas_app     — application: UI, tools, inference, VCB
+crates/varstotas_render  — wgpu renderer, camera, path tracer
+crates/varstotas_script  — Rhai scripting API over the kernel
+crates/varstotas_i18n    — localization (Fluent)
+crates/varstotas_app     — application: UI, tools, inference, VCB, plugins
+locales/                 — UI texts, one .ftl file per language
+python/                  — Python client of the local bridge and the MCP server
+examples/                — example plugins and scripts
+qa/                      — UI regression scripts, fixtures, models
+vendor/                  — egui_code_editor with a local fix
 ```
 
 ## Release builds

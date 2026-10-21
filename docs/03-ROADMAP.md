@@ -16,7 +16,7 @@
 
 **M2 demo:** draw the house from `00-VISION.md`.
 
-## M3 — MVP polish ✅ (QA: docs/qa/M3-report.md, docs/qa/M3-round2-report.md)
+## M3 — MVP polish ✅
 - Groups edit context, Entity Info, Materials, styles, Zoom Extents, standard views, undo for everything, autosave.
 - UX QA pass, fixing topology bugs, performance (10k+ faces @ 60 FPS).
 - Release builds: macOS `.app` (universal), Windows `.exe`.
