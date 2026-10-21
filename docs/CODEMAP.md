@@ -139,9 +139,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `clipboard.rs` | copy, cut, paste; library placement (`from_library`) reuses a model definition only with the library's content (`Model::content_hash`, `same_or_numbered`), else the original comes in as "<name> 2" |
 | `autosave.rs` | autosave and recovery |
 | `templates.rs` | File → New templates |
-| `demo/mod.rs` | Help → Demos → Country House — `country_house()` builds the furnished demo model in code (walls with openings via `prism`, gable roof, partitions, fireplace, windows / doors as components, furniture components, garden), its materials, lights, render settings and 8 scenes |
-| `demo/textures.rs` | procedural tileable textures for the demo (siding, stone, roof metal, oak floor, decking, tiles, marble, woods, fabrics, rug, grass, gravel, brick, plaster): colour + normal + roughness maps as PNG (`Tex`, `Maps`) |
-| `demo/gallery.rs` | Help → Demos → Material Gallery — `material_gallery()`: 24 bevelled cubes (`bevelled_cube`) in different materials, a studio cove (tag Cove, hidden outdoors), 8 scenes with different environments / styles |
+| `demo.rs` | Help → Demos — `country_house()` / `material_gallery()` load the embedded `examples/demos/*.vrst` (ordinary model files; edit them in the app and save over); the gallery's materials also fill the materials library's Examples folder |
 | `debug_capture.rs` | `VARSTOTAS_SCRIPT` harness, including the `raw` and `rawp` real-input commands (`raw scroll` = a trackpad swipe) |
 | `tools/mod.rs` | `Tool` trait and tool registry (`SHAPES` — Draw → Shapes) |
 | `tools/primitives.rs` | `PrimitiveTool`: Draw → Shapes (base, then height / tube; Measurements `w,d[,h]` / `r[,h]`, `Ns`) → `generator::add` + `place` of the bundled `examples/generators/primitives/*.rhai` (`SOURCES`) |

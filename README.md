@@ -30,7 +30,7 @@ crates/varstotas_i18n    — localization (Fluent)
 crates/varstotas_app     — application: UI, tools, inference, VCB, plugins
 locales/                 — UI texts, one .ftl file per language
 python/                  — Python client of the local bridge and the MCP server
-examples/                — example plugins and scripts
+examples/                — example plugins, scripts, generators and the demo models (.vrst)
 qa/                      — UI regression scripts, fixtures, models
 vendor/                  — egui_code_editor with a local fix
 ```
