@@ -39,6 +39,7 @@ A plugin's description is comments at the start of the file (`//` for Rhai, `#` 
 | `@model_import ply,…` | a 3D model importer: an item in **File → Import**, these files are also read by the **3D Library** (see "Model plugins") |
 | `@model_source` / `@model_source search` | a model source in the **3D Library** window: the whole catalogue at once / search on the site's side |
 | `@notice text` | the source's terms (licence, whether a key or account is needed, whom to credit as the author): shown with ⚠ above the catalogue in **3D Library** / **Online Materials**. Several lines are allowed, they are joined with a space. |
+| `@tag.ru …` | a localized variant of `@name`, `@menu`, `@description`, `@param` (`@param.ru key "Подпись"`), `@pick`, `@select`, `@notice`: the suffix is a language code, a platform (`macos`, `windows`, `linux`) or both (`@menu.ru.macos`); the best match for the UI language and platform wins, the plain tag is the fallback. Texts the script itself shows can follow `lang()` / `varstotas.lang()`. See [LOCALIZATION.md](LOCALIZATION.md#plugins). |
 
 Parameters, `points`, `objects` and `path` are ordinary script variables. In the Script Console editor they are highlighted in dark teal and are in the autocompletion list: you can see that the value comes from the header.
 

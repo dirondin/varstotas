@@ -1,8 +1,11 @@
 // @name Poly Pizza
 // @model_source search
 // @description Low-poly models of Poly Pizza (poly.pizza; CC0 and CC-BY: the credit goes with the component, File → Export → Attributions). Needs a free API key from poly.pizza/settings/api. Type a search and press Enter.
+// @description.ru Низкополигональные модели Poly Pizza (poly.pizza; CC0 и CC-BY: указание автора сохраняется в компоненте, Файл → Экспорт → Авторы). Нужен бесплатный API-ключ с poly.pizza/settings/api. Введите запрос и нажмите Enter.
 // @param api_key:text = "" "API key"
+// @param.ru api_key "API-ключ"
 // @notice Models of Poly Pizza (poly.pizza) are CC0 or CC-BY: CC-BY models need a credit to their author (File → Export → Attributions).
+// @notice.ru Модели Poly Pizza (poly.pizza) — CC0 или CC-BY: для моделей CC-BY нужно указать автора (Файл → Экспорт → Авторы).
 
 fn search(query, params) {
     if params.api_key == "" { throw "Set the Poly Pizza API key (free at poly.pizza/settings/api)"; }

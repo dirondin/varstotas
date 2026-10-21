@@ -1,8 +1,12 @@
 # @name ambientCG Search (Python)
+# @name.ru Поиск ambientCG (Python)
 # @material_source
 # @description An example material source in Python: ambientCG materials matching a search, downloaded as a zip of 1K maps. The protocol: `plugin.py catalogue | download`, the arguments as JSON on stdin, the answer as JSON on the last line of stdout.
+# @description.ru Пример источника материалов на Python: материалы ambientCG по запросу, загружаются zip-архивом карт 1K. Протокол: `plugin.py catalogue | download`, аргументы — JSON в stdin, ответ — JSON в последней строке stdout.
 # @param search:text = "metal" "Search"
+# @param.ru search "Поиск"
 # @notice ambientCG materials are CC0: free for any use, also commercial; credit optional.
+# @notice.ru Материалы ambientCG — CC0: свободны для любого использования, в том числе коммерческого; указывать автора не обязательно.
 import json
 import os
 import subprocess

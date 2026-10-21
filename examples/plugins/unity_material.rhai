@@ -1,7 +1,10 @@
 // @name Unity Material
+// @name.ru Материал Unity
 // @material_import mat
 // @description Unity materials (.mat, Standard / URP / HDRP Lit): base colour and map, normal map, occlusion, emission, metallic and smoothness. The textures are found by their GUIDs in the .meta files of the project's Assets folder (PNG, JPEG, TGA, BMP).
+// @description.ru Материалы Unity (.mat, Standard / URP / HDRP Lit): базовый цвет и карта, карта нормалей, затенение, свечение, металличность и гладкость. Текстуры ищутся по GUID в файлах .meta папки Assets проекта (PNG, JPEG, TGA, BMP).
 // @param width = 1000 "Texture width"
+// @param.ru width "Ширина текстуры"
 
 fn trimmed(s) {
     let t = s;

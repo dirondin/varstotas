@@ -1,8 +1,12 @@
 // @name Model Folders
+// @name.ru Папки моделей
 // @model_source
 // @description 3D models on this computer: every model file in the folder and its subfolders (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas, and what importer plugins read); an image with the same name is its thumbnail, the subfolder its category.
+// @description.ru 3D-модели на этом компьютере: каждый файл модели в папке и её подпапках (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, varstotas и то, что читают плагины-импортёры); изображение с тем же именем — его миниатюра, подпапка — категория.
 // @param folder:text = "" "Folder"
+// @param.ru folder "Папка"
 // @param unit:text = "" "Unit (empty: the file's own)"
+// @param.ru unit "Единицы (пусто: как в файле)"
 
 fn name_of(p) {
     let s = p;

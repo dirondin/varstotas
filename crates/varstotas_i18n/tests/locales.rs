@@ -96,3 +96,35 @@ fn plural_forms_by_count() {
     assert_eq!(tr!("app-faces-reversed", count = 5u32), "5 faces reversed");
     assert_eq!(tr!("app-faces-reversed", count = 12345i64), "12345 faces reversed");
 }
+
+/// A translation uses only arguments its English message gets (a renamed `{ $var }` would show
+/// as the raw placeholder).
+#[test]
+fn translations_use_only_known_arguments() {
+    let vars = |lang: &str| -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+        let text = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../locales/{lang}.ftl"))).unwrap();
+        let mut out = std::collections::BTreeMap::new();
+        let mut key = String::new();
+        for line in text.lines() {
+            if let Some((k, _)) = line.split_once(" =").filter(|(k, _)| !k.is_empty() && k.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')) {
+                key = k.to_string();
+            }
+            let set: &mut std::collections::BTreeSet<String> = out.entry(key.clone()).or_default();
+            for part in line.split("$").skip(1) {
+                let name: String = part.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
+                if !name.is_empty() {
+                    set.insert(name);
+                }
+            }
+        }
+        out
+    };
+    let en = vars(BASE);
+    for lang in embedded_languages().into_iter().filter(|l| *l != BASE) {
+        for (k, used) in vars(lang) {
+            let known = en.get(&k).cloned().unwrap_or_default();
+            let unknown: Vec<&String> = used.iter().filter(|v| !known.contains(*v)).collect();
+            assert!(unknown.is_empty(), "{lang} {k}: unknown arguments {unknown:?}");
+        }
+    }
+}

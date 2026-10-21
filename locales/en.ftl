@@ -1401,7 +1401,7 @@ tray-card-environment = Environment
 tray-card-soften-edges = Soften Edges
 tray-card-instructor = Instructor
 tray-card-model-info-tip = Model Info: statistics of the document, Purge Unused
-tray-cards-all-off = Every card is off: Window → Tray cards
+tray-cards-all-off = Every card is off: Window → Side Bar
 
 tray-untagged = Untagged
 tray-default = Default

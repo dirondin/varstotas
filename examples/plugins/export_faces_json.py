@@ -1,6 +1,8 @@
 # @name Faces as JSON (plugin)
+# @name.ru Грани в JSON (плагин)
 # @export json
 # @description An example exporter (built in: File → Export → Faces (JSON)…). Every face of the model (world coordinates, mm) with its normal, area and material: an example exporter in Python.
+# @description.ru Пример экспортёра на Python (встроен: Файл → Экспорт → Грани (JSON)…): каждая грань модели (мировые координаты, мм) с нормалью, площадью и материалом.
 import json
 
 import varstotas

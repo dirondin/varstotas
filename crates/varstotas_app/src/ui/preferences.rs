@@ -593,26 +593,6 @@ impl VarstotasApp {
 
     fn prefs_interface(&mut self, ui: &mut Ui) {
         use super::theme::ThemePref;
-        heading(ui, &tr!("prefs-language"));
-        let langs = self.prefs_win.languages.get_or_insert_with(varstotas_i18n::languages).clone();
-        let name_of = |code: &str| langs.iter().find(|(c, _)| c == code).map(|(_, n)| n.clone()).unwrap_or_else(|| code.to_string());
-        let system = tr!("prefs-language-system", language = name_of(&varstotas_i18n::system_language()));
-        let mut lang = self.prefs.language.clone();
-        let shown = lang.as_deref().map(name_of).unwrap_or_else(|| system.clone());
-        let r = egui::ComboBox::from_id_salt("ui_language").selected_text(shown).width(260.0).show_ui(ui, |ui| {
-            ui.selectable_value(&mut lang, None, &system);
-            for (code, name) in &langs {
-                ui.selectable_value(&mut lang, Some(code.clone()), name);
-            }
-        });
-        super::tray_lib::spot("language", r.response.rect.center());
-        if lang != self.prefs.language {
-            varstotas_i18n::set_language(lang.as_deref());
-            self.prefs.language = lang;
-            // Plugin headers carry their texts per language.
-            self.load_plugins();
-        }
-        note(ui, &tr!("prefs-language-note"));
         heading(ui, &tr!("prefs-theme"));
         ui.horizontal(|ui| {
             for (t, label) in [(ThemePref::Light, "Light"), (ThemePref::Dark, "Dark"), (ThemePref::System, "As the System")] { // i18n-ignore
@@ -644,6 +624,26 @@ impl VarstotasApp {
                 super::tray_lib::spot(format!("icons:{label}"), r.rect.center());
             }
         });
+        heading(ui, &tr!("prefs-language"));
+        let langs = self.prefs_win.languages.get_or_insert_with(varstotas_i18n::languages).clone();
+        let name_of = |code: &str| langs.iter().find(|(c, _)| c == code).map(|(_, n)| n.clone()).unwrap_or_else(|| code.to_string());
+        let system = tr!("prefs-language-system", language = name_of(&varstotas_i18n::system_language()));
+        let mut lang = self.prefs.language.clone();
+        let shown = lang.as_deref().map(name_of).unwrap_or_else(|| system.clone());
+        let r = egui::ComboBox::from_id_salt("ui_language").selected_text(shown).width(260.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut lang, None, &system);
+            for (code, name) in &langs {
+                ui.selectable_value(&mut lang, Some(code.clone()), name);
+            }
+        });
+        super::tray_lib::spot("language", r.response.rect.center());
+        if lang != self.prefs.language {
+            varstotas_i18n::set_language(lang.as_deref());
+            self.prefs.language = lang;
+            // Plugin headers carry their texts per language.
+            self.load_plugins();
+        }
+        note(ui, &tr!("prefs-language-note"));
     }
 
     /// Theme, scale and toolbar icon size from the preferences (every frame; cheap when unchanged).
