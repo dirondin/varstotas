@@ -176,7 +176,7 @@ Items 2 and 4 agreed with the owner on 2026-10-19.
    - ✅ Licences: MIT for Varstotas, Help → Licences… (components, formats, online libraries), the source's terms above the catalogue (`@notice` for plugins), a warning about a site's "own" licence on placing and export; the Send to Varstotas bookmarklet removed (2026-10-20).
    - ✅ COLLADA (DAE) export: File → Export → COLLADA (DAE)…, mm and Z up, a node per group, materials and textures (files alongside); we do not make FBX export — a plugin `@export fbx` if needed (2026-10-20).
    - ✅ The name Varstotas: crates, binary, `~/.varstotas`, the `.vrst` / `.vrstmat` format, git history without the old name, author Dirondin (2026-10-20).
-   - ✅ App icon: a workbench corner (half wood, half translucent), axes, sky / ground; `assets/icon.png` from `scripts/make_icon.py`, window / Dock / `.icns` / `.ico` (2026-10-20).
+   - ✅ App icon: a complete workbench (vertical half wood / half blue schematic), oblique view without axes, sky / ground; `assets/icon.png` from `scripts/make_icon.py`, window / Dock / `.icns` / `.ico` (2026-10-20).
    - ✅ Slice tool: a plane by three points / face / axis cuts the selection or context (edges along the cut, a shared component made unique), Split (copy modifier) — two closed groups (2026-10-20).
    - ✅ The Model Info button in the top right corner of Entity Info (2026-10-20).
    - ✅ Hide in Components / Materials — a crossed-out eye icon instead of the word (2026-10-20).

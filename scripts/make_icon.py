@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Programmatic Varstotas app icon (stdlib only).
 
-The corner of a workbench (top, leg, aprons, stretchers) seen from above-front, cut in half
-by a vertical plane: the left half is wood, the right half translucent bluish faces, all with
-black edges. Behind it the model axes run from a centre point; the background is the editor's
-sky / ground gradient in a rounded square.
+A complete four-legged workbench seen from an oblique above-front angle. The screen's
+vertical centre divides the textured wooden view on the left from the opaque visible-surface
+schematic view on the right. No model axes; the background is the editor's sky / ground
+gradient in a rounded square.
 
   make_icon.py png  <out.png> [size]     -- master PNG (default 1024; takes a while)
   make_icon.py ico  <out.ico> <png>...   -- pack PNG files into a Windows .ico
@@ -21,32 +21,27 @@ import zlib
 
 # Boxes: (min, max, grain axis 0/1/2).
 BOXES = [
-    ((0.0, 0.0, 9.0), (9.5, 9.5, 10.8), 0),  # top
-    ((0.5, 0.5, 0.0), (2.5, 2.5, 9.0), 2),  # leg
-    ((2.5, 0.9, 7.0), (9.5, 1.9, 9.0), 0),  # apron along X
-    ((0.9, 2.5, 7.0), (1.9, 9.5, 9.0), 1),  # apron along Y
-    ((2.5, 1.0, 1.4), (9.5, 2.0, 2.8), 0),  # stretcher along X
-    ((1.0, 2.5, 1.4), (2.0, 9.5, 2.8), 1),  # stretcher along Y
+    ((0.0, 0.0, 10.0), (18.0, 10.0, 11.2), 0),  # complete tabletop
+    *[((x, y, 0.0), (x + 1.6, y + 1.6, 10.0), 2)
+      for x in (1.0, 15.4) for y in (1.0, 7.4)],  # four legs
+    *[((2.6, y, 7.8), (15.4, y + 0.9, 10.0), 0)
+      for y in (1.3, 7.7)],  # long aprons
+    *[((x, 2.6, 7.8), (x + 0.9, 7.4, 10.0), 1)
+      for x in (1.3, 15.7)],  # short aprons
 ]
-# Axes from this point (behind the bench, on the floor) in +X / +Y / +Z.
-AXIS_ORIGIN = (6.0, 6.0, 0.0)
-AXIS_LEN = 40.0
-AXIS_COLORS = [(0.85, 0.0, 0.0), (0.0, 0.62, 0.0), (0.0, 0.0, 0.9)]
 
-EYE_DIR = (-1.0, -0.82, 0.78)  # from the scene towards the viewer
-TARGET = (4.6, 4.6, 5.0)
-SCALE = 0.046  # model units -> icon units
-OFFSET = (0.5, 0.52)  # where TARGET lands on the icon
+EYE_DIR = (1.25, -2.0, 1.35)  # deliberately asymmetric three-quarter view
+TARGET = (9.0, 5.0, 5.6)
+SPLIT_X = 0.5  # screen space, independent of model orientation
 LIGHT = (-0.45, -0.75, 0.95)
 
-# Half on the viewer's left (x < y side of this plane) is wood, the rest translucent.
+# Split by projected screen position, rather than a diagonal plane in model space.
 def is_wood(p):
-    return p[0] - p[1] < 0.0
+    return project(p)[0] < SPLIT_X
 
 
 WOOD_LIGHT, WOOD_DARK = (0.86, 0.66, 0.42), (0.62, 0.40, 0.20)
-GLASS = (0.36, 0.56, 0.95)
-GLASS_ALPHA = 0.42
+SCHEMATIC = (0.72, 0.81, 0.94)
 EDGE_W = 0.0062  # icon units
 EDGE_COL = (0.05, 0.06, 0.08)
 
@@ -79,6 +74,17 @@ FWD = norm(EYE_DIR)  # towards the viewer
 RIGHT = norm(cross((0.0, 0.0, 1.0), FWD))
 UP = cross(FWD, RIGHT)
 LIGHT_N = norm(LIGHT)
+
+
+# Fit the entire bench inside the rounded square with room around all four legs.
+CORNERS = [tuple((lo, hi)[side][axis] for axis, side in enumerate(sides))
+           for lo, hi, _ in BOXES
+           for sides in ((x, y, z) for x in (0, 1) for y in (0, 1) for z in (0, 1))]
+PX = [dot(sub(p, TARGET), RIGHT) for p in CORNERS]
+PY = [dot(sub(p, TARGET), UP) for p in CORNERS]
+SCALE = min(0.70 / (max(PX) - min(PX)), 0.70 / (max(PY) - min(PY)))
+OFFSET = (0.5 - (min(PX) + max(PX)) * SCALE / 2,
+          0.565 + (min(PY) + max(PY)) * SCALE / 2)  # lower the bench; keep feet below the horizon
 
 
 def project(p):
@@ -150,16 +156,16 @@ def box_edges(lo, hi):
 class Canvas:
     def __init__(self, size):
         self.size = size
-        self.opaque = [None] * (size * size)  # (depth, rgb)
-        self.layers = {}  # pixel -> [(depth, rgb, alpha)]
+        self.surfaces = [None] * (size * size)  # nearest (depth, rgb, alpha), even when translucent
+        self.layers = {}  # visible edge samples: pixel -> [(depth, rgb, alpha)]
 
     def frag(self, i, depth, rgb, alpha):
-        if alpha >= 1.0:
-            o = self.opaque[i]
-            if o is None or depth < o[0]:
-                self.opaque[i] = (depth, rgb)
-        else:
-            self.layers.setdefault(i, []).append((depth, rgb, alpha))
+        # Opacity changes the fill, not visibility: never reveal geometry behind it.
+        if alpha <= 0:
+            return
+        surface = self.surfaces[i]
+        if surface is None or depth < surface[0]:
+            self.surfaces[i] = (depth, rgb, alpha)
 
     def triangle(self, tri, shade):
         """`tri`: three (model point, projected point); `shade(p) -> (rgb, alpha)`."""
@@ -214,7 +220,7 @@ class Canvas:
                 rgb, alpha = color_at(p)
                 depth = a[2] + (b[2] - a[2]) * t - bias
                 i = py * n + px
-                o = self.opaque[i]
+                o = self.surfaces[i]
                 if o is not None and depth > o[0]:
                     continue
                 self.layers.setdefault(i, []).append((depth, rgb, alpha * cov))
@@ -247,28 +253,25 @@ def draw(n):
     cv = Canvas(n)
     for lo, hi, grain in BOXES:
         for quad, nrm in box_faces(lo, hi):
-            back = dot(nrm, FWD) <= 0
+            if dot(nrm, FWD) <= 0:
+                continue  # hidden back faces are absent on both sides
 
-            def shade(p, nrm=nrm, grain=grain, back=back):
+            def shade(p, nrm=nrm, grain=grain):
                 if is_wood(p):
-                    if back:
-                        return (0, 0, 0), 0.0
                     return lit(wood(p, grain), nrm, 0.55), 1.0
-                g = lit(GLASS, nrm if not back else tuple(-c for c in nrm), 0.6)
-                return g, GLASS_ALPHA * (0.55 if back else 1.0)
+                return lit(SCHEMATIC, nrm, 0.6), 1.0
 
             pts = [(q, project(q)) for q in quad]
             cv.triangle((pts[0], pts[1], pts[2]), shade)
             cv.triangle((pts[0], pts[2], pts[3]), shade)
-    # edges: wood edges only where visible (depth test), glass edges all of them
+    # Both styles use the same hidden-line removal and nearest-surface depth test.
     for lo, hi, _ in BOXES:
         for a, b in box_edges(lo, hi):
+            normals = [tuple((-1.0 if a[k] == lo[k] else 1.0) if i == k else 0.0 for i in range(3))
+                       for k in range(3) if a[k] == b[k]]
+            if not any(dot(nrm, FWD) > 0 for nrm in normals):
+                continue
             cv.segment(a, b, EDGE_W, lambda p: (EDGE_COL, 1.0 if is_wood(p) else 0.85), 0.05)
-    # axes behind the bench: they only show where nothing opaque covers them
-    for axis, col in enumerate(AXIS_COLORS):
-        end = list(AXIS_ORIGIN)
-        end[axis] += AXIS_LEN
-        cv.segment(AXIS_ORIGIN, tuple(end), EDGE_W * 1.15, lambda p, col=col: (col, 0.95), 0.0)
     return cv
 
 
@@ -287,8 +290,10 @@ def render(size, ss=2):
                     if not in_round_rect(x, y):
                         continue
                     i = sy * n + sx
-                    o = cv.opaque[i]
-                    col = o[1] if o else background(x, y)
+                    o = cv.surfaces[i]
+                    col = background(x, y)
+                    if o:
+                        col = tuple(col[k] + (o[1][k] - col[k]) * o[2] for k in range(3))
                     for d, rgb, a in sorted(cv.layers.get(i, ()), key=lambda f: -f[0]):
                         if o is None or d <= o[0]:
                             col = tuple(col[k] + (rgb[k] - col[k]) * a for k in range(3))
