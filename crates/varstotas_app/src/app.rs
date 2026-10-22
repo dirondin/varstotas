@@ -89,6 +89,8 @@ pub struct Prefs {
     pub autosave_minutes: u32,
     /// Template for File → New (None until chosen on first start).
     pub template: Option<Template>,
+    /// User document templates (None = ~/.varstotas/templates).
+    pub templates_dir: Option<PathBuf>,
     /// Script Console editor text.
     pub console_code: String,
     /// Components library folder (None = ~/.varstotas/components).
@@ -178,6 +180,7 @@ impl Default for Prefs {
             autosave: true,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
             template: None,
+            templates_dir: None,
             console_code: String::new(),
             library_dir: None,
             hide_examples: false,
@@ -327,6 +330,7 @@ pub enum Action {
     ExportImage,
     ExportAnimation,
     NewFromTemplate(Template),
+    NewFromFileTemplate(PathBuf),
     IntersectFaces(IntersectScope),
     ReverseFaces,
     OrientFaces,
@@ -455,6 +459,7 @@ pub struct ExportJob {
 pub enum Pending {
     New,
     NewFrom(Template),
+    NewFromFileTemplate(PathBuf),
     Open,
     OpenPath(PathBuf),
     Quit,
@@ -724,8 +729,8 @@ impl VarstotasApp {
         };
         app.show_templates = show_templates;
         app.start_bridge(&cc.egui_ctx);
-        crate::demo::install_examples();
         app.load_plugins();
+        app.ensure_templates_dir();
         app
     }
 
@@ -1711,6 +1716,7 @@ impl VarstotasApp {
                     },
                 });
             }
+            Action::NewFromFileTemplate(path) => self.guard_dirty(Pending::NewFromFileTemplate(path)),
             Action::NewFromTemplate(t) => {
                 self.prefs.template.get_or_insert(t);
                 self.guard_dirty(Pending::NewFrom(t));
@@ -2143,6 +2149,7 @@ impl VarstotasApp {
                 self.new_from_template(t);
             }
             Pending::NewFrom(t) => self.new_from_template(t),
+            Pending::NewFromFileTemplate(path) => self.new_from_file_template(&path),
             Pending::Open => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter(tr!("app-filter-model"), &["vrst"])
@@ -2156,6 +2163,25 @@ impl VarstotasApp {
                 self.allow_close = true;
                 self.tray.close_requested = true;
             }
+        }
+    }
+
+    pub(crate) fn ensure_templates_dir(&self) {
+        if let Some(dir) = crate::templates::directory(self.prefs.templates_dir.as_deref())
+            && let Err(e) = std::fs::create_dir_all(&dir)
+        {
+            log::warn!("templates: cannot create {}: {e}", dir.display());
+        }
+    }
+
+    fn new_from_file_template(&mut self, path: &Path) {
+        match guarded(|| crate::templates::load_document(path)) {
+            Ok(Ok(doc)) => {
+                self.replace_document(doc);
+                self.flash(tr!("template-created", path = path.display().to_string()));
+            }
+            Ok(Err(e)) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e.to_string())),
         }
     }
 

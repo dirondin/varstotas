@@ -1,4 +1,4 @@
-# The Material Gallery demo (~/.varstotas/examples/material_gallery.vrst) — 24 bevelled cubes in different materials (metals, glass,
+# The Material Gallery demo (repository examples/demos/material_gallery.vrst) — 24 bevelled cubes in different materials (metals, glass,
 # emissive, textures, custom shaders) and scenes in different environments / render styles,
 # each shown in the viewport and path traced
 action demo_gallery

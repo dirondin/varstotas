@@ -62,7 +62,7 @@ impl Section {
     /// What the search finds a section by (besides its name): the labels of its settings.
     fn words(self) -> &'static str {
         match self {
-            Section::General => "auto-save autosave minutes template new document units undo steps history", // i18n-ignore
+            Section::General => "auto-save autosave minutes template folder directory new document units undo steps history", // i18n-ignore
             Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise", // i18n-ignore
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle", // i18n-ignore
             Section::Libraries => "components materials folder examples in model tiles small large list", // i18n-ignore
@@ -312,6 +312,7 @@ impl VarstotasApp {
                 p.autosave = d.autosave;
                 p.autosave_minutes = d.autosave_minutes;
                 p.template = d.template;
+                p.templates_dir = None;
             }
             Section::Drawing => {
                 p.snapping = d.snapping;
@@ -340,6 +341,7 @@ impl VarstotasApp {
                 p.toolbar_icons = d.toolbar_icons;
             }
         }
+        if matches!(s, Section::General) { self.ensure_templates_dir(); }
         self.flash(tr!("prefs-defaults-flash", section = s.name()));
     }
 
@@ -363,6 +365,10 @@ impl VarstotasApp {
             self.prefs.template = Some(t);
         }
         note(ui, &tr!("prefs-template-note"));
+        let old_dir = self.prefs.templates_dir.clone();
+        folder_row(ui, &tr!("template-folder-label"), &mut self.prefs.templates_dir, crate::templates::default_dir(), &tr!("template-folder-tip"));
+        if self.prefs.templates_dir != old_dir { self.ensure_templates_dir(); }
+
         heading(ui, &tr!("prefs-undo"));
         ui.horizontal(|ui| {
             ui.label(tr!("prefs-keep"));
@@ -474,17 +480,21 @@ impl VarstotasApp {
         let home = crate::bridge::home_dir();
         heading(ui, &tr!("prefs-components"));
         folder_row(ui, &tr!("prefs-library-folder"), &mut self.prefs.library_dir, home.as_ref().map(|h| h.join("components")), &tr!("prefs-components-folder-tip"));
-        let mut show_ex = !self.prefs.hide_examples;
-        ui.checkbox(&mut show_ex, tr!("prefs-show-examples")).on_hover_text(tr!("prefs-show-examples-tip"));
-        self.prefs.hide_examples = !show_ex;
+        if crate::debug_capture::qa_examples_dir().is_some() {
+            let mut show_ex = !self.prefs.hide_examples;
+            ui.checkbox(&mut show_ex, tr!("prefs-show-examples")).on_hover_text(tr!("prefs-show-examples-tip"));
+            self.prefs.hide_examples = !show_ex;
+        }
         let mut show_doc = !self.prefs.hide_document;
         ui.checkbox(&mut show_doc, tr!("prefs-show-in-model")).on_hover_text(tr!("prefs-show-in-model-tip"));
         self.prefs.hide_document = !show_doc;
         heading(ui, &tr!("prefs-materials"));
         folder_row(ui, &tr!("prefs-library-folder"), &mut self.prefs.mat_library_dir, home.as_ref().map(|h| h.join("materials")), &tr!("prefs-materials-folder-tip"));
-        let mut show_ex = !self.prefs.hide_mat_examples;
-        ui.checkbox(&mut show_ex, tr!("prefs-show-examples")).on_hover_text(tr!("prefs-show-mat-examples-tip"));
-        self.prefs.hide_mat_examples = !show_ex;
+        if crate::debug_capture::qa_examples_dir().is_some() {
+            let mut show_ex = !self.prefs.hide_mat_examples;
+            ui.checkbox(&mut show_ex, tr!("prefs-show-examples")).on_hover_text(tr!("prefs-show-mat-examples-tip"));
+            self.prefs.hide_mat_examples = !show_ex;
+        }
         heading(ui, &tr!("prefs-tiles"));
         ui.horizontal(|ui| {
             for (s, label) in super::tray_lib::TILE_SIZES {

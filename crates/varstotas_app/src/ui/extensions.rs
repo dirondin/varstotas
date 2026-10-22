@@ -47,12 +47,9 @@ fn vec_json(p: DVec3) -> Value {
 }
 
 impl VarstotasApp {
-    /// Install the examples and scan `~/.varstotas/plugins`.
+    /// Scan user-installed plugins in `~/.varstotas/plugins`.
     pub(crate) fn load_plugins(&mut self) {
         let Some(dir) = crate::plugins::plugins_dir() else { return };
-        if let Err(e) = crate::plugins::install_examples(&dir) {
-            log::warn!("plugins: cannot install the examples: {e}");
-        }
         let (list, errors) = crate::plugins::scan(&dir);
         for e in &errors {
             log::warn!("plugin: {e}");

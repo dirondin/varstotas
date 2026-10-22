@@ -1,0 +1,70 @@
+# Document file templates: detached copies, save guard, errors, custom directory and menu.
+wait 10
+expect template_files=[]
+action script let f = rect(ORIGIN,1200,800); pushpull(f,600); material("Template paint", [0.75,0.56,0.38]); print("fixture ready");
+expect script=Some((true, "fixture ready"))
+action render_set samples=64
+save home/.varstotas/templates/Room.vrst
+wait 3
+expect template_files=["Room"]
+# Inspect File -> New from Template with the new file.
+raw click 20 -105
+wait 3
+raw move 100 -52
+wait 8
+screenshot shots/templates_menu.bmp
+raw move 220 88
+wait 3
+raw click 220 88
+wait 5
+expect document_path=None document_dirty=true save_confirm=false
+expect model_faces=6
+expect render=(1280x720 64spp
+expect undo=None
+# A second template request must ask before discarding unsaved content.
+action file_template home/.varstotas/templates/Room.vrst
+wait 3
+expect save_confirm=true
+raw key Escape
+wait 3
+expect document_path=None document_dirty=true save_confirm=false
+save models/from_template.vrst
+# Change the copy, save elsewhere, then instantiate the unchanged original.
+box 2000 0 0 400 400 400
+save models/from_template.vrst
+expect model_faces=12
+action file_template home/.varstotas/templates/Room.vrst
+wait 3
+expect model_faces=6
+expect document_path=None document_dirty=true save_confirm=false
+save models/from_template_again.vrst
+# Broken and missing files keep the current document.
+action script write_text("home/.varstotas/templates/Broken.vrst", "bad JSON");
+save models/from_template_again.vrst
+action file_template home/.varstotas/templates/Broken.vrst
+wait 3
+expect model_faces=6
+expect document_path=Some("models/from_template_again.vrst") document_dirty=false
+expect save_confirm=false
+action file_template home/.varstotas/templates/Missing.vrst
+wait 3
+expect model_faces=6
+# A custom directory replaces the default catalogue.
+action templates_dir models/custom_templates
+expect template_files=[]
+save models/custom_templates/Custom.vrst
+wait 3
+expect template_files=["Custom"]
+action templates_folder
+expect revealed=Some("custom_templates")
+action file_template models/custom_templates/Custom.vrst
+wait 3
+expect document_path=None document_dirty=true save_confirm=false
+save models/custom_copy.vrst
+action templates_dir default
+expect template_files=["Broken", "Room"]
+# The template folder setting is grouped with the default unit preset.
+action preferences
+wait 5
+screenshot shots/templates_preferences.bmp
+quit

@@ -211,6 +211,8 @@ menu-sheets = Лісты…
 menu-help = Даведка
 menu-user-guide = Кіраўніцтва карыстальніка
 menu-user-guide-hint = Як карыстацца Varstotas: інструменты, меню, файлы, клавішы (F1 над мадэллю: актыўны інструмент)
+menu-examples = Прыклады
+menu-examples-hint = Адкрыць прыклады ў рэпазіторыі ў браўзеры
 menu-script-reference = Даведнік па скрыптах
 menu-script-reference-hint = Скрыпты, генератары і скрыпты кампанентаў: функцыі, уласцівасці, прыклады
 menu-licences = Ліцэнзіі…
@@ -4106,3 +4108,13 @@ kernel-io-ply = PLY: { $msg }
 # $why — сістэмная памылка / паведамленне чытача
 kernel-io-error-io = io: { $why }
 kernel-io-error-format = format: { $why }
+
+## File templates
+template-files-heading = З файлаў шаблонаў
+template-files-empty = У гэтай папцы няма шаблонаў .vrst
+template-open-folder = Адкрыць папку шаблонаў…
+template-folder-error = Не ўдалося прачытаць шаблоны: { $error }
+template-created = Створана з шаблона: { $path }
+template-load-failed = Не ўдалося загрузіць шаблон { $path }: { $error }
+template-folder-label = Папка шаблонаў
+template-folder-tip = Змясціце сюды мадэлі .vrst для стварэння новых дакументаў на іх аснове.

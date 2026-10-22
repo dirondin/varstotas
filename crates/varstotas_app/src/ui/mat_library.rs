@@ -135,7 +135,8 @@ pub(crate) fn safe_name(s: &str) -> String {
 
 /// The materials of the Material Gallery demo (its floor and backdrop left out).
 fn examples() -> Vec<MatItem> {
-    let m = crate::demo::material_gallery();
+    let Some(dir) = crate::debug_capture::qa_examples_dir() else { return Vec::new() };
+    let Ok(m) = varstotas_kernel::io::load(&dir.join("demos/material_gallery.vrst")) else { return Vec::new() };
     m.materials
         .values()
         .filter(|x| !matches!(x.name.as_str(), "Showroom Floor" | "Backdrop")) // i18n-ignore
@@ -389,8 +390,10 @@ impl VarstotasApp {
                     purge = true;
                     ui.close();
                 }
-                ui.separator();
-                ui.checkbox(&mut show_ex, tr!("library-show-examples")).on_hover_text(tr!("mat-show-examples-hover"));
+                if crate::debug_capture::qa_examples_dir().is_some() {
+                    ui.separator();
+                    ui.checkbox(&mut show_ex, tr!("library-show-examples")).on_hover_text(tr!("mat-show-examples-hover"));
+                }
             },
         );
         self.prefs.hide_mat_examples = !show_ex;
@@ -535,7 +538,7 @@ impl VarstotasApp {
                 list: self.mat_library.items.iter().filter(|i| i.folder == f && found(&i.mat)).map(entry).collect(),
             });
         }
-        if !self.prefs.hide_mat_examples {
+        if !self.prefs.hide_mat_examples && !examples.is_empty() {
             secs.push(Sec {
                 key: format!("mat:{EXAMPLES}"),
                 title: tr!("library-examples"),

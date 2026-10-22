@@ -211,6 +211,8 @@ menu-sheets = Lapai…
 menu-help = Pagalba
 menu-user-guide = Vartotojo vadovas
 menu-user-guide-hint = Kaip naudotis Varstotas: įrankiai, meniu, failai, klavišai (F1 virš modelio: aktyvus įrankis)
+menu-examples = Pavyzdžiai
+menu-examples-hint = Atverti saugyklos pavyzdžius naršyklėje
 menu-script-reference = Scenarijų žinynas
 menu-script-reference-hint = Scenarijai, generatoriai ir komponentų scenarijai: funkcijos, savybės, pavyzdžiai
 menu-licences = Licencijos…
@@ -4054,3 +4056,13 @@ kernel-io-ply = PLY: { $msg }
 # $why yra sistemos klaida / skaitytuvo pranešimas
 kernel-io-error-io = io: { $why }
 kernel-io-error-format = format: { $why }
+
+## File templates
+template-files-heading = Iš šablonų failų
+template-files-empty = Šiame aplanke nėra .vrst šablonų
+template-open-folder = Atverti šablonų aplanką…
+template-folder-error = Nepavyko perskaityti šablonų: { $error }
+template-created = Sukurta iš šablono: { $path }
+template-load-failed = Nepavyko įkelti šablono { $path }: { $error }
+template-folder-label = Šablonų aplankas
+template-folder-tip = Įkelkite čia .vrst modelius, kad galėtumėte pagal juos kurti naujus dokumentus.

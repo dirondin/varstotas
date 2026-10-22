@@ -1,4 +1,4 @@
-# The Material Gallery demo (installed to ~/.varstotas/examples) opened as a document;
+# The Material Gallery demo (repository examples/demos) opened as a document;
 # File → Preview Image → Show… opens the Preview Image window with the picture set from the
 # current view (menus clicked with the real mouse; the menu bar is above the viewport: y < 0).
 action demo_gallery

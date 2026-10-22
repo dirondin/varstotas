@@ -1015,7 +1015,9 @@ impl VarstotasApp {
                     ui.close();
                 }
                 ui.separator();
-                ui.checkbox(&mut show_ex, tr!("library-show-examples")).on_hover_text(tr!("library-show-examples-hover"));
+                if crate::debug_capture::qa_examples_dir().is_some() {
+                    ui.checkbox(&mut show_ex, tr!("library-show-examples")).on_hover_text(tr!("library-show-examples-hover"));
+                }
                 ui.checkbox(&mut show_doc, tr!("library-show-in-model")).on_hover_text(tr!("library-show-in-model-hover"));
             },
         );

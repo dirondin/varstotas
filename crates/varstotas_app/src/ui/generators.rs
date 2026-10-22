@@ -11,15 +11,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use varstotas_i18n::tr;
 
-pub const EXAMPLES: &[(&str, &str)] = &[
-    ("shelf.rhai", include_str!("../../../../examples/generators/shelf.rhai")),
-    ("drawer_box.rhai", include_str!("../../../../examples/generators/drawer_box.rhai")),
-    ("stair.rhai", include_str!("../../../../examples/generators/stair.rhai")),
-    ("cabinet.rhai", include_str!("../../../../examples/generators/cabinet.rhai")),
-    ("railing.rhai", include_str!("../../../../examples/generators/railing.rhai")),
-    ("table.rhai", include_str!("../../../../examples/generators/table.rhai")),
-];
-
 /// Source "document" id of generator placements (never a real document).
 const GENERATOR_UID: u64 = u64::MAX - 7;
 
@@ -146,20 +137,17 @@ fn scan(root: &Path) -> (Vec<GenItem>, Vec<String>) {
     (items, errors)
 }
 
-/// The bundled examples (not files; Save to Library in the editor makes an own copy).
-fn bundled() -> Vec<GenItem> {
-    EXAMPLES
-        .iter()
-        .filter_map(|(_, src)| Generator::parse(src).ok().map(|g| (g, src)))
-        .map(|(g, src)| GenItem {
-            name: g.name,
-            description: g.description,
-            source: src.to_string(),
-            file: None,
-            folder: EXAMPLES_FOLDER.into(),
-            bundled: true,
-        })
-        .collect()
+/// Optional repository fixtures for the debug QA harness (never bundled or installed).
+fn qa_examples() -> Vec<GenItem> {
+    let Some(dir) = crate::debug_capture::qa_examples_dir() else { return Vec::new() };
+    let (mut items, _) = scan(&dir.join("generators"));
+    items.retain(|i| i.file.as_ref().and_then(|p| p.parent()) == Some(dir.join("generators").as_path()));
+    for item in &mut items {
+        item.file = None;
+        item.folder = EXAMPLES_FOLDER.into();
+        item.bundled = true;
+    }
+    items
 }
 
 /// Text of a value in Entity Info.
@@ -328,7 +316,7 @@ impl VarstotasApp {
     /// its components were built with it).
     pub(crate) fn generator_items(&self) -> Vec<GenItem> {
         let mut out: Vec<GenItem> = self.library.gens.items.clone();
-        out.extend(bundled().into_iter().filter(|b| !self.library.gens.items.iter().any(|x| x.name == b.name)));
+        out.extend(qa_examples().into_iter().filter(|b| !self.library.gens.items.iter().any(|x| x.name == b.name)));
         // The document's generators, always under In Model: its own copies, edited apart from
         // the library's.
         out.extend(self.doc.model.generators.values().map(|g| GenItem {

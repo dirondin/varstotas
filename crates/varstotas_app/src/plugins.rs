@@ -22,13 +22,14 @@
 //! `@menu.macos …`); the most specific match for the UI language and platform wins
 //! (`varstotas_i18n::pick_variant`), the plain tag is the fallback.
 //!
-//! The header ends at the first line that is not a comment. Examples ship in `examples/plugins`
-//! and are installed (refreshed on every start) to `~/.varstotas/plugins/examples`.
+//! The header ends at the first line that is not a comment. Optional examples live only in
+//! the repository (`examples/plugins`); users install selected plugins themselves.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use varstotas_i18n::tr;
 
+#[cfg(test)]
 pub const EXAMPLES: &[(&str, &str)] = &[
     ("stairs.rhai", include_str!("../../../examples/plugins/stairs.rhai")),
     ("beam.rhai", include_str!("../../../examples/plugins/beam.rhai")),
@@ -307,19 +308,6 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
 /// `~/.varstotas/plugins`.
 pub fn plugins_dir() -> Option<PathBuf> {
     crate::bridge::home_dir().map(|d| d.join("plugins"))
-}
-
-/// Write the example plugins to `<dir>/examples` (replacing older copies).
-pub fn install_examples(dir: &Path) -> std::io::Result<()> {
-    let ex = dir.join("examples");
-    std::fs::create_dir_all(&ex)?;
-    for (name, src) in EXAMPLES {
-        let p = ex.join(name);
-        if std::fs::read_to_string(&p).ok().as_deref() != Some(*src) {
-            std::fs::write(p, src)?;
-        }
-    }
-    Ok(())
 }
 
 /// All plugins under `dir` (two folder levels), sorted by menu path; parse errors per file.

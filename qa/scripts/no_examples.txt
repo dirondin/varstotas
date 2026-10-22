@@ -1,0 +1,21 @@
+# Normal startup: no repository QA fixtures, no installed or bundled examples.
+wait 10
+expect plugins=0 plugin_errors=0
+expect lib_folders=[]
+expect gens=[]
+expect mat_shown=[]
+# Help contains the repository link (do not launch the browser in QA).
+raw click 456 -105
+wait 5
+screenshot shots/no_examples_help.bmp
+raw key Escape
+# Built-in shapes remain functional without optional generators.
+tool box
+rawp click 0 0 0
+rawp click 1000 600 0
+vcb 800
+wait 5
+expect model_faces=6
+expect gen_defs=1
+screenshot shots/no_examples.bmp
+quit

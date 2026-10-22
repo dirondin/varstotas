@@ -196,6 +196,30 @@ impl VarstotasApp {
                             self.actions.push(Action::NewFromTemplate(t));
                         }
                     }
+                    ui.separator();
+                    ui.label(egui::RichText::new(tr!("template-files-heading")).weak());
+                    let dir = crate::templates::directory(self.prefs.templates_dir.as_deref());
+                    if let Some(dir) = &dir {
+                        match crate::templates::scan(dir) {
+                            Ok(files) if files.is_empty() => { ui.label(tr!("template-files-empty")); }
+                            Ok(files) => {
+                                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                                    for file in files {
+                                        if ui.button(&file.name).on_hover_text(file.path.display().to_string()).clicked() {
+                                            self.actions.push(Action::NewFromFileTemplate(file.path));
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            }
+                            Err(e) => { ui.label(tr!("template-folder-error", error = e.to_string())); }
+                        }
+                    }
+                    ui.separator();
+                    if ui.add_enabled(dir.is_some(), Button::new(tr!("template-open-folder"))).clicked() {
+                        if let Some(dir) = dir { super::extensions::reveal(&dir); }
+                        ui.close();
+                    }
                 });
                 self.cmd_item(ui, Cmd::Open);
                 let recent = self.prefs.recent.clone();
@@ -483,12 +507,20 @@ impl VarstotasApp {
                     self.open_script_help(crate::ui::script_help::Topic::Basics, None);
                     ui.close();
                 }
+                let examples = ui.add_enabled(!crate::EXAMPLES_URL.is_empty(), egui::Button::new(tr!("menu-examples"))).on_hover_text(tr!("menu-examples-hint"));
+                if examples.clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(crate::EXAMPLES_URL));
+                    ui.close();
+                }
                 ui.separator();
                 if ui.add(egui::Button::new(tr!("menu-licences")).selected(self.licences.open)).on_hover_text(tr!("menu-licences-hint")).clicked() {
                     self.open_licences(crate::ui::licences::Tab::Varstotas);
                     ui.close();
                 }
-                self.item(ui, &tr!("menu-about"), None, true, Action::About);
+                if ui.button(tr!("menu-about")).clicked() {
+                    self.actions.push(Action::About);
+                    ui.close();
+                }
             });
         });
     }

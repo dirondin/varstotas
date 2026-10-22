@@ -3,7 +3,7 @@
 ## Plugins
 A plugin is a `.rhai` or `.py` file in the `~/.varstotas/plugins/` folder (subfolders are scanned too, two levels deep). Plugins are loaded at startup; after editing, choose **Extensions → Reload Plugins**. **Open Plugins Folder** is there too.
 
-Examples are in `examples/plugins/`. At every launch the application copies them to `~/.varstotas/plugins/examples/` — keep your own plugins in another subfolder, otherwise they will be overwritten:
+Examples are available only in the repository at `examples/plugins/` (Help → Examples). They are not shipped or installed automatically. Copy the plugins you want into `~/.varstotas/plugins/`, then choose Extensions → Reload Plugins:
 - `stairs.rhai` — a staircase: parameters and one point.
 - `beam.rhai` — a beam between two points.
 - `import_points_csv.rhai` — import a contour from CSV ("Points from CSV (plugin)"; the format is built in: File → Import → Points (CSV)).

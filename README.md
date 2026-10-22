@@ -5,7 +5,7 @@ A lightweight native classic-style 3D editor for macOS and Windows. Rust + egui 
 ```bash
 cargo run --release -p varstotas_app     # run
 cargo test --workspace                 # tests
-qa/run_all.sh [name …]                 # UI regression scripts (qa/scripts/*.txt, debug build)
+qa/run_all.sh [name …]                 # UI regression scripts (explicit repository fixtures)
 ```
 
 UI languages: English, Russian, Lithuanian, Belarusian (Preferences → Interface → Language).
@@ -34,6 +34,23 @@ examples/                — example plugins, scripts, generators and the demo m
 qa/                      — UI regression scripts, fixtures, models
 vendor/                  — egui_code_editor with a local fix
 ```
+
+## Examples
+Demo scenes, scripts, plugins and optional generators live only in `examples/` in this repository.
+They are not embedded in the application or installed into `~/.varstotas`.
+**Help → Examples** opens the repository examples in a browser. Download what you need:
+open `.vrst` demos with File → Open, run scripts with File → Run Script, copy selected plugins
+to `~/.varstotas/plugins/`, and generators to your components library.
+Previously installed files are left untouched. Built-in Draw → Shapes tools use their own
+resources in `crates/varstotas_app/assets/primitives/`.
+
+## Document templates
+File → New from Template lists the built-in unit presets and `.vrst` files from
+`~/.varstotas/templates/`. Open Templates Folder opens that directory in Finder / Explorer.
+Preferences → General → Templates folder lets you choose another directory or restore the default.
+A file template creates an untitled, unsaved copy with its model settings; Save prompts for a new
+file and never overwrites the template automatically. Files added to the directory appear the next
+time the menu is opened. Existing unsaved work is protected by the usual Save / Don't Save / Cancel prompt.
 
 ## Release builds
 Artifacts go to `dist/` (not tracked by git).

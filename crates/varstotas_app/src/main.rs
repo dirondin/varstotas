@@ -12,6 +12,7 @@ mod bridge;
 mod bridge_ops;
 mod clipboard;
 mod debug_capture;
+#[cfg(test)]
 mod demo;
 mod document;
 mod downloads;
@@ -37,6 +38,9 @@ mod vector_export;
 mod tools;
 mod ui;
 mod viewport;
+
+// Repository examples; available on GitHub once the project is pushed.
+const EXAMPLES_URL: &str = "https://github.com/dirondin/varstotas/tree/master/examples";
 
 fn main() -> eframe::Result<()> {
     applog::init();

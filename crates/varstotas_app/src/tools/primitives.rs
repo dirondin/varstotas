@@ -18,12 +18,12 @@ use varstotas_render::Overlay3d;
 /// The shape tools' generators: (tool, generator name, source). Each puts the shape's base on
 /// the component's red–green plane at the origin (round shapes centred on it).
 pub const SOURCES: [(ToolId, &str, &str); 6] = [
-    (ToolId::Box, "Box", include_str!("../../../../examples/generators/primitives/box.rhai")), // i18n-ignore
-    (ToolId::Cylinder, "Cylinder", include_str!("../../../../examples/generators/primitives/cylinder.rhai")), // i18n-ignore
-    (ToolId::Cone, "Cone", include_str!("../../../../examples/generators/primitives/cone.rhai")), // i18n-ignore
-    (ToolId::Pyramid, "Pyramid", include_str!("../../../../examples/generators/primitives/pyramid.rhai")), // i18n-ignore
-    (ToolId::Sphere, "Sphere", include_str!("../../../../examples/generators/primitives/sphere.rhai")), // i18n-ignore
-    (ToolId::Torus, "Torus", include_str!("../../../../examples/generators/primitives/torus.rhai")), // i18n-ignore
+    (ToolId::Box, "Box", include_str!("../../assets/primitives/box.rhai")), // i18n-ignore
+    (ToolId::Cylinder, "Cylinder", include_str!("../../assets/primitives/cylinder.rhai")), // i18n-ignore
+    (ToolId::Cone, "Cone", include_str!("../../assets/primitives/cone.rhai")), // i18n-ignore
+    (ToolId::Pyramid, "Pyramid", include_str!("../../assets/primitives/pyramid.rhai")), // i18n-ignore
+    (ToolId::Sphere, "Sphere", include_str!("../../assets/primitives/sphere.rhai")), // i18n-ignore
+    (ToolId::Torus, "Torus", include_str!("../../assets/primitives/torus.rhai")), // i18n-ignore
 ];
 
 /// Torus tube sides per ring segment.

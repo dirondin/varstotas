@@ -11,12 +11,28 @@ names=($@)
 fail=0
 for n in $names; do
   cd $out
-  rm -rf $out/home/.varstotas/cache/thumbs $out/home/.varstotas/components $out/home/.varstotas/materials $out/home/.varstotas/library_state.json $out/home/.varstotas/downloads/manual   # the libraries (favourites, history) start empty in every script
+  rm -rf $out/home/.varstotas/cache/thumbs $out/home/.varstotas/components $out/home/.varstotas/materials $out/home/.varstotas/templates $out/home/.varstotas/library_state.json $out/home/.varstotas/downloads/manual   # the libraries (favourites, history) start empty in every script
   [[ -d $root/qa/fixtures/$n/components ]] && cp -R $root/qa/fixtures/$n/components $out/home/.varstotas/   # or with the script's fixture
-  HOME=$out/home VARSTOTAS_LANG=en RUST_LOG=info VARSTOTAS_SCRIPT=$root/qa/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
+  # Explicit repository fixtures for regression tests, never installed by the application.
+  [[ $n == templates ]] && rm -rf $out/models/custom_templates
+  qa_home=$out/home
+  qa_examples=$root/examples
+  if [[ $n == no_examples ]]; then
+    qa_home=$out/no_examples_home
+    qa_examples=
+    mkdir -p $qa_home
+  else
+    mkdir -p $qa_home/.varstotas/plugins/examples
+    cp $root/examples/plugins/* $qa_home/.varstotas/plugins/examples/
+  fi
+  HOME=$qa_home VARSTOTAS_LANG=en RUST_LOG=info VARSTOTAS_QA_EXAMPLES=$qa_examples VARSTOTAS_SCRIPT=$root/qa/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
   code=$?
   bad=$(grep -cE 'expect FAIL|panicked' $out/$n.log)
   ok=$(grep -c 'expect ok' $out/$n.log)
+  if [[ $n == no_examples && ( -e $qa_home/.varstotas/examples || -e $qa_home/.varstotas/plugins/examples ) ]]; then
+    echo "FAIL no_examples: application installed example files"
+    bad=$((bad + 1))
+  fi
   if (( code != 0 || bad > 0 )); then
     echo "FAIL $n (exit $code, $bad failures, $ok ok)"; grep -E 'expect FAIL|panicked' $out/$n.log | cut -c1-300; fail=1
     cp $out/$n.log $out/$n.fail.log; echo "     log: $out/$n.fail.log (last: $(grep 'script:' $out/$n.log | tail -1 | sed -E 's/.*script: //' | cut -c1-80))"

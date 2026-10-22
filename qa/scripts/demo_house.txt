@@ -1,4 +1,4 @@
-# The Country House demo (~/.varstotas/examples/country_house.vrst) — the furnished demo model (procedural textures, PBR
+# The Country House demo (repository examples/demos/country_house.vrst) — the furnished demo model (procedural textures, PBR
 # materials, lights, scenes) in the Realistic style and path traced
 action demo_house
 wait 30

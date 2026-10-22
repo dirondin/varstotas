@@ -207,6 +207,8 @@ menu-sheets = Sheets…
 menu-help = Help
 menu-user-guide = User Guide
 menu-user-guide-hint = How to use Varstotas: tools, menus, files, keys (F1 over the model: the active tool)
+menu-examples = Examples
+menu-examples-hint = Open the repository examples in your browser
 menu-script-reference = Script Reference
 menu-script-reference-hint = Scripts, generators and component scripts: functions, properties, examples
 menu-licences = Licences…
@@ -4035,3 +4037,13 @@ kernel-io-ply = PLY: { $msg }
 # $why is the system error / the reader's message
 kernel-io-error-io = io: { $why }
 kernel-io-error-format = format: { $why }
+
+## File templates
+template-files-heading = From template files
+template-files-empty = No .vrst templates in this folder
+template-open-folder = Open Templates Folder…
+template-folder-error = Could not read templates: { $error }
+template-created = Created from template: { $path }
+template-load-failed = Could not load template { $path }: { $error }
+template-folder-label = Templates folder
+template-folder-tip = Place .vrst models here to use them as starting points for new documents.
