@@ -28,16 +28,23 @@ pub const NAMES: &[&str] = &[
 /// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
 /// sorted.
 pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
-    fn walk(d: &std::path::Path, ext: &str, depth: usize, out: &mut Vec<String>) {
+    fn walk(d: &std::path::Path, ext: &str, depth: usize, out: &mut Vec<String>,
+        visited: &mut usize,
+        deadline: Instant,
+    ) {
         let Ok(rd) = std::fs::read_dir(d) else { return };
         for e in rd.flatten() {
-            if out.len() >= 5000 {
+            *visited += 1;
+            if *visited > 100_000 || Instant::now() > deadline || out.len() >= 5000 {
                 return;
             }
             let p = e.path();
+            if e.file_type().is_ok_and(|t| t.is_symlink()) {
+                continue;
+            }
             if p.is_dir() {
                 if depth < 8 {
-                    walk(&p, ext, depth + 1, out);
+                    walk(&p, ext, depth + 1, out, visited, deadline);
                 }
             } else if ext.is_empty() || p.extension().is_some_and(|x| x.to_string_lossy().eq_ignore_ascii_case(ext)) {
                 out.push(p.to_string_lossy().to_string());
@@ -45,7 +52,10 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
         }
     }
     let mut out = Vec::new();
-    walk(dir, ext, 0, &mut out);
+    walk(dir, ext, 0, &mut out,
+        &mut 0,
+        Instant::now() + Duration::from_secs(2),
+    );
     out.sort();
     out
 }
@@ -53,19 +63,23 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
 /// GET `url` with the system curl (into the file `to`, else the bytes back), with extra
 /// request headers (`#{ "Authorization": "Token …" }`).
 fn fetch(url: &str, to: Option<&str>, headers: &Map) -> Result<Vec<u8>, String> {
-    let mut cmd = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
-    cmd.args(["-sSfL", "--max-time", "300", "--retry", "2", "--user-agent", "Varstotas"]); // i18n-ignore
-    for (k, v) in headers {
-        cmd.arg("-H").arg(format!("{k}: {v}"));
+    let remaining = with(|st| Ok(st.deadline.saturating_duration_since(Instant::now()))).map_err(|e| e.to_string())?;
+    let headers: Vec<_> = headers
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    let bytes = crate::network::fetch(
+        url,
+        &headers,
+        remaining.min(Duration::from_secs(60)),
+        || false,
+    )?;
+    if let Some(path) = to {
+        std::fs::write(path, &bytes).map_err(|e| e.to_string())?;
+        Ok(Vec::new())
+    } else {
+        Ok(bytes)
     }
-    if let Some(p) = to {
-        cmd.arg("-o").arg(p);
-    }
-    let out = cmd.arg(url).output().map_err(|e| format!("curl: {e}"))?;
-    if !out.status.success() {
-        return Err(format!("{url}: {}", String::from_utf8_lossy(&out.stderr).trim()));
-    }
-    Ok(out.stdout)
 }
 
 fn err<T>(msg: impl Into<String>) -> R<T> {
@@ -586,23 +600,33 @@ pub fn scope() -> Scope<'static> {
     s
 }
 
-pub fn engine(limit: Duration) -> Engine {
+pub fn engine(limit: Duration, trusted_io: bool) -> Engine {
     let mut e = Engine::new();
-    e.set_max_expr_depths(256, 256);
+    e.set_max_expr_depths(128, 128);
+    e.set_max_operations(5_000_000);
+    e.set_max_string_size(8 * 1024 * 1024);
+    e.set_max_array_size(100_000);
+    e.set_max_map_size(10_000);
     e.set_max_call_levels(128);
     let start = Instant::now();
     e.on_progress(move |_| (start.elapsed() > limit).then(|| Dynamic::from(tr!("script-err-time-limit-of-secs-s-exceeded", secs = limit.as_secs().to_string()))));
     e.on_print(|s| {
         let _ = with(|st| {
-            st.out.push_str(s);
-            st.out.push('\n');
+            let remaining = (1024 * 1024usize).saturating_sub(st.out.len() + 1);
+            st.out.push_str(&s[..s.floor_char_boundary(remaining.min(s.len()))]);
+            if remaining > 0 {
+                st.out.push('\n');
+            }
             Ok(())
         });
     });
     e.on_debug(|s, _, _| {
         let _ = with(|st| {
-            st.out.push_str(s);
-            st.out.push('\n');
+            let remaining = (1024 * 1024usize).saturating_sub(st.out.len() + 1);
+            st.out.push_str(&s[..s.floor_char_boundary(remaining.min(s.len()))]);
+            if remaining > 0 {
+                st.out.push('\n');
+            }
             Ok(())
         });
     });
@@ -610,7 +634,7 @@ pub fn engine(limit: Duration) -> Engine {
     register_entity(&mut e);
     register_geometry(&mut e);
     register_ops(&mut e);
-    register_context(&mut e);
+    register_context(&mut e, trusted_io);
     register_generators(&mut e);
     crate::generator::register_math(&mut e);
     e
@@ -1320,7 +1344,7 @@ fn register_generators(e: &mut Engine) {
     });
 }
 
-fn register_context(e: &mut Engine) {
+fn register_context(e: &mut Engine, trusted_io: bool) {
     e.register_fn("enter", |x: Dynamic| -> R<()> {
         let g = one(&x)?;
         with(|st| {
@@ -1427,8 +1451,10 @@ fn register_context(e: &mut Engine) {
     });
     e.register_fn("lang", || varstotas_i18n::language());
     e.register_fn("platform", || varstotas_i18n::platform().to_string());
-    e.register_fn("read_text", |path: ImmutableString| -> R<String> {
-        std::fs::read_to_string(path.as_str()).or_else(|e| err(format!("{path}: {e}")))
+    if trusted_io {
+        e.register_fn("read_text", |path: ImmutableString| -> R<String> {
+            varstotas_kernel::io::read_limited(std::path::Path::new(path.as_str()), 8 * 1024 * 1024)
+                .and_then(|b| String::from_utf8(b).map_err(std::io::Error::other)).or_else(|e| err(format!("{path}: {e}")))
     });
     e.register_fn("write_text", |path: ImmutableString, text: ImmutableString| -> R<()> {
         std::fs::write(path.as_str(), text.as_str()).or_else(|e| err(format!("{path}: {e}")))
@@ -1439,11 +1465,13 @@ fn register_context(e: &mut Engine) {
     });
     e.register_fn("list_dirs", |dir: ImmutableString| -> Array {
         let mut out: Vec<String> = std::fs::read_dir(dir.as_str())
-            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).map(|p| p.to_string_lossy().to_string()).collect())
+            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).take(5000)
+                        .map(|p| p.to_string_lossy().to_string()).collect())
             .unwrap_or_default();
         out.sort();
         out.into_iter().map(Dynamic::from).collect()
     });
+    }
     e.register_fn("parse_json", |text: ImmutableString| -> R<Dynamic> {
         let v: serde_json::Value = serde_json::from_str(text.as_str()).or_else(|e| err(format!("JSON: {e}")))?;
         crate::json::from_json(&v).or_else(err)
@@ -1458,10 +1486,12 @@ fn register_context(e: &mut Engine) {
         }
         fetch(url, Some(path), headers).map(|_| ()).or_else(err)
     }
-    e.register_fn("fetch_text", |url: ImmutableString| fetch_text(&url, &Map::new()));
+    if trusted_io {
+        e.register_fn("fetch_text", |url: ImmutableString| fetch_text(&url, &Map::new()));
     e.register_fn("fetch_text", |url: ImmutableString, headers: Map| fetch_text(&url, &headers));
     e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString| fetch_file(&url, &path, &Map::new()));
     e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString, headers: Map| fetch_file(&url, &path, &headers));
+    }
     e.register_fn("url_encode", |s: ImmutableString| -> String {
         s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect() // i18n-ignore
     });

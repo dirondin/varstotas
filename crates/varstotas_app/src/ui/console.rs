@@ -47,6 +47,7 @@ impl VarstotasApp {
             path: self.doc.active_path.clone(),
             selection: self.doc.selection.clone(),
             time_limit: None,
+            trusted_io: true,
         };
         let first = src.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().trim().to_string();
         let more = src.lines().filter(|l| !l.trim().is_empty()).count() > 1;

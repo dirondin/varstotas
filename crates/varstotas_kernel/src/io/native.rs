@@ -30,6 +30,9 @@ pub fn to_json(model: &Model) -> Result<String, IoError> {
 
 /// Parse `.vrst` JSON text (caches are rebuilt).
 pub fn from_json(text: &str) -> Result<Model, IoError> {
+    if text.len() > super::MAX_MODEL_BYTES {
+        return Err(IoError::Format("Model exceeds file size limit".into()));
+    }
     let f: FileIn = serde_json::from_str(text).map_err(|e| IoError::Format(e.to_string()))?;
     if f.format != FORMAT {
         return Err(IoError::Format(tr!("kernel-io-not-a-varstotas-file-format-format", format = format!("{:?}", f.format))));
@@ -41,22 +44,21 @@ pub fn from_json(text: &str) -> Result<Model, IoError> {
     if !m.defs.contains_key(m.root) {
         return Err(IoError::Format(tr!("kernel-io-missing-root-definition").into()));
     }
+    super::validate_model(&m)?;
     m.rebuild_caches();
     Ok(m)
 }
 
 pub fn save(model: &Model, path: &Path) -> Result<(), IoError> {
     let s = to_json(model)?;
-    // Write atomically-ish: temp file then rename.
-    let tmp = path.with_extension("vrst.tmp");
-    std::fs::write(&tmp, s)?;
-    std::fs::rename(&tmp, path)?;
+    super::atomic_write(path, s.as_bytes())?;
     Ok(())
 }
 
 pub fn load(path: &Path) -> Result<Model, IoError> {
-    let s = std::fs::read_to_string(path)?;
-    from_json(&s)
+    let bytes = super::read_limited(path, super::MAX_MODEL_BYTES)?;
+    let s = std::str::from_utf8(&bytes).map_err(|e| IoError::Format(e.to_string()))?;
+    from_json(s)
 }
 
 // ---- material files ------------------------------------------------------------------------
@@ -84,15 +86,13 @@ struct MatIn {
 /// Write one material (colour, texture, PBR parameters, maps and shader) to a file.
 pub fn save_material(mat: &crate::Material, path: &Path) -> Result<(), IoError> {
     let s = serde_json::to_string(&MatOut { format: MATERIAL_FORMAT, version: VERSION, material: mat }).map_err(|e| IoError::Format(e.to_string()))?;
-    let tmp = path.with_extension("vrstmat.tmp");
-    std::fs::write(&tmp, s)?;
-    std::fs::rename(&tmp, path)?;
+    super::atomic_write(path, s.as_bytes())?;
     Ok(())
 }
 
 /// Read a material file written by [`save_material`].
 pub fn load_material(path: &Path) -> Result<crate::Material, IoError> {
-    let f: MatIn = serde_json::from_str(&std::fs::read_to_string(path)?).map_err(|e| IoError::Format(e.to_string()))?;
+    let f: MatIn = serde_json::from_slice(&super::read_limited(path, super::MAX_MODEL_BYTES)?).map_err(|e| IoError::Format(e.to_string()))?;
     if f.format != MATERIAL_FORMAT {
         return Err(IoError::Format(tr!("kernel-io-not-a-varstotas-material-format-format", format = format!("{:?}", f.format))));
     }

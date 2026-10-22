@@ -352,7 +352,7 @@ pub fn import_3mf(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_3mf_with(model: &mut Model, path: &Path, opts: &super::ImportOptions) -> Result<(), IoError> {
-    let data = std::fs::read(path)?;
+    let data = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     add_3mf(model, &data, opts)
 }
 

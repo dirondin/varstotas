@@ -2316,9 +2316,47 @@ impl VarstotasApp {
 
     /// Export the model to `path`; the format follows the extension.
     pub(crate) fn export_to(&mut self, path: &std::path::Path) {
+        self.export_to_approved(path, None);
+    }
+
+    pub(crate) fn export_to_approved(&mut self, path: &std::path::Path, approved: Option<&std::collections::HashSet<PathBuf>>) {
         let model = &self.doc.model;
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
-        let r = guarded(|| match ext.as_str() {
+        let bundle = io::export_bundle(model, path);
+        let collisions: Vec<_> = bundle
+            .as_ref()
+            .map(|f| {
+                f.iter()
+                    .skip(1)
+                    .filter(|(p, _)| p.exists())
+                    .map(|(p, _)| p.display().to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let local_approved: std::collections::HashSet<PathBuf> = bundle.as_ref()
+            .map(|f| f.iter().filter(|(p, _)| p.exists()).map(|(p, _)| p.clone()).collect()).unwrap_or_default();
+        let allow_sidecars = if approved.is_none() && !collisions.is_empty() {
+            rfd::MessageDialog::new()
+                .set_title(tr!("app-export-replace-title"))
+                .set_description(tr!(
+                    "app-export-replace-files",
+                    files = collisions.join("\n")
+                ))
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show()
+                == rfd::MessageDialogResult::Yes
+        } else {
+            approved.is_some()
+        };
+        if !collisions.is_empty() && !allow_sidecars {
+            return;
+        }
+        let approved = approved.unwrap_or(&local_approved);
+        let r = guarded(|| {
+            if let Some(files) = &bundle {
+                return io::write_bundle_approved(files, approved);
+            }
+            match ext.as_str() {
             "obj" => io::export_obj(model, path),
             "dxf" => io::export_dxf(model, path),
             "glb" => io::export_glb(model, path),
@@ -2339,6 +2377,7 @@ impl VarstotasApp {
                 std::fs::write(path, bytes).map_err(Into::into)
             }
             _ => io::export_stl(model, path),
+            }
         });
         match r {
             Ok(Ok(())) => match crate::downloads::licence_warning(&self.doc.model.attributions()) {

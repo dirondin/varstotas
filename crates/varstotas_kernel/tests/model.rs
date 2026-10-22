@@ -737,7 +737,7 @@ fn obj_export_writes_texture_and_uvs_import_embeds_it() {
     // `vt` come back as the same texture position (top face, merged from two triangles).
     let pl = TexPlacement { offset: [30.0, -20.0], angle_deg: 30.0, scale: [0.5, 2.0] };
     m.root_mesh_mut().faces[top].uv = Some(pl);
-    io::export_obj(&m, &path).unwrap();
+    io::write_bundle(&io::export_bundle(&m, &path).unwrap(), true).unwrap();
     let mut back = Model::new();
     io::import_obj(&mut back, &path).unwrap();
     assert_eq!(back.root_mesh().faces.len(), 6);

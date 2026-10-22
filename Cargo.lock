@@ -2846,6 +2846,7 @@ dependencies = [
  "env_logger",
  "epaint_default_fonts",
  "flate2",
+ "getrandom 0.4.3",
  "glam",
  "image",
  "libc",
@@ -2909,6 +2910,7 @@ dependencies = [
 name = "varstotas_script"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "rhai",
  "serde",
  "serde_json",

@@ -152,3 +152,11 @@ The **Components** section in the Default Tray (enabled by a checkbox in the **W
 - The thumbnail is a wireframe in isometric view, and if the file has a **preview image** — that. Right click on a thumbnail: **Set Preview Image…** (PNG / JPEG / TGA / BMP; reduced to 512 px and written to the file) and **Remove Preview Image**. For the open document the preview is set in **File → Preview Image** (from a file or as a snapshot of the current view). Models from the 3D Library get a preview by themselves — the source's image. A hint above the thumbnail shows the dimensions. Search filters by name. The ⟳ button rereads the folder; changed files are also reread when the section is simply shown.
 
 Parametric components built by a script (`@generator`) are described in `docs/GENERATORS.md`.
+
+## Security boundary
+
+Installing and invoking a plugin is a trust decision. Rhai plugins have host file/network IO;
+Python plugins have the current user's OS permissions. They can change files outside the
+model, and Undo cannot restore those files. Inspect third-party plugins before installation.
+Document generators and component scripts have geometry-only access even when called by a
+plugin. See [Scripts: trust and execution limits](SCRIPTING.md#trust-and-execution-limits).

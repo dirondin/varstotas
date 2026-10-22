@@ -4138,3 +4138,9 @@ template-created = Создано из шаблона: { $path }
 template-load-failed = Не удалось загрузить шаблон { $path }: { $error }
 template-folder-label = Папка шаблонов
 template-folder-tip = Поместите сюда модели .vrst для создания новых документов на их основе.
+
+app-export-replace-title = Заменить файлы экспорта?
+app-export-replace-files =
+    Экспорт заменит следующие файлы материалов или текстур:
+    { $files }
+    Продолжить?

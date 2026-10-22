@@ -289,7 +289,7 @@ pub fn import_dxf(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_dxf_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let bytes = std::fs::read(path)?;
+    let bytes = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     let data = parse_dxf(&String::from_utf8_lossy(&bytes))?;
     add_dxf(model, &data, opts)
 }

@@ -24,14 +24,11 @@ fn texture_bytes(t: &ufbx::Texture, dir: Option<&Path>) -> Option<(Vec<u8>, Stri
     if !t.content.is_empty() {
         return Some((t.content.to_vec(), name));
     }
-    let tries = [t.absolute_filename.to_string(), t.filename.to_string()];
-    for f in tries.iter().filter(|f| !f.is_empty()) {
-        if let Ok(b) = std::fs::read(f) {
-            return Some((b, name));
-        }
-    }
     let dir = dir?;
-    [t.relative_filename.to_string(), name.clone()].iter().filter(|f| !f.is_empty()).find_map(|f| std::fs::read(dir.join(f.replace('\\', "/"))).ok()).map(|b| (b, name.clone()))
+    [t.relative_filename.to_string(), name.clone()].iter().filter(|f| !f.is_empty()).find_map(|f| {
+            super::resource_path(dir, f)
+                .and_then(|p| super::read_limited(&p, 128 * 1024 * 1024)).ok()
+        }).map(|b| (b, name.clone()))
 }
 
 fn material(m: &ufbx::Material, dir: Option<&Path>) -> ImpMat {
@@ -57,7 +54,7 @@ pub fn import_fbx(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_fbx_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let data = std::fs::read(path)?;
+    let data = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     add_fbx(model, &data, path.parent(), opts)
 }
 

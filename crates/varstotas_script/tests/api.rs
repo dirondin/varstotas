@@ -6,7 +6,11 @@ use varstotas_script::{ScriptCtx, ScriptRun, run};
 use std::time::Duration;
 
 fn go(m: &mut Model, src: &str) -> ScriptRun {
-    let r = run(m, &ScriptCtx::default(), src);
+    let r = run(m, &ScriptCtx {
+            trusted_io: true,
+            ..Default::default()
+        }, src,
+    );
     assert!(r.error.is_none(), "script failed: {:?}\noutput: {}", r.error, r.output);
     r
 }
@@ -87,7 +91,8 @@ fn time_limit_stops_endless_loops() {
     let mut m = Model::new();
     let ctx = ScriptCtx { time_limit: Some(Duration::from_millis(200)), ..Default::default() };
     let r = run(&mut m, &ctx, "loop { }");
-    assert!(r.error.unwrap().contains("time limit"));
+    let error = r.error.unwrap();
+    assert!(error.contains("time limit") || error.contains("operations"), "{error}");
 }
 
 #[test]
@@ -237,7 +242,7 @@ fn all_faces_and_text_files() {
 #[test]
 fn example_plugins_run() {
     use serde_json::json;
-    let ctx = ScriptCtx::default();
+    let ctx = ScriptCtx { trusted_io: true, ..Default::default() };
     let run = |src: &str, vars: serde_json::Value| {
         let mut m = Model::new();
         let r = varstotas_script::eval_json(&mut m, &ctx, src, vars.as_object().unwrap());

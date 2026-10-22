@@ -1,7 +1,7 @@
 //! Rigs (parameters of ordinary components, see `varstotas_kernel::rig`): the values turned into
 //! part operations — the joints — and the variants built, shared, posed again and written back.
 //!
-//! The rig's script `fn update(p) { … }` runs after the joints with the whole script API (as a
+//! The rig's script `fn update(p) { … }` runs after the joints with the geometry API, without host file or network access (as a
 //! generator's `build`): the current context is the component's content in the pose of the
 //! joints, `p` holds the values and formulas; parts are found with `child(name)` /
 //! `child(parent, name, deep)` and changed with the usual functions (`rotate`, `move`, `scale`,
@@ -210,11 +210,12 @@ fn geometry_hash(m: &Mesh) -> u64 {
 /// Run the rig's script on a copy of `model` whose top level is `content` (the variant posed by
 /// the joints): the copy afterwards.
 fn sandbox(model: &Model, content: &Mesh, script: &str, p: rhai::Map) -> Result<Model, String> {
+    if script.len() > 1024 * 1024 { return Err("Component script exceeds 1 MiB".into()); }
     let mut sb = model.clone();
     let root = sb.root;
     sb.defs[root].mesh = content.clone();
     // `update(p, parts)` of older documents: the parts' bounds by name.
-    let legacy = rhai::Engine::new().compile(script).map_err(|e| format!("script: {e}"))?.iter_functions().find(|f| f.name == "update").map(|f| f.params.len());
+    let legacy = expr_engine().compile(script).map_err(|e| format!("script: {e}"))?.iter_functions().find(|f| f.name == "update").map(|f| f.params.len());
     let mut vars = vec![("p".to_string(), rhai::Dynamic::from_map(p))];
     let call = match legacy {
         Some(1) => "update(p);",
@@ -236,7 +237,8 @@ fn sandbox(model: &Model, content: &Mesh, script: &str, p: rhai::Map) -> Result<
         }
         _ => return Err("script: needs `fn update(p) { ... }`".into()),
     };
-    let ctx = ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(Duration::from_secs(10)) };
+    let ctx = ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(Duration::from_secs(10)),
+        trusted_io: false};
     let (run, _) = crate::run_with(&mut sb, &ctx, &format!("{script}\n{call}\n"), vars, |_| ());
     match run.error {
         Some(e) => Err(format!("script: {e}")),

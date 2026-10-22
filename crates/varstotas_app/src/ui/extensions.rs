@@ -10,11 +10,11 @@ use crate::plugins::{Lang, ParamKind, Plugin};
 use crate::ui::console::LogLine;
 use crate::ui::icons::Icon;
 use egui::{Context, Key, RichText, Ui};
-use varstotas_kernel::glam::DVec3;
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use varstotas_i18n::tr;
+use varstotas_kernel::glam::DVec3;
 
 /// Plugin index of the Script Console's code (see [`PluginState::console`]).
 pub const CONSOLE: usize = usize::MAX;
@@ -49,7 +49,8 @@ fn vec_json(p: DVec3) -> Value {
 impl VarstotasApp {
     /// Scan user-installed plugins in `~/.varstotas/plugins`.
     pub(crate) fn load_plugins(&mut self) {
-        let Some(dir) = crate::plugins::plugins_dir() else { return };
+        let Some(dir) = crate::plugins::plugins_dir() else { return;
+        };
         let (list, errors) = crate::plugins::scan(&dir);
         for e in &errors {
             log::warn!("plugin: {e}");
@@ -67,7 +68,7 @@ impl VarstotasApp {
     /// Console code: with a header asking for parameters, points or objects it runs like a
     /// plugin (dialog, picking, then the run); else directly.
     pub(crate) fn run_console_code(&mut self, src: &str) {
-        match crate::plugins::parse(src, std::path::Path::new("Script.rhai") /* i18n-ignore */) {
+        match crate::plugins::parse(src, std::path::Path::new("Script.rhai"), /* i18n-ignore */) {
             Ok(p) if !p.params.is_empty() || p.pick.is_some() || p.select.is_some() => {
                 self.plugins.console = Some((p, src.to_string()));
                 self.start_plugin(CONSOLE, None);
@@ -155,7 +156,10 @@ impl VarstotasApp {
             .enumerate()
             .filter_map(|(i, p)| {
                 let exts = if export { &p.export } else { &p.import };
-                (!exts.is_empty()).then(|| (i, format!("{} ({})…", p.name, exts.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", "))))
+                (!exts.is_empty()).then(|| {
+                    (i, format!("{} ({})…", p.name, exts.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", ")),
+                    )
+                })
             })
             .collect();
         if items.is_empty() {
@@ -179,7 +183,10 @@ impl VarstotasApp {
             .iter()
             .enumerate()
             .filter(|(_, p)| !p.model_import.is_empty())
-            .map(|(i, p)| (i, format!("{} ({})…", p.name, p.model_import.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", "))))
+            .map(|(i, p)| {
+                (i, format!("{} ({})…", p.name, p.model_import.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", ")),
+                )
+            })
             .collect();
         if items.is_empty() {
             return;
@@ -195,7 +202,8 @@ impl VarstotasApp {
 
     /// File dialog for an importer / exporter plugin, then [`Self::start_plugin`].
     pub(crate) fn plugin_file(&mut self, idx: usize, export: bool) {
-        let Some(p) = self.plugins.list.get(idx) else { return };
+        let Some(p) = self.plugins.list.get(idx) else { return;
+        };
         let exts: Vec<&str> = if export { p.export.iter().map(String::as_str).collect() } else { p.import.iter().map(String::as_str).collect() };
         let d = rfd::FileDialog::new().add_filter(p.name.clone(), &exts);
         let path = if export {
@@ -225,15 +233,18 @@ impl VarstotasApp {
             Some(v) if v.len() == p.params.len() => v.clone(),
             _ => p.params.iter().map(|q| q.default.clone()).collect(),
         };
-        self.plugins.dialog = Some(ParamDialog { idx, values, path, error: None, focus: true });
+        self.plugins.dialog = Some(ParamDialog { idx, values, path, error: None, focus: true,
+        });
     }
 
     /// Values of the dialog as script variables.
     fn plugin_vars(&self, d: &ParamDialog) -> Result<Map<String, Value>, String> {
-        let Some(p) = self.plugin_at(d.idx) else { return Err(tr!("ext-script-gone")) };
+        let Some(p) = self.plugin_at(d.idx) else { return Err(tr!("ext-script-gone"));
+        };
         let mut vars = Map::new();
         for (q, v) in p.params.iter().zip(&d.values) {
-            vars.insert(q.key.clone(), crate::plugins::param_value(q, v, self.doc.model.unit)?);
+            vars.insert(q.key.clone(), crate::plugins::param_value(q, v, self.doc.model.unit)?,
+            );
         }
         if let Some(f) = &d.path {
             vars.insert("path".into(), json!(f.to_string_lossy()));
@@ -246,12 +257,14 @@ impl VarstotasApp {
         let Some(p) = self.plugin_at(idx) else { return };
         if let Some((n, prompt)) = p.pick.clone().filter(|_| !vars.contains_key("points")) {
             self.plugins.pending = Some((idx, vars));
-            self.install_tool(Box::new(crate::tools::plugin_pick::PluginPickTool::new(n, prompt)));
+            self.install_tool(Box::new(crate::tools::plugin_pick::PluginPickTool::new(n, prompt,
+            )));
             return;
         }
         if let Some(prompt) = p.select.clone().filter(|_| !vars.contains_key("objects")) {
             self.plugins.pending = Some((idx, vars));
-            self.install_tool(Box::new(crate::tools::plugin_select::PluginSelectTool::new(prompt)));
+            self.install_tool(Box::new(crate::tools::plugin_select::PluginSelectTool::new(prompt),
+            ));
             return;
         }
         self.run_plugin(idx, vars);
@@ -263,7 +276,8 @@ impl VarstotasApp {
             return;
         }
         if let Some((idx, mut vars)) = self.plugins.pending.take() {
-            vars.insert("points".into(), Value::Array(pts.into_iter().map(vec_json).collect()));
+            vars.insert("points".into(), Value::Array(pts.into_iter().map(vec_json).collect()),
+            );
             self.plugin_go(idx, vars);
         }
     }
@@ -279,7 +293,8 @@ impl VarstotasApp {
     }
 
     pub(crate) fn run_plugin(&mut self, idx: usize, vars: Map<String, Value>) {
-        let Some(p) = self.plugin_at(idx).cloned() else { return };
+        let Some(p) = self.plugin_at(idx).cloned() else { return;
+        };
         if p.lang == Lang::Python {
             self.run_python_with(&p.path, Some(Value::Object(vars).to_string()));
             return;
@@ -289,12 +304,17 @@ impl VarstotasApp {
         } else {
             match std::fs::read_to_string(&p.path) {
                 Ok(s) => s,
-                Err(e) => return self.flash_error(tr!("console-cannot-read", path = p.path.display().to_string(), error = e.to_string())),
+                Err(e) => {
+                    return self.flash_error(tr!("console-cannot-read", path = p.path.display().to_string(), error = e.to_string()));
+                }
             }
         };
-        let ctx = varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None };
+        let ctx = varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None,
+            trusted_io: true,
+        };
         self.console.push(LogLine::Input(if idx == CONSOLE { tr!("ext-run-script", name = p.name.clone()) } else { tr!("ext-run-plugin", name = p.name.clone()) }));
-        let r = self.doc.try_commit_if(&p.name, |m| Ok::<_, String>(varstotas_script::eval_json(m, &ctx, &src, &vars)), |r| r.run.changed);
+        let r = self.doc.try_commit_if(&p.name, |m| Ok::<_, String>(varstotas_script::eval_json(m, &ctx, &src, &vars)), |r| r.run.changed,
+        );
         let Some(r) = r else {
             let e = self.doc.last_error.take().unwrap_or_else(|| tr!("ext-plugin-failed"));
             crate::applog::error(&p.name, &e);
@@ -317,7 +337,8 @@ impl VarstotasApp {
             }
             None => {
                 let out = r.run.output.trim_end().to_string();
-                self.flash(out.lines().last().map_or_else(|| tr!("ext-done", name = p.name.clone()), str::to_string));
+                self.flash(out.lines().last().map_or_else(|| tr!("ext-done", name = p.name.clone()), str::to_string),
+                );
                 self.console.last = Some((true, out));
                 if !p.import.is_empty() {
                     self.actions.push(Action::ZoomExtents);
@@ -327,8 +348,10 @@ impl VarstotasApp {
     }
 
     pub(crate) fn plugin_dialog(&mut self, ctx: &Context) {
-        let Some(mut d) = self.plugins.dialog.take() else { return };
-        let Some(p) = self.plugin_at(d.idx).cloned() else { return };
+        let Some(mut d) = self.plugins.dialog.take() else { return;
+        };
+        let Some(p) = self.plugin_at(d.idx).cloned() else { return;
+        };
         let pos = self.viewport.view_rect.min + egui::vec2(40.0, 40.0);
         let mut open = true;
         let (mut run, mut cancel) = (false, false);

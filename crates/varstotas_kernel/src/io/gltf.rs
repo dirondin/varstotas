@@ -374,7 +374,10 @@ fn load_uri(uri: &str, dir: Option<&Path>) -> Result<Vec<u8>, IoError> {
     }
     let dir = dir.ok_or_else(|| bad(tr!("kernel-io-external-file-uri-needs-a-path", uri = uri.to_string())))?;
     let name = uri.replace("%20", " ");
-    Ok(std::fs::read(dir.join(name))?)
+    Ok(super::read_limited(
+        &super::resource_path(dir, &name)?,
+        super::MAX_MODEL_BYTES,
+    )?)
 }
 
 impl Gltf {
@@ -516,7 +519,7 @@ pub fn import_gltf(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_gltf_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let data = std::fs::read(path)?;
+    let data = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     add_gltf(model, &data, path.parent(), opts)
 }
 

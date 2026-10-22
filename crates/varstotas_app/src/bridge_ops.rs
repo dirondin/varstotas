@@ -5,22 +5,40 @@ use crate::app::{ExportContent, VarstotasApp};
 use crate::bridge::{Bridge, Request};
 use crate::nav;
 use crate::ui::console::LogLine;
+use serde_json::{Value, json};
+use std::collections::{HashSet, VecDeque};
+use std::io::{BufRead, Read};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{Receiver, Sender, sync_channel};
 use varstotas_kernel::Model;
 use varstotas_kernel::glam::DVec3;
 use varstotas_render::StandardView;
-use serde_json::{Value, json};
-use std::collections::VecDeque;
-use std::io::BufRead;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{Receiver, Sender, channel};
 
 /// An operation opened by `begin`: one undo step for everything until `commit`.
 pub struct Txn {
     conn: u64,
     label: String,
-    before: Model,
+    model: Model,
+    base_version: u64,
+    path: varstotas_kernel::ContextPath,
+    selection: Option<Vec<varstotas_kernel::EntityRef>>,
+    started: std::time::Instant,
     changed: bool,
+}
+
+impl Txn {
+    fn commit(self, doc: &mut crate::document::Document) -> Result<bool, String> {
+        if self.base_version != doc.model_version || self.path != doc.active_path {
+            return Err("document changed while operation was open; operation discarded".into());
+        }
+        if self.changed {
+            let before = std::mem::replace(&mut doc.model, self.model);
+            doc.record_step(&self.label, before);
+        }
+        if let Some(sel) = self.selection { doc.set_selection(sel); }
+        Ok(self.changed)
+    }
 }
 
 /// A screenshot waiting for the next paint.
@@ -36,6 +54,8 @@ pub struct PythonRun {
     out: Receiver<(bool, String)>,
     name: String,
     text: String,
+    started: std::time::Instant,
+    exceeded: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(Default)]
@@ -43,7 +63,7 @@ pub struct BridgeState {
     pub server: Option<Bridge>,
     pub txn: Option<Txn>,
     /// Destructive calls waiting for the user's answer.
-    pub confirm: VecDeque<(String, Request)>,
+    pub confirm: VecDeque<(String, Request, u64, Option<HashSet<PathBuf>>)>,
     shots: Vec<Shot>,
     pub python: Option<PythonRun>,
     /// Calls served (for the script harness dump).
@@ -57,7 +77,11 @@ enum Reply {
     /// Answered later (screenshot).
     Later,
     /// Ask the user first.
-    Confirm(String),
+    Confirm(String, Option<HashSet<PathBuf>>),
+}
+
+impl Reply {
+    fn confirm(message: String) -> Self { Self::Confirm(message, None) }
 }
 
 fn vec(v: &Value) -> Option<DVec3> {
@@ -116,21 +140,35 @@ impl VarstotasApp {
             b.remove_file();
         }
         if let Some(p) = self.bridge.python.as_mut() {
-            let _ = p.child.kill();
+            varstotas_script::process::terminate(&mut p.child);
         }
     }
 
     /// Serve calls that arrived, show the confirmation dialog, collect Python output.
     pub(crate) fn bridge_tick(&mut self, ctx: &egui::Context) {
+        if self
+            .bridge
+            .txn
+            .as_ref()
+            .is_some_and(|t| t.started.elapsed().as_secs() > 300)
+        {
+            self.bridge.txn = None;
+        }
         let reqs = self.bridge.server.as_ref().map(Bridge::poll).unwrap_or_default();
         for req in reqs {
             self.bridge.calls += 1;
-            match self.bridge_exec(&req, false, ctx) {
+            match self.bridge_exec(&req, false, None, ctx) {
                 Reply::Done(r) => {
                     let _ = req.reply.send(r);
                 }
                 Reply::Later => {}
-                Reply::Confirm(what) => self.bridge.confirm.push_back((what, req)),
+                Reply::Confirm(what, approved) => {
+                    if self.bridge.confirm.len() >= 16 {
+                        let _ = req.reply.send(Err("too many pending confirmations".into()));
+                    } else {
+                        self.bridge.confirm.push_back((what, req, self.doc.model_version, approved));
+                    }
+                }
             }
         }
         if let Some(a) = self.bridge.answer.take() {
@@ -142,21 +180,26 @@ impl VarstotasApp {
 
     /// Answer the oldest confirmation (dialog button or script harness).
     pub(crate) fn bridge_answer(&mut self, allow: bool, ctx: &egui::Context) {
-        let Some((_, req)) = self.bridge.confirm.pop_front() else { return };
-        let r = if allow { self.bridge_exec(&req, true, ctx) } else { Reply::Done(Err("the user declined".into())) };
+        let Some((_, req, version, approved)) = self.bridge.confirm.pop_front() else { return;
+        };
+        let r = if !allow { Reply::Done(Err("the user declined".into())) }
+            else if req.method == "export" && version != self.doc.model_version {
+                Reply::Done(Err("document changed while export confirmation was open; retry export".into()))
+            } else { self.bridge_exec(&req, true, approved.as_ref(), ctx) };
         match r {
             Reply::Done(r) => {
                 let _ = req.reply.send(r);
             }
             Reply::Later => {}
-            Reply::Confirm(_) => {
+            Reply::Confirm(_, _) => {
                 let _ = req.reply.send(Err("confirmation loop".into()));
             }
         }
     }
 
     fn bridge_confirm_dialog(&mut self, ctx: &egui::Context) {
-        let Some((what, _)) = self.bridge.confirm.front() else { return };
+        let Some((what, _, _, _)) = self.bridge.confirm.front() else { return;
+        };
         let what = what.clone();
         let mut answer = None;
         egui::Modal::new(egui::Id::new("bridge_confirm")).show(ctx, |ui| {
@@ -206,32 +249,66 @@ impl VarstotasApp {
     }
 
     fn script_ctx(&self) -> varstotas_script::ScriptCtx {
-        varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None }
+        varstotas_script::ScriptCtx { path: self.doc.active_path.clone(), selection: self.doc.selection.clone(), time_limit: None,
+            trusted_io: false,
+        }
     }
 
-    fn bridge_exec(&mut self, req: &Request, confirmed: bool, ctx: &egui::Context) -> Reply {
+    fn bridge_exec(&mut self, req: &Request, confirmed: bool, approved: Option<&HashSet<PathBuf>>, ctx: &egui::Context) -> Reply {
         let p = &req.params;
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         let in_txn = self.bridge.txn.is_some();
         let done = Reply::Done;
+        if self.bridge.txn.as_ref().is_some_and(|t| t.conn != req.conn)
+            && matches!(
+                req.method.as_str(),
+                "eval"
+                    | "begin"
+                    | "commit"
+                    | "abort"
+                    | "undo"
+                    | "redo"
+                    | "save"
+                    | "export"
+                    | "open"
+                    | "new"
+            )
+        {
+            return done(Err("operation belongs to another connection".into()));
+        }
         match req.method.as_str() {
             "hello" => done(Ok(json!({
                 "app": "Varstotas",
                 "version": env!("CARGO_PKG_VERSION"),
                 "api": varstotas_script::api_names(),
             }))),
-            "docs" => done(Ok(Value::String(include_str!("../../../docs/SCRIPTING.md").into()))),
-            "info" => done(Ok(self.bridge_info())),
+            "docs" => done(Ok(Value::String(include_str!("../../../docs/SCRIPTING.md").into(),
+            ))),
+            "info" => {
+                let m = self
+                    .bridge
+                    .txn
+                    .as_ref()
+                    .filter(|t| t.conn == req.conn)
+                    .map_or(&self.doc.model, |t| &t.model);
+                done(Ok(self.bridge_info(m)))
+            }
             "eval" => {
                 let code = s("code").unwrap_or_default().to_string();
                 let vars = p.get("vars").and_then(Value::as_object).cloned().unwrap_or_default();
                 let label = s("label").unwrap_or("Python").to_string();
-                let sc = self.script_ctx();
+                let mut sc = self.script_ctx();
+                if let Some(t) = &self.bridge.txn {
+                    sc.path = t.path.clone();
+                    if let Some(sel) = &t.selection {
+                        sc.selection = sel.clone();
+                    }
+                }
                 let r = if let Some(t) = self.bridge.txn.as_mut() {
-                    let r = varstotas_script::eval_json(&mut self.doc.model, &sc, &code, &vars);
-                    if r.run.changed {
-                        t.changed = true;
-                        self.doc.touch();
+                    let r = varstotas_script::eval_json(&mut t.model, &sc, &code, &vars);
+                    t.changed |= r.run.changed;
+                    if let Some(sel) = &r.run.selection {
+                        t.selection = Some(sel.clone());
                     }
                     Some(r)
                 } else {
@@ -244,13 +321,14 @@ impl VarstotasApp {
                 let Some(r) = r else {
                     return done(Err(self.doc.last_error.take().unwrap_or_else(|| "script failed".into())));
                 };
-                if let Some(sel) = r.run.selection.clone() {
+                if !in_txn && let Some(sel) = r.run.selection.clone() {
                     self.doc.set_selection(sel);
                 }
                 done(match r.run.error {
                     Some(e) if r.run.output.is_empty() => Err(e),
                     Some(e) => Err(format!("{}{e}", r.run.output)),
-                    None => Ok(json!({ "value": r.value, "output": r.run.output, "changed": r.run.changed })),
+                    None => Ok(json!({ "value": r.value, "output": r.run.output, "changed": r.run.changed }),
+                    ),
                 })
             }
             "begin" => {
@@ -258,25 +336,22 @@ impl VarstotasApp {
                     return done(Err("an operation is already open".into()));
                 }
                 let label = s("label").unwrap_or("Python").to_string();
-                self.bridge.txn = Some(Txn { conn: req.conn, label, before: self.doc.model.clone(), changed: false });
+                self.bridge.txn = Some(Txn { conn: req.conn, label,
+                    model: self.doc.model.clone(),
+                    base_version: self.doc.model_version,
+                    path: self.doc.active_path.clone(),
+                    selection: None,
+                    started: std::time::Instant::now(),
+                    changed: false,
+                });
                 done(Ok(Value::Null))
             }
             "commit" => match self.bridge.txn.take() {
-                Some(t) => {
-                    if t.changed {
-                        self.doc.record_step(&t.label, t.before);
-                    }
-                    done(Ok(json!(t.changed)))
-                }
+                Some(t) => done(t.commit(&mut self.doc).map(|changed| json!(changed))),
                 None => done(Err("no open operation".into())),
             },
             "abort" | "$disconnect" => {
-                if let Some(t) = self.bridge.txn.take_if(|t| req.method == "abort" || t.conn == req.conn)
-                    && t.changed
-                {
-                    self.doc.model = t.before;
-                    self.doc.touch();
-                }
+                self.bridge.txn.take_if(|t| t.conn == req.conn);
                 done(Ok(Value::Null))
             }
             "undo" | "redo" if in_txn => done(Err("finish the open operation first".into())),
@@ -317,40 +392,71 @@ impl VarstotasApp {
             "screenshot" => {
                 let path = match s("path") {
                     Some(x) => PathBuf::from(x),
-                    None => std::env::temp_dir().join(format!("varstotas-shot-{}.png", self.bridge.calls)),
+                    None => match crate::bridge::random_token() {
+                        Ok(token) => {
+                            std::env::temp_dir().join(format!("varstotas-shot-{token}.png"))
+                        }
+                        Err(e) => return done(Err(e.to_string())),
+                },
                 };
-                self.bridge_png(path, p, ctx, req.reply.clone(), p.get("base64").and_then(Value::as_bool).unwrap_or(false))
+                if !confirmed && path.exists() {
+                    return Reply::confirm(format!("Overwrite the file\n{}", path.display()));
+                }
+                self.bridge_png(path, p, ctx, req.reply.clone(), p.get("base64").and_then(Value::as_bool).unwrap_or(false),
+                )
             }
-            "save" | "export" | "open" | "new" if in_txn => done(Err("finish the open operation first".into())),
+            "save" | "export" | "open" | "new" if in_txn => {
+                done(Err("finish the open operation first".into()))
+            }
             "save" => {
                 let path = match s("path") {
                     Some(x) => PathBuf::from(x),
                     None => match self.doc.path.clone() {
                         Some(x) => x,
-                        None => return done(Err("the document has no file yet: pass a path".into())),
+                        None => {
+                            return done(Err("the document has no file yet: pass a path".into()));
+                        }
                     },
                 };
                 if !confirmed && path.exists() && self.doc.path.as_deref() != Some(&path) {
-                    return Reply::Confirm(format!("Save the model over the existing file\n{}", path.display()));
+                    return Reply::confirm(format!("Save the model over the existing file\n{}", path.display()));
                 }
                 if self.save_to(&path) { done(Ok(json!(path.to_string_lossy()))) } else { done(Err(self.flash_text("save failed"))) }
             }
             "export" => {
-                let Some(path) = s("path").map(PathBuf::from) else { return done(Err("missing path".into())) };
-                if !confirmed && path.exists() {
-                    return Reply::Confirm(format!("Overwrite the file\n{}", path.display()));
+                let Some(path) = s("path").map(PathBuf::from) else { return done(Err("missing path".into()));
+                };
+                let files = varstotas_kernel::io::export_bundle(&self.doc.model, &path);
+                let collisions: Vec<_> = files
+                    .as_ref()
+                    .map(|files| {
+                        files
+                            .iter()
+                            .map(|(p, _)| p)
+                            .filter(|p| p.exists())
+                            .collect()
+                    })
+                    .unwrap_or_else(|| if path.exists() { vec![&path] } else { vec![] });
+                if !confirmed && !collisions.is_empty() {
+                    let message = format!("Overwrite existing export files\n{}", collisions.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
+                    let paths = collisions.iter().map(|p| (*p).clone()).collect();
+                    return Reply::Confirm(message, Some(paths));
                 }
                 let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
                 if ext == "png" {
                     return self.bridge_png(path, p, ctx, req.reply.clone(), false);
                 }
-                if !["stl", "obj", "dxf", "glb", "3mf", "dae", "ply", "json", "csv", "svg", "pdf"].contains(&ext.as_str()) {
+                if !["stl", "obj", "dxf", "glb", "3mf", "dae", "ply", "json", "csv", "svg", "pdf",
+                ].contains(&ext.as_str()) {
                     return done(Err(format!("unknown export format .{ext}")));
                 }
                 self.flash = None;
-                self.export_to(&path);
+                let empty_approved = HashSet::new();
+                self.export_to_approved(&path, Some(approved.unwrap_or(&empty_approved)));
                 match &self.flash {
-                    Some((m, _, _)) if m.starts_with("Exported") => done(Ok(json!(path.to_string_lossy()))),
+                    Some((m, _, _)) if m.starts_with("Exported") => {
+                        done(Ok(json!(path.to_string_lossy())))
+                    }
                     _ => done(Err(self.flash_text("export failed"))),
                 }
             }
@@ -360,14 +466,15 @@ impl VarstotasApp {
                         Some(x) if req.method == "open" => format!("Open {x}"),
                         _ => "Start a new document".into(),
                     };
-                    return Reply::Confirm(format!("{what}, discarding the unsaved changes of “{}”", self.doc.display_name()));
+                    return Reply::confirm(format!("{what}, discarding the unsaved changes of “{}”", self.doc.display_name()));
                 }
                 if req.method == "new" {
                     let t = self.prefs.template.unwrap_or(crate::templates::Template::ArchitecturalMm);
                     self.new_from_template(t);
                     return done(Ok(Value::Null));
                 }
-                let Some(path) = s("path").map(PathBuf::from) else { return done(Err("missing path".into())) };
+                let Some(path) = s("path").map(PathBuf::from) else { return done(Err("missing path".into()));
+                };
                 self.flash = None;
                 self.open_path(&path);
                 if self.doc.path.as_deref() == Some(&path) {
@@ -385,13 +492,23 @@ impl VarstotasApp {
         self.flash.as_ref().map_or_else(|| default.to_string(), |f| f.0.clone())
     }
 
-    fn bridge_png(&mut self, path: PathBuf, p: &Value, ctx: &egui::Context, reply: Sender<Result<Value, String>>, base64: bool) -> Reply {
+    fn bridge_png(&mut self, path: PathBuf, p: &Value, ctx: &egui::Context, reply: Sender<Result<Value, String>>, base64: bool,
+    ) -> Reply {
+        if !self.bridge.shots.is_empty() {
+            return Reply::Done(Err("too many pending screenshots".into()));
+        }
+        if std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Reply::Done(Err("refusing to overwrite a symbolic link".into()));
+        }
         let ppp = ctx.pixels_per_point();
         let vp = self.viewport.size() * ppp;
-        let dim = |k: &str, d: f32| p.get(k).and_then(Value::as_u64).map_or(d.round() as u32, |v| v as u32).clamp(16, 8192);
+        let dim = |k: &str, d: f32| {
+            p.get(k).and_then(Value::as_u64).map_or(d.round() as u32, |v| v.clamp(16, 4096) as u32).clamp(16, 4096)
+        };
         let size = [dim("width", vp.x.max(16.0)), dim("height", vp.y.max(16.0))];
         self.export_png_to(path.clone(), size, ExportContent::default());
-        self.bridge.shots.push(Shot { path, base64, reply });
+        self.bridge.shots.push(Shot { path, base64, reply,
+        });
         ctx.request_repaint();
         Reply::Later
     }
@@ -401,11 +518,11 @@ impl VarstotasApp {
         json!({ "eye": jvec(c.eye), "target": jvec(c.target), "up": jvec(c.up), "fov": c.fov_y_deg, "parallel": c.ortho })
     }
 
-    fn bridge_info(&self) -> Value {
-        let m = &self.doc.model;
+    fn bridge_info(&self, m: &Model) -> Value {
         let root = m.root_mesh();
         let id = |r| varstotas_script::entity_id(&self.doc.active_path, r);
-        let bounds = m.bounds().map(|b| json!({ "min": jvec(b.min), "max": jvec(b.max), "size": jvec(b.max - b.min) }));
+        let bounds = m.bounds().map(|b| json!({ "min": jvec(b.min), "max": jvec(b.max), "size": jvec(b.max - b.min) }),
+        );
         let groups: Vec<Value> = root
             .instances
             .iter()
@@ -448,7 +565,10 @@ impl VarstotasApp {
             self.flash_error("A Python script is already running");
             return;
         }
-        let py = std::env::var("VARSTOTAS_PYTHON").unwrap_or_else(|_| if cfg!(windows) { "python".into() } else { "python3".into() });
+        let py = std::env::var("VARSTOTAS_PYTHON").unwrap_or_else(|_| {
+            if cfg!(windows) { "python".into() } else { "python3".into()
+            }
+        });
         let mut pypath = crate::bridge::python_dir().map(|d| d.into_os_string()).unwrap_or_default();
         if let Some(old) = std::env::var_os("PYTHONPATH").filter(|v| !v.is_empty()) {
             pypath.push(if cfg!(windows) { ";" } else { ":" });
@@ -468,6 +588,7 @@ impl VarstotasApp {
         if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             cmd.current_dir(dir);
         }
+        varstotas_script::process::isolate_group(&mut cmd);
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
@@ -477,11 +598,30 @@ impl VarstotasApp {
                 return;
             }
         };
-        let (tx, rx) = channel();
-        let pipe = |r: Box<dyn std::io::Read + Send>, err: bool, tx: Sender<(bool, String)>| {
+        let (tx, rx) = sync_channel(128);
+        let exceeded = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let pipe = |r: Box<dyn std::io::Read + Send>, err: bool, tx: std::sync::mpsc::SyncSender<(bool, String)>| {
+            let exceeded = exceeded.clone();
             std::thread::spawn(move || {
-                for l in std::io::BufReader::new(r).lines().map_while(Result::ok) {
-                    let _ = tx.send((err, l));
+                let mut reader = std::io::BufReader::new(r.take(1024 * 1024 + 1));
+                let mut total = 0usize;
+                loop {
+                    let mut bytes = Vec::new();
+                    let Ok(n) = reader.by_ref().take(65537).read_until(b'\n', &mut bytes) else {
+                        break;
+                    };
+                    if n == 0 {
+                        break;
+                    }
+                    total += n;
+                    if total > 1024 * 1024
+                        || n > 65536
+                        || tx.try_send((err, String::from_utf8_lossy(&bytes).trim_end().to_string()))
+                            .is_err()
+                    {
+                        exceeded.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
                 }
             });
         };
@@ -493,24 +633,35 @@ impl VarstotasApp {
         }
         self.console.open = true;
         self.console.push(LogLine::Input(format!("python {name}")));
-        self.bridge.python = Some(PythonRun { child, out: rx, name, text: String::new() });
+        self.bridge.python = Some(PythonRun { child, out: rx, name, text: String::new(),
+            started: std::time::Instant::now(),
+            exceeded,
+        });
     }
 
     pub(crate) fn stop_python(&mut self) {
         if let Some(p) = self.bridge.python.as_mut() {
-            let _ = p.child.kill();
+            varstotas_script::process::terminate(&mut p.child);
         }
     }
 
     fn python_tick(&mut self, ctx: &egui::Context) {
-        let Some(p) = self.bridge.python.as_mut() else { return };
+        let Some(p) = self.bridge.python.as_mut() else { return;
+        };
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
-        for (err, l) in p.out.try_iter() {
+        if p.started.elapsed().as_secs() > 600
+            || p.exceeded.load(std::sync::atomic::Ordering::Relaxed)
+            || p.text.len() > 1024 * 1024
+        {
+            varstotas_script::process::terminate(&mut p.child);
+        }
+        for (err, l) in p.out.try_iter().take(128) {
             p.text.push_str(&l);
             p.text.push('\n');
             self.console.push(if err { LogLine::Error(l) } else { LogLine::Output(l) });
         }
-        let Ok(Some(status)) = p.child.try_wait() else { return };
+        let Ok(Some(status)) = p.child.try_wait() else { return;
+        };
         // Output still in the pipes arrives after the exit: collect it.
         std::thread::sleep(std::time::Duration::from_millis(20));
         for (err, l) in p.out.try_iter() {
@@ -540,5 +691,34 @@ mod tests {
         assert_eq!(super::base64(b"fo"), "Zm8=");
         assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
         assert_eq!(super::base64(&[0xff, 0xfe, 0x00, 0x7f]), "//4Afw==");
+    }
+}
+
+#[cfg(test)]
+mod transaction_security_tests {
+    use super::*;
+    use crate::document::Document;
+    fn stage(doc: &Document) -> Txn {
+        Txn { conn: 1, label: "Staged".into(), model: doc.model.clone(), base_version: doc.model_version,
+            path: doc.active_path.clone(), selection: None, started: std::time::Instant::now(), changed: true }
+    }
+    #[test]
+    fn transaction_commit_preserves_intervening_ui_edit() {
+        let mut doc = Document::new(); let mut t = stage(&doc);
+        t.model.add_material("agent", [1.0; 4]);
+        doc.commit("UI", |m| { m.add_material("user", [1.0; 4]); });
+        assert!(t.commit(&mut doc).is_err());
+        assert!(doc.model.materials.values().any(|m| m.name == "user"));
+        assert!(!doc.model.materials.values().any(|m| m.name == "agent"));
+        assert_eq!(doc.history.undo_label(), Some("UI"));
+    }
+    #[test]
+    fn successful_transaction_is_one_undo_step() {
+        let mut doc = Document::new(); let mut t = stage(&doc);
+        t.model.add_material("agent", [1.0; 4]);
+        assert!(doc.model.materials.is_empty());
+        assert!(t.commit(&mut doc).unwrap());
+        assert_eq!(doc.history.undo_label(), Some("Staged"));
+        doc.undo(); assert!(doc.model.materials.is_empty());
     }
 }

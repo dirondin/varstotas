@@ -19,7 +19,7 @@ Rules:
 - One run is **one Undo step** ("Script"). If the script fails with an error, the model is not changed. A message with the line and position is written to the log.
 - Coordinates are **world, in millimetres**. Numbers can be written as integers (`1000`) or fractions; lengths — as a string with units: `"1.2m"`, `"30cm"`, `"6\""`.
 - New geometry is created in the **current context**: the group that was open when the script started, or the one entered through `enter(g)`.
-- The script is stopped after 30 seconds of running (an infinite loop will not hang the application).
+- Rhai execution has a 30-second deadline and operation/allocation limits. Downloads share the deadline. Native geometry calls are synchronous and cannot be forcibly interrupted; this is not an OS sandbox.
 - `print(x)` writes to the log. The value of the last expression is printed too.
 - The Rhai string methods `trim()`, `to_upper()` and the like change the string in place and return `()`: write `s.trim(); if s == "" { … }`.
 - Plugins (custom menu items, parameter dialogs, point picking, importers and exporters) are described in `docs/PLUGINS.md`.
@@ -145,20 +145,20 @@ print(m.bounds(m.groups())["size"])   # vec3(1200, 800, 30)
 - A call outside `operation()` is a separate Undo step, "Python".
 - `m.rhai(code, **vars)` runs Rhai code in a single call; keyword arguments become variables. This is faster for big loops.
 - Application: `m.info()` (document summary), `m.undo()` / `m.redo()`, `m.view("iso" | "top" | … | "zoom_extents")`, `m.camera(eye=…, target=…, parallel=True)`, `m.screenshot(path=None, width=…, height=…)` (path to a PNG), `m.save(path=None)`, `m.export(path)` (format by extension: stl, obj, dxf, glb, 3mf, csv, svg, pdf, png), `m.open(path)`, `m.new()`.
-- Before destructive actions the application shows an "External script" dialog, and a refusal raises an error. These are: saving over another existing file, exporting over a file, and also opening a file or a new document when there are unsaved changes.
+- Before destructive actions the application shows an "External script" dialog, and a refusal raises an error. These are: saving over another existing file, exporting over a file (including OBJ/DAE materials and textures), replacing a screenshot, and also opening a file or a new document when there are unsaved changes.
 
 Example — `examples/scripts/bookshelf.py`.
 
 ## Bridge (protocol)
 The application listens only on `127.0.0.1`, on a random port. The port and a random token are written to `~/.varstotas/bridge.json` (permissions 0600). The bridge can be disabled with the `VARSTOTAS_NO_BRIDGE=1` variable.
 
-A request is a JSON line `{"id": 1, "token": "…", "method": "…", "params": {…}}`. The token is needed in the first request of a connection. The reply: `{"id": 1, "result": …}` or `{"id": 1, "error": {"message": "…"}}`. The same JSON is accepted as an HTTP `POST /rpc`, with the token in the body or in the `Authorization: Bearer …` header. Requests from a browser (with an `Origin` header) are rejected.
+A request is a JSON line `{"id": 1, "token": "…", "method": "…", "params": {…}}`. The token is needed in the first request of a connection. The reply: `{"id": 1, "result": …}` or `{"id": 1, "error": {"message": "…"}}`. The same JSON is accepted as an HTTP `POST /rpc`, with a required `Authorization: Bearer …` header (validated before reading the body). Requests from a browser (with an `Origin` header) are rejected.
 
 | Method | Parameters → result |
 |---|---|
 | `hello` | → `{app, version, api}` |
 | `eval` | `code`, `vars` (JSON), `label` → `{value, output, changed}`; entities — `{"$entity": id, "kind"}`, vectors — `{"$vec": [x, y, z]}` (passed the same way in `vars`) |
-| `begin` / `commit` / `abort` | an operation (one Undo step); if the connection closes with an open operation, it is rolled back |
+| `begin` / `commit` / `abort` | an operation (one Undo step); connection-owned staged model; closing or aborting discards it; commit rejects concurrent document/context changes |
 | `info`, `docs` | document summary; this reference |
 | `undo`, `redo`, `view`, `camera`, `screenshot` (`path`, `width`, `height`, `base64`) | |
 | `save`, `export`, `open`, `new` | with the user's confirmation (see above) |
@@ -178,3 +178,29 @@ Tools:
 - `set_view`;
 - `undo`, `redo`;
 - `save`, `export`, `open`, `new_document` — marked as destructive, the application asks the user.
+
+## Trust and execution limits
+
+`ScriptCtx::default()` exposes geometry only. Document generators (including automatic previews),
+component scripts and every bridge/MCP `eval` run without `read_text`, `write_text`, `file_exists`,
+`list_files`, `list_dirs`, `fetch_text` or `fetch_file`. Nested generators cannot inherit host IO
+from a trusted caller. Manually running a local script in the console or File → Run Script,
+and invoking an installed plugin, enables host IO explicitly: run only code you trust there.
+Python scripts and plugins run as the current user; they are not isolated by OS permissions.
+Undo and script-error rollback cover the model, never external file writes or network effects
+of trusted code. File tasks from agents use the dedicated `save`, `export`, `open` methods.
+
+Rhai limits: source 1 MiB, strings 8 MiB, arrays 100,000 elements, maps 10,000 entries,
+5 million operations, 128 call levels, console output 1 MiB. Formula engines use smaller limits.
+HTTP(S) downloads disable curl configuration and non-HTTP schemes/redirects, cap output at
+256 MiB, and time out within 60 seconds or the remaining script deadline. Material-source
+Python calls have a 60-second limit and 8 MiB stdout; interactive Python scripts have a
+10-minute limit and bounded output. Unix children run in a process group that is terminated
+on cancellation/timeout. On Windows descendant process termination is not guaranteed;
+pipe waits are bounded but this is not a replacement for a Windows Job Object.
+
+Bridge requests are limited to 1 MiB, 16 concurrent connections and a 64-request queue.
+Socket reads/writes time out after 10 seconds; transactions expire after 5 minutes.
+`begin` works on a private copy, visible to its connection; the viewport/live model changes
+only on `commit`. Other connections cannot mutate the document until the transaction ends.
+A concurrent edit in the UI makes commit fail rather than overwrite that edit.

@@ -68,3 +68,21 @@ Tool.overlay() ─→ Overlay3d + 2D markers ──→ Renderer.render → egui 
 2. `cargo build`, `cargo test`, `cargo clippy` — green before a commit; UI changes also pass their `qa/scripts/` regressions (`qa/run_all.sh <name>`).
 3. The kernel is covered by unit tests for every operation (especially face topology).
 4. Every UI text comes from `locales/<lang>.ftl` by key (`tr!`), see `LOCALIZATION.md`.
+
+## Security boundaries (2026-10-22)
+
+`varstotas_script::ScriptCtx` adds `trusted_io: bool` (default false). Only explicit local
+script/plugin entry points opt in. Document generators/rigs and bridge evaluation always use
+false. `script::network` centralizes HTTP(S)-only bounded downloads; `script::process`
+provides cancellation, output limits and Unix process-group cleanup, not OS permission isolation.
+
+`kernel::io::{read_limited, resource_path, validate_model}` bound file reads, confine external
+assets to the import directory (canonical paths, symlinks included), and validate native model
+graphs before rebuilding caches. `def_bounds` memoizes shared definitions and detects cycles.
+`io::{export_bundle, write_bundle}` enumerate multi-file output before any writes and refuse
+replacement unless the output path was explicitly approved. `io::atomic_write` uses exclusive temporary
+files and rename for native saves and bridge credentials; parent directories must be trusted.
+
+Bridge transactions own a staged Model and source document version/context. Only the owning
+connection can mutate/commit/abort them. Commit detects intervening UI edits. Transport uses
+CSPRNG tokens, bounded clients/queues/lines/bodies and header authentication before body reads.

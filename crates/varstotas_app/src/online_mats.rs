@@ -186,10 +186,6 @@ pub fn embeddable(bytes: Vec<u8>, file: &str) -> Result<(Vec<u8>, String), Strin
     Ok((out, format!("{stem}.png")))
 }
 
-fn curl() -> &'static str {
-    if cfg!(windows) { "curl.exe" } else { "curl" }
-}
-
 thread_local! {
     /// This thread's cancel flag (a 3D Library download): `fetch` stops curl when it is set.
     static CANCEL: std::cell::RefCell<Option<Arc<std::sync::atomic::AtomicBool>>> = const { std::cell::RefCell::new(None) };
@@ -206,50 +202,7 @@ fn cancelled() -> bool {
 
 /// GET `url` with the system curl (follows redirects; fails on HTTP errors).
 pub fn fetch(url: &str) -> Result<Vec<u8>, String> {
-    use std::io::Read;
-    if cancelled() {
-        return Err("cancelled".into());
-    }
-    let mut child = std::process::Command::new(curl())
-        .args(["-sSfL", "--max-time", "600", "--retry", "2", "--user-agent", "Varstotas"]) // i18n-ignore
-        .arg(url)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("curl: {e}"))?;
-    // Read the output in threads (a pipe fills up), watch the cancel flag meanwhile.
-    let (mut so, mut se) = (child.stdout.take(), child.stderr.take());
-    let out = std::thread::spawn(move || {
-        let mut b = Vec::new();
-        if let Some(s) = so.as_mut() {
-            let _ = s.read_to_end(&mut b);
-        }
-        b
-    });
-    let err = std::thread::spawn(move || {
-        let mut b = Vec::new();
-        if let Some(s) = se.as_mut() {
-            let _ = s.read_to_end(&mut b);
-        }
-        b
-    });
-    let status = loop {
-        if cancelled() {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("cancelled".into());
-        }
-        match child.try_wait() {
-            Ok(Some(st)) => break st,
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-            Err(e) => return Err(format!("curl: {e}")),
-        }
-    };
-    let (out, err) = (out.join().unwrap_or_default(), err.join().unwrap_or_default());
-    if !status.success() {
-        return Err(String::from_utf8_lossy(&err).trim().to_string());
-    }
-    Ok(out)
+    varstotas_script::network::fetch(url, &[], Duration::from_secs(60), cancelled)
 }
 
 /// `~/.varstotas/cache/online`.

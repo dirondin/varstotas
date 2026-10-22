@@ -35,7 +35,8 @@ pub fn call(p: &Plugin, func: &str, args: Vec<(&str, Value)>) -> Result<Value, S
             let names: Vec<&str> = args.iter().map(|(k, _)| *k).collect();
             let call = format!("{src}\n{func}({})\n", names.join(", "));
             let vars: Map<String, Value> = args.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
-            let ctx = varstotas_script::ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(std::time::Duration::from_secs(600)) };
+            let ctx = varstotas_script::ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(std::time::Duration::from_secs(60)),
+                trusted_io: true};
             let r = varstotas_script::eval_json(&mut varstotas_kernel::Model::new(), &ctx, &call, &vars);
             for l in r.run.output.lines() {
                 log::info!("{}: {l}", p.name);
@@ -46,7 +47,6 @@ pub fn call(p: &Plugin, func: &str, args: Vec<(&str, Value)>) -> Result<Value, S
             }
         }
         Lang::Python => {
-            use std::io::Write;
             use std::process::{Command, Stdio};
             let py = std::env::var("VARSTOTAS_PYTHON").unwrap_or_else(|_| if cfg!(windows) { "python".into() } else { "python3".into() });
             let input = Value::Object(args.into_iter().map(|(k, v)| (k.to_string(), v)).collect()).to_string();
@@ -58,11 +58,13 @@ pub fn call(p: &Plugin, func: &str, args: Vec<(&str, Value)>) -> Result<Value, S
             if let Some(d) = crate::bridge::python_dir() {
                 cmd.env("PYTHONPATH", d);
             }
-            let mut child = cmd.spawn().map_err(|e| format!("{py}: {e}"))?;
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(input.as_bytes());
-            }
-            let out = child.wait_with_output().map_err(|e| e.to_string())?;
+            let out = varstotas_script::process::output_input(
+                &mut cmd,
+                std::time::Duration::from_secs(60),
+                8 * 1024 * 1024,
+                || false,
+                Some(input.into_bytes()),
+            )?;
             let stdout = String::from_utf8_lossy(&out.stdout);
             let mut lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
             let last = lines.pop();

@@ -123,7 +123,7 @@ pub fn import_ply(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_ply_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let data = std::fs::read(path)?;
+    let data = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     add_ply(model, &data, &name, opts)
 }

@@ -19,8 +19,16 @@ wait 5
 screenshot shots/bridge_confirm.bmp
 action bridge_confirm deny
 wait 5
+# Screenshot destination exists: deny replacing it.
+expect bridge_confirm=1
+action bridge_confirm deny
+wait 5
+# OBJ destination is new, but its MTL exists: deny replacing the sidecar.
+expect bridge_confirm=1
+action bridge_confirm deny
+wait 5
 expect bridge_confirm=0
-expect bridge checks: 21 ok
+expect bridge checks: 33 ok
 expect undo=Some("Agent")
 expect defs=3 model_faces=32
 screenshot shots/bridge_check.bmp

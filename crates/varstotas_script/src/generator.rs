@@ -63,6 +63,11 @@ pub(crate) fn register_math(e: &mut rhai::Engine) {
 pub(crate) fn expr_engine() -> rhai::Engine {
     let mut e = rhai::Engine::new();
     e.set_max_operations(100_000);
+    e.set_max_string_size(1024 * 1024);
+    e.set_max_array_size(10_000);
+    e.set_max_map_size(1_000);
+    e.set_max_call_levels(64);
+    e.set_max_expr_depths(64, 64);
     register_math(&mut e);
     e
 }
@@ -115,7 +120,8 @@ fn build(model: &Model, g: &Generator, values: &GenValues) -> Result<Model, Stri
     tmp.materials = model.materials.clone();
     tmp.tags = model.tags.clone();
     tmp.generators = model.generators.clone();
-    let ctx = ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(Duration::from_secs(10)) };
+    let ctx = ScriptCtx { path: Vec::new(), selection: Vec::new(), time_limit: Some(Duration::from_secs(10)),
+        trusted_io: false};
     let src = format!("{}\nbuild(p);\n", g.source);
     DEPTH.set(DEPTH.get() + 1);
     let (run, _) = run_with(&mut tmp, &ctx, &src, vec![("p".into(), rhai::Dynamic::from_map(p))], |_| ());

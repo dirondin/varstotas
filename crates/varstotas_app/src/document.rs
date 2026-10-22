@@ -259,11 +259,6 @@ impl Document {
         self.after_change();
     }
 
-    /// The model was changed in place (outside `commit`): rebuild, prune the selection.
-    pub fn touch(&mut self) {
-        self.after_change();
-    }
-
     /// Record an undo step for changes already made in place since `before`.
     pub fn record_step(&mut self, label: &str, before: Model) {
         self.rig_hook();

@@ -20,7 +20,7 @@ PROTOCOL = "2025-06-18"
 INSTRUCTIONS = (
     "Varstotas is a 3D modeller. Build and edit geometry with run_script (Rhai code; "
     "call api_reference first for the functions). Coordinates are world millimetres, Z is up. "
-    "Each run_script call is one undo step; an error rolls it back. Check results with "
+    "Each run_script call is one undo step; an error rolls back model changes. Host file and network functions are unavailable in run_script. Check results with "
     "model_info and screenshot."
 )
 

@@ -10,10 +10,15 @@ mod native;
 mod obj;
 mod ply;
 mod points;
+mod security;
 mod stl;
 mod threemf;
 mod xml;
 mod zip;
+pub use security::{
+    MAX_MODEL_BYTES, atomic_write, export_bundle, read_limited, resource_path, validate_model,
+    write_bundle, write_bundle_approved,
+};
 
 pub use dae::{add_dae, export_dae, import_dae, import_dae_with, write_dae};
 pub use dxf::{DxfData, add_dxf, export_dxf, import_dxf, import_dxf_with, parse_dxf, write_dxf};

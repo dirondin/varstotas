@@ -114,7 +114,7 @@ pub fn import_stl(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_stl_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let data = std::fs::read(path)?;
+    let data = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     let tris = parse_stl(&data)?;
     let mesh = model.root_mesh_mut();
     let before: HashSet<FaceId> = mesh.faces.keys().collect();

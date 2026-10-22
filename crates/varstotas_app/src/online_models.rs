@@ -569,7 +569,7 @@ fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// absolute).
 fn safe_rel(p: &str) -> Option<PathBuf> {
     let parts: Vec<&str> = p.split(['/', '\\']).filter(|s| !s.is_empty() && *s != ".").collect();
-    (!parts.is_empty() && !parts.contains(&"..") && !parts[0].contains(':')).then(|| parts.iter().collect())
+    (!parts.is_empty() && !parts.contains(&"..") && !parts.iter().any(|s| s.contains(':'))).then(|| parts.iter().collect())
 }
 
 /// The last part of a URL path (decoded spaces), for a file name.

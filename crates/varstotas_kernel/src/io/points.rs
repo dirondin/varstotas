@@ -23,7 +23,9 @@ pub fn parse_points_csv(text: &str) -> Vec<DVec3> {
 /// Import the points of a CSV file into the root: lines through them; when the last point
 /// repeats the first, a closed outline (a face when planar).
 pub fn import_points_csv(model: &mut Model, path: &Path) -> Result<usize, IoError> {
-    let mut pts = parse_points_csv(&std::fs::read_to_string(path)?);
+    let mut pts = parse_points_csv(&String::from_utf8(super::read_limited(path, super::MAX_MODEL_BYTES)?)
+            .map_err(|e| IoError::Format(e.to_string()))?,
+    );
     if pts.len() < 2 {
         return Err(IoError::Format(tr!("kernel-io-no-points-in-display", display = path.display().to_string())));
     }

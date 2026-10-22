@@ -4066,3 +4066,9 @@ template-created = Sukurta iš šablono: { $path }
 template-load-failed = Nepavyko įkelti šablono { $path }: { $error }
 template-folder-label = Šablonų aplankas
 template-folder-tip = Įkelkite čia .vrst modelius, kad galėtumėte pagal juos kurti naujus dokumentus.
+
+app-export-replace-title = Pakeisti eksporto failus?
+app-export-replace-files =
+    Eksportuojant bus pakeisti šie medžiagų arba tekstūrų failai:
+    { $files }
+    Tęsti?

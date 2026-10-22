@@ -4047,3 +4047,9 @@ template-created = Created from template: { $path }
 template-load-failed = Could not load template { $path }: { $error }
 template-folder-label = Templates folder
 template-folder-tip = Place .vrst models here to use them as starting points for new documents.
+
+app-export-replace-title = Replace export files?
+app-export-replace-files =
+    Export will replace these material or texture files:
+    { $files }
+    Continue?

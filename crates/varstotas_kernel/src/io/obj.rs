@@ -180,16 +180,8 @@ fn convex_polygon(positions: &[DVec3], normal: DVec3) -> Option<Vec<usize>> {
 }
 
 pub fn export_obj(model: &Model, path: &Path) -> Result<(), IoError> {
-    let mtl_path = path.with_extension("mtl");
-    let mtl_name = mtl_path.file_name().and_then(|s| s.to_str()).unwrap_or("model.mtl").to_string();
-    let (obj, mtl, textures) = write_obj_with_textures(model, &mtl_name);
-    std::fs::write(path, obj)?;
-    std::fs::write(&mtl_path, mtl)?;
-    let dir = path.parent().unwrap_or(Path::new("."));
-    for (name, bytes) in textures {
-        std::fs::write(dir.join(name), &bytes[..])?;
-    }
-    Ok(())
+    let files = super::export_bundle(model, path).ok_or_else(|| IoError::Format("Invalid export path".into()))?;
+    super::write_bundle(&files, false)
 }
 
 /// Parsed OBJ: polygons (with the index of their `usemtl` name), polylines, `mtllib`
@@ -320,7 +312,8 @@ pub fn import_obj(model: &mut Model, path: &Path) -> Result<(), IoError> {
 /// materials defined in the `mtllib` files become model materials (a material with the same
 /// name and colour is reused; `default` means no material) on the faces' front side.
 pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let text = std::fs::read_to_string(path)?;
+    let text = String::from_utf8(super::read_limited(path, super::MAX_MODEL_BYTES)?)
+        .map_err(|e| IoError::Format(e.to_string()))?;
     let data = parse_obj(&text)?;
     // Material ids per used name.
     let mut mat_of: Vec<Option<MaterialId>> = vec![None; data.mtl_names.len()];
@@ -329,7 +322,9 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
         let mut defs: Vec<MtlMaterial> = Vec::new();
         for lib in &data.mtllibs {
             // A missing or unreadable library leaves its materials out (geometry still loads).
-            if let Ok(t) = std::fs::read_to_string(dir.join(lib)) {
+            if let Ok(t) = super::resource_path(dir, lib)
+                .and_then(|p| super::read_limited(&p, 8 * 1024 * 1024))
+                .and_then(|b| String::from_utf8(b).map_err(std::io::Error::other)) {
                 defs.extend(parse_mtl(&t));
             }
         }
@@ -344,7 +339,8 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
                 model.materials[id].texture = def.texture.clone();
                 // Embed the image when the file is there (faces get placements fitted to `vt`).
                 if let Some(t) = &def.texture
-                    && let Ok(bytes) = std::fs::read(dir.join(t))
+                    && let Ok(bytes) = super::resource_path(dir, t)
+                        .and_then(|p| super::read_limited(&p, 128 * 1024 * 1024))
                     && crate::texture::image_dimensions(&bytes).is_some()
                 {
                     let name = Path::new(t).file_name().and_then(|n| n.to_str()).unwrap_or(t).to_string();

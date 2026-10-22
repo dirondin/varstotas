@@ -119,8 +119,8 @@ impl<'a> Doc<'a> {
         let file = from.child("ref").map(|r| r.text.trim().to_string()).unwrap_or_else(|| from.text.trim().to_string());
         let file = file.trim_start_matches("file://").replace("%20", " ");
         let p = Path::new(&file);
-        let path = if p.is_absolute() { p.to_path_buf() } else { self.dir?.join(p) };
-        let bytes = std::fs::read(&path).ok().or_else(|| std::fs::read(self.dir?.join(p.file_name()?)).ok())?;
+        let path = super::resource_path(self.dir?, &file).ok()?;
+        let bytes = super::read_limited(&path, 128 * 1024 * 1024).ok()?;
         Some((bytes, p.file_name()?.to_string_lossy().to_string()))
     }
 
@@ -272,7 +272,7 @@ pub fn import_dae(model: &mut Model, path: &Path) -> Result<(), IoError> {
 }
 
 pub fn import_dae_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> Result<(), IoError> {
-    let text = std::fs::read(path)?;
+    let text = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     add_dae(model, &String::from_utf8_lossy(&text), path.parent(), opts)
 }
 
@@ -515,11 +515,7 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
 
 /// Write `path` (`.dae`) and its images next to it.
 pub fn export_dae(model: &Model, path: &Path) -> Result<(), IoError> {
-    let (text, files) = write_dae(model);
-    std::fs::write(path, text)?;
-    let dir = path.parent().unwrap_or(Path::new("."));
-    for (name, bytes) in files {
-        std::fs::write(dir.join(name), &bytes[..])?;
-    }
-    Ok(())
+    let files = super::export_bundle(model, path)
+        .ok_or_else(|| IoError::Format("Invalid export path".into()))?;
+    super::write_bundle(&files, false)
 }

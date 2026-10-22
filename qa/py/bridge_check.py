@@ -48,6 +48,32 @@ check("rhai with vars", m.rhai("bounds(groups()).size.z + k", k=1) == 719.0)
 m.undo()
 check("undo", len(m.groups()) == 1)
 
+# Security: transaction ownership and staged state, then filesystem capability denial.
+other = varstotas.connect()
+m.request("begin", label="Isolated")
+m.box(ORIGIN, 2, 2, 2)
+check("owner sees staged model", m.info()["root"]["groups"] == 2)
+check("other sees live model", other.info()["root"]["groups"] == 1)
+for method, params in [("eval", {"code": "box(ORIGIN,1,1,1)"}), ("commit", {}), ("abort", {}), ("begin", {})]:
+    try:
+        other.request(method, **params)
+        check("foreign " + method + " denied", False)
+    except varstotas.VarstotasError as e:
+        check("foreign " + method + " denied", "another connection" in str(e))
+m.request("abort")
+check("staged abort preserves live model", m.info()["root"]["groups"] == 1)
+other.close()
+marker = os.path.join(tempfile.gettempdir(), "varstotas_bridge_security_marker")
+open(marker, "w").write("keep")
+for code in ['write_text(%s, "bad"); throw "after"' % json.dumps(marker),
+             'read_text(%s)' % json.dumps(marker), 'fetch_text("file:///etc/hosts")']:
+    try:
+        m.rhai(code)
+        check("bridge host IO denied", False)
+    except varstotas.VarstotasError:
+        check("bridge host IO denied", open(marker).read() == "keep")
+os.remove(marker)
+
 # Camera, screenshot.
 cam = m.view("top")
 check("top view", abs(cam["eye"][2] - cam["target"][2]) > 0)
@@ -78,6 +104,24 @@ try:
     check("export denied", False)
 except varstotas.VarstotasError as e:
     check("export denied", "declined" in str(e) and open(target).read() == "old")
+
+# Screenshot overwrite and OBJ sidecars must use the same confirmation boundary.
+with tempfile.TemporaryDirectory(prefix="varstotas-security-") as folder:
+    shot_path = os.path.join(folder, "existing.png")
+    open(shot_path, "w").write("keep screenshot")
+    try:
+        m.screenshot(path=shot_path, width=64, height=64)
+        check("screenshot overwrite denied", False)
+    except varstotas.VarstotasError as e:
+        check("screenshot overwrite denied", "declined" in str(e) and open(shot_path).read() == "keep screenshot")
+    obj = os.path.join(folder, "new.obj")
+    mtl = os.path.join(folder, "new.mtl")
+    open(mtl, "w").write("keep sidecar")
+    try:
+        m.export(obj)
+        check("sidecar overwrite denied", False)
+    except varstotas.VarstotasError as e:
+        check("sidecar overwrite denied", "declined" in str(e) and open(mtl).read() == "keep sidecar" and not os.path.exists(obj))
 
 # The MCP server over stdio.
 mcp = os.path.join(os.path.dirname(varstotas.__file__), "varstotas_mcp.py")

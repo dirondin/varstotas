@@ -527,22 +527,31 @@ impl Model {
 
     /// Local bounds of a definition including nested instances.
     pub fn def_bounds(&self, d: DefId) -> Option<Aabb> {
-        self.def_bounds_depth(d, 0)
-    }
-
-    fn def_bounds_depth(&self, d: DefId, depth: usize) -> Option<Aabb> {
-        if depth > 64 {
+        fn visit(
+            m: &Model, d: DefId, depth: usize,
+            cache: &mut HashMap<DefId, Option<Aabb>>,
+            active: &mut HashSet<DefId>,
+        ) -> Option<Aabb> {
+        if depth > 64 || active.contains(&d) {
             return None;
+            }
+            if let Some(b) = cache.get(&d) {
+                return *b;
         }
-        let mesh = &self.defs.get(d)?.mesh;
+        let mesh = &m.defs.get(d)?.mesh;
+            active.insert(d);
         let mut b = mesh.bounds();
         for inst in mesh.instances.values() {
-            if let Some(cb) = self.def_bounds_depth(inst.def, depth + 1) {
+            if let Some(cb) = visit(m, inst.def, depth + 1, cache, active) {
                 let wb = cb.transformed(&inst.transform);
                 b = Some(b.map_or(wb, |x| x.union(&wb)));
             }
         }
-        b
+            active.remove(&d);
+            cache.insert(d, b);
+            b
+        }
+        visit(self, d, 0, &mut HashMap::new(), &mut HashSet::new())
     }
 
     /// Closest visible face hit, descending into visible instances.
