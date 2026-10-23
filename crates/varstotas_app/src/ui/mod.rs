@@ -17,6 +17,7 @@ pub mod mat_library;
 pub mod menu;
 pub mod model_info;
 pub mod preferences;
+pub mod printing;
 pub mod model_library;
 pub mod online_mats;
 pub mod realistic;
@@ -146,3 +147,5 @@ pub fn swatch(ui: &mut Ui, color: Color32, size: f32, selected: bool) -> Respons
 }
 
 pub mod tutorial;
+
+pub mod printing_tools;

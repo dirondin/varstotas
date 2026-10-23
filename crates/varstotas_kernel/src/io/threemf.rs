@@ -29,9 +29,7 @@ pub(super) fn xml_escape(s: &str) -> String {
 }
 
 pub(super) fn num(x: f64) -> String {
-    let s = format!("{:.4}", crate::geom::snap(x));
-    let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s == "-0" || s.is_empty() { "0".into() } else { s.into() }
+    if x==0. {"0".into()}else{x.to_string()}
 }
 
 /// The `3D/3dmodel.model` XML of the visible model.
@@ -55,7 +53,7 @@ pub fn write_3mf_model(model: &Model) -> String {
         for t in f.positions.as_chunks::<3>().0 {
             let mut ids = [0; 3];
             for (k, p) in t.iter().enumerate() {
-                let key = [p.x, p.y, p.z].map(|c| crate::geom::snap(c).to_bits());
+                let key = [p.x, p.y, p.z].map(|c| if c==0. {0}else{c.to_bits()});
                 let n = verts.len();
                 ids[k] = *index.entry(key).or_insert_with(|| {
                     verts.push([p.x, p.y, p.z]);
@@ -80,9 +78,15 @@ pub fn write_3mf_model(model: &Model) -> String {
     }
     let mut s = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<model unit=\"millimeter\" xml:lang=\"en-US\" \
-         // i18n-ignore-next
-         xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n <metadata name=\"Application\">Varstotas</metadata>\n <resources>\n",
+         xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n <metadata name=\"Application\">Varstotas</metadata>\n",
     );
+    // Standard Core metadata names (3MF Core §3.4.1), escaped as XML text.
+    let credits:Vec<_>=model.attributions().into_iter().map(|a|a.line()).collect();
+    let description=[model.metadata.text.clone(),credits.join("\n")].into_iter().filter(|s|!s.is_empty()).collect::<Vec<_>>().join("\n\n");
+    for (name,value) in [("Title",model.defs[model.root].name.as_str()),("Description",description.as_str()),("LicenseTerms",model.metadata.license.as_str())] {
+        if !value.is_empty(){let _=writeln!(s," <metadata name=\"{name}\">{}</metadata>",xml_escape(value));}
+    }
+    s.push_str(" <resources>\n");
     let has_mats = !mat_ids.is_empty();
     if has_mats {
         s.push_str("  <basematerials id=\"1\">\n");

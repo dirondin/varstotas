@@ -1,8 +1,8 @@
 # Help → User Guide (real mouse and keys).
 wait 10
-raw click 456 -105
+action click_spot menu:Help
 wait 5
-raw click 481 -54
+action click_spot menu:UserGuide
 wait 5
 expect guide=(true Start "")
 screenshot shots/guide_start.bmp

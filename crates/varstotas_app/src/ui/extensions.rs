@@ -87,6 +87,8 @@ impl VarstotasApp {
 
     /// Extensions menu: plugins by their menu paths, then the folder commands.
     pub(crate) fn extensions_menu(&mut self, ui: &mut Ui) {
+        self.cmd_item_as(ui, super::commands::Cmd::PrintCheck, &tr!("print-title"));
+        ui.separator();
         let entries: Vec<(usize, Vec<String>)> = self
             .plugins
             .list

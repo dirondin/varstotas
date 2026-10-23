@@ -64,7 +64,24 @@ pub fn triangulate_face(mesh: &Mesh, f: FaceId) -> Vec<[DVec3; 3]> {
     let h2: Vec<Vec<DVec2>> = holes3.iter().map(|h| h.iter().map(|p| pr.to2(*p)).collect()).collect();
     let hr: Vec<&[DVec2]> = h2.iter().map(|h| h.as_slice()).collect();
     let all: Vec<DVec3> = outer3.iter().chain(holes3.iter().flatten()).copied().collect();
-    triangulate(&o2, &hr).into_iter().map(|t| [all[t[0]], all[t[1]], all[t[2]]]).collect()
+    let mut triangles=triangulate(&o2,&hr);
+    // Ear clipping may discard collinear contour vertices. Preserve them in the emitted
+    // surface so adjacent faces (including print cut caps) have matching edge subdivisions.
+    // Otherwise a topologically closed CAD mesh exports T-junctions into STL/3MF.
+    for (vertex,p) in all.iter().enumerate() {
+        let mut refined=Vec::with_capacity(triangles.len());
+        for t in triangles {
+            if t.contains(&vertex) {refined.push(t);continue;}
+            let split=(0..3).find(|&k| {
+                let(a,b)=(all[t[k]],all[t[(k+1)%3]]);let d=b-a;let length=d.length();
+                if length<=2e-7{return false;}let u=(*p-a).dot(d)/d.length_squared();
+                u>1e-7/length && u<1.-1e-7/length && p.distance_squared(a+d*u)<=1e-14
+            });
+            if let Some(k)=split {refined.push([t[k],vertex,t[(k+2)%3]]);refined.push([vertex,t[(k+1)%3],t[(k+2)%3]]);}else{refined.push(t);}
+        }
+        triangles=refined;
+    }
+    triangles.into_iter().map(|t|t.map(|k|all[k])).collect()
 }
 
 /// Smoothed corner normals (local) of face `f`, keyed by vertex position: at each vertex, the

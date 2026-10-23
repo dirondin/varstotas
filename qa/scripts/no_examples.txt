@@ -5,7 +5,7 @@ expect lib_folders=[]
 expect gens=[]
 expect mat_shown=[]
 # Help contains the repository link (do not launch the browser in QA).
-raw click 456 -105
+action click_spot menu:Help
 wait 5
 screenshot shots/no_examples_help.bmp
 action click_spot menu:Examples

@@ -2,9 +2,9 @@
 # a crate picked in Open Source shows its texts. (No screenshot right after the menu
 # click: a capture while the menu closes hangs.)
 wait 10
-raw click 456 -105
+action click_spot menu:Help
 wait 5
-raw click 480 37
+action click_spot menu:Licences
 wait 10
 expect licences=(true varstotas None)
 action licences formats

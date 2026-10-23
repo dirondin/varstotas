@@ -69,6 +69,7 @@ impl FaceStylePref {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Prefs {
+    pub printing: crate::ui::printing_tools::PrintingPrefs,
     pub tray_open: bool,
     pub show_start_screen: bool,
     pub face_style: FaceStylePref,
@@ -171,6 +172,7 @@ impl Prefs {
 impl Default for Prefs {
     fn default() -> Self {
         Self {
+            printing: Default::default(),
             tray_open: true,
             show_start_screen: true,
             face_style: FaceStylePref::Shaded,
@@ -253,6 +255,9 @@ pub enum Action {
     ModelLibrary,
     /// Window → Model Info.
     ModelInfo,
+    PrintCheck,
+    PrintRepair,
+    PrintTools(crate::ui::printing_tools::PrintTab),
     /// Window → Component Parameters (for the selected component).
     RigEditor,
     /// Edit → Purge Unused: components, groups and materials nothing in the scene uses.
@@ -570,6 +575,7 @@ pub struct VarstotasApp {
     pub(crate) online: crate::ui::online_mats::OnlineWindow,
     pub(crate) models: crate::ui::model_library::ModelWindow,
     /// Window → Model Info.
+    pub(crate) printing: crate::ui::printing::PrintingWindow,
     pub(crate) model_info: crate::ui::model_info::ModelInfoWindow,
     /// Rendered thumbnails of the Components card.
     pub(crate) thumbs: crate::thumbs::Thumbs,
@@ -737,6 +743,7 @@ impl VarstotasApp {
             hud_open: None,
             active_pane: 0,
             panes: (0..4).map(|_| Default::default()).collect(),
+            printing: Default::default(),
             model_info: Default::default(),
             thumbs: Default::default(),
             rig_editor: Default::default(),
@@ -1323,6 +1330,9 @@ impl VarstotasApp {
             }
             Action::PreviewFromView => self.preview_from_view(crate::ui::library::PreviewTarget::Document),
             Action::PreviewShow => self.model_info.preview_open = !self.model_info.preview_open,
+            Action::PrintCheck => self.open_printing(ctx, false),
+            Action::PrintRepair => self.open_printing(ctx, true),
+            Action::PrintTools(tab) => self.open_print_tools(ctx,tab),
             Action::ModelInfo => self.model_info.open = !self.model_info.open,
             Action::RigEditor => self.open_rig_editor(),
             Action::PurgeUnused => self.purge_unused(true, true),
@@ -2817,7 +2827,8 @@ impl eframe::App for VarstotasApp {
                 self.step_player(dt as f64);
                 ctx.request_repaint();
             }
-            let (o3, o2) = self.tool_overlays();
+            let (mut o3, o2) = self.tool_overlays();
+            self.printing_overlay(&mut o3);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())
@@ -2885,6 +2896,7 @@ impl eframe::App for VarstotasApp {
         self.log_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);
+        self.printing_window(&ctx);
         self.preferences_window(&ctx);
         self.doc_preview_window(&ctx);
         self.rig_editor_window(&ctx);

@@ -81,7 +81,7 @@ impl VarstotasApp {
         self.cmd_item_as(ui, c, &c.menu_label());
     }
 
-    fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
+    pub(super) fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
         let response = icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), false);
         super::tray_lib::spot(format!("cmd:{}", c.key()), response.rect.center());
         if response.clicked() {
@@ -472,7 +472,8 @@ impl VarstotasApp {
 
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));
 
-            ui.menu_button(tr!("menu-extensions"), |ui| self.extensions_menu(ui));
+            let extensions_menu = ui.menu_button(tr!("menu-extensions"), |ui| self.extensions_menu(ui));
+            super::tray_lib::spot("menu:Extensions",extensions_menu.response.rect.center());
 
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
@@ -507,19 +508,19 @@ impl VarstotasApp {
                 }
             });
 
-            ui.menu_button(tr!("menu-help"), |ui| {
+            let help_menu=ui.menu_button(tr!("menu-help"), |ui| {
                 let r = ui.button(tr!("tutorial-title"));
                 super::tray_lib::spot("menu:Tutorial", r.rect.center());
                 if r.clicked() { self.actions.push(Action::Tutorial); ui.close(); }
-                if ui
-                    .add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open))
-                    .on_hover_text(tr!("menu-user-guide-hint"))
-                    .clicked()
-                {
+                let guide=ui.add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open)).on_hover_text(tr!("menu-user-guide-hint"));
+                super::tray_lib::spot("menu:UserGuide",guide.rect.center());
+                if guide.clicked() {
                     self.open_app_help(crate::ui::app_help::Topic::Start);
                     ui.close();
                 }
-                if ui.add(egui::Button::new(tr!("menu-script-reference")).selected(self.script_help.open)).on_hover_text(tr!("menu-script-reference-hint")).clicked() {
+                let reference=ui.add(egui::Button::new(tr!("menu-script-reference")).selected(self.script_help.open)).on_hover_text(tr!("menu-script-reference-hint"));
+                super::tray_lib::spot("menu:ScriptReference",reference.rect.center());
+                if reference.clicked() {
                     self.open_script_help(crate::ui::script_help::Topic::Basics, None);
                     ui.close();
                 }
@@ -530,7 +531,9 @@ impl VarstotasApp {
                     ui.close();
                 }
                 ui.separator();
-                if ui.add(egui::Button::new(tr!("menu-licences")).selected(self.licences.open)).on_hover_text(tr!("menu-licences-hint")).clicked() {
+                let licences=ui.add(egui::Button::new(tr!("menu-licences")).selected(self.licences.open)).on_hover_text(tr!("menu-licences-hint"));
+                super::tray_lib::spot("menu:Licences",licences.rect.center());
+                if licences.clicked() {
                     self.open_licences(crate::ui::licences::Tab::Varstotas);
                     ui.close();
                 }
@@ -543,6 +546,7 @@ impl VarstotasApp {
                 super::tray_lib::spot("menu:ReportProblem", r.rect.center());
                 if r.clicked() { self.actions.push(Action::ReportProblem); ui.close(); }
             });
+            super::tray_lib::spot("menu:Help",help_menu.response.rect.center());
         });
     }
 

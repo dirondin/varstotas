@@ -1672,6 +1672,20 @@ impl VarstotasApp {
         // `rig_script <file>`, `rig_clear`, then `rig_apply`, `rig_remove`, `rig_pick <joint>`;
         // values of the selected copies: `rig key=value …`, `rig_reset`.
         // The log window's entries: `log_clear`.
+        use crate::ui::printing_tools::{PrintTab,PrintMap};
+        for (action,tab) in [("print_analysis",PrintTab::Analysis),("print_bed",PrintTab::Bed),("print_split",PrintTab::Split),("print_export",PrintTab::Export)] {if name==action{self.open_print_tools(ctx,tab);return;}}
+        for (action,mode) in [("print_drop",varstotas_kernel::printing::preparation::Placement::Drop),("print_center",varstotas_kernel::printing::preparation::Placement::Center),("print_arrange",varstotas_kernel::printing::preparation::Placement::Arrange)] {if name==action{self.print_place_action(mode);return;}}
+        if name=="print_lay"{self.print_lay_action();return;}
+        if name=="print_cut"||name=="print_cut_to_bed"{self.start_print_cut(ctx,name=="print_cut_to_bed");return;}
+        if name=="print_open_slicer"{self.open_print_slicer();return;}
+        if let Some(path)=name.strip_prefix("print_export_to "){self.start_print_export(ctx,path.into());return;}
+        if let Some(path)=name.strip_prefix("print_slicer "){self.prefs.printing.slicer=Some(path.into());return;}
+        if let Some(mode)=name.strip_prefix("print_map "){self.printing.map=match mode{"wall"=>PrintMap::Thickness,"overhang"=>PrintMap::Overhang,_=>PrintMap::None};return;}
+        if let Some(args)=name.strip_prefix("print_cut_set "){for arg in args.split_whitespace(){if let Some((k,v))=arg.split_once('='){match k{"axis"=>self.printing.cut_normal=match v{"x"=>DVec3::X,"y"=>DVec3::Y,_=>DVec3::Z},"pos"=>if let Ok(v)=v.parse(){self.printing.cut_position=v},"connectors"=>self.printing.connectors.enabled=v=="on",_=>{}}}}return;}
+        if name == "print_check" {self.open_printing(ctx, false);return;}
+        if name == "print_repair" {self.open_printing(ctx, true);return;}
+        if name == "print_run_repair" {self.start_print_job(ctx, true);return;}
+        if name == "print_run_check" {self.start_print_job(ctx, false);return;}
         if name == "log_clear" {
             crate::applog::clear();
             return;
@@ -2468,6 +2482,7 @@ impl VarstotasApp {
             f.y + 0.0,
             f.z + 0.0
         );
+        let extra = format!("{extra} {} {}",self.printing_dump(),self.print_tools_dump());
         let sh = &m.shadows;
         let sun = sh.sun_direction();
         let extra = format!(

@@ -1,0 +1,15 @@
+box 0 0 0 450 120 100
+select_all
+action make_group
+wait 10
+action print_split
+wait 120
+action print_cut_to_bed
+wait 180
+expect print_tools=(Some(Split) busy=false
+expect sel F=0 E=0 I=3
+action print_run_check
+wait 180
+expect open=0 nonmanifold=0 winding=0
+save models/printing-autocut.vrst
+quit

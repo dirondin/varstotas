@@ -51,7 +51,7 @@ action click_spot tutorial:next
 wait 5
 expect tutorial=(false 10)
 expect document_dirty=false
-raw click 456 -105
+action click_spot menu:Help
 wait 5
 action click_spot menu:Tutorial
 wait 5

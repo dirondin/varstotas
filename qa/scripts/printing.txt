@@ -1,0 +1,52 @@
+# 3D Printing: actual menu entry, read-only check, stale reports, repair and Undo.
+box 0 0 0 20 20 20
+view iso
+zoom_extents
+save models/printing-before.vrst
+wait 10
+action click_spot menu:Extensions
+wait 5
+action click_spot cmd:PrintCheck
+wait 100
+expect printing=(true false busy=false stale=false faces=6 open=0 nonmanifold=0 winding=0 duplicates=0 inverted=0 repaired=false)
+expect document_dirty=false
+screenshot shots/printing-check.bmp
+select_all
+action reverse_faces
+wait 10
+expect stale=true faces=6
+action click_spot printing:check-tab
+wait 5
+action click_spot printing:check
+wait 100
+expect inverted=1 repaired=false
+action click_spot printing:repair-tab
+wait 5
+screenshot shots/printing-repair.bmp
+action click_spot printing:repair-tab
+wait 5
+action click_spot printing:repair
+wait 100
+expect printing=(true true busy=false stale=false faces=6 open=0 nonmanifold=0 winding=0 duplicates=0 inverted=0 repaired=true)
+undo
+wait 5
+expect stale=true
+action click_spot printing:check-tab
+wait 5
+action click_spot printing:check
+wait 100
+expect inverted=1 repaired=true
+open models/printing-before.vrst
+wait 5
+action click_spot printing:check-tab
+wait 5
+action click_spot printing:check
+wait 100
+expect inverted=0 repaired=true
+action click_spot printing:repair-tab
+wait 5
+action click_spot printing:repair
+wait 100
+expect inverted=0 repaired=false
+expect document_dirty=false
+quit

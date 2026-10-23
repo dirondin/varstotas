@@ -89,6 +89,9 @@ pub enum Cmd {
     Render,
     WorkPlanes,
     ModelInfo,
+    PrintCheck,
+    PrintRepair,
+    PrintAnalysis, PrintBed, PrintSplit, PrintExport,
     ComponentParams,
     Library3d,
     GeneratorEditor,
@@ -114,12 +117,14 @@ impl Cmd {
         v.extend(crate::inference::settings::all_kinds().map(Snap));
         v.push(SideBar);
         v.extend(crate::ui::tray::TRAY_CARDS.map(Card));
+        v.extend([PrintCheck, PrintRepair, PrintAnalysis, PrintBed, PrintSplit, PrintExport]);
         v.extend([Render, WorkPlanes, ModelInfo, ComponentParams, Library3d, GeneratorEditor, Console, Log, Preferences]);
         v
     }
 
     /// Its menu (the headings of Preferences → Toolbar's reserve).
     pub fn group(self) -> &'static str {
+        if matches!(self, Cmd::PrintCheck | Cmd::PrintRepair | Cmd::PrintAnalysis | Cmd::PrintBed | Cmd::PrintSplit | Cmd::PrintExport) {return "3D Printing";} // i18n-ignore
         let all = Cmd::all();
         let at = |c: Cmd| all.iter().position(|x| *x == c).unwrap_or(0);
         let i = at(self);
@@ -259,6 +264,12 @@ impl Cmd {
             Cmd::Card(n) => return crate::ui::tray::card_label(n),
             Cmd::Render => "cmd-render",
             Cmd::WorkPlanes => "cmd-work-planes",
+            Cmd::PrintCheck => "print-check-command",
+            Cmd::PrintAnalysis => "print-analysis",
+            Cmd::PrintBed => "print-bed",
+            Cmd::PrintSplit => "print-split",
+            Cmd::PrintExport => "print-export",
+            Cmd::PrintRepair => "print-repair-command",
             Cmd::ModelInfo => "cmd-model-info",
             Cmd::ComponentParams => "cmd-component-params",
             Cmd::Library3d => "cmd-d",
@@ -354,6 +365,12 @@ impl Cmd {
             },
             Cmd::Render => Icon::Render,
             Cmd::WorkPlanes => Icon::GuidePlane,
+            Cmd::PrintCheck => Icon::ModelInfo,
+            Cmd::PrintAnalysis => Icon::Solid,
+            Cmd::PrintBed => Icon::Solid,
+            Cmd::PrintSplit => Icon::Solid,
+            Cmd::PrintExport => Icon::Solid,
+            Cmd::PrintRepair => Icon::Solid,
             Cmd::ModelInfo => Icon::ModelInfo,
             Cmd::ComponentParams => Icon::Parametric,
             Cmd::Library3d => Icon::Cloud,
@@ -446,6 +463,12 @@ impl Cmd {
             Cmd::Card(n) => tr!("cmd-desc-card", card = crate::ui::tray::card_label(n)),
             Cmd::Render => tr!("cmd-desc-render"),
             Cmd::WorkPlanes => tr!("cmd-desc-work-planes"),
+            Cmd::PrintCheck => tr!("print-check-description"),
+            Cmd::PrintAnalysis => tr!("print-analysis"),
+            Cmd::PrintBed => tr!("print-bed"),
+            Cmd::PrintSplit => tr!("print-split"),
+            Cmd::PrintExport => tr!("print-export"),
+            Cmd::PrintRepair => tr!("print-repair-description"),
             Cmd::ModelInfo => tr!("cmd-desc-model-info"),
             Cmd::ComponentParams => tr!("cmd-desc-component-params"),
             Cmd::Library3d => tr!("cmd-desc-library-3d"),
@@ -532,6 +555,12 @@ impl Cmd {
             Cmd::Card(n) => Action::ToggleCard(n),
             Cmd::Render => Action::ToggleRender,
             Cmd::WorkPlanes => Action::WorkPlanes,
+            Cmd::PrintCheck => Action::PrintCheck,
+            Cmd::PrintAnalysis => Action::PrintTools(super::printing_tools::PrintTab::Analysis),
+            Cmd::PrintBed => Action::PrintTools(super::printing_tools::PrintTab::Bed),
+            Cmd::PrintSplit => Action::PrintTools(super::printing_tools::PrintTab::Split),
+            Cmd::PrintExport => Action::PrintTools(super::printing_tools::PrintTab::Export),
+            Cmd::PrintRepair => Action::PrintRepair,
             Cmd::ModelInfo => Action::ModelInfo,
             Cmd::ComponentParams => Action::RigEditor,
             Cmd::Library3d => Action::ModelLibrary,
@@ -553,6 +582,12 @@ impl Cmd {
             Cmd::Sheets => Some(app.sheets.open),
             Cmd::Render => Some(app.render_window.open),
             Cmd::WorkPlanes => Some(app.planes_window.open),
+            Cmd::PrintCheck => Some(app.printing.open && app.printing.advanced_tab.is_none() && !app.printing.repair_tab),
+            Cmd::PrintAnalysis => Some(app.printing.open && app.printing.advanced_tab == Some(super::printing_tools::PrintTab::Analysis)),
+            Cmd::PrintBed => Some(app.printing.open && app.printing.advanced_tab == Some(super::printing_tools::PrintTab::Bed)),
+            Cmd::PrintSplit => Some(app.printing.open && app.printing.advanced_tab == Some(super::printing_tools::PrintTab::Split)),
+            Cmd::PrintExport => Some(app.printing.open && app.printing.advanced_tab == Some(super::printing_tools::PrintTab::Export)),
+            Cmd::PrintRepair => Some(app.printing.open && app.printing.advanced_tab.is_none() && app.printing.repair_tab),
             Cmd::ModelInfo => Some(app.model_info.open),
             Cmd::ComponentParams => Some(app.rig_editor.open),
             Cmd::Library3d => Some(app.models.open),

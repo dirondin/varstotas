@@ -38,6 +38,7 @@ pub mod model;
 pub mod generator;
 pub mod params;
 pub mod primitives;
+pub mod printing;
 pub mod lights;
 pub mod pbr;
 pub mod report;
