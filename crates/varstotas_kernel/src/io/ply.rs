@@ -164,7 +164,7 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
         "binary_big_endian" => Body::Bin { data: &data[body_at..], at: 0, big: true },
         f => return Err(bad(tr!("kernel-io-unknown-format-f", f = f.to_string()))),
     };
-    let mut verts: Vec<(DVec3, Option<[u8; 3]>)> = Vec::new();
+    let mut verts: Vec<(DVec3, Option<[u8; 3]>, Option<DVec3>)> = Vec::new();
     let mut faces: Vec<(Vec<usize>, Option<[u8; 3]>)> = Vec::new();
     let color = |r: &Row| -> Option<[u8; 3]> {
         let c = |n: &str, alt: &str| r.vals.get(n).or(r.vals.get(alt)).copied();
@@ -197,7 +197,8 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
             match e.name.as_str() {
                 "vertex" => {
                     let g = |n: &str| row.vals.get(n).copied().unwrap_or(0.0);
-                    verts.push((DVec3::new(g("x"), g("y"), g("z")), color(&row)));
+                    let normal=["nx","ny","nz"].iter().all(|n|row.vals.contains_key(*n)).then(||DVec3::new(g("nx"),g("ny"),g("nz")));
+                    verts.push((DVec3::new(g("x"), g("y"), g("z")), color(&row),normal));
                 }
                 "face" => faces.push((std::mem::take(&mut row.list), color(&row))),
                 _ => {}
@@ -228,7 +229,7 @@ pub fn add_ply(model: &mut Model, data: &[u8], name: &str, opts: &ImportOptions)
             by_color.insert(c, mats.len() - 1);
             Some(mats.len() - 1)
         });
-        polys.push(ImpPoly { pts: idx.iter().map(|i| verts[*i].0).collect(), uv: None, mat });
+        polys.push(ImpPoly { pts: idx.iter().map(|i| verts[*i].0).collect(), uv: None, mat, normals: idx.iter().map(|i|verts[*i].2).collect() });
     }
     add_meshes(model, vec![ImpMesh { name: name.to_string(), polys }], &mats, DMat4::from_scale(DVec3::splat(k)), opts).map(|_| ())
 }

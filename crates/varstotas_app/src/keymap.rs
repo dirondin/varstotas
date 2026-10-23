@@ -148,6 +148,28 @@ const COMMANDS: [KeyCmd; 14] = [
 ];
 
 impl KeyCmd {
+    /// The same action/tool icons used in menus and toolbars.
+    pub fn icon(self) -> crate::ui::icons::Icon {
+        use crate::ui::icons::Icon;
+        match self {
+            Self::New => Icon::FileNew,
+            Self::Open => Icon::FileOpen,
+            Self::Save => Icon::FileSave,
+            Self::SaveAs => Icon::FileSaveAs,
+            Self::Quit => Icon::Quit,
+            Self::Undo => Icon::Undo,
+            Self::Redo => Icon::Redo,
+            Self::SelectAll => Icon::SelectAll,
+            Self::SelectNone => Icon::SelectNone,
+            Self::MakeGroup => Icon::Group,
+            Self::ZoomExtents => Icon::ZoomExtents,
+            Self::ToggleSnapping => Icon::Magnet,
+            Self::NextScene => Icon::NextScene,
+            Self::PrevScene => Icon::PrevScene,
+            Self::Tool(t) => t.icon(),
+        }
+    }
+
     /// Commands first, then every tool.
     pub fn all() -> Vec<KeyCmd> {
         COMMANDS.into_iter().chain(ToolId::ALL.into_iter().map(KeyCmd::Tool)).collect()

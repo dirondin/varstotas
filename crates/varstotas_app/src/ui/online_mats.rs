@@ -191,6 +191,7 @@ impl VarstotasApp {
         while let Ok(msg) = self.online.work.rx.try_recv() {
             match msg {
                 Msg::Catalogue(src, res) => {
+                    self.online.work.progress.remove(&format!("@catalogue:{}", src.key()));
                     self.online.work.busy -= 1;
                     self.online.loading.remove(&src);
                     if let Err(e) = &res {
@@ -199,6 +200,7 @@ impl VarstotasApp {
                     self.online.catalogues.insert(src, res);
                 }
                 Msg::Thumb(url, img) => {
+                    self.online.work.progress.remove(&format!("@thumb:{url}"));
                     let state = match img {
                         Some((w, h, px)) => {
                             let ci = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &px);
@@ -210,6 +212,7 @@ impl VarstotasApp {
                 }
                 Msg::Models(..) | Msg::Model(..) => {}
                 Msg::Material(key, res, use_it) => {
+                    self.online.work.progress.remove(&key);
                     self.online.work.busy -= 1;
                     self.online.downloading.remove(&key);
                     match res {
@@ -243,6 +246,7 @@ impl VarstotasApp {
     }
 
     fn online_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        self.online.work.progress_ui(ui);
         let plugins = self.source_plugins();
         let mut pick: Option<Result<Source, String>> = None;
         ui.horizontal(|ui| {

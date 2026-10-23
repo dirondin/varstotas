@@ -24,6 +24,7 @@ pub struct PaneView {
     face_style: FaceStylePref,
     xray: bool,
     show_edges: bool,
+    show_triangles: bool,
     realistic_edges: bool,
     profiles: bool,
     show_axes: bool,
@@ -42,6 +43,7 @@ impl Default for PaneView {
             face_style: FaceStylePref::default(),
             xray: false,
             show_edges: true,
+            show_triangles: false,
             realistic_edges: false,
             profiles: false,
             show_axes: true,
@@ -123,6 +125,7 @@ impl VarstotasApp {
         swap(&mut p.face_style, &mut prefs.face_style);
         swap(&mut p.xray, &mut prefs.xray);
         swap(&mut p.show_edges, &mut prefs.show_edges);
+        swap(&mut p.show_triangles, &mut prefs.show_triangles);
         swap(&mut p.realistic_edges, &mut prefs.realistic_edges);
         swap(&mut p.profiles, &mut prefs.profiles);
         swap(&mut p.show_axes, &mut prefs.show_axes);
@@ -198,6 +201,7 @@ impl VarstotasApp {
                 face_style: prefs.face_style,
                 xray: prefs.xray,
                 show_edges: prefs.show_edges,
+                show_triangles: prefs.show_triangles,
                 realistic_edges: prefs.realistic_edges,
                 profiles: prefs.profiles,
                 show_axes: prefs.show_axes,

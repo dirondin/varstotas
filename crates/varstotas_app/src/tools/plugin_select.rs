@@ -77,7 +77,7 @@ impl Tool for PluginSelectTool {
         match self.hover {
             Some(EntityRef::Face(f)) => highlight_face(view, f, HOVER_FACE, out3d),
             Some(e) => {
-                for (a, b) in transformed_preview(view.doc, &[e], &DMat4::IDENTITY, 4000) {
+                for (a, b) in transformed_preview(view.doc, &[e], &DMat4::IDENTITY) {
                     line(out3d, a, b, SELECT_BLUE, 3.0);
                 }
             }

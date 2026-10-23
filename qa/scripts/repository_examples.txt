@@ -1,0 +1,21 @@
+# Open repository fixtures directly; examples are never installed into the user directory.
+wait 5
+open ../../examples/demos/bookshelf.vrst
+wait 5
+expect model_faces=54
+open ../../examples/demos/workbench.vrst
+wait 5
+expect model_faces=54
+open ../../examples/demos/dining_set.vrst
+wait 5
+expect model_faces=174
+open ../../examples/demos/garden_pergola.vrst
+wait 5
+expect model_faces=120
+open ../../examples/demos/staircase.vrst
+wait 5
+expect model_faces=138
+open ../../examples/demos/small_workshop.vrst
+wait 5
+expect model_faces=144
+quit

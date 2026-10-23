@@ -50,6 +50,16 @@ impl History {
         self.undo.push((label.clone(), cur));
         Some(label)
     }
+    /// Agent history changes must preserve current locks; interactive Undo remains unrestricted.
+    pub fn undo_preserving_locks(&mut self, current: &mut Model) -> Result<Option<String>, String> {
+        if let Some((_, next)) = self.undo.last() { current.validate_locked_changes(next)?; }
+        Ok(self.undo(current))
+    }
+    pub fn redo_preserving_locks(&mut self, current: &mut Model) -> Result<Option<String>, String> {
+        if let Some((_, next)) = self.redo.last() { current.validate_locked_changes(next)?; }
+        Ok(self.redo(current))
+    }
+
     pub fn undo_label(&self) -> Option<&str> {
         self.undo.last().map(|(l, _)| l.as_str())
     }

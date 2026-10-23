@@ -62,13 +62,13 @@ impl Section {
     /// What the search finds a section by (besides its name): the labels of its settings.
     fn words(self) -> &'static str {
         match self {
-            Section::General => "auto-save autosave minutes template folder directory new document units undo steps history", // i18n-ignore
+            Section::General => "auto-save autosave backup previous version minutes template folder directory new document units undo steps history", // i18n-ignore
             Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise", // i18n-ignore
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle", // i18n-ignore
             Section::Libraries => "components materials folder examples in model tiles small large list", // i18n-ignore
             Section::Downloads => "watch downloads folder browser", // i18n-ignore
-            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons language translation", // i18n-ignore
-            Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture", // i18n-ignore
+            Section::Interface => "theme light dark system appearance scale size zoom toolbar icons language translation startup welcome start screen", // i18n-ignore
+            Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture pinch twist roll multitouch", // i18n-ignore
             Section::Shortcuts => "keyboard shortcuts hotkeys keys", // i18n-ignore
             Section::Toolbar => "toolbar buttons order reserve separator customize tools", // i18n-ignore
             Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera", // i18n-ignore
@@ -132,6 +132,9 @@ pub struct ViewDefaults {
     pub axes: bool,
     pub ground: bool,
     pub sky: bool,
+    // Adopt the new grid-on default even when old preferences saved the former
+    // grid-off default. Future explicit choices persist under the new key.
+    #[serde(rename = "grid_enabled")]
     pub grid: bool,
     pub shadows: bool,
     /// Perspective (else parallel projection).
@@ -149,7 +152,7 @@ impl Default for ViewDefaults {
             axes: true,
             ground: true,
             sky: true,
-            grid: false,
+            grid: true,
             shadows: false,
             perspective: true,
             fov: 35.0,
@@ -310,6 +313,7 @@ impl VarstotasApp {
             Section::General => {
                 p.undo_steps = d.undo_steps;
                 p.autosave = d.autosave;
+                p.save_backups = d.save_backups;
                 p.autosave_minutes = d.autosave_minutes;
                 p.template = d.template;
                 p.templates_dir = None;
@@ -336,6 +340,7 @@ impl VarstotasApp {
             Section::Shortcuts => p.shortcuts.clear(),
             Section::Toolbar => p.toolbar.clear(),
             Section::Interface => {
+                p.show_start_screen = d.show_start_screen;
                 p.theme = d.theme;
                 p.ui_scale = d.ui_scale;
                 p.toolbar_icons = d.toolbar_icons;
@@ -353,6 +358,9 @@ impl VarstotasApp {
             ui.label(tr!("prefs-minutes"));
         });
         note(ui, &tr!("prefs-autosave-note"));
+        let r = ui.checkbox(&mut self.prefs.save_backups, tr!("prefs-save-backups"));
+        super::tray_lib::spot("prefs:save_backups", r.rect.center());
+        note(ui, &tr!("prefs-save-backups-note"));
         heading(ui, &tr!("prefs-new-document"));
         let cur = self.prefs.template.unwrap_or(Template::ArchitecturalMm);
         let mut t = cur;
@@ -654,6 +662,9 @@ impl VarstotasApp {
             self.load_plugins();
         }
         note(ui, &tr!("prefs-language-note"));
+        ui.separator();
+        let r = ui.checkbox(&mut self.prefs.show_start_screen, tr!("start-show"));
+        super::tray_lib::spot("prefs:start_show", r.rect.center());
     }
 
     /// Theme, scale and toolbar icon size from the preferences (every frame; cheap when unchanged).
@@ -710,14 +721,17 @@ impl VarstotasApp {
         // the table shows the published keys: make it this frame's
         keymap::publish(&self.prefs.shortcuts);
         let rows = shortcut_rows(&self.prefs_win.search);
-        egui::Grid::new("shortcuts_grid").num_columns(3).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
+        egui::Grid::new("shortcuts_grid").num_columns(4).spacing([12.0, 4.0]).show(ui, |ui| {
             let mut tools_heading = false;
             for cmd in rows {
                 if matches!(cmd, KeyCmd::Tool(_)) && !tools_heading {
                     tools_heading = true;
+                    ui.label("");
                     ui.label(RichText::new(tr!("prefs-shortcuts-tools")).strong());
                     ui.end_row();
                 }
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                super::icons::paint_icon(ui.painter(), rect, cmd.icon(), false);
                 ui.label(cmd.name());
                 let waiting = self.prefs_win.capture == Some(cmd);
                 let keys = keymap::labels(cmd);
@@ -751,7 +765,7 @@ impl VarstotasApp {
     }
 
     fn prefs_navigation(&mut self, ui: &mut Ui) {
-        use crate::nav::NavGesture;
+        use crate::nav::{NavGesture, TwistGesture};
         let n = &mut self.prefs.nav;
         heading(ui, &tr!("prefs-speed"));
         egui::Grid::new("nav_speed").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
@@ -763,6 +777,10 @@ impl VarstotasApp {
             let r = ui.add(egui::Slider::new(&mut n.zoom_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
             super::tray_lib::spot("nav:zoom", r.rect.center());
             ui.end_row();
+        });
+        ui.horizontal(|ui| {
+            ui.label(tr!("prefs-nav-pan"));
+            ui.add(egui::Slider::new(&mut n.pan_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
         });
         heading(ui, &tr!("prefs-nav-zoom"));
         let r = ui.checkbox(&mut n.invert_zoom, tr!("prefs-invert-wheel")).on_hover_text(tr!("prefs-invert-wheel-tip"));
@@ -778,15 +796,56 @@ impl VarstotasApp {
         });
         note(ui, &tr!("prefs-shift-other"));
         heading(ui, &tr!("prefs-trackpad"));
-        ui.horizontal(|ui| {
-            ui.label(tr!("prefs-two-fingers"));
-            ui.radio_value(&mut n.two_finger, NavGesture::Orbit, tr!("prefs-nav-orbit"));
-            let r = ui.radio_value(&mut n.two_finger, NavGesture::Pan, tr!("prefs-nav-pan"));
-            super::tray_lib::spot("nav:two_pan", r.rect.center());
-            let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, tr!("prefs-nav-zoom"));
-            super::tray_lib::spot("nav:two_zoom", r.rect.center());
+        let r = ui.checkbox(&mut n.trackpad_enabled, tr!("prefs-trackpad-enabled"));
+        super::tray_lib::spot("nav:trackpad", r.rect.center());
+        ui.add_enabled_ui(n.trackpad_enabled, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr!("prefs-two-fingers"));
+                ui.radio_value(&mut n.two_finger, NavGesture::Orbit, tr!("prefs-nav-orbit"));
+                let r = ui.radio_value(&mut n.two_finger, NavGesture::Pan, tr!("prefs-nav-pan"));
+                super::tray_lib::spot("nav:two_pan", r.rect.center());
+                let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, tr!("prefs-nav-zoom"));
+                super::tray_lib::spot("nav:two_zoom", r.rect.center());
+            });
+            ui.horizontal(|ui| {
+                ui.label(tr!("prefs-gesture-speed"));
+                ui.add(egui::Slider::new(&mut n.trackpad_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
+            });
+            let r = ui.checkbox(&mut n.invert_swipe, tr!("prefs-invert-swipe"));
+            super::tray_lib::spot("nav:invert_swipe", r.rect.center());
+            note(ui, &tr!("prefs-trackpad-note"));
+            ui.separator();
+            let r = ui.checkbox(&mut n.pinch_enabled, tr!("prefs-pinch-enabled"));
+            super::tray_lib::spot("nav:pinch", r.rect.center());
+            ui.add_enabled_ui(n.pinch_enabled, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(tr!("prefs-gesture-speed"));
+                    ui.add(egui::Slider::new(&mut n.pinch_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
+                });
+                let r = ui.checkbox(&mut n.invert_pinch, tr!("prefs-invert-pinch"));
+                super::tray_lib::spot("nav:invert_pinch", r.rect.center());
+            });
+            ui.separator();
+            ui.label(RichText::new(tr!("prefs-twist")).strong());
+            ui.horizontal_wrapped(|ui| {
+                for (gesture, label, spot) in [
+                    (TwistGesture::Disabled, "prefs-twist-off", "nav:twist_off"),
+                    (TwistGesture::Orbit, "prefs-twist-orbit", "nav:twist_orbit"),
+                    (TwistGesture::Roll, "prefs-twist-roll", "nav:twist_roll"),
+                ] {
+                    let r = ui.radio_value(&mut n.twist, gesture, tr!(label));
+                    super::tray_lib::spot(spot, r.rect.center());
+                }
+            });
+            ui.add_enabled_ui(n.twist != TwistGesture::Disabled, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(tr!("prefs-gesture-speed"));
+                    ui.add(egui::Slider::new(&mut n.twist_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
+                });
+                ui.checkbox(&mut n.invert_twist, tr!("prefs-invert-twist"));
+            });
+            note(ui, &tr!("prefs-trackpad-platform"));
         });
-        note(ui, &tr!("prefs-trackpad-note"));
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {

@@ -22,6 +22,8 @@ struct GeometryKey {
     model: u64,
     face_style: FaceStyle,
     textures: bool,
+    show_triangles: bool,
+    xray: bool,
 }
 
 /// Inputs the uploaded highlight states depend on.
@@ -223,7 +225,7 @@ impl Viewport {
                 }
             }
             if let Some(renderer) = g.renderer.as_mut() {
-                let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures };
+                let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures, show_triangles: style.show_triangles, xray: style.xray };
                 if g.built != Some(key) {
                     let t0 = std::time::Instant::now();
                     if self.tess_version != Some(doc.model_version) {
@@ -235,7 +237,7 @@ impl Viewport {
                         }
                     }
                     let t1 = std::time::Instant::now();
-                    let params = BuildParams { face_style: style.face_style, textures: self.show_textures, prev_origin: g.origin };
+                    let params = BuildParams { show_triangles: style.show_triangles, clean_xray: style.xray, face_style: style.face_style, textures: self.show_textures, prev_origin: g.origin };
                     let geo = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params))
                         .unwrap_or_else(|e| {
                             log::warn!("scene build failed: {e}");
@@ -330,7 +332,7 @@ impl Viewport {
                         let _ = guarded(|| renderer.set_custom_shaders(rs, &customs));
                         let table = crate::pbr::material_table(&doc.model);
                         let _ = guarded(|| renderer.set_materials(rs, &table));
-                        let params = BuildParams { face_style: FaceStyle::Realistic, textures: true, prev_origin: g.origin };
+                        let params = BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Realistic, textures: true, prev_origin: g.origin };
                         let r = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params)).and_then(|geo| {
                             guarded(|| renderer.pt_start(rs, &geo, &job.lights, &job.camera, &job.style, &job.settings))
                         });

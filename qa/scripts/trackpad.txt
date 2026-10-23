@@ -1,0 +1,73 @@
+# Native egui pinch/twist and smooth scroll, with settings operated through the UI.
+wait 10
+action preferences
+wait 5
+action click_spot prefs:Navigation
+wait 5
+action click_spot prefs_reset
+wait 5
+raw click 664 54
+wait 5
+action new
+wait 10
+expect cam_dist=12000
+raw pinch 900 500 2
+wait 5
+expect cam_dist=6000
+raw pinch 900 500 0.5
+wait 5
+expect cam_dist=12000
+dump before_twist
+raw twist 900 500 0.3
+wait 5
+dump after_twist
+expect cam_dist=12000
+action preferences
+wait 5
+raw scroll 500 350 -230
+wait 8
+action click_spot nav:pinch
+wait 3
+expect pinch_enabled: false
+raw click 664 54
+wait 5
+raw pinch 900 500 2
+wait 5
+expect cam_dist=12000
+action preferences
+wait 5
+action click_spot nav:pinch
+action click_spot nav:invert_pinch
+wait 3
+expect invert_pinch: true
+raw click 664 54
+wait 5
+raw pinch 900 500 2
+wait 5
+expect cam_dist=24000
+action preferences
+wait 5
+raw scroll 500 350 1000
+wait 8
+action click_spot nav:trackpad
+wait 3
+expect trackpad_enabled: false
+raw click 664 54
+wait 5
+raw pinch 900 500 0.5
+raw twist 900 500 0.3
+raw scroll 900 500 100
+wait 5
+expect cam_dist=24000
+raw wheel 900 500 1
+wait 5
+expect cam_dist=20339
+raw wheel 900 500 -1
+wait 5
+expect cam_dist=24000
+action preferences
+wait 5
+action click_spot prefs_reset
+wait 5
+expect pinch_enabled: true, pinch_speed: 1.0, invert_pinch: false, twist: Orbit
+quit

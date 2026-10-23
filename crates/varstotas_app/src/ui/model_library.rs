@@ -286,6 +286,7 @@ impl VarstotasApp {
     /// Stop downloading `key` (curl is stopped; a plugin's own download finishes unseen).
     pub(crate) fn models_cancel(&mut self, key: &str) {
         if let Some(flag) = self.models.downloading.remove(key) {
+            self.models.work.progress.remove(key);
             flag.store(true, Ordering::Relaxed);
             self.models.cancelled.insert(key.to_string());
             self.flash(tr!("model-lib-cancelled", name = self.models.asset(key).map(|a| a.name.clone()).unwrap_or_else(|| key.to_string())));
@@ -399,6 +400,7 @@ impl VarstotasApp {
         while let Ok(msg) = self.models.work.rx.try_recv() {
             match msg {
                 Msg::Models(src, query, res) => {
+                    self.models.work.progress.remove(&format!("@catalogue:{}", src.key()));
                     self.models.work.busy -= 1;
                     self.models.loading.remove(&src);
                     if let Err(e) = &res {
@@ -409,6 +411,7 @@ impl VarstotasApp {
                     self.models.ensure(ctx);
                 }
                 Msg::Thumb(url, img) => {
+                    self.models.work.progress.remove(&format!("@thumb:{url}"));
                     let state = match img {
                         Some((w, h, px)) => {
                             let ci = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &px);
@@ -419,6 +422,7 @@ impl VarstotasApp {
                     self.models.thumbs.insert(url, state);
                 }
                 Msg::Model(key, res, place) => {
+                    self.models.work.progress.remove(&key);
                     self.models.work.busy -= 1;
                     if self.models.cancelled.remove(&key) {
                         self.models.last = Some(format!("{key} cancelled"));
@@ -474,6 +478,7 @@ impl VarstotasApp {
     }
 
     fn models_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        self.models.work.progress_ui(ui);
         self.models_refresh_saved();
         let plugins = self.model_source_plugins();
         let mut pick: Option<Result<ModelSource, String>> = None;

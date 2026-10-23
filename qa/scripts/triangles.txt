@@ -1,0 +1,46 @@
+box 0 0 0 1000 600 400
+view iso
+zoom_extents
+wait 10
+action triangles off
+save models/triangles.vrst
+raw click 100 -105
+wait 5
+action click_spot menu:Triangles
+wait 5
+expect triangles=true
+raw key Escape
+wait 3
+expect document_dirty=false
+style color
+wait 3
+expect triangles=true
+style shaded
+wait 3
+expect triangles=true
+style mono
+wait 3
+expect triangles=true
+style hidden
+wait 3
+expect triangles=true
+style wire
+wait 3
+expect triangles=true
+style realistic
+wait 3
+expect triangles=true
+action xray on
+wait 3
+expect hud=(Some(Iso) false Realistic true)
+expect triangles=true
+action add_scene
+action triangles off
+expect triangles=false
+action scene_0
+wait 10
+expect triangles=true
+action triangles off
+expect triangles=false
+save models/triangles.vrst
+quit

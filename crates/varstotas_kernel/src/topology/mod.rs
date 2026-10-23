@@ -147,19 +147,10 @@ impl Mesh {
         let e2 = self.e_new(v, b, Some(&tmpl));
         let faces = self.cache.edge_faces.get(e).cloned().unwrap_or_default();
         self.cache.edge_faces.insert(e2, faces.clone());
-        for f in faces {
-            let face = &mut self.faces[f];
-            for l in std::iter::once(&mut face.outer).chain(face.holes.iter_mut()) {
-                let n = l.len();
-                for i in 0..n {
-                    let (x, y) = (l[i], l[(i + 1) % n]);
-                    if (x == a && y == b) || (x == b && y == a) {
-                        l.insert(i + 1, v);
-                        break;
-                    }
-                }
-            }
-        }
+        let delta = self.pos(b) - self.pos(a);
+        let t = (self.pos(v) - self.pos(a)).dot(delta) / delta.length_squared().max(1e-30);
+        for f in faces { self.faces[f].split_loop_edge(a, b, v, t); }
+
         e2
     }
 
@@ -205,6 +196,7 @@ impl Mesh {
         self.e_repoint(e1, v, b);
         for f in &f1 {
             let face = &mut self.faces[*f];
+            face.normals.clear();
             for l in std::iter::once(&mut face.outer).chain(face.holes.iter_mut()) {
                 l.retain(|x| *x != v);
             }
@@ -235,6 +227,7 @@ impl Mesh {
         }
         for f in faces {
             let face = &mut self.faces[f];
+            face.normals.clear();
             for l in std::iter::once(&mut face.outer).chain(face.holes.iter_mut()) {
                 for x in l.iter_mut() {
                     if *x == gone {
@@ -308,6 +301,7 @@ impl Mesh {
             self.faces[f].holes.iter().map(|h| geom::newell(&self.loop_pos(h)).dot(n) > 0.0).collect();
         let face = &mut self.faces[f];
         face.normal = n;
+        if flips.iter().any(|flip| *flip) { face.normals.clear(); }
         for (h, flip) in face.holes.iter_mut().zip(flips) {
             if flip {
                 h.reverse();
@@ -318,13 +312,16 @@ impl Mesh {
     /// Create a face with loops (edges are created if missing) and attributes from `tmpl`.
     /// The outer loop order defines the normal.
     pub(crate) fn f_new(&mut self, outer: Vec<VertexId>, holes: Vec<Vec<VertexId>>, tmpl: &Face) -> FaceId {
+        let normals = if outer == tmpl.outer && holes == tmpl.holes { tmpl.normals.clone() } else { Vec::new() };
         let face = Face {
             outer,
             holes,
             normal: tmpl.normal,
+            normals,
             front: tmpl.front,
             back: tmpl.back,
             hidden: tmpl.hidden,
+            locked: tmpl.locked,
             tag: tmpl.tag,
             uv: tmpl.uv,
         };
@@ -336,6 +333,7 @@ impl Mesh {
     pub(crate) fn f_set_loops(&mut self, f: FaceId, outer: Vec<VertexId>, holes: Vec<Vec<VertexId>>) {
         self.f_unregister(f);
         let face = &mut self.faces[f];
+        face.normals.clear();
         face.outer = outer;
         face.holes = holes;
         self.f_register(f);

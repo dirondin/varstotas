@@ -583,7 +583,7 @@ impl InferenceEngine {
                         r.point = proj(fp);
                         r.from_point = Some((fp, axis_kind_of(fp - r.point).unwrap_or(InferenceKind::FromPoint)));
                     } else {
-                        r.point = natural;
+                        r.point = grid_line_snap(q, dir, natural).unwrap_or(natural);
                     }
                     return finish(r);
                 }
@@ -591,6 +591,25 @@ impl InferenceEngine {
                     if let Some(p) = best_point.filter(|p| pl.distance(p.pos).abs() < 1e-3) {
                         let mut r = InferenceResult::with_kind(p.pos, p.kind);
                         r.ref_entity = p.r.clone();
+                        r.locked = locked;
+                        return finish(r);
+                    }
+                    // A tool's plane constraint must not bypass ordinary geometry/grid
+                    // snaps, but none of them may pull the point off the drawing plane.
+                    let in_plane = |p: DVec3| pl.distance(p).abs() < 1e-3;
+                    let plane_snap = best_ix.filter(|(_, p)| in_plane(*p))
+                        .map(|(_, p)| InferenceResult::with_kind(p, InferenceKind::Intersection))
+                        .or_else(|| best_edge.filter(|(_, p)| allowed(InferenceKind::OnEdge) && in_plane(*p))
+                            .map(|(e, p)| {
+                                let mut r = InferenceResult::with_kind(p, InferenceKind::OnEdge);
+                                r.ref_entity = e.r.clone();
+                                r.edge = Some((e.a, e.b));
+                                r
+                            }))
+                        .or_else(|| best_guide.filter(|(_, p, _)| in_plane(*p))
+                            .map(|(_, p, _)| InferenceResult::with_kind(p, InferenceKind::OnGuide)))
+                        .or_else(|| grid_snap(q, &ray, &visible).filter(|r| in_plane(r.point)));
+                    if let Some(mut r) = plane_snap {
                         r.locked = locked;
                         return finish(r);
                     }
@@ -688,8 +707,8 @@ impl InferenceEngine {
                 }
             }
             if let Some((_, mut p, d, kind, seg)) = best_dir {
-                // A direction lying in the grid plane stops where it crosses grid lines.
-                if let Some(x) = grid_crossing(q, anchor, d, p) {
+                // Directions snap at grid coordinates, including height and elevated picks.
+                if let Some(x) = grid_line_snap(q, d, p) {
                     p = x;
                 }
                 let mut r = InferenceResult::with_kind(p, kind);
@@ -799,20 +818,17 @@ fn grid_snap(q: &Query, ray: &Ray, visible: &dyn Fn(DVec3) -> bool) -> Option<In
     None
 }
 
-/// Where a direction from `anchor` (lying in the grid plane) crosses a grid line next to
-/// `p`, if that is within the point radius.
-fn grid_crossing(q: &Query, anchor: DVec3, d: DVec3, p: DVec3) -> Option<DVec3> {
+/// Nearest grid-coordinate crossing along a constrained direction, within the point radius.
+/// The grid frame also supplies height increments; the result always stays on the line.
+fn grid_line_snap(q: &Query, d: DVec3, p: DVec3) -> Option<DVec3> {
     if !allowed(InferenceKind::GridPoint) && !allowed(InferenceKind::OnGridLine) {
         return None;
     }
     let g = settings::grid()?;
     let (o, n) = (DVec3::from_array(g.origin), g.normal());
-    if d.dot(n).abs() > 1e-9 || (anchor - o).dot(n).abs() > 1e-6 {
-        return None;
-    }
     let s = g.snap_step(q.camera.pixel_size_at(p, q.viewport) / q.camera.basis().forward.dot(n).abs().max(0.1));
     let px = |x: DVec3| q.camera.world_to_screen(x, q.viewport).map_or(f64::INFINITY, |sc| sc.distance(q.cursor));
-    [DVec3::from_array(g.u), DVec3::from_array(g.v)]
+    [DVec3::from_array(g.u), DVec3::from_array(g.v), n]
         .into_iter()
         .filter_map(|a| {
             let da = d.dot(a);
@@ -1219,6 +1235,75 @@ mod tests {
         assert_eq!(e.infer(&query(&m, &cam, p(1003.0, 1997.0), None)).kind, InferenceKind::Free);
         publish(&SnapPrefs::default());
         publish_grid(&GridPrefs::default());
+    }
+
+    #[test]
+    fn drawing_plane_keeps_grid_and_geometry_snaps_without_leaving_the_plane() {
+        use settings::{GridPrefs, SnapPrefs, publish, publish_grid};
+        publish(&SnapPrefs::default());
+        publish_grid(&GridPrefs { show: true, step: 10.0, major: 10 });
+        let m = Model::new();
+        let cam = camera_top();
+        let mut e = InferenceEngine::default();
+        let mut q = query(&m, &cam, screen(&cam, DVec3::new(1003.0, 1997.0, 0.0)), Some(DVec3::ZERO));
+        q.constraint = Some(Constraint::Plane(Plane::new(DVec3::ZERO, DVec3::Z)));
+        let r = e.infer(&q);
+        assert_eq!(r.kind, InferenceKind::GridPoint);
+        assert!(r.point.distance(DVec3::new(1000.0, 2000.0, 0.0)) < 1e-6);
+        q.cursor = screen(&cam, DVec3::new(1500.0, 1990.0, 0.0));
+        let r = e.infer(&q);
+        assert_eq!(r.kind, InferenceKind::OnGridLine);
+        assert!((r.point.y - 2000.0).abs() < 1e-6);
+        // A base on a raised face cannot jump down onto the ground grid.
+        q.constraint = Some(Constraint::Plane(Plane::new(DVec3::Z * 500.0, DVec3::Z)));
+        assert!((e.infer(&q).point.z - 500.0).abs() < 1e-6);
+        q.constraint = Some(Constraint::Plane(Plane::new(DVec3::ZERO, DVec3::Z)));
+        publish(&SnapPrefs { enabled: false, ..Default::default() });
+        assert_eq!(e.infer(&q).kind, InferenceKind::OnFace);
+        publish(&SnapPrefs::default());
+        let m = square_model();
+        let mut q = query(&m, &cam, screen(&cam, DVec3::new(2000.0, 2000.0, 0.0)), None);
+        q.constraint = Some(Constraint::Plane(Plane::new(DVec3::ZERO, DVec3::Z)));
+        assert_eq!(InferenceEngine::default().infer(&q).kind, InferenceKind::Endpoint);
+        publish_grid(&GridPrefs { show: false, ..Default::default() });
+    }
+
+    #[test]
+    fn height_and_elevated_pick_directions_snap_to_grid_coordinates() {
+        use settings::{GridPrefs, SnapPrefs, publish, publish_grid};
+        publish(&SnapPrefs::default());
+        publish_grid(&GridPrefs { show: true, step: 10.0, major: 10 });
+        let m = Model::new();
+        let cam = Camera { eye: DVec3::new(6000.0, -8000.0, 8000.0), target: DVec3::ZERO,
+            up: DVec3::Z, ortho: true, ortho_height: 6000.0, ..Camera::default() };
+        let anchor = DVec3::new(1500.0, 1500.0, 0.0);
+        let mut q = query(&m, &cam, screen(&cam, anchor + DVec3::Z * 1997.0), Some(anchor));
+        q.constraint = Some(Constraint::Line { origin: anchor, dir: DVec3::Z, kind: InferenceKind::Free });
+        let r = InferenceEngine::default().infer(&q);
+        assert!(r.point.distance(anchor + DVec3::Z * 2000.0) < 1e-6, "{r:?}");
+        // The same inference is used by plugin @pick, both automatic and arrow-locked.
+        q.constraint = None;
+        let mut e = InferenceEngine::default();
+        assert!((e.infer(&q).point.z - 2000.0).abs() < 1e-6);
+        e.handle_arrow(egui::Key::ArrowUp);
+        assert!((e.infer(&q).point.z - 2000.0).abs() < 1e-6);
+        let elevated = DVec3::new(0.0, 1500.0, 750.0);
+        q.anchor = Some(elevated);
+        q.cursor = screen(&cam, elevated + DVec3::X * 1997.0);
+        e.handle_arrow(egui::Key::ArrowRight);
+        let r = e.infer(&q);
+        assert!(r.point.distance(elevated + DVec3::X * 2000.0) < 1e-6, "{r:?}");
+        // Disabling either the grid or grid snap categories leaves the natural height.
+        publish_grid(&GridPrefs { show: false, ..Default::default() });
+        assert!((e.infer(&q).point.x - 1997.0).abs() < 1e-6);
+        publish_grid(&GridPrefs { show: true, step: 10.0, major: 10 });
+        let mut prefs = SnapPrefs::default();
+        prefs.set(InferenceKind::GridPoint, false);
+        prefs.set(InferenceKind::OnGridLine, false);
+        publish(&prefs);
+        assert!((e.infer(&q).point.x - 1997.0).abs() < 1e-6);
+        publish(&SnapPrefs::default());
+        publish_grid(&GridPrefs { show: false, ..Default::default() });
     }
 
     #[test]

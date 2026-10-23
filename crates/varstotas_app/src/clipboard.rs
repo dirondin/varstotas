@@ -16,9 +16,6 @@ use varstotas_kernel::{
 };
 use std::collections::{HashMap, HashSet};
 
-/// Max preview segments drawn while a paste follows the cursor.
-const PREVIEW_LIMIT: usize = 20_000;
-
 pub struct Clipboard {
     /// Pruned clone of the source model holding the copied definition.
     model: Model,
@@ -36,7 +33,7 @@ pub struct Clipboard {
     dims: Vec<varstotas_kernel::DimGeom>,
     /// World bounds of the copied content.
     pub bounds: Aabb,
-    /// World-space edges of the copied content at its original position (capped).
+    /// World-space edges of the copied content at its original position.
     pub preview: Vec<(DVec3, DVec3)>,
     /// Number of copied entities + guides (for messages).
     pub count: usize,
@@ -72,19 +69,21 @@ fn reachable_defs(model: &Model, d: DefId, out: &mut HashSet<DefId>) {
 pub fn def_edges(model: &Model, d: DefId, max: usize) -> Vec<(DVec3, DVec3)> {
     let mut out = Vec::new();
     collect_edges(model, d, DMat4::IDENTITY, &mut out, 0);
-    out.truncate(max);
-    out
+    sample_edges(&out, max)
+}
+
+/// Even coverage for small thumbnails; working previews always use the complete mesh.
+pub fn sample_edges(edges: &[(DVec3,DVec3)], max: usize) -> Vec<(DVec3,DVec3)> {
+    let n=edges.len().min(max);
+    (0..n).map(|i|edges[i*edges.len()/n]).collect()
 }
 
 fn collect_edges(model: &Model, d: DefId, m: DMat4, out: &mut Vec<(DVec3, DVec3)>, depth: usize) {
-    if depth > 32 || out.len() >= PREVIEW_LIMIT {
+    if depth > 64 {
         return;
     }
     let Some(def) = model.defs.get(d) else { return };
     for (id, e) in def.mesh.edges.iter() {
-        if out.len() >= PREVIEW_LIMIT {
-            return;
-        }
         if e.hidden {
             continue;
         }

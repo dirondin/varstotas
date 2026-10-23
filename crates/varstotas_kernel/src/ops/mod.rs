@@ -185,13 +185,22 @@ impl Mesh {
 
     /// Reverse a face (flip normal, swap front/back materials).
     pub fn reverse_face(&mut self, f: FaceId) {
-        let Some(face) = self.faces.get_mut(f) else { return };
+        let Some(face) = self.faces.get(f) else { return };
+        // Preserve the texture on its physical side when the projection basis flips.
+        let texture = face.uv.map(|uv| {
+            let points: Vec<_> = face.outer.iter().map(|v| self.vertices[*v].pos).collect();
+            let mapped: Vec<_> = points.iter().map(|p| crate::texture::face_uv_mm(*p, face.normal, Some(&uv))).collect();
+            (points, mapped)
+        });
+        let face = self.faces.get_mut(f).unwrap();
+        face.reverse_shading_normals(true);
         face.outer.reverse();
-        for h in &mut face.holes {
-            h.reverse();
-        }
+        for h in &mut face.holes { h.reverse(); }
         face.normal = -face.normal;
         std::mem::swap(&mut face.front, &mut face.back);
+        if let Some((points, mapped)) = texture {
+            face.uv = crate::TexPlacement::fit(&points, &mapped, face.normal, [1.0, 1.0]).filter(|uv| !uv.is_identity());
+        }
     }
 
     /// Reverse several faces (Context → Reverse Faces). Dead ids are skipped; returns how many

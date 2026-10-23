@@ -12,7 +12,7 @@ raw click 137 90
 raw text rect
 wait 5
 # Rectangle gets L (Line loses it), Rotated Rectangle gets Shift+R
-raw click 415 171
+action click_spot key:tool:Rectangle
 wait 5
 expect key_capture=Some("tool:Rectangle")
 raw key L
@@ -20,7 +20,7 @@ wait 5
 expect keys={"tool:Line": "", "tool:Rectangle": "L"} key_capture=None
 # (the key went to the table only)
 expect tool=Select
-raw click 415 197
+action click_spot key:tool:RotatedRectangle
 wait 5
 raw mods shift
 raw key R
@@ -28,7 +28,7 @@ raw mods
 wait 5
 expect keys={"tool:Line": "", "tool:Rectangle": "L", "tool:RotatedRectangle": "Shift+R"}
 # a digit types into Measurements: refused
-raw click 415 171
+action click_spot key:tool:Rectangle
 wait 5
 raw key 5
 wait 5
@@ -54,14 +54,14 @@ expect tool=Select
 action preferences
 wait 10
 expect prefs_win=(true Shortcuts)
-raw click 511 171
+action click_spot keyreset:tool:Rectangle
 wait 5
 expect keys={"tool:Line": "", "tool:RotatedRectangle": "Shift+R"}
 raw click 649 92
 wait 5
 expect keys={}
 # Backspace: Rectangle without a shortcut
-raw click 415 171
+action click_spot key:tool:Rectangle
 wait 5
 raw key Backspace
 wait 5

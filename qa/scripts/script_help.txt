@@ -3,7 +3,7 @@
 wait 10
 raw click 456 -105
 wait 5
-raw click 499 -49
+raw click 499 -27
 wait 5
 expect help=(true Basics "")
 screenshot shots/help_basics.bmp
@@ -47,7 +47,7 @@ action script nonexistent_fn(1)
 wait 5
 expect log=(false 1 1)
 screenshot shots/log_badge.bmp
-raw click 1073 761
+action click_spot status:log
 wait 5
 expect log=(true 1 0)
 screenshot shots/log_window.bmp

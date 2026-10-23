@@ -715,6 +715,9 @@ fn register_entity(e: &mut Engine) {
     });
     e.register_get("min", |x: &mut Entity| -> R<DVec3> { with(|st| Ok(ent_bounds(st, std::slice::from_ref(x))?.map_or(DVec3::ZERO, |b| b.min))) });
     e.register_get("max", |x: &mut Entity| -> R<DVec3> { with(|st| Ok(ent_bounds(st, std::slice::from_ref(x))?.map_or(DVec3::ZERO, |b| b.max))) });
+    e.register_get("locked", |x: &mut Entity| -> R<bool> {
+        with(|st| Ok(st.model.entity_locked(&x.path, x.r)))
+    });
     e.register_get_set(
         "hidden",
         |x: &mut Entity| -> R<bool> {
@@ -1416,7 +1419,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     e.register_fn("select", |x: Dynamic| -> R<()> {
         let es = if x.is_unit() { vec![] } else { ents(&x)? };
         with(|st| {
-            st.selection = es;
+            st.selection = es.into_iter().filter(|e| !st.model.entity_locked(&e.path, e.r)).collect();
             st.selection_set = true;
             Ok(())
         })

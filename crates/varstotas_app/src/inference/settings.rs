@@ -178,7 +178,7 @@ pub struct GridPrefs {
 
 impl Default for GridPrefs {
     fn default() -> Self {
-        Self { show: false, step: 10.0, major: 10 }
+        Self { show: true, step: 10.0, major: 10 }
     }
 }
 

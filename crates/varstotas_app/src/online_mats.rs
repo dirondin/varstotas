@@ -432,22 +432,47 @@ pub enum Msg {
 pub struct Online {
     pub(crate) tx: Sender<Msg>,
     pub rx: Receiver<Msg>,
-    thumbs: Option<Sender<(String, String)>>,
+    thumbs: Option<Sender<(String, String, crate::download_progress::Tracker)>>,
     pub busy: usize,
+    pub progress: std::collections::BTreeMap<String, crate::download_progress::Tracker>,
 }
 
 impl Default for Online {
     fn default() -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
-        Self { tx, rx, thumbs: None, busy: 0 }
+        Self { tx, rx, thumbs: None, busy: 0, progress: Default::default() }
     }
 }
 
 impl Online {
+    pub(crate) fn track(&mut self, key: String) -> crate::download_progress::Tracker {
+        let progress = crate::download_progress::Tracker::default();
+        self.progress.insert(key, progress.clone());
+        progress
+    }
+
+    pub(crate) fn progress_ui(&self, ui: &mut egui::Ui) {
+        for (_, tracker) in self.progress.iter().filter(|(key, _)| !key.starts_with("@thumb:")) {
+            if let Some(progress) = tracker.snapshot() {
+                crate::download_progress::show(ui, &progress);
+                ui.add_space(4.0);
+            }
+        }
+        let thumbs: Vec<_> = self.progress.iter().filter(|(key, _)| key.starts_with("@thumb:"))
+            .filter_map(|(_, p)| p.snapshot()).collect();
+        if !thumbs.is_empty() {
+            ui.collapsing(tr!("download-progress-previews", count = thumbs.len()), |ui| {
+                for progress in thumbs { crate::download_progress::show(ui, &progress); }
+            });
+        }
+    }
+
     pub fn load_catalogue(&mut self, source: Source, ctx: &egui::Context) {
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
         self.busy += 1;
+        let progress = self.track(format!("@catalogue:{}", source.key()));
         std::thread::spawn(move || {
+            let _progress = progress.observe(&ctx);
             let res = catalogue(&source);
             let _ = tx.send(Msg::Catalogue(source, res));
             ctx.request_repaint();
@@ -458,7 +483,9 @@ impl Online {
     pub fn download(&mut self, asset: Asset, dir: PathBuf, use_it: bool, ctx: &egui::Context) {
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
         self.busy += 1;
+        let progress = self.track(asset.key());
         std::thread::spawn(move || {
+            let _progress = progress.observe(&ctx);
             let res = download(&asset).and_then(|m| {
                 let path = dir.join(asset.source.folder()).join(format!("{}.{}", crate::ui::mat_library::safe_name(&m.name), varstotas_kernel::io::MATERIAL_EXT));
                 let _ = std::fs::create_dir_all(path.parent().unwrap_or(&dir));
@@ -472,8 +499,9 @@ impl Online {
 
     /// Fetch thumbnail `url` (cached on disk as `name`).
     pub fn thumb(&mut self, url: &str, name: &str, ctx: &egui::Context) {
+        let progress = self.track(format!("@thumb:{url}"));
         let sender = self.thumbs.get_or_insert_with(|| {
-            let (qtx, qrx) = std::sync::mpsc::channel::<(String, String)>();
+            let (qtx, qrx) = std::sync::mpsc::channel::<(String, String, crate::download_progress::Tracker)>();
             let qrx = Arc::new(Mutex::new(qrx));
             for _ in 0..4 {
                 let (qrx, tx, ctx) = (qrx.clone(), self.tx.clone(), ctx.clone());
@@ -481,7 +509,8 @@ impl Online {
                     loop {
                         // Take the job, then let the lock go (the others fetch meanwhile).
                         let job = qrx.lock().ok().and_then(|r| r.recv().ok());
-                        let Some((url, name)) = job else { break };
+                        let Some((url, name, progress)) = job else { break };
+                        let _progress = progress.observe(&ctx);
                         let local = !url.starts_with("http://") && !url.starts_with("https://");
                         let bytes = if local { std::fs::read(url.trim_start_matches("file://")).map_err(|e| e.to_string()) } else { cached(&url, &format!("thumbs/{}.png", file_safe(&name)), None) };
                         let img = bytes
@@ -498,7 +527,7 @@ impl Online {
             }
             qtx
         });
-        let _ = sender.send((url.to_string(), name.to_string()));
+        let _ = sender.send((url.to_string(), name.to_string(), progress));
     }
 }
 

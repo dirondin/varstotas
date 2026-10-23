@@ -8,6 +8,8 @@ expect mat_shown=[]
 raw click 456 -105
 wait 5
 screenshot shots/no_examples_help.bmp
+action click_spot menu:Examples
+wait 5
 raw key Escape
 # Built-in shapes remain functional without optional generators.
 tool box

@@ -205,6 +205,7 @@ pub const MEMBERS: &[Member] = &[
     prop("center", "script-member-center", &[Face, Edge, Group], Vector),
     prop("vertices", "script-member-vertices", &[Face, Edge], Vecs),
     prop("name", "script-member-name", &[Group], Str),
+    prop("locked", "script-member-locked", ENT, Bool),
     prop("hidden", "script-member-hidden", ENT, Bool),
     prop("bounds", "script-member-bounds", ENT, Bounds),
     prop("size", "script-member-size", ENT, Vector),

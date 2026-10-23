@@ -233,8 +233,6 @@ impl VarstotasApp {
     }
 
     pub(crate) fn toolbar(&mut self, ui: &mut Ui) {
-        // the harness spots are collected from here on each frame (toolbar, then the side bar)
-        super::tray_lib::clear_spots();
         let items = layout(&self.prefs.toolbar);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;

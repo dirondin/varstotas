@@ -11,6 +11,7 @@ mod obj;
 mod ply;
 mod points;
 mod security;
+mod surface;
 mod stl;
 mod threemf;
 mod xml;
@@ -24,7 +25,7 @@ pub use dae::{add_dae, export_dae, import_dae, import_dae_with, write_dae};
 pub use dxf::{DxfData, add_dxf, export_dxf, import_dxf, import_dxf_with, parse_dxf, write_dxf};
 pub use fbx::{add_fbx, import_fbx, import_fbx_with};
 pub use gltf::{add_gltf, export_glb, import_gltf, import_gltf_with, write_glb};
-pub use native::{MATERIAL_EXT, MATERIAL_FORMAT, from_json, load, load_material, save, save_material, to_json};
+pub use native::{VERSION as NATIVE_VERSION, MIN_VERSION as NATIVE_MIN_VERSION, MATERIAL_VERSION, MATERIAL_EXT, MATERIAL_FORMAT, backup_path, from_json, load, load_material, save, save_with_backup, save_material, to_json};
 pub use obj::{export_obj, import_obj, import_obj_with, write_obj, write_obj_with_textures};
 pub use threemf::{add_3mf, export_3mf, import_3mf, import_3mf_with, write_3mf, write_3mf_model};
 pub use zip::unzip;
@@ -40,11 +41,14 @@ pub struct ImportOptions {
     pub merge_coplanar: bool,
     /// OBJ / glTF: read materials (and textures) and assign them to faces.
     pub materials: bool,
+    /// Recover Blender exports of legacy Lambert/Blinn material sets that incorrectly mark
+    /// every opaque surface as transmission=1 / IOR=1. Disable for literal source factors.
+    pub repair_legacy_materials: bool,
 }
 
 impl Default for ImportOptions {
     fn default() -> Self {
-        Self { merge_coplanar: true, materials: true }
+        Self { merge_coplanar: true, materials: true, repair_legacy_materials: true }
     }
 }
 

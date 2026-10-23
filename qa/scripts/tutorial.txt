@@ -1,0 +1,62 @@
+wait 10
+action start_screen
+wait 5
+action click_spot start:tutorial
+wait 5
+expect tutorial=(true 1)
+expect start=(false true)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 2)
+action click_spot tutorial:tool:Pan
+wait 5
+expect tool=Pan
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 3)
+action click_spot tutorial:back
+wait 5
+expect tutorial=(true 2)
+action click_spot tutorial:restart
+wait 5
+expect tutorial=(true 1)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 2)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 3)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 4)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 5)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 6)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 7)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 8)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 9)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(true 10)
+action click_spot tutorial:next
+wait 5
+expect tutorial=(false 10)
+expect document_dirty=false
+raw click 456 -105
+wait 5
+action click_spot menu:Tutorial
+wait 5
+expect tutorial=(true 10)
+action click_spot tutorial:restart
+wait 5
+expect tutorial=(true 1)
+quit

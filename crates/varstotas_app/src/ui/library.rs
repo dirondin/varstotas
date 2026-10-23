@@ -196,7 +196,7 @@ fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
         .and_then(|p| p.strip_prefix(root).ok())
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
-    let edges: Vec<_> = clip.preview.iter().take(THUMB_EDGES).copied().collect();
+    let edges: Vec<_> = crate::clipboard::sample_edges(&clip.preview, THUMB_EDGES);
     Ok(LibItem {
         path: path.to_path_buf(),
         name,

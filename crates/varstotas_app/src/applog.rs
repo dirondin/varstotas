@@ -91,6 +91,15 @@ pub fn snapshot() -> (u64, Vec<Entry>) {
     LOG.lock().map(|s| (s.version, s.entries.iter().cloned().collect())).unwrap_or_default()
 }
 
+/// A small diagnostic excerpt without cloning the whole session log.
+pub fn recent(limit: usize) -> Vec<Entry> {
+    LOG.lock().map(|s| {
+        let mut entries: Vec<_> = s.entries.iter().rev().take(limit).cloned().collect();
+        entries.reverse();
+        entries
+    }).unwrap_or_default()
+}
+
 pub fn version() -> u64 {
     LOG.lock().map(|s| s.version).unwrap_or(0)
 }

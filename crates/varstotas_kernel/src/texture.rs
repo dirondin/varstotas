@@ -47,11 +47,13 @@ pub struct TexPlacement {
     pub offset: [f64; 2],
     pub angle_deg: f64,
     pub scale: [f64; 2],
+    /// Shear after rotating into texture axes, before scaling V (imported atlas mapping).
+    pub shear: f64,
 }
 
 impl Default for TexPlacement {
     fn default() -> Self {
-        Self { offset: [0.0; 2], angle_deg: 0.0, scale: [1.0; 2] }
+        Self { offset: [0.0; 2], angle_deg: 0.0, scale: [1.0; 2], shear: 0.0 }
     }
 }
 
@@ -67,12 +69,12 @@ impl TexPlacement {
     pub fn approx_eq(&self, o: &Self) -> bool {
         let close = |a: f64, b: f64, tol: f64| (a - b).abs() <= tol * (1.0 + a.abs().max(b.abs()));
         (0..2).all(|i| close(self.offset[i], o.offset[i], 1e-6) && close(self.scale[i], o.scale[i], 1e-6))
-            && close(self.angle_deg, o.angle_deg, 1e-6)
+            && close(self.angle_deg, o.angle_deg, 1e-6) && close(self.shear, o.shear, 1e-6)
     }
 
     /// Fit the placement that maps the planar coordinates of `pts` (on a face with normal `n`)
     /// to the texture coordinates `uvs` (in tiles of `tile` mm), e.g. `vt` from an OBJ file.
-    /// Least squares over all points; shear is dropped. `None` for degenerate input.
+    /// Full affine least squares, including shear. `None` for degenerate input.
     pub fn fit(pts: &[DVec3], uvs: &[DVec2], n: DVec3, tile: [f64; 2]) -> Option<Self> {
         if pts.len() < 3 || pts.len() != uvs.len() {
             return None;
@@ -103,11 +105,11 @@ impl TexPlacement {
         let lmax = l0.max(l1);
         if lmax < 1e-9 || a.determinant().abs() < 1e-9 * lmax * lmax {
             let p = if lmax < 1e-9 {
-                Self { offset: [0.0; 2], angle_deg: 0.0, scale: [FLAT; 2] }
+                Self { offset: [0.0; 2], angle_deg: 0.0, scale: [FLAT; 2], shear: 0.0 }
             } else if l0 >= l1 {
-                Self { offset: [0.0; 2], angle_deg: row0.y.atan2(row0.x).to_degrees(), scale: [1.0 / l0, FLAT] }
+                Self { offset: [0.0; 2], angle_deg: row0.y.atan2(row0.x).to_degrees(), scale: [1.0 / l0, FLAT], shear: 0.0 }
             } else {
-                Self { offset: [0.0; 2], angle_deg: (-row1.x).atan2(row1.y).to_degrees(), scale: [FLAT, 1.0 / l1] }
+                Self { offset: [0.0; 2], angle_deg: (-row1.x).atan2(row1.y).to_degrees(), scale: [FLAT, 1.0 / l1], shear: 0.0 }
             };
             let offset = qm - p.to_planar(tm);
             let p = Self { offset: offset.to_array(), ..p };
@@ -120,17 +122,18 @@ impl TexPlacement {
             return None;
         }
         let offset = -(a.inverse() * c);
-        let p = Self { offset: offset.to_array(), angle_deg: theta.to_degrees(), scale: [1.0 / row0.length(), 1.0 / inv_sy] };
+        let p = Self { offset: offset.to_array(), angle_deg: theta.to_degrees(), scale: [1.0 / row0.length(), 1.0 / inv_sy], shear: row1.dot(DVec2::new(co, s)) / inv_sy };
         p.is_finite().then_some(p)
     }
 
     fn is_finite(&self) -> bool {
-        self.offset.iter().chain(&self.scale).all(|v| v.is_finite()) && self.angle_deg.is_finite()
+        self.offset.iter().chain(&self.scale).all(|v| v.is_finite()) && self.angle_deg.is_finite() && self.shear.is_finite()
     }
 
     /// Inverse of [`Self::apply`]: planar coordinates (mm) of texture-space point `t` (mm).
     pub fn to_planar(&self, t: DVec2) -> DVec2 {
-        let st = DVec2::new(t.x * self.scale[0], t.y * self.scale[1]);
+        let x = t.x * self.scale[0];
+        let st = DVec2::new(x, t.y * self.scale[1] - self.shear * x);
         let (s, c) = self.angle_deg.to_radians().sin_cos();
         DVec2::from(self.offset) + DVec2::new(st.x * c - st.y * s, st.x * s + st.y * c)
     }
@@ -142,7 +145,7 @@ impl TexPlacement {
         let r = DVec2::new(d.x * c - d.y * s, d.x * s + d.y * c);
         let sx = if self.scale[0].abs() > 1e-9 { self.scale[0] } else { 1.0 };
         let sy = if self.scale[1].abs() > 1e-9 { self.scale[1] } else { 1.0 };
-        DVec2::new(r.x / sx, r.y / sy)
+        DVec2::new(r.x / sx, (r.y + self.shear * r.x) / sy)
     }
 }
 
@@ -278,8 +281,9 @@ mod tests {
             .map(|(a, b)| DVec3::new(10.0, 20.0, 30.0) + u * *a + v * *b)
             .collect();
         for want in [
-            TexPlacement { offset: [120.0, -40.0], angle_deg: 30.0, scale: [1.5, 0.75] },
-            TexPlacement { offset: [5.0, 6.0], angle_deg: -100.0, scale: [2.0, -1.0] },
+            TexPlacement { offset: [120.0, -40.0], angle_deg: 30.0, scale: [1.5, 0.75], shear: 0.0 },
+            TexPlacement { offset: [5.0, 6.0], angle_deg: -100.0, scale: [2.0, -1.0], shear: 0.0 },
+            TexPlacement { offset: [50.0, -70.0], angle_deg: 43.0, scale: [0.7, -2.0], shear: 1.3 },
         ] {
             let tile = [400.0, 200.0];
             let uvs: Vec<DVec2> =
@@ -313,7 +317,7 @@ mod tests {
 
     #[test]
     fn placement_moves_rotates_scales() {
-        let p = TexPlacement { offset: [100.0, 0.0], angle_deg: 90.0, scale: [2.0, 1.0] };
+        let p = TexPlacement { offset: [100.0, 0.0], angle_deg: 90.0, scale: [2.0, 1.0], shear: 0.0 };
         let q = p.apply(DVec2::new(100.0, 50.0));
         assert!((q - DVec2::new(25.0, 0.0)).length() < 1e-9, "{q}");
         assert!((p.to_planar(q) - DVec2::new(100.0, 50.0)).length() < 1e-9);

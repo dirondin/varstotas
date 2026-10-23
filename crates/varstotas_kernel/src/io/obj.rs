@@ -1,7 +1,7 @@
 //! Wavefront OBJ (+ MTL) export and import.
 
 use super::{ImportOptions, IoError};
-use crate::{FaceId, MaterialId, Model, tessellate};
+use crate::{MaterialId, Model, tessellate};
 use glam::DVec3;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -86,12 +86,6 @@ pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String
         let _ = writeln!(flines, "g {}\nusemtl {}", names[m], names[m]);
         for &fi in faces {
             let f = &tess.faces[fi];
-            let nk = key(f.normal);
-            let nlen = nidx.len();
-            let ni = *nidx.entry(nk).or_insert_with(|| {
-                let _ = writeln!(nlines, "vn {} {} {}", num(f.normal.x), num(f.normal.y), num(f.normal.z));
-                nlen + 1
-            });
             let textured = matches!(tile, Some([w, h]) if f.uv.len() == f.positions.len() && w > 0.0 && h > 0.0);
             let [w, h] = tile.unwrap_or([1.0, 1.0]);
             // Convex faces without holes as one polygon, the rest as triangles.
@@ -102,6 +96,11 @@ pub fn write_obj_with_textures(model: &Model, mtl_file: &str) -> (String, String
             for poly in polys {
                 let mut line = String::from("f");
                 for i in poly {
+                    let n=f.normals.get(i).copied().unwrap_or(f.normal);
+                    let nlen=nidx.len();
+                    let ni=*nidx.entry(key(n)).or_insert_with(|| {
+                        let _=writeln!(nlines,"vn {} {} {}",num(n.x),num(n.y),num(n.z));nlen+1
+                    });
                     let p = f.positions[i];
                     let len = vidx.len();
                     let vi = *vidx.entry(key(p)).or_insert_with(|| {
@@ -191,6 +190,7 @@ pub(crate) struct ObjData {
     pub polys: Vec<(Vec<DVec3>, Option<usize>)>,
     /// Texture coordinates of each polygon's corners (`vt`), when every corner has one.
     pub poly_uvs: Vec<Option<Vec<glam::DVec2>>>,
+    pub poly_normals: Vec<Option<Vec<DVec3>>>,
     pub lines: Vec<Vec<DVec3>>,
     pub mtllibs: Vec<String>,
     pub mtl_names: Vec<String>,
@@ -199,6 +199,7 @@ pub(crate) struct ObjData {
 pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
     let mut verts: Vec<DVec3> = Vec::new();
     let mut tverts: Vec<glam::DVec2> = Vec::new();
+    let mut normals: Vec<DVec3> = Vec::new();
     let mut d = ObjData::default();
     let mut cur: Option<usize> = None;
     for (ln, line) in text.lines().enumerate() {
@@ -214,6 +215,11 @@ pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
                 }
                 verts.push(DVec3::new(c[0], c[1], c[2]));
             }
+            "vn" => {
+                let values:Vec<_>=it.take(3).map(|s|s.parse::<f64>()).collect::<Result<_,_>>().map_err(|_|bad())?;
+                if values.len()!=3 {return Err(bad());}
+                normals.push(DVec3::from_slice(&values));
+            }
             "vt" => {
                 let c: Vec<f64> = it.take(2).filter_map(|s| s.parse::<f64>().ok()).collect();
                 tverts.push(glam::DVec2::new(c.first().copied().unwrap_or(0.0), c.get(1).copied().unwrap_or(0.0)));
@@ -221,6 +227,7 @@ pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
             "f" | "l" => {
                 let mut pts = Vec::new();
                 let mut uvs = Some(Vec::new());
+                let mut ns=Some(Vec::new());
                 for tok in it {
                     let mut parts = tok.split('/');
                     let i: i64 = parts.next().unwrap_or("").parse().map_err(|_| bad())?;
@@ -231,6 +238,11 @@ pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
                         let k = if t < 0 { tverts.len() as i64 + t } else { t - 1 };
                         tverts.get(usize::try_from(k).ok()?).copied()
                     });
+                    let n=parts.next().and_then(|s|s.parse::<i64>().ok()).and_then(|i| {
+                        let k=if i<0 {normals.len() as i64+i}else{i-1};
+                        normals.get(usize::try_from(k).ok()?).copied()
+                    });
+                    match (n,ns.as_mut()) {(Some(n),Some(v))=>v.push(n),_=>ns=None}
                     match (t, uvs.as_mut()) {
                         (Some(t), Some(v)) => v.push(t),
                         _ => uvs = None,
@@ -239,6 +251,7 @@ pub(crate) fn parse_obj(text: &str) -> Result<ObjData, IoError> {
                 if tag == "f" {
                     d.polys.push((pts, cur));
                     d.poly_uvs.push(uvs);
+                    d.poly_normals.push(ns);
                 } else {
                     d.lines.push(pts)
                 }
@@ -307,7 +320,7 @@ pub fn import_obj(model: &mut Model, path: &Path) -> Result<(), IoError> {
     import_obj_with(model, path, &ImportOptions::default())
 }
 
-/// Import an OBJ file into the root mesh (sticky: each polygon via `add_face_exact`;
+/// Import an OBJ surface into the root mesh (polygons and authored corner normals preserved;
 /// non-planar polygons are fanned into triangles; `l` polylines become edges). `usemtl`
 /// materials defined in the `mtllib` files become model materials (a material with the same
 /// name and colour is reused; `default` means no material) on the faces' front side.
@@ -350,12 +363,13 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
             }));
         }
     }
-    let before: HashSet<FaceId> = model.root_mesh().faces.keys().collect();
     let tiles: HashMap<MaterialId, [f64; 2]> =
         model.materials.iter().filter_map(|(id, m)| Some((id, m.image.as_ref()?.size))).collect();
     let mesh = model.root_mesh_mut();
+    let mut surface = super::surface::SurfaceBuilder::from_mesh(mesh);
     for (k, (p, mi)) in data.polys.iter().enumerate() {
-        let made = super::stl::add_polygon(mesh, p);
+        let made = surface.polygon(mesh, p)?;
+        for &f in &made {super::surface::corner_normals(mesh,f,p,data.poly_normals.get(k).and_then(|n|n.as_deref()));}
         if let Some(m) = mi.and_then(|i| mat_of[i]) {
             let uvs = data.poly_uvs.get(k).and_then(|u| u.as_ref());
             for f in made {
@@ -368,12 +382,9 @@ pub fn import_obj_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
             }
         }
     }
+    surface.finish(mesh, opts);
     for l in &data.lines {
         mesh.add_polyline(l, false, false);
-    }
-    if opts.merge_coplanar {
-        let made = super::stl::new_faces(mesh, &before);
-        mesh.merge_coplanar_faces(&made);
     }
     Ok(())
 }

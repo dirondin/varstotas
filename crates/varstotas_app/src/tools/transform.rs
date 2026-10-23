@@ -235,7 +235,7 @@ fn hover_with_guides(ctx: &ToolContext) -> (Option<Hover>, Option<GuideRef>) {
 }
 
 fn draw_preview(view: &OverlayView, tg: &Targets, t: &DMat4, out3d: &mut Overlay3d, out2d: &mut Vec<Marker2d>) {
-    for (a, b) in transformed_preview(view.doc, &tg.ents, t, 6000) {
+    for (a, b) in transformed_preview(view.doc, &tg.ents, t) {
         line(out3d, a, b, SELECT_BLUE, 1.5);
     }
     for g in &tg.guides {

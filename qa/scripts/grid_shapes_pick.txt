@@ -1,0 +1,51 @@
+# Grid inference must survive the base plane, height line and a plugin's pick points.
+box -4000 -4000 -100 8000 8000 100
+view top
+zoom_extents
+wait 10
+action grid on
+tool box
+rawp move 1003 -997 0
+wait 3
+expect snap=Some((GridPoint, 1000, -1000, 0))
+rawp click 1003 -997 0
+rawp move 1997 1003 0
+wait 3
+expect snap=Some((GridPoint, 2000, 1000, 0))
+rawp click 1997 1003 0
+view iso
+zoom_extents
+wait 5
+rawp move 1500 0 1997
+wait 3
+expect snap=Some((Free, 1500, 0, 2000))
+rawp click 1500 0 1997
+wait 5
+expect gen=Box{width=1000,depth=2000,height=2000}@1000x2000x2000
+action plugin Beam
+wait 5
+raw key Enter
+wait 5
+rawp move 3003 -1997 0
+wait 3
+expect snap=Some((GridPoint, 3000, -2000, 0))
+rawp click 3003 -1997 0
+rawp move 3000 -2000 1997
+wait 3
+expect snap=Some((OnBlueAxis, 3000, -2000, 2000))
+rawp click 3000 -2000 1997
+wait 5
+expect undo=Some("Beam")
+action about
+wait 5
+expect about=(true true)
+action click_spot about:close
+wait 5
+expect about=(false true)
+action about
+wait 5
+action click_spot about:licences
+wait 5
+expect about=(false true)
+expect licences=(true varstotas
+quit

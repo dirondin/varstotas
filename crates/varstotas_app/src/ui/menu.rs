@@ -82,7 +82,9 @@ impl VarstotasApp {
     }
 
     fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
-        if icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), false).clicked() {
+        let response = icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), false);
+        super::tray_lib::spot(format!("cmd:{}", c.key()), response.rect.center());
+        if response.clicked() {
             self.actions.push(c.action());
         }
     }
@@ -141,7 +143,7 @@ impl VarstotasApp {
         self.clipboard_items(ui);
         self.cmd_item_as(ui, Cmd::Delete, &tr!("menu-erase"));
         ui.separator();
-        for c in [Cmd::Hide, Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode] {
+        for c in [Cmd::Hide, Cmd::Lock, Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeParametric, Cmd::Explode] {
             self.cmd_item(ui, c);
             // on a component other copies share
             if c == Cmd::MakeComponent && self.doc.can_make_unique() {
@@ -186,6 +188,8 @@ impl VarstotasApp {
     }
 
     pub(crate) fn menu_bar(&mut self, ui: &mut Ui) {
+        // Collect QA targets for the whole frame, including menus before the toolbar.
+        super::tray_lib::clear_spots();
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button(tr!("menu-file"), |ui| {
                 self.cmd_item(ui, Cmd::New);
@@ -233,6 +237,9 @@ impl VarstotasApp {
                         }
                     });
                 });
+                let r = ui.button(tr!("start-menu"));
+                super::tray_lib::spot("menu:StartScreen", r.rect.center());
+                if r.clicked() { self.actions.push(Action::StartScreen); ui.close(); }
                 ui.separator();
                 self.cmd_item(ui, Cmd::Save);
                 self.cmd_item(ui, Cmd::SaveAs);
@@ -275,7 +282,7 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::Quit);
             });
 
-            ui.menu_button(tr!("menu-edit"), |ui| {
+            let edit_menu = ui.menu_button(tr!("menu-edit"), |ui| {
                 let undo = self.doc.history.undo_label().map(|l| tr!("menu-undo-named", name = l)).unwrap_or_else(|| Cmd::Undo.menu_label());
                 let redo = self.doc.history.redo_label().map(|l| tr!("menu-redo-named", name = l)).unwrap_or_else(|| Cmd::Redo.menu_label());
                 self.cmd_item_as(ui, Cmd::Undo, &undo);
@@ -290,7 +297,9 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::SelectNone);
                 ui.separator();
                 self.cmd_item(ui, Cmd::Hide);
+                self.cmd_item(ui, Cmd::Lock);
                 self.cmd_item(ui, Cmd::UnhideAll);
+                self.cmd_item(ui, Cmd::UnlockAll);
                 ui.separator();
                 for c in [Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeUnique, Cmd::MakeParametric, Cmd::Explode, Cmd::CloseGroup] {
                     self.cmd_item(ui, c);
@@ -298,6 +307,7 @@ impl VarstotasApp {
                 ui.separator();
                 self.face_ops_items(ui);
             });
+            super::tray_lib::spot("menu:Edit", edit_menu.response.rect.center());
 
             ui.menu_button(tr!("menu-view"), |ui| {
                 ui.label(egui::RichText::new(tr!("menu-face-style")).small().weak());
@@ -317,6 +327,9 @@ impl VarstotasApp {
                 ui.separator();
                 ui.label(egui::RichText::new(tr!("menu-edge-style")).small().weak());
                 icon_check(ui, self.prefs.edges_mut(), Icon::StyleEdges, &tr!("menu-edges")).on_hover_text(tr!("menu-edges-hint"));
+                let r = icon_check(ui, &mut self.prefs.show_triangles, Icon::StyleWireframe, &tr!("view-triangles"));
+                super::tray_lib::spot("menu:Triangles", r.rect.center());
+                r.on_hover_text(tr!("view-triangles-hint"));
                 icon_check(ui, &mut self.prefs.profiles, Icon::StyleProfiles, &tr!("menu-profiles"));
                 ui.separator();
                 let mut guides = !self.doc.model.guides_hidden;
@@ -495,6 +508,9 @@ impl VarstotasApp {
             });
 
             ui.menu_button(tr!("menu-help"), |ui| {
+                let r = ui.button(tr!("tutorial-title"));
+                super::tray_lib::spot("menu:Tutorial", r.rect.center());
+                if r.clicked() { self.actions.push(Action::Tutorial); ui.close(); }
                 if ui
                     .add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open))
                     .on_hover_text(tr!("menu-user-guide-hint"))
@@ -508,8 +524,9 @@ impl VarstotasApp {
                     ui.close();
                 }
                 let examples = ui.add_enabled(!crate::EXAMPLES_URL.is_empty(), egui::Button::new(tr!("menu-examples"))).on_hover_text(tr!("menu-examples-hint"));
+                super::tray_lib::spot("menu:Examples", examples.rect.center());
                 if examples.clicked() {
-                    ui.ctx().open_url(egui::OpenUrl::new_tab(crate::EXAMPLES_URL));
+                    super::online_mats::open_url(crate::EXAMPLES_URL);
                     ui.close();
                 }
                 ui.separator();
@@ -521,6 +538,10 @@ impl VarstotasApp {
                     self.actions.push(Action::About);
                     ui.close();
                 }
+                ui.separator();
+                let r = ui.button(tr!("report-menu"));
+                super::tray_lib::spot("menu:ReportProblem", r.rect.center());
+                if r.clicked() { self.actions.push(Action::ReportProblem); ui.close(); }
             });
         });
     }

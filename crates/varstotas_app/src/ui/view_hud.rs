@@ -209,6 +209,11 @@ impl VarstotasApp {
             if item(ui, Icon::StyleEdges, &tr!("view-edges"), edges, None).clicked() {
                 *self.prefs.edges_mut() = !edges;
             }
+            let r = item(ui, Icon::StyleWireframe, &tr!("view-triangles"), self.prefs.show_triangles, None);
+            super::tray_lib::spot("hud:triangles", r.rect.center());
+            if r.on_hover_text(tr!("view-triangles-hint")).clicked() {
+                self.prefs.show_triangles = !self.prefs.show_triangles;
+            }
             if item(ui, Icon::StyleProfiles, &tr!("view-profiles"), self.prefs.profiles, None).clicked() {
                 self.prefs.profiles = !self.prefs.profiles;
             }

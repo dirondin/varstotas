@@ -152,6 +152,7 @@ fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_op
                     let (rect, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     paint_icon(ui.painter(), rect, icon, false);
                     super::tray_lib::spot(format!("card:{title}"), rect.center());
+                    super::tray_lib::spot(format!("card_toggle:{title}"), rect.center() - vec2(17.0, 0.0));
                     ui.label(RichText::new(card_label(title)).strong());
                     if let Some((icon, tip)) = button {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1343,6 +1344,7 @@ impl VarstotasApp {
 
     fn tags_panel(&mut self, ui: &mut Ui) {
         let mut toggle: Option<TagId> = None;
+        let mut lock_tag: Option<TagId> = None;
         let mut rename_commit: Option<(TagId, String)> = None;
         let mut delete: Option<TagId> = None;
         let mut add = false;
@@ -1359,7 +1361,12 @@ impl VarstotasApp {
             if r.clicked() {
                 self.doc.mutate_untracked(|m| m.untagged_hidden = !m.untagged_hidden);
             }
-            ui.add_space(14.0);
+            let locked = self.doc.model.untagged_locked;
+            let r = small_icon_button(ui, if locked { Icon::Lock } else { Icon::Unlock }, &tr!(if locked { "cmd-unlock" } else { "cmd-lock" }));
+            super::tray_lib::spot("tag_lock:Untagged", r.rect.center());
+            if r.clicked() {
+                self.doc.change_locks(&tr!("cmd-lock"), |m| m.untagged_locked = !m.untagged_locked);
+            }
             ui.label(if un_shown { RichText::new(tr!("tray-untagged")) } else { RichText::new(tr!("tray-untagged")).color(theme::text_dim()) });
         });
         let tags: Vec<(TagId, String, bool, [f32; 4])> = self
@@ -1370,10 +1377,14 @@ impl VarstotasApp {
             .map(|(id, t)| (id, t.name.clone(), t.visible, t.color))
             .collect();
         for (id, name, visible, color) in tags {
+            let locked = self.doc.model.tags[id].locked;
             ui.horizontal(|ui| {
                 if small_icon_button(ui, if visible { Icon::Eye } else { Icon::EyeOff }, &tr!("tray-tags-toggle")).clicked() {
                     toggle = Some(id);
                 }
+                let r = small_icon_button(ui, if locked { Icon::Lock } else { Icon::Unlock }, &tr!(if locked { "cmd-unlock" } else { "cmd-lock" }));
+                super::tray_lib::spot(format!("tag_lock:{name}"), r.rect.center());
+                if r.clicked() { lock_tag = Some(id); }
                 let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                 ui.painter().circle_filled(rect.center(), 4.5, color32(color));
                 match &mut self.tray.tag_rename {
@@ -1411,6 +1422,9 @@ impl VarstotasApp {
                     }
                 });
             });
+        }
+        if let Some(id) = lock_tag {
+            self.doc.change_locks(&tr!("cmd-lock"), |m| m.tags[id].locked = !m.tags[id].locked);
         }
         if let Some(id) = toggle {
             self.doc.mutate_untracked(|m| {
@@ -1612,6 +1626,9 @@ fn outliner_level(
         let mut child_path = path.clone();
         child_path.push(id);
         let row = |ui: &mut Ui, actions: &mut Vec<Action>| {
+            let lock = small_icon_button(ui, if model.entity_locked(path, EntityRef::Instance(id)) { Icon::Lock } else { Icon::Unlock }, &tr!(if inst.locked { "cmd-unlock" } else { "cmd-lock" }));
+            super::tray_lib::spot(format!("outliner_lock:{}", label), lock.rect.center());
+            if lock.clicked() { actions.push(Action::ToggleInstanceLocked(path.clone(), id)); }
             if small_icon_button(ui, if inst.hidden { Icon::EyeOff } else { Icon::Eye }, &tr!("tray-outliner-hide-show")).clicked() {
                 actions.push(Action::ToggleInstanceHidden(path.clone(), id));
             }
@@ -1622,6 +1639,7 @@ fn outliner_level(
                 text = text.color(theme::text_dim()).italics();
             }
             let resp = ui.selectable_label(selected, text).interact(Sense::drag());
+            super::tray_lib::spot(format!("outliner_row:{label}"), resp.rect.center());
             if resp.double_clicked() {
                 actions.push(Action::FocusInstance(path.clone(), id));
             } else if resp.clicked() {
@@ -1642,6 +1660,10 @@ fn outliner_level(
                 }
                 if ui.button(tr!(if inst.hidden { "tray-outliner-unhide" } else { "tray-outliner-hide" })).clicked() {
                     actions.push(Action::ToggleInstanceHidden(path.clone(), id));
+                    ui.close();
+                }
+                if ui.button(tr!(if inst.locked { "cmd-unlock" } else { "cmd-lock" })).clicked() {
+                    actions.push(Action::ToggleInstanceLocked(path.clone(), id));
                     ui.close();
                 }
                 if ui.button(tr!("tray-outliner-explode")).clicked() {

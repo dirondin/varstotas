@@ -467,6 +467,7 @@ pub struct RenderStyle {
     pub face_style: FaceStyle,
     pub xray: bool,
     pub show_edges: bool,
+    pub show_triangles: bool,
     pub profiles: bool,
     pub profile_width_px: f32,
     pub show_axes: bool,

@@ -1,0 +1,46 @@
+# Metadata is applied once, undoable, persisted in the versioned native document.
+wait 10
+action model_info
+wait 10
+expect model_info_tab=Info
+dump model_info_initial
+action click_spot model_info:tab:meta
+wait 5
+expect model_info_tab=Meta
+action click_spot model_info:metadata
+raw text A workbench by Žilvinas
+raw key Enter
+raw text Second line
+action click_spot model_info:license
+raw text CC BY 4.0
+wait 5
+expect metadata="" license=""
+action click_spot model_info:tab:info
+wait 5
+expect model_info_tab=Info
+action click_spot model_info:tab:meta
+wait 5
+expect model_info_tab=Meta
+action click_spot model_info:apply
+wait 5
+expect metadata="A workbench by Žilvinas\nSecond line" license="CC BY 4.0"
+expect document_dirty=true
+action undo
+wait 5
+expect metadata="" license=""
+action redo
+wait 5
+expect metadata="A workbench by Žilvinas\nSecond line" license="CC BY 4.0"
+save models/metadata.vrst
+expect document_dirty=false
+action new
+wait 5
+expect metadata="" license=""
+open models/metadata.vrst
+wait 5
+expect metadata="A workbench by Žilvinas\nSecond line" license="CC BY 4.0"
+expect document_dirty=false
+action click_spot model_info:preview
+wait 5
+expect preview_win=true
+quit

@@ -215,6 +215,8 @@ impl Material {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tag {
+    #[serde(default)]
+    pub locked: bool,
     pub name: String,
     pub visible: bool,
     pub color: [f32; 4],
@@ -280,6 +282,8 @@ pub struct SceneStyle {
     pub xray: bool,
     pub edges: bool,
     pub profiles: bool,
+    #[serde(default)]
+    pub triangles: bool,
 }
 
 /// Model Info → Animation: scene transitions and playback.
@@ -312,8 +316,18 @@ pub use crate::guides::GuideLine;
 /// A path from the root into nested instances, identifying an editing context.
 pub type ContextPath = Vec<InstanceId>;
 
+/// Free-form document information; an empty licence makes no licensing claim.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ModelMetadata {
+    pub text: String,
+    pub license: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Model {
+    #[serde(default)]
+    pub metadata: ModelMetadata,
     pub defs: SlotMap<DefId, Definition>,
     pub root: DefId,
     pub materials: SlotMap<MaterialId, Material>,
@@ -334,6 +348,8 @@ pub struct Model {
     /// Untagged top-level entities hidden (the eye of "Untagged" in the Tags card).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub untagged_hidden: bool,
+    #[serde(default)]
+    pub untagged_locked: bool,
     pub scenes: Vec<Scene>,
     #[serde(default)]
     pub scene_settings: SceneSettings,
@@ -400,11 +416,13 @@ impl Model {
         // i18n-ignore-next
         let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         Self {
+            metadata: ModelMetadata::default(),
             defs,
             root,
             materials: SlotMap::with_key(),
             tags: SlotMap::with_key(),
             untagged_hidden: false,
+            untagged_locked: false,
             environment: Default::default(),
             hdri: None,
             lights: Vec::new(),
@@ -1004,7 +1022,7 @@ impl Model {
             .values()
             .map(|f| {
                 let loops: Vec<Vec<_>> = f.loops().map(|l| l.iter().map(|v| pos(*v)).collect()).collect();
-                h((loops, mat(f.front), mat(f.back), f.hidden, tag(f.tag)))
+                h((loops, mat(f.front), mat(f.back), f.hidden, f.locked, tag(f.tag)))
             })
             .collect();
         let mut edges: Vec<u64> = m
@@ -1013,7 +1031,7 @@ impl Model {
             .map(|e| {
                 let mut ends = [pos(e.v[0]), pos(e.v[1])];
                 ends.sort();
-                h((ends, e.soft, e.smooth, e.hidden, tag(e.tag)))
+                h((ends, e.soft, e.smooth, e.hidden, e.locked, tag(e.tag)))
             })
             .collect();
         let mut insts: Vec<u64> = m
@@ -1021,7 +1039,7 @@ impl Model {
             .values()
             .map(|i| {
                 let xf: Vec<i64> = i.transform.to_cols_array().iter().map(|x| (x * 1000.0).round() as i64).collect();
-                h((self.content_hash_in(i.def, depth + 1), xf, &i.name, mat(i.material), tag(i.tag), i.hidden))
+                h((self.content_hash_in(i.def, depth + 1), xf, &i.name, mat(i.material), tag(i.tag), i.hidden, i.locked))
             })
             .collect();
         faces.sort_unstable();
@@ -1036,7 +1054,7 @@ impl Model {
     }
 
     pub fn add_tag(&mut self, name: &str) -> TagId {
-        self.tags.insert(Tag { name: name.to_string(), visible: true, color: [0.5, 0.5, 0.5, 1.0] })
+        self.tags.insert(Tag { locked: false, name: name.to_string(), visible: true, color: [0.5, 0.5, 0.5, 1.0] })
     }
 
     /// Delete tag `t`: its faces, edges, groups and components become untagged (the classic

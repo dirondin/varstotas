@@ -66,6 +66,12 @@ pub fn validate_model(m: &crate::Model) -> Result<(), IoError> {
             return Err(bad());
         }
         for f in mesh.faces.values() {
+            if !f.normals.is_empty() && (f.normals.len() != f.loops().map(Vec::len).sum::<usize>()
+                || f.normals.iter().any(|n| !n.is_finite() || !n.length_squared().is_finite() || n.length_squared() < 1e-12)) {
+                return Err(IoError::Format(format!("Invalid face shading normals: {} corners, {} normals", f.loops().map(Vec::len).sum::<usize>(), f.normals.len())));
+            }
+            if f.uv.is_some_and(|uv| !uv.offset.iter().chain(&uv.scale).all(|v| v.is_finite())
+                || !uv.angle_deg.is_finite() || !uv.shear.is_finite()) { return Err(bad()); }
             if !f.normal.is_finite() || f.outer.len() < 3 {
                 return Err(bad());
             }

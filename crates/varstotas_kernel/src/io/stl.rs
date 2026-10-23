@@ -1,10 +1,8 @@
 //! STL export (binary) and import (binary or ASCII).
 
 use super::{ImportOptions, IoError};
-use crate::mesh::Mesh;
-use crate::{FaceId, Model, tessellate};
+use crate::{Model, tessellate};
 use glam::DVec3;
-use std::collections::HashSet;
 use std::path::Path;
 use varstotas_i18n::tr;
 
@@ -84,30 +82,7 @@ pub(crate) fn parse_stl(data: &[u8]) -> Result<Vec<[DVec3; 3]>, IoError> {
     Ok(verts.as_chunks::<3>().0.iter().map(|c| [c[0], c[1], c[2]]).collect())
 }
 
-/// Add one polygon with exact orientation; non-planar polygons are fanned into triangles.
-/// Returns the faces made.
-pub(crate) fn add_polygon(mesh: &mut Mesh, pts: &[DVec3]) -> Vec<FaceId> {
-    if pts.len() < 3 {
-        return Vec::new();
-    }
-    if let Some(f) = mesh.add_face_exact(pts) {
-        return vec![f];
-    }
-    let mut out = Vec::new();
-    if pts.len() > 3 {
-        for i in 1..pts.len() - 1 {
-            out.extend(mesh.add_face_exact(&[pts[0], pts[i], pts[i + 1]]));
-        }
-    }
-    out
-}
-
-/// Faces of `mesh` not in `before` (made by an import, incl. pieces of split faces).
-pub(crate) fn new_faces(mesh: &Mesh, before: &HashSet<FaceId>) -> Vec<FaceId> {
-    mesh.faces.keys().filter(|f| !before.contains(f)).collect()
-}
-
-/// Import an STL file into the root mesh (each triangle via `add_face_exact`), merging
+/// Import an STL surface into the root mesh, preserving source triangles and merging
 /// coplanar triangles.
 pub fn import_stl(model: &mut Model, path: &Path) -> Result<(), IoError> {
     import_stl_with(model, path, &ImportOptions::default())
@@ -117,13 +92,8 @@ pub fn import_stl_with(model: &mut Model, path: &Path, opts: &ImportOptions) -> 
     let data = super::read_limited(path, super::MAX_MODEL_BYTES)?;
     let tris = parse_stl(&data)?;
     let mesh = model.root_mesh_mut();
-    let before: HashSet<FaceId> = mesh.faces.keys().collect();
-    for t in tris {
-        add_polygon(mesh, &t);
-    }
-    if opts.merge_coplanar {
-        let made = new_faces(mesh, &before);
-        mesh.merge_coplanar_faces(&made);
-    }
+    let mut surface = super::surface::SurfaceBuilder::from_mesh(mesh);
+    for t in tris { surface.triangle(mesh, t)?; }
+    surface.finish(mesh, opts);
     Ok(())
 }

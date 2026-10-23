@@ -4,7 +4,7 @@
 wait 10
 raw click 456 -105
 wait 5
-raw click 480 15
+raw click 480 37
 wait 10
 expect licences=(true varstotas None)
 action licences formats

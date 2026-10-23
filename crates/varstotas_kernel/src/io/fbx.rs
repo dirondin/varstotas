@@ -87,8 +87,11 @@ pub fn add_fbx(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Import
             }
             let range = face.index_begin as usize..(face.index_begin + face.num_indices) as usize;
             let mut pts: Vec<DVec3> = range.clone().map(|i| { let p = mesh.vertex_position[i]; xf.transform_point3(DVec3::new(p.x, p.y, p.z)) }).collect();
-            let mut uv: Option<Vec<DVec2>> = mesh.vertex_uv.exists.then(|| range.map(|i| { let u = mesh.vertex_uv[i]; DVec2::new(u.x, u.y) }).collect());
+            let mut uv: Option<Vec<DVec2>> = mesh.vertex_uv.exists.then(|| range.clone().map(|i| { let u = mesh.vertex_uv[i]; DVec2::new(u.x, u.y) }).collect());
+            let nm=xf.inverse().transpose();
+            let mut normals=mesh.vertex_normal.exists.then(||range.map(|i| {let n=mesh.vertex_normal[i];nm.transform_vector3(DVec3::new(n.x,n.y,n.z)).normalize_or_zero()}).collect::<Vec<_>>());
             if flip {
+                if let Some(ns)=normals.as_mut() {ns.reverse();}
                 pts.reverse();
                 if let Some(u) = uv.as_mut() {
                     u.reverse();
@@ -101,7 +104,7 @@ pub fn add_fbx(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Import
                     mats.len() - 1
                 })
             });
-            polys.push(ImpPoly { pts, uv, mat });
+            polys.push(ImpPoly { pts, uv, mat, normals });
         }
         meshes.push(ImpMesh { name: node.element.name.to_string(), polys });
     }

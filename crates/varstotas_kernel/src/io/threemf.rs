@@ -322,7 +322,7 @@ impl Reader3mf {
                 let pid = t.attr("pid").or(opid);
                 let pi = t.attr("p1").and_then(|s| s.parse::<usize>().ok()).or(oidx).unwrap_or(0);
                 let mat = pid.and_then(|p| part.colors.get(p)).and_then(|l| l.get(pi).copied());
-                out.polys.push(super::meshes::ImpPoly { pts: idx.iter().map(|i| xf.transform_point3(verts[*i])).collect(), uv: None, mat });
+                out.polys.push(super::meshes::ImpPoly { pts: idx.iter().map(|i| xf.transform_point3(verts[*i])).collect(), uv: None, mat, normals: None });
             }
         }
         let comps: Vec<(String, String, glam::DMat4)> = obj

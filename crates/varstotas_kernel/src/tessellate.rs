@@ -72,6 +72,9 @@ pub fn triangulate_face(mesh: &Mesh, f: FaceId) -> Vec<[DVec3; 3]> {
 /// "Smooth normals"). `None` when no edge of the face is smooth (flat shading).
 pub fn face_smooth_normals(mesh: &Mesh, f: FaceId) -> Option<Vec<(DVec3, DVec3)>> {
     let face = mesh.faces.get(f)?;
+    if !face.normals.is_empty() && face.normals.len() == face.loops().map(Vec::len).sum::<usize>() {
+        return Some(face.loops().flatten().zip(&face.normals).map(|(v, n)| (mesh.vertices[*v].pos, *n)).collect());
+    }
     if !mesh.face_edges(f).iter().any(|e| mesh.edges.get(*e).is_some_and(|ed| ed.smooth)) {
         return None;
     }

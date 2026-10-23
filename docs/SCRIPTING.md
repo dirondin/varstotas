@@ -17,6 +17,7 @@ Varstotas embeds the [Rhai](https://rhai.rs/book/) language — a simple scripti
 
 Rules:
 - One run is **one Undo step** ("Script"). If the script fails with an error, the model is not changed. A message with the line and position is written to the log.
+- `e.locked` reads the effective editing lock (including tags and ancestor groups). Locked entities remain readable, but `select` excludes them. Scripts, installed plugins and Python/MCP operations cannot modify protected geometry, shared definitions or materials, or clear locks. A rejected edit rolls back the whole model operation. Bridge Undo/Redo also preserves current locks; interactive Undo/Redo remains available to the user.
 - Coordinates are **world, in millimetres**. Numbers can be written as integers (`1000`) or fractions; lengths — as a string with units: `"1.2m"`, `"30cm"`, `"6\""`.
 - New geometry is created in the **current context**: the group that was open when the script started, or the one entered through `enter(g)`.
 - Rhai execution has a 30-second deadline and operation/allocation limits. Downloads share the deadline. Native geometry calls are synchronous and cannot be forcibly interrupted; this is not an OS sandbox.

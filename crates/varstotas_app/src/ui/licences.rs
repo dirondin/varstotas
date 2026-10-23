@@ -225,7 +225,7 @@ fn varstotas_tab(ui: &mut Ui) {
         ui.label(RichText::new(LICENSE).monospace().small());
         ui.add_space(8.0);
         ui.label(RichText::new(tr!("licences-programs")).strong());
-        egui::Grid::new("licences_programs").striped(true).num_columns(3).show(ui, |ui| {
+        egui::Grid::new("licences_programs").num_columns(3).show(ui, |ui| {
             for (n, id) in PROGRAMS {
                 ui.label(*n);
                 ui.label(cell("program", id, "use"));
@@ -240,7 +240,7 @@ fn varstotas_tab(ui: &mut Ui) {
 
 fn formats_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_formats").show(ui, |ui| {
-        egui::Grid::new("licences_formats_grid").striped(true).num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
+        egui::Grid::new("licences_formats_grid").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
             for h in [tr!("licence-formats-col-format"), tr!("licence-formats-col-varstotas"), tr!("licence-formats-col-how"), tr!("licence-formats-col-note")] {
                 ui.label(RichText::new(h).strong());
             }
@@ -260,7 +260,7 @@ fn libraries_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_libraries").show(ui, |ui| {
         ui.label(RichText::new(tr!("licence-libs-intro")).small());
         ui.add_space(6.0);
-        egui::Grid::new("licences_libraries_grid").striped(true).num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
+        egui::Grid::new("licences_libraries_grid").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
             for h in [tr!("licence-libs-col-library"), tr!("licence-libs-col-assets"), tr!("licence-libs-col-licence"), tr!("licence-libs-col-terms")] {
                 ui.label(RichText::new(h).strong());
             }

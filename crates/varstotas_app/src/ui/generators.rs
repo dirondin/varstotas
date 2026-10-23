@@ -339,7 +339,7 @@ impl VarstotasApp {
         let unit = self.doc.model.unit;
         if !self.library.gens.thumbs.contains_key(&it.source) {
             let t = build_preview(&self.doc.model, &it.source, &GenValues::new()).map(|(_, c)| {
-                let edges: Vec<_> = c.preview.iter().take(crate::ui::library::THUMB_EDGES).copied().collect();
+                let edges: Vec<_> = crate::clipboard::sample_edges(&c.preview, crate::ui::library::THUMB_EDGES);
                 (crate::ui::library::thumbnail(&edges), c.bounds.max - c.bounds.min)
             });
             self.library.gens.thumbs.insert(it.source.clone(), t);

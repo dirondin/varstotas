@@ -1,0 +1,18 @@
+# The longer Model Info window scrolls to its existing purge controls.
+wait 10
+action script material("Test", [0.8,0.5,0.2]); let b = box(ORIGIN,100,50,30); paint(b, "Test"); erase(b);
+action console_close
+wait 5
+expect stats=(0 0 0 0 | 0/0 0/1 0/1) None
+action model_info
+wait 10
+action click_spot model_info:tab:cleanup
+wait 5
+expect model_info_tab=Cleanup
+action click_spot purge
+wait 5
+expect stats=(0 0 0 0 | 0/0 0/0 0/0) Some("Purged 1 group(s), 1 material(s)")
+action undo
+wait 5
+expect stats=(0 0 0 0 | 0/0 0/1 0/1)
+quit

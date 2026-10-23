@@ -164,14 +164,11 @@ pub(crate) fn triangle_records(geo: &SceneGeometry) -> (crate::bvh::Bvh, Vec<[f3
     let mut tri_attr = Vec::with_capacity(n * 5);
     for &t in &bvh.order {
         let t = t as usize;
-        let mut idx = [3 * t, 3 * t + 1, 3 * t + 2];
+        let idx = [3 * t, 3 * t + 1, 3 * t + 2];
         let p = |i: usize| Vec3::from_array(geo.tris[i].pos);
-        // The geometric normal points to the front side (the vertex normals' side).
-        let ng = (p(idx[1]) - p(idx[0])).cross(p(idx[2]) - p(idx[0]));
-        let vn = Vec3::from_array(geo.tris[idx[0]].normal) + Vec3::from_array(geo.tris[idx[1]].normal) + Vec3::from_array(geo.tris[idx[2]].normal);
-        if ng.dot(vn) < 0.0 {
-            idx.swap(1, 2);
-        }
+        // Winding defines front/back materials, consistently with rasterization. Authored
+        // shading normals can cross the geometric hemisphere on thin/degenerate details;
+        // they must never turn a triangle (or the inside/outside of glass) around.
         let tex = |i: usize| geo.tex.get(i).copied().unwrap_or_default();
         let (v0, e1, e2) = (p(idx[0]), p(idx[1]) - p(idx[0]), p(idx[2]) - p(idx[0]));
         let t0 = tex(idx[0]);
@@ -948,9 +945,9 @@ mod tests {
     }
 
     #[test]
-    fn triangles_face_their_normals() {
+    fn shading_normals_do_not_reverse_triangle_sides() {
         let v = |pos: [f32; 3]| TriVertex { pos, normal: [0.0, 0.0, 1.0], color: [1.0, 0.0, 0.0, 1.0] };
-        // Clockwise seen from +Z, normals up: the corners get swapped.
+        // Clockwise seen from +Z, normals up: preserve geometry and side materials.
         let geo = SceneGeometry {
             tris: vec![v([0.0, 0.0, 0.0]), v([0.0, 1.0, 0.0]), v([1.0, 0.0, 0.0])],
             back_colors: vec![[0.0, 0.0, 1.0, 1.0]; 3],
@@ -961,7 +958,7 @@ mod tests {
         assert_eq!(bvh.order, vec![0]);
         let e1 = Vec3::new(g[1][0], g[1][1], g[1][2]);
         let e2 = Vec3::new(g[2][0], g[2][1], g[2][2]);
-        assert!(e1.cross(e2).z > 0.0);
+        assert!(e1.cross(e2).z < 0.0);
         assert_eq!((g[0][3].to_bits(), g[1][3].to_bits(), g[2][3].to_bits()), (4, 5, 2 | (3 << 16)));
         assert_eq!(a[0][3].to_bits(), 0xff00_00ff);
         assert_eq!(a[1][3].to_bits(), 0xffff_0000);

@@ -4,6 +4,8 @@ box 0 0 0 1000 600 400
 view iso
 zoom_extents
 wait 10
+expect grid=(true, 10.0, 10)
+action grid off
 expect grid=(false, 10.0, 10)
 screenshot shots/grid_off.bmp
 action grid on

@@ -33,6 +33,7 @@ impl Txn {
             return Err("document changed while operation was open; operation discarded".into());
         }
         if self.changed {
+            doc.model.validate_locked_changes(&self.model)?;
             let before = std::mem::replace(&mut doc.model, self.model);
             doc.record_step(&self.label, before);
         }
@@ -355,8 +356,8 @@ impl VarstotasApp {
                 done(Ok(Value::Null))
             }
             "undo" | "redo" if in_txn => done(Err("finish the open operation first".into())),
-            "undo" => done(Ok(self.doc.undo().map_or(Value::Null, Value::String))),
-            "redo" => done(Ok(self.doc.redo().map_or(Value::Null, Value::String))),
+            "undo" => done(self.doc.agent_history(false).map(|v| v.map_or(Value::Null, Value::String))),
+            "redo" => done(self.doc.agent_history(true).map(|v| v.map_or(Value::Null, Value::String))),
             "view" => {
                 let name = s("name").unwrap_or_default().to_ascii_lowercase();
                 self.cam_anim = None;
@@ -461,6 +462,9 @@ impl VarstotasApp {
                 }
             }
             "open" | "new" => {
+                if !confirmed && self.doc.model.has_locks() {
+                    return Reply::confirm("Replace the current document containing locked objects".into());
+                }
                 if !confirmed && self.doc.dirty {
                     let what = match s("path") {
                         Some(x) if req.method == "open" => format!("Open {x}"),
@@ -711,6 +715,18 @@ mod transaction_security_tests {
         assert!(doc.model.materials.values().any(|m| m.name == "user"));
         assert!(!doc.model.materials.values().any(|m| m.name == "agent"));
         assert_eq!(doc.history.undo_label(), Some("UI"));
+    }
+    #[test]
+    fn staged_bridge_mutation_cannot_bypass_lock_validation() {
+        let mut doc = Document::new();
+        let f = doc.model.root_mesh_mut().add_face(&[DVec3::ZERO, DVec3::X, DVec3::Y]).unwrap();
+        doc.model.root_mesh_mut().faces[f].locked = true;
+        let original = varstotas_kernel::io::to_json(&doc.model).unwrap();
+        let mut t = stage(&doc);
+        t.model.root_mesh_mut().faces.remove(f);
+        assert!(t.commit(&mut doc).is_err());
+        assert_eq!(varstotas_kernel::io::to_json(&doc.model).unwrap(), original);
+        assert!(doc.history.undo_label().is_none());
     }
     #[test]
     fn successful_transaction_is_one_undo_step() {

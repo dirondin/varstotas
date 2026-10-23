@@ -16,6 +16,7 @@ mod debug_capture;
 mod demo;
 mod document;
 mod downloads;
+mod download_progress;
 mod inference;
 mod keymap;
 mod layout;
@@ -30,6 +31,7 @@ mod overlay;
 mod panes;
 mod plugins;
 mod scene_builder;
+mod startup;
 mod templates;
 mod text3d;
 mod textures;
@@ -41,8 +43,28 @@ mod viewport;
 
 // Repository examples; available on GitHub once the project is pushed.
 const EXAMPLES_URL: &str = "https://github.com/dirondin/varstotas/tree/master/examples";
+const ISSUES_URL: &str = "https://github.com/dirondin/varstotas/issues/new";
+const APP_NAME: &str = "Varstotas"; // i18n-ignore
 
 fn main() -> eframe::Result<()> {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 1 && (args[0] == "--help" || args[0] == "-h") {
+        println!("{}", startup::usage());
+        return Ok(());
+    }
+    if args.len() == 1 && (args[0] == "--version" || args[0] == "-V") {
+        println!("{APP_NAME} {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    let startup_document = startup::document(args).unwrap_or_else(|error| {
+        eprintln!("{error}\n{}", startup::usage());
+        std::process::exit(2);
+    }).map(|path| path.canonicalize().unwrap_or(path));
+    // Winit's native macOS menu uses NSProcessInfo, which otherwise inherits the
+    // lowercase executable name when launching a development build outside an .app.
+    #[cfg(target_os = "macos")]
+    objc2_foundation::NSProcessInfo::processInfo()
+        .setProcessName(&objc2_foundation::NSString::from_str(APP_NAME));
     applog::init();
     let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
     if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
@@ -81,7 +103,7 @@ fn main() -> eframe::Result<()> {
     let mut options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
-            .with_title("Varstotas") // i18n-ignore
+            .with_title(APP_NAME)
             .with_icon(app_icon())
             .with_inner_size([1400.0, 900.0])
             .with_min_inner_size([800.0, 500.0])
@@ -99,9 +121,9 @@ fn main() -> eframe::Result<()> {
         }));
     }
     eframe::run_native(
-        "Varstotas", // i18n-ignore
+        APP_NAME,
         options,
-        Box::new(|cc| Ok(Box::new(app::VarstotasApp::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(app::VarstotasApp::new(cc, startup_document)))),
     )
 }
 

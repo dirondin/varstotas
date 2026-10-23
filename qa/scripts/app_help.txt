@@ -2,7 +2,7 @@
 wait 10
 raw click 456 -105
 wait 5
-raw click 481 -76
+raw click 481 -54
 wait 5
 expect guide=(true Start "")
 screenshot shots/guide_start.bmp

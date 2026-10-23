@@ -32,6 +32,7 @@ pub mod guides;
 pub mod history;
 pub mod io;
 pub mod layout;
+pub mod locking;
 pub mod mesh;
 pub mod model;
 pub mod generator;
@@ -63,6 +64,7 @@ pub use history::History;
 pub use mesh::Mesh;
 pub use ops::{ChamferKind, ChamferResult, IntersectScope, SliceOutcome, SolidOp};
 pub use model::{
+    ModelMetadata,
     Attribution, ContextPath, LicenseKind, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
 pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
@@ -257,6 +259,8 @@ pub struct Edge {
     pub soft: bool,
     pub smooth: bool,
     pub hidden: bool,
+    #[serde(default)]
+    pub locked: bool,
     pub tag: Option<TagId>,
     /// Edges created together as one arc/circle share a curve id (selected/erased as a unit).
     pub curve: Option<u32>,
@@ -264,7 +268,7 @@ pub struct Edge {
 
 impl Edge {
     pub fn new(a: VertexId, b: VertexId) -> Self {
-        Self { v: [a, b], soft: false, smooth: false, hidden: false, tag: None, curve: None }
+        Self { v: [a, b], soft: false, smooth: false, hidden: false, locked: false, tag: None, curve: None }
     }
     /// The endpoint that is not `v` (or `v[0]` if `v` is not an endpoint).
     pub fn other(&self, v: VertexId) -> VertexId {
@@ -282,9 +286,14 @@ pub struct Face {
     /// Inner loops (holes), clockwise when viewed from the front.
     pub holes: Vec<Vec<VertexId>>,
     pub normal: DVec3,
+    /// Authored shading normals, one per loop corner (outer, then holes). Empty = generated shading.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub normals: Vec<DVec3>,
     pub front: Option<MaterialId>,
     pub back: Option<MaterialId>,
     pub hidden: bool,
+    #[serde(default)]
+    pub locked: bool,
     pub tag: Option<TagId>,
     /// Texture position on this face (`None` = default projection). See [`texture`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -298,13 +307,51 @@ impl Face {
             outer: Vec::new(),
             holes: Vec::new(),
             normal: DVec3::Z,
+            normals: Vec::new(),
             front: None,
             back: None,
             hidden: false,
+            locked: false,
             tag: None,
             uv: None,
         }
     }
+    /// Insert an edge vertex and its interpolated authored normal in matching loop order.
+    pub(crate) fn split_loop_edge(&mut self, a: VertexId, b: VertexId, vertex: VertexId, t: f64) {
+        let corner = self.loops().enumerate().find_map(|(loop_index, vertices)| {
+            (0..vertices.len()).find_map(|i| {
+                let (x, y) = (vertices[i], vertices[(i + 1) % vertices.len()]);
+                ((x == a && y == b) || (x == b && y == a)).then_some((loop_index, i, x == a))
+            })
+        });
+        let Some((loop_index, i, forward)) = corner else { return };
+        if !self.normals.is_empty() {
+            if self.normals.len() == self.loops().map(Vec::len).sum::<usize>() {
+                let start: usize = self.loops().take(loop_index).map(Vec::len).sum();
+                let count = self.loops().nth(loop_index).unwrap().len();
+                let (a, b) = (self.normals[start + i], self.normals[start + (i + 1) % count]);
+                let t = if forward { t } else { 1.0 - t };
+                self.normals.insert(start + i + 1, a.lerp(b, t.clamp(0.0, 1.0)).normalize_or(self.normal));
+            } else { self.normals.clear(); }
+        }
+        let vertices = if loop_index == 0 { &mut self.outer } else { &mut self.holes[loop_index - 1] };
+        vertices.insert(i + 1, vertex);
+    }
+
+    pub(crate) fn reverse_shading_normals(&mut self, negate: bool) {
+        if self.normals.len() != self.loops().map(Vec::len).sum::<usize>() {
+            self.normals.clear();
+            return;
+        }
+        let mut start = 0;
+        for len in std::iter::once(self.outer.len()).chain(self.holes.iter().map(Vec::len)) {
+            let corners = &mut self.normals[start..start + len];
+            corners.reverse();
+            if negate { for n in corners { *n = -*n; } }
+            start += len;
+        }
+    }
+
     /// Iterate over all loops (outer first, then holes).
     pub fn loops(&self) -> impl Iterator<Item = &Vec<VertexId>> {
         std::iter::once(&self.outer).chain(self.holes.iter())
@@ -319,6 +366,7 @@ pub struct Instance {
     pub material: Option<MaterialId>,
     pub tag: Option<TagId>,
     pub hidden: bool,
+    #[serde(default)]
     pub locked: bool,
 }
 

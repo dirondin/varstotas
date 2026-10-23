@@ -298,6 +298,9 @@ fn parse_raw(rest: &str) -> Option<RawCmd> {
         "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
         "dragfast" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: true },
         "scroll" => RawCmd::Scroll(p(0)?, *n.get(2)?),
+        "pinch" => RawCmd::Pinch(p(0)?, *n.get(2)?),
+        "wheel" => RawCmd::Wheel(p(0)?, *n.get(2)?),
+        "twist" => RawCmd::Twist(p(0)?, *n.get(2)?),
         "mods" => RawCmd::Mods(parse_mods(args)),
         "copy" => RawCmd::Copy,
         "cut" => RawCmd::Cut,
@@ -342,6 +345,9 @@ pub enum RawCmd {
     /// `raw scroll x y dy` — move, then a trackpad swipe of `dy` points (negative: the
     /// content moves up, i.e. scroll down).
     Scroll(Pos2, f32),
+    Pinch(Pos2, f32),
+    Wheel(Pos2, f32),
+    Twist(Pos2, f32),
     /// `raw mods shift+alt|none` — `ModifiersChanged` only (what winit emits for modifier
     /// keys; egui 0.36 tracks `InputState::modifiers` from it). Later pointer/key events
     /// carry the new state in their `modifiers` field. No `Key` events are sent.
@@ -538,7 +544,8 @@ pub struct Script {
 impl Script {
     pub fn parse(text: &str) -> Self {
         let cmds: Vec<ScriptCmd> = text.lines().filter_map(parse_cmd).collect();
-        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..) | ScriptCmd::RawSheet(..))).then(RawInjector::default);
+        let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..) | ScriptCmd::RawSheet(..))
+            || matches!(c, ScriptCmd::Action(name) if name.starts_with("click_spot "))).then(RawInjector::default);
         Self {
             cmds,
             raw,
@@ -882,6 +889,21 @@ impl VarstotasApp {
     fn script_action(&mut self, name: &str, ctx: &Context) {
         use crate::app::Action;
         use varstotas_kernel::IntersectScope;
+        if name == "console_close" { self.console.open = false; return; }
+        if let Some(value) = name.strip_prefix("xray ") {
+            self.prefs.xray = value.trim() == "on";
+            return;
+        }
+        if let Some(value) = name.strip_prefix("triangles ") {
+            self.prefs.show_triangles = value.trim() == "on";
+            return;
+        }
+        if let Some(name) = name.strip_prefix("click_spot ") {
+            let spots = crate::ui::tray_lib::spots(self.viewport.view_rect.min);
+            let (_, x, y) = spots.iter().find(|(n, _, _)| n == name).expect("visible QA click spot");
+            self.queue_raw(RawCmd::Click(egui::pos2(*x as f32, *y as f32)));
+            return;
+        }
         if let Some(path) = name.strip_prefix("file_template ") {
             self.actions.push(Action::NewFromFileTemplate(path.trim().into()));
             return;
@@ -2130,7 +2152,12 @@ impl VarstotasApp {
             "purge_unused" => Action::PurgeUnused,
             "new" => Action::New,
             "preferences" => Action::Preferences,
+            "tutorial" => Action::Tutorial,
             "about" => Action::About,
+            "start_screen" => Action::StartScreen,
+            "report_problem" => Action::ReportProblem,
+            "lock" => Action::LockSelected,
+            "unlock_all" => Action::UnlockAll,
             "undo" => Action::Undo,
             "redo" => Action::Redo,
             "template_chooser" => {
@@ -2141,7 +2168,7 @@ impl VarstotasApp {
                 // Toggle the first tag's visibility (creating a tag "QA" if there is none).
                 self.doc.mutate_untracked(|m| {
                     if m.tags.is_empty() {
-                        m.tags.insert(varstotas_kernel::Tag { name: "QA".into(), visible: true, color: [0.5; 4] });
+                        m.tags.insert(varstotas_kernel::Tag { locked: false, name: "QA".into(), visible: true, color: [0.5; 4] });
                     }
                     if let Some(t) = m.tags.values_mut().next() {
                         t.visible = !t.visible;
@@ -2204,6 +2231,12 @@ impl VarstotasApp {
                 let ph = egui::TouchPhase::Start;
                 vec![vec![mv(p)], vec![wheel(ph, 0.0)], vec![wheel(egui::TouchPhase::Move, dy)], vec![wheel(egui::TouchPhase::End, 0.0)]]
             }
+            RawCmd::Wheel(p, delta) => vec![vec![mv(p)], vec![Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line, delta: egui::vec2(0.0, delta),
+                phase: egui::TouchPhase::Move, modifiers: m,
+            }]],
+            RawCmd::Pinch(p, factor) => vec![vec![mv(p)], vec![Event::Zoom(factor)]],
+            RawCmd::Twist(p, radians) => vec![vec![mv(p)], vec![Event::Rotate(radians)]],
             RawCmd::RightClick(p) => {
                 let rb = |pressed: bool| Event::PointerButton {
                     pos: p + origin,
@@ -2340,6 +2373,21 @@ impl VarstotasApp {
             .and_then(|d| crate::templates::scan(&d).ok()).unwrap_or_default()
             .into_iter().map(|f| f.name).collect::<Vec<_>>();
         let extra = format!("{extra} template_files={template_files:?} document_path={:?} document_dirty={} save_confirm={}", self.doc.path, self.doc.dirty, self.confirm.is_some());
+        let lock_counts = (
+            m.defs.values().map(|d| d.mesh.instances.values().filter(|i| i.locked).count()).sum::<usize>(),
+            m.defs.values().map(|d| d.mesh.faces.values().filter(|f| f.locked).count()).sum::<usize>(),
+            m.defs.values().map(|d| d.mesh.edges.values().filter(|e| e.locked).count()).sum::<usize>(),
+            m.tags.values().filter(|t| t.locked).count(), m.untagged_locked,
+        );
+        let extra = format!("{extra} locks={lock_counts:?} metadata={:?} license={:?} model_info_tab={:?}", m.metadata.text, m.metadata.license, self.model_info.tab);
+        let extra = format!("{extra} start=({} {}) report=({} {})", self.show_start,
+            self.prefs.show_start_screen, self.feedback.open, self.feedback.include_errors);
+        let extra = format!("{extra} about=({} {})", self.show_about, self.about_icon.is_some());
+        let extra = format!("{extra} tutorial=({} {})", self.tutorial.open, self.tutorial.step + 1);
+        let transfers = |work: &crate::online_mats::Online| work.progress.values()
+            .filter_map(|p| p.snapshot()).map(|p| (p.received, p.total)).collect::<Vec<_>>();
+        let extra = format!("{extra} model_transfer={:?} material_transfer={:?}", transfers(&self.models.work), transfers(&self.online.work));
+        let extra = format!("{extra} triangles={}", self.prefs.show_triangles);
         let sc = &m.scene_settings;
         let extra = format!(
             "{extra} scenes={:?} scene={:?} playing={} anim={} cam=({:.0},{:.0},{:.0}) style={} edges={} tags_hidden={} tags={:?} untagged_hidden={} drawn_faces={} transition={:.1}s/{}",
@@ -2826,6 +2874,7 @@ mod tests {
         assert_eq!(parse_cmd("raw mods shift+option"), Some(ScriptCmd::Raw(RawCmd::Mods(alt_shift))));
         assert_eq!(parse_cmd("raw key Escape down"), Some(ScriptCmd::Raw(RawCmd::Key(Key::Escape, Some(true)))));
         assert!(Script::parse("raw tap 1 2").raw.is_some());
+        assert!(Script::parse("action click_spot start:continue").raw.is_some());
         assert!(Script::parse("clickpx 1 2").raw.is_none());
 
         let mut inj = RawInjector::default();

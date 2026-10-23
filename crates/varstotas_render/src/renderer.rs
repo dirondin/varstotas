@@ -427,6 +427,7 @@ impl Default for RenderStyle {
             face_style: FaceStyle::Shaded,
             xray: false,
             show_edges: true,
+            show_triangles: false,
             profiles: true,
             profile_width_px: 2.5,
             show_axes: true,
@@ -1494,7 +1495,7 @@ impl Renderer {
         }
 
         // 3. edges (write depth so x-ray / translucent faces don't wash them out)
-        if (style.show_edges || style.face_style == FaceStyle::Wireframe) && g.edge_verts > 0 {
+        if (style.show_edges || style.show_triangles || style.face_style == FaceStyle::Wireframe) && g.edge_verts > 0 {
             if ppp >= 1.5 {
                 // HiDPI: 1 physical px is too faint; draw 1 logical point quads.
                 if let (Some(pl), Some(bg)) = (&p.edge_thick_seg, &g.edges_bg) {

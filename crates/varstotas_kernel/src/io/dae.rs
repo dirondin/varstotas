@@ -153,6 +153,7 @@ impl<'a> Doc<'a> {
             };
             let Some((po, (pv, ps))) = find("VERTEX") else { continue };
             let uv = find("TEXCOORD");
+            let normal = find("NORMAL");
             let mat = prim.attr("material").map(|s| binds.get(s).cloned().unwrap_or_else(|| s.to_string())).and_then(|m| self.material(&m));
             // Index lists, one per polygon.
             let mut polys: Vec<Vec<usize>> = Vec::new();
@@ -197,7 +198,8 @@ impl<'a> Doc<'a> {
                 let pts: Option<Vec<DVec3>> = (0..n).map(|k| at(pv, *ps, po, k, 3).map(|v| DVec3::new(v[0], v[1], v[2]))).collect();
                 let Some(pts) = pts else { continue };
                 let uvs = uv.and_then(|(o, s)| (0..n).map(|k| at(&s.0, s.1, o, k, 2).map(|v| DVec2::new(v[0], v[1]))).collect::<Option<Vec<_>>>());
-                out.push(ImpPoly { pts, uv: uvs, mat });
+                let normals=normal.and_then(|(o,s)|(0..n).map(|k|at(&s.0,s.1,o,k,3).map(|v|DVec3::new(v[0],v[1],v[2]))).collect::<Option<Vec<_>>>());
+                out.push(ImpPoly { pts, uv: uvs, mat, normals });
             }
         }
         Ok(out)
@@ -245,7 +247,12 @@ impl<'a> Doc<'a> {
                 for q in &mut p.pts {
                     *q = m.transform_point3(*q);
                 }
+                if let Some(ns)=p.normals.as_mut() {
+                    let nm=m.inverse().transpose();
+                    for n in ns { *n=nm.transform_vector3(*n).normalize_or_zero(); }
+                }
                 if m.determinant() < 0.0 {
+                    if let Some(ns)=p.normals.as_mut() {ns.reverse();}
                     p.pts.reverse();
                     if let Some(u) = p.uv.as_mut() {
                         u.reverse();

@@ -7,6 +7,7 @@ pub mod console;
 pub mod dialogs;
 pub mod downloads;
 pub mod extensions;
+pub mod feedback;
 pub mod gen_editor;
 pub mod generators;
 pub mod icons;
@@ -27,6 +28,7 @@ pub mod app_help;
 pub mod view_hud;
 pub mod sheets;
 pub mod statusbar;
+pub mod start_screen;
 pub mod theme;
 pub mod toolbar;
 pub mod tray;
@@ -142,3 +144,5 @@ pub fn swatch(ui: &mut Ui, color: Color32, size: f32, selected: bool) -> Respons
     p.rect_stroke(rect, 5.0, stroke, egui::StrokeKind::Inside);
     resp
 }
+
+pub mod tutorial;

@@ -189,10 +189,13 @@ pub fn pick_face(ctx: &ToolContext) -> Option<Hover> {
         return None;
     }
     if hit.path.len() > active.len() {
-        return Some(Hover::Instance { id: hit.path[active.len()], point: hit.point });
+        let id = hit.path[active.len()];
+        if ctx.doc.model.entity_locked(active, EntityRef::Instance(id)) { return None; }
+        return Some(Hover::Instance { id, point: hit.point });
     }
     let mesh = ctx.doc.model.mesh_at(active)?;
     let f = mesh.faces.get(hit.face)?;
+    if ctx.doc.model.entity_locked(active, EntityRef::Face(hit.face)) { return None; }
     let xf = context_xf(ctx.doc);
     let n = xf.inverse().transpose().transform_vector3(f.normal).normalize_or(f.normal);
     Some(Hover::Face { face: hit.face, point: hit.point, plane: Plane::new(hit.point, n) })
@@ -223,7 +226,7 @@ fn edges_near(ctx: &ToolContext, c: DVec2, radius: f64) -> Vec<(f64, EdgeId, DVe
                 let xf = context_xf(ctx.doc);
                 edges.reserve(mesh.edges.len());
                 for (id, e) in mesh.edges.iter() {
-                    if e.hidden {
+                    if e.hidden || ctx.doc.model.entity_locked(&key.2, EntityRef::Edge(id)) {
                         continue;
                     }
                     let (a, b) = mesh.edge_segment(id);
@@ -380,6 +383,7 @@ pub fn pick_instance_wire(ctx: &ToolContext, radius: f64) -> Option<Hover> {
                 .nested_wire_world(&key.2)
                 .into_iter()
                 .filter_map(|(id, a, b)| {
+                    if ctx.doc.model.entity_locked(&key.2, EntityRef::Instance(id)) { return None; }
                     let (sa, sb) = inference::geo::project_segment(ctx.camera, vp, a, b)?;
                     Some((id, a, b, sa, sb))
                 })
@@ -609,8 +613,8 @@ pub fn snap_angle(deg: f64, step: f64, tol: f64) -> (f64, bool) {
 }
 
 /// World-space edge segments that move/stretch when `ents` are transformed by `t_world`
-/// (in the active context). Instances contribute their definition's edges (capped).
-pub fn transformed_preview(doc: &Document, ents: &[EntityRef], t_world: &DMat4, limit: usize) -> Vec<(DVec3, DVec3)> {
+/// (in the active context). Instances contribute their definition's complete visible edges.
+pub fn transformed_preview(doc: &Document, ents: &[EntityRef], t_world: &DMat4) -> Vec<(DVec3, DVec3)> {
     guarded(|| {
         let mut out = Vec::new();
         let Some(mesh) = doc.active_mesh() else { return out };
@@ -620,7 +624,7 @@ pub fn transformed_preview(doc: &Document, ents: &[EntityRef], t_world: &DMat4, 
         let mut seen: HashSet<EdgeId> = HashSet::new();
         for v in &vs {
             for e in mesh.vertex_edges(*v) {
-                if !seen.insert(e) || out.len() >= limit {
+                if !seen.insert(e) {
                     continue;
                 }
                 let ed = &mesh.edges[e];
@@ -637,7 +641,7 @@ pub fn transformed_preview(doc: &Document, ents: &[EntityRef], t_world: &DMat4, 
                 && let Some(inst) = mesh.instances.get(*id)
             {
                 let m = *t_world * xf * inst.transform;
-                instance_edges(&doc.model, inst.def, m, &mut out, limit, 0);
+                instance_edges(&doc.model, inst.def, m, &mut out, 0);
             }
         }
         out
@@ -645,15 +649,12 @@ pub fn transformed_preview(doc: &Document, ents: &[EntityRef], t_world: &DMat4, 
     .unwrap_or_default()
 }
 
-fn instance_edges(model: &Model, def: varstotas_kernel::DefId, m: DMat4, out: &mut Vec<(DVec3, DVec3)>, limit: usize, depth: usize) {
-    if depth > 16 {
+fn instance_edges(model: &Model, def: varstotas_kernel::DefId, m: DMat4, out: &mut Vec<(DVec3, DVec3)>, depth: usize) {
+    if depth > 64 {
         return;
     }
     let Some(d) = model.defs.get(def) else { return };
     for (id, e) in d.mesh.edges.iter() {
-        if out.len() >= limit {
-            return;
-        }
         if e.hidden {
             continue;
         }
@@ -661,7 +662,7 @@ fn instance_edges(model: &Model, def: varstotas_kernel::DefId, m: DMat4, out: &m
         out.push((m.transform_point3(a), m.transform_point3(b)));
     }
     for inst in d.mesh.instances.values() {
-        instance_edges(model, inst.def, m * inst.transform, out, limit, depth + 1);
+        if !inst.hidden {instance_edges(model, inst.def, m * inst.transform, out, depth + 1);}
     }
 }
 
@@ -782,7 +783,7 @@ pub fn highlight_hover(view: &OverlayView, h: &Hover, out3d: &mut Overlay3d) {
         Hover::Face { face, .. } => highlight_face(view, *face, HOVER_FACE, out3d),
         Hover::Edge { a, b, .. } => line(out3d, *a, *b, SELECT_BLUE, 3.0),
         Hover::Instance { id, .. } => {
-            for (a, b) in transformed_preview(view.doc, &[EntityRef::Instance(*id)], &DMat4::IDENTITY, 4000) {
+            for (a, b) in transformed_preview(view.doc, &[EntityRef::Instance(*id)], &DMat4::IDENTITY) {
                 line(out3d, a, b, SELECT_BLUE, 2.0);
             }
         }
@@ -1112,6 +1113,40 @@ pub fn draw_dim_moved(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dense_nested_models_have_complete_transform_and_clipboard_previews() {
+        use varstotas_kernel::{Definition,Edge,Vertex,Instance};
+        let mut model=varstotas_kernel::Model::new();
+        let empty=||Definition{name:String::new(),mesh:varstotas_kernel::Mesh::new(),is_group:true,guides:Default::default(),params:None,generated:None,source:None,rig:None,rigged:None,preview:None};
+        let mut def=empty();
+        let count=21_001;
+        for i in 0..count {
+            let a=def.mesh.vertices.insert(Vertex{pos:DVec3::new(i as f64,0.,0.)});
+            let b=def.mesh.vertices.insert(Vertex{pos:DVec3::new(i as f64,1.,0.)});
+            def.mesh.edges.insert(Edge::new(a,b));
+        }
+        let mut id=model.defs.insert(def);
+        // More than the old 16-level transform-preview depth limit.
+        for _ in 0..18 {
+            let mut parent=empty();
+            parent.mesh.instances.insert(Instance{def:id,transform:DMat4::IDENTITY,name:String::new(),material:None,tag:None,hidden:false,locked:false});
+            id=model.defs.insert(parent);
+        }
+        let instance=model.root_mesh_mut().instances.insert(Instance{def:id,transform:DMat4::IDENTITY,name:String::new(),material:None,tag:None,hidden:false,locked:false});
+        model.rebuild_caches();
+        let doc=Document::from_model(model,None);
+        let shift=DVec3::new(10.,20.,30.);
+        let preview=transformed_preview(&doc,&[EntityRef::Instance(instance)],&DMat4::from_translation(shift));
+        assert_eq!(preview.len(),count);
+        assert_eq!(preview.first().unwrap().0,shift);
+        assert_eq!(preview.last().unwrap().0,shift+DVec3::X*(count-1) as f64);
+        let clip=crate::clipboard::Clipboard::from_parts(&doc.model,doc.uid,&[],&[EntityRef::Instance(instance)],&[]).unwrap();
+        assert_eq!(clip.preview.len(),count,"paste must show the complete surface too");
+        assert_eq!(crate::clipboard::sample_edges(&clip.preview,0).len(),0);
+        let thumbnail=crate::clipboard::sample_edges(&clip.preview,10);
+        assert!(thumbnail.last().unwrap().0.x>(count as f64)*0.8,"thumbnail sampling must span the whole model");
+    }
 
     #[test]
     fn moving_an_anchored_dimension_drags_its_offset() {

@@ -1,0 +1,63 @@
+# Start hub preference, actions, unsaved-work guard and a user-reviewed GitHub draft.
+wait 10
+expect start=(false true)
+action start_screen
+wait 10
+expect start=(true true)
+action click_spot start:show
+wait 5
+expect start=(true false)
+action click_spot start:continue
+wait 5
+expect start=(false false)
+action preferences
+wait 10
+action click_spot prefs:Interface
+wait 5
+expect prefs_win=(true Interface)
+action click_spot prefs:start_show
+wait 5
+expect start=(false true)
+raw click 664 54
+wait 5
+action start_screen
+wait 5
+action click_spot start:new
+wait 10
+expect start=(false true)
+expect model_faces=0
+action script box(ORIGIN,100,50,30);
+action console_close
+action start_screen
+wait 5
+action click_spot start:new
+wait 5
+expect save_confirm=true
+raw key Escape
+wait 5
+expect save_confirm=false
+expect model_faces=6
+save models/start_feedback.vrst
+action script box(vec3(500,0,0),50,50,50);
+action console_close
+save models/start_feedback.vrst
+expect model_faces=12
+open models/start_feedback.bak.vrst
+wait 5
+expect model_faces=6
+open models/start_feedback.vrst
+wait 5
+expect model_faces=12
+action report_problem
+wait 10
+expect report=(true false)
+action click_spot report:title
+raw text QA feedback draft
+action click_spot report:description
+raw text Steps to reproduce: this is a local UI regression, not a submitted issue.
+action click_spot report:errors
+wait 5
+expect report=(true true)
+action click_spot report:github
+wait 5
+quit

@@ -436,20 +436,46 @@ impl VarstotasApp {
         }
 
         if self.show_about {
+            if self.about_icon.is_none()
+                && let Some(image) = crate::textures::thumbnail(include_bytes!("../../assets/icon.png"), 320)
+            {
+                self.about_icon = Some(ctx.load_texture("about_app_icon", image, egui::TextureOptions::LINEAR));
+            }
             let resp = Modal::new(Id::new("about")).show(ctx, |ui| {
-                ui.set_width(320.0);
-                ui.heading("Varstotas"); // i18n-ignore
-                ui.label(tr!("dialog-about-tagline"));
-                ui.label(RichText::new(tr!("dialog-about-version", version = env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
-                ui.label(RichText::new(tr!("dialog-about-licence")).color(theme::text_dim()));
+                ui.set_width(540.0);
                 ui.add_space(8.0);
+                ui.horizontal_top(|ui| {
+                    if let Some(icon) = &self.about_icon {
+                        ui.image((icon.id(), egui::vec2(156.0, 156.0)));
+                        ui.add_space(20.0);
+                    }
+                    ui.vertical(|ui| {
+                        ui.set_max_width(340.0);
+                        ui.label(RichText::new(crate::APP_NAME).size(28.0).strong());
+                        ui.add_space(4.0);
+                        ui.label(RichText::new(tr!("dialog-about-version", version = env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
+                        ui.add_space(16.0);
+                        ui.label(tr!("dialog-about-tagline"));
+                        ui.add_space(14.0);
+                        ui.label(RichText::new(tr!("dialog-about-licence")).color(theme::text_dim()));
+                    });
+                });
+                ui.add_space(18.0);
+                ui.separator();
+                ui.add_space(6.0);
                 let mut close = false;
                 ui.horizontal(|ui| {
-                    if ui.button(tr!("dialog-about-licences")).clicked() {
+                    let r = ui.button(tr!("dialog-about-licences"));
+                    super::tray_lib::spot("about:licences", r.rect.center());
+                    if r.clicked() {
                         self.open_licences(crate::ui::licences::Tab::Varstotas);
                         close = true;
                     }
-                    close |= ui.button(tr!("close")).clicked();
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let r = ui.button(tr!("close"));
+                        super::tray_lib::spot("about:close", r.rect.center());
+                        close |= r.clicked();
+                    });
                 });
                 close
             });

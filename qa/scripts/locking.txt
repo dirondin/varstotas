@@ -1,0 +1,91 @@
+# Locks: real UI controls, selection/context exclusion, Rhai/Python protection, persistence.
+wait 10
+raw move 0 0
+action script let b = box(ORIGIN,100,50,30); b.name = "Protected"; tag(b,"Building"); select(b);
+action console_close
+action tray_only Outliner,Tags,Entity Info
+view iso
+zoom_extents
+wait 20
+expect sel F=0 E=0 I=1
+# The Outliner lock is accessible even after the object becomes unselectable.
+action click_spot outliner_lock:Protected
+wait 5
+expect locks=(1, 0, 0, 0, false)
+expect sel F=0 E=0 I=0
+select_all
+expect sel F=0 E=0 I=0
+action click_spot outliner_row:Protected
+wait 5
+expect sel F=0 E=0 I=0
+rawp dblclick 50 0 15
+wait 5
+expect context_depth=0
+action script move(groups()[0],X*100);
+expect script=Some((false, "Runtime error: This operation would change locked objects.
+expect undo=Some("Lock")
+action run_script ../../qa/py/locking_check.py
+expect locking bridge checks: 12 ok
+expect model_faces=6
+action console_close
+screenshot shots/locking_outliner.bmp
+action click_spot outliner_lock:Protected
+wait 5
+expect locks=(0, 0, 0, 0, false)
+action click_spot card_toggle:Tags
+wait 5
+# Tag locks apply to the object and its descendants without altering their own flags.
+action click_spot tag_lock:Building
+wait 5
+expect locks=(0, 0, 0, 1, false)
+select_all
+expect sel F=0 E=0 I=0
+rawp dblclick 50 0 15
+wait 5
+expect context_depth=0
+action script enter(groups()[0]); pushpull(faces()[0],10);
+expect script=Some((false, "Runtime error: This operation would change locked objects.
+save models/locking.vrst
+action unlock_all
+expect locks=(0, 0, 0, 0, false)
+action undo
+expect locks=(0, 0, 0, 1, false)
+action redo
+expect locks=(0, 0, 0, 0, false)
+action console_close
+# Lock from the viewport context menu, next to Hide.
+action click_spot outliner_row:Protected
+wait 5
+rawp rclick 50 0 15
+wait 5
+action click_spot cmd:Lock
+wait 5
+expect locks=(1, 0, 0, 0, false)
+# Edit -> Unlock All is reachable while nothing can be selected.
+action click_spot menu:Edit
+wait 5
+action click_spot cmd:UnlockAll
+wait 5
+expect locks=(0, 0, 0, 0, false)
+# Edit -> Lock on loose geometry: faces and edges both become unselectable.
+action script let f = rect(vec3(300,0,0),100,50); select(f);
+action click_spot menu:Edit
+wait 5
+action click_spot cmd:Lock
+wait 5
+expect locks=(0, 1, 0, 0, false)
+action script pushpull(faces()[0],10);
+expect script=Some((false, "Runtime error: This operation would change locked objects.
+action unlock_all
+expect locks=(0, 0, 0, 0, false)
+# Loading the saved file restores the tag lock; Untagged has its own lock.
+open models/locking.vrst
+wait 10
+expect locks=(0, 0, 0, 1, false)
+action click_spot tag_lock:Untagged
+wait 5
+expect locks=(0, 0, 0, 1, true)
+screenshot shots/locking_done.bmp
+action unlock_all
+expect locks=(0, 0, 0, 0, false)
+quit

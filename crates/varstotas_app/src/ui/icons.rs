@@ -82,6 +82,8 @@ pub enum Icon {
     Redo,
     Eye,
     EyeOff,
+    Lock,
+    Unlock,
     Plus,
     Cloud,
     More,
@@ -883,6 +885,16 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pts.push(pen.p(fx(8.0), 19.0));
             pen.painter.add(Shape::line(pts, pen.stroke()));
             pen.head((fx(3.5), 7.0), (-flip, 0.0), 4.5, pen.ink);
+        }
+        Icon::Lock | Icon::Unlock => {
+            pen.line(&[(6.0, 11.0), (6.0, 21.0), (19.0, 21.0), (19.0, 11.0), (6.0, 11.0)]);
+            if icon == Icon::Unlock {
+                // Swing outward around the right attachment; keep the hinge in place.
+                pen.line(&[(16.0, 11.0), (16.0, 6.0), (18.0, 3.0), (21.0, 3.0), (23.0, 6.0), (23.0, 8.0)]);
+            } else {
+                pen.line(&[(7.0, 11.0), (7.0, 6.0), (9.0, 3.0), (14.0, 3.0), (16.0, 6.0), (16.0, 11.0)]);
+            }
+            pen.line(&[(12.0, 15.0), (12.0, 18.0)]);
         }
         Icon::Eye | Icon::EyeOff => {
             let mut pts = pen.arc_pts((12.0, 19.0), 11.0, 220.0, 320.0);

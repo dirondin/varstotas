@@ -133,6 +133,7 @@ impl VarstotasApp {
         } else {
             ui.add(egui::Button::new(RichText::new(tr!("log-badge")).small().color(theme::text_dim())).frame(false))
         };
+        super::tray_lib::spot("status:log", resp.rect.center());
         if resp.on_hover_text(tr!("log-badge-hint")).clicked() {
             self.toggle_log(!self.log_window.open || n > 0);
         }

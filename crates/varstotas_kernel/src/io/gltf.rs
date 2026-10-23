@@ -10,13 +10,15 @@
 //! Import: every mesh node becomes a group (world transform baked in); triangles are merged
 //! back into polygons; base colours, textures and the physical properties become materials.
 
-use super::stl::{add_polygon, new_faces};
 use super::{ImportOptions, IoError};
 use crate::mesh::Mesh;
 use crate::model::Definition;
 use crate::texture::{TexPlacement, TextureImage, base64_decode};
-use crate::{FaceId, Instance, MaterialId, Model, tessellate};
+use crate::{Instance, MaterialId, Model, tessellate};
+use super::surface::SurfaceBuilder;
 use glam::{DMat4, DQuat, DVec2, DVec3};
+
+type PrimitiveData = (Vec<DVec3>, Option<Vec<DVec2>>, Option<Vec<DVec3>>, Vec<usize>);
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -25,6 +27,25 @@ use varstotas_i18n::tr;
 const GLB_MAGIC: u32 = 0x4654_6C67;
 const CHUNK_JSON: u32 = 0x4E4F_534A;
 const CHUNK_BIN: u32 = 0x004E_4942;
+
+/// Some Blender conversions of old Maya assets (including NASA's ACES suit) export an
+/// entire set of Lambert/Blinn surfaces as index-matched, fully transmitting glass. Treat
+/// only this complete signature as a legacy conversion error; ordinary glass, mixed sets,
+/// transmission textures and explicitly blended surfaces retain their authored factors.
+fn legacy_transmission_set(doc: &Value) -> bool {
+    let Some(materials) = doc["materials"].as_array().filter(|m| m.len() >= 2) else { return false };
+    doc["asset"]["generator"].as_str().is_some_and(|s| s.starts_with("Khronos glTF Blender I/O"))
+        && materials.iter().any(|m| m["name"].as_str().is_some_and(|s| {
+            let s = s.to_ascii_lowercase(); s.contains("lambert") || s.contains("blinn")
+        }))
+        && materials.iter().all(|m| {
+            let e = &m["extensions"];
+            e["KHR_materials_transmission"]["transmissionFactor"].as_f64() == Some(1.0)
+                && e["KHR_materials_ior"]["ior"].as_f64() == Some(1.0)
+                && e["KHR_materials_transmission"]["transmissionTexture"].is_null()
+                && m["alphaMode"].as_str().unwrap_or("OPAQUE") == "OPAQUE"
+        })
+}
 
 /// Varstotas (Z-up, mm) → glTF (Y-up, m).
 fn to_gltf(p: DVec3) -> [f32; 3] {
@@ -464,7 +485,7 @@ impl Gltf {
     /// A Draco-compressed primitive (`KHR_draco_mesh_compression`): its positions, texture
     /// coordinates and triangle indices.
     #[allow(clippy::type_complexity)]
-    fn draco(&self, ext: &Value) -> Result<(Vec<[f64; 3]>, Option<Vec<[f64; 2]>>, Vec<usize>), IoError> {
+    fn draco(&self, ext: &Value) -> Result<(Vec<[f64; 3]>, Option<Vec<[f64; 2]>>, Option<Vec<[f64; 3]>>, Vec<usize>), IoError> {
         let view = ext["bufferView"].as_u64().ok_or_else(|| bad(tr!("kernel-io-draco-primitive-without-bufferview")))?;
         let (bytes, _) = self.view_bytes(view as usize)?;
         let mut buf = draco_core::DecoderBuffer::new(bytes);
@@ -475,8 +496,9 @@ impl Gltf {
         let pos = attr("POSITION").ok_or_else(|| bad("Draco primitive without POSITION"))?.read_f32s(n, 3);
         let pos = pos.as_chunks::<3>().0.iter().map(|c| [c[0] as f64, c[1] as f64, c[2] as f64]).collect();
         let uv = attr("TEXCOORD_0").map(|a| a.read_f32s(n, 2).as_chunks::<2>().0.iter().map(|c| [c[0] as f64, c[1] as f64]).collect());
+        let normals = attr("NORMAL").map(|a| a.read_f32s(n, 3).as_chunks::<3>().0.iter().map(|c| [c[0] as f64, c[1] as f64, c[2] as f64]).collect());
         let idx = mesh.faces().iter().flat_map(|f| f.iter().map(|p| p.0 as usize)).collect();
-        Ok((pos, uv, idx))
+        Ok((pos, uv, normals, idx))
     }
 
     fn image(&self, tex: usize, dir: Option<&Path>) -> Option<(Vec<u8>, String)> {
@@ -558,6 +580,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
         return Err(bad(tr!("kernel-io-no-meshes-in-the-gltf-scene")));
     }
     placed.reverse();
+    let repair_transmission = opts.repair_legacy_materials && legacy_transmission_set(&g.doc);
     // Materials (created when first used).
     let mut mats: HashMap<usize, Option<MaterialId>> = HashMap::new();
     let mut get_mat = |model: &mut Model, i: usize| -> Option<MaterialId> {
@@ -599,7 +622,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 // i18n-ignore-next
                 emission_strength: num(&ext["KHR_materials_emissive_strength"]["emissiveStrength"], 1.0),
                 // i18n-ignore-next
-                transmission: num(&ext["KHR_materials_transmission"]["transmissionFactor"], 0.0),
+                transmission: if repair_transmission { 0.0 } else { num(&ext["KHR_materials_transmission"]["transmissionFactor"], 0.0) },
                 // i18n-ignore-next
                 ior: num(&ext["KHR_materials_ior"]["ior"], 1.5),
                 normal_scale: num(&m["normalTexture"]["scale"], 1.0),
@@ -630,6 +653,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
     for (mi, m, name) in placed {
         let gm = &g.doc["meshes"][mi];
         let mut mesh = Mesh::new();
+        let mut surface = SurfaceBuilder::default();
         for p in gm["primitives"].as_array().into_iter().flatten() {
             let mode = p["mode"].as_u64().unwrap_or(4);
             if !matches!(mode, 4..=6) {
@@ -637,10 +661,13 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
             }
             // i18n-ignore-next
             let draco = &p["extensions"]["KHR_draco_mesh_compression"];
-            let (pos, uv, idx): (Vec<DVec3>, Option<Vec<DVec2>>, Vec<usize>) = if draco.is_object() {
-                let (pos, uv, idx) = g.draco(draco)?;
+            let normal_matrix = m.inverse().transpose();
+            let map_normal = |n: DVec3| from_gltf(normal_matrix.transform_vector3(n)).normalize_or_zero();
+            let (pos, uv, normals, idx): PrimitiveData = if draco.is_object() {
+                let (pos, uv, normals, idx) = g.draco(draco)?;
                 let pos = pos.iter().map(|v| from_gltf(m.transform_point3(DVec3::new(v[0], v[1], v[2])))).collect();
-                (pos, uv.map(|uv| uv.iter().map(|v| DVec2::new(v[0], -v[1])).collect()), idx)
+                (pos, uv.map(|uv| uv.iter().map(|v| DVec2::new(v[0], -v[1])).collect()),
+                    normals.map(|nn| nn.into_iter().map(|n| map_normal(DVec3::from_array(n))).collect()), idx)
             } else {
                 let Some(pa) = p["attributes"]["POSITION"].as_u64() else { continue };
                 let pos: Vec<DVec3> = g
@@ -656,7 +683,11 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                     Some(a) => g.read(a as usize)?.iter().map(|v| v[0] as usize).collect(),
                     None => (0..pos.len()).collect(),
                 };
-                (pos, uv, idx)
+                let normals = match p["attributes"]["NORMAL"].as_u64() {
+                    Some(a) => Some(g.read(a as usize)?.iter().map(|n| map_normal(DVec3::new(n[0], n[1], n[2]))).collect()),
+                    None => None,
+                };
+                (pos, uv, normals, idx)
             };
             let tris: Vec<[usize; 3]> = match mode {
                 5 => (2..idx.len()).map(|k| if k % 2 == 0 { [idx[k - 2], idx[k - 1], idx[k]] } else { [idx[k - 1], idx[k - 2], idx[k]] }).collect(),
@@ -673,13 +704,24 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 }
                 let t = if flip { [t[0], t[2], t[1]] } else { t };
                 let pts = [pos[t[0]], pos[t[1]], pos[t[2]]];
-                for f in add_polygon(&mut mesh, &pts) {
+                if let Some(f) = surface.triangle(&mut mesh, pts)? {
                     let Some(face) = mesh.faces.get_mut(f) else { continue };
                     face.front = mat;
+                    if let Some(normals) = &normals {
+                        if t.iter().any(|&k| k >= normals.len() || normals[k] == DVec3::ZERO || !normals[k].is_finite()) {
+                            return Err(bad("Invalid glTF vertex normals"));
+                        }
+                        face.normals = t.iter().map(|&k| normals[k]).collect();
+                    }
+                    // glTF double-sided materials use the same surface on both sides.
+                    // Keeping a default opaque back here makes transmissive imports appear inside-out.
+                    if p["material"].as_u64().is_some_and(|i| g.doc["materials"][i as usize]["doubleSided"].as_bool().unwrap_or(false)) {
+                        face.back = mat;
+                    }
                     if let (Some(tile), Some(uv)) = (tile, uv.as_ref())
                         && t.iter().all(|&k| k < uv.len())
                     {
-                        let uvs = [uv[t[0]], uv[t[1]], uv[t[2]]];
+                        let uvs = t.map(|k| uv[k]);
                         face.uv = TexPlacement::fit(&pts, &uvs, face.normal, tile).filter(|pl| !pl.is_identity());
                     }
                 }
@@ -688,10 +730,7 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
         if mesh.faces.is_empty() {
             continue;
         }
-        if opts.merge_coplanar {
-            let made = new_faces(&mesh, &HashSet::<FaceId>::new());
-            mesh.merge_coplanar_faces(&made);
-        }
+        surface.finish(&mut mesh, opts);
         // i18n-ignore-next
         let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         let inst = Instance { def, transform: DMat4::IDENTITY, name, material: None, tag: None, hidden: false, locked: false };

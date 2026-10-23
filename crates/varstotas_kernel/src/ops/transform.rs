@@ -32,13 +32,19 @@ impl Mesh {
         let vset: HashSet<VertexId> = vs.iter().copied().collect();
         self.transform_curve_infos(&vset, m);
         let mirror = m.determinant() < 0.0;
+        let normal_matrix = m.inverse().transpose();
         let mut new_edges: Vec<EdgeId> = Vec::new();
         for f in affected {
             if !self.faces.contains_key(f) {
                 continue;
             }
-            if mirror && self.faces[f].loops().flatten().all(|v| vset.contains(v)) {
+            let whole_face = self.faces[f].loops().flatten().all(|v| vset.contains(v));
+            if whole_face {
+                for n in &mut self.faces[f].normals { *n = normal_matrix.transform_vector3(*n).normalize_or_zero(); }
+            } else { self.faces[f].normals.clear(); }
+            if mirror && whole_face {
                 let face = &mut self.faces[f];
+                face.reverse_shading_normals(false);
                 face.outer.reverse();
                 for h in &mut face.holes {
                     h.reverse();

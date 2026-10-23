@@ -1,5 +1,6 @@
 # Menu commands on the toolbar (Preferences → Toolbar can add any of them): switches show
 # their state and toggle, commands run, ones that do not apply stay inert. Real mouse.
+action grid off
 box 0 0 0 400 300 200
 wait 5
 toolbar Select SnappingOnOff Snap:endpoint ShowGrid SelectAll Cut Solid:Union

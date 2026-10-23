@@ -1175,13 +1175,13 @@ prefs-section-render = Render
 
 ## Search words of the sections (besides their names; a translation lists its own)
 
-prefs-words-general = auto-save autosave minutes template new document units undo steps history
+prefs-words-general = auto-save autosave minutes template new document units undo steps history backup previous version
 prefs-words-render = render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise
 prefs-words-drawing = snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle
 prefs-words-libraries = components materials folder examples in model tiles small large list
 prefs-words-downloads = watch downloads folder browser
-prefs-words-interface = theme light dark system appearance scale size zoom toolbar icons language translation
-prefs-words-navigation = mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture
+prefs-words-interface = theme light dark system appearance scale size zoom toolbar icons language translation startup welcome start screen
+prefs-words-navigation = mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture pinch twist roll multitouch
 prefs-words-shortcuts = keyboard shortcuts hotkeys keys
 prefs-words-toolbar = toolbar buttons order reserve separator customize tools
 prefs-words-view = new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera
@@ -1325,7 +1325,7 @@ prefs-middle-drag = Middle button drag:
 prefs-shift-other = Shift gives the other one.
 prefs-trackpad = Trackpad
 prefs-two-fingers = Two fingers:
-prefs-trackpad-note = Shift: Pan (Orbit when two fingers pan). Pinch and %CMD% + two fingers always zoom.
+prefs-trackpad-note = Shift swaps orbit and pan. Pinch and %CMD% + two fingers zoom independently of the mouse wheel.
 
 ## View (defaults of a new document)
 
@@ -4053,3 +4053,124 @@ app-export-replace-files =
     Export will replace these material or texture files:
     { $files }
     Continue?
+
+## Object and tag locking
+cmd-lock = Lock
+cmd-unlock = Unlock
+cmd-unlock-all = Unlock All
+cmd-desc-lock = Lock selected objects against selection and editing
+cmd-desc-unlock-all = Unlock all objects and tags
+edit-locked = This operation would change locked objects. Unlock them first.
+script-member-locked = Effective editing lock (read-only; includes tag and ancestor locks).
+
+## Startup screen and feedback
+start-menu = Start Screen…
+start-subtitle = Create a model, continue your work, or explore the examples.
+start-create = New model
+start-new = Create
+start-open = Open a document…
+start-guide = Quick guide
+start-recent = Recent documents
+start-no-recent = Your recently opened documents will appear here.
+start-basics-title = Getting started
+start-basics = Space: Select · L: Line · R: Rectangle. Type exact dimensions in Measurements. Use the mouse wheel to zoom and the middle button to orbit.
+start-show = Show at startup
+start-continue = Continue
+report-menu = Report a Problem…
+report-intro = Review the report, then open a draft in your browser. Sign in to GitHub to submit it yourself.
+report-access = A private repository requires access. Model files and screenshots are not attached automatically.
+report-title = Summary
+report-description = What happened?
+report-description-hint = Steps to reproduce, expected result, and what actually happened.
+report-errors = Include the last 10 warnings and errors
+report-review = Review the exact report below before sharing it. Logs may contain file names or other details.
+report-copy = Copy report
+report-github = Open GitHub draft
+report-paste = The full report was copied. Paste it into the GitHub issue body.
+
+cli-usage =
+    Usage: Varstotas [--open] <document.vrst>
+    Varstotas -- <document.vrst>
+    Varstotas --help | --version
+cli-one-document = Specify one document
+cli-unknown-option = Unknown option: { $option }
+cli-open-path = --open requires a document path
+
+prefs-save-backups = Keep a backup of the previous saved version
+prefs-save-backups-note = Explicit saves keep the previous version in <name>.bak.vrst. Turning this off leaves existing backups untouched.
+
+model-info-metadata = Document metadata
+model-info-metadata-text = Text / description
+model-info-license = License
+model-info-license-hint = License name, URL or full text (optional)
+model-info-metadata-apply = Apply
+model-info-metadata-reset = Discard changes
+model-info-format-version = Save format version: { $version }
+model-info-metadata-edit = Edit document metadata
+
+model-info-tab-info = Info
+model-info-tab-meta = Meta
+model-info-tab-cleanup = Cleanup
+
+download-progress-unknown = Downloaded { $received } / total unknown
+
+# Practical step-by-step walkthrough.
+tutorial-title = Tutorial
+tutorial-step = Step { $current } / { $total }
+tutorial-try = Try it
+tutorial-tools = Activate a tool
+tutorial-details = More about this step
+tutorial-practice-note = Keep this window beside your model while you practise.
+tutorial-back = Back
+tutorial-restart = Start over
+tutorial-finish = Finish
+tutorial-next = Next
+tutorial-0-title = Meet Varstotas
+tutorial-0-body = Build models from edges and faces, then organise them into reusable components. Varstotas combines precise drawing, editable 3D shapes, materials, scenes and drawing sheets. This walkthrough takes you from a blank document to a model ready to share.
+tutorial-0-task = Choose File → New. We will build a simple tabletop, explore its tools and prepare the file for sharing. Use Next at your own pace.
+tutorial-1-title = Look around your model
+tutorial-1-body = Drag with the middle mouse button to orbit; hold Shift to pan. The wheel zooms toward the cursor. Trackpad navigation and speeds can be adjusted in Preferences → Navigation. Camera views and projection are also available in the viewport corner.
+tutorial-1-task = Try orbiting and panning. Switch between Top and Iso in Camera → Standard Views, then use Zoom Extents to frame the model.
+tutorial-2-title = Draw a precise base
+tutorial-2-body = Edges form faces when a closed outline is planar. Rectangle and Circle create a face directly. The Measurements box accepts exact sizes while a tool is active; tooltips and the Instructor explain the current stage.
+tutorial-2-task = Activate Rectangle. Click a first corner, move the pointer and type 1400mm,800mm into Measurements, then press Enter. You have a tabletop outline.
+tutorial-3-title = Give it volume
+tutorial-3-body = Push/Pull turns a face into a solid. Draw → Shapes creates a box, cylinder, cone, pyramid, sphere or torus in one operation. These shapes are components with editable generator parameters in Entity Info.
+tutorial-3-task = Use Push/Pull on the rectangle and enter 40 for its thickness. Try Box nearby: choose the first corner, opposite base corner, then height.
+tutorial-4-title = Let points snap into place
+tutorial-4-body = The cursor identifies endpoints, midpoints, axes and grid points. Coloured inference lines guide the direction. Arrow keys lock axes; Shift locks the current inference. The magnet menu controls individual snap types.
+tutorial-4-task = Show the grid and activate Line. Hover a corner, then follow an axis to another grid line. Repeat with Box and notice snapping at the base and height stages. Escape cancels an unfinished operation.
+tutorial-5-title = Edit and reuse
+tutorial-5-body = Move, Rotate and Scale reshape a selection; Undo lets you experiment. A group isolates geometry from nearby edges. Components share one definition, so editing one copy updates its siblings.
+tutorial-5-task = Select the tabletop and make a group from Edit. Move it, undo the move, and double-click the group to edit inside. Close the editing context before continuing.
+tutorial-6-title = Keep a model organised
+tutorial-6-body = Outliner shows nested groups and components. Tags control visibility and editing locks. Entity Info exposes the current selection and its parameters. Hidden and locked objects are separate states.
+tutorial-6-task = Give the tabletop a name in Entity Info. Create a tag in Tags, assign it and toggle visibility. Try the lock, then unlock it again before painting.
+tutorial-7-title = Add materials and choose a style
+tutorial-7-body = Paint assigns colours and textures; Texture Position adjusts their placement. Online Materials downloads reusable materials. Shaded with Textures is useful while modelling; Monochrome exposes front/back faces, and Realistic uses physical material properties and lighting.
+tutorial-7-task = Choose a material and paint a face. Compare Shaded with Textures, Monochrome and Realistic in the style menu. Try X-Ray to see hidden edges.
+tutorial-8-title = Present the result
+tutorial-8-body = Scenes remember views and model display settings. Dimensions annotate the model, section planes reveal the inside, and sheets arrange views on paper. Render creates a finished image; animation can move between scenes.
+tutorial-8-task = Frame an Iso view and add a scene. Make a second scene from Top. Switch between them, then try Dimension or Section on your model.
+tutorial-9-title = Save and share
+tutorial-9-body = Native .vrst files preserve editable geometry, materials, scenes and metadata. Model Info → Meta stores a description, license and preview. Import/export connects to OBJ, STL, GLB and other formats; scripts and plugins extend the tools.
+tutorial-9-task = Save the model. Add a description and license in Model Info → Meta and save again. Explore Help → Examples for downloadable projects, or repeat a step to practise further.
+
+app-reversed-faces = Reversed { $count } face(s). Use Monochrome to inspect front/back orientation.
+
+download-progress-previews = Downloading previews: { $count }
+
+prefs-trackpad-enabled = Enable trackpad / smooth-scroll navigation
+prefs-gesture-speed = Sensitivity
+prefs-invert-swipe = Invert two-finger swipe
+prefs-pinch-enabled = Pinch to zoom
+prefs-invert-pinch = Invert pinch
+prefs-twist = Two-finger twist
+prefs-twist-off = Off
+prefs-twist-orbit = Orbit around vertical axis
+prefs-twist-roll = Roll view
+prefs-invert-twist = Invert twist
+prefs-trackpad-platform = Native pinch and twist depend on OS and driver support. Smooth-scroll devices also use these settings.
+
+view-triangles = Triangles
+view-triangles-hint = Show every tessellation edge over the current style, including soft edges and polygon diagonals.

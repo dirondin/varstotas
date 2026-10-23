@@ -38,7 +38,7 @@ raw text tiles
 wait 5
 expect prefs_win=(true Libraries)
 # Libraries -> List: the Materials card's tiles follow
-raw click 414 426
+action click_spot tiles:List
 wait 5
 expect lib_tiles=List
 # clear the search; View -> Reset: the defaults again
@@ -54,7 +54,7 @@ wait 5
 expect prefs_win=(true View)
 raw click 649 92
 wait 5
-expect new_view=ViewDefaults { face_style: Shaded, edges: true, profiles: true, axes: true, ground: true, sky: true, grid: false, shadows: false, perspective: true, fov: 35.0 }
+expect new_view=ViewDefaults { face_style: Shaded, edges: true, profiles: true, axes: true, ground: true, sky: true, grid: true, shadows: false, perspective: true, fov: 35.0 }
 raw click 137 174
 wait 5
 expect prefs_win=(true Drawing)
@@ -70,7 +70,7 @@ expect snapping=(true, [])
 raw click 137 282
 wait 5
 expect prefs_win=(true Navigation)
-raw click 427 372
+action click_spot nav:two_zoom
 wait 3
 expect two_finger: Zoom
 # a new document (perspective again after the View Reset); scroll up = closer
@@ -81,17 +81,17 @@ raw scroll 900 600 100
 wait 5
 expect cam_dist=4415
 expect hud=(Some(Iso) false Shaded false)
-# Invert the wheel: the same scroll goes back out
-raw click 281 224
+# Invert the swipe: wheel inversion is now separate from trackpad gestures
+action click_spot nav:invert_swipe
 wait 3
-expect invert_zoom: true
+expect invert_swipe: true
 raw scroll 900 600 100
 wait 5
 expect cam_dist=12000
 # Reset: Orbit, no inversion
 raw click 649 92
 wait 5
-expect nav=NavPrefs { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: Orbit, two_finger: Orbit }
+expect nav=NavPrefs { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: Orbit, two_finger: Orbit, pan_speed: 1.0, trackpad_enabled: true
 # Interface: the dark look, large toolbar icons
 expect look=(false 1.00 36)
 raw click 137 147

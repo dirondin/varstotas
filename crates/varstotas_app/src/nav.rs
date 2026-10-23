@@ -3,7 +3,7 @@
 
 use crate::document::guarded;
 use egui::{Event, MouseWheelUnit, PointerButton, Pos2, Rect, Response, Vec2};
-use varstotas_kernel::glam::{DVec2, DVec3};
+use varstotas_kernel::glam::{DQuat, DVec2, DVec3};
 use varstotas_kernel::{Aabb, Model, Ray};
 use varstotas_render::{Camera, StandardView};
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,14 @@ pub enum NavGesture {
     Pan,
     /// Trackpad only: two fingers zoom (Shift = pan).
     Zoom,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TwistGesture {
+    Disabled,
+    #[default]
+    Orbit,
+    Roll,
 }
 
 /// Mouse and trackpad navigation (Preferences → Navigation).
@@ -34,11 +42,24 @@ pub struct NavPrefs {
     pub middle: NavGesture,
     /// Two-finger scroll on a trackpad: Orbit, Pan or Zoom (Shift: Pan, or Orbit when it pans).
     pub two_finger: NavGesture,
+    pub pan_speed: f64,
+    pub trackpad_enabled: bool,
+    pub trackpad_speed: f64,
+    pub invert_swipe: bool,
+    pub pinch_enabled: bool,
+    pub pinch_speed: f64,
+    pub invert_pinch: bool,
+    pub twist: TwistGesture,
+    pub twist_speed: f64,
+    pub invert_twist: bool,
 }
 
 impl Default for NavPrefs {
     fn default() -> Self {
-        Self { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: NavGesture::Orbit, two_finger: NavGesture::Orbit }
+        Self { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: NavGesture::Orbit, two_finger: NavGesture::Orbit, pan_speed: 1.0,
+            trackpad_enabled: true, trackpad_speed: 1.0, invert_swipe: false,
+            pinch_enabled: true, pinch_speed: 1.0, invert_pinch: false,
+            twist: TwistGesture::Orbit, twist_speed: 1.0, invert_twist: false }
     }
 }
 
@@ -63,8 +84,34 @@ pub fn prefs() -> NavPrefs {
 impl NavPrefs {
     /// A zoom factor `f` (> 1 = in) with the speed and the inversion applied.
     pub fn zoom_factor(&self, f: f64) -> f64 {
+        if !f.is_finite() || f <= 0.0 { return 1.0; }
         let k = f.ln() * self.zoom_speed.clamp(0.1, 10.0);
         (if self.invert_zoom { -k } else { k }).exp()
+    }
+
+    pub fn pinch_factor(&self, factor: f64) -> f64 {
+        if !factor.is_finite() || factor <= 0.0 { return 1.0; }
+        let k = factor.ln() * self.pinch_speed.clamp(0.1, 10.0);
+        (if self.invert_pinch { -k } else { k }).exp()
+    }
+
+    pub fn swipe_delta(&self, delta: DVec2) -> DVec2 {
+        delta * self.trackpad_speed.clamp(0.1, 10.0) * if self.invert_swipe { -1.0 } else { 1.0 }
+    }
+
+    pub fn apply_twist(&self, camera: &mut Camera, angle: f64, pivot: DVec3) -> bool {
+        if !self.trackpad_enabled || self.twist == TwistGesture::Disabled || !angle.is_finite() || angle == 0.0 {
+            return false;
+        }
+        let angle = angle * self.twist_speed.clamp(0.1, 10.0) * if self.invert_twist { 1.0 } else { -1.0 };
+        let axis = if self.twist == TwistGesture::Orbit { DVec3::Z } else { camera.basis().forward };
+        let rotation = DQuat::from_axis_angle(axis, angle);
+        if self.twist == TwistGesture::Orbit {
+            camera.eye = pivot + rotation * (camera.eye - pivot);
+            camera.target = pivot + rotation * (camera.target - pivot);
+        }
+        camera.up = rotation * camera.up;
+        true
     }
 
     pub fn orbit_delta(&self, d: DVec2) -> DVec2 {
@@ -185,7 +232,7 @@ impl NavController {
             if d != Vec2::ZERO {
                 match self.drag {
                     Some(NavDrag::Orbit) => camera.orbit(prefs.orbit_delta(dvec2(d)), self.pivot),
-                    Some(NavDrag::Pan) => camera.pan(dvec2(d), self.pan_point, dvec2(viewport)),
+                    Some(NavDrag::Pan) => camera.pan(dvec2(d) * prefs.pan_speed.clamp(0.1, 10.0), self.pan_point, dvec2(viewport)),
                     None => {}
                 }
                 changed = true;
@@ -200,7 +247,7 @@ impl NavController {
             let (events, now) = ctx.input(|i| (i.events.clone(), i.time));
             for ev in events {
                 match ev {
-                    Event::MouseWheel { unit, delta, modifiers, .. } => {
+                    Event::MouseWheel { unit, delta, modifiers, phase } => {
                         let Some(l) = local else { continue };
                         match unit {
                             MouseWheelUnit::Line | MouseWheelUnit::Page => {
@@ -213,10 +260,20 @@ impl NavController {
                                 }
                             }
                             MouseWheelUnit::Point => {
+                                if !prefs.trackpad_enabled { continue; }
+                                if matches!(phase, egui::TouchPhase::Start) { self.scroll_anchor = None; }
+                                if matches!(phase, egui::TouchPhase::End | egui::TouchPhase::Cancel) && delta == Vec2::ZERO {
+                                    self.scroll_anchor = None;
+                                    continue;
+                                }
+                                let delta = if modifiers.command || modifiers.ctrl { dvec2(delta) } else { prefs.swipe_delta(dvec2(delta)) };
+                                if !delta.is_finite() || delta == DVec2::ZERO { continue; }
                                 let zoom = prefs.two_finger == NavGesture::Zoom && !modifiers.shift;
                                 if modifiers.command || modifiers.ctrl || zoom {
+                                    if (modifiers.command || modifiers.ctrl) && !prefs.pinch_enabled { continue; }
                                     let target = zoom_at(l, camera);
-                                    camera.zoom(prefs.zoom_factor((delta.y as f64 * 0.01).exp()), target);
+                                    let factor = (delta.y * 0.01).exp();
+                                    camera.zoom(if modifiers.command || modifiers.ctrl { prefs.pinch_factor(factor) } else { factor }, target);
                                     changed = true;
                                     continue;
                                 }
@@ -231,19 +288,31 @@ impl NavController {
                                     _ => modifiers.shift,
                                 };
                                 if pan {
-                                    camera.pan(dvec2(delta), anchor, dvec2(viewport));
+                                    camera.pan(delta * prefs.pan_speed.clamp(0.1, 10.0), anchor, dvec2(viewport));
                                 } else {
-                                    camera.orbit(prefs.orbit_delta(dvec2(delta)), anchor);
+                                    camera.orbit(prefs.orbit_delta(delta), anchor);
                                 }
                                 changed = true;
                             }
                         }
                     }
-                    Event::Zoom(f) if f != 1.0 => {
+                    Event::Zoom(f) if prefs.trackpad_enabled && prefs.pinch_enabled && f.is_finite() && f > 0.0 && f != 1.0 => {
                         if let Some(l) = local {
                             let target = zoom_at(l, camera);
-                            camera.zoom(f as f64, target);
+                            camera.zoom(prefs.pinch_factor(f as f64), target);
                             changed = true;
+                        }
+                    }
+                    Event::Rotate(angle) => {
+                        if let Some(l) = local {
+                            let anchor = match self.scroll_anchor {
+                                Some((p, t)) if now - t < 0.25 => p,
+                                _ => point_under(model, camera, l, viewport),
+                            };
+                            if prefs.apply_twist(camera, angle as f64, anchor) {
+                                self.scroll_anchor = Some((anchor, now));
+                                changed = true;
+                            }
                         }
                     }
                     _ => {}
@@ -361,6 +430,52 @@ mod tests {
         assert!((p.zoom_factor(1.5) - 2.25).abs() < 1e-12);
         p.orbit_speed = 0.5;
         assert_eq!(p.orbit_delta(DVec2::new(10.0, -4.0)), DVec2::new(5.0, -2.0));
+    }
+
+    #[test]
+    fn trackpad_defaults_migrate_and_pinch_is_independent_of_the_wheel() {
+        let old: NavPrefs = serde_json::from_str(r#"{"invert_zoom":true,"two_finger":"Pan"}"#).unwrap();
+        assert!(old.trackpad_enabled && old.pinch_enabled);
+        assert_eq!(old.two_finger, NavGesture::Pan);
+        assert_eq!(old.twist, TwistGesture::Orbit);
+        assert_eq!(old.pinch_factor(2.0), 2.0);
+        let mut p = old.clone();
+        p.pinch_speed = 2.0;
+        assert_eq!(p.pinch_factor(2.0), 4.0);
+        p.invert_pinch = true;
+        assert_eq!(p.pinch_factor(2.0), 0.25);
+        assert_eq!(p.pinch_factor(f64::NAN), 1.0);
+        assert_eq!(p.pinch_factor(0.0), 1.0);
+        p.trackpad_speed = 2.0;
+        p.invert_swipe = true;
+        assert_eq!(p.swipe_delta(DVec2::new(10.0, -4.0)), DVec2::new(-20.0, 8.0));
+        let saved = serde_json::to_string(&p).unwrap();
+        assert_eq!(serde_json::from_str::<NavPrefs>(&saved).unwrap(), p);
+    }
+
+    #[test]
+    fn twist_orbit_roll_inversion_and_disable_preserve_camera_geometry() {
+        let mut camera = Camera::default();
+        let original = camera.clone();
+        let pivot = DVec3::new(100.0, 200.0, 300.0);
+        let mut prefs = NavPrefs::default();
+        assert!(prefs.apply_twist(&mut camera, 0.4, pivot));
+        assert!((camera.eye.distance(pivot) - original.eye.distance(pivot)).abs() < 1e-6);
+        assert!((camera.distance() - original.distance()).abs() < 1e-6);
+        prefs.invert_twist = true;
+        prefs.apply_twist(&mut camera, 0.4, pivot);
+        assert!(camera.eye.distance(original.eye) < 1e-6);
+        assert!(camera.up.distance(original.up) < 1e-6);
+        prefs.twist = TwistGesture::Roll;
+        prefs.apply_twist(&mut camera, 0.4, pivot);
+        assert!(camera.eye.distance(original.eye) < 1e-6);
+        assert!(camera.target.distance(original.target) < 1e-6);
+        assert!(camera.up.distance(original.up) > 0.1);
+        prefs.trackpad_enabled = false;
+        let before = camera.clone();
+        assert!(!prefs.apply_twist(&mut camera, 0.4, pivot));
+        assert_eq!(camera.eye, before.eye);
+        assert_eq!(camera.up, before.up);
     }
 
     fn model_with_face(z: f64) -> Model {

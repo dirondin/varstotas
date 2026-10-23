@@ -6,10 +6,21 @@
 use crate::app::VarstotasApp;
 use egui::{Color32, Context, RichText, vec2};
 use varstotas_i18n::tr;
-use varstotas_kernel::stats::ModelStats;
+use varstotas_kernel::{ModelMetadata, stats::ModelStats};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) enum ModelInfoTab {
+    #[default]
+    Info,
+    Meta,
+    Cleanup,
+}
 
 pub struct ModelInfoWindow {
     pub open: bool,
+    pub(crate) tab: ModelInfoTab,
+    metadata_source: Option<(u64, ModelMetadata)>,
+    metadata_draft: ModelMetadata,
     /// Statistics for a model version.
     cache: Option<(u64, ModelStats)>,
     /// What Purge Unused removes.
@@ -25,7 +36,18 @@ pub struct ModelInfoWindow {
 
 impl Default for ModelInfoWindow {
     fn default() -> Self {
-        Self { open: false, cache: None, purge_defs: true, purge_mats: true, last: None, preview_open: false, preview_tex: None }
+        Self {
+            open: false,
+            tab: ModelInfoTab::Info,
+            metadata_source: None,
+            metadata_draft: ModelMetadata::default(),
+            cache: None,
+            purge_defs: true,
+            purge_mats: true,
+            last: None,
+            preview_open: false,
+            preview_tex: None,
+        }
     }
 }
 
@@ -52,7 +74,17 @@ fn bytes(b: u64) -> String {
 
 /// "used of all" with the unused part marked.
 fn used_of(used: usize, all: usize) -> RichText {
-    if used == all { RichText::new(n(all)) } else { RichText::new(tr!("model-info-used-of", used = n(used), all = n(all), unused = n(all - used))).color(Color32::from_rgb(190, 110, 20)) }
+    if used == all {
+        RichText::new(n(all))
+    } else {
+        RichText::new(tr!(
+            "model-info-used-of",
+            used = n(used),
+            all = n(all),
+            unused = n(all - used)
+        ))
+        .color(Color32::from_rgb(190, 110, 20))
+    }
 }
 
 impl VarstotasApp {
@@ -75,11 +107,16 @@ impl VarstotasApp {
     /// choose.
     pub(crate) fn purge_unused(&mut self, defs: bool, mats: bool) {
         let s = self.model_stats();
-        let has = (defs && (s.component_defs_used < s.component_defs || s.group_defs_used < s.group_defs)) || (mats && s.materials_used < s.materials);
+        let has = (defs
+            && (s.component_defs_used < s.component_defs || s.group_defs_used < s.group_defs))
+            || (mats && s.materials_used < s.materials);
         let msg = if !has {
             tr!("model-info-nothing-to-purge")
         } else {
-            match self.doc.commit(&tr!("model-info-purge"), |m| m.purge_unused(defs, mats)) {
+            match self
+                .doc
+                .commit(&tr!("model-info-purge"), |m| m.purge_unused(defs, mats))
+            {
                 Some(p) => {
                     self.library.def_thumbs.clear();
                     let mut parts = Vec::new();
@@ -109,20 +146,43 @@ impl VarstotasApp {
             return None;
         };
         let key = std::sync::Arc::as_ptr(&img.bytes) as *const u8 as usize;
-        if self.model_info.preview_tex.as_ref().is_none_or(|t| t.0 != key) {
+        if self
+            .model_info
+            .preview_tex
+            .as_ref()
+            .is_none_or(|t| t.0 != key)
+        {
             let ci = crate::textures::thumbnail(&img.bytes, crate::textures::PREVIEW_SIDE)?;
             let size = ci.size;
             let tex = ctx.load_texture("doc_preview", ci, egui::TextureOptions::LINEAR);
             self.model_info.preview_tex = Some((key, tex, size));
         }
-        self.model_info.preview_tex.as_ref().map(|t| (t.1.id(), t.2))
+        self.model_info
+            .preview_tex
+            .as_ref()
+            .map(|t| (t.1.id(), t.2))
     }
 
     /// "512 × 384 JPEG, 41 KB" for the document's preview picture.
     fn doc_preview_label(&self, size: [usize; 2]) -> String {
-        let b = self.doc.model.preview.as_ref().map(|i| &i.bytes[..]).unwrap_or_default();
-        let kind = if b.starts_with(b"\x89PNG") { "PNG" } else { "JPEG" };
-        format!("{} × {} {kind}, {}", size[0], size[1], bytes(b.len() as u64))
+        let b = self
+            .doc
+            .model
+            .preview
+            .as_ref()
+            .map(|i| &i.bytes[..])
+            .unwrap_or_default();
+        let kind = if b.starts_with(b"\x89PNG") {
+            "PNG"
+        } else {
+            "JPEG"
+        };
+        format!(
+            "{} × {} {kind}, {}",
+            size[0],
+            size[1],
+            bytes(b.len() as u64)
+        )
     }
 
     /// File → Preview Image → Show…: the picture the Components library shows for this file,
@@ -136,7 +196,12 @@ impl VarstotasApp {
         let mut open = true;
         let mut action = None;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 60.0);
-        let mut win = egui::Window::new(tr!("model-info-preview-title")).id(egui::Id::new("doc_preview_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        let mut win = egui::Window::new(tr!("model-info-preview-title"))
+            .id(egui::Id::new("doc_preview_window"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
@@ -145,13 +210,22 @@ impl VarstotasApp {
             match tex {
                 Some((id, size)) => {
                     let k = (360.0 / size[0].max(size[1]) as f32).min(1.0);
-                    ui.vertical_centered(|ui| ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k))));
+                    ui.vertical_centered(|ui| {
+                        ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k)))
+                    });
                     ui.label(RichText::new(label.unwrap_or_default()).weak());
                 }
                 None => {
                     let (r, _) = ui.allocate_exact_size(vec2(360.0, 160.0), egui::Sense::hover());
-                    ui.painter().rect_filled(r, 4.0, ui.visuals().faint_bg_color);
-                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, &tr!("model-info-no-preview"), egui::FontId::proportional(12.0), ui.visuals().weak_text_color());
+                    ui.painter()
+                        .rect_filled(r, 4.0, ui.visuals().faint_bg_color);
+                    ui.painter().text(
+                        r.center(),
+                        egui::Align2::CENTER_CENTER,
+                        &tr!("model-info-no-preview"),
+                        egui::FontId::proportional(12.0),
+                        ui.visuals().weak_text_color(),
+                    );
                 }
             }
             ui.label(RichText::new(tr!("model-info-preview-note")).weak().small());
@@ -162,7 +236,10 @@ impl VarstotasApp {
                 if ui.button(tr!("model-info-from-view")).clicked() {
                     action = Some(crate::app::Action::PreviewFromView);
                 }
-                if ui.add_enabled(tex.is_some(), egui::Button::new(tr!("sheets-remove"))).clicked() {
+                if ui
+                    .add_enabled(tex.is_some(), egui::Button::new(tr!("sheets-remove")))
+                    .clicked()
+                {
                     action = Some(crate::app::Action::PreviewRemove);
                 }
             });
@@ -175,8 +252,15 @@ impl VarstotasApp {
 
     pub(crate) fn model_info_window(&mut self, ctx: &Context) {
         if !self.model_info.open {
+            self.model_info.metadata_source = None;
             return;
         }
+        let source = (self.doc.uid, self.doc.model.metadata.clone());
+        if self.model_info.metadata_source.as_ref() != Some(&source) {
+            self.model_info.metadata_draft = source.1.clone();
+            self.model_info.metadata_source = Some(source);
+        }
+        let mut apply_metadata = false;
         // The libraries are counted from their scans.
         if self.library.scanned.is_none() {
             self.refresh_library();
@@ -188,99 +272,304 @@ impl VarstotasApp {
         let preview = self.doc_preview_texture(ctx);
         let preview_label = preview.map(|(_, sz)| self.doc_preview_label(sz));
         let mut show_preview = false;
-        let file_size = self.doc.path.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len());
+        let file_size = self
+            .doc
+            .path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len());
         let lib_components = self.library.items.len();
-        let lib_materials = self.mat_library.items.iter().filter(|i| i.path.is_some()).count();
+        let lib_materials = self
+            .mat_library
+            .items
+            .iter()
+            .filter(|i| i.path.is_some())
+            .count();
         let mut open = true;
         let mut purge = false;
         let pos = self.viewport.view_rect.left_top() + vec2(40.0, 40.0);
-        let mut win = egui::Window::new(tr!("model-info-title")).id(egui::Id::new("model_info_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
+        let mut win = egui::Window::new(tr!("model-info-title"))
+            .id(egui::Id::new("model_info_window"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size([480.0, 520.0])
+            .min_size([340.0, 260.0])
+            .default_pos(pos);
         if self.debug.script_active() {
             win = win.fixed_pos(pos);
         }
-        win.show(ctx, |ui| {
-            ui.set_width(380.0);
+        let response = win.show(ctx, |ui| {
             let row = |ui: &mut egui::Ui, k: &str, v: RichText| {
                 ui.label(k);
                 ui.label(v);
                 ui.end_row();
             };
-            ui.label(RichText::new(tr!("model-info-scene")).strong()).on_hover_text(tr!("model-info-scene-hint"));
-            egui::Grid::new("mi_scene").num_columns(2).spacing([16.0, 3.0]).show(ui, |ui| {
-                row(ui, &tr!("model-info-row-polygons"), RichText::new(n(s.scene.faces)));
-                row(ui, &tr!("model-info-row-triangles"), RichText::new(n(s.scene.triangles)));
-                row(ui, &tr!("model-info-row-edges"), RichText::new(n(s.scene.edges)));
-                row(ui, &tr!("model-info-row-groups-placed"), RichText::new(n(s.scene.groups)));
-                row(ui, &tr!("model-info-row-components-placed"), RichText::new(n(s.scene.components)));
-            });
-            ui.add_space(6.0);
-            ui.label(RichText::new(tr!("model-info-file")).strong()).on_hover_text(tr!("model-info-file-hint"));
-            egui::Grid::new("mi_file").num_columns(2).spacing([16.0, 3.0]).show(ui, |ui| {
-                row(ui, &tr!("model-info-row-polygons"), RichText::new(n(s.stored.faces)));
-                row(ui, &tr!("model-info-row-triangles"), RichText::new(n(s.stored.triangles)));
-                row(ui, &tr!("model-info-row-components"), used_of(s.component_defs_used, s.component_defs));
-                row(ui, &tr!("model-info-row-groups"), used_of(s.group_defs_used, s.group_defs));
-                row(ui, &tr!("model-info-row-materials"), used_of(s.materials_used, s.materials));
-                if s.textures > 0 {
-                    row(ui, &tr!("model-info-row-textures"), RichText::new(format!("{} ({})", n(s.textures), bytes(s.texture_bytes as u64))));
+            ui.horizontal(|ui| {
+                for (tab, key, spot) in [
+                    (
+                        ModelInfoTab::Info,
+                        "model-info-tab-info",
+                        "model_info:tab:info",
+                    ),
+                    (
+                        ModelInfoTab::Meta,
+                        "model-info-tab-meta",
+                        "model_info:tab:meta",
+                    ),
+                    (
+                        ModelInfoTab::Cleanup,
+                        "model-info-tab-cleanup",
+                        "model_info:tab:cleanup",
+                    ),
+                ] {
+                    let r = ui.selectable_value(&mut self.model_info.tab, tab, tr!(key));
+                    super::tray_lib::spot(spot, r.rect.center());
                 }
-                row(ui, &tr!("model-info-row-tags"), RichText::new(n(s.tags)));
-                row(ui, &tr!("model-info-row-scenes"), RichText::new(n(s.scenes)));
-                if s.sheets > 0 {
-                    row(ui, &tr!("model-info-row-sheets"), RichText::new(n(s.sheets)));
-                }
-                if s.generators > 0 {
-                    row(ui, &tr!("model-info-row-generators"), RichText::new(n(s.generators)));
-                }
-                if s.lights > 0 {
-                    row(ui, &tr!("model-info-row-lights"), RichText::new(n(s.lights)));
-                }
-                if s.guides + s.dims > 0 {
-                    row(ui, &tr!("model-info-row-guides"), RichText::new(format!("{} / {}", n(s.guides), n(s.dims))));
-                }
-                if let Some(b) = file_size {
-                    row(ui, &tr!("model-info-row-file-size"), RichText::new(bytes(b)));
-                }
-                ui.label(tr!("model-info-preview-image"));
-                ui.horizontal(|ui| {
-                    if let Some((id, size)) = preview {
-                        let k = 48.0 / size[0].max(size[1]) as f32;
-                        ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
-                        ui.label(RichText::new(preview_label.unwrap_or_default()).weak());
-                    } else {
-                        ui.label(RichText::new(tr!("model-info-none")).weak());
-                    }
-                    show_preview = ui.link(tr!("model-info-show")).on_hover_text(tr!("model-info-show-hint")).clicked();
-                });
-                ui.end_row();
-            });
-            ui.add_space(6.0);
-            ui.label(RichText::new(tr!("model-info-libraries")).strong());
-            egui::Grid::new("mi_libs").num_columns(2).spacing([16.0, 3.0]).show(ui, |ui| {
-                row(ui, &tr!("model-info-row-lib-components"), RichText::new(tr!("model-info-files", n = n(lib_components))));
-                row(ui, &tr!("model-info-row-lib-materials"), RichText::new(tr!("model-info-files", n = n(lib_materials))));
             });
             ui.separator();
-            ui.label(RichText::new(tr!("model-info-purge")).strong());
-            ui.label(RichText::new(tr!("model-info-purge-note")).weak());
-            let unused_defs = s.component_defs - s.component_defs_used + s.group_defs - s.group_defs_used;
-            let unused_mats = s.materials - s.materials_used;
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut self.model_info.purge_defs, tr!("model-info-purge-defs", n = unused_defs));
-                ui.checkbox(&mut self.model_info.purge_mats, tr!("model-info-purge-mats", n = unused_mats));
-            });
-            ui.horizontal(|ui| {
-                let can = (self.model_info.purge_defs && unused_defs > 0) || (self.model_info.purge_mats && unused_mats > 0);
-                let r = ui.add_enabled(can, egui::Button::new(tr!("model-info-purge")));
-                crate::ui::tray_lib::spot("purge", r.rect.center());
-                if r.clicked() {
-                    purge = true;
-                }
-                if let Some(l) = &self.model_info.last {
-                    ui.label(RichText::new(l).weak());
-                }
-            });
+            egui::ScrollArea::vertical()
+                .id_salt(("model_info_body", self.model_info.tab))
+                .auto_shrink([false, false])
+                .show(ui, |ui| match self.model_info.tab {
+                    ModelInfoTab::Info => {
+                        ui.label(
+                            RichText::new(tr!(
+                                "model-info-format-version",
+                                version = varstotas_kernel::io::NATIVE_VERSION
+                            ))
+                            .weak()
+                            .small(),
+                        );
+                        ui.label(RichText::new(tr!("model-info-scene")).strong())
+                            .on_hover_text(tr!("model-info-scene-hint"));
+                        egui::Grid::new("mi_scene")
+                            .num_columns(2)
+                            .spacing([16.0, 3.0])
+                            .show(ui, |ui| {
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-polygons"),
+                                    RichText::new(n(s.scene.faces)),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-triangles"),
+                                    RichText::new(n(s.scene.triangles)),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-edges"),
+                                    RichText::new(n(s.scene.edges)),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-groups-placed"),
+                                    RichText::new(n(s.scene.groups)),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-components-placed"),
+                                    RichText::new(n(s.scene.components)),
+                                );
+                            });
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(tr!("model-info-file")).strong())
+                            .on_hover_text(tr!("model-info-file-hint"));
+                        egui::Grid::new("mi_file")
+                            .num_columns(2)
+                            .spacing([16.0, 3.0])
+                            .show(ui, |ui| {
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-polygons"),
+                                    RichText::new(n(s.stored.faces)),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-triangles"),
+                                    RichText::new(n(s.stored.triangles)),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-components"),
+                                    used_of(s.component_defs_used, s.component_defs),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-groups"),
+                                    used_of(s.group_defs_used, s.group_defs),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-materials"),
+                                    used_of(s.materials_used, s.materials),
+                                );
+                                if s.textures > 0 {
+                                    row(
+                                        ui,
+                                        &tr!("model-info-row-textures"),
+                                        RichText::new(format!(
+                                            "{} ({})",
+                                            n(s.textures),
+                                            bytes(s.texture_bytes as u64)
+                                        )),
+                                    );
+                                }
+                                row(ui, &tr!("model-info-row-tags"), RichText::new(n(s.tags)));
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-scenes"),
+                                    RichText::new(n(s.scenes)),
+                                );
+                                if s.sheets > 0 {
+                                    row(
+                                        ui,
+                                        &tr!("model-info-row-sheets"),
+                                        RichText::new(n(s.sheets)),
+                                    );
+                                }
+                                if s.generators > 0 {
+                                    row(
+                                        ui,
+                                        &tr!("model-info-row-generators"),
+                                        RichText::new(n(s.generators)),
+                                    );
+                                }
+                                if s.lights > 0 {
+                                    row(
+                                        ui,
+                                        &tr!("model-info-row-lights"),
+                                        RichText::new(n(s.lights)),
+                                    );
+                                }
+                                if s.guides + s.dims > 0 {
+                                    row(
+                                        ui,
+                                        &tr!("model-info-row-guides"),
+                                        RichText::new(format!("{} / {}", n(s.guides), n(s.dims))),
+                                    );
+                                }
+                                if let Some(b) = file_size {
+                                    row(
+                                        ui,
+                                        &tr!("model-info-row-file-size"),
+                                        RichText::new(bytes(b)),
+                                    );
+                                }
+                            });
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(tr!("model-info-libraries")).strong());
+                        egui::Grid::new("mi_libs")
+                            .num_columns(2)
+                            .spacing([16.0, 3.0])
+                            .show(ui, |ui| {
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-lib-components"),
+                                    RichText::new(tr!("model-info-files", n = n(lib_components))),
+                                );
+                                row(
+                                    ui,
+                                    &tr!("model-info-row-lib-materials"),
+                                    RichText::new(tr!("model-info-files", n = n(lib_materials))),
+                                );
+                            });
+                    }
+                    ModelInfoTab::Meta => {
+                        ui.label(RichText::new(tr!("model-info-metadata")).strong());
+                        ui.label(tr!("model-info-metadata-text"));
+                        let r = ui.add(
+                            egui::TextEdit::multiline(&mut self.model_info.metadata_draft.text)
+                                .desired_rows(3)
+                                .desired_width(f32::INFINITY),
+                        );
+                        super::tray_lib::spot("model_info:metadata", r.rect.center());
+                        ui.label(tr!("model-info-license"));
+                        let r = ui.add(
+                            egui::TextEdit::multiline(&mut self.model_info.metadata_draft.license)
+                                .hint_text(tr!("model-info-license-hint"))
+                                .desired_rows(2)
+                                .desired_width(f32::INFINITY),
+                        );
+                        super::tray_lib::spot("model_info:license", r.rect.center());
+                        let changed = self.model_info.metadata_draft != self.doc.model.metadata;
+                        ui.horizontal(|ui| {
+                            let r = ui.add_enabled(
+                                changed,
+                                egui::Button::new(tr!("model-info-metadata-apply")),
+                            );
+                            super::tray_lib::spot("model_info:apply", r.rect.center());
+                            apply_metadata = r.clicked();
+                            if ui
+                                .add_enabled(
+                                    changed,
+                                    egui::Button::new(tr!("model-info-metadata-reset")),
+                                )
+                                .clicked()
+                            {
+                                self.model_info.metadata_draft = self.doc.model.metadata.clone();
+                            }
+                        });
+                        ui.separator();
+                        ui.label(tr!("model-info-preview-image"));
+                        ui.horizontal(|ui| {
+                            if let Some((id, size)) = preview {
+                                let k = 48.0 / size[0].max(size[1]) as f32;
+                                ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
+                                ui.label(RichText::new(preview_label.unwrap_or_default()).weak());
+                            } else {
+                                ui.label(RichText::new(tr!("model-info-none")).weak());
+                            }
+                            let r = ui
+                                .link(tr!("model-info-show"))
+                                .on_hover_text(tr!("model-info-show-hint"));
+                            super::tray_lib::spot("model_info:preview", r.rect.center());
+                            show_preview = r.clicked();
+                        });
+                    }
+                    ModelInfoTab::Cleanup => {
+                        ui.label(RichText::new(tr!("model-info-purge")).strong());
+                        ui.label(RichText::new(tr!("model-info-purge-note")).weak());
+                        let unused_defs = s.component_defs - s.component_defs_used + s.group_defs
+                            - s.group_defs_used;
+                        let unused_mats = s.materials - s.materials_used;
+                        ui.vertical(|ui| {
+                            ui.checkbox(
+                                &mut self.model_info.purge_defs,
+                                tr!("model-info-purge-defs", n = unused_defs),
+                            );
+                            ui.checkbox(
+                                &mut self.model_info.purge_mats,
+                                tr!("model-info-purge-mats", n = unused_mats),
+                            );
+                        });
+                        ui.horizontal(|ui| {
+                            let can = (self.model_info.purge_defs && unused_defs > 0)
+                                || (self.model_info.purge_mats && unused_mats > 0);
+                            let r = ui.add_enabled(can, egui::Button::new(tr!("model-info-purge")));
+                            crate::ui::tray_lib::spot("purge", r.rect.center());
+                            if r.clicked() {
+                                purge = true;
+                            }
+                            if let Some(l) = &self.model_info.last {
+                                ui.label(RichText::new(l).weak());
+                            }
+                        });
+                    }
+                });
         });
+        if let Some(r) = response {
+            super::tray_lib::spot(
+                "model_info:resize",
+                r.response.rect.right_bottom() - vec2(3.0, 3.0),
+            );
+        }
+        if apply_metadata {
+            let metadata = self.model_info.metadata_draft.clone();
+            self.doc
+                .commit(&tr!("model-info-metadata-edit"), |m| m.metadata = metadata);
+        }
         if show_preview {
             self.model_info.preview_open = true;
         }

@@ -2,11 +2,10 @@
 //! coordinates, one group per mesh in the root.
 
 use super::{ImportOptions, IoError};
-use super::stl::{add_polygon, new_faces};
 use crate::texture::{TexPlacement, TextureImage};
-use crate::{Definition, FaceId, Instance, MaterialId, Mesh, Model};
+use crate::{Definition, Instance, MaterialId, Mesh, Model};
 use glam::{DMat4, DVec2, DVec3};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use varstotas_i18n::tr;
 
 /// A material of an imported file: its colour (sRGB, alpha) and a colour image.
@@ -25,6 +24,7 @@ pub(crate) struct ImpPoly {
     pub pts: Vec<DVec3>,
     pub uv: Option<Vec<DVec2>>,
     pub mat: Option<usize>,
+    pub normals: Option<Vec<DVec3>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -53,6 +53,7 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
     let mut groups = 0;
     for m in meshes {
         let mut mesh = Mesh::new();
+        let mut surface = super::surface::SurfaceBuilder::default();
         for p in &m.polys {
             if p.pts.len() < 3 {
                 continue;
@@ -63,14 +64,18 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
             };
             let mut pts: Vec<DVec3> = p.pts.iter().map(|q| xf.transform_point3(*q)).collect();
             let mut uv = p.uv.clone().filter(|u| u.len() == pts.len());
+            let nm = xf.inverse().transpose();
+            let mut normals=p.normals.as_ref().map(|ns|ns.iter().map(|n|nm.transform_vector3(*n).normalize_or_zero()).collect::<Vec<_>>());
             if flip {
+                if let Some(ns)=normals.as_mut() {ns.reverse();}
                 pts.reverse();
                 if let Some(u) = uv.as_mut() {
                     u.reverse();
                 }
             }
             let tile = mat.and_then(|id| model.materials[id].image.as_ref()).map(|i| i.size);
-            for f in add_polygon(&mut mesh, &pts) {
+            for f in surface.polygon(&mut mesh, &pts)? {
+                super::surface::corner_normals(&mut mesh, f, &pts, normals.as_deref());
                 let Some(face) = mesh.faces.get_mut(f) else { continue };
                 face.front = mat;
                 if let (Some(tile), Some(uv)) = (tile, uv.as_ref()) {
@@ -81,10 +86,7 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
         if mesh.faces.is_empty() {
             continue;
         }
-        if opts.merge_coplanar {
-            let made = new_faces(&mesh, &HashSet::<FaceId>::new());
-            mesh.merge_coplanar_faces(&made);
-        }
+        surface.finish(&mut mesh, opts);
         // i18n-ignore-next
         let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
         let root = model.root;

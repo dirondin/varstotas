@@ -127,7 +127,7 @@ pub(crate) fn run_with<T>(
         model: model.clone(),
         path: ctx.path.clone(),
         start_path: ctx.path.clone(),
-        selection: ctx.selection.iter().map(|r| Entity { path: ctx.path.clone(), r: *r }).collect(),
+        selection: ctx.selection.iter().filter(|r| !model.entity_locked(&ctx.path, **r)).map(|r| Entity { path: ctx.path.clone(), r: *r }).collect(),
         selection_set: false,
         out: String::new(),
         dirty: false,
@@ -146,6 +146,10 @@ pub(crate) fn run_with<T>(
     let result = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, src)
         .and_then(|v| {
             check_value(&v)?;
+            STATE.with(|s| {
+                let s = s.borrow();
+                model.validate_locked_changes(&s.as_ref().expect("script state").model)
+            }).map_err(|e| Box::new(rhai::EvalAltResult::ErrorRuntime(e.into(), rhai::Position::NONE)))?;
             if !ctx.trusted_io {
                 let validation = STATE.with(|s| {
                     let s = s.borrow();

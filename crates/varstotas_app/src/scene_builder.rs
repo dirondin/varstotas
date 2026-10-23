@@ -24,6 +24,8 @@ fn starts_with(path: &[InstanceId], prefix: &[InstanceId]) -> bool {
 /// Inputs of the geometry build (model-version dependent only).
 pub struct BuildParams {
     pub face_style: FaceStyle,
+    pub show_triangles: bool,
+    pub clean_xray: bool,
     /// Show material textures (Shaded with Textures).
     pub textures: bool,
     /// Origin used by the previous build; kept while it stays close to the model centre so
@@ -297,6 +299,12 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
         if e.soft {
             continue;
         }
+        if p.clean_xray && !p.show_triangles && let Some(mesh) = model.mesh_at(&e.owner_path) {
+            let faces = mesh.edge_faces(e.edge);
+            if faces.len() == 2 && mesh.faces[faces[0]].normal.dot(mesh.faces[faces[1]].normal) > 30f64.to_radians().cos() {
+                continue;
+            }
+        }
         let a = LineVertex { pos: rel(e.a), color: EDGE };
         let b = LineVertex { pos: rel(e.b), color: EDGE };
         geo.edge_ids.push(ei as u32);
@@ -316,6 +324,28 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
             }
         }
     }
+    if p.show_triangles {
+        // A diagnostic overlay: real tessellation diagonals, including soft edges.
+        // Synthetic segments have no editable topological edge id.
+        let mut seen = HashSet::new();
+        geo.edges.clear();
+        geo.edge_ids.clear();
+        let key = |p: DVec3| p.to_array().map(|v| if v == 0.0 { 0 } else { v.to_bits() });
+        let mut segment = |a: DVec3, b: DVec3| {
+            let (ka, kb) = (key(a), key(b));
+            let key = if ka <= kb { (ka, kb) } else { (kb, ka) };
+            if seen.insert(key) {
+                geo.edges.extend([LineVertex { pos: rel(a), color: EDGE }, LineVertex { pos: rel(b), color: EDGE }]);
+                geo.edge_ids.push(u32::MAX);
+            }
+        };
+        for face in &tess.faces {
+            for tri in face.positions.as_chunks::<3>().0 {
+                segment(tri[0], tri[1]); segment(tri[1], tri[2]); segment(tri[2], tri[0]);
+            }
+        }
+        for edge in &tess.edges { segment(edge.a, edge.b); }
+    }
     geo.radius = (max_r2.sqrt() as f32).max(10_000.0);
     geo
 }
@@ -327,6 +357,66 @@ mod tests {
 
     /// The threaded tessellation matches the kernel's (content and order), including nested
     /// and mirrored instances and meshes big enough to be split across workers.
+    #[test]
+    fn triangle_overlay_contains_real_diagonals_and_soft_edges_in_every_style() {
+        let mut model = Model::new();
+        model.root_mesh_mut().add_face_exact(&[DVec3::ZERO, DVec3::X * 100.0,
+            DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]).unwrap();
+        for edge in model.root_mesh_mut().edges.values_mut() { edge.soft = true; }
+        let params = |style, triangles| BuildParams { face_style: style, textures: true,
+            prev_origin: None, show_triangles: triangles, clean_xray: true };
+        assert!(build(&model, &params(FaceStyle::Shaded, false)).edges.is_empty());
+        for style in [FaceStyle::Shaded, FaceStyle::Monochrome, FaceStyle::HiddenLine,
+            FaceStyle::Wireframe, FaceStyle::Realistic] {
+            let geo = build(&model, &params(style, true));
+            assert_eq!(geo.edges.len() / 2, 5, "{style:?}");
+            assert_eq!(geo.edge_ids.len(), 5);
+            assert!(geo.edge_ids.iter().all(|id| *id == u32::MAX));
+        }
+    }
+
+    #[test]
+    fn ordinary_xray_hides_internal_coplanar_edges_but_triangles_restore_them() {
+        let mut model = Model::new();
+        let mesh = model.root_mesh_mut();
+        mesh.add_face_exact(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0)]).unwrap();
+        mesh.add_face_exact(&[DVec3::ZERO, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]).unwrap();
+        assert_eq!(mesh.faces.len(), 2);
+        let mut params = BuildParams { face_style: FaceStyle::Shaded, textures: true,
+            prev_origin: None, show_triangles: false, clean_xray: false };
+        assert_eq!(build(&model, &params).edges.len() / 2, 5);
+        params.clean_xray = true;
+        assert_eq!(build(&model, &params).edges.len() / 2, 4);
+        params.show_triangles = true;
+        assert_eq!(build(&model, &params).edges.len() / 2, 5);
+    }
+
+    #[test]
+    fn reverse_faces_changes_visible_side_and_monochrome_exposes_painted_faces() {
+        let mut model = Model::new();
+        let face = model.root_mesh_mut().add_face_exact(&[DVec3::ZERO, DVec3::X * 1000.0,
+            DVec3::new(1000.0, 1000.0, 0.0), DVec3::Y * 1000.0]).unwrap();
+        let seen_from_above = |model: &Model, style| {
+            let geo = build(model, &BuildParams { show_triangles: false, clean_xray: false, face_style: style, textures: true, prev_origin: None });
+            let p = |i: usize| DVec3::from_array(geo.tris[i].pos.map(f64::from));
+            let front = (p(1) - p(0)).cross(p(2) - p(0)).z > 0.0;
+            (front, if front { geo.tris[0].color } else { geo.back_colors[0] })
+        };
+        assert_eq!(seen_from_above(&model, FaceStyle::Shaded), (true, FRONT_DEFAULT));
+        model.root_mesh_mut().reverse_face(face);
+        assert_eq!(seen_from_above(&model, FaceStyle::Shaded), (false, BACK_DEFAULT));
+        let red = [1.0, 0.0, 0.0, 1.0];
+        let mat = model.add_material("Red", red);
+        model.root_mesh_mut().faces[face].back = Some(mat);
+        assert_eq!(seen_from_above(&model, FaceStyle::Shaded).1, red);
+        model.root_mesh_mut().reverse_face(face);
+        // Reversal preserves the paint on its physical side, but Monochrome shows orientation.
+        assert_eq!(seen_from_above(&model, FaceStyle::Shaded), (true, red));
+        assert_eq!(seen_from_above(&model, FaceStyle::Monochrome), (true, FRONT_DEFAULT));
+        model.root_mesh_mut().reverse_face(face);
+        assert_eq!(seen_from_above(&model, FaceStyle::Monochrome), (false, BACK_DEFAULT));
+    }
+
     #[test]
     fn parallel_tessellation_matches_kernel() {
         let mut m = Model::new();
@@ -395,7 +485,7 @@ mod tests {
         ]);
         let f = f.expect("face");
         let _ = m.root_mesh_mut().push_pull(f, 1000.0, false);
-        let geo = build(&m, &BuildParams { face_style: FaceStyle::Shaded, textures: true, prev_origin: None });
+        let geo = build(&m, &BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Shaded, textures: true, prev_origin: None });
         let o = DVec3::from_array(geo.origin);
         let bb = m.bounds().expect("bounds");
         assert!((o - (bb.min + bb.max) * 0.5).length() < 1e-6, "{o}");
@@ -446,7 +536,7 @@ mod tests {
         let g = m.make_group(&[], &grouped).expect("group");
 
         let tess = tessellate_model(&m);
-        let geo = build_from(&m, &tess, &BuildParams { face_style: FaceStyle::Shaded, textures: true, prev_origin: None });
+        let geo = build_from(&m, &tess, &BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Shaded, textures: true, prev_origin: None });
         assert_eq!(geo.face_ids.len(), geo.tris.len() / 3);
         assert_eq!(geo.edge_ids.len(), geo.edges.len() / 2);
         assert!(geo.face_ids.iter().all(|&i| (i as usize) < tess.faces.len()));

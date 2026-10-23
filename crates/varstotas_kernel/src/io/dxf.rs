@@ -5,11 +5,9 @@
 //! ARC and POINT-free geometry of the ENTITIES section; units from `$INSUNITS`.
 //! Lines and polylines become edges (closed planar loops find faces), 3DFACEs become faces.
 
-use super::stl::{add_polygon, new_faces};
 use super::{ImportOptions, IoError};
-use crate::{FaceId, Model, tessellate};
+use crate::{Model, tessellate};
 use glam::DVec3;
-use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::path::Path;
 use varstotas_i18n::tr;
@@ -300,7 +298,7 @@ pub fn add_dxf(model: &mut Model, data: &DxfData, opts: &ImportOptions) -> Resul
         return Err(IoError::Format(tr!("kernel-io-no-supported-entities-line-polyline-dface").into()));
     }
     let mesh = model.root_mesh_mut();
-    let before: HashSet<FaceId> = mesh.faces.keys().collect();
+    let mut surface = super::surface::SurfaceBuilder::from_mesh(mesh);
     for f in &data.faces {
         let mut pts: Vec<DVec3> = Vec::with_capacity(f.len());
         for p in f {
@@ -311,12 +309,9 @@ pub fn add_dxf(model: &mut Model, data: &DxfData, opts: &ImportOptions) -> Resul
         if pts.len() > 3 && pts[0].distance(pts[pts.len() - 1]) < 1e-9 {
             pts.pop();
         }
-        add_polygon(mesh, &pts);
+        surface.polygon(mesh, &pts)?;
     }
-    if opts.merge_coplanar && !data.faces.is_empty() {
-        let made = new_faces(mesh, &before);
-        mesh.merge_coplanar_faces(&made);
-    }
+    surface.finish(mesh, opts);
     for (pts, closed) in &data.polylines {
         let mut pts = pts.clone();
         pts.dedup_by(|a, b| a.distance(*b) < 1e-9);

@@ -1,0 +1,42 @@
+# Default on, disable without removing the old backup, then enable again.
+wait 10
+action script box(ORIGIN,100,50,30);
+action console_close
+save models/backup_pref.vrst
+action script box(vec3(500,0,0),50,50,50);
+action console_close
+save models/backup_pref.vrst
+open models/backup_pref.bak.vrst
+wait 5
+expect model_faces=6
+open models/backup_pref.vrst
+action preferences
+wait 10
+action click_spot prefs:General
+wait 5
+action click_spot prefs:save_backups
+raw click 664 54
+wait 5
+action script box(vec3(1000,0,0),50,50,50);
+action console_close
+save models/backup_pref.vrst
+open models/backup_pref.bak.vrst
+wait 5
+expect model_faces=6
+open models/backup_pref.vrst
+wait 5
+expect model_faces=18
+action preferences
+wait 10
+action click_spot prefs:General
+wait 5
+action click_spot prefs:save_backups
+raw click 664 54
+wait 5
+action script box(vec3(1500,0,0),50,50,50);
+action console_close
+save models/backup_pref.vrst
+open models/backup_pref.bak.vrst
+wait 5
+expect model_faces=18
+quit

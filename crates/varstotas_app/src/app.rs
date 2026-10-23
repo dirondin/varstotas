@@ -70,6 +70,7 @@ impl FaceStylePref {
 #[serde(default)]
 pub struct Prefs {
     pub tray_open: bool,
+    pub show_start_screen: bool,
     pub face_style: FaceStylePref,
     pub xray: bool,
     /// Edges in every style but Realistic. Stored under a new key: the old `show_edges` was
@@ -79,6 +80,7 @@ pub struct Prefs {
     /// Edges in the Realistic style (off by default: a photo has no lines).
     pub realistic_edges: bool,
     pub profiles: bool,
+    pub show_triangles: bool,
     pub show_axes: bool,
     pub show_ground: bool,
     /// The sky gradient behind the model; off = a plain light background.
@@ -87,6 +89,8 @@ pub struct Prefs {
     /// Autosave every `autosave_minutes` while the document has unsaved changes.
     pub autosave: bool,
     pub autosave_minutes: u32,
+    /// Keep the previous distinct version beside explicitly saved documents.
+    pub save_backups: bool,
     /// Template for File → New (None until chosen on first start).
     pub template: Option<Template>,
     /// User document templates (None = ~/.varstotas/templates).
@@ -168,16 +172,19 @@ impl Default for Prefs {
     fn default() -> Self {
         Self {
             tray_open: true,
+            show_start_screen: true,
             face_style: FaceStylePref::Shaded,
             xray: false,
             show_edges: true,
             realistic_edges: false,
             profiles: true,
+            show_triangles: false,
             show_axes: true,
             show_ground: true,
             show_sky: true,
             recent: Vec::new(),
             autosave: true,
+            save_backups: true,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
             template: None,
             templates_dir: None,
@@ -272,6 +279,9 @@ pub enum Action {
     MakeComponent,
     Explode,
     HideSelected,
+    LockSelected,
+    UnlockAll,
+    ToggleInstanceLocked(ContextPath, InstanceId),
     UnhideAll,
     ExitContext,
     SetTool(ToolId),
@@ -302,6 +312,9 @@ pub enum Action {
     NextScene,
     PrevScene,
     About,
+    StartScreen,
+    Tutorial,
+    ReportProblem,
     Preferences,
     Cut,
     Copy,
@@ -492,13 +505,16 @@ pub struct VarstotasApp {
     pub(crate) base_style: RenderStyle,
     pub(crate) actions: Vec<Action>,
     pub(crate) confirm: Option<Pending>,
+    pub(crate) tutorial: crate::ui::tutorial::TutorialWindow,
     pub(crate) show_about: bool,
+    pub(crate) about_icon: Option<egui::TextureHandle>,
     pub(crate) console: crate::ui::console::ConsoleState,
     pub(crate) script_help: crate::ui::script_help::ScriptHelp,
     /// Help → Licences….
     pub(crate) licences: crate::ui::licences::LicencesWindow,
     pub(crate) app_help: crate::ui::app_help::AppHelp,
     pub(crate) log_window: crate::ui::log_window::LogWindow,
+    pub(crate) feedback: crate::ui::feedback::FeedbackWindow,
     /// Local server for Python scripts and AI agents.
     pub(crate) bridge: crate::bridge_ops::BridgeState,
     pub(crate) plugins: crate::ui::extensions::PluginState,
@@ -577,6 +593,7 @@ pub struct VarstotasApp {
     pub(crate) ctx_on_axes: bool,
     /// Template chooser shown (first start / File → New from Template…).
     pub(crate) show_templates: bool,
+    pub(crate) show_start: bool,
 }
 
 /// Autosave bookkeeping (see [`crate::autosave`]).
@@ -605,6 +622,7 @@ fn fallback_style() -> RenderStyle {
         xray: false,
         show_edges: true,
         profiles: true,
+        show_triangles: false,
         profile_width_px: 2.5,
         show_axes: true,
         show_ground: true,
@@ -621,12 +639,16 @@ fn fallback_style() -> RenderStyle {
 }
 
 impl VarstotasApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, startup_document: Option<PathBuf>) -> Self {
         crate::ui::theme::apply(&cc.egui_ctx);
-        let prefs: Prefs = cc
+        let mut prefs: Prefs = cc
             .storage
             .and_then(|s| eframe::get_value(s, PREFS_KEY))
             .unwrap_or_default();
+        // Startup creates a new document: use its default style rather than the
+        // last viewport style left behind by a scene or a previous session.
+        prefs.face_style = prefs.new_view.face_style;
+        prefs.grid.show = prefs.new_view.grid;
         varstotas_i18n::set_user_dir(crate::bridge::home_dir().map(|d| d.join("locales")));
         varstotas_i18n::set_language(prefs.language.as_deref());
         for e in varstotas_i18n::load_errors() {
@@ -648,7 +670,8 @@ impl VarstotasApp {
         } else {
             prefs.template.unwrap_or(Template::ArchitecturalMm)
         };
-        let show_templates = prefs.template.is_none() && !debug.script_active();
+        let show_start = prefs.show_start_screen && startup_document.is_none()
+            && (!debug.script_active() || std::env::var_os("VARSTOTAS_QA_START_SCREEN").is_some());
         let mut app = Self {
             doc: Document::from_model(template.new_model(), None),
             camera: template.camera(nav::startup_camera()),
@@ -663,12 +686,15 @@ impl VarstotasApp {
             base_style,
             actions,
             confirm: None,
+            tutorial: Default::default(),
             show_about: false,
+            about_icon: None,
             console: Default::default(),
             script_help: Default::default(),
             licences: Default::default(),
             app_help: Default::default(),
             log_window: Default::default(),
+            feedback: crate::ui::feedback::FeedbackWindow::new(cc),
             bridge: Default::default(),
             plugins: Default::default(),
             library: Default::default(),
@@ -717,6 +743,7 @@ impl VarstotasApp {
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
+            show_start,
             autosave: AutosaveState {
                 worker: crate::autosave::Autosaver::new(),
                 dir: autosave_dir,
@@ -727,7 +754,9 @@ impl VarstotasApp {
                 recoveries,
             },
         };
-        app.show_templates = show_templates;
+        if let Some(path) = startup_document {
+            app.open_path(&path);
+        }
         app.start_bridge(&cc.egui_ctx);
         app.load_plugins();
         app.ensure_templates_dir();
@@ -740,6 +769,7 @@ impl VarstotasApp {
         s.xray = self.prefs.xray;
         s.show_edges = self.prefs.edges_on();
         s.profiles = self.prefs.profiles;
+        s.show_triangles = self.prefs.show_triangles;
         s.show_axes = self.prefs.show_axes;
         s.show_ground = self.prefs.show_ground;
         if !self.prefs.show_sky {
@@ -1025,6 +1055,7 @@ impl VarstotasApp {
             || self.vector_dialog.is_some()
             || self.text3d_dialog.is_some()
             || self.show_templates
+            || self.show_start
             || self.show_about
     }
 
@@ -1389,6 +1420,23 @@ impl VarstotasApp {
                 });
                 self.doc.clear_selection();
             }
+            Action::LockSelected => {
+                let path = self.doc.active_path.clone();
+                let sel = self.doc.selection.clone();
+                if !sel.is_empty() {
+                    self.doc.change_locks(&tr!("cmd-lock"), |m| m.set_entities_locked(&path, &sel, true));
+                    self.doc.clear_selection();
+                }
+            }
+            Action::UnlockAll => self.doc.change_locks(&tr!("cmd-unlock-all"), |m| m.unlock_all()),
+            Action::ToggleInstanceLocked(path, id) => {
+                let locked = self.doc.model.mesh_at(&path).and_then(|m| m.instances.get(id)).is_some_and(|i| i.locked);
+                if !self.doc.model.context_locked(&path) {
+                    self.doc.change_locks(&tr!(if locked { "cmd-unlock" } else { "cmd-lock" }), |m| {
+                        m.set_entities_locked(&path, &[EntityRef::Instance(id)], !locked);
+                    });
+                }
+            }
             Action::UnhideAll => {
                 self.doc.commit(&tr!("app-undo-unhide-all"), |m| {
                     for (_, d) in m.defs.iter_mut() {
@@ -1528,7 +1576,10 @@ impl VarstotasApp {
                     self.go_to_scene(i);
                 }
             }
+            Action::Tutorial => { self.show_start = false; self.tutorial.open = true; }
             Action::About => self.show_about = true,
+            Action::StartScreen => self.show_start = true,
+            Action::ReportProblem => self.feedback.open = true,
             Action::Preferences => self.prefs_win.open = true,
             Action::Copy => {
                 self.copy(ctx);
@@ -1729,7 +1780,9 @@ impl VarstotasApp {
                     return;
                 }
                 let path = self.doc.active_path.clone();
-                self.doc.commit(&tr!("app-undo-reverse-faces"), |m| m.mesh_at_mut(&path).map(|mesh| mesh.reverse_faces(&faces)));
+                if let Some(Some(count)) = self.doc.commit(&tr!("app-undo-reverse-faces"), |m| m.mesh_at_mut(&path).map(|mesh| mesh.reverse_faces(&faces))) {
+                    self.flash(tr!("app-reversed-faces", count = count));
+                }
             }
             Action::OrientFaces => {
                 let Some(f) = self.selected_faces().first().copied() else {
@@ -2001,6 +2054,7 @@ impl VarstotasApp {
             xray: self.prefs.xray,
             edges: self.prefs.edges_on(),
             profiles: self.prefs.profiles,
+            triangles: self.prefs.show_triangles,
         });
         s.hidden_tags = Some(self.doc.model.tags.iter().filter(|(_, t)| !t.visible).map(|(id, _)| id).collect());
         s.untagged_hidden = Some(self.doc.model.untagged_hidden);
@@ -2038,6 +2092,7 @@ impl VarstotasApp {
             self.prefs.xray = st.xray;
             *self.prefs.edges_mut() = st.edges;
             self.prefs.profiles = st.profiles;
+            self.prefs.show_triangles = st.triangles;
         }
     }
 
@@ -2194,6 +2249,8 @@ impl VarstotasApp {
     }
 
     fn replace_document(&mut self, doc: Document) {
+        self.show_start = false;
+        self.show_templates = false;
         // The old document was saved or its changes discarded: its autosave is obsolete.
         if let Some(p) = self.autosave.written.take() {
             self.autosave.worker.delete(p);
@@ -2224,6 +2281,8 @@ impl VarstotasApp {
     }
 
     pub(crate) fn open_path(&mut self, path: &Path) {
+        self.show_start = false;
+        self.show_templates = false;
         match guarded(|| io::load(path)) {
             Ok(Ok(model)) => {
                 self.replace_document(Document::from_model(model, Some(path.to_path_buf())));
@@ -2270,7 +2329,13 @@ impl VarstotasApp {
     }
 
     pub(crate) fn save_to(&mut self, path: &Path) -> bool {
-        match guarded(|| io::save(&self.doc.model, path)) {
+        match guarded(|| {
+            if self.prefs.save_backups {
+                io::save_with_backup(&self.doc.model, path)
+            } else {
+                io::save(&self.doc.model, path)
+            }
+        }) {
             Ok(Ok(())) => {
                 self.doc.path = Some(path.to_path_buf());
                 self.doc.dirty = false;
@@ -2810,6 +2875,9 @@ impl eframe::App for VarstotasApp {
         }
 
         self.dialogs(&ctx);
+        self.start_screen(&ctx);
+        self.feedback_window(&ctx);
+        self.tutorial_window(&ctx);
         self.console_window(&ctx);
         self.app_help_window(&ctx);
         self.script_help_window(&ctx);

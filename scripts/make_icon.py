@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Programmatic Varstotas app icon (stdlib only).
 
-A complete four-legged workbench seen from an oblique above-front angle. The screen's
-vertical centre divides the textured wooden view on the left from the opaque visible-surface
-schematic view on the right. No model axes; the background is the editor's sky / ground
-gradient in a rounded square.
+A complete four-legged workbench seen orthographically from an oblique above-front angle. The screen's
+vertical centre divides the textured wooden view on the left from the translucent X-ray
+schematic view on the right. No model axes; a continuous soft gradient fills the rounded square.
 
   make_icon.py png  <out.png> [size]     -- master PNG (default 1024; takes a while)
   make_icon.py ico  <out.ico> <png>...   -- pack PNG files into a Windows .ico
@@ -20,18 +19,19 @@ import zlib
 # ---- scene (model units, Z up) -------------------------------------------------------------
 
 # Boxes: (min, max, grain axis 0/1/2).
+RAIL_Z = 10.0 / 3.0  # two thirds of the leg height down from the tabletop
 BOXES = [
-    ((0.0, 0.0, 10.0), (18.0, 10.0, 11.2), 0),  # complete tabletop
-    *[((x, y, 0.0), (x + 1.6, y + 1.6, 10.0), 2)
-      for x in (1.0, 15.4) for y in (1.0, 7.4)],  # four legs
-    *[((2.6, y, 7.8), (15.4, y + 0.9, 10.0), 0)
-      for y in (1.3, 7.7)],  # long aprons
-    *[((x, 2.6, 7.8), (x + 0.9, 7.4, 10.0), 1)
-      for x in (1.3, 15.7)],  # short aprons
+    ((0.0, 0.0, 10.0), (18.0, 10.0, 10.65), 0),  # complete tabletop
+    *[((x, y, 0.0), (x + 1.0, y + 1.0, 10.0), 2)
+      for x in (1.3, 15.7) for y in (1.3, 7.7)],  # four slimmer legs, same centres
+    *[((2.3, y, RAIL_Z - 0.5), (15.7, y + 0.6, RAIL_Z + 0.5), 0)
+      for y in (1.5, 7.9)],  # long lower rails, joined to the inner leg faces
+    *[((x, 2.3, RAIL_Z - 0.5), (x + 0.6, 7.7, RAIL_Z + 0.5), 1)
+      for x in (1.5, 15.9)],  # short lower rails, at exactly the same height
 ]
 
-EYE_DIR = (1.25, -2.0, 1.35)  # deliberately asymmetric three-quarter view
-TARGET = (9.0, 5.0, 5.6)
+EYE_DIR = (1.63, -2.0, 1.175)  # orthographic tabletop slopes matched to the app screenshot
+TARGET = (9.0, 5.0, 5.325)
 SPLIT_X = 0.5  # screen space, independent of model orientation
 LIGHT = (-0.45, -0.75, 0.95)
 
@@ -42,12 +42,11 @@ def is_wood(p):
 
 WOOD_LIGHT, WOOD_DARK = (0.86, 0.66, 0.42), (0.62, 0.40, 0.20)
 SCHEMATIC = (0.72, 0.81, 0.94)
-EDGE_W = 0.0062  # icon units
+SCHEMATIC_ALPHA = 0.28
+EDGE_W = 0.0030  # icon units
 EDGE_COL = (0.05, 0.06, 0.08)
 
-SKY_TOP, SKY_HORIZON, GROUND = (0.50, 0.70, 0.92), (0.91, 0.94, 0.97), (0.78, 0.75, 0.69)
-GROUND_FAR = (0.62, 0.58, 0.52)
-HORIZON = 0.58
+BG_TOP, BG_BOTTOM = (0.92, 0.94, 0.96), (0.72, 0.77, 0.83)
 INSET, RADIUS = 0.085, 0.19
 
 
@@ -76,21 +75,26 @@ UP = cross(FWD, RIGHT)
 LIGHT_N = norm(LIGHT)
 
 
+def camera_project(p):
+    d = sub(p, TARGET)
+    return dot(d, RIGHT), dot(d, UP), -dot(d, FWD)
+
+
 # Fit the entire bench inside the rounded square with room around all four legs.
 CORNERS = [tuple((lo, hi)[side][axis] for axis, side in enumerate(sides))
            for lo, hi, _ in BOXES
            for sides in ((x, y, z) for x in (0, 1) for y in (0, 1) for z in (0, 1))]
-PX = [dot(sub(p, TARGET), RIGHT) for p in CORNERS]
-PY = [dot(sub(p, TARGET), UP) for p in CORNERS]
-SCALE = min(0.70 / (max(PX) - min(PX)), 0.70 / (max(PY) - min(PY)))
+PX = [camera_project(p)[0] for p in CORNERS]
+PY = [camera_project(p)[1] for p in CORNERS]
+SCALE = min(0.78 / (max(PX) - min(PX)), 0.78 / (max(PY) - min(PY)))
 OFFSET = (0.5 - (min(PX) + max(PX)) * SCALE / 2,
-          0.565 + (min(PY) + max(PY)) * SCALE / 2)  # lower the bench; keep feet below the horizon
+          0.540 + (min(PY) + max(PY)) * SCALE / 2)
 
 
 def project(p):
     """Model point -> (x, y, depth) in icon units (y down, larger depth = farther)."""
-    d = sub(p, TARGET)
-    return (OFFSET[0] + dot(d, RIGHT) * SCALE, OFFSET[1] - dot(d, UP) * SCALE, -dot(d, FWD))
+    x, y, depth = camera_project(p)
+    return (OFFSET[0] + x * SCALE, OFFSET[1] - y * SCALE, depth)
 
 
 # ---- procedural wood -------------------------------------------------------------------------
@@ -156,11 +160,11 @@ def box_edges(lo, hi):
 class Canvas:
     def __init__(self, size):
         self.size = size
-        self.surfaces = [None] * (size * size)  # nearest (depth, rgb, alpha), even when translucent
-        self.layers = {}  # visible edge samples: pixel -> [(depth, rgb, alpha)]
+        self.surfaces = [None] * (size * size)  # nearest fill (depth, rgb, alpha)
+        self.layers = {}  # edge samples, including X-ray edges on the right
 
     def frag(self, i, depth, rgb, alpha):
-        # Opacity changes the fill, not visibility: never reveal geometry behind it.
+        # Use one translucent shell for a clear tint; draw the X-ray edges separately.
         if alpha <= 0:
             return
         surface = self.surfaces[i]
@@ -186,13 +190,13 @@ class Canvas:
                 w2 = 1.0 - w0 - w1
                 if w0 < 0 or w1 < 0 or w2 < 0:
                     continue
-                # orthographic: model point and depth interpolate linearly
+                # Orthographic projection interpolates model position and depth linearly.
                 p = tuple(w0 * pa[k] + w1 * pb[k] + w2 * pc[k] for k in range(3))
                 depth = w0 * a[2] + w1 * b[2] + w2 * c[2]
                 rgb, alpha = shade(p)
                 self.frag(py * n + px, depth, rgb, alpha)
 
-    def segment(self, pa, pb, width, color_at, bias):
+    def segment(self, pa, pb, width, color_at, bias, front_visible=True):
         """Anti-aliased line from model `pa` to `pb`; `color_at(p) -> (rgb, alpha)`."""
         n = self.size
         a, b = project(pa), project(pb)
@@ -221,18 +225,19 @@ class Canvas:
                 depth = a[2] + (b[2] - a[2]) * t - bias
                 i = py * n + px
                 o = self.surfaces[i]
-                if o is not None and depth > o[0]:
-                    continue
+                hidden = not front_visible or (o is not None and depth > o[0])
+                if sx / n < SPLIT_X:
+                    if hidden:
+                        continue
+                elif hidden:
+                    alpha *= 0.45
                 self.layers.setdefault(i, []).append((depth, rgb, alpha * cov))
 
 
 def background(x, y):
-    if y < HORIZON:
-        t = (y - INSET) / (HORIZON - INSET)
-        t = max(0.0, min(1.0, t)) ** 1.3
-        return tuple(SKY_TOP[i] + (SKY_HORIZON[i] - SKY_TOP[i]) * t for i in range(3))
-    t = max(0.0, min(1.0, (y - HORIZON) / (1.0 - INSET - HORIZON)))
-    return tuple(GROUND_FAR[i] + (GROUND[i] - GROUND_FAR[i]) * t ** 0.7 for i in range(3))
+    t = max(0.0, min(1.0, (y - INSET) / (1.0 - 2.0 * INSET)))
+    t = t * t * (3.0 - 2.0 * t)
+    return tuple(BG_TOP[i] + (BG_BOTTOM[i] - BG_TOP[i]) * t for i in range(3))
 
 
 def in_round_rect(x, y):
@@ -249,29 +254,81 @@ def lit(rgb, normal, ambient):
     return tuple(min(1.0, c * k) for c in rgb)
 
 
+def draw_dimensions(cv):
+    """X/Y tabletop dimensions and Z front-right leg height, as in the app."""
+    z = BOXES[0][1][2]
+    corners = ((0.0, 0.0, z), (0.0, 10.0, z), (18.0, 10.0, z))
+    tips = [(*p[:2], z + 1.4) for p in corners]
+    ink = lambda p: (EDGE_COL, 1.0)
+    overlay_bias = 1e6  # CAD annotations stay readable over translucent geometry.
+    for p in corners:
+        cv.segment((*p[:2], z + 0.12), (*p[:2], z + 1.65), 0.0014, ink, overlay_bias)
+
+    def arrow(tip, towards):
+        direction = sub(towards, tip)
+        dx, dy = dot(direction, RIGHT), -dot(direction, UP)
+        length = math.hypot(dx, dy)
+        along = 0.012 / (length * SCALE)
+        base = tuple(tip[k] + direction[k] * along for k in range(3))
+        side = tuple((-dy * RIGHT[k] - dx * UP[k]) / length * 0.0035 / SCALE for k in range(3))
+        wings = [tuple(base[k] + sign * side[k] for k in range(3)) for sign in (-1, 1)]
+        pts = [(p, (*project(p)[:2], -overlay_bias)) for p in (tip, *wings)]
+        cv.triangle(pts, ink)
+
+    def label(letter, a, b, offset):
+        # Simple vector lettering stays crisp at every icon size, without a font dependency.
+        glyphs = {
+            "X": [((-0.5, -0.5), (0.5, 0.5)), ((-0.5, 0.5), (0.5, -0.5))],
+            "Y": [((-0.5, -0.5), (0.0, 0.0), (0.5, -0.5)), ((0.0, 0.0), (0.0, 0.5))],
+            "Z": [((-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5))],
+        }
+        mid = tuple((a[k] + b[k]) / 2 for k in range(3))
+        for stroke in glyphs[letter]:
+            pts = [tuple(mid[k] + RIGHT[k] * (x * 0.018 + offset[0]) / SCALE
+                         - UP[k] * (y * 0.026 + offset[1]) / SCALE for k in range(3)) for x, y in stroke]
+            for p, q in zip(pts, pts[1:]):
+                cv.segment(p, q, 0.0065, ink, overlay_bias)
+
+    for letter, (a, b) in zip(("Y", "X"), zip(tips, tips[1:])):
+        cv.segment(a, b, 0.0017, ink, overlay_bias)
+        arrow(a, b)
+        arrow(b, a)
+        label(letter, a, b, (0.0, -0.023))
+
+    # Offset the height dimension along the tabletop's short axis, beside the right leg.
+    lo, hi, _ = BOXES[3]  # front-right leg
+    a, b = (hi[0], hi[1] + 1.7, lo[2]), (hi[0], hi[1] + 1.7, hi[2])
+    for height in (lo[2], hi[2]):
+        cv.segment((hi[0], hi[1] + 0.12, height), (hi[0], hi[1] + 1.95, height), 0.0014, ink, overlay_bias)
+    cv.segment(a, b, 0.0017, ink, overlay_bias)
+    arrow(a, b)
+    arrow(b, a)
+    label("Z", a, b, (0.022, 0.10))  # keep the letter clear of the lower rails
+
+
 def draw(n):
     cv = Canvas(n)
     for lo, hi, grain in BOXES:
         for quad, nrm in box_faces(lo, hi):
             if dot(nrm, FWD) <= 0:
-                continue  # hidden back faces are absent on both sides
+                continue  # nearest outward shell supplies the fill; X-ray edges follow
 
             def shade(p, nrm=nrm, grain=grain):
                 if is_wood(p):
                     return lit(wood(p, grain), nrm, 0.55), 1.0
-                return lit(SCHEMATIC, nrm, 0.6), 1.0
+                return lit(SCHEMATIC, nrm, 0.6), SCHEMATIC_ALPHA
 
             pts = [(q, project(q)) for q in quad]
             cv.triangle((pts[0], pts[1], pts[2]), shade)
             cv.triangle((pts[0], pts[2], pts[3]), shade)
-    # Both styles use the same hidden-line removal and nearest-surface depth test.
+    # Wood hides rear geometry; the schematic half also shows hidden edges, more faintly.
     for lo, hi, _ in BOXES:
         for a, b in box_edges(lo, hi):
             normals = [tuple((-1.0 if a[k] == lo[k] else 1.0) if i == k else 0.0 for i in range(3))
                        for k in range(3) if a[k] == b[k]]
-            if not any(dot(nrm, FWD) > 0 for nrm in normals):
-                continue
-            cv.segment(a, b, EDGE_W, lambda p: (EDGE_COL, 1.0 if is_wood(p) else 0.85), 0.05)
+            front_visible = any(dot(nrm, FWD) > 0 for nrm in normals)
+            cv.segment(a, b, EDGE_W, lambda p: (EDGE_COL, 1.0 if is_wood(p) else 0.75), 0.05, front_visible)
+    draw_dimensions(cv)
     return cv
 
 
@@ -295,7 +352,7 @@ def render(size, ss=2):
                     if o:
                         col = tuple(col[k] + (o[1][k] - col[k]) * o[2] for k in range(3))
                     for d, rgb, a in sorted(cv.layers.get(i, ()), key=lambda f: -f[0]):
-                        if o is None or d <= o[0]:
+                        if x >= SPLIT_X or o is None or d <= o[0]:
                             col = tuple(col[k] + (rgb[k] - col[k]) * a for k in range(3))
                     for k in range(3):
                         acc[k] += col[k]

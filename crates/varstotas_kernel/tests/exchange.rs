@@ -3,7 +3,7 @@
 use varstotas_kernel::glam::DVec3;
 use varstotas_kernel::io::{ImportOptions, add_dae, add_gltf, export_dae, import_dae, write_3mf, write_3mf_model, write_dae, write_glb};
 use varstotas_kernel::texture::base64_encode;
-use varstotas_kernel::{EntityRef, Model};
+use varstotas_kernel::{EntityRef, Model, io};
 
 /// A 2000 × 1000 × 500 box group, painted red.
 fn box_model() -> Model {
@@ -256,4 +256,121 @@ fn dae_texture_file_next_to_the_document() {
     let img = m.materials[face.front.unwrap()].image.as_ref().expect("texture read back");
     assert_eq!(img.bytes[..], png_bytes(7)[..]);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn double_sided_transmissive_gltf_preserves_material_and_winding_on_both_sides() {
+    let pos: Vec<u8> = [0.0f32, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0].iter().flat_map(|v| v.to_le_bytes()).collect();
+    let uri = format!("data:application/octet-stream;base64,{}", base64_encode(&pos));
+    for double_sided in [false, true] {
+        let doc = serde_json::json!({
+            "asset":{"version":"2.0"}, "scenes":[{"nodes":[0]}], "nodes":[{"mesh":0}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0},"material":0}]}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],
+            "bufferViews":[{"buffer":0,"byteLength":36}],"buffers":[{"byteLength":36,"uri":uri}],
+            "materials":[{"doubleSided":double_sided,"extensions":{
+                "KHR_materials_transmission":{"transmissionFactor":1.0},"KHR_materials_ior":{"ior":1.0}}}]
+        });
+        let mut model = Model::new();
+        add_gltf(&mut model, &serde_json::to_vec(&doc).unwrap(), None, &Default::default()).unwrap();
+        let face = model.defs.values().flat_map(|d| d.mesh.faces.values()).next().unwrap();
+        assert_eq!(face.back, double_sided.then_some(face.front).flatten());
+        assert!(face.normal.distance(-DVec3::Y) < 1e-6);
+        let material = &model.materials[face.front.unwrap()];
+        assert_eq!((material.pbr.as_ref().unwrap().transmission, material.pbr.as_ref().unwrap().ior), (1.0, 1.0));
+    }
+}
+
+#[test]
+fn gltf_t_junction_preserves_source_triangles_and_corner_normals() {
+    let positions: [f32; 18] = [0.,0.,0., 1.,0.,0., 0.,1.,0., 0.5,0.,0., 0.,0.,0., 0.5,-1.,0.];
+    let normals: [f32; 18] = [0.,0.,1., 0.,0.,1., 0.,0.,1., 0.,0.,1., 0.,0.,1., 0.,0.,1.];
+    let bytes: Vec<u8> = positions.iter().chain(&normals).flat_map(|v| v.to_le_bytes()).collect();
+    let doc = serde_json::json!({
+        "asset":{"version":"2.0"},"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1}}]}],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3"},
+                     {"bufferView":1,"componentType":5126,"count":6,"type":"VEC3"}],
+        "bufferViews":[{"buffer":0,"byteLength":72},{"buffer":0,"byteOffset":72,"byteLength":72}],
+        "buffers":[{"byteLength":144,"uri":format!("data:application/octet-stream;base64,{}",base64_encode(&bytes))}]
+    });
+    let mut model = Model::new();
+    add_gltf(&mut model, &serde_json::to_vec(&doc).unwrap(), None, &ImportOptions { merge_coplanar: false, materials: true, ..Default::default() }).unwrap();
+    let mesh = &model.defs.values().find(|d| !d.mesh.faces.is_empty()).unwrap().mesh;
+    assert_eq!(mesh.faces.len(), 2);
+    assert!(mesh.faces.values().all(|f| f.outer.len() == 3));
+    for f in mesh.faces.values() { assert_eq!(f.normals.len(), f.outer.len()); }
+    io::validate_model(&model).unwrap();
+    io::from_json(&io::to_json(&model).unwrap()).unwrap();
+}
+
+#[test]
+fn gltf_keeps_thin_layers_overlaps_and_sub_tolerance_triangle_edges() {
+    // Imported mesh triangles are a surface, not strokes for the interactive CAD face finder.
+    // The second layer and the last edge are both only 0.0005 mm from existing geometry.
+    let triangles = [
+        [[0f32,0.,0.],[1.,0.,0.],[0.,1.,0.]],
+        [[0.,0.,0.0000005],[1.,0.,0.0000005],[0.,1.,0.0000005]],
+        [[0.,1.,0.],[1.,0.,0.],[0.,0.,0.]],
+        [[0.,0.,0.],[0.0000005,0.,0.],[0.,1.,0.]],
+    ];
+    let bytes: Vec<_> = triangles.iter().flatten().flatten().flat_map(|x| x.to_le_bytes()).collect();
+    let doc = serde_json::json!({
+        "asset":{"version":"2.0"},"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":(0..4).map(|i| serde_json::json!({"attributes":{"POSITION":i},"material":i})).collect::<Vec<_>>()}],
+        "materials":(0..4).map(|i|serde_json::json!({"name":format!("Layer {i}")})).collect::<Vec<_>>(),
+        "accessors":(0..4).map(|i|serde_json::json!({"bufferView":0,"byteOffset":i*36,"componentType":5126,"count":3,"type":"VEC3"})).collect::<Vec<_>>(),
+        "bufferViews":[{"buffer":0,"byteLength":bytes.len()}],
+        "buffers":[{"byteLength":bytes.len(),"uri":format!("data:application/octet-stream;base64,{}",base64_encode(&bytes))}]
+    });
+    let mut model = Model::new();
+    add_gltf(&mut model, &serde_json::to_vec(&doc).unwrap(), None, &ImportOptions { merge_coplanar:false, materials:true, ..Default::default() }).unwrap();
+    let mesh = &model.defs.values().find(|d| !d.mesh.faces.is_empty()).unwrap().mesh;
+    assert_eq!(mesh.faces.len(),4,"no overwritten, split or collapsed source triangles");
+    for (face, expected) in mesh.faces.values().zip(triangles) {
+        for (vertex, point) in face.outer.iter().zip(expected) {
+            let point=DVec3::new(point[0] as f64, -point[2] as f64, point[1] as f64)*1000.0;
+            assert_eq!(mesh.vertices[*vertex].pos,point);
+        }
+    }
+    let materials: std::collections::HashSet<_> = mesh.faces.values().map(|f|f.front.unwrap()).collect();
+    assert_eq!(materials.len(),4,"overlapping surfaces retain their own materials");
+    io::validate_model(&model).unwrap();
+    io::from_json(&io::to_json(&model).unwrap()).unwrap();
+}
+
+#[test]
+fn legacy_blender_transmission_recovery_is_narrow_and_can_be_disabled() {
+    let pos: Vec<u8> = [0f32,0.,0., 1.,0.,0., 0.,1.,0.].iter().flat_map(|v|v.to_le_bytes()).collect();
+    let material = |name| serde_json::json!({"name":name,"doubleSided":true,"extensions":{
+        "KHR_materials_transmission":{"transmissionFactor":1.0},"KHR_materials_ior":{"ior":1.0}}});
+    let doc = serde_json::json!({
+        "asset":{"version":"2.0","generator":"Khronos glTF Blender I/O v4.2.57"},
+        "scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0},"material":0},{"attributes":{"POSITION":0},"material":1}]}],
+        "materials":[material("legacy_lambert"),material("legacy_blinn")],
+        "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],
+        "bufferViews":[{"buffer":0,"byteLength":36}],
+        "buffers":[{"byteLength":36,"uri":format!("data:application/octet-stream;base64,{}",base64_encode(&pos))}]
+    });
+    let import = |doc:&serde_json::Value, repair| {
+        let mut model=Model::new();
+        add_gltf(&mut model,&serde_json::to_vec(doc).unwrap(),None,&ImportOptions{repair_legacy_materials:repair,..Default::default()}).unwrap();
+        model.materials.values().map(|m|m.pbr.as_ref().unwrap().transmission).collect::<Vec<_>>()
+    };
+    assert_eq!(import(&doc,true),[0.,0.]);
+    assert_eq!(import(&doc,false),[1.,1.],"literal source factors remain available");
+    for (pointer,value) in [
+        ("/materials/1/extensions/KHR_materials_ior/ior",serde_json::json!(1.5)),
+        ("/materials/1/extensions/KHR_materials_transmission/transmissionTexture",serde_json::json!({"index":0})),
+        ("/materials/1/alphaMode",serde_json::json!("BLEND")),
+        ("/asset/generator",serde_json::json!("Other exporter")),
+    ] {
+        let mut other=doc.clone();
+        let path:Vec<_>=pointer.trim_start_matches('/').split('/').collect();
+        let mut target=&mut other;
+        for key in &path[..path.len()-1] {target=if let Ok(i)=key.parse::<usize>(){&mut target[i]}else{&mut target[*key]};}
+        target[path[path.len()-1]]=value;
+        assert_eq!(import(&other,true),[1.,1.],"authored glass must stay intact: {pointer}");
+    }
 }

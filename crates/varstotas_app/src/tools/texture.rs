@@ -113,8 +113,8 @@ fn dragged(grab: Grab, o: TexPlacement, tile: [f64; 2], start: DVec2, q: DVec2) 
                 return o;
             }
             let flip = if o.scale[0] < 0.0 { 180.0 } else { 0.0 };
-            p.angle_deg = d.y.atan2(d.x).to_degrees() - flip;
-            let sx = d.length() / tile[0] * o.scale[0].signum();
+            p.angle_deg = d.y.atan2(d.x).to_degrees() + o.shear.atan().to_degrees() - flip;
+            let sx = d.length() / (tile[0] * (1.0 + o.shear * o.shear).sqrt()) * o.scale[0].signum();
             p.scale = [sx, o.scale[1] * (sx / o.scale[0]).abs()];
         }
         Grab::Blue => {
@@ -329,8 +329,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn green_pin_preserves_imported_shear_when_rotating_and_scaling() {
+        let o = TexPlacement { offset: [100.0, 200.0], angle_deg: 20.0, scale: [2.0, 3.0], shear: 0.75 };
+        let tile = [500.0, 500.0];
+        let green = o.to_planar(DVec2::new(tile[0], 0.0));
+        let same = dragged(Grab::Green, o, tile, green, green);
+        assert!((same.angle_deg - o.angle_deg).abs() < 1e-9);
+        assert!((same.scale[0] - o.scale[0]).abs() < 1e-9);
+        let d = green - DVec2::from(o.offset);
+        let target = DVec2::from(o.offset) + DVec2::new(-d.y, d.x) * 2.0;
+        let changed = dragged(Grab::Green, o, tile, green, target);
+        assert!((changed.angle_deg - 110.0).abs() < 1e-9);
+        assert_eq!(changed.scale, [4.0, 6.0]);
+        assert_eq!(changed.shear, o.shear);
+        assert!(changed.to_planar(DVec2::new(tile[0], 0.0)).distance(target) < 1e-6);
+    }
+
+    #[test]
     fn green_pin_rotates_and_scales_uniformly() {
-        let o = TexPlacement { offset: [100.0, 0.0], angle_deg: 0.0, scale: [1.0, 2.0] };
+        let o = TexPlacement { offset: [100.0, 0.0], angle_deg: 0.0, scale: [1.0, 2.0], shear: 0.0 };
         // Green pin (tile 400 wide) dragged straight up by 800 mm: 90°, scale ×2 on both axes.
         let p = dragged(Grab::Green, o, [400.0, 200.0], DVec2::new(500.0, 0.0), DVec2::new(100.0, 800.0));
         assert!((p.angle_deg - 90.0).abs() < 1e-9 && (p.scale[0] - 2.0).abs() < 1e-9 && (p.scale[1] - 4.0).abs() < 1e-9, "{p:?}");
@@ -339,7 +356,7 @@ mod tests {
 
     #[test]
     fn blue_pin_and_move() {
-        let o = TexPlacement { offset: [0.0, 0.0], angle_deg: 90.0, scale: [1.0, 1.0] };
+        let o = TexPlacement { offset: [0.0, 0.0], angle_deg: 90.0, scale: [1.0, 1.0], shear: 0.0 };
         // v direction is -x when rotated 90°.
         let p = dragged(Grab::Blue, o, [400.0, 200.0], DVec2::ZERO, DVec2::new(-300.0, 50.0));
         assert!((p.scale[1] - 1.5).abs() < 1e-9 && p.scale[0] == 1.0, "{p:?}");

@@ -265,7 +265,7 @@ fn save_load_round_trip() {
     let path = dir.join("test.vrst");
     io::save(&model, &path).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
-    assert!(text.starts_with("{\"format\":\"varstotas\",\"version\":1,"));
+    assert!(text.starts_with("{\"format\":\"varstotas\",\"version\":4,"));
     let mut loaded = io::load(&path).unwrap();
     assert_eq!(loaded.unit, LengthUnit::Meter);
     assert_eq!(loaded.root_mesh().faces.len(), 5);
@@ -496,7 +496,7 @@ fn obj_round_trip_merges_triangles_and_keeps_materials() {
     assert_eq!(r.faces.values().filter(|f| f.front == Some(glass2)).count(), 1);
     assert_eq!(r.faces.values().filter(|f| f.front.is_none()).count(), 4);
     // Without merging: the exported polygons (convex quads, not triangles).
-    let opts = io::ImportOptions { merge_coplanar: false, materials: false };
+    let opts = io::ImportOptions { merge_coplanar: false, materials: false, ..Default::default() };
     let m3 = obj_round_trip(&model, "objrt_raw", &opts);
     assert_eq!(m3.root_mesh().faces.len(), 6);
     assert!(m3.materials.is_empty());
@@ -574,7 +574,7 @@ fn stl_import_merges_coplanar_triangles() {
     io::import_stl(&mut m2, &p).unwrap();
     assert_eq!(m2.root_mesh().faces.len(), 6);
     let mut m3 = Model::new();
-    io::import_stl_with(&mut m3, &p, &io::ImportOptions { merge_coplanar: false, materials: true }).unwrap();
+    io::import_stl_with(&mut m3, &p, &io::ImportOptions { merge_coplanar: false, materials: true, ..Default::default() }).unwrap();
     assert_eq!(m3.root_mesh().faces.len(), 12);
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -619,9 +619,9 @@ fn obj_import_merges_flat_triangle_grids() {
 #[test]
 fn scenes_style_tags_and_settings_round_trip() {
     let mut m = box_model();
-    let tag = m.tags.insert(Tag { name: "Roof".into(), visible: false, color: [1.0; 4] });
+    let tag = m.tags.insert(Tag { locked: false, name: "Roof".into(), visible: false, color: [1.0; 4] });
     let mut s = Scene::camera("A", DVec3::new(1.0, 2.0, 3.0), DVec3::ZERO, DVec3::Z, 35.0, false);
-    s.style = Some(SceneStyle { face_style: "wireframe".into(), xray: true, edges: false, profiles: true });
+    s.style = Some(SceneStyle { face_style: "wireframe".into(), xray: true, edges: false, profiles: true, triangles: true });
     s.hidden_tags = Some(vec![tag]);
     s.in_animation = false;
     m.scenes.push(s);
@@ -735,7 +735,7 @@ fn obj_export_writes_texture_and_uvs_import_embeds_it() {
     assert_eq!((img.pixels, img.file_name.as_str()), ([64, 64], "Brick_Wall.png"));
     assert_eq!(back.root_mesh().faces.len(), 6);
     // `vt` come back as the same texture position (top face, merged from two triangles).
-    let pl = TexPlacement { offset: [30.0, -20.0], angle_deg: 30.0, scale: [0.5, 2.0] };
+    let pl = TexPlacement { offset: [30.0, -20.0], angle_deg: 30.0, scale: [0.5, 2.0], shear: 0.0 };
     m.root_mesh_mut().faces[top].uv = Some(pl);
     io::write_bundle(&io::export_bundle(&m, &path).unwrap(), true).unwrap();
     let mut back = Model::new();

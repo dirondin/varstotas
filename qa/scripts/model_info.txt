@@ -56,7 +56,10 @@ wait 5
 expect stats=(0 0 0 0 | 0/1 0/0 0/1) None
 screenshot shots/mi_4.bmp
 # Purge Unused in the window
-raw click 96 638
+action click_spot model_info:tab:cleanup
+wait 5
+expect model_info_tab=Cleanup
+action click_spot purge
 wait 5
 expect stats=(0 0 0 0 | 0/0 0/0 0/0) Some("Purged 1 component(s), 1 material(s)")
 screenshot shots/mi_5.bmp

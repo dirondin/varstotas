@@ -133,7 +133,7 @@ impl Thumbs {
 fn render(renderer: &mut Renderer, rs: &egui_wgpu::RenderState, model: &Model) -> Result<varstotas_render::RgbaImage, String> {
     let b = model.bounds().ok_or("empty model")?; // i18n-ignore
     let tess = crate::scene_builder::tessellate_model(model);
-    let params = crate::scene_builder::BuildParams { face_style: FaceStyle::Shaded, textures: true, prev_origin: None };
+    let params = crate::scene_builder::BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Shaded, textures: true, prev_origin: None };
     let geo = crate::scene_builder::build_from(model, &tess, &params);
     let mut sync = crate::textures::TextureSync::default();
     if let Some(images) = sync.changed(model) {

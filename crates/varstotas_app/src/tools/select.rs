@@ -135,6 +135,7 @@ impl SelectTool {
             } else {
                 EntityRef::Face(hit.face)
             };
+            if ctx.doc.model.entity_locked(&active, entity) { return None; }
             Some(Picked { context: active, entity })
         } else {
             // Clicked outside the open group: resolve in the closest common context.
@@ -145,6 +146,7 @@ impl SelectTool {
             } else {
                 EntityRef::Face(hit.face)
             };
+            if ctx.doc.model.entity_locked(&context, entity) { return None; }
             Some(Picked { context, entity })
         }
     }

@@ -1181,13 +1181,13 @@ prefs-section-render = Vaizdavimas
 
 ## Search words of the sections (besides their names; a translation lists its own)
 
-prefs-words-general = automatinis išsaugojimas minutės šablonas naujas dokumentas vienetai atšaukimo žingsniai istorija
+prefs-words-general = automatinis išsaugojimas minutės šablonas naujas dokumentas vienetai atšaukimo žingsniai istorija atsarginė kopija ankstesnė versija
 prefs-words-render = vaizdavimas paveikslėlis dydis mėginiai atšokimai kokybė triukšmo šalinimas programos ffmpeg vaizdo įrašas animacija oidn open image denoise
 prefs-words-drawing = prisitraukimas nuspėjimas galinis taškas vidurio taškas briauna paviršius ašis tinklelis žingsnis pagrindinis žingsniai perkelti sukti mastelis kampas
 prefs-words-libraries = komponentai medžiagos aplankas pavyzdžiai modelyje plytelės mažos didelės sąrašas
 prefs-words-downloads = stebėti atsisiuntimai aplankas naršyklė
-prefs-words-interface = tema šviesi tamsi sistema išvaizda mastelis dydis artinimas įrankių juosta piktogramos kalba vertimas
-prefs-words-navigation = pelė jutiklinis kilimėlis sukimas artinimas slinkimas greitis apversti ratukas žymeklis vidurinis mygtukas du pirštai gestas
+prefs-words-interface = tema šviesi tamsi sistema išvaizda mastelis dydis artinimas įrankių juosta piktogramos kalba vertimas pradžia paleidimas pradžios ekranas
+prefs-words-navigation = pelė jutiklinis kilimėlis sukimas artinimas slinkimas greitis apversti ratukas žymeklis vidurinis mygtukas du pirštai gestas suspaudimas pasukimas pakreipimas daugelio lietimų
 prefs-words-shortcuts = klaviatūra spartieji klavišai karštieji klavišai klavišai
 prefs-words-toolbar = įrankių juosta mygtukai tvarka atsarga skirtukas pritaikyti įrankiai
 prefs-words-view = naujas dokumentas stilius šešėliuotas tekstūros vienspalvis paslėptos linijos karkasas realistinis briaunos kontūrai ašys žemė dangus tinklelis šešėliai perspektyva lygiagreti projekcija fov matymo laukas kamera
@@ -1331,7 +1331,7 @@ prefs-middle-drag = Vidurinio mygtuko tempimas:
 prefs-shift-other = Shift suteikia kitą.
 prefs-trackpad = Jutiklinis kilimėlis
 prefs-two-fingers = Du pirštai:
-prefs-trackpad-note = Shift: slinkimas (sukimas, kai du pirštai slenka). Suspaudimas ir %CMD% + du pirštai visada artina.
+prefs-trackpad-note = Shift sukeičia sukimą ir stumdymą. Suspaudimas ir %CMD% + du pirštai artina nepriklausomai nuo pelės ratuko.
 
 ## View (defaults of a new document)
 
@@ -4072,3 +4072,124 @@ app-export-replace-files =
     Eksportuojant bus pakeisti šie medžiagų arba tekstūrų failai:
     { $files }
     Tęsti?
+
+## Object and tag locking
+cmd-lock = Užrakinti
+cmd-unlock = Atrakinti
+cmd-unlock-all = Atrakinti viską
+cmd-desc-lock = Užrakinti pasirinktus objektus, kad jų nebūtų galima pasirinkti ar redaguoti
+cmd-desc-unlock-all = Atrakinti visus objektus ir žymas
+edit-locked = Šis veiksmas pakeistų užrakintus objektus. Pirmiausia juos atrakinkite.
+script-member-locked = Veiksmingas redagavimo užraktas, įskaitant žymos ir tėvinių objektų užraktus (tik skaityti).
+
+## Pradžios ekranas ir atsiliepimai
+start-menu = Pradžios ekranas…
+start-subtitle = Kurkite modelį, tęskite darbą arba peržiūrėkite pavyzdžius.
+start-create = Naujas modelis
+start-new = Kurti
+start-open = Atverti dokumentą…
+start-guide = Trumpasis vadovas
+start-recent = Naujausi dokumentai
+start-no-recent = Čia bus rodomi neseniai atverti dokumentai.
+start-basics-title = Pirmieji žingsniai
+start-basics = Tarpas: žymėjimas · L: linija · R: stačiakampis. Tikslius matmenis įveskite matmenų laukelyje. Pelės ratukas keičia mastelį, vidurinis mygtukas suka vaizdą.
+start-show = Rodyti paleidžiant
+start-continue = Tęsti
+report-menu = Pranešti apie problemą…
+report-intro = Peržiūrėkite pranešimą ir atverkite juodraštį naršyklėje. Norėdami išsiųsti, prisijunkite prie GitHub ir pateikite jį patys.
+report-access = Privačiai saugyklai reikia prieigos. Modelio failai ir ekrano nuotraukos automatiškai nepridedami.
+report-title = Santrauka
+report-description = Kas nutiko?
+report-description-hint = Atkūrimo žingsniai, tikėtinas rezultatas ir faktinis elgesys.
+report-errors = Pridėti paskutinius 10 įspėjimų ir klaidų
+report-review = Prieš bendrindami peržiūrėkite tekstą. Žurnale gali būti failų vardų ir kitos informacijos.
+report-copy = Kopijuoti pranešimą
+report-github = Atverti GitHub juodraštį
+report-paste = Visas pranešimas nukopijuotas. Įklijuokite jį į GitHub problemos aprašymą.
+
+cli-usage =
+    Naudojimas: Varstotas [--open] <document.vrst>
+    Varstotas -- <document.vrst>
+    Varstotas --help | --version
+cli-one-document = Nurodykite vieną dokumentą
+cli-unknown-option = Nežinomas parametras: { $option }
+cli-open-path = Po --open reikia nurodyti dokumento kelią
+
+prefs-save-backups = Saugoti ankstesnės išsaugotos versijos atsarginę kopiją
+prefs-save-backups-note = Išsaugant ankstesnė versija paliekama faile <name>.bak.vrst. Išjungus esamos kopijos nepašalinamos.
+
+model-info-metadata = Dokumento metaduomenys
+model-info-metadata-text = Tekstas / aprašymas
+model-info-license = Licencija
+model-info-license-hint = Licencijos pavadinimas, nuoroda arba visas tekstas (neprivaloma)
+model-info-metadata-apply = Taikyti
+model-info-metadata-reset = Atmesti pakeitimus
+model-info-format-version = Išsaugojimo formato versija: { $version }
+model-info-metadata-edit = Keisti dokumento metaduomenis
+
+model-info-tab-info = Informacija
+model-info-tab-meta = Metaduomenys
+model-info-tab-cleanup = Valymas
+
+download-progress-unknown = Atsisiųsta { $received } / bendras dydis nežinomas
+
+# Practical step-by-step walkthrough.
+tutorial-title = Pamoka
+tutorial-step = Žingsnis { $current } / { $total }
+tutorial-try = Išbandykite
+tutorial-tools = Įjungti įrankį
+tutorial-details = Daugiau apie šį žingsnį
+tutorial-practice-note = Palikite šį langą šalia modelio ir praktikuokitės darbo srityje.
+tutorial-back = Atgal
+tutorial-restart = Nuo pradžių
+tutorial-finish = Baigti
+tutorial-next = Toliau
+tutorial-0-title = Pažinkite Varstotas
+tutorial-0-body = Modelį sudaro briaunos ir paviršiai, jungiami į grupes bei pakartotinai naudojamus komponentus. Programa turi tikslų braižymą, keičiamas 3D formas, medžiagas, scenas ir brėžinių lapus. Pradėsime nuo naujo dokumento.
+tutorial-0-task = Pasirinkite File → New. Paprasto stalviršio pavyzdžiu išmoksite įrankius ir paruošite failą dalytis. Toliau eikite savo tempu.
+tutorial-1-title = Apžiūrėkite modelį
+tutorial-1-body = Tempkite viduriniu pelės mygtuku, kad pasuktumėte vaizdą; su Shift — pastumtumėte. Ratukas artina ties žymekliu. Jutiklinio kilimėlio valdymas ir greitis keičiami navigacijos nustatymuose.
+tutorial-1-task = Išbandykite sukimą ir stumdymą. Camera → Standard Views perjunkite Top ir Iso, tada naudokite Zoom Extents.
+tutorial-2-title = Nubrėžkite tikslų pagrindą
+tutorial-2-body = Uždaras plokščias briaunų kontūras sudaro paviršių. Rectangle ir Circle sukuria jį iškart. Measurements laukas priima tikslius matmenis, kol įrankis aktyvus; Instructor paaiškina dabartinį etapą.
+tutorial-2-task = Įjunkite Rectangle. Nurodykite pirmą kampą, pajudinkite žymeklį, į Measurements įrašykite 1400mm,800mm ir spauskite Enter.
+tutorial-3-title = Suteikite tūrį
+tutorial-3-body = Push/Pull ištempia paviršių. Draw → Shapes viena operacija kuria dėžę, cilindrą, kūgį, piramidę, sferą ar torą. Šie komponentai turi keičiamus generatoriaus parametrus Entity Info.
+tutorial-3-task = Ištempkite stačiakampį su Push/Pull ir įveskite 40. Šalia išbandykite Box: pirmas kampas, priešingas pagrindo kampas ir aukštis.
+tutorial-4-title = Naudokite pritraukimą
+tutorial-4-body = Žymeklis atpažįsta galus, vidurio taškus, ašis ir tinklelį. Spalvotos linijos padeda išlaikyti kryptį. Rodyklės fiksuoja ašį, Shift — dabartinę kryptį. Magneto meniu valdo pritraukimo rūšis.
+tutorial-4-task = Įjunkite tinklelį ir Line. Nuo kampo judėkite ašies kryptimi iki kitos tinklelio linijos. Pakartokite su Box pagrindu ir aukščiu. Escape atšaukia nebaigtą veiksmą.
+tutorial-5-title = Redaguokite ir kartokite
+tutorial-5-body = Move, Rotate ir Scale keičia pažymėtus objektus; Undo leidžia eksperimentuoti. Grupė atskiria geometriją nuo gretimų briaunų. Komponento kopijos dalijasi apibrėžimu, todėl pakeitimai atnaujina visas kopijas.
+tutorial-5-task = Pažymėkite stalviršį ir Edit meniu sukurkite grupę. Perkelkite ją, atšaukite perkėlimą ir dukart spustelėkite, kad redaguotumėte vidų. Baigę išeikite iš grupės.
+tutorial-6-title = Sutvarkykite modelį
+tutorial-6-body = Outliner rodo įdėtas grupes ir komponentus. Žymos valdo matomumą ir redagavimo užraktus. Entity Info pateikia pažymėto objekto parametrus. Paslėpimas ir užrakinimas veikia atskirai.
+tutorial-6-task = Entity Info pavadinkite stalviršį. Tags skiltyje sukurkite ir priskirkite žymą, perjunkite matomumą. Išbandykite užraktą ir prieš dažydami atrakinkite.
+tutorial-7-title = Medžiagos ir vaizdo stiliai
+tutorial-7-body = Paint priskiria spalvą ir tekstūrą, Texture Position keičia jų padėtį. Online Materials atsiunčia medžiagas. Shaded with Textures tinka modeliuoti, Monochrome skiria paviršių puses, Realistic naudoja fizines savybes ir apšvietimą.
+tutorial-7-task = Nudažykite paviršių. Palyginkite Shaded with Textures, Monochrome ir Realistic stilius. Įjunkite X-Ray paslėptoms briaunoms pamatyti.
+tutorial-8-title = Pristatykite rezultatą
+tutorial-8-body = Scenos įsimena vaizdus ir rodymo nustatymus. Matmenys pažymi modelį, pjūviai rodo vidų, lapai išdėsto vaizdus popieriuje. Render kuria galutinį atvaizdą, animacija pereina tarp scenų.
+tutorial-8-task = Pridėkite Iso sceną ir antrą Top sceną. Persijunkite tarp jų, tada išbandykite Dimension arba Section.
+tutorial-9-title = Išsaugokite ir dalykitės
+tutorial-9-body = .vrst išlaiko redaguojamą geometriją, medžiagas, scenas ir metaduomenis. Model Info → Meta saugo aprašymą, licenciją ir peržiūrą. Importas ir eksportas palaiko OBJ, STL, GLB ir kitus formatus; scenarijai ir papildiniai plečia įrankius.
+tutorial-9-task = Išsaugokite modelį. Model Info → Meta įrašykite aprašymą ir licenciją, vėl išsaugokite. Help → Examples rasite pavyzdžius; galite pakartoti bet kurį žingsnį.
+
+app-reversed-faces = Apversta paviršių: { $count }. Monochrome režimas parodo priekinę ir galinę puses.
+
+download-progress-previews = Atsisiunčiamos peržiūros: { $count }
+
+prefs-trackpad-enabled = Navigacija jutikliniu kilimėliu / sklandžiu slinkimu
+prefs-gesture-speed = Jautrumas
+prefs-invert-swipe = Apversti dviejų pirštų slinkimą
+prefs-pinch-enabled = Artinti suspaudimo gestu
+prefs-invert-pinch = Apversti suspaudimą
+prefs-twist = Dviejų pirštų pasukimas
+prefs-twist-off = Išjungta
+prefs-twist-orbit = Sukti apie vertikalią ašį
+prefs-twist-roll = Pakreipti vaizdą
+prefs-invert-twist = Apversti pasukimą
+prefs-trackpad-platform = Suspaudimas ir pasukimas priklauso nuo OS ir tvarkyklės. Šie nustatymai taip pat taikomi sklandaus slinkimo įrenginiams.
+
+view-triangles = Trikampiai
+view-triangles-hint = Rodyti visas trianguliacijos briaunas virš esamo stiliaus, įskaitant minkštas briaunas ir daugiakampių įstrižaines.

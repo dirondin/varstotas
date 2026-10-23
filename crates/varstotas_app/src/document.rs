@@ -187,6 +187,11 @@ impl Document {
         match guarded(|| f(&mut self.model)) {
             Ok(r) => {
                 self.rig_hook();
+                if let Err(msg) = before.validate_locked_changes(&self.model) {
+                    self.model = before;
+                    self.last_error = Some(msg);
+                    return None;
+                }
                 self.history.push(label, before);
                 self.after_change();
                 self.last_commit_version = self.model_version;
@@ -230,6 +235,11 @@ impl Document {
             }
             Ok(Ok(r)) => {
                 self.rig_hook();
+                if let Err(msg) = before.validate_locked_changes(&self.model) {
+                    self.model = before;
+                    self.last_error = Some(msg);
+                    return None;
+                }
                 self.history.push(label, before);
                 self.after_change();
                 self.last_commit_version = self.model_version;
@@ -253,8 +263,14 @@ impl Document {
     /// Mutate document-level state that should not create an undo step
     /// (e.g. tag visibility). Still marks the document dirty.
     pub fn mutate_untracked(&mut self, f: impl FnOnce(&mut Model)) {
-        if let Err(msg) = guarded(|| f(&mut self.model)) {
+        let before = self.model.has_locks().then(|| self.model.clone());
+        let result = guarded(|| f(&mut self.model)).and_then(|_| {
+            before.as_ref().map_or(Ok(()), |m| m.validate_locked_changes(&self.model))
+        });
+        if let Err(msg) = result {
+            if let Some(before) = before { self.model = before; }
             self.last_error = Some(msg);
+            return;
         }
         self.after_change();
     }
@@ -262,9 +278,25 @@ impl Document {
     /// Record an undo step for changes already made in place since `before`.
     pub fn record_step(&mut self, label: &str, before: Model) {
         self.rig_hook();
+        if let Err(msg) = before.validate_locked_changes(&self.model) {
+            self.model = before;
+            self.last_error = Some(msg);
+            self.after_change();
+            return;
+        }
         self.history.push(label, before);
         self.after_change();
         self.last_commit_version = self.model_version;
+    }
+
+    /// Explicit user lock controls; scripts and plugins cannot call this entry point.
+    pub fn change_locks(&mut self, label: &str, f: impl FnOnce(&mut Model)) {
+        let before = self.model.clone();
+        f(&mut self.model);
+        self.history.push(label, before);
+        self.after_change();
+        self.last_commit_version = self.model_version;
+        self.last_error = None;
     }
 
     /// Components with parameters (rigs) after an edit: an edited variant goes back to its
@@ -303,6 +335,13 @@ impl Document {
         Some(l)
     }
 
+    pub fn agent_history(&mut self, redo: bool) -> Result<Option<String>, String> {
+        let label = if redo { self.history.redo_preserving_locks(&mut self.model) }
+            else { self.history.undo_preserving_locks(&mut self.model) }?;
+        if label.is_some() { self.after_change(); }
+        Ok(label)
+    }
+
     // ---- selection -------------------------------------------------------
 
     /// Replace the selection with `sel` (entities of the active context; no guides).
@@ -320,7 +359,7 @@ impl Document {
     pub fn set_selection_full(&mut self, mut sel: Vec<EntityRef>, mut guides: Vec<GuideRef>, mut dims: Vec<DimId>) {
         if let Some(mesh) = self.model.mesh_at(&self.active_path) {
             let mut seen = std::collections::HashSet::new();
-            sel.retain(|e| entity_alive(mesh, *e) && seen.insert(*e));
+            sel.retain(|e| entity_alive(mesh, *e) && !self.model.entity_locked(&self.active_path, *e) && seen.insert(*e));
         }
         let mut seen = std::collections::HashSet::new();
         guides.retain(|g| self.model.has_guide_in(&self.active_path, *g) && seen.insert(*g));
@@ -452,6 +491,7 @@ impl Document {
 
     #[allow(dead_code)]
     pub fn toggle_selected(&mut self, e: EntityRef) {
+        if self.model.entity_locked(&self.active_path, e) { return; }
         if let Some(i) = self.selection.iter().position(|x| *x == e) {
             self.selection.remove(i);
         } else {
@@ -464,7 +504,7 @@ impl Document {
         let mut have: HashSet<EntityRef> = self.selection.iter().copied().collect();
         let n = self.selection.len();
         for e in ents {
-            if have.insert(e) {
+            if !self.model.entity_locked(&self.active_path, e) && have.insert(e) {
                 self.selection.push(e);
             }
         }
@@ -492,7 +532,7 @@ impl Document {
         self.selection.retain(|e| !toggled.contains(e));
         let mut seen = HashSet::new();
         for e in ents {
-            if !had.contains(e) && seen.insert(*e) {
+            if !self.model.entity_locked(&self.active_path, *e) && !had.contains(e) && seen.insert(*e) {
                 self.selection.push(*e);
             }
         }
@@ -520,6 +560,7 @@ impl Document {
 
     /// Enter an editing context (double-click on group).
     pub fn set_active_path(&mut self, path: ContextPath) {
+        if self.model.context_locked(&path) { return; }
         if path != self.active_path {
             self.active_path = path;
             self.selection.clear();
@@ -543,7 +584,7 @@ impl Document {
 
     /// Drop selected refs that no longer exist (after undo/erase), and reset an invalid context.
     pub fn prune_selection(&mut self) {
-        if guarded(|| self.model.mesh_at(&self.active_path).is_none()).unwrap_or(true) {
+        if self.model.context_locked(&self.active_path) || guarded(|| self.model.mesh_at(&self.active_path).is_none()).unwrap_or(true) {
             self.active_path.clear();
         }
         let ng = self.guide_sel.len();
@@ -569,7 +610,7 @@ impl Document {
             return;
         };
         let n = self.selection.len();
-        self.selection.retain(|e| entity_alive(mesh, *e));
+        self.selection.retain(|e| entity_alive(mesh, *e) && !model.entity_locked(path, *e));
         if n != self.selection.len() {
             self.selection_version += 1;
         }
@@ -661,5 +702,53 @@ mod tests {
         assert_eq!(r, Some(1));
         assert_eq!(doc.history.undo_label(), Some("Real"));
         assert!(doc.dirty);
+    }
+}
+
+#[cfg(test)]
+mod locking_tests {
+    use super::*;
+    use varstotas_kernel::{FaceId, glam::DVec3};
+
+    fn fixture() -> (Document, FaceId) {
+        let mut d = Document::new();
+        let f = d.model.root_mesh_mut().add_face(&[DVec3::ZERO, DVec3::X * 100., DVec3::Y * 100.]).unwrap();
+        (d, f)
+    }
+
+    #[test]
+    fn lock_controls_clear_selection_and_support_undo_redo() {
+        let (mut d, f) = fixture();
+        d.set_selection(vec![EntityRef::Face(f)]);
+        d.change_locks("Lock", |m| m.set_entities_locked(&[], &[EntityRef::Face(f)], true));
+        assert!(d.selection.is_empty());
+        assert!(d.agent_history(false).is_err());
+        assert_eq!(d.history.undo_label(), Some("Lock"));
+        d.select_all(); assert!(d.selection.is_empty());
+        d.toggle_selected(EntityRef::Face(f)); assert!(d.selection.is_empty());
+        d.add_to_selection([EntityRef::Face(f)]); assert!(d.selection.is_empty());
+        d.toggle_many(&[EntityRef::Face(f)]); assert!(d.selection.is_empty());
+        d.undo().unwrap(); assert!(!d.model.root_mesh().faces[f].locked);
+        d.select_all(); assert!(!d.selection.is_empty());
+        d.redo().unwrap(); assert!(d.selection.is_empty());
+        d.change_locks("Unlock All", |m| m.unlock_all());
+        d.select_all(); assert!(!d.selection.is_empty());
+    }
+
+    #[test]
+    fn every_document_write_path_rolls_back_locked_mutations_without_undo_steps() {
+        let (mut d, f) = fixture();
+        d.model.root_mesh_mut().faces[f].locked = true;
+        let v = d.model.root_mesh().faces[f].outer[0];
+        let before = varstotas_kernel::io::to_json(&d.model).unwrap();
+        assert!(d.commit("Move", |m| m.root_mesh_mut().vertices[v].pos += DVec3::Z).is_none());
+        assert!(d.try_commit("Delete", |m| Ok::<_, String>(m.root_mesh_mut().faces.remove(f))).is_none());
+        d.mutate_untracked(|m| m.root_mesh_mut().vertices[v].pos += DVec3::Z);
+        let original = d.model.clone();
+        d.model.root_mesh_mut().vertices[v].pos += DVec3::Z;
+        d.record_step("In place", original);
+        assert_eq!(varstotas_kernel::io::to_json(&d.model).unwrap(), before);
+        assert!(d.history.undo_label().is_none());
+        assert!(d.last_error.is_some());
     }
 }

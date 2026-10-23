@@ -2,14 +2,22 @@
 # Builds a universal (arm64 + x86_64) macOS release bundle: dist/Varstotas.app,
 # plus dist/Varstotas-<version>-macos-universal.zip and .dmg.
 #
-# Usage: scripts/build-macos.sh [--no-dmg]
+# Usage: scripts/build-macos.sh [--no-dmg] [--debug]
+# --debug builds a local target/Varstotas.app without universal slices or archives.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 MAKE_DMG=1
-[[ "${1:-}" == "--no-dmg" ]] && MAKE_DMG=0
+DEBUG_BUILD=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-dmg) MAKE_DMG=0 ;;
+    --debug) DEBUG_BUILD=1; MAKE_DMG=0 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
 
 TARGETS=(aarch64-apple-darwin x86_64-apple-darwin)
 BIN=varstotas
@@ -18,30 +26,39 @@ BUNDLE_ID=dev.varstotas.app
 MIN_MACOS=11.0
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
+[[ "$DEBUG_BUILD" == 1 ]] && APP="$ROOT/target/$APP_NAME.app"
 
 VERSION="$(cargo metadata --no-deps --format-version 1 \
   | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="varstotas_app"))')"
 echo "==> Varstotas $VERSION"
 
-# 1. Toolchain targets.
-installed="$(rustup target list --installed)"
-for t in "${TARGETS[@]}"; do
-  grep -qx "$t" <<<"$installed" || rustup target add "$t"
-done
+# 1–2. A local debug build, or release builds for both architectures.
+if [[ "$DEBUG_BUILD" == 1 ]]; then
+  cargo build --offline -p varstotas_app --bin "$BIN"
+else
+  installed="$(rustup target list --installed)"
+  for t in "${TARGETS[@]}"; do
+    grep -qx "$t" <<<"$installed" || rustup target add "$t"
+  done
 
-# 2. Release builds per arch.
-export MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS"
-for t in "${TARGETS[@]}"; do
-  echo "==> cargo build --release --target $t"
-  cargo build --release -p varstotas_app --bin "$BIN" --target "$t"
-done
+  # 2. Release builds per arch.
+  export MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS"
+  for t in "${TARGETS[@]}"; do
+    echo "==> cargo build --release --target $t"
+    cargo build --release -p varstotas_app --bin "$BIN" --target "$t"
+  done
+fi
 
 # 3. Bundle skeleton.
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-SLICES=()
-for t in "${TARGETS[@]}"; do SLICES+=("target/$t/release/$BIN"); done
-lipo -create -output "$APP/Contents/MacOS/$BIN" "${SLICES[@]}"
+if [[ "$DEBUG_BUILD" == 1 ]]; then
+  cp "target/debug/$BIN" "$APP/Contents/MacOS/$BIN"
+else
+  SLICES=()
+  for t in "${TARGETS[@]}"; do SLICES+=("target/$t/release/$BIN"); done
+  lipo -create -output "$APP/Contents/MacOS/$BIN" "${SLICES[@]}"
+fi
 chmod +x "$APP/Contents/MacOS/$BIN"
 
 # 4. Icon (.icns via iconutil from the master PNG drawn by scripts/make_icon.py).
@@ -87,6 +104,11 @@ plutil -lint "$APP/Contents/Info.plist" >/dev/null
 # 6. Ad-hoc signature (no Developer ID; Gatekeeper will still ask on first open).
 codesign --force --deep -s - "$APP"
 codesign --verify --deep --strict "$APP"
+
+if [[ "$DEBUG_BUILD" == 1 ]]; then
+  echo "==> done: $APP"
+  exit 0
+fi
 
 # 7. Archives.
 ZIP="$DIST/$APP_NAME-$VERSION-macos-universal.zip"

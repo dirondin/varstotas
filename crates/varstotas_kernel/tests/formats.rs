@@ -260,3 +260,46 @@ fn csv_points_and_faces_json() {
     assert_eq!(fs[0]["material"], "Red");
     assert_eq!(v["units"], "mm");
 }
+
+#[test]
+fn fbx_preserves_nearby_layers_and_authored_corner_normals() {
+    let fbx=FBX.replace("Vertices: *12","Vertices: *18")
+        .replace("a: 0,0,0,100,0,0,100,0,-100,0,0,-100","a: 0,0,0,100,0,0,0,0,-100,0,0.00005,0,100,0.00005,0,0,0.00005,-100")
+        .replace("PolygonVertexIndex: *4","PolygonVertexIndex: *6")
+        .replace("a: 0,1,2,-4","a: 0,1,-3,3,4,-6")
+        .replace("GeometryVersion: 124",r#"GeometryVersion: 124
+        LayerElementNormal: 0 {
+            Version: 101
+            Name: ""
+            MappingInformationType: "ByPolygonVertex"
+            ReferenceInformationType: "Direct"
+            Normals: *18 { a: 0.1,1,0,0,1,0.2,0,1,0,0.1,1,0,0,1,0.2,0,1,0 }
+        }"#)
+        .replace("Layer: 0 {",r#"Layer: 0 {
+            LayerElement: { Type: "LayerElementNormal"
+                TypedIndex: 0 }
+        "#);
+    let mut model=Model::new();
+    io::add_fbx(&mut model,fbx.as_bytes(),None,&ImportOptions{merge_coplanar:false,..Default::default()}).unwrap();
+    assert_eq!(faces(&model),2);
+    let mesh=&model.defs.values().find(|d|!d.mesh.faces.is_empty()).unwrap().mesh;
+    let z:Vec<_>=mesh.faces.values().map(|f|mesh.vertices[f.outer[0]].pos.z).collect();
+    assert!((z[0]-z[1]).abs()>0.0004,"FBX layers welded: {z:?}");
+    for f in mesh.faces.values() {
+        assert_eq!(f.normals.len(),3);
+        assert!(f.normals[0].distance(f.normals[1])>0.1,"FBX normals flattened");
+        assert!(f.normals.iter().all(|n|n.z>0.9));
+    }
+    io::validate_model(&model).unwrap();
+}
+
+#[test]
+fn ply_preserves_authored_vertex_normals() {
+    let ply="ply\nformat ascii 1.0\ncomment units mm\nelement vertex 3\nproperty float x\nproperty float y\nproperty float z\nproperty float nx\nproperty float ny\nproperty float nz\nelement face 1\nproperty list uchar int vertex_indices\nend_header\n0 0 0 0.2 0 1\n100 0 0 0 0.2 1\n0 100 0 0 0 1\n3 0 1 2\n";
+    let path=std::env::temp_dir().join(format!("varstotas_ply_normals_{}.ply",std::process::id()));
+    std::fs::write(&path,ply).unwrap();let mut model=Model::new();io::import_ply(&mut model,&path).unwrap();
+    let face=model.defs.values().flat_map(|d|d.mesh.faces.values()).next().unwrap();
+    assert_eq!(face.normals.len(),3);
+    assert!(face.normals[0].distance(DVec3::new(0.2,0.,1.).normalize())<1e-9);
+    io::validate_model(&model).unwrap();std::fs::remove_file(path).unwrap();
+}

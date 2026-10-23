@@ -1,4 +1,4 @@
-//! Native `.vrst` format: `{"format":"varstotas","version":1,"model":{...}}`.
+//! Native `.vrst` format: `{"format":"varstotas","version":4,"model":{...}}`.
 
 use super::IoError;
 use crate::Model;
@@ -7,7 +7,11 @@ use std::path::Path;
 use varstotas_i18n::tr;
 
 pub const FORMAT: &str = "varstotas";
-pub const VERSION: u32 = 1;
+/// V1: original; V2: metadata; V3: corner normals; V4: affine UV placement with shear.
+pub const VERSION: u32 = 4;
+pub const MIN_VERSION: u32 = 1;
+/// Material files have their own independent schema version.
+pub const MATERIAL_VERSION: u32 = 1;
 
 #[derive(Serialize)]
 struct FileOut<'a> {
@@ -17,9 +21,13 @@ struct FileOut<'a> {
 }
 
 #[derive(Deserialize)]
-struct FileIn {
+struct FileHeader {
     format: String,
     version: u32,
+}
+
+#[derive(Deserialize)]
+struct FileIn {
     model: Model,
 }
 
@@ -33,14 +41,17 @@ pub fn from_json(text: &str) -> Result<Model, IoError> {
     if text.len() > super::MAX_MODEL_BYTES {
         return Err(IoError::Format("Model exceeds file size limit".into()));
     }
-    let f: FileIn = serde_json::from_str(text).map_err(|e| IoError::Format(e.to_string()))?;
+    let f: FileHeader = serde_json::from_str(text).map_err(|e| IoError::Format(e.to_string()))?;
     if f.format != FORMAT {
         return Err(IoError::Format(tr!("kernel-io-not-a-varstotas-file-format-format", format = format!("{:?}", f.format))));
     }
-    if f.version > VERSION {
+    if !(MIN_VERSION..=VERSION).contains(&f.version) {
         return Err(IoError::Format(tr!("kernel-io-unsupported-version-version", version = f.version.to_string())));
     }
-    let mut m = f.model;
+    // Validate the envelope before deserializing a possibly incompatible model schema.
+    // V1 has no metadata; Model's serde defaults supply empty fields during migration.
+    let mut m = serde_json::from_str::<FileIn>(text)
+        .map_err(|e| IoError::Format(e.to_string()))?.model;
     if !m.defs.contains_key(m.root) {
         return Err(IoError::Format(tr!("kernel-io-missing-root-definition").into()));
     }
@@ -50,8 +61,38 @@ pub fn from_json(text: &str) -> Result<Model, IoError> {
 }
 
 pub fn save(model: &Model, path: &Path) -> Result<(), IoError> {
+    super::validate_model(model)?;
     let s = to_json(model)?;
     super::atomic_write(path, s.as_bytes())?;
+    Ok(())
+}
+
+/// One previous explicit save, kept as a normal, reopenable `.vrst` document.
+pub fn backup_path(path: &Path) -> std::path::PathBuf {
+    let mut name = path.file_stem().unwrap_or_default().to_os_string();
+    name.push(".bak.vrst");
+    path.with_file_name(name)
+}
+
+/// Preserve the previous file before replacing it. Backup failure leaves the original intact.
+/// Autosaves and generated fixtures use `save` and do not rotate document backups.
+pub fn save_with_backup(model: &Model, path: &Path) -> Result<(), IoError> {
+    super::validate_model(model)?;
+    let text = to_json(model)?;
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => {
+            if !meta.is_file() || meta.file_type().is_symlink() {
+                return Err(std::io::Error::other("Expected a regular document file").into());
+            }
+            let previous = super::read_limited(path, super::MAX_MODEL_BYTES)?;
+            // Repeated Save without changes must not discard the last distinct version.
+            if previous == text.as_bytes() { return Ok(()); }
+            super::atomic_write(&backup_path(path), &previous)?;
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    super::atomic_write(path, text.as_bytes())?;
     Ok(())
 }
 
@@ -85,7 +126,7 @@ struct MatIn {
 
 /// Write one material (colour, texture, PBR parameters, maps and shader) to a file.
 pub fn save_material(mat: &crate::Material, path: &Path) -> Result<(), IoError> {
-    let s = serde_json::to_string(&MatOut { format: MATERIAL_FORMAT, version: VERSION, material: mat }).map_err(|e| IoError::Format(e.to_string()))?;
+    let s = serde_json::to_string(&MatOut { format: MATERIAL_FORMAT, version: MATERIAL_VERSION, material: mat }).map_err(|e| IoError::Format(e.to_string()))?;
     super::atomic_write(path, s.as_bytes())?;
     Ok(())
 }
@@ -96,7 +137,7 @@ pub fn load_material(path: &Path) -> Result<crate::Material, IoError> {
     if f.format != MATERIAL_FORMAT {
         return Err(IoError::Format(tr!("kernel-io-not-a-varstotas-material-format-format", format = format!("{:?}", f.format))));
     }
-    if f.version > VERSION {
+    if f.version != MATERIAL_VERSION {
         return Err(IoError::Format(tr!("kernel-io-unsupported-version-version", version = f.version.to_string())));
     }
     Ok(f.material)

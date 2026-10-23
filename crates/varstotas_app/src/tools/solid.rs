@@ -134,7 +134,7 @@ impl Tool for SolidTool {
                 Ok(id) => (id, SELECT_BLUE),
                 Err(id) => (id, egui::Color32::from_rgb(0xD0, 0x30, 0x30)),
             };
-            for (a, b) in transformed_preview(view.doc, &[EntityRef::Instance(id)], &DMat4::IDENTITY, 4000) {
+            for (a, b) in transformed_preview(view.doc, &[EntityRef::Instance(id)], &DMat4::IDENTITY) {
                 line(out3d, a, b, color, 2.0);
             }
         }

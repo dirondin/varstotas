@@ -466,20 +466,13 @@ impl Mesh {
         let tmpl = self.edges[e].clone();
         let [a, b] = tmpl.v;
         let faces = self.edge_faces(e);
+        let delta = self.pos(b) - self.pos(a);
+        let t = (self.pos(v) - self.pos(a)).dot(delta) / delta.length_squared().max(1e-30);
         for f in &faces {
             self.f_unregister(*f);
-            let face = &mut self.faces[*f];
-            for l in std::iter::once(&mut face.outer).chain(face.holes.iter_mut()) {
-                let k = l.len();
-                if let Some(i) = (0..k).find(|i| {
-                    let (x, y) = (l[*i], l[(*i + 1) % k]);
-                    (x == a && y == b) || (x == b && y == a)
-                }) {
-                    l.insert(i + 1, v);
-                    break;
-                }
-            }
+            self.faces[*f].split_loop_edge(a, b, v, t);
         }
+
         self.e_remove(e);
         let e1 = match self.edge_between(a, v) {
             Some(x) => x,

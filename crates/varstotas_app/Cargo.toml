@@ -37,6 +37,7 @@ getrandom = "0.4"
 # winit as eframe's.
 [target.'cfg(target_os = "macos")'.dependencies]
 winit = { version = "0.30", default-features = false }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSProcessInfo", "NSString"] }
 
 # The log window's local time (localtime_r).
 [target.'cfg(unix)'.dependencies]

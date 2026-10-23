@@ -968,7 +968,9 @@ impl Online {
     pub fn load_models(&mut self, source: ModelSource, query: String, ctx: &egui::Context) {
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
         self.busy += 1;
+        let progress = self.track(format!("@catalogue:{}", source.key()));
         std::thread::spawn(move || {
+            let _progress = progress.observe(&ctx);
             let res = catalogue(&source, &query);
             let _ = tx.send(Msg::Models(source, query, res));
             ctx.request_repaint();
@@ -979,7 +981,9 @@ impl Online {
     pub fn download_model(&mut self, asset: ModelAsset, lib: PathBuf, importers: Vec<Plugin>, place: bool, cancel: Arc<std::sync::atomic::AtomicBool>, ctx: &egui::Context) {
         let (tx, ctx) = (self.tx.clone(), ctx.clone());
         self.busy += 1;
+        let progress = self.track(asset.key());
         std::thread::spawn(move || {
+            let _progress = progress.observe(&ctx);
             crate::online_mats::set_cancel(Some(cancel));
             let res = download(&asset, &lib, &importers);
             let _ = tx.send(Msg::Model(asset.key(), res, place));
