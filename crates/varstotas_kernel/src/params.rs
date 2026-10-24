@@ -58,10 +58,10 @@ impl Model {
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let base = self.defs[pd].mesh.instances.get(inst).ok_or(OpError::NotFound)?.def;
         if self.defs.get(base).is_none_or(|d| d.params.is_some()) {
-            return Err(OpError::Invalid(tr!("kernel-err-already-parametric").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-already-parametric")));
         }
         if self.def_bounds(base).is_none() {
-            return Err(OpError::Invalid(tr!("kernel-err-empty-group").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-empty-group")));
         }
         let name = self.defs[base].name.clone();
         let p = self.defs.insert(Definition {
@@ -86,13 +86,13 @@ impl Model {
     pub fn set_instance_params(&mut self, path: &[InstanceId], inst: InstanceId, mut params: Parametric) -> OpResult<()> {
         self.make_unique(path, inst)?;
         let d = self.mesh_at(path).and_then(|m| m.instances.get(inst)).ok_or(OpError::NotFound)?.def;
-        let old = self.defs[d].params.as_ref().ok_or(OpError::Invalid(tr!("kernel-err-not-parametric").into()))?;
+        let old = self.defs[d].params.as_ref().ok_or(OpError::Invalid(tr!("kernel-err-not-parametric")))?;
         params.base = old.base;
         params.variant = old.variant;
         params.count = params.count.clamp(1, 1000);
         params.axis = params.axis.min(2);
         if params.size.iter().flatten().any(|s| !s.is_finite() || *s <= TOL) || !params.gap.is_finite() {
-            return Err(OpError::Invalid(tr!("kernel-err-size-must-be-positive").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-size-must-be-positive")));
         }
         self.defs[d].params = Some(params);
         self.regenerate_params(d)
@@ -101,7 +101,7 @@ impl Model {
     /// Rebuild the content of parametric definition `d` from its base and attributes.
     pub fn regenerate_params(&mut self, d: DefId) -> OpResult<()> {
         let mut params = self.defs.get(d).and_then(|x| x.params.clone()).ok_or(OpError::NotFound)?;
-        let bb = self.def_bounds(params.base).ok_or(OpError::Invalid(tr!("kernel-err-empty-base").into()))?;
+        let bb = self.def_bounds(params.base).ok_or(OpError::Invalid(tr!("kernel-err-empty-base")))?;
         let ext = bb.max - bb.min;
         let wants_stretch = params.stretch
             && (0..3).any(|k| params.size[k].is_some_and(|s| (s - ext[k]).abs() > TOL && ext[k] > TOL));

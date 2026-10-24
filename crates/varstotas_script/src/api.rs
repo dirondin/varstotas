@@ -1452,7 +1452,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
             Ok(out)
         })
     });
-    e.register_fn("lang", || varstotas_i18n::language());
+    e.register_fn("lang", varstotas_i18n::language);
     e.register_fn("platform", || varstotas_i18n::platform().to_string());
     if trusted_io {
         e.register_fn("read_text", |path: ImmutableString| -> R<String> {

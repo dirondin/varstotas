@@ -18,7 +18,7 @@ pub fn unzip(data: &[u8], want: impl Fn(&str) -> bool) -> Result<Vec<(String, Ve
     let mut out = Vec::new();
     for _ in 0..count {
         if !data.get(at..).is_some_and(|d| d.starts_with(b"PK\x01\x02")) {
-            return Err(tr!("kernel-io-bad-zip-directory").into());
+            return Err(tr!("kernel-io-bad-zip-directory"));
         }
         let method = u16_at(at + 10)?;
         let (csize, usize_) = (u32_at(at + 20)?, u32_at(at + 24)?);

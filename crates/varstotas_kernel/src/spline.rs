@@ -222,17 +222,17 @@ impl Mesh {
     /// a closed curve with a face that would cross itself.
     pub fn set_spline(&mut self, cid: u32, new: &Spline) -> OpResult<Vec<EdgeId>> {
         self.ensure();
-        let (chain, old) = self.spline_chain(cid).ok_or(OpError::Invalid(tr!("kernel-err-not-a-curve-that-can-be").into()))?;
+        let (chain, old) = self.spline_chain(cid).ok_or(OpError::Invalid(tr!("kernel-err-not-a-curve-that-can-be")))?;
         let min = if old.closed { 3 } else { 2 };
         if new.closed != old.closed || new.anchors.len() < min {
-            return Err(OpError::Invalid(tr!("kernel-err-too-few-points").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-too-few-points")));
         }
         if new.segs == 0 || new.segs > crate::curves::MAX_CURVE_SEGMENTS {
             return Err(OpError::Invalid(tr!("kernel-err-segments-must-be-max-curve-segments", MAX_CURVE_SEGMENTS = crate::curves::MAX_CURVE_SEGMENTS.to_string())));
         }
         let pts = new.points();
         if new.closed && !self.curve_faces(cid).is_empty() && !simple_loop(&pts, &new.plane()) {
-            return Err(OpError::Invalid(tr!("kernel-err-the-curve-would-cross-itself").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-curve-would-cross-itself")));
         }
         self.rebuild_curve(cid, chain, old.closed, &old.plane(), &pts)?;
         self.splines.insert(cid, new.clone());

@@ -334,7 +334,7 @@ impl VarstotasApp {
                 );
             }
             Some(Err(_)) => {
-                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, &tr!("gen-build-failed"), egui::FontId::proportional(13.0), Color32::from_rgb(200, 50, 40));
+                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, tr!("gen-build-failed"), egui::FontId::proportional(13.0), Color32::from_rgb(200, 50, 40));
             }
             None => {}
         }

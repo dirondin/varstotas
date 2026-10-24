@@ -57,7 +57,7 @@ impl El {
                     let el = stack.pop().unwrap();
                     match stack.last_mut() {
                         Some(p) => p.children.push(el),
-                        None => return Err(IoError::Format(tr!("kernel-io-xml-unbalanced-tags").into())),
+                        None => return Err(IoError::Format(tr!("kernel-io-xml-unbalanced-tags"))),
                     }
                 }
                 Event::Text(t) => {
@@ -76,11 +76,11 @@ impl El {
                 _ => {}
             }
             if stack.is_empty() {
-                return Err(IoError::Format(tr!("kernel-io-xml-unbalanced-tags").into()));
+                return Err(IoError::Format(tr!("kernel-io-xml-unbalanced-tags")));
             }
         }
         let mut top = stack.swap_remove(0);
-        top.children.pop().ok_or_else(|| IoError::Format(tr!("kernel-io-xml-no-root-element").into()))
+        top.children.pop().ok_or_else(|| IoError::Format(tr!("kernel-io-xml-no-root-element")))
     }
 
     pub fn attr(&self, k: &str) -> Option<&str> {

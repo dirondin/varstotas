@@ -94,7 +94,7 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
         groups += 1;
     }
     if groups == 0 {
-        return Err(IoError::Format(tr!("kernel-io-no-faces-in-the-file").into()));
+        return Err(IoError::Format(tr!("kernel-io-no-faces-in-the-file")));
     }
     Ok(groups)
 }

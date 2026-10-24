@@ -425,11 +425,11 @@ impl Mesh {
     /// radius <= TOL; segments < 3 (closed) / < 1 (arc) or > [`MAX_CURVE_SEGMENTS`].
     pub fn set_curve(&mut self, cid: u32, radius: Option<f64>, segments: Option<u32>) -> OpResult<Vec<EdgeId>> {
         self.ensure();
-        let old = self.curve_info(cid).ok_or(OpError::Invalid(tr!("kernel-err-not-an-arc-circle-or-polygon").into()))?;
+        let old = self.curve_info(cid).ok_or(OpError::Invalid(tr!("kernel-err-not-an-arc-circle-or-polygon")))?;
         let mut new = old;
         if let Some(r) = radius {
             if !r.is_finite() || r <= TOL {
-                return Err(OpError::Invalid(tr!("kernel-err-radius-must-be-positive").into()));
+                return Err(OpError::Invalid(tr!("kernel-err-radius-must-be-positive")));
             }
             new.radius = r;
         }
@@ -481,19 +481,19 @@ impl Mesh {
         let eset: HashSet<EdgeId> = edges.iter().copied().collect();
         let k = chain.len();
         if pts.len() < 2 || (closed && pts.len() < 3) {
-            return Err(OpError::Invalid(tr!("kernel-err-too-few-points").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-too-few-points")));
         }
         let interior: Vec<VertexId> = if closed { chain.clone() } else { chain[1..k - 1].to_vec() };
         for v in &interior {
             let ves = self.vertex_edges(*v);
             if ves.len() != 2 || ves.iter().any(|e| !eset.contains(e)) {
-                return Err(OpError::Invalid(tr!("kernel-err-other-edges-are-attached-to-the").into()));
+                return Err(OpError::Invalid(tr!("kernel-err-other-edges-are-attached-to-the")));
             }
         }
         let faces = self.curve_faces(cid);
         for f in &faces {
             if self.faces[*f].loops().flatten().any(|v| plane.distance(self.pos(*v)).abs() > PTOL * 10.0) {
-                return Err(OpError::Invalid(tr!("kernel-err-the-curve-bounds-faces-outside-its").into()));
+                return Err(OpError::Invalid(tr!("kernel-err-the-curve-bounds-faces-outside-its")));
             }
         }
         let tmpl = self.edges[edges[0]].clone();

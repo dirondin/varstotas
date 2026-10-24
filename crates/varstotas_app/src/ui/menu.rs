@@ -82,7 +82,7 @@ impl VarstotasApp {
     }
 
     pub(super) fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
-        let response = icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), false);
+        let response = icon_row(ui, Some(c.icon()), label, c.shortcut().as_deref(), c.enabled(self), false);
         super::tray_lib::spot(format!("cmd:{}", c.key()), response.rect.center());
         if response.clicked() {
             self.actions.push(c.action());

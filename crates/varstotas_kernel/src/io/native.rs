@@ -53,7 +53,7 @@ pub fn from_json(text: &str) -> Result<Model, IoError> {
     let mut m = serde_json::from_str::<FileIn>(text)
         .map_err(|e| IoError::Format(e.to_string()))?.model;
     if !m.defs.contains_key(m.root) {
-        return Err(IoError::Format(tr!("kernel-io-missing-root-definition").into()));
+        return Err(IoError::Format(tr!("kernel-io-missing-root-definition")));
     }
     super::validate_model(&m)?;
     m.rebuild_caches();

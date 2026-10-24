@@ -222,7 +222,7 @@ impl VarstotasApp {
                     ui.painter().text(
                         r.center(),
                         egui::Align2::CENTER_CENTER,
-                        &tr!("model-info-no-preview"),
+                        tr!("model-info-no-preview"),
                         egui::FontId::proportional(12.0),
                         ui.visuals().weak_text_color(),
                     );

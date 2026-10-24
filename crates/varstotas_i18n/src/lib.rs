@@ -329,11 +329,10 @@ pub fn languages() -> Vec<(String, String)> {
     if let Some(dir) = &user_dir {
         for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
             let p = e.path();
-            if p.extension().is_some_and(|x| x == "ftl") {
-                if let Some(stem) = p.file_stem() {
+            if p.extension().is_some_and(|x| x == "ftl")
+                && let Some(stem) = p.file_stem() {
                     codes.push(stem.to_string_lossy().into_owned());
                 }
-            }
         }
     }
     codes.sort();

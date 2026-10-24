@@ -816,7 +816,7 @@ impl Tool for RotatedRectTool {
             _ => {}
         }
         if let Some(k) = self.snap.filter(|_| self.p2.is_some()) {
-            out2d.push(Marker2d::CursorTooltip { text: k.label().into() });
+            out2d.push(Marker2d::CursorTooltip { text: k.label() });
         } else if self.snapped_angle {
             out2d.push(Marker2d::CursorTooltip { text: tr!("tool-cursor-angle") });
         } else if let Some(r) = &self.cur {

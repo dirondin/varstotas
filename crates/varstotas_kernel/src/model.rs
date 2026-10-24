@@ -660,7 +660,7 @@ impl Model {
         let guides: Vec<GuideRef> = guides.iter().copied().filter(|g| self.has_guide_in(path, *g)).collect();
         let dims: Vec<DimId> = dims.iter().copied().filter(|d| self.defs[pd].mesh.dims.contains_key(*d)).collect();
         if ents.is_empty() && guides.is_empty() && dims.is_empty() {
-            return Err(OpError::Invalid(tr!("kernel-err-nothing-selected").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-nothing-selected")));
         }
         let parent = &mut self.defs[pd].mesh;
         parent.ensure();
@@ -964,7 +964,7 @@ impl Model {
         }
         let mut copy = self.defs[d].clone();
         if let Some(g) = copy.generated.as_mut() {
-            let new = self.fork_generator(&g.generator).ok_or(OpError::Invalid(tr!("kernel-err-the-generator-s-script-can-t").into()))?;
+            let new = self.fork_generator(&g.generator).ok_or(OpError::Invalid(tr!("kernel-err-the-generator-s-script-can-t")))?;
             g.generator = new.clone();
             copy.name = new;
             let nd = self.defs.insert(copy);

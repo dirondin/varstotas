@@ -57,9 +57,9 @@ pub(crate) fn parse_stl(data: &[u8]) -> Result<Vec<[DVec3; 3]>, IoError> {
             return Ok(tris);
         }
     }
-    let text = std::str::from_utf8(data).map_err(|_| IoError::Format(tr!("kernel-io-not-a-valid-stl").into()))?;
+    let text = std::str::from_utf8(data).map_err(|_| IoError::Format(tr!("kernel-io-not-a-valid-stl")))?;
     if !text.trim_start().starts_with("solid") {
-        return Err(IoError::Format(tr!("kernel-io-not-a-valid-stl").into()));
+        return Err(IoError::Format(tr!("kernel-io-not-a-valid-stl")));
     }
     let mut verts = Vec::new();
     for line in text.lines() {
@@ -77,7 +77,7 @@ pub(crate) fn parse_stl(data: &[u8]) -> Result<Vec<[DVec3; 3]>, IoError> {
         }
     }
     if verts.len() % 3 != 0 {
-        return Err(IoError::Format(tr!("kernel-io-stl-vertex-count-not-a-multiple").into()));
+        return Err(IoError::Format(tr!("kernel-io-stl-vertex-count-not-a-multiple")));
     }
     Ok(verts.as_chunks::<3>().0.iter().map(|c| [c[0], c[1], c[2]]).collect())
 }

@@ -522,10 +522,10 @@ pub fn set_rig(model: &mut Model, d: DefId, rig: Option<Rig>) -> Result<DefId, S
     let master = model.rig_master(d).unwrap_or(d);
     let def = model.defs.get(master).ok_or_else(|| tr!("script-err-no-such-component"))?;
     if def.is_group {
-        return Err(tr!("script-err-groups-can-t-have-parameters-make").into());
+        return Err(tr!("script-err-groups-can-t-have-parameters-make"));
     }
     if def.generated.is_some() || def.params.is_some() || def.rigged.is_some() {
-        return Err(tr!("script-err-this-component-is-built-by-a").into());
+        return Err(tr!("script-err-this-component-is-built-by-a"));
     }
     let (had, name) = (def.rig.is_some(), def.name.clone());
     match rig {
@@ -576,7 +576,7 @@ fn validate(rig: &Rig) -> Result<(), String> {
     }
     for j in &rig.joints {
         if j.part.trim().is_empty() {
-            return Err(tr!("script-err-a-joint-without-a-part").into());
+            return Err(tr!("script-err-a-joint-without-a-part"));
         }
         if j.expr.trim().is_empty() && !keys.contains(j.param.as_str()) {
             return Err(tr!("script-err-part-choose-a-parameter-or-write", part = j.part.to_string()));

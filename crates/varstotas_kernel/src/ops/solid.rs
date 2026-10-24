@@ -340,7 +340,7 @@ impl Model {
     /// second solid's frame). Returns the new instances.
     pub fn solid_op_in(&mut self, path: &[InstanceId], op: SolidOp, first: InstanceId, second: InstanceId) -> OpResult<Vec<InstanceId>> {
         if first == second {
-            return Err(OpError::Invalid(tr!("kernel-err-pick-two-different-solids").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-pick-two-different-solids")));
         }
         let (ma, ta, ia) = self.solid_of(path, first)?;
         let (mb, tb, ib) = self.solid_of(path, second)?;
@@ -354,11 +354,11 @@ impl Model {
         };
         let results: Vec<Mesh> = results.into_iter().filter(|m| !m.faces.is_empty()).collect();
         if results.is_empty() {
-            return Err(OpError::Invalid(tr!("kernel-err-the-solids-do-not-overlap").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-solids-do-not-overlap")));
         }
         let inv = tb.inverse();
         if !inv.is_finite() {
-            return Err(OpError::Invalid(tr!("kernel-err-the-second-solid-has-a-degenerate").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-the-second-solid-has-a-degenerate")));
         }
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let mut out = Vec::new();
@@ -390,7 +390,7 @@ impl Model {
     pub fn solid_union_all_in(&mut self, path: &[InstanceId], insts: &[InstanceId]) -> OpResult<InstanceId> {
         let (&first, rest) = insts.split_first().ok_or(OpError::Invalid("no solids".into()))?;
         if rest.is_empty() {
-            return Err(OpError::Invalid(tr!("kernel-err-pick-at-least-two-solids").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-pick-at-least-two-solids")));
         }
         let mut acc = first;
         for &next in rest {

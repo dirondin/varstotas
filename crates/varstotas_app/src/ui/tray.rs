@@ -1672,7 +1672,7 @@ fn outliner_level(
                     ui.close();
                 }
                 if !is_group
-                    && model.can_make_unique(&path, id)
+                    && model.can_make_unique(path, id)
                     && ui.button(tr!("tray-outliner-make-unique")).on_hover_text(tr!("tray-outliner-make-unique-hover")).clicked()
                 {
                     actions.push(Action::SelectInstance(path.clone(), id));

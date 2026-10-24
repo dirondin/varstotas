@@ -446,10 +446,10 @@ impl Generator {
             }
         }
         if !tagged {
-            return Err(tr!("kernel-gen-not-a-generator-the-header-needs").into());
+            return Err(tr!("kernel-gen-not-a-generator-the-header-needs"));
         }
         if g.name.trim().is_empty() {
-            return Err(tr!("kernel-gen-empty-generator-name").into());
+            return Err(tr!("kernel-gen-empty-generator-name"));
         }
         if !source.contains("fn build") {
             return Err("a generator needs `fn build(p) { ... }`".into());

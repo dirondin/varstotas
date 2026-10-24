@@ -493,7 +493,7 @@ impl VarstotasApp {
                     painter.rect_filled(rect, 4.0, theme::border());
                     let (Some(sheet), Some(page)) = (sheet.as_mut(), page.as_ref()) else {
                         st.preview = None;
-                        painter.text(rect.center(), egui::Align2::CENTER_CENTER, &tr!("sheets-add-first"), egui::FontId::proportional(15.0), theme::text_dim());
+                        painter.text(rect.center(), egui::Align2::CENTER_CENTER, tr!("sheets-add-first"), egui::FontId::proportional(15.0), theme::text_dim());
                         return;
                     };
                     let k = ((rect.width() - 24.0) / sheet.size.x as f32).min((rect.height() - 24.0) / sheet.size.y as f32);

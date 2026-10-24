@@ -264,7 +264,7 @@ impl Model {
     pub fn rename_definition(&mut self, d: DefId, name: &str) -> OpResult<()> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(OpError::Invalid(tr!("kernel-err-an-empty-name").into()));
+            return Err(OpError::Invalid(tr!("kernel-err-an-empty-name")));
         }
         let d = self.defs.get(d).and_then(|x| x.rigged.as_ref()).filter(|r| r.paint.is_none()).map_or(d, |r| r.master);
         if d == self.root || self.defs.get(d).is_none_or(|x| x.is_group) {

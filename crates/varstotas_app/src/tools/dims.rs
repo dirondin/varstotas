@@ -216,7 +216,7 @@ impl Tool for DimensionTool {
                 let text = varstotas_kernel::dims::dim_label(a.distance(b), None, unit);
                 out3d.add_linear_dimension(a, b, self.offset, text, &dim_style(false));
                 if let Some(k) = self.offset_axis {
-                    out2d.push(Marker2d::CursorTooltip { text: k.label().into() });
+                    out2d.push(Marker2d::CursorTooltip { text: k.label() });
                 }
             }
         }

@@ -455,7 +455,7 @@ impl Tool for RectangleTool {
             polyline(out3d, &c, true, color, 2.0);
             if let Some(k) = self.shape_kind {
                 dashed(out3d, c[0], c[2], k.color(), 1.5);
-                out2d.push(Marker2d::CursorTooltip { text: k.label().into() });
+                out2d.push(Marker2d::CursorTooltip { text: k.label() });
             }
             let m = &view.doc.model;
             label(out2d, c[2], format!("{} × {}", fmt_len(m, s.w.abs()), fmt_len(m, s.h.abs())));
@@ -990,11 +990,11 @@ impl Tool for ArcTool {
                 let apex = (s.a + s.b) * 0.5 + s.side * s.bulge;
                 label(out2d, apex, fmt_len(&view.doc.model, s.bulge.abs()));
                 if self.tangent_snap {
-                    out2d.push(Marker2d::CursorTooltip { text: InferenceKind::Tangent.label().into() });
+                    out2d.push(Marker2d::CursorTooltip { text: InferenceKind::Tangent.label() });
                     return;
                 }
                 if self.half {
-                    out2d.push(Marker2d::CursorTooltip { text: InferenceKind::HalfCircle.label().into() });
+                    out2d.push(Marker2d::CursorTooltip { text: InferenceKind::HalfCircle.label() });
                     return;
                 }
             } else if let Some(info) = self.tangent_arc(s.b) {

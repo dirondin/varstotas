@@ -307,7 +307,7 @@ impl Reader3mf {
     /// The triangles of object `id` of part `path` (components followed), into `out`.
     fn object(&mut self, path: &str, id: &str, xf: glam::DMat4, out: &mut super::meshes::ImpMesh, depth: usize) -> Result<(), IoError> {
         if depth > 32 {
-            return Err(IoError::Format(tr!("kernel-io-mf-components-nested-too-deep").into()));
+            return Err(IoError::Format(tr!("kernel-io-mf-components-nested-too-deep")));
         }
         self.part(path)?;
         let part = &self.parts[path];
@@ -370,7 +370,7 @@ pub fn add_3mf(model: &mut Model, data: &[u8], opts: &super::ImportOptions) -> R
         // i18n-ignore-next
         .and_then(|r| r.all("Relationship").find(|x| x.attr("Type").is_some_and(|t| t.ends_with("/3dmodel"))).and_then(|x| x.attr("Target").map(str::to_string)))
         .or_else(|| files.keys().find(|k| k.ends_with(".model")).map(|k| format!("/{k}")))
-        .ok_or_else(|| IoError::Format(tr!("kernel-io-mf-no-d-model-part").into()))?;
+        .ok_or_else(|| IoError::Format(tr!("kernel-io-mf-no-d-model-part")))?;
     let mut rd = Reader3mf { files, parts: HashMap::new(), mats: Vec::new() };
     rd.part(&start)?;
     let bytes = rd.files.iter().find(|(k, _)| k.eq_ignore_ascii_case(start.trim_start_matches('/'))).map(|(_, v)| v.clone()).unwrap_or_default();

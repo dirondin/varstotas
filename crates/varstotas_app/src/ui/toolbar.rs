@@ -79,7 +79,7 @@ impl Item {
 
     pub fn name(self) -> String {
         match self {
-            Item::Tool(id) => id.name().into(),
+            Item::Tool(id) => id.name(),
             Item::Cmd(c) => c.name(),
             Item::Snapping => tr!("toolbar-snapping-menu"),
             Item::Sep => tr!("toolbar-separator"),
