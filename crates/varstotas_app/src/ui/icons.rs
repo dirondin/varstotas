@@ -186,6 +186,12 @@ pub mod pal {
     pub const SKIN: Color32 = Color32::from_rgb(0xF6, 0xD9, 0xB8);
 }
 
+/// Stroke widths on the 24-unit grid: every icon line uses one of these three tokens
+/// (wider strokes are only for shapes drawn as fat lines, like a magnifier handle).
+const W: f32 = 1.7;
+const W_THIN: f32 = 1.1;
+const W_BOLD: f32 = 2.2;
+
 struct Pen<'a> {
     painter: &'a Painter,
     origin: Pos2,
@@ -201,10 +207,10 @@ impl Pen<'_> {
         pts.iter().map(|&(x, y)| self.p(x, y)).collect()
     }
     fn stroke(&self) -> Stroke {
-        Stroke::new(1.7 * self.s, self.ink)
+        Stroke::new(W * self.s, self.ink)
     }
     fn thin(&self) -> Stroke {
-        Stroke::new(1.1 * self.s, self.ink)
+        Stroke::new(W_THIN * self.s, self.ink)
     }
     /// Strokes a polyline. egui joins closed paths with unlimited miters, which leave long spikes
     /// at acute corners, while open paths bevel every join sharper than a right angle. So closed
@@ -377,15 +383,15 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         }
         Icon::Arc => {
             pen.arc((12.0, 17.0), 9.0, 180.0, 360.0, pen.stroke());
-            pen.line_c(&[(3.0, 17.0), (21.0, 17.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
+            pen.line_c(&[(3.0, 17.0), (21.0, 17.0)], Stroke::new(W_THIN * pen.s, SHADE_DARK));
             pen.dot((3.0, 17.0), 2.0, RED);
             pen.dot((21.0, 17.0), 2.0, RED);
             pen.dot((12.0, 8.0), 1.6, BLUE);
         }
         Icon::ArcCenter => {
             pen.arc((8.0, 16.0), 11.0, 270.0, 360.0, pen.stroke());
-            pen.line_c(&[(8.0, 16.0), (19.0, 16.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
-            pen.line_c(&[(8.0, 16.0), (8.0, 5.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
+            pen.line_c(&[(8.0, 16.0), (19.0, 16.0)], Stroke::new(W_THIN * pen.s, SHADE_DARK));
+            pen.line_c(&[(8.0, 16.0), (8.0, 5.0)], Stroke::new(W_THIN * pen.s, SHADE_DARK));
             pen.dot((8.0, 16.0), 1.8, BLUE);
             pen.dot((19.0, 16.0), 2.0, RED);
             pen.dot((8.0, 5.0), 2.0, RED);
@@ -408,7 +414,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                     )
                 })
                 .collect();
-            let thin = Stroke::new(1.0 * pen.s, BLUE);
+            let thin = Stroke::new(W_THIN * pen.s, BLUE);
             pen.line_c(&[(3.0, 18.0), (6.0, 3.0)], thin);
             pen.line_c(&[(21.0, 6.0), (18.0, 21.0)], thin);
             pen.line(&curve);
@@ -455,14 +461,14 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         }
         Icon::Axes => {
             let o = (8.0, 15.0);
-            pen.line_c(&[o, (21.0, 15.0)], Stroke::new(1.8 * pen.s, RED));
-            pen.line_c(&[o, (16.0, 8.0)], Stroke::new(1.8 * pen.s, GREEN));
-            pen.line_c(&[o, (8.0, 3.0)], Stroke::new(1.8 * pen.s, BLUE));
-            pen.line_c(&[o, (3.0, 20.0)], Stroke::new(1.0 * pen.s, SHADE_DARK));
+            pen.line_c(&[o, (21.0, 15.0)], Stroke::new(W * pen.s, RED));
+            pen.line_c(&[o, (16.0, 8.0)], Stroke::new(W * pen.s, GREEN));
+            pen.line_c(&[o, (8.0, 3.0)], Stroke::new(W * pen.s, BLUE));
+            pen.line_c(&[o, (3.0, 20.0)], Stroke::new(W_THIN * pen.s, SHADE_DARK));
             pen.dot(o, 2.0, YELLOW);
         }
         Icon::Dimension => {
-            let thin = Stroke::new(1.0 * pen.s, SHADE_DARK);
+            let thin = Stroke::new(W_THIN * pen.s, SHADE_DARK);
             pen.line_c(&[(3.0, 20.0), (3.0, 9.0)], thin);
             pen.line_c(&[(21.0, 20.0), (21.0, 9.0)], thin);
             pen.line_c(&[(4.0, 12.0), (20.0, 12.0)], pen.thin());
@@ -497,8 +503,12 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dot((12.0, 3.0), 1.6, RED);
         }
         Icon::Pyramid => {
-            pen.poly(&[(12.0, 3.0), (3.0, 17.0), (12.0, 21.0)], SHADE);
-            pen.poly(&[(12.0, 3.0), (12.0, 21.0), (21.0, 16.0)], SHADE_DARK);
+            pen.solid(
+                &[(&[(12.0, 3.0), (3.0, 17.0), (12.0, 21.0)], SHADE), (&[(12.0, 3.0), (12.0, 21.0), (21.0, 16.0)], SHADE_DARK)],
+                &[(12.0, 3.0), (21.0, 16.0), (12.0, 21.0), (3.0, 17.0)],
+                &[&[(12.0, 3.0), (12.0, 21.0)]],
+                pen.stroke(),
+            );
             pen.dot((12.0, 3.0), 1.6, RED);
         }
         Icon::Sphere => {
@@ -524,14 +534,21 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dot((12.0, 12.0), 1.5, RED);
         }
         Icon::PushPull => {
-            pen.poly(&[(4.0, 15.0), (14.0, 15.0), (14.0, 21.0), (4.0, 21.0)], SHADE);
-            pen.poly(&[(14.0, 15.0), (20.0, 11.0), (20.0, 17.0), (14.0, 21.0)], SHADE_DARK);
-            pen.poly(&[(4.0, 15.0), (10.0, 11.0), (20.0, 11.0), (14.0, 15.0)], BLUE_SOFT);
-            pen.line_c(&[(12.0, 13.0), (12.0, 5.5)], Stroke::new(2.2 * pen.s, RED));
+            pen.solid(
+                &[
+                    (&[(4.0, 15.0), (14.0, 15.0), (14.0, 21.0), (4.0, 21.0)], SHADE),
+                    (&[(14.0, 15.0), (20.0, 11.0), (20.0, 17.0), (14.0, 21.0)], SHADE_DARK),
+                    (&[(4.0, 15.0), (10.0, 11.0), (20.0, 11.0), (14.0, 15.0)], BLUE_SOFT),
+                ],
+                &[(4.0, 15.0), (10.0, 11.0), (20.0, 11.0), (20.0, 17.0), (14.0, 21.0), (4.0, 21.0)],
+                &[&[(4.0, 15.0), (14.0, 15.0), (20.0, 11.0)], &[(14.0, 15.0), (14.0, 21.0)]],
+                pen.stroke(),
+            );
+            pen.line_c(&[(12.0, 13.0), (12.0, 5.5)], Stroke::new(W_BOLD * pen.s, RED));
             pen.head((12.0, 1.8), (0.0, -1.0), 4.5, RED);
         }
         Icon::Move => {
-            let st = Stroke::new(1.8 * pen.s, pen.ink);
+            let st = Stroke::new(W * pen.s, pen.ink);
             pen.line_c(&[(12.0, 5.0), (12.0, 19.0)], st);
             pen.line_c(&[(5.0, 12.0), (19.0, 12.0)], st);
             pen.head((12.0, 2.0), (0.0, -1.0), 4.0, RED);
@@ -540,7 +557,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.head((22.0, 12.0), (1.0, 0.0), 4.0, RED);
         }
         Icon::Rotate => {
-            pen.arc((12.0, 12.0), 8.0, 40.0, 320.0, Stroke::new(1.9 * pen.s, pen.ink));
+            pen.arc((12.0, 12.0), 8.0, 40.0, 320.0, Stroke::new(W * pen.s, pen.ink));
             let a = 320.0f32 * PI / 180.0;
             let tip = (12.0 + 8.0 * a.cos() + 1.2, 12.0 + 8.0 * a.sin() + 1.2);
             pen.head(tip, (0.75, 0.9), 4.5, RED);
@@ -551,11 +568,11 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.painter.rect_stroke(
                 Rect::from_min_max(pen.p(3.5, 3.5), pen.p(20.5, 20.5)),
                 1.5 * pen.s,
-                Stroke::new(1.0 * pen.s, SHADE_DARK),
+                Stroke::new(W_THIN * pen.s, SHADE_DARK),
                 egui::StrokeKind::Middle,
             );
             pen.poly(&[(3.5, 12.0), (12.0, 12.0), (12.0, 20.5), (3.5, 20.5)], BLUE_SOFT);
-            pen.line_c(&[(10.0, 14.0), (17.0, 7.0)], Stroke::new(1.8 * pen.s, RED));
+            pen.line_c(&[(10.0, 14.0), (17.0, 7.0)], Stroke::new(W * pen.s, RED));
             pen.head((20.0, 4.0), (1.0, -1.0), 4.5, RED);
             for c in [(3.5, 3.5), (20.5, 3.5), (20.5, 20.5)] {
                 pen.dot(c, 1.6, GREEN);
@@ -564,7 +581,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         Icon::Offset => {
             pen.poly(&[(3.0, 3.0), (21.0, 3.0), (21.0, 21.0), (3.0, 21.0)], FILL);
             pen.poly(&[(8.0, 8.0), (16.0, 8.0), (16.0, 16.0), (8.0, 16.0)], BLUE_SOFT);
-            pen.line_c(&[(5.0, 12.0), (7.0, 12.0)], Stroke::new(1.5 * pen.s, RED));
+            pen.line_c(&[(5.0, 12.0), (7.0, 12.0)], Stroke::new(W * pen.s, RED));
             pen.head((8.0, 12.0), (1.0, 0.0), 3.0, RED);
         }
         Icon::FollowMe => {
@@ -572,7 +589,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             let mut path = vec![pen.p(5.0, 21.0), pen.p(5.0, 13.0)];
             path.extend(pen.arc_pts((13.0, 13.0), 8.0, 180.0, 270.0));
             path.push(pen.p(20.0, 5.0));
-            pen.path(path, false, Stroke::new(1.6 * pen.s, RED));
+            pen.path(path, false, Stroke::new(W * pen.s, RED));
             pen.head((22.5, 5.0), (1.0, 0.0), 3.5, RED);
             // profile
             pen.poly(&[(2.0, 17.0), (8.0, 17.0), (8.0, 22.0), (2.0, 22.0)], BLUE_SOFT);
@@ -603,12 +620,12 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                     pen.thin(),
                 );
             }
-            pen.line_c(&[(12.0, 18.0), (18.5, 9.0)], Stroke::new(1.6 * pen.s, RED));
+            pen.line_c(&[(12.0, 18.0), (18.5, 9.0)], Stroke::new(W * pen.s, RED));
             pen.dot((12.0, 18.0), 1.6, BLUE);
         }
         Icon::Orbit => {
             pen.circle((12.0, 12.0), 4.0, BLUE_SOFT);
-            let st = Stroke::new(1.7 * pen.s, pen.ink);
+            let st = Stroke::new(W * pen.s, pen.ink);
             pen.arc((12.0, 12.0), 9.0, 200.0, 330.0, st);
             pen.arc((12.0, 12.0), 9.0, 20.0, 150.0, st);
             let a = 330.0f32 * PI / 180.0;
@@ -632,7 +649,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             }
             // Thumb
             pen.path(vec![pen.p(7.0, 17.0), pen.p(3.5, 13.0)], false, Stroke::new(3.0 * pen.s, pen.ink));
-            pen.path(vec![pen.p(7.0, 17.0), pen.p(3.6, 13.1)], false, Stroke::new(1.4 * pen.s, SKIN));
+            pen.path(vec![pen.p(7.0, 17.0), pen.p(3.6, 13.1)], false, Stroke::new(W * pen.s, SKIN));
             // cover finger bottoms
             pen.painter.rect_filled(
                 Rect::from_min_max(pen.p(7.4, 12.0), pen.p(17.2, 15.0)),
@@ -644,10 +661,10 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.circle((10.0, 10.0), 6.0, FILL);
             pen.path(vec![pen.p(14.5, 14.5), pen.p(20.5, 20.5)], false, Stroke::new(3.2 * pen.s, pen.ink));
             if icon == Icon::Zoom {
-                pen.line_c(&[(7.0, 10.0), (13.0, 10.0)], Stroke::new(1.5 * pen.s, BLUE));
-                pen.line_c(&[(10.0, 7.0), (10.0, 13.0)], Stroke::new(1.5 * pen.s, BLUE));
+                pen.line_c(&[(7.0, 10.0), (13.0, 10.0)], Stroke::new(W * pen.s, BLUE));
+                pen.line_c(&[(10.0, 7.0), (10.0, 13.0)], Stroke::new(W * pen.s, BLUE));
             } else {
-                let st = Stroke::new(1.4 * pen.s, RED);
+                let st = Stroke::new(W * pen.s, RED);
                 for (a, b, c) in [
                     ((1.5, 5.0), (1.5, 1.5), (5.0, 1.5)),
                     ((15.0, 1.5), (18.5, 1.5), (18.5, 5.0)),
@@ -663,24 +680,24 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         Icon::ViewRight => cube(&pen, FILL, FILL, BLUE),
         Icon::ViewBack | Icon::ViewLeft => {
             cube(&pen, FILL, FILL, FILL);
-            let st = Stroke::new(1.0 * pen.s, SHADE_DARK);
+            let st = Stroke::new(W_THIN * pen.s, SHADE_DARK);
             pen.dashed((12.0, 3.0), (12.0, 12.0), st);
         }
         Icon::ViewBottom => {
             // The hidden bottom face, tinted, with its hidden edges dashed.
             cube(&pen, FILL, FILL, FILL);
-            let st = Stroke::new(1.0 * pen.s, BLUE);
+            let st = Stroke::new(W_THIN * pen.s, BLUE);
             pen.poly_c(&[(12.0, 12.0), (20.0, 16.5), (12.0, 21.0), (4.0, 16.5)], Color32::from_rgba_unmultiplied(0x3A, 0x7B, 0xD5, 70), Stroke::NONE);
             pen.dashed((12.0, 12.0), (20.0, 16.5), st);
             pen.dashed((12.0, 12.0), (4.0, 16.5), st);
-            pen.line_c(&[(4.0, 16.5), (12.0, 21.0), (20.0, 16.5)], Stroke::new(1.6 * pen.s, BLUE));
+            pen.line_c(&[(4.0, 16.5), (12.0, 21.0), (20.0, 16.5)], Stroke::new(W * pen.s, BLUE));
         }
         Icon::StyleShaded => cube(&pen, Color32::from_rgb(0xF6, 0xE0, 0xA8), Color32::from_rgb(0xE4, 0xB8, 0x6A), Color32::from_rgb(0xC8, 0x92, 0x48)),
         Icon::Text => {
             // A boxed "A" with a leader to a dot.
             pen.poly(&[(9.0, 3.0), (21.0, 3.0), (21.0, 13.0), (9.0, 13.0)], FILL);
-            pen.line_c(&[(12.0, 11.0), (15.0, 5.0), (18.0, 11.0)], Stroke::new(1.4 * pen.s, BLUE));
-            pen.line_c(&[(13.2, 8.8), (16.8, 8.8)], Stroke::new(1.2 * pen.s, BLUE));
+            pen.line_c(&[(12.0, 11.0), (15.0, 5.0), (18.0, 11.0)], Stroke::new(W * pen.s, BLUE));
+            pen.line_c(&[(13.2, 8.8), (16.8, 8.8)], Stroke::new(W_THIN * pen.s, BLUE));
             pen.line(&[(9.0, 13.0), (4.5, 19.5)]);
             pen.dot((4.0, 20.0), 2.0, RED);
         }
@@ -688,14 +705,14 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             // An extruded "A".
             let side = Stroke::new(3.2 * pen.s, SHADE_DARK);
             pen.line_c(&[(6.0, 21.0), (12.0, 5.0), (18.0, 21.0)], side);
-            let front = Stroke::new(2.0 * pen.s, BLUE);
+            let front = Stroke::new(W_BOLD * pen.s, BLUE);
             pen.line_c(&[(4.5, 19.5), (10.5, 3.5), (16.5, 19.5)], front);
             pen.line_c(&[(7.0, 13.5), (14.0, 13.5)], front);
         }
         Icon::Chamfer => {
             // A block profile with the top-right corner cut flat.
             pen.poly(&[(3.0, 21.0), (3.0, 4.0), (13.0, 4.0), (20.0, 11.0), (20.0, 21.0)], FILL);
-            pen.line_c(&[(13.0, 4.0), (20.0, 11.0)], Stroke::new(2.2 * pen.s, RED));
+            pen.line_c(&[(13.0, 4.0), (20.0, 11.0)], Stroke::new(W_BOLD * pen.s, RED));
             pen.dashed((13.0, 4.0), (20.0, 4.0), pen.thin());
             pen.dashed((20.0, 4.0), (20.0, 11.0), pen.thin());
         }
@@ -711,7 +728,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pts.extend(pen.arc_pts((13.0, 11.0), 7.0, 270.0, 360.0));
             pts.push(pen.p(20.0, 21.0));
             pen.fill_path(pts, FILL, pen.stroke());
-            pen.arc((13.0, 11.0), 7.0, 270.0, 360.0, Stroke::new(2.2 * pen.s, RED));
+            pen.arc((13.0, 11.0), 7.0, 270.0, 360.0, Stroke::new(W_BOLD * pen.s, RED));
             pen.dashed((13.0, 4.0), (20.0, 4.0), pen.thin());
             pen.dashed((20.0, 4.0), (20.0, 11.0), pen.thin());
         }
@@ -723,7 +740,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.dot((17.0, 6.0), 3.0, sun);
             for k in 0..8 {
                 let a = k as f32 * std::f32::consts::FRAC_PI_4;
-                pen.line_c(&[(17.0 + 4.3 * a.cos(), 6.0 + 4.3 * a.sin()), (17.0 + 5.8 * a.cos(), 6.0 + 5.8 * a.sin())], Stroke::new(1.2 * pen.s, sun));
+                pen.line_c(&[(17.0 + 4.3 * a.cos(), 6.0 + 4.3 * a.sin()), (17.0 + 5.8 * a.cos(), 6.0 + 5.8 * a.sin())], Stroke::new(W_THIN * pen.s, sun));
             }
         }
         Icon::PositionCamera => {
@@ -732,7 +749,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.line(&[(12.0, 7.0), (12.0, 14.0)]);
             pen.line(&[(7.5, 10.0), (12.0, 8.5), (16.5, 10.0)]);
             pen.line(&[(9.0, 19.0), (12.0, 14.0), (15.0, 19.0)]);
-            let st = Stroke::new(1.6 * pen.s, RED);
+            let st = Stroke::new(W * pen.s, RED);
             pen.line_c(&[(5.0, 20.0), (19.0, 23.0)], st);
             pen.line_c(&[(5.0, 23.0), (19.0, 20.0)], st);
         }
@@ -742,7 +759,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pts.extend(pen.arc_pts((12.0, 11.0), 9.0, 40.0, 140.0));
             pen.path(pts, true, pen.stroke());
             pen.dot((12.0, 17.0), 2.5, pen.ink);
-            let st = Stroke::new(1.5 * pen.s, BLUE);
+            let st = Stroke::new(W * pen.s, BLUE);
             pen.arc((12.0, 14.0), 10.0, 205.0, 335.0, st);
             pen.head((2.6, 10.5), (-0.5, 0.9), 3.5, BLUE);
             pen.head((21.4, 10.5), (0.5, 0.9), 3.5, BLUE);
@@ -762,42 +779,63 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.arc((12.0, 13.0), 5.8, 0.0, 180.0, band);
             pen.line_c(&[(6.2, 13.2), (6.2, 8.0)], band);
             pen.line_c(&[(17.8, 13.2), (17.8, 8.0)], band);
-            let tip = Stroke::new(1.0 * pen.s, pen.ink);
+            let tip = Stroke::new(W_THIN * pen.s, pen.ink);
             pen.poly_c(&[(4.0, 3.5), (8.4, 3.5), (8.4, 8.0), (4.0, 8.0)], FILL, tip);
             pen.poly_c(&[(15.6, 3.5), (20.0, 3.5), (20.0, 8.0), (15.6, 8.0)], FILL, tip);
         }
         Icon::GuidePlane => {
             // A tilted orange plane with a blue normal arrow and a red in-plane axis.
             let orange = Color32::from_rgb(0xE8, 0x7A, 0x1E);
-            pen.poly_c(&[(2.5, 15.0), (14.0, 9.5), (21.5, 14.5), (10.0, 20.5)], Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70), Stroke::new(1.4 * pen.s, orange));
+            pen.poly_c(&[(2.5, 15.0), (14.0, 9.5), (21.5, 14.5), (10.0, 20.5)], Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70), Stroke::new(W * pen.s, orange));
             let blue = Color32::from_rgb(0x2A, 0x5C, 0xD6);
-            pen.line_c(&[(12.0, 15.0), (12.0, 5.0)], Stroke::new(1.6 * pen.s, blue));
+            pen.line_c(&[(12.0, 15.0), (12.0, 5.0)], Stroke::new(W * pen.s, blue));
             pen.head((12.0, 3.0), (0.0, -1.0), 3.5, blue);
-            pen.line_c(&[(12.0, 15.0), (17.5, 12.3)], Stroke::new(1.6 * pen.s, RED));
+            pen.line_c(&[(12.0, 15.0), (17.5, 12.3)], Stroke::new(W * pen.s, RED));
         }
         Icon::Section => {
             // A cube cut by an orange plane with an arrow.
             cube(&pen, FILL, SHADE, SHADE_DARK);
             let orange = Color32::from_rgb(0xE8, 0x7A, 0x1E);
-            pen.poly_c(&[(2.5, 9.0), (13.0, 3.5), (21.5, 9.5), (11.0, 15.0)], Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70), Stroke::new(1.4 * pen.s, orange));
-            pen.line_c(&[(12.0, 9.25), (12.0, 20.5)], Stroke::new(1.4 * pen.s, orange));
+            // a horizontal plane through the middle of the cube, in the cube's own isometric
+            // proportions (half-width : half-height = 8 : 4.5), centred on its axis
+            let (hw, hh) = (10.0, 10.0 * 4.5 / 8.0);
+            pen.poly_c(
+                &[(12.0 - hw, 12.0), (12.0, 12.0 - hh), (12.0 + hw, 12.0), (12.0, 12.0 + hh)],
+                Color32::from_rgba_unmultiplied(0xE8, 0x7A, 0x1E, 70),
+                Stroke::new(W * pen.s, orange),
+            );
+            pen.line_c(&[(12.0, 12.0), (12.0, 20.5)], Stroke::new(W * pen.s, orange));
             pen.head((12.0, 22.0), (0.0, 1.0), 3.5, orange);
         }
         Icon::Slice => {
             // A block cut in two: the upper part lifted off, the cut face tinted red.
             let red = Color32::from_rgb(0xD6, 0x3A, 0x2A);
-            let st = Stroke::new(1.2 * pen.s, Color32::from_rgb(0x3A, 0x3A, 0x40));
-            pen.poly_c(&[(4.0, 13.0), (12.0, 17.0), (12.0, 21.5), (4.0, 17.5)], SHADE, st);
-            pen.poly_c(&[(12.0, 17.0), (20.0, 13.0), (20.0, 17.5), (12.0, 21.5)], SHADE_DARK, st);
-            pen.poly_c(&[(4.0, 13.0), (12.0, 9.0), (20.0, 13.0), (12.0, 17.0)], Color32::from_rgba_unmultiplied(0xD6, 0x3A, 0x2A, 90), Stroke::new(1.2 * pen.s, red));
-            pen.poly_c(&[(4.0, 5.5), (12.0, 9.5), (12.0, 13.0), (4.0, 9.0)], SHADE, st);
-            pen.poly_c(&[(12.0, 9.5), (20.0, 5.5), (20.0, 9.0), (12.0, 13.0)], SHADE_DARK, st);
-            pen.poly_c(&[(4.0, 5.5), (12.0, 1.5), (20.0, 5.5), (12.0, 9.5)], FILL, st);
+            let st = Stroke::new(W_THIN * pen.s, Color32::from_rgb(0x3A, 0x3A, 0x40));
+            // lower half: sides stroked once, then the cut face on top in red
+            for (pts, fill) in [
+                (&[(4.0, 13.0), (12.0, 17.0), (12.0, 21.5), (4.0, 17.5)], SHADE),
+                (&[(12.0, 17.0), (20.0, 13.0), (20.0, 17.5), (12.0, 21.5)], SHADE_DARK),
+            ] {
+                pen.poly_c(pts, fill, Stroke::NONE);
+            }
+            pen.line_c(&[(4.0, 13.0), (4.0, 17.5), (12.0, 21.5), (20.0, 17.5), (20.0, 13.0)], st);
+            pen.line_c(&[(12.0, 17.0), (12.0, 21.5)], st);
+            pen.poly_c(&[(4.0, 13.0), (12.0, 9.0), (20.0, 13.0), (12.0, 17.0)], Color32::from_rgba_unmultiplied(0xD6, 0x3A, 0x2A, 90), Stroke::new(W_THIN * pen.s, red));
+            pen.solid(
+                &[
+                    (&[(4.0, 5.5), (12.0, 9.5), (12.0, 13.0), (4.0, 9.0)], SHADE),
+                    (&[(12.0, 9.5), (20.0, 5.5), (20.0, 9.0), (12.0, 13.0)], SHADE_DARK),
+                    (&[(4.0, 5.5), (12.0, 1.5), (20.0, 5.5), (12.0, 9.5)], FILL),
+                ],
+                &[(4.0, 5.5), (12.0, 1.5), (20.0, 5.5), (20.0, 9.0), (12.0, 13.0), (4.0, 9.0)],
+                &[&[(4.0, 5.5), (12.0, 9.5), (20.0, 5.5)], &[(12.0, 9.5), (12.0, 13.0)]],
+                st,
+            );
         }
         Icon::StyleTextured => {
             // Brick cube: mortar rows on the sides, staggered joints.
             cube(&pen, Color32::from_rgb(0xD8, 0x7A, 0x5C), Color32::from_rgb(0xB8, 0x55, 0x3A), Color32::from_rgb(0x96, 0x40, 0x2C));
-            let st = Stroke::new(0.9 * pen.s, Color32::from_rgb(0xF2, 0xE6, 0xD8));
+            let st = Stroke::new(W_THIN * pen.s, Color32::from_rgb(0xF2, 0xE6, 0xD8));
             for k in [3.0, 6.0] {
                 pen.line_c(&[(4.0, 7.5 + k), (12.0, 12.0 + k)], st);
                 pen.line_c(&[(12.0, 12.0 + k), (20.0, 7.5 + k)], st);
@@ -831,7 +869,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                 Color32::TRANSPARENT
             };
             cube(&pen, tr, tr, tr);
-            let st = Stroke::new(1.0 * pen.s, if icon == Icon::StyleXRay { BLUE } else { pen.ink });
+            let st = Stroke::new(W_THIN * pen.s, if icon == Icon::StyleXRay { BLUE } else { pen.ink });
             pen.dashed((12.0, 12.0), (12.0, 3.0), st);
             pen.dashed((4.0, 16.5), (12.0, 12.0), st);
             pen.dashed((20.0, 16.5), (12.0, 12.0), st);
@@ -849,7 +887,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         }
         Icon::StyleEdges => {
             cube(&pen, Color32::WHITE, FILL, FILL);
-            let st = Stroke::new(1.8 * pen.s, BLUE);
+            let st = Stroke::new(W * pen.s, BLUE);
             pen.line_c(&[(4.0, 7.5), (12.0, 12.0), (20.0, 7.5)], st);
             pen.line_c(&[(12.0, 12.0), (12.0, 21.0)], st);
         }
@@ -889,13 +927,20 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             // A cube whose cut outline is drawn thick in orange.
             cube(&pen, FILL, SHADE, SHADE_DARK);
             let orange = Color32::from_rgb(0xE8, 0x7A, 0x1E);
-            pen.line_c(&[(4.0, 12.0), (12.0, 16.5), (20.0, 12.0)], Stroke::new(2.6 * pen.s, orange));
+            pen.line_c(&[(4.0, 12.0), (12.0, 16.5), (20.0, 12.0)], Stroke::new(W_BOLD * pen.s, orange));
         }
         Icon::SectionFill => {
             // A cube cut in half: the cut face filled dark.
-            pen.poly(&[(4.0, 12.0), (12.0, 16.5), (12.0, 21.0), (4.0, 16.5)], SHADE);
-            pen.poly(&[(12.0, 16.5), (20.0, 12.0), (20.0, 16.5), (12.0, 21.0)], SHADE_DARK);
-            pen.poly(&[(12.0, 7.5), (20.0, 12.0), (12.0, 16.5), (4.0, 12.0)], pen.ink);
+            pen.solid(
+                &[
+                    (&[(4.0, 12.0), (12.0, 16.5), (12.0, 21.0), (4.0, 16.5)], SHADE),
+                    (&[(12.0, 16.5), (20.0, 12.0), (20.0, 16.5), (12.0, 21.0)], SHADE_DARK),
+                    (&[(12.0, 7.5), (20.0, 12.0), (12.0, 16.5), (4.0, 12.0)], pen.ink),
+                ],
+                &[(12.0, 7.5), (20.0, 12.0), (20.0, 16.5), (12.0, 21.0), (4.0, 16.5), (4.0, 12.0)],
+                &[&[(4.0, 12.0), (12.0, 16.5), (20.0, 12.0)], &[(12.0, 16.5), (12.0, 21.0)]],
+                pen.stroke(),
+            );
         }
         Icon::Panes1 | Icon::Panes2 | Icon::Panes4 => {
             // The view's frame split into its panes.
@@ -921,13 +966,19 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.head((fx(3.5), 7.0), (-flip, 0.0), 4.5, pen.ink);
         }
         Icon::Lock | Icon::Unlock => {
-            pen.line(&[(6.0, 11.0), (6.0, 21.0), (19.0, 21.0), (19.0, 11.0), (6.0, 11.0)]);
-            if icon == Icon::Unlock {
-                // Swing outward around the right attachment; keep the hinge in place.
-                pen.line(&[(16.0, 11.0), (16.0, 6.0), (18.0, 3.0), (21.0, 3.0), (23.0, 6.0), (23.0, 8.0)]);
-            } else {
-                pen.line(&[(7.0, 11.0), (7.0, 6.0), (9.0, 3.0), (14.0, 3.0), (16.0, 6.0), (16.0, 11.0)]);
-            }
+            pen.painter.rect_stroke(
+                Rect::from_min_max(pen.p(5.0, 11.0), pen.p(19.0, 21.0)),
+                1.5 * pen.s,
+                pen.stroke(),
+                egui::StrokeKind::Middle,
+            );
+            // An arched shackle centred over the body; opened, it lifts and the left leg
+            // comes free of the body.
+            let (cy, left_end) = if icon == Icon::Unlock { (5.5, 8.0) } else { (7.5, 11.0) };
+            let mut shackle = vec![pen.p(8.0, left_end)];
+            shackle.extend(pen.arc_pts((12.0, cy), 4.0, 180.0, 360.0));
+            shackle.push(pen.p(16.0, 11.0));
+            pen.path(shackle, false, pen.stroke());
             pen.line(&[(12.0, 15.0), (12.0, 18.0)]);
         }
         Icon::Eye | Icon::EyeOff => {
@@ -942,11 +993,34 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         }
         Icon::Cloud => {
             // A cloud with an arrow down: the online library.
-            pen.arc((8.5, 13.0), 4.0, 90.0, 270.0, pen.stroke());
-            pen.arc((12.5, 10.0), 5.0, 180.0, 340.0, pen.stroke());
-            pen.arc((16.5, 13.5), 3.5, -90.0, 90.0, pen.stroke());
-            pen.line(&[(8.5, 17.0), (10.0, 17.0)]);
-            pen.line(&[(14.0, 17.0), (16.5, 17.0)]);
+            // One continuous outline: bottom edge, left puff, top puff, right puff, bottom edge,
+            // each arc running exactly to where it meets the next circle. The only open ends
+            // are the gap for the arrow.
+            let base = 17.5;
+            let (c1, r1) = ((7.5, 14.0), 3.5);
+            let (c2, r2) = ((12.5, 10.5), 4.5);
+            let (c3, r3) = ((17.0, 14.0), 3.5);
+            // the upper crossing of two circles, as an angle (degrees, screen space) on each
+            let meet = |a: (f32, f32), ra: f32, b: (f32, f32), rb: f32| {
+                let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                let d = (dx * dx + dy * dy).sqrt();
+                let t = (d * d + ra * ra - rb * rb) / (2.0 * d);
+                let h = (ra * ra - t * t).max(0.0).sqrt();
+                let (mx, my) = (a.0 + dx * t / d, a.1 + dy * t / d);
+                let p = [(mx - dy * h / d, my + dx * h / d), (mx + dy * h / d, my - dx * h / d)];
+                let p = if p[0].1 < p[1].1 { p[0] } else { p[1] };
+                let ang = |c: (f32, f32)| ((p.1 - c.1).atan2(p.0 - c.0) * 180.0 / PI).rem_euclid(360.0);
+                (ang(a), ang(b))
+            };
+            let (a12, b12) = meet(c1, r1, c2, r2);
+            let (b23, a23) = meet(c2, r2, c3, r3);
+            let b23 = if b23 < b12 { b23 + 360.0 } else { b23 };
+            let mut outline = vec![pen.p(10.0, base), pen.p(c1.0, base)];
+            outline.extend(pen.arc_pts(c1, r1, 90.0, a12));
+            outline.extend(pen.arc_pts(c2, r2, b12, b23));
+            outline.extend(pen.arc_pts(c3, r3, a23, 450.0));
+            outline.push(pen.p(14.0, base));
+            pen.path(outline, false, pen.stroke());
             pen.line(&[(12.0, 12.0), (12.0, 21.0)]);
             pen.line(&[(9.5, 18.5), (12.0, 21.0), (14.5, 18.5)]);
         }
@@ -980,11 +1054,15 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.painter.rect_stroke(
                 Rect::from_min_max(pen.p(3.0, 3.0), pen.p(21.0, 21.0)),
                 2.0 * pen.s,
-                Stroke::new(1.2 * pen.s, BLUE),
+                Stroke::new(W_THIN * pen.s, BLUE),
                 egui::StrokeKind::Middle,
             );
-            pen.poly(&[(7.0, 9.0), (13.0, 9.0), (13.0, 17.0), (7.0, 17.0)], BLUE_SOFT);
-            pen.poly(&[(13.0, 9.0), (17.0, 7.0), (17.0, 15.0), (13.0, 17.0)], SHADE);
+            pen.solid(
+                &[(&[(7.0, 9.0), (13.0, 9.0), (13.0, 17.0), (7.0, 17.0)], BLUE_SOFT), (&[(13.0, 9.0), (17.0, 7.0), (17.0, 15.0), (13.0, 17.0)], SHADE)],
+                &[(7.0, 9.0), (13.0, 9.0), (17.0, 7.0), (17.0, 15.0), (13.0, 17.0), (7.0, 17.0)],
+                &[&[(13.0, 9.0), (13.0, 17.0)]],
+                pen.stroke(),
+            );
         }
         _ => cmd::paint(&pen, icon),
     }
