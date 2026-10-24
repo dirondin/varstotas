@@ -34,6 +34,10 @@ pub fn border() -> Color32 {
 pub fn accent_soft() -> Color32 {
     pick(Color32::from_rgb(0xD6, 0xE6, 0xFA), Color32::from_rgb(0x24, 0x48, 0x78))
 }
+/// Warnings (a texture too large, …): amber, readable in both looks.
+pub fn warning() -> Color32 {
+    pick(Color32::from_rgb(0xA0, 0x62, 0x00), Color32::from_rgb(0xE0, 0xA8, 0x40))
+}
 pub fn text_dim() -> Color32 {
     pick(Color32::from_rgb(0x6B, 0x72, 0x7D), Color32::from_rgb(0x9A, 0xA2, 0xAE))
 }

@@ -43,12 +43,15 @@ screenshot shots/realism_viewport.bmp
 material Brick
 action tray_only Material Editor
 wait 5
-raw click 1212 238
+# collapse Textures, open Physical
+raw click 1185 238
+wait 5
+raw click 1212 267
 wait 5
 screenshot shots/realism_editor.bmp
-raw drag 1262 593 1390 593 10
+raw drag 1262 622 1390 622 10
 wait 3
-raw drag 1262 697 1390 697 10
+raw drag 1262 726 1390 726 10
 wait 5
 expect ("Brick", [1.0, 1.0, 0.0, 0.0, 100.0])
 screenshot shots/realism_editor_set.bmp

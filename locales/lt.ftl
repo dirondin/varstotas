@@ -1244,6 +1244,8 @@ prefs-ffmpeg = ffmpeg (vaizdo įrašai iš Failas → Eksportuoti → Animacija)
 prefs-ffmpeg-missing = nerasta: įdiekite (brew install ffmpeg) arba pasirinkite programą
 prefs-oidn = Open Image Denoise biblioteka (vaizdavimo triukšmo šalinimas)
 prefs-oidn-missing = nerasta: triukšmą šalina integruotas filtras (brew install open-image-denoise arba pasirinkite biblioteką)
+prefs-image-editor = Vaizdų redaktorius (Medžiagos redaktorius → Tekstūros → Redaguoti)
+prefs-image-editor-default = sistemos numatytoji programa šiam failui
 
 ## Drawing
 
@@ -1973,6 +1975,43 @@ mated-opacity = Nepermatomumas
 mated-texture = Tekstūra
 mated-no-texture = Be tekstūros
 mated-undo-color = Keisti medžiagos spalvą
+mated-textures = Tekstūros
+mated-slot-base = Pagrindinė tekstūra
+mated-slot-empty = Tuščia
+mated-view-tip = Peržiūrėti dideliu mastu
+mated-downscale = Sumažinti
+mated-downscale-tip = Didelis vaizdas: atvaizdavimas naudoja ne daugiau 1024 px. Perkoduoti į { $side } px, kad dokumentas būtų mažesnis
+mated-load-tip = Įkelti vaizdą…
+mated-replace-tip = Pakeisti kitu vaizdu… (plytelės dydis išlieka)
+mated-clear-tip = Pašalinti šią tekstūrą
+mated-export-tip = Išsaugoti vaizdą faile…
+mated-edit-tip = Redaguoti vaizdų redaktoriuje: išsaugojus ten, medžiaga atnaujinama
+mated-map-set = Įkelti žemėlapių rinkinį iš aplanko…
+mated-map-set-tip = Užpildyti lizdus iš aplanko pagal failų vardų priesagas: _color / _albedo / _diff, _normal (geriau OpenGL), _rough, _metal, _ao, _emission
+mated-watching = { $count ->
+        [one] Stebima { $count } tekstūra, atidaryta redaktoriuje
+        [few] Stebimos { $count } tekstūros, atidarytos redaktoriuje
+        [many] Stebima { $count } tekstūros, atidarytos redaktoriuje
+       *[other] Stebima { $count } tekstūrų, atidarytų redaktoriuje
+    }
+mated-view-title = { $material }: { $slot }
+mated-view-tiled = Kartoti 3 × 3
+mated-undo-texture = Įkelti tekstūrą
+mated-undo-map-set = Įkelti žemėlapių rinkinį
+mated-undo-clear = Pašalinti tekstūrą
+mated-undo-downscale = Sumažinti tekstūrą
+mated-undo-reload = Iš naujo įkelti tekstūrą
+mated-no-maps = { $path } nėra vaizdų su žemėlapių priesagomis
+mated-maps-loaded = { $count ->
+        [one] Įkeltas { $count } žemėlapis
+        [few] Įkelti { $count } žemėlapiai
+        [many] Įkelta { $count } žemėlapio
+       *[other] Įkelta { $count } žemėlapių
+    }
+mated-exported = Išsaugota: { $path }
+mated-editing = Redaguojama { $file }: išsaugokite, kad atnaujintumėte medžiagą
+mated-cant-open-editor = Nepavyko atidaryti vaizdų redaktoriaus: { $error }
+mated-reloaded = { $slot }: įkelta iš naujo iš vaizdų redaktoriaus
 
 ## ======== 3D biblioteka ========
 
@@ -2349,7 +2388,6 @@ realistic-load = Įkelti…
 realistic-clear = Išvalyti
 realistic-reset = Atkurti
 realistic-preset = Šablonas
-realistic-paint-first = Pirmiausia kuo nors nudažykite šia medžiaga
 
 ## Aplinka
 

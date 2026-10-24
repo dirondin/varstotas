@@ -1238,6 +1238,8 @@ prefs-ffmpeg = ffmpeg (videos of File → Export → Animation)
 prefs-ffmpeg-missing = not found: install it (brew install ffmpeg) or choose the program
 prefs-oidn = Open Image Denoise library (the render's denoiser)
 prefs-oidn-missing = not found: the built-in filter denoises (brew install open-image-denoise, or choose the library)
+prefs-image-editor = Image editor (Material Editor → Textures → Edit)
+prefs-image-editor-default = the system's default program for the file
 
 ## Drawing
 
@@ -1959,6 +1961,39 @@ mated-opacity = Opacity
 mated-texture = Texture
 mated-no-texture = No texture
 mated-undo-color = Edit material colour
+mated-textures = Textures
+mated-slot-base = Base texture
+mated-slot-empty = Empty
+mated-view-tip = View large
+mated-downscale = Downscale
+mated-downscale-tip = Large image: the renderer samples at most 1024 px. Re-encode at { $side } px to keep the document small
+mated-load-tip = Load an image…
+mated-replace-tip = Replace with another image… (the tile size is kept)
+mated-clear-tip = Remove this texture
+mated-export-tip = Save the image as a file…
+mated-edit-tip = Edit in the image editor: saving there updates the material
+mated-map-set = Load map set from folder…
+mated-map-set-tip = Fill the slots from a folder by file-name suffixes: _color / _albedo / _diff, _normal (OpenGL preferred), _rough, _metal, _ao, _emission
+mated-watching = { $count ->
+        [one] Watching { $count } texture open in the image editor
+       *[other] Watching { $count } textures open in the image editor
+    }
+mated-view-title = { $material }: { $slot }
+mated-view-tiled = Repeat 3 × 3
+mated-undo-texture = Load Texture
+mated-undo-map-set = Load Map Set
+mated-undo-clear = Clear Texture
+mated-undo-downscale = Downscale Texture
+mated-undo-reload = Reload Texture
+mated-no-maps = No images with map suffixes in { $path }
+mated-maps-loaded = { $count ->
+        [one] Loaded { $count } map
+       *[other] Loaded { $count } maps
+    }
+mated-exported = Saved { $path }
+mated-editing = Editing { $file }: save it to update the material
+mated-cant-open-editor = Can't open the image editor: { $error }
+mated-reloaded = { $slot } reloaded from the image editor
 
 ## ======== 3D Library ========
 
@@ -2335,7 +2370,6 @@ realistic-load = Load…
 realistic-clear = Clear
 realistic-reset = Reset
 realistic-preset = Preset
-realistic-paint-first = Paint something with the material first
 
 ## Environment
 

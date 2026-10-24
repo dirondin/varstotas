@@ -1248,6 +1248,8 @@ prefs-ffmpeg = ffmpeg (видео для Файл → Экспорт → Ани�
 prefs-ffmpeg-missing = не найден: установите его (brew install ffmpeg) или выберите программу
 prefs-oidn = Библиотека Open Image Denoise (шумоподавление рендера)
 prefs-oidn-missing = не найдена: шумоподавление выполнит встроенный фильтр (brew install open-image-denoise или выберите библиотеку)
+prefs-image-editor = Графический редактор (Редактор материала → Текстуры → Редактировать)
+prefs-image-editor-default = программа по умолчанию для этого файла
 
 ## Рисование
 
@@ -2008,6 +2010,43 @@ mated-opacity = Непрозрачность
 mated-texture = Текстура
 mated-no-texture = Без текстуры
 mated-undo-color = Изменить цвет материала
+mated-textures = Текстуры
+mated-slot-base = Основная текстура
+mated-slot-empty = Пусто
+mated-view-tip = Открыть крупно
+mated-downscale = Уменьшить
+mated-downscale-tip = Большое изображение: рендер использует не больше 1024 px. Пересохранить в { $side } px, чтобы документ был меньше
+mated-load-tip = Загрузить изображение…
+mated-replace-tip = Заменить другим изображением… (размер плитки сохранится)
+mated-clear-tip = Убрать эту текстуру
+mated-export-tip = Сохранить изображение в файл…
+mated-edit-tip = Редактировать в графическом редакторе: сохранение там обновит материал
+mated-map-set = Загрузить набор карт из папки…
+mated-map-set-tip = Заполнить слоты из папки по суффиксам имён файлов: _color / _albedo / _diff, _normal (OpenGL предпочтительнее), _rough, _metal, _ao, _emission
+mated-watching = { $count ->
+        [one] Отслеживается { $count } текстура, открытая в редакторе
+        [few] Отслеживаются { $count } текстуры, открытые в редакторе
+        [many] Отслеживается { $count } текстур, открытых в редакторе
+       *[other] Отслеживается { $count } текстуры, открытой в редакторе
+    }
+mated-view-title = { $material }: { $slot }
+mated-view-tiled = Повторить 3 × 3
+mated-undo-texture = Загрузить текстуру
+mated-undo-map-set = Загрузить набор карт
+mated-undo-clear = Убрать текстуру
+mated-undo-downscale = Уменьшить текстуру
+mated-undo-reload = Перезагрузить текстуру
+mated-no-maps = В { $path } нет изображений с суффиксами карт
+mated-maps-loaded = { $count ->
+        [one] Загружена { $count } карта
+        [few] Загружены { $count } карты
+        [many] Загружено { $count } карт
+       *[other] Загружено { $count } карты
+    }
+mated-exported = Сохранено: { $path }
+mated-editing = Редактируется { $file }: сохраните его, чтобы обновить материал
+mated-cant-open-editor = Не удалось открыть графический редактор: { $error }
+mated-reloaded = { $slot }: перезагружено из графического редактора
 
 ## ======== 3D-библиотека ========
 
@@ -2396,7 +2435,6 @@ realistic-load = Загрузить…
 realistic-clear = Очистить
 realistic-reset = Сбросить
 realistic-preset = Пресет
-realistic-paint-first = Сначала закрасьте что-нибудь этим материалом
 
 ## Окружение
 

@@ -23,6 +23,8 @@ pub struct MatEditorState {
     usage: Option<(u64, MaterialId, usize)>,
     /// `model_version` the current material was last refreshed from the model at.
     synced: u64,
+    /// The Textures section and the large view.
+    pub maps: super::mat_maps::MapsState,
 }
 
 /// Faces (front or back) and objects painted with `id`, in every definition.
@@ -130,6 +132,11 @@ impl VarstotasApp {
             .default_open(true)
             .show(ui, |ui| self.material_basic(ui));
         super::tray_lib::spot("mated:basic", basic.header_response.rect.center());
+        let textures = egui::CollapsingHeader::new(RichText::new(tr!("mated-textures")).strong())
+            .id_salt(("mated_textures", big))
+            .default_open(true)
+            .show(ui, |ui| self.material_textures(ui, big));
+        super::tray_lib::spot("mated:textures", textures.header_response.rect.center());
         self.pbr_editor(ui);
     }
 

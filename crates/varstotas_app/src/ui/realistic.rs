@@ -5,7 +5,7 @@ use super::{color_f32, color32, theme};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
 use crate::document::PaletteMaterial;
 use egui::{Color32, RichText, Sense, Ui, vec2};
-use varstotas_kernel::{CustomShader, EFFECT_PRESETS, Effects, Environment, MaterialId, PBR_MAPS, Pbr, SkyKind, Stylize, TextureImage, Tonemap, shader_params};
+use varstotas_kernel::{CustomShader, EFFECT_PRESETS, Effects, Environment, MaterialId, Pbr, SkyKind, Stylize, TextureImage, Tonemap, shader_params};
 use std::path::Path;
 use varstotas_i18n::tr;
 
@@ -19,9 +19,6 @@ pub(crate) const PBR_PRESETS: [(&str, f32, f32, f32, f32); 7] = [
     ("Glass", 0.0, 0.03, 1.0, 0.0), // i18n-ignore
     ("Light", 0.0, 0.6, 0.0, 5.0), // i18n-ignore
 ];
-
-/// Keys of the map names, in the order of `PBR_MAPS`.
-const MAP_LABELS: [&str; 5] = ["realistic-map-normal", "realistic-map-roughness", "realistic-map-metallic", "realistic-map-occlusion", "realistic-map-emission"];
 
 impl VarstotasApp {
     /// The current paint material if it is in the model.
@@ -342,26 +339,6 @@ impl VarstotasApp {
                     });
                 }
             }
-            ui.add_space(2.0);
-            egui::Grid::new("pbr_maps").num_columns(3).spacing([6.0, 3.0]).show(ui, |ui| {
-                for (map, label) in PBR_MAPS.iter().zip(MAP_LABELS) {
-                    ui.label(tr(label));
-                    let name = p.map(map).map_or("—".to_string(), |t| t.file_name.clone()); // i18n-ignore
-                    ui.label(RichText::new(name).small().color(theme::text_dim()));
-                    ui.horizontal(|ui| {
-                        if ui.small_button(tr!("realistic-load")).clicked() {
-                            match mid {
-                                Some(id) => self.actions.push(Action::PickPbrMap(id, map)),
-                                None => self.flash(tr!("realistic-paint-first")),
-                            }
-                        }
-                        if p.map(map).is_some() && ui.small_button(tr!("realistic-clear")).clicked() {
-                            self.set_pbr_map(&cur.name, map, None);
-                        }
-                    });
-                    ui.end_row();
-                }
-            });
             if map_normal_scale(&p) {
                 let resp = ui.add(egui::Slider::new(&mut p.normal_scale, 0.0..=4.0).text(tr!("realistic-normal-strength")).fixed_decimals(2));
                 dragging |= resp.dragged();

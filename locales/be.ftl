@@ -1244,6 +1244,8 @@ prefs-ffmpeg = ffmpeg (відэа з Файл → Экспарт → Аніма�
 prefs-ffmpeg-missing = не знойдзена: усталюйце яе (brew install ffmpeg) або выберыце праграму
 prefs-oidn = Бібліятэка Open Image Denoise (шумапрыгнятальнік рэндара)
 prefs-oidn-missing = не знойдзена: шум прыгнятае ўбудаваны фільтр (brew install open-image-denoise, або выберыце бібліятэку)
+prefs-image-editor = Графічны рэдактар (Рэдактар матэрыялу → Тэкстуры → Рэдагаваць)
+prefs-image-editor-default = праграма па змаўчанні для гэтага файла
 
 ## Маляванне
 
@@ -2004,6 +2006,43 @@ mated-opacity = Непразрыстасць
 mated-texture = Тэкстура
 mated-no-texture = Без тэкстуры
 mated-undo-color = Змяніць колер матэрыялу
+mated-textures = Тэкстуры
+mated-slot-base = Асноўная тэкстура
+mated-slot-empty = Пуста
+mated-view-tip = Адкрыць буйна
+mated-downscale = Паменшыць
+mated-downscale-tip = Вялікая выява: рэндэр выкарыстоўвае не больш за 1024 px. Перазахаваць у { $side } px, каб дакумент быў меншы
+mated-load-tip = Загрузіць выяву…
+mated-replace-tip = Замяніць іншай выявай… (памер пліткі захаваецца)
+mated-clear-tip = Прыбраць гэту тэкстуру
+mated-export-tip = Захаваць выяву ў файл…
+mated-edit-tip = Рэдагаваць у графічным рэдактары: захаванне там абновіць матэрыял
+mated-map-set = Загрузіць набор карт з папкі…
+mated-map-set-tip = Запоўніць слоты з папкі па суфіксах імёнаў файлаў: _color / _albedo / _diff, _normal (лепей OpenGL), _rough, _metal, _ao, _emission
+mated-watching = { $count ->
+        [one] Адсочваецца { $count } тэкстура, адкрытая ў рэдактары
+        [few] Адсочваюцца { $count } тэкстуры, адкрытыя ў рэдактары
+        [many] Адсочваецца { $count } тэкстур, адкрытых у рэдактары
+       *[other] Адсочваецца { $count } тэкстуры, адкрытай у рэдактары
+    }
+mated-view-title = { $material }: { $slot }
+mated-view-tiled = Паўтарыць 3 × 3
+mated-undo-texture = Загрузіць тэкстуру
+mated-undo-map-set = Загрузіць набор карт
+mated-undo-clear = Прыбраць тэкстуру
+mated-undo-downscale = Паменшыць тэкстуру
+mated-undo-reload = Перазагрузіць тэкстуру
+mated-no-maps = У { $path } няма выяў з суфіксамі карт
+mated-maps-loaded = { $count ->
+        [one] Загружана { $count } карта
+        [few] Загружаны { $count } карты
+        [many] Загружана { $count } карт
+       *[other] Загружана { $count } карты
+    }
+mated-exported = Захавана: { $path }
+mated-editing = Рэдагуецца { $file }: захавайце яго, каб абнавіць матэрыял
+mated-cant-open-editor = Не ўдалося адкрыць графічны рэдактар: { $error }
+mated-reloaded = { $slot }: перазагружана з графічнага рэдактара
 
 ## ======== 3D-бібліятэка ========
 
@@ -2390,7 +2429,6 @@ realistic-load = Загрузіць…
 realistic-clear = Ачысціць
 realistic-reset = Скінуць
 realistic-preset = Прасет
-realistic-paint-first = Спачатку пафарбуйце нешта гэтым матэрыялам
 
 ## Асяроддзе
 

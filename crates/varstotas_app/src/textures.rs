@@ -77,6 +77,78 @@ pub fn load_file(path: &Path, width_mm: f64) -> Result<(TextureImage, Decoded), 
     Ok((tex, decoded))
 }
 
+/// Texture slots of a material: the base (colour) texture, then the physical maps.
+pub const SLOTS: [&str; 6] = ["base", "normal", "roughness", "metallic", "ao", "emission"];
+
+/// Images larger than this (longest side, pixels) get a size warning and a downscale button:
+/// the renderer samples at most 1024 px, larger files only grow the document.
+pub const LARGE_SIDE: u32 = 2048;
+
+/// The slot an image file belongs to by its name suffix (`wood_color.png`,
+/// `Bricks097_4K-PNG_NormalGL.png`, `brick_rough_2k.jpg`…), and whether it is a DirectX
+/// normal map (green channel flipped; an OpenGL one is preferred).
+pub fn slot_of_file(name: &str) -> Option<(&'static str, bool)> {
+    let stem = name.rsplit_once('.').map_or(name, |(s, _)| s).to_ascii_lowercase();
+    let tokens: Vec<&str> = stem.split(|c: char| !c.is_ascii_alphanumeric()).filter(|t| !t.is_empty()).collect();
+    let dx = tokens.iter().any(|t| *t == "dx" || t.ends_with("dx") && t.starts_with("normal"));
+    // the last meaningful token decides (resolution / format tokens are skipped)
+    for t in tokens.iter().rev() {
+        let slot = match *t {
+            "color" | "colour" | "col" | "albedo" | "basecolor" | "diffuse" | "diff" | "base" => "base",
+            "normal" | "normalgl" | "normaldx" | "nor" | "nrm" | "norm" => "normal",
+            "rough" | "roughness" | "rgh" => "roughness",
+            "metal" | "metallic" | "metalness" | "met" => "metallic",
+            "ao" | "occlusion" | "ambientocclusion" | "occ" => "ao",
+            "emission" | "emissive" | "emit" => "emission",
+            "gl" | "dx" | "png" | "jpg" | "map" | "tex" | "texture" => continue,
+            t if t.len() <= 3 && t.ends_with('k') && t[..t.len() - 1].chars().all(|c| c.is_ascii_digit()) => continue,
+            _ => return None,
+        };
+        // "base" alone is a name word unless it is followed by colour ("base_color")
+        if slot == "base" && *t == "base" {
+            return None;
+        }
+        return Some((slot, slot == "normal" && dx));
+    }
+    None
+}
+
+/// The image files of `dir` sorted into slots by name (the first match per slot; an OpenGL
+/// normal map wins over a DirectX one).
+pub fn map_set_in(dir: &Path) -> Vec<(&'static str, std::path::PathBuf)> {
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).collect())
+        .unwrap_or_default();
+    files.retain(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg")));
+    files.sort();
+    let mut out: Vec<(&'static str, std::path::PathBuf, bool)> = Vec::new();
+    for f in files {
+        let Some((slot, dx)) = f.file_name().and_then(|n| n.to_str()).and_then(slot_of_file) else { continue };
+        match out.iter_mut().find(|(s, _, _)| *s == slot) {
+            Some(e) if e.2 && !dx => *e = (slot, f, dx),
+            Some(_) => {}
+            None => out.push((slot, f, dx)),
+        }
+    }
+    out.sort_by_key(|(s, _, _)| SLOTS.iter().position(|x| x == s));
+    out.into_iter().map(|(s, f, _)| (s, f)).collect()
+}
+
+/// Re-encode an image with its longest side at most `max` pixels (PNG stays PNG, anything
+/// else becomes JPEG).
+pub fn downscale(bytes: &[u8], max: u32) -> Result<Vec<u8>, String> {
+    let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
+    let img = img.resize(max, max, image::imageops::FilterType::Lanczos3);
+    let mut out = Vec::new();
+    if bytes.starts_with(b"\x89PNG") {
+        img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    } else {
+        let rgb = img.to_rgb8();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90).encode_image(&rgb).map_err(|e| e.to_string())?;
+    }
+    Ok(out)
+}
+
 /// Uploads the model's textures to the renderer when they change, decoding each image once.
 #[derive(Default)]
 pub struct TextureSync {
@@ -163,5 +235,38 @@ mod tests {
         assert!(s.changed(&snapshot).is_none());
         m.materials[id].image.as_mut().unwrap().size = [1000.0, 500.0];
         assert!(s.changed(&m).is_some());
+    }
+
+    #[test]
+    fn slots_by_file_name() {
+        for (name, want) in [
+            ("wood_color.png", Some(("base", false))),
+            ("Bricks097_4K-PNG_Color.png", Some(("base", false))),
+            ("Bricks097_4K-PNG_NormalGL.png", Some(("normal", false))),
+            ("Bricks097_4K-PNG_NormalDX.png", Some(("normal", true))),
+            ("red_brick_nor_gl_2k.jpg", Some(("normal", false))),
+            ("red_brick_nor_dx_2k.jpg", Some(("normal", true))),
+            ("red_brick_rough_2k.jpg", Some(("roughness", false))),
+            ("metal_plate_metal_1k.png", Some(("metallic", false))),
+            ("red_brick_ao_2k.jpg", Some(("ao", false))),
+            ("lamp_Emissive.png", Some(("emission", false))),
+            ("red_brick_diff_2k.jpg", Some(("base", false))),
+            ("Wall_BaseColor.png", Some(("base", false))),
+            ("red_brick_disp_2k.png", None),
+            ("photo.jpg", None),
+            ("base.png", None),
+        ] {
+            assert_eq!(slot_of_file(name), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn downscale_keeps_png_and_aspect() {
+        let img = image::RgbaImage::from_pixel(64, 32, image::Rgba([10, 20, 30, 255]));
+        let mut png = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut png, image::ImageFormat::Png).unwrap();
+        let out = downscale(&png.into_inner(), 16).unwrap();
+        assert!(out.starts_with(b"\x89PNG"));
+        assert_eq!(varstotas_kernel::texture::image_dimensions(&out), Some([16, 8]));
     }
 }

@@ -154,6 +154,8 @@ pub struct Prefs {
     pub ffmpeg_path: Option<PathBuf>,
     /// Open Image Denoise library chosen by hand (None = found on the system).
     pub oidn_path: Option<PathBuf>,
+    /// Image editor for textures (None = the system's default program for the file).
+    pub image_editor_path: Option<PathBuf>,
     /// Undo steps kept per document.
     pub undo_steps: u32,
 }
@@ -218,6 +220,7 @@ impl Default for Prefs {
             new_render: Default::default(),
             ffmpeg_path: None,
             oidn_path: None,
+            image_editor_path: None,
             undo_steps: 100,
         }
     }
@@ -375,7 +378,12 @@ pub enum Action {
     /// Environment card: pick an HDRI file (`.hdr`) for the document.
     PickHdri,
     /// Material editor: pick an image for map `.1` (`normal`, `roughness`, …) of material `.0`.
-    PickPbrMap(varstotas_kernel::MaterialId, &'static str),
+    /// Load an image file into a texture slot of a material (`textures::SLOTS`).
+    PickSlotFile(String, &'static str),
+    /// Save the image of a texture slot as a file.
+    ExportSlot(String, &'static str),
+    /// Load a map set from a folder into a material.
+    PickMapFolder(String),
     /// Tools → 3D Text…: open the dialog.
     Text3d,
     /// Place 3D text with these values (the text follows the cursor).
@@ -1709,9 +1717,25 @@ impl VarstotasApp {
                     self.load_hdri(&path);
                 }
             }
-            Action::PickPbrMap(mid, map) => {
+            Action::PickSlotFile(name, slot) => {
                 if let Some(path) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
-                    self.load_pbr_map(mid, map, &path);
+                    self.load_slot_file(&name, slot, &path);
+                }
+            }
+            Action::ExportSlot(name, slot) => {
+                let img = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| {
+                    crate::ui::mat_maps::slot_image(&crate::document::PaletteMaterial::of(m), slot).cloned()
+                });
+                if let Some(img) = img {
+                    let file = if img.file_name.is_empty() { format!("{name}-{slot}.{}", img.extension()) } else { img.file_name.clone() };
+                    if let Some(path) = rfd::FileDialog::new().set_file_name(file).save_file() {
+                        self.export_slot(&name, slot, &path);
+                    }
+                }
+            }
+            Action::PickMapFolder(name) => {
+                if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                    self.load_map_folder(&name, &dir);
                 }
             }
             Action::ToggleSectionDisplay(k) => {
@@ -2904,6 +2928,8 @@ impl eframe::App for VarstotasApp {
         self.rig_editor_window(&ctx);
         self.shader_editor_window(&ctx);
         self.material_editor_window(&ctx);
+        self.texture_view_window(&ctx);
+        self.poll_external_edits();
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
         self.sheets_window(&ctx);

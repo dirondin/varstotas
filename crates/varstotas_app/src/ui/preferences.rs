@@ -63,7 +63,7 @@ impl Section {
     fn words(self) -> &'static str {
         match self {
             Section::General => "auto-save autosave backup previous version minutes template folder directory new document units undo steps history", // i18n-ignore
-            Section::Render => "render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise", // i18n-ignore
+            Section::Render => "render image size samples bounces quality denoise programs ffmpeg image editor texture video animation oidn open image denoise", // i18n-ignore
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle", // i18n-ignore
             Section::Libraries => "components materials folder examples in model tiles small large list", // i18n-ignore
             Section::Downloads => "watch downloads folder browser", // i18n-ignore
@@ -457,6 +457,8 @@ impl VarstotasApp {
             oidn,
             &tr!("prefs-oidn-missing"),
         );
+        let editor = self.prefs.image_editor_path.clone();
+        file_row(ui, &tr!("prefs-image-editor"), &mut self.prefs.image_editor_path, editor, &tr!("prefs-image-editor-default"));
     }
 
     fn prefs_drawing(&mut self, ui: &mut Ui) {
