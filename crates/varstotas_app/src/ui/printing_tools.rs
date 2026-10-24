@@ -689,9 +689,10 @@ impl VarstotasApp {
             }
         }
     }
+    /// The bed volume (only while the 3D Printing window is open) and the Split tab's cut plane.
     pub(super) fn print_tools_overlay(&self, out: &mut varstotas_render::Overlay3d) {
         let bed = &self.prefs.printing.bed;
-        if self.prefs.printing.show_bed && bed.valid() {
+        if self.printing.open && self.prefs.printing.show_bed && bed.valid() {
             let points = [
                 DVec3::ZERO,
                 DVec3::X * bed.width_mm,
