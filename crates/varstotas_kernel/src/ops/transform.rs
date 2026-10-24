@@ -8,6 +8,9 @@ use crate::texture::{TexPlacement, carried_placement};
 use glam::{DMat4, DVec2, DVec3};
 use std::collections::{HashMap, HashSet};
 
+/// A face's texture state before a transform: normal, placement and corner positions.
+type FaceTexture = (DVec3, Option<TexPlacement>, Vec<(VertexId, DVec3)>);
+
 impl Mesh {
     /// Apply transform to vertices; connected edges/faces stretch. Non-planar faces that
     /// result are triangulated and coplanar triangles re-merged (folding), so faces
@@ -28,7 +31,7 @@ impl Mesh {
         }
         // Texture coordinates of every corner before the move: faces keep their texture on
         // the geometry (moved whole it travels along, partly moved it stretches).
-        let before: HashMap<FaceId, (DVec3, Option<TexPlacement>, Vec<(VertexId, DVec3)>)> = affected
+        let before: HashMap<FaceId, FaceTexture> = affected
             .iter()
             .map(|&f| {
                 let face = &self.faces[f];

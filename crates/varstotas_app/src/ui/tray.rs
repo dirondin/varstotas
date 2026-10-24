@@ -107,14 +107,15 @@ pub(crate) fn rgb(c: [u8; 3]) -> [f32; 4] {
 }
 
 /// Side bar cards in their order (Window menu checkboxes, `Prefs::tray_hidden`).
-pub(crate) const TRAY_CARDS: [&str; 10] =
-    ["Entity Info", "Materials", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"]; // i18n-ignore
+pub(crate) const TRAY_CARDS: [&str; 11] =
+    ["Entity Info", "Materials", "Material Editor", "Components", "Tags", "Outliner", "Scenes", "Shadows", "Environment", "Soften Edges", "Instructor"]; // i18n-ignore
 
 /// The side bar card `title` (an id: preference values, spots) as shown to the user.
 pub(crate) fn card_label(title: &str) -> String {
     match title {
         "Entity Info" => tr!("tray-card-entity-info"), // i18n-ignore
         "Materials" => tr!("tray-card-materials"), // i18n-ignore
+        "Material Editor" => tr!("tray-card-material-editor"), // i18n-ignore
         "Components" => tr!("tray-card-components"), // i18n-ignore
         "Tags" => tr!("tray-card-tags"), // i18n-ignore
         "Outliner" => tr!("tray-card-outliner"), // i18n-ignore
@@ -249,6 +250,9 @@ impl VarstotasApp {
             }
             if on("Materials") { // i18n-ignore
                 card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui)); // i18n-ignore
+            }
+            if on("Material Editor") { // i18n-ignore
+                card(ui, "Material Editor", Icon::Gear, true, |ui| self.material_editor_card(ui)); // i18n-ignore
             }
             if on("Components") { // i18n-ignore
                 let open = self.library_open_requested();
@@ -890,7 +894,7 @@ impl VarstotasApp {
     }
 
     /// Size of the current textured material's tile (width / height, aspect lock).
-    fn texture_size_editor(&mut self, ui: &mut Ui) {
+    pub(crate) fn texture_size_editor(&mut self, ui: &mut Ui) {
         let unit = self.doc.model.unit;
         let Some(cur) = self.doc.current_material.clone() else { return };
         let Some((mid, mat)) = self.doc.model.materials.iter().find(|(_, m)| m.name == cur.name) else { return };
@@ -1319,8 +1323,6 @@ impl VarstotasApp {
         });
 
         self.material_library_ui(ui);
-        self.texture_size_editor(ui);
-        self.pbr_editor(ui);
         if let Some(p) = picked {
             self.doc.current_material = p;
             if self.tool_id() != crate::tools::ToolId::Paint {

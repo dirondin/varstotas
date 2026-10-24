@@ -1390,6 +1390,7 @@ template-imperial-desc = Даўжыні ў цалях.
 
 tray-card-entity-info = Звесткі пра аб’ект
 tray-card-materials = Матэрыялы
+tray-card-material-editor = Рэдактар матэрыялу
 tray-card-components = Кампаненты
 tray-card-tags = Тэгі
 tray-card-outliner = Структура
@@ -1976,6 +1977,33 @@ mat-terms-polyhaven = Працуе на Poly Haven (polyhaven.com). Тэксту
 mat-terms-ambientcg = Матэрыялы ambientCG пад CC0: бясплатна для любога выкарыстання, у тым ліку камерцыйнага; указанне аўтара неабавязковае.
 mat-err-not-catalogue = гэта не каталог
 mat-err-no-colour-map = няма карты колеру
+
+## Рэдактар матэрыялу
+mated-window-title = Рэдактар матэрыялу
+mated-none = Няма матэрыялу: выберыце ўзор або матэрыял з бібліятэкі ці вазьміце яго з вылучэння.
+mated-not-in-model = Яшчэ не ў мадэлі: дадасца, калі вы пафарбуеце ім або зменіце яго.
+mated-used = { $count ->
+        [one] Выкарыстоўваецца на { $count } грані або аб'екце
+       *[other] Выкарыстоўваецца на { $count } гранях і аб'ектах
+    }
+mated-pick = Узяць з вылучэння
+mated-pick-tip = Піпетка: зрабіць бягучым матэрыял вылучанай грані або аб'екта
+mated-pick-none = Вылучыце пафарбаваную грань або аб'ект, каб узяць яго матэрыял
+mated-picked = Бягучы матэрыял: { $name }
+mated-select-tip = Вылучыць грані і аб'екты гэтага кантэксту, пафарбаваныя гэтым матэрыялам
+mated-selected = { $count ->
+        [one] Вылучаны { $count } элемент
+        [few] Вылучана { $count } элементы
+        [many] Вылучана { $count } элементаў
+       *[other] Вылучана { $count } элемента
+    }
+mated-window-tip = Адкрыць рэдактар у акне
+mated-basic = Асноўнае
+mated-color = Колер
+mated-opacity = Непразрыстасць
+mated-texture = Тэкстура
+mated-no-texture = Без тэкстуры
+mated-undo-color = Змяніць колер матэрыялу
 
 ## ======== 3D-бібліятэка ========
 

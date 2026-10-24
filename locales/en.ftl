@@ -1384,6 +1384,7 @@ template-imperial-desc = Lengths in inches.
 
 tray-card-entity-info = Entity Info
 tray-card-materials = Materials
+tray-card-material-editor = Material Editor
 tray-card-components = Components
 tray-card-tags = Tags
 tray-card-outliner = Outliner
@@ -1933,6 +1934,31 @@ mat-terms-polyhaven = Powered by Poly Haven (polyhaven.com). The textures are CC
 mat-terms-ambientcg = ambientCG materials are CC0: free for any use, also commercial; credit optional.
 mat-err-not-catalogue = not a catalogue
 mat-err-no-colour-map = no colour map
+
+## Material Editor
+mated-window-title = Material Editor
+mated-none = No material: pick a swatch or a library material, or take one from the selection.
+mated-not-in-model = Not in the model yet: it is added when you paint with it or edit it.
+mated-used = { $count ->
+        [one] Used on { $count } face or object
+       *[other] Used on { $count } faces and objects
+    }
+mated-pick = Pick from selection
+mated-pick-tip = Eyedropper: make the material of the selected face or object current
+mated-pick-none = Select a painted face or object to pick its material
+mated-picked = Current material: { $name }
+mated-select-tip = Select the faces and objects in this context painted with this material
+mated-selected = { $count ->
+        [one] Selected { $count } entity
+       *[other] Selected { $count } entities
+    }
+mated-window-tip = Open the editor in a window
+mated-basic = Basic
+mated-color = Colour
+mated-opacity = Opacity
+mated-texture = Texture
+mated-no-texture = No texture
+mated-undo-color = Edit material colour
 
 ## ======== 3D Library ========
 

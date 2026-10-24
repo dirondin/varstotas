@@ -217,7 +217,9 @@ impl VarstotasApp {
         let header = egui::CollapsingHeader::new(tr!("realistic-physical")).id_salt("pbr_editor").default_open(stored.is_some()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let tex = self.pbr_preview(ui.ctx(), &cur, &p);
-                let (rect, _) = ui.allocate_exact_size(vec2(84.0, 84.0), Sense::hover());
+                // a larger preview when there is room (the editor window)
+                let side = if ui.available_width() > 380.0 { 128.0 } else { 84.0 };
+                let (rect, _) = ui.allocate_exact_size(vec2(side, side), Sense::hover());
                 ui.painter().image(tex, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
                 ui.vertical(|ui| {
                     ui.label(RichText::new(tr!("realistic-preset")).small().color(theme::text_dim()));
@@ -242,7 +244,7 @@ impl VarstotasApp {
                 });
             });
             egui::Grid::new("pbr_values").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                ui.spacing_mut().slider_width = 120.0;
+                ui.spacing_mut().slider_width = slider_width(ui);
                 let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, label: String, tip: String| {
                     ui.label(label).on_hover_text(tip);
                     let resp = ui.add(egui::Slider::new(v, r).fixed_decimals(2));
@@ -272,7 +274,7 @@ impl VarstotasApp {
                 p.clearcoat > 0.0 || p.sheen > 0.0 || p.anisotropy != 0.0 || p.anti_tiling > 0.0 || p.bevel > 0.0,
             ).show(ui, |ui| {
                 egui::Grid::new("pbr_more_values").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                    ui.spacing_mut().slider_width = 120.0;
+                    ui.spacing_mut().slider_width = slider_width(ui);
                     let mut slider = |ui: &mut Ui, v: &mut f32, r: std::ops::RangeInclusive<f32>, id: &str, label: String, tip: String, log: bool| {
                         ui.label(label).on_hover_text(tip);
                         let resp = ui.add(egui::Slider::new(v, r).fixed_decimals(2).logarithmic(log));
@@ -321,7 +323,7 @@ impl VarstotasApp {
                 let params = shader_params(&sh.source);
                 if !params.is_empty() {
                     egui::Grid::new("pbr_shader_params").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                        ui.spacing_mut().slider_width = 120.0;
+                        ui.spacing_mut().slider_width = slider_width(ui);
                         for (i, q) in params.iter().enumerate() {
                             let mut v = sh.param(i);
                             ui.label(if q.label.is_empty() { q.name.as_str() } else { q.label.as_str() });
@@ -786,6 +788,11 @@ fn stylize_name(s: Stylize) -> String {
 }
 
 pub(crate) const ERROR_RED: Color32 = Color32::from_rgb(0xC6, 0x28, 0x28);
+
+/// Slider width in a label / slider / value row: fills the card, never overflows it.
+fn slider_width(ui: &Ui) -> f32 {
+    (ui.available_width() - 170.0).clamp(60.0, 320.0)
+}
 
 #[cfg(test)]
 mod tests {

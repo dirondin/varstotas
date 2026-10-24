@@ -1394,6 +1394,7 @@ template-imperial-desc = Длины в дюймах.
 
 tray-card-entity-info = Свойства объекта
 tray-card-materials = Материалы
+tray-card-material-editor = Редактор материала
 tray-card-components = Компоненты
 tray-card-tags = Теги
 tray-card-outliner = Структура
@@ -1980,6 +1981,33 @@ mat-terms-polyhaven = Работает на Poly Haven (polyhaven.com). Текс
 mat-terms-ambientcg = Материалы ambientCG под CC0: свободно для любого использования, в том числе коммерческого; указывать авторство необязательно.
 mat-err-not-catalogue = это не каталог
 mat-err-no-colour-map = нет карты цвета
+
+## Редактор материала
+mated-window-title = Редактор материала
+mated-none = Нет материала: выберите образец или материал из библиотеки либо возьмите его из выделения.
+mated-not-in-model = Ещё не в модели: добавится, когда вы покрасите им или измените его.
+mated-used = { $count ->
+        [one] Используется на { $count } грани или объекте
+       *[other] Используется на { $count } гранях и объектах
+    }
+mated-pick = Взять из выделения
+mated-pick-tip = Пипетка: сделать текущим материал выбранной грани или объекта
+mated-pick-none = Выделите покрашенную грань или объект, чтобы взять его материал
+mated-picked = Текущий материал: { $name }
+mated-select-tip = Выделить грани и объекты этого контекста, покрашенные этим материалом
+mated-selected = { $count ->
+        [one] Выделен { $count } элемент
+        [few] Выделено { $count } элемента
+        [many] Выделено { $count } элементов
+       *[other] Выделено { $count } элемента
+    }
+mated-window-tip = Открыть редактор в окне
+mated-basic = Основное
+mated-color = Цвет
+mated-opacity = Непрозрачность
+mated-texture = Текстура
+mated-no-texture = Без текстуры
+mated-undo-color = Изменить цвет материала
 
 ## ======== 3D-библиотека ========
 

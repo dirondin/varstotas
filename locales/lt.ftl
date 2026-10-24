@@ -1390,6 +1390,7 @@ template-imperial-desc = Ilgiai coliais.
 
 tray-card-entity-info = Objekto informacija
 tray-card-materials = Medžiagos
+tray-card-material-editor = Medžiagos redaktorius
 tray-card-components = Komponentai
 tray-card-tags = Žymės
 tray-card-outliner = Struktūra
@@ -1945,6 +1946,33 @@ mat-terms-polyhaven = Teikia Poly Haven (polyhaven.com). Tekstūros yra CC0: nem
 mat-terms-ambientcg = ambientCG medžiagos yra CC0: nemokamos bet kokiam naudojimui, taip pat komerciniam; autorystės nurodyti nebūtina.
 mat-err-not-catalogue = tai ne katalogas
 mat-err-no-colour-map = nėra spalvų žemėlapio
+
+## Medžiagos redaktorius
+mated-window-title = Medžiagos redaktorius
+mated-none = Nėra medžiagos: pasirinkite pavyzdį ar bibliotekos medžiagą arba paimkite ją iš pažymėjimo.
+mated-not-in-model = Dar ne modelyje: bus pridėta, kai ja nudažysite arba ją pakeisite.
+mated-used = { $count ->
+        [one] Naudojama { $count } paviršiuje ar objekte
+       *[other] Naudojama paviršiuose ir objektuose: { $count }
+    }
+mated-pick = Paimti iš pažymėjimo
+mated-pick-tip = Pipetė: pažymėto paviršiaus ar objekto medžiagą padaryti dabartine
+mated-pick-none = Pažymėkite nudažytą paviršių ar objektą, kad paimtumėte jo medžiagą
+mated-picked = Dabartinė medžiaga: { $name }
+mated-select-tip = Pažymėti šio konteksto paviršius ir objektus, nudažytus šia medžiaga
+mated-selected = { $count ->
+        [one] Pažymėtas { $count } elementas
+        [few] Pažymėti { $count } elementai
+        [many] Pažymėta { $count } elemento
+       *[other] Pažymėta { $count } elementų
+    }
+mated-window-tip = Atidaryti redaktorių lange
+mated-basic = Pagrindinės
+mated-color = Spalva
+mated-opacity = Nepermatomumas
+mated-texture = Tekstūra
+mated-no-texture = Be tekstūros
+mated-undo-color = Keisti medžiagos spalvą
 
 ## ======== 3D biblioteka ========
 

@@ -13,6 +13,7 @@ pub mod generators;
 pub mod icons;
 pub mod library;
 pub mod log_window;
+pub mod mat_editor;
 pub mod mat_library;
 pub mod menu;
 pub mod model_info;
