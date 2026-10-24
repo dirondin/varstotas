@@ -1115,7 +1115,7 @@ impl VarstotasApp {
         let hud = self.hud_rect.expand(2.0);
         let strips = self.splitter_strips.clone();
         let on_hud = |p: egui::Pos2| hud.contains(p) || strips.iter().any(|s| s.contains(p));
-        let over = response.contains_pointer() && !ctx.input(|i| i.pointer.hover_pos()).is_some_and(&on_hud);
+        let over = response.contains_pointer() && !ctx.input(|i| i.pointer.hover_pos()).is_some_and(on_hud);
         let (events, modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
         // Primary-button state as of each event, NOT `i.pointer.primary_down()` (the state at
         // the end of the frame): one frame often holds the last moves of a drag *and* the

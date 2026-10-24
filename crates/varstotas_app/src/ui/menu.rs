@@ -457,6 +457,7 @@ impl VarstotasApp {
                 for id in crate::tools::SHAPES {
                     self.tool_item(ui, id);
                 }
+                self.cmd_item(ui, Cmd::Text3d);
             });
 
             ui.menu_button(tr!("menu-tools"), |ui| {
@@ -486,7 +487,6 @@ impl VarstotasApp {
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);
                 }
-                self.cmd_item(ui, Cmd::Text3d);
             });
 
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));

@@ -143,6 +143,8 @@ pub enum Icon {
     Unfold,
     UvEditor,
     TexturePosition,
+    /// 3D Printing: a printer laying down a part.
+    Print3d,
     /// The UV Editor's toolbar (`uv.rs`).
     Uv(uv::UvIcon),
     Snap(crate::inference::InferenceKind),

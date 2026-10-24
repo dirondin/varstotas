@@ -125,6 +125,9 @@ impl Cmd {
     /// Its menu (the headings of Preferences → Toolbar's reserve).
     pub fn group(self) -> &'static str {
         if matches!(self, Cmd::PrintCheck | Cmd::PrintRepair | Cmd::PrintAnalysis | Cmd::PrintBed | Cmd::PrintSplit | Cmd::PrintExport) {return "3D Printing";} // i18n-ignore
+        if self == Cmd::Text3d {
+            return "Draw"; // i18n-ignore
+        }
         let all = Cmd::all();
         let at = |c: Cmd| all.iter().position(|x| *x == c).unwrap_or(0);
         let i = at(self);
@@ -255,7 +258,7 @@ impl Cmd {
             Cmd::FlipBlue => "cmd-flip-blue",
             Cmd::Solid(op) => return op.name(),
             Cmd::Unfold => "cmd-unfold",
-            Cmd::Text3d => "cmd-d",
+            Cmd::Text3d => "cmd-text-3d",
             Cmd::ZoomExtents => "cmd-zoom-extents",
             Cmd::Snapping => "cmd-snapping",
             Cmd::ShowGrid => "cmd-show-grid",
@@ -272,7 +275,7 @@ impl Cmd {
             Cmd::PrintRepair => "print-repair-command",
             Cmd::ModelInfo => "cmd-model-info",
             Cmd::ComponentParams => "cmd-component-params",
-            Cmd::Library3d => "cmd-d",
+            Cmd::Library3d => "cmd-library-3d",
             Cmd::GeneratorEditor => "cmd-generator-editor",
             Cmd::Console => "cmd-console",
             Cmd::Log => "cmd-log",
@@ -365,7 +368,7 @@ impl Cmd {
             },
             Cmd::Render => Icon::Render,
             Cmd::WorkPlanes => Icon::GuidePlane,
-            Cmd::PrintCheck => Icon::ModelInfo,
+            Cmd::PrintCheck => Icon::Print3d,
             Cmd::PrintAnalysis => Icon::Solid,
             Cmd::PrintBed => Icon::Solid,
             Cmd::PrintSplit => Icon::Solid,

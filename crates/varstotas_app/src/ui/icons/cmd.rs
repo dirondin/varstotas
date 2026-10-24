@@ -378,6 +378,19 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             pen.circle((15.5, 7.0), 2.1, pal::GREEN);
             pen.circle((7.0, 11.5), 2.8, pal::RED);
         }
+        Icon::Print3d => {
+            // the printer's frame and bed, the hot end on its gantry, a part growing layer by layer
+            rect(pen, (2.5, 19.0), (21.5, 21.5), SHADE, pen.thin());
+            pen.line_c(&[(4.0, 19.0), (4.0, 3.0), (20.0, 3.0), (20.0, 19.0)], pen.stroke());
+            pen.line_c(&[(4.0, 7.0), (20.0, 7.0)], pen.thin());
+            rect(pen, (9.5, 5.0), (14.5, 9.5), FILL, pen.thin());
+            pen.poly_c(&[(10.5, 9.5), (13.5, 9.5), (12.0, 12.0)], ORANGE, pen.thin());
+            rect(pen, (7.5, 13.5), (16.5, 19.0), BLUE_SOFT, pen.thin());
+            for y in [15.3, 17.1] {
+                pen.line_c(&[(7.5, y), (16.5, y)], pen.thin());
+            }
+            pen.line_c(&[(12.0, 12.5), (12.0, 13.5)], Stroke::new(W_BOLD * pen.s, ORANGE));
+        }
         Icon::Snap(k) => snap(pen, k),
         Icon::SideBar => {
             rect(pen, (2.5, 4.0), (21.5, 20.0), FILL, pen.stroke());
