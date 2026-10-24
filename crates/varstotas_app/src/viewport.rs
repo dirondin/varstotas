@@ -22,6 +22,7 @@ struct GeometryKey {
     model: u64,
     face_style: FaceStyle,
     textures: bool,
+    checker: bool,
     show_triangles: bool,
     xray: bool,
 }
@@ -74,6 +75,8 @@ pub struct Viewport {
     pub last_highlight_ms: f64,
     /// Draw material textures (set by the app from the face style before `paint`).
     pub show_textures: bool,
+    /// UV Editor's checker stands in for every texture.
+    pub checker: bool,
     /// Custom surface shaders that do not compile: (source, message).
     pub shader_errors: Vec<(String, String)>,
     /// PNG export to run at the next paint (needs the GPU renderer).
@@ -157,6 +160,7 @@ impl Default for Viewport {
             last_highlight_ms: 0.0,
             shader_errors: Vec::new(),
             show_textures: true,
+            checker: false,
             export: None,
             export_result: None,
             pt: None,
@@ -225,7 +229,7 @@ impl Viewport {
                 }
             }
             if let Some(renderer) = g.renderer.as_mut() {
-                let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures, show_triangles: style.show_triangles, xray: style.xray };
+                let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures, checker: self.checker, show_triangles: style.show_triangles, xray: style.xray };
                 if g.built != Some(key) {
                     let t0 = std::time::Instant::now();
                     if self.tess_version != Some(doc.model_version) {
@@ -248,7 +252,7 @@ impl Viewport {
                     g.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
                     let t2 = std::time::Instant::now();
-                    if let Some(images) = g.textures.changed(&doc.model)
+                    if let Some(images) = g.textures.changed(&doc.model, self.checker)
                         && let Err(e) = guarded(|| renderer.set_textures(rs, &images))
                     {
                         log::warn!("set_textures failed: {e}");
@@ -319,7 +323,7 @@ impl Viewport {
                     if job.restart {
                         job.restart = false;
                         // The Realistic resources may be stale when the view shows another style.
-                        if let Some(images) = g.textures.changed(&doc.model) {
+                        if let Some(images) = g.textures.changed(&doc.model, self.checker) {
                             let _ = guarded(|| renderer.set_textures(rs, &images));
                         }
                         if let Some(images) = g.data_textures.changed(&doc.model) {

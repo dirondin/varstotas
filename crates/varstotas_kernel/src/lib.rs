@@ -54,6 +54,7 @@ pub mod texture;
 mod topology;
 pub mod triangulate;
 pub mod unfold;
+pub mod uv;
 pub mod units;
 pub mod workplane;
 
@@ -265,11 +266,14 @@ pub struct Edge {
     pub tag: Option<TagId>,
     /// Edges created together as one arc/circle share a curve id (selected/erased as a unit).
     pub curve: Option<u32>,
+    /// A UV seam: the texture is cut here when an island is unfolded ([`uv`]).
+    #[serde(default)]
+    pub seam: bool,
 }
 
 impl Edge {
     pub fn new(a: VertexId, b: VertexId) -> Self {
-        Self { v: [a, b], soft: false, smooth: false, hidden: false, locked: false, tag: None, curve: None }
+        Self { v: [a, b], soft: false, smooth: false, hidden: false, locked: false, tag: None, curve: None, seam: false }
     }
     /// The endpoint that is not `v` (or `v[0]` if `v` is not an endpoint).
     pub fn other(&self, v: VertexId) -> VertexId {

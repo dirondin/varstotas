@@ -179,7 +179,7 @@ impl Mesh {
             return false;
         }
         let (x, y) = (&self.edges[e1], &self.edges[e2]);
-        if x.soft != y.soft || x.smooth != y.smooth || x.hidden != y.hidden || x.tag != y.tag || x.curve != y.curve {
+        if x.soft != y.soft || x.smooth != y.smooth || x.hidden != y.hidden || x.tag != y.tag || x.curve != y.curve || x.seam != y.seam {
             return false;
         }
         let mut f1 = self.edge_faces(e1);

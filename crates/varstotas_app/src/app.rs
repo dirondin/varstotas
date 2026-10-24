@@ -274,6 +274,8 @@ pub enum Action {
     ExportDrawing,
     /// Tools → Unfold…: the flat pattern window.
     Unfold,
+    /// Open the UV Editor.
+    UvEditor,
     /// Window → Sheets…: layout sheets.
     Sheets,
     WorkPlanes,
@@ -534,6 +536,7 @@ pub struct VarstotasApp {
     pub(crate) library: crate::ui::library::LibraryState,
     pub(crate) mat_library: crate::ui::mat_library::MatLibraryState,
     pub(crate) mat_editor: crate::ui::mat_editor::MatEditorState,
+    pub(crate) uv: crate::ui::uv_editor::UvState,
     /// A Components / Materials tile being dragged into the viewport.
     pub(crate) tray_drag: Option<crate::ui::tray_lib::TrayDrag>,
     /// Transient status message (text, expiry time).
@@ -715,6 +718,7 @@ impl VarstotasApp {
             library: Default::default(),
             mat_library: Default::default(),
             mat_editor: Default::default(),
+            uv: Default::default(),
             tray_drag: None,
             flash: None,
             tray: TrayState::default(),
@@ -1350,6 +1354,11 @@ impl VarstotasApp {
             Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
+            Action::UvEditor => {
+                self.uv.open = true;
+                self.uv.selected.clear();
+                self.uv_run("frame");
+            }
             Action::Sheets => self.sheets.open = true,
             Action::WorkPlanes => self.planes_window.open = true,
             Action::Undo => match self.doc.undo() {
@@ -2747,6 +2756,7 @@ impl VarstotasApp {
         tools::section::draw_sections(&view, &mut o3);
         tools::workplane::draw_work_planes(&view, &mut o3);
         self.section_cut_overlay(&mut o3);
+        self.seam_overlay(&mut o3);
         tools::light::draw_lights(&view, &mut o3);
         self.tool.overlay(&view, &mut o3, &mut o2);
         o2.extend(self.tool.cursor_glyph());
@@ -2929,6 +2939,7 @@ impl eframe::App for VarstotasApp {
         self.rig_editor_window(&ctx);
         self.shader_editor_window(&ctx);
         self.material_editor_window(&ctx);
+        self.uv_editor_window(&ctx);
         self.texture_view_window(&ctx);
         self.poll_external_edits();
         self.plugin_dialog(&ctx);

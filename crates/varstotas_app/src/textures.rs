@@ -149,17 +149,21 @@ pub fn downscale(bytes: &[u8], max: u32) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// Image bytes pointer and tile size of one texture layer.
+type LayerKey = (usize, [f64; 2]);
+
 /// Uploads the model's textures to the renderer when they change, decoding each image once.
 #[derive(Default)]
 pub struct TextureSync {
-    /// (image bytes pointer, tile size) per layer of the uploaded set.
-    key: Option<Vec<(usize, [f64; 2])>>,
+    /// (image bytes pointer, tile size) per layer of the uploaded set, and the checker.
+    key: Option<(Vec<LayerKey>, bool)>,
     cache: HashMap<usize, (Arc<[u8]>, Option<Decoded>)>,
 }
 
 impl TextureSync {
-    /// Texture data per layer (see `scene_builder::texture_layers`) if the set changed.
-    pub fn changed(&mut self, model: &Model) -> Option<Vec<varstotas_render::TextureData>> {
+    /// Texture data per layer (see `scene_builder::texture_layers`) if the set changed;
+    /// `checker`: the UV Editor's checker in place of every image (same tile sizes).
+    pub fn changed(&mut self, model: &Model, checker: bool) -> Option<Vec<varstotas_render::TextureData>> {
         let layers = crate::scene_builder::texture_layers(model);
         let mut imgs: Vec<&TextureImage> = layers.iter().filter_map(|id| model.materials[*id].image.as_ref()).collect();
         // Emission maps of the Realistic style follow the material textures.
@@ -170,8 +174,18 @@ impl TextureSync {
         );
         imgs.truncate(varstotas_render::MAX_TEXTURE_LAYERS);
         let key: Vec<(usize, [f64; 2])> = imgs.iter().map(|t| (Arc::as_ptr(&t.bytes) as *const u8 as usize, t.size)).collect();
-        if self.key.as_ref() == Some(&key) {
+        if self.key.as_ref().is_some_and(|(k, c)| *k == key && *c == checker) {
             return None;
+        }
+        if checker {
+            let img = crate::ui::uv_editor::checker_image();
+            let rgba: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+            let data = imgs
+                .iter()
+                .map(|t| varstotas_render::TextureData { width: img.size[0] as u32, height: img.size[1] as u32, rgba: rgba.clone(), size_mm: [t.size[0] as f32, t.size[1] as f32] })
+                .collect();
+            self.key = Some((key, true));
+            return Some(data);
         }
         self.cache.retain(|k, _| key.iter().any(|(p, _)| p == k));
         let data = imgs
@@ -194,7 +208,7 @@ impl TextureSync {
                 }
             })
             .collect();
-        self.key = Some(key);
+        self.key = Some((key, false));
         Some(data)
     }
 }
@@ -224,17 +238,17 @@ mod tests {
     fn sync_uploads_only_on_change() {
         let mut m = Model::new();
         let mut s = TextureSync::default();
-        assert_eq!(s.changed(&m).map(|v| v.len()), Some(0));
-        assert!(s.changed(&m).is_none());
+        assert_eq!(s.changed(&m, false).map(|v| v.len()), Some(0));
+        assert!(s.changed(&m, false).is_none());
         let id = m.add_material("Brick", [1.0; 4]);
         m.materials[id].image = Some(TextureImage::new(tiny_png(), "b.png", 500.0));
-        let v = s.changed(&m).unwrap();
+        let v = s.changed(&m, false).unwrap();
         assert_eq!((v.len(), v[0].width, v[0].size_mm), (1, 2, [500.0, 250.0]));
-        assert!(s.changed(&m).is_none());
+        assert!(s.changed(&m, false).is_none());
         let snapshot = m.clone(); // undo snapshots share the bytes
-        assert!(s.changed(&snapshot).is_none());
+        assert!(s.changed(&snapshot, false).is_none());
         m.materials[id].image.as_mut().unwrap().size = [1000.0, 500.0];
-        assert!(s.changed(&m).is_some());
+        assert!(s.changed(&m, false).is_some());
     }
 
     #[test]

@@ -1,0 +1,57 @@
+# UV Editor: seams at hard edges split a box into six islands; pack, unfold, projections,
+# island picking / dragging with the real mouse, checker in the 3D view, undo.
+box 0 0 0 1000 600 400
+view iso
+zoom_extents
+wait 10
+texture ../../qa/models/bricks.png 800
+wait 2
+raw mods shift
+rawp click 500 300 400
+raw mods none
+wait 3
+expect mats={"bricks": 6}
+tool select
+action uv_open
+wait 5
+expect uv=(true 6 1 0 false 0)
+screenshot shots/uv_open.bmp
+# seams at every hard edge: six islands, drawn red in the 3D view
+raw click 656 81
+wait 3
+expect uv=(true 6 6 0 false 12)
+expect undo=Some("Mark Seams")
+action uv pack
+wait 3
+screenshot shots/uv_packed.bmp
+expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
+# pick island 0 with the mouse, turn it 90°, drag it 40 pt right (rotate about its centre)
+raw click 608 527
+wait 3
+expect uv=(true 6 6 1 false 12)
+raw click 315 108
+wait 3
+expect uvs=["o(-135,-265) a90 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)"
+raw drag 608 527 648 527 8
+wait 3
+expect uvs=["o(-135,-714) a90 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)"
+screenshot shots/uv_moved.bmp
+undo
+undo
+wait 3
+expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
+# the checker stands in for the textures in the 3D view too
+raw click 599 108
+wait 5
+expect uv=(true 6 6 1 true 12)
+screenshot shots/uv_checker.bmp
+# no seams: one island; a cylinder round the walls and top / bottom
+action uv seams_clear
+wait 3
+expect uv=(true 6 1 1 true 0)
+action uv select_none
+action uv cylinder
+wait 3
+expect uvs=["o(-500,779) a90 s(0.85,1.00)", "o(500,779) a-90 s(0.85,1.00)", "o(-500,200) a90 s(0.94,1.00)", "o(500,-869) a-90 s(0.94,1.00)"]
+screenshot shots/uv_cylinder.bmp
+quit

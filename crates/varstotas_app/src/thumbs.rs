@@ -136,7 +136,7 @@ fn render(renderer: &mut Renderer, rs: &egui_wgpu::RenderState, model: &Model) -
     let params = crate::scene_builder::BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Shaded, textures: true, prev_origin: None };
     let geo = crate::scene_builder::build_from(model, &tess, &params);
     let mut sync = crate::textures::TextureSync::default();
-    if let Some(images) = sync.changed(model) {
+    if let Some(images) = sync.changed(model, false) {
         renderer.set_textures(rs, &images);
     }
     renderer.set_geometry(rs, &geo);

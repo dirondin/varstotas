@@ -170,7 +170,23 @@ impl VarstotasApp {
         if self.selected_textured_face() {
             ui.menu_button(tr!("menu-texture"), |ui| {
                 self.item(ui, &tr!("menu-texture-position"), None, true, Action::SetTool(ToolId::TexturePosition));
+                self.item(ui, &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
+        }
+        // UV seams on the selected edges
+        let edges: Vec<varstotas_kernel::EdgeId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Edge(e) = e { Some(*e) } else { None }).collect();
+        if !edges.is_empty() {
+            let mesh = self.doc.model.mesh_at(&self.doc.active_path);
+            let any = |seam: bool| edges.iter().any(|e| mesh.and_then(|m| m.edges.get(*e)).is_some_and(|ed| ed.seam == seam));
+            let (unmarked, marked) = (any(false), any(true));
+            if unmarked && ui.button(tr!("menu-mark-seam")).clicked() {
+                self.uv_run("seams_mark");
+                ui.close();
+            }
+            if marked && ui.button(tr!("menu-clear-seam")).clicked() {
+                self.uv_run("seams_clear");
+                ui.close();
+            }
         }
         if !self.doc.active_path.is_empty() {
             ui.separator();
@@ -178,12 +194,15 @@ impl VarstotasApp {
         }
     }
 
-    /// Exactly one face of the active context is selected and it has a textured material.
+    /// A selected face of the active context has a textured material.
     fn selected_textured_face(&self) -> bool {
-        let [EntityRef::Face(fid)] = self.doc.selection.as_slice() else { return false };
         let model = &self.doc.model;
-        model.mesh_at(&self.doc.active_path).and_then(|m| m.faces.get(*fid)).is_some_and(|f| {
-            [f.front, f.back].into_iter().flatten().any(|id| model.materials.get(id).is_some_and(|m| m.image.is_some()))
+        let Some(mesh) = model.mesh_at(&self.doc.active_path) else { return false };
+        self.doc.selection.iter().any(|e| {
+            let EntityRef::Face(fid) = e else { return false };
+            mesh.faces.get(*fid).is_some_and(|f| {
+                [f.front, f.back].into_iter().flatten().any(|id| model.materials.get(id).is_some_and(|m| m.image.is_some()))
+            })
         })
     }
 
@@ -468,6 +487,8 @@ impl VarstotasApp {
                     self.tool_item(ui, id);
                 }
                 self.cmd_item(ui, Cmd::Text3d);
+                ui.separator();
+                self.item(ui, &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
 
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));

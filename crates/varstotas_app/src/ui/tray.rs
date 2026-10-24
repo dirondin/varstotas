@@ -877,6 +877,11 @@ impl VarstotasApp {
             if ui.button(tr!("tray-tex-position")).on_hover_text(tr!("tray-tex-position-hover")).clicked() {
                 self.actions.push(Action::SetTool(crate::tools::ToolId::TexturePosition));
             }
+            let uv = ui.button(tr!("menu-uv-editor"));
+            super::tray_lib::spot("tex:uv_editor", uv.rect.center());
+            if uv.clicked() {
+                self.actions.push(Action::UvEditor);
+            }
             if ui.add_enabled(!pl.is_identity(), egui::Button::new(tr!("tray-tex-reset"))).clicked() {
                 new = Some(Default::default());
             }

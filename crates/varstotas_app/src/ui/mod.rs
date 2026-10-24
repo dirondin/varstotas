@@ -15,6 +15,7 @@ pub mod library;
 pub mod log_window;
 pub mod mat_editor;
 pub mod mat_maps;
+pub mod uv_editor;
 pub mod mat_library;
 pub mod menu;
 pub mod model_info;
