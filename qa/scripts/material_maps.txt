@@ -19,12 +19,12 @@ tool select
 wait 3
 screenshot shots/maps_set.bmp
 # clear Roughness with its row button
-raw click 1347 447
+raw click 1347 478
 wait 5
 expect slots=[("base", "oak_color.png", [16, 16]), ("normal", "oak_normal_gl.png", [16, 16]), ("ao", "oak_ao.png", [16, 16])]
 expect undo=Some("Clear Texture")
 # the large view (click the base thumbnail)
-raw click 1185 362
+raw click 1185 393
 wait 5
 expect tex_view=Some("base")
 screenshot shots/maps_view.bmp
@@ -38,7 +38,7 @@ action mat_slot base|../../qa/models/wide_strip.png
 wait 5
 expect ("base", "wide_strip.png", [2600, 64])
 expect textures=["Grey:1000x25"]
-raw click 1250 392
+raw click 1250 423
 wait 5
 expect ("base", "wide_strip.png", [2048, 50])
 expect undo=Some("Downscale Texture")

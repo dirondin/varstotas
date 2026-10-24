@@ -233,6 +233,10 @@ pub struct TextureData {
     pub rgba: Vec<u8>,
     /// Tile size in mm (`[width, height]`).
     pub size_mm: [f32; 2],
+    /// Texels with less alpha are cut out (0 = none; 0.5 by default).
+    pub cutoff: f32,
+    /// One tile, not repeated: off it the material colour shows.
+    pub decal: bool,
 }
 
 #[repr(C)]

@@ -563,7 +563,8 @@ struct FaceOut {
     @location(8) @interpolate(flat) mats: vec2<u32>,
 };
 
-// Material textures (see textures.rs): layer i + 1 in `layers`; `tex_info[i].xy` = 1 / tile size (mm).
+// Material textures (see textures.rs): layer i + 1 in `layers`; `tex_info[i].xy` = 1 / tile size (mm),
+// `.w` = alpha cut-off, + 2 for a decal (one tile, not repeated).
 @group(1) @binding(0) var face_tex: texture_2d_array<f32>;
 @group(1) @binding(1) var face_tex_sampler: sampler;
 @group(1) @binding(2) var<uniform> tex_info: array<vec4<f32>, 256>;
@@ -576,6 +577,17 @@ struct FaceOut {
 // custom shader parameters 0..3, 4..7, [clearcoat, clearcoat roughness, sheen, sheen tint],
 // [anisotropy, anti-tiling, bevel mm, 0].
 @group(1) @binding(5) var<uniform> materials: array<vec4<f32>, 2048>;
+
+/// Alpha below which texels of layer `li` are cut out.
+fn layer_cutoff(li: i32) -> f32 {
+    let w = tex_info[li].w;
+    return select(w, w - 2.0, w > 1.5);
+}
+
+/// Tile coordinates `q` of layer `li` are off a decal (the material colour shows there).
+fn off_decal(li: i32, q: vec2<f32>) -> bool {
+    return tex_info[li].w > 1.5 && (any(q < vec2<f32>(0.0)) || any(q > vec2<f32>(1.0)));
+}
 
 @vertex
 fn vs_face(v: FaceIn) -> FaceOut {
@@ -643,9 +655,10 @@ fn face_classic(in: FaceOut, ff: bool) -> vec4<f32> {
     }
     // Sampled for every fragment (implicit derivatives need uniform control flow).
     let li = max(i32(layer) - 1, 0);
-    let texel = textureSample(face_tex, face_tex_sampler, in.uv * tex_info[li].xy, li);
-    if layer > 0u && mode < 0.5 {
-        if texel.a < 0.5 {
+    let q = in.uv * tex_info[li].xy;
+    let texel = textureSample(face_tex, face_tex_sampler, q, li);
+    if layer > 0u && mode < 0.5 && !off_decal(li, q) {
+        if texel.a < layer_cutoff(li) {
             discard;
         }
         c = vec4<f32>(texel.rgb, c.a);
@@ -1073,10 +1086,12 @@ fn fs_face_pbr(in: FaceOut, ff: bool) -> FaceFrag {
         let li = i32(layer) - 1;
         let k = tex_info[li].xy;
         let texel = sample_tiled(face_tex, li, in.uv * k, duv_dx * k, duv_dy * k, at);
-        if texel.a < 0.5 {
-            discard;
+        if !off_decal(li, in.uv * k) {
+            if texel.a < layer_cutoff(li) {
+                discard;
+            }
+            c = vec4<f32>(texel.rgb, c.a);
         }
-        c = vec4<f32>(texel.rgb, c.a);
     }
     var metallic = 0.0;
     var rough = 0.6;

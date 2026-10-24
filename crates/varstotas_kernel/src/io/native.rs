@@ -153,7 +153,7 @@ mod material_tests {
         let id = m.add_material("Brass", [0.9, 0.7, 0.3, 1.0]);
         let mat = &mut m.materials[id];
         mat.pbr = Some(crate::Pbr { metallic: 1.0, roughness: 0.2, shader: Some(crate::CustomShader::new("// x\nfn surface(s: Surface, p: Params) -> Surface { return s; }")), ..Default::default() });
-        mat.image = Some(crate::TextureImage { bytes: vec![1u8, 2, 3].into(), pixels: [1, 1], size: [500.0, 500.0], file_name: "b.png".into() });
+        mat.image = Some(crate::TextureImage { bytes: vec![1u8, 2, 3].into(), pixels: [1, 1], size: [500.0, 500.0], file_name: "b.png".into(), look: crate::TexLook { decal: true, ..Default::default() } });
         let path = std::env::temp_dir().join(format!("varstotas_mat_{}.{MATERIAL_EXT}", std::process::id()));
         save_material(&m.materials[id], &path).unwrap();
         let back = load_material(&path).unwrap();

@@ -12,7 +12,7 @@ use egui::{Color32, RichText, Sense, Stroke, Ui, vec2};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 use varstotas_i18n::tr;
-use varstotas_kernel::TextureImage;
+use varstotas_kernel::{TexLook, TextureImage};
 
 /// A texture opened in an external program: reloaded into its slot when the file changes.
 pub struct ExternalEdit {
@@ -33,6 +33,8 @@ pub struct MapsState {
     view_tex: Option<(usize, egui::TextureHandle)>,
     pub edits: Vec<ExternalEdit>,
     last_poll: Option<Instant>,
+    /// Look being dragged (material name, look): committed on release.
+    look_draft: Option<(String, TexLook)>,
 }
 
 /// Label key of a slot.
@@ -240,6 +242,87 @@ impl VarstotasApp {
             self.flash(tr!("mated-reloaded", slot = slot_label(slot)));
         }
         self.mat_editor.maps.edits.retain(|e| e.path.exists());
+    }
+
+    /// Set the base texture look of the current material: one undo step.
+    pub(crate) fn set_texture_look(&mut self, look: TexLook) {
+        let Some(cur) = self.doc.current_material.clone() else { return };
+        match self.current_material_id() {
+            Some(id) => {
+                self.doc.commit(&tr!("mated-undo-look"), |m| {
+                    if let Some(t) = &mut m.materials[id].image {
+                        t.look = look;
+                    }
+                });
+                if let Some(m) = self.doc.model.materials.get(id) {
+                    self.doc.current_material = Some(PaletteMaterial::of(m));
+                }
+            }
+            None => {
+                let mut c = cur;
+                if let Some(t) = &mut c.image {
+                    t.look = look;
+                }
+                self.doc.current_material = Some(c);
+            }
+        }
+    }
+
+    /// Colour adjustments, cut-out, decal and world mapping of the base texture.
+    pub(crate) fn texture_look_editor(&mut self, ui: &mut Ui) {
+        let Some(cur) = self.doc.current_material.clone() else { return };
+        let Some(img) = &cur.image else { return };
+        let mut l = match &self.mat_editor.maps.look_draft {
+            Some((n, l)) if *n == cur.name => *l,
+            _ => img.look,
+        };
+        let before = l;
+        let mut toggled = false;
+        egui::Grid::new("mated_look_grid").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            let slider = |ui: &mut Ui, label: String, v: &mut f32, range: std::ops::RangeInclusive<f32>, id: &str| {
+                ui.label(label);
+                let r = ui.add(egui::Slider::new(v, range).fixed_decimals(if id == "hue" { 0 } else { 2 }));
+                super::tray_lib::spot(format!("look:{id}"), r.rect.left_center());
+                ui.end_row();
+            };
+            slider(ui, tr!("mated-hue"), &mut l.hue, -180.0..=180.0, "hue");
+            slider(ui, tr!("mated-saturation"), &mut l.saturation, -1.0..=1.0, "saturation");
+            slider(ui, tr!("mated-lightness"), &mut l.lightness, -1.0..=1.0, "lightness");
+            slider(ui, tr!("mated-cutoff"), &mut l.alpha_cutoff, 0.0..=1.0, "cutoff");
+        });
+        let mut check = |ui: &mut Ui, v: &mut bool, label: String, tip: String, id: &str| {
+            let r = ui.checkbox(v, label).on_hover_text(tip);
+            super::tray_lib::spot(format!("look:{id}"), r.rect.left_center());
+            toggled |= r.changed();
+        };
+        check(ui, &mut l.colorize, tr!("mated-colorize"), tr!("mated-colorize-tip"), "colorize");
+        check(ui, &mut l.decal, tr!("mated-decal"), tr!("mated-decal-tip"), "decal");
+        check(ui, &mut l.world, tr!("mated-world"), tr!("mated-world-tip"), "world");
+        if !l.is_default() {
+            let r = ui.small_button(tr!("mated-look-reset"));
+            super::tray_lib::spot("look:reset", r.rect.center());
+            if r.clicked() {
+                l = TexLook::default();
+                toggled = true;
+            }
+        }
+        if toggled {
+            self.mat_editor.maps.look_draft = None;
+            self.set_texture_look(l);
+            return;
+        }
+        if l != before {
+            self.mat_editor.maps.look_draft = Some((cur.name.clone(), l));
+        }
+        // sliders apply when the pointer is released
+        let released = !ui.ctx().input(|i| i.pointer.any_down());
+        if released
+            && let Some((n, l)) = self.mat_editor.maps.look_draft.take()
+            && n == cur.name
+            && l != img.look
+        {
+            self.set_texture_look(l);
+        }
     }
 
     /// The Textures section of the Material Editor.

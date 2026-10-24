@@ -190,3 +190,28 @@ fn fit_rotate_flip_and_align() {
     let e = face_uv_mm(pts[2], n, Some(&al));
     assert!(face_uv_mm(pts[0], n, Some(&al)).length() < 1e-6 && e.y.abs() < 1e-6 && e.x > 0.0);
 }
+
+/// Look: grey at saturation -1, colorize takes the tint's hue, the default look is identity and
+/// is not written to files.
+#[test]
+fn texture_look_adjusts_pixels() {
+    use varstotas_kernel::TexLook;
+    let px = [200u8, 60, 40, 255];
+    let mut a = px;
+    TexLook::default().apply(&mut a, [0.0; 3]);
+    assert_eq!(a, px);
+    let mut g = px;
+    TexLook { saturation: -1.0, ..Default::default() }.apply(&mut g, [0.0; 3]);
+    assert!(g[0] == g[1] && g[1] == g[2] && g[3] == 255, "{g:?}");
+    let mut c = px;
+    TexLook { colorize: true, ..Default::default() }.apply(&mut c, [0.1, 0.2, 0.9]);
+    assert!(c[2] > c[0] && c[2] > c[1], "blue tint: {c:?}");
+    let mut h = [255u8, 0, 0, 255];
+    TexLook { hue: 120.0, ..Default::default() }.apply(&mut h, [0.0; 3]);
+    assert_eq!(h, [0, 255, 0, 255]);
+    let img = varstotas_kernel::TextureImage::new(vec![1, 2, 3], "x.png", 500.0);
+    let json = serde_json::to_string(&img).unwrap();
+    assert!(!json.contains("look"), "{json}");
+    let back: varstotas_kernel::TextureImage = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.look, TexLook::default());
+}

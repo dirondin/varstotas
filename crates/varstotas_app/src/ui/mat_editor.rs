@@ -267,6 +267,9 @@ impl VarstotasApp {
         if cur.image.is_some() {
             ui.label(RichText::new(tr!("mated-texture")).strong());
             self.texture_size_editor(ui);
+            ui.add_space(4.0);
+            let r = egui::CollapsingHeader::new(tr!("mated-look")).id_salt("mated_look").show(ui, |ui| self.texture_look_editor(ui));
+            super::tray_lib::spot("mated:look", r.header_response.rect.left_center() + egui::vec2(8.0, 0.0));
         } else {
             ui.label(RichText::new(tr!("mated-no-texture")).small().color(theme::text_dim()));
         }

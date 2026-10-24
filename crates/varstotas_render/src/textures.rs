@@ -140,7 +140,7 @@ impl FaceTextures {
 
     /// Replace the colour textures (sRGB); layer `i` (vertex layer index `i + 1`) is `images[i]`.
     pub fn set(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, images: &[TextureData]) {
-        self.cut = images.iter().map(|img| img.rgba.iter().skip(3).step_by(4).any(|&a| a < 128)).collect();
+        self.cut = images.iter().map(|img| img.rgba.iter().skip(3).step_by(4).any(|&a| (a as f32) < img.cutoff * 255.0)).collect();
         self.color_view = self.upload(device, queue, images, wgpu::TextureFormat::Rgba8UnormSrgb, false);
         self.rebind(device);
     }
@@ -188,7 +188,7 @@ impl FaceTextures {
         for (layer, img) in images.iter().enumerate() {
             // z: the texture has cut-out texels (the path tracer only samples those for hits).
             let cut = !data && self.cut.get(layer).copied().unwrap_or(false);
-            info[layer] = [1.0 / img.size_mm[0].max(1e-3), 1.0 / img.size_mm[1].max(1e-3), if cut { 1.0 } else { 0.0 }, 0.0];
+            info[layer] = [1.0 / img.size_mm[0].max(1e-3), 1.0 / img.size_mm[1].max(1e-3), if cut { 1.0 } else { 0.0 }, img.cutoff.clamp(0.0, 1.0) + if img.decal { 2.0 } else { 0.0 }];
             let mut level = resample(img, side);
             let mut s = side;
             for mip in 0..mips {
@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn resample_flips_and_halves() {
         // 1×2 image: top red, bottom blue.
-        let img = TextureData { width: 1, height: 2, rgba: vec![255, 0, 0, 255, 0, 0, 255, 255], size_mm: [1.0, 1.0] };
+        let img = TextureData { width: 1, height: 2, rgba: vec![255, 0, 0, 255, 0, 0, 255, 255], size_mm: [1.0, 1.0], cutoff: 0.5, decal: false };
         let r = resample(&img, 2);
         assert_eq!(&r[0..4], &[0, 0, 255, 255], "row 0 = bottom of the image");
         assert_eq!(&r[8..12], &[255, 0, 0, 255]);

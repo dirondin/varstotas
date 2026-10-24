@@ -81,7 +81,7 @@ pub use section::{SectionDisplay, SectionPlane};
 pub use workplane::WorkPlane;
 pub use shadows::ShadowSettings;
 pub use text3d::Text3dOptions;
-pub use texture::{TexPlacement, TextureImage};
+pub use texture::{TexLook, TexPlacement, TextureImage};
 pub use tessellate::{Owner, TessEdge, TessFace, Tessellation, tessellate};
 
 /// Point merge tolerance in millimetres.

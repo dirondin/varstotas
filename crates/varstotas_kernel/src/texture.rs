@@ -22,6 +22,110 @@ pub struct TextureImage {
     /// Original file name (for export and display).
     #[serde(default)]
     pub file_name: String,
+    /// Colour adjustments, cut-out, decal and world mapping (non-destructive).
+    #[serde(default, skip_serializing_if = "TexLook::is_default")]
+    pub look: TexLook,
+}
+
+/// How a texture image is shown: the image bytes stay untouched.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TexLook {
+    /// Hue shift in degrees (-180..180).
+    pub hue: f32,
+    /// Saturation change (-1..1; -1 = grey).
+    pub saturation: f32,
+    /// Lightness change (-1..1).
+    pub lightness: f32,
+    /// Tint the image with the material colour (keeping its brightness).
+    pub colorize: bool,
+    /// Texels with less alpha are cut out (0 = none).
+    pub alpha_cutoff: f32,
+    /// One tile, not repeated: off it the material colour shows.
+    pub decal: bool,
+    /// Coordinates from world position (box projection), ignoring face placements.
+    pub world: bool,
+}
+
+impl Default for TexLook {
+    fn default() -> Self {
+        Self { hue: 0.0, saturation: 0.0, lightness: 0.0, colorize: false, alpha_cutoff: 0.5, decal: false, world: false }
+    }
+}
+
+impl TexLook {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The colour changes leave pixels as they are.
+    pub fn is_identity(&self) -> bool {
+        self.hue == 0.0 && self.saturation == 0.0 && self.lightness == 0.0 && !self.colorize
+    }
+
+    /// Applies hue / saturation / lightness and colorize (`tint`: the material colour) to RGBA bytes.
+    pub fn apply(&self, rgba: &mut [u8], tint: [f32; 3]) {
+        if self.is_identity() {
+            return;
+        }
+        let (th, ts, _) = rgb_to_hsl(tint);
+        for px in rgba.as_chunks_mut::<4>().0 {
+            let c = [px[0] as f32 / 255.0, px[1] as f32 / 255.0, px[2] as f32 / 255.0];
+            let (mut h, mut s, mut l) = rgb_to_hsl(c);
+            if self.colorize {
+                (h, s) = (th, ts);
+            }
+            h = (h + self.hue / 360.0).rem_euclid(1.0);
+            s = if self.saturation >= 0.0 { s + (1.0 - s) * self.saturation } else { s * (1.0 + self.saturation) };
+            l = if self.lightness >= 0.0 { l + (1.0 - l) * self.lightness } else { l * (1.0 + self.lightness) };
+            let o = hsl_to_rgb(h, s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
+            for i in 0..3 {
+                px[i] = (o[i] * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+}
+
+/// RGB (0..1) to hue (0..1), saturation, lightness.
+pub fn rgb_to_hsl(c: [f32; 3]) -> (f32, f32, f32) {
+    let max = c[0].max(c[1]).max(c[2]);
+    let min = c[0].min(c[1]).min(c[2]);
+    let l = (max + min) / 2.0;
+    let d = max - min;
+    if d < 1e-6 {
+        return (0.0, 0.0, l);
+    }
+    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let h = if max == c[0] {
+        (c[1] - c[2]) / d + if c[1] < c[2] { 6.0 } else { 0.0 }
+    } else if max == c[1] {
+        (c[2] - c[0]) / d + 2.0
+    } else {
+        (c[0] - c[1]) / d + 4.0
+    };
+    (h / 6.0, s, l)
+}
+
+/// Hue (0..1), saturation, lightness to RGB (0..1).
+pub fn hsl_to_rgb(h: f32, s: f32, l: f32) -> [f32; 3] {
+    if s <= 0.0 {
+        return [l; 3];
+    }
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let f = |t: f32| {
+        let t = t.rem_euclid(1.0);
+        if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        }
+    };
+    [f(h + 1.0 / 3.0), f(h), f(h - 1.0 / 3.0)]
 }
 
 impl TextureImage {
@@ -29,7 +133,7 @@ impl TextureImage {
     pub fn new(bytes: Vec<u8>, file_name: impl Into<String>, width_mm: f64) -> Self {
         let pixels = image_dimensions(&bytes).unwrap_or([0, 0]);
         let aspect = if pixels[0] > 0 && pixels[1] > 0 { pixels[1] as f64 / pixels[0] as f64 } else { 1.0 };
-        Self { bytes: bytes.into(), pixels, size: [width_mm, width_mm * aspect], file_name: file_name.into() }
+        Self { bytes: bytes.into(), pixels, size: [width_mm, width_mm * aspect], file_name: file_name.into(), look: TexLook::default() }
     }
 
     /// File extension for the embedded format (`png` or `jpg`).

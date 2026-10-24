@@ -5,7 +5,7 @@
 //! change only recomputes [`highlight`] from the cached `Tessellation`.
 
 use crate::document::guarded;
-use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
+use varstotas_kernel::glam::{DMat3, DMat4, DVec2, DVec3};
 use varstotas_kernel::tessellate::face_world_triangles;
 use varstotas_kernel::{
     ContextPath, EntityRef, FaceId, InstanceId, MaterialId, Model, TessEdge, TessFace, Tessellation, tessellate,
@@ -118,12 +118,16 @@ fn tess_rec(
     let owner: &ContextPath = path;
     let tess_face = |fid: FaceId| -> TessFace {
         let face = &mesh.faces[fid];
-        let (positions, uv, normals) = face_world_triangles(mesh, fid, &m, with_uv);
+        let (positions, mut uv, normals) = face_world_triangles(mesh, fid, &m, with_uv);
+        let normal = (nm * face.normal).normalize_or_zero();
+        if with_uv && world_mapped(model, face.front.or(inherited).or(face.back)) {
+            uv = world_uv(&positions, normal);
+        }
         TessFace {
             owner_path: owner.clone(),
             face: Some(fid),
             positions,
-            normal: (nm * face.normal).normalize_or_zero(),
+            normal,
             front: face.front,
             back: face.back,
             inherited,
@@ -350,10 +354,39 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
     geo
 }
 
+/// The material's texture uses world mapping (see [`varstotas_kernel::TexLook::world`]).
+fn world_mapped(model: &Model, mat: Option<MaterialId>) -> bool {
+    mat.and_then(|id| model.materials.get(id)).and_then(|m| m.image.as_ref()).is_some_and(|t| t.look.world)
+}
+
+/// Box-projected texture coordinates (mm) of world positions: the plane across the normal's
+/// dominant axis, so neighbouring faces facing the same way continue the pattern.
+pub fn world_uv(positions: &[DVec3], normal: DVec3) -> Vec<DVec2> {
+    let a = normal.abs();
+    let axis = if a.z >= a.x && a.z >= a.y {
+        DVec3::Z * normal.z.signum()
+    } else if a.x >= a.y {
+        DVec3::X * normal.x.signum()
+    } else {
+        DVec3::Y * normal.y.signum()
+    };
+    positions.iter().map(|p| varstotas_kernel::texture::face_uv_mm(*p, axis, None)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use varstotas_kernel::glam::DVec3;
+
+    #[test]
+    fn world_uv_continues_across_faces() {
+        // two front-ish faces at different tilts project onto the same plane: same coordinates
+        let p = [DVec3::new(100.0, 0.0, 200.0), DVec3::new(300.0, 50.0, 400.0)];
+        let a = world_uv(&p, DVec3::new(0.0, -1.0, 0.0));
+        let b = world_uv(&p, DVec3::new(0.2, -0.9, 0.1).normalize());
+        assert_eq!(a, b);
+        assert_eq!(a[0], DVec2::new(100.0, 200.0));
+    }
 
     /// The threaded tessellation matches the kernel's (content and order), including nested
     /// and mirrored instances and meshes big enough to be split across workers.

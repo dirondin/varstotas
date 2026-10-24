@@ -177,8 +177,8 @@ impl DataSync {
             let size_mm = [k.3[0] as f32, k.3[1] as f32];
             out.push(match kind {
                 DataKind::Normal => match &decoded[0] {
-                    Some(d) => TextureData { width: d.0, height: d.1, rgba: d.2.clone(), size_mm },
-                    None => TextureData { width: 1, height: 1, rgba: vec![128, 128, 255, 255], size_mm },
+                    Some(d) => TextureData { width: d.0, height: d.1, rgba: d.2.clone(), size_mm, cutoff: 0.0, decal: false },
+                    None => TextureData { width: 1, height: 1, rgba: vec![128, 128, 255, 255], size_mm, cutoff: 0.0, decal: false },
                 },
                 DataKind::Orm => pack_orm(&decoded, size_mm),
             });
@@ -204,7 +204,7 @@ fn pack_orm(maps: &[Option<Decoded>], size_mm: [f32; 2]) -> TextureData {
             }
         }
     }
-    TextureData { width: w, height: h, rgba, size_mm }
+    TextureData { width: w, height: h, rgba, size_mm, cutoff: 0.0, decal: false }
 }
 
 /// Decode an HDRI (Radiance `.hdr`, or any image the decoder knows, then sRGB → linear).

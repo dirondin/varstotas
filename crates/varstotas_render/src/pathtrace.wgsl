@@ -89,7 +89,12 @@ fn cut_out(tri: u32, u: f32, v: f32, front: bool) -> bool {
     let a4 = tri_attr[5u * tri + 4u];
     let uv = a3.xy * (1.0 - u - v) + a3.zw * u + a4.xy * v;
     let li = i32(layer) - 1;
-    return textureSampleLevel(face_tex, face_tex_sampler, uv * tex_info[li].xy, li, 0.0).a < 0.5;
+    let q = uv * tex_info[li].xy;
+    let w = tex_info[li].w;
+    if w > 1.5 && (any(q < vec2<f32>(0.0)) || any(q > vec2<f32>(1.0))) {
+        return false; // off a decal
+    }
+    return textureSampleLevel(face_tex, face_tex_sampler, q, li, 0.0).a < select(w, w - 2.0, w > 1.5);
 }
 
 /// Material of the side of `tri` a ray along `d` hits. Glass is a volume: from inside a glass
@@ -467,7 +472,10 @@ fn surface_at(h: Hit, d: vec3<f32>, p: vec3<f32>) -> Mat {
     if layer > 0u {
         let li = i32(layer) - 1;
         let k = tex_info[li].xy;
-        c = vec4<f32>(sample_tiled_l(face_tex, li, uv * k, at).rgb, c.a);
+        let q = uv * k;
+        if !(tex_info[li].w > 1.5 && (any(q < vec2<f32>(0.0)) || any(q > vec2<f32>(1.0)))) {
+            c = vec4<f32>(sample_tiled_l(face_tex, li, q, at).rgb, c.a);
+        }
     }
     // Tangent of the triangle's planar coordinates (u direction).
     var tg = tangent_of(n);

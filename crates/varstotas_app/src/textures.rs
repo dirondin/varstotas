@@ -1,7 +1,7 @@
 //! Texture images: decoding (PNG / JPEG), the GPU texture set of a model, and creating
 //! textured materials from image files.
 
-use varstotas_kernel::{Model, TextureImage};
+use varstotas_kernel::{Model, TexLook, TextureImage};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -149,8 +149,8 @@ pub fn downscale(bytes: &[u8], max: u32) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// Image bytes pointer and tile size of one texture layer.
-type LayerKey = (usize, [f64; 2]);
+/// Image bytes pointer, tile size, look and colorize tint of one texture layer.
+type LayerKey = (usize, [f64; 2], TexLook, [u32; 3]);
 
 /// Uploads the model's textures to the renderer when they change, decoding each image once.
 #[derive(Default)]
@@ -165,15 +165,28 @@ impl TextureSync {
     /// `checker`: the UV Editor's checker in place of every image (same tile sizes).
     pub fn changed(&mut self, model: &Model, checker: bool) -> Option<Vec<varstotas_render::TextureData>> {
         let layers = crate::scene_builder::texture_layers(model);
-        let mut imgs: Vec<&TextureImage> = layers.iter().filter_map(|id| model.materials[*id].image.as_ref()).collect();
+        let mut imgs: Vec<(&TextureImage, [f32; 3])> = layers
+            .iter()
+            .filter_map(|id| {
+                let m = &model.materials[*id];
+                m.image.as_ref().map(|t| (t, [m.color[0], m.color[1], m.color[2]]))
+            })
+            .collect();
         // Emission maps of the Realistic style follow the material textures.
         imgs.extend(
             crate::pbr::emission_layers(model)
                 .iter()
-                .filter_map(|id| model.materials[*id].pbr.as_ref().and_then(|p| p.emission_map.as_ref())),
+                .filter_map(|id| model.materials[*id].pbr.as_ref().and_then(|p| p.emission_map.as_ref()))
+                .map(|t| (t, [1.0; 3])),
         );
         imgs.truncate(varstotas_render::MAX_TEXTURE_LAYERS);
-        let key: Vec<(usize, [f64; 2])> = imgs.iter().map(|t| (Arc::as_ptr(&t.bytes) as *const u8 as usize, t.size)).collect();
+        let key: Vec<LayerKey> = imgs
+            .iter()
+            .map(|(t, tint)| {
+                let tint = if t.look.colorize { tint.map(f32::to_bits) } else { [0; 3] };
+                (Arc::as_ptr(&t.bytes) as *const u8 as usize, t.size, t.look, tint)
+            })
+            .collect();
         if self.key.as_ref().is_some_and(|(k, c)| *k == key && *c == checker) {
             return None;
         }
@@ -182,29 +195,49 @@ impl TextureSync {
             let rgba: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
             let data = imgs
                 .iter()
-                .map(|t| varstotas_render::TextureData { width: img.size[0] as u32, height: img.size[1] as u32, rgba: rgba.clone(), size_mm: [t.size[0] as f32, t.size[1] as f32] })
+                .map(|(t, _)| varstotas_render::TextureData {
+                    width: img.size[0] as u32,
+                    height: img.size[1] as u32,
+                    rgba: rgba.clone(),
+                    size_mm: [t.size[0] as f32, t.size[1] as f32],
+                    cutoff: 0.0,
+                    decal: false,
+                })
                 .collect();
             self.key = Some((key, true));
             return Some(data);
         }
-        self.cache.retain(|k, _| key.iter().any(|(p, _)| p == k));
+        self.cache.retain(|k, _| key.iter().any(|(p, ..)| p == k));
         let data = imgs
             .iter()
             .zip(&key)
-            .map(|(t, (ptr, _))| {
+            .map(|((t, tint), (ptr, ..))| {
                 let entry = self.cache.entry(*ptr).or_insert_with(|| {
                     let d = decode(&t.bytes).map_err(|e| log::warn!("texture {}: {e}", t.file_name)).ok();
                     (t.bytes.clone(), d)
                 });
                 match &entry.1 {
-                    Some(d) => varstotas_render::TextureData {
-                        width: d.0,
-                        height: d.1,
-                        rgba: d.2.clone(),
-                        size_mm: [t.size[0] as f32, t.size[1] as f32],
-                    },
+                    Some(d) => {
+                        let mut rgba = d.2.clone();
+                        t.look.apply(&mut rgba, *tint);
+                        varstotas_render::TextureData {
+                            width: d.0,
+                            height: d.1,
+                            rgba,
+                            size_mm: [t.size[0] as f32, t.size[1] as f32],
+                            cutoff: t.look.alpha_cutoff,
+                            decal: t.look.decal,
+                        }
+                    }
                     // Undecodable: a magenta tile so the problem is visible.
-                    None => varstotas_render::TextureData { width: 1, height: 1, rgba: vec![255, 0, 255, 255], size_mm: [1000.0; 2] },
+                    None => varstotas_render::TextureData {
+                        width: 1,
+                        height: 1,
+                        rgba: vec![255, 0, 255, 255],
+                        size_mm: [1000.0; 2],
+                        cutoff: 0.5,
+                        decal: false,
+                    },
                 }
             })
             .collect();
