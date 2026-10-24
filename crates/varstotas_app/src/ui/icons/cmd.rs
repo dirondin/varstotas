@@ -1,6 +1,6 @@
 //! Icons of the menu commands (File, Edit, Solid Tools, Snapping), same 24×24 grid and style.
 
-use super::{CUBE_LEFT, CUBE_RIGHT, CUBE_TOP, Icon, Pen, pal};
+use super::{CUBE_INNER, CUBE_LEFT, CUBE_OUTLINE, CUBE_RIGHT, CUBE_TOP, Icon, Pen, pal};
 use crate::inference::InferenceKind;
 use egui::{Align2, Color32, FontId, Rect, Stroke};
 use std::f32::consts::PI;
@@ -33,11 +33,15 @@ fn page(pen: &Pen, (x0, y0): (f32, f32), (x1, y1): (f32, f32), fold: f32) {
 
 /// The isometric cube scaled by `k` about (12, 12) and moved to `c`.
 fn mini_cube(pen: &Pen, c: (f32, f32), k: f32) {
-    let t = |pts: &[(f32, f32); 4]| pts.map(|(x, y)| (c.0 + (x - 12.0) * k, c.1 + (y - 12.0) * k));
-    let st = pen.thin();
-    pen.poly_c(&t(&CUBE_TOP), pal::fill(), st);
-    pen.poly_c(&t(&CUBE_LEFT), pal::shade(), st);
-    pen.poly_c(&t(&CUBE_RIGHT), pal::shade_dark(), st);
+    let t = |pts: &[(f32, f32)]| pts.iter().map(|(x, y)| (c.0 + (x - 12.0) * k, c.1 + (y - 12.0) * k)).collect::<Vec<_>>();
+    let (top, left, right) = (t(&CUBE_TOP), t(&CUBE_LEFT), t(&CUBE_RIGHT));
+    let inner = CUBE_INNER.map(t);
+    pen.solid(
+        &[(&top, pal::fill()), (&left, pal::shade()), (&right, pal::shade_dark())],
+        &t(&CUBE_OUTLINE),
+        &[&inner[0], &inner[1]],
+        pen.thin(),
+    );
 }
 
 /// A red cross on a light disc (remove / delete marks).
@@ -447,7 +451,7 @@ fn solid(pen: &Pen, op: u8) {
         0 => {
             rect(pen, a0, a1, pal::shade(), none);
             rect(pen, b0, b1, pal::shade(), none);
-            pen.painter.add(egui::Shape::closed_line(pen.pts(&union_outline), Stroke::new(2.4 * pen.s, pen.ink)));
+            pen.path(pen.pts(&union_outline), true, Stroke::new(2.4 * pen.s, pen.ink));
         }
         1 => {
             rect(pen, o0, o1, pal::BLUE, none);

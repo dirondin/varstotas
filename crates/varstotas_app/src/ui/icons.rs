@@ -5,6 +5,8 @@ use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, vec2};
 use std::f32::consts::PI;
 
 mod cmd;
+#[cfg(test)]
+mod sheet;
 
 #[allow(dead_code)] // full icon set; some are only used by later tools
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -204,21 +206,54 @@ impl Pen<'_> {
     fn thin(&self) -> Stroke {
         Stroke::new(1.1 * self.s, self.ink)
     }
+    /// Strokes a polyline. egui joins closed paths with unlimited miters, which leave long spikes
+    /// at acute corners, while open paths bevel every join sharper than a right angle. So closed
+    /// outlines are drawn as open paths that start and end in the middle of their first edge:
+    /// the butt ends meet flush and every corner gets the same miter-or-bevel join.
+    fn path(&self, mut pts: Vec<Pos2>, closed: bool, stroke: Stroke) {
+        if stroke.width <= 0.0 || stroke.color == Color32::TRANSPARENT || pts.len() < 2 {
+            return;
+        }
+        if closed && pts.len() > 2 {
+            let mid = pts[0].lerp(pts[1], 0.5);
+            pts.rotate_left(1);
+            pts.insert(0, mid);
+            pts.push(mid);
+        }
+        self.painter.add(Shape::line(pts, stroke));
+    }
+    /// A faceted solid: the faces are filled, then the silhouette is stroked once as a closed
+    /// outline and each inner edge chain once, so neighbouring faces never stack their own joins
+    /// on a shared corner.
+    fn solid(&self, faces: &[(&[(f32, f32)], Color32)], outline: &[(f32, f32)], inner: &[&[(f32, f32)]], stroke: Stroke) {
+        for (pts, fill) in faces {
+            self.painter.add(Shape::convex_polygon(self.pts(pts), *fill, Stroke::NONE));
+        }
+        for chain in inner {
+            self.path(self.pts(chain), false, stroke);
+        }
+        self.path(self.pts(outline), true, stroke);
+    }
+    /// A convex polygon filled to its outline, then stroked by [`Self::path`].
+    fn fill_path(&self, pts: Vec<Pos2>, fill: Color32, stroke: Stroke) {
+        self.painter.add(Shape::convex_polygon(pts.clone(), fill, Stroke::NONE));
+        self.path(pts, true, stroke);
+    }
     fn line(&self, pts: &[(f32, f32)]) {
-        self.painter.add(Shape::line(self.pts(pts), self.stroke()));
+        self.path(self.pts(pts), false, self.stroke());
     }
     fn line_c(&self, pts: &[(f32, f32)], stroke: Stroke) {
-        self.painter.add(Shape::line(self.pts(pts), stroke));
+        self.path(self.pts(pts), false, stroke);
     }
     fn poly(&self, pts: &[(f32, f32)], fill: Color32) {
-        self.painter.add(Shape::convex_polygon(self.pts(pts), fill, self.stroke()));
+        self.fill_path(self.pts(pts), fill, self.stroke());
     }
     fn poly_c(&self, pts: &[(f32, f32)], fill: Color32, stroke: Stroke) {
-        self.painter.add(Shape::convex_polygon(self.pts(pts), fill, stroke));
+        self.fill_path(self.pts(pts), fill, stroke);
     }
     /// Closed outline for non-convex shapes (no fill).
     fn closed(&self, pts: &[(f32, f32)]) {
-        self.painter.add(Shape::closed_line(self.pts(pts), self.stroke()));
+        self.path(self.pts(pts), true, self.stroke());
     }
     fn circle(&self, c: (f32, f32), r: f32, fill: Color32) {
         self.painter.circle(self.p(c.0, c.1), r * self.s, fill, self.stroke());
@@ -246,7 +281,7 @@ impl Pen<'_> {
             .collect()
     }
     fn arc(&self, c: (f32, f32), r: f32, a0: f32, a1: f32, stroke: Stroke) {
-        self.painter.add(Shape::line(self.arc_pts(c, r, a0, a1), stroke));
+        self.path(self.arc_pts(c, r, a0, a1), false, stroke);
     }
     /// Filled arrow head with tip at `tip`, pointing along `dir`.
     fn head(&self, tip: (f32, f32), dir: (f32, f32), size: f32, color: Color32) {
@@ -275,10 +310,11 @@ const CUBE_TOP: [(f32, f32); 4] = [(12.0, 3.0), (20.0, 7.5), (12.0, 12.0), (4.0,
 const CUBE_LEFT: [(f32, f32); 4] = [(4.0, 7.5), (12.0, 12.0), (12.0, 21.0), (4.0, 16.5)];
 const CUBE_RIGHT: [(f32, f32); 4] = [(12.0, 12.0), (20.0, 7.5), (20.0, 16.5), (12.0, 21.0)];
 
+const CUBE_OUTLINE: [(f32, f32); 6] = [(12.0, 3.0), (20.0, 7.5), (20.0, 16.5), (12.0, 21.0), (4.0, 16.5), (4.0, 7.5)];
+const CUBE_INNER: [&[(f32, f32)]; 2] = [&[(4.0, 7.5), (12.0, 12.0), (20.0, 7.5)], &[(12.0, 12.0), (12.0, 21.0)]];
+
 fn cube(pen: &Pen, top: Color32, left: Color32, right: Color32) {
-    pen.poly(&CUBE_TOP, top);
-    pen.poly(&CUBE_LEFT, left);
-    pen.poly(&CUBE_RIGHT, right);
+    pen.solid(&[(&CUBE_TOP, top), (&CUBE_LEFT, left), (&CUBE_RIGHT, right)], &CUBE_OUTLINE, &CUBE_INNER, pen.stroke());
 }
 
 /// Paint `icon` into `rect` (square recommended). `active` uses the accent ink.
@@ -408,7 +444,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         Icon::Pie => {
             let mut pts = vec![pen.p(6.0, 18.0)];
             pts.extend(pen.arc_pts((6.0, 18.0), 14.0, 270.0, 360.0));
-            pen.painter.add(Shape::convex_polygon(pts, BLUE_SOFT, pen.stroke()));
+            pen.fill_path(pts, BLUE_SOFT, pen.stroke());
             pen.dot((6.0, 18.0), 1.8, RED);
         }
         Icon::RotatedRectangle => {
@@ -436,9 +472,16 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             pen.line_c(&[(3.0, 20.0), (21.0, 20.0)], pen.stroke());
         }
         Icon::Box3d => {
-            pen.poly(&[(3.0, 10.0), (13.0, 10.0), (13.0, 21.0), (3.0, 21.0)], SHADE);
-            pen.poly(&[(13.0, 10.0), (21.0, 5.0), (21.0, 16.0), (13.0, 21.0)], SHADE_DARK);
-            pen.poly(&[(3.0, 10.0), (11.0, 5.0), (21.0, 5.0), (13.0, 10.0)], BLUE_SOFT);
+            pen.solid(
+                &[
+                    (&[(3.0, 10.0), (13.0, 10.0), (13.0, 21.0), (3.0, 21.0)], SHADE),
+                    (&[(13.0, 10.0), (21.0, 5.0), (21.0, 16.0), (13.0, 21.0)], SHADE_DARK),
+                    (&[(3.0, 10.0), (11.0, 5.0), (21.0, 5.0), (13.0, 10.0)], BLUE_SOFT),
+                ],
+                &[(3.0, 10.0), (11.0, 5.0), (21.0, 5.0), (21.0, 16.0), (13.0, 21.0), (3.0, 21.0)],
+                &[&[(3.0, 10.0), (13.0, 10.0), (21.0, 5.0)], &[(13.0, 10.0), (13.0, 21.0)]],
+                pen.stroke(),
+            );
         }
         Icon::Cylinder => {
             let mut side = pen.ell((12.0, 18.0), 8.0, 3.0, 0.0, 180.0);
@@ -529,7 +572,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             let mut path = vec![pen.p(5.0, 21.0), pen.p(5.0, 13.0)];
             path.extend(pen.arc_pts((13.0, 13.0), 8.0, 180.0, 270.0));
             path.push(pen.p(20.0, 5.0));
-            pen.painter.add(Shape::line(path, Stroke::new(1.6 * pen.s, RED)));
+            pen.path(path, false, Stroke::new(1.6 * pen.s, RED));
             pen.head((22.5, 5.0), (1.0, 0.0), 3.5, RED);
             // profile
             pen.poly(&[(2.0, 17.0), (8.0, 17.0), (8.0, 22.0), (2.0, 22.0)], BLUE_SOFT);
@@ -551,7 +594,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         Icon::Protractor => {
             let mut pts = pen.arc_pts((12.0, 18.0), 9.5, 180.0, 360.0);
             pts.push(pen.p(2.5, 18.0));
-            pen.painter.add(Shape::convex_polygon(pts, FILL, pen.stroke()));
+            pen.fill_path(pts, FILL, pen.stroke());
             for i in 1..6 {
                 let a = (180.0 + i as f32 * 30.0) * PI / 180.0;
                 let (c, s) = (a.cos(), a.sin());
@@ -588,14 +631,8 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                 pen.painter.rect(r, 1.4 * pen.s, SKIN, pen.thin(), egui::StrokeKind::Middle);
             }
             // Thumb
-            pen.painter.add(Shape::line(
-                vec![pen.p(7.0, 17.0), pen.p(3.5, 13.0)],
-                Stroke::new(3.0 * pen.s, pen.ink),
-            ));
-            pen.painter.add(Shape::line(
-                vec![pen.p(7.0, 17.0), pen.p(3.6, 13.1)],
-                Stroke::new(1.4 * pen.s, SKIN),
-            ));
+            pen.path(vec![pen.p(7.0, 17.0), pen.p(3.5, 13.0)], false, Stroke::new(3.0 * pen.s, pen.ink));
+            pen.path(vec![pen.p(7.0, 17.0), pen.p(3.6, 13.1)], false, Stroke::new(1.4 * pen.s, SKIN));
             // cover finger bottoms
             pen.painter.rect_filled(
                 Rect::from_min_max(pen.p(7.4, 12.0), pen.p(17.2, 15.0)),
@@ -605,10 +642,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         }
         Icon::Zoom | Icon::ZoomExtents => {
             pen.circle((10.0, 10.0), 6.0, FILL);
-            pen.painter.add(Shape::line(
-                vec![pen.p(14.5, 14.5), pen.p(20.5, 20.5)],
-                Stroke::new(3.2 * pen.s, pen.ink),
-            ));
+            pen.path(vec![pen.p(14.5, 14.5), pen.p(20.5, 20.5)], false, Stroke::new(3.2 * pen.s, pen.ink));
             if icon == Icon::Zoom {
                 pen.line_c(&[(7.0, 10.0), (13.0, 10.0)], Stroke::new(1.5 * pen.s, BLUE));
                 pen.line_c(&[(10.0, 7.0), (10.0, 13.0)], Stroke::new(1.5 * pen.s, BLUE));
@@ -676,7 +710,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             let mut pts = pen.pts(&[(3.0, 21.0), (3.0, 4.0)]);
             pts.extend(pen.arc_pts((13.0, 11.0), 7.0, 270.0, 360.0));
             pts.push(pen.p(20.0, 21.0));
-            pen.painter.add(Shape::convex_polygon(pts, FILL, pen.stroke()));
+            pen.fill_path(pts, FILL, pen.stroke());
             pen.arc((13.0, 11.0), 7.0, 270.0, 360.0, Stroke::new(2.2 * pen.s, RED));
             pen.dashed((13.0, 4.0), (20.0, 4.0), pen.thin());
             pen.dashed((20.0, 4.0), (20.0, 11.0), pen.thin());
@@ -706,7 +740,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             // An eye under a curved double arrow.
             let mut pts = pen.arc_pts((12.0, 23.0), 9.0, 220.0, 320.0);
             pts.extend(pen.arc_pts((12.0, 11.0), 9.0, 40.0, 140.0));
-            pen.painter.add(Shape::closed_line(pts, pen.stroke()));
+            pen.path(pts, true, pen.stroke());
             pen.dot((12.0, 17.0), 2.5, pen.ink);
             let st = Stroke::new(1.5 * pen.s, BLUE);
             pen.arc((12.0, 14.0), 10.0, 205.0, 335.0, st);
@@ -718,7 +752,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             for (x, y) in [(8.0, 13.0), (16.0, 7.0)] {
                 let mut pts = pen.arc_pts((x, y), 3.0, 180.0, 360.0);
                 pts.extend(pen.arc_pts((x, y + 4.0), 2.6, 0.0, 180.0));
-                pen.painter.add(Shape::convex_polygon(pts, SHADE, pen.thin()));
+                pen.fill_path(pts, SHADE, pen.thin());
                 pen.dot((x, y + 8.6), 2.0, pen.ink);
             }
         }
@@ -883,7 +917,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
             }
             pts.insert(0, pen.p(fx(7.0), 7.0));
             pts.push(pen.p(fx(8.0), 19.0));
-            pen.painter.add(Shape::line(pts, pen.stroke()));
+            pen.path(pts, false, pen.stroke());
             pen.head((fx(3.5), 7.0), (-flip, 0.0), 4.5, pen.ink);
         }
         Icon::Lock | Icon::Unlock => {
@@ -899,7 +933,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
         Icon::Eye | Icon::EyeOff => {
             let mut pts = pen.arc_pts((12.0, 19.0), 11.0, 220.0, 320.0);
             pts.extend(pen.arc_pts((12.0, 5.0), 11.0, 40.0, 140.0));
-            pen.painter.add(Shape::closed_line(pts, pen.stroke()));
+            pen.path(pts, true, pen.stroke());
             if icon == Icon::Eye {
                 pen.dot((12.0, 12.0), 3.0, pen.ink);
             } else {
