@@ -1942,6 +1942,8 @@ proc-width = Plytelės plotis
 proc-name = Pavadinimas
 proc-hint = Plytelė kartojasi be siūlių; peržiūroje – 2 × 2 plytelės.
 proc-create = Sukurti medžiagą
+proc-plugin-hover = Raštas iš įskiepio (@texture_generator)
+proc-generating = Generuojama…
 proc-created = Sukurta medžiaga { $name }: spustelėkite sienas, kad nudažytumėte
 mat-import = Importuoti…
 mat-import-hover = Pridėti medžiagų failus (.vrstmat, papildinių formatai) prie dokumento
@@ -3166,6 +3168,9 @@ ext-mat-catalogue-array = catalogue() turi grąžinti medžiagų masyvą
 ext-mat-no-home = nėra namų aplanko
 ext-mat-default-name = Medžiaga
 ext-mat-import-nothing = import_material() nieko negrąžino
+ext-tex-bad-size = Įterptas vaizdas: "size" turi būti viena kraštinė arba [plotis, aukštis] nuo 1 iki 8192 pikselių
+ext-tex-no-pixels = Įterptas vaizdas: pikselius pateikite "rgb", "rgba" arba "grey" (masyvas 0..255, base64 arba blob)
+ext-tex-pixel-count = Įterptas vaizdas: tikėtasi baitų: { $want }, pateikta: { $got }
 ext-mat-spec-object = medžiagos specifikacija turi būti objektas
 
 ## Plėtinių meniu ir papildinių dialogai
@@ -3837,6 +3842,8 @@ script-fn-min = Mažesnis skaičius.
 script-fn-max = Didesnis skaičius.
 script-fn-clamp = x, laikomas ribose lo..hi.
 script-fn-ceil = Apvalinti aukštyn iki sveikojo skaičiaus (kaip float).
+script-fn-noise = Glotnus triukšmas 0..1 taške x, y (viena ląstelė = 1). Kai period > 0, kartojasi kas period ląstelių (vientisos plytelės); seed parenka raštą.
+script-fn-fbm = Fraktalinis triukšmas 0..1: triukšmo oktavos, kiekviena dvigubai smulkesnė ir dvigubai silpnesnė; period ir seed – kaip noise.
 
 ## Skyriai
 script-group-points-and-vectors = Taškai ir vektoriai

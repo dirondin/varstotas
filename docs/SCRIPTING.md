@@ -36,7 +36,8 @@ Entities (faces, edges, groups) are "references". After operations that merge or
 | `v.x`, `v.y`, `v.z` | components (can be assigned) |
 | `v.length()`, `v.normalize()`, `a.dot(b)`, `a.cross(b)`, `a.distance(b)` | |
 | `length("2.5m")` | parse a length with units → mm |
-| `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)`, `ceil(x)` | numbers (integers and fractions mixed) |
+| `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)`, `ceil(x)` | numbers (integers and fractions mixed); the result is a fraction (`.to_int()` for an index or a byte) |
+| `noise(x, y)`, `noise(x, y, period, seed)`, `fbm(x, y, period, octaves, seed)` | smooth value noise 0..1 on a unit grid; with `period > 0` it repeats every `period` cells (seamless tiles); `fbm` sums octaves |
 
 ## Construction
 | Function | Result |
@@ -192,7 +193,9 @@ Undo and script-error rollback cover the model, never external file writes or ne
 of trusted code. File tasks from agents use the dedicated `save`, `export`, `open` methods.
 
 Rhai limits: source 1 MiB, strings 8 MiB, arrays 100,000 elements, maps 10,000 entries,
-5 million operations, 128 call levels, console output 1 MiB. Formula engines use smaller limits.
+5 million operations, 128 call levels, console output 1 MiB. Trusted runs (a local script run by
+hand, an installed plugin) have no operation limit (the time limit stays) and arrays / blobs up to
+32 Mi elements, enough for a 2048² RGBA texture. Formula engines use smaller limits.
 HTTP(S) downloads disable curl configuration and non-HTTP schemes/redirects, cap output at
 256 MiB, and time out within 60 seconds or the remaining script deadline. Material-source
 Python calls have a 60-second limit and 8 MiB stdout; interactive Python scripts have a

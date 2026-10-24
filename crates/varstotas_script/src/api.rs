@@ -608,6 +608,11 @@ pub fn engine(limit: Duration, trusted_io: bool) -> Engine {
     e.set_max_array_size(100_000);
     e.set_max_map_size(10_000);
     e.set_max_call_levels(128);
+    if trusted_io {
+        // plugins and local scripts: the time limit guards them; a 2048² RGBA blob must fit
+        e.set_max_operations(0);
+        e.set_max_array_size(32 * 1024 * 1024);
+    }
     let start = Instant::now();
     e.on_progress(move |_| (start.elapsed() > limit).then(|| Dynamic::from(tr!("script-err-time-limit-of-secs-s-exceeded", secs = limit.as_secs().to_string()))));
     e.on_print(|s| {
@@ -1495,10 +1500,42 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString| fetch_file(&url, &path, &Map::new()));
     e.register_fn("fetch_file", |url: ImmutableString, path: ImmutableString, headers: Map| fetch_file(&url, &path, &headers));
     }
+    // Seamless value noise for texture generators (see `noise_at`).
+    e.register_fn("noise", |x: f64, y: f64| noise_at(x, y, 0, 0));
+    e.register_fn("noise", |x: f64, y: f64, period: i64, seed: i64| noise_at(x, y, period, seed));
+    e.register_fn("fbm", |x: f64, y: f64, period: i64, octaves: i64, seed: i64| {
+        let (mut sum, mut amp, mut norm, mut k) = (0.0, 0.5, 0.0, 1.0);
+        for o in 0..octaves.clamp(1, 12) {
+            sum += noise_at(x * k, y * k, period * k as i64, seed + o) * amp;
+            norm += amp;
+            amp *= 0.5;
+            k *= 2.0;
+        }
+        sum / norm
+    });
     e.register_fn("url_encode", |s: ImmutableString| -> String {
         s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect() // i18n-ignore
     });
     e.register_fn("materials", || -> R<Array> {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))
     });
+}
+
+/// Value noise in 0..1 at `x, y` (lattice cells of 1); with `period > 0` it repeats every
+/// `period` cells, so a texture tile of `period` cells is seamless.
+pub fn noise_at(x: f64, y: f64, period: i64, seed: i64) -> f64 {
+    let (xi, yi) = (x.floor(), y.floor());
+    let (fx, fy) = (x - xi, y - yi);
+    let wrap = |i: f64| if period > 0 { (i as i64).rem_euclid(period) } else { i as i64 };
+    let at = |i: f64, j: f64| {
+        let mut h = (wrap(i) as u64).wrapping_mul(0x8da6_b343) ^ (wrap(j) as u64).wrapping_mul(0xd816_3841) ^ (seed as u64).wrapping_mul(0xcb1a_b31f);
+        h ^= h >> 29;
+        h = h.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        h ^= h >> 32;
+        (h & 0xffff) as f64 / 65535.0
+    };
+    let s = |t: f64| t * t * (3.0 - 2.0 * t);
+    let a = at(xi, yi) + (at(xi + 1.0, yi) - at(xi, yi)) * s(fx);
+    let b = at(xi, yi + 1.0) + (at(xi + 1.0, yi + 1.0) - at(xi, yi + 1.0)) * s(fx);
+    a + (b - a) * s(fy)
 }

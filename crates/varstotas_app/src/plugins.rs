@@ -13,6 +13,7 @@
 //! // @material_source                      (a source of the Online Materials window)
 //! // @model_import ply                      (3D models: File → Import, 3D Library downloads)
 //! // @model_source [search]                 (a source of the 3D Library window)
+//! // @texture_generator [max side]          (a pattern of the Procedural Material window)
 //! // @notice Models are CC-BY: credit …      (terms shown above a source's assets; repeatable)
 //! ```
 //!
@@ -42,6 +43,9 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     ("poly_pizza.rhai", include_str!("../../../examples/plugins/poly_pizza.rhai")),
     ("sketchfab.py", include_str!("../../../examples/plugins/sketchfab.py")),
     ("import_ply.py", include_str!("../../../examples/plugins/import_ply.py")),
+    ("basket_weave.rhai", include_str!("../../../examples/plugins/basket_weave.rhai")),
+    ("terrazzo.rhai", include_str!("../../../examples/plugins/terrazzo.rhai")),
+    ("marble.py", include_str!("../../../examples/plugins/marble.py")),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,12 +101,15 @@ pub struct Plugin {
     /// `@notice`: the source's terms (licences, what its site asks for), shown as a warning
     /// above its assets in the 3D Library / Online Materials window (several lines joined).
     pub notice: String,
+    /// `@texture_generator [side]`: a pattern of the Procedural Material window, with the
+    /// largest image side it is asked for (512 by default; see `mat_plugins::texture`).
+    pub texture_generator: Option<u32>,
 }
 
 impl Plugin {
     /// A plugin of the Extensions menu (not a file or a material plugin).
     pub fn in_menu(&self) -> bool {
-        self.import.is_empty() && self.export.is_empty() && self.material_import.is_empty() && !self.material_source && self.model_import.is_empty() && self.model_source.is_none()
+        self.import.is_empty() && self.export.is_empty() && self.material_import.is_empty() && !self.material_source && self.model_import.is_empty() && self.model_source.is_none() && self.texture_generator.is_none()
     }
 }
 
@@ -194,6 +201,7 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
         model_import: Vec::new(),
         model_source: None,
         notice: String::new(),
+        texture_generator: None,
     };
     // Localized variants: tag → suffix → text; `@param.<suffix> key "Label"`: key → suffix → label.
     let mut variants: HashMap<&str, BTreeMap<String, String>> = HashMap::new();
@@ -257,6 +265,7 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             "material_source" => p.material_source = true,
             "model_import" => p.model_import = exts(),
             "model_source" => p.model_source = Some(rest.eq_ignore_ascii_case("search")),
+            "texture_generator" => p.texture_generator = Some(rest.parse::<u32>().unwrap_or(512).clamp(16, 2048)),
             "notice" => {
                 if !p.notice.is_empty() {
                     p.notice.push(' ');

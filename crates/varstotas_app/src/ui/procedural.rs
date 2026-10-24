@@ -6,6 +6,8 @@ use crate::app::VarstotasApp;
 use crate::document::PaletteMaterial;
 use egui::{Color32, RichText};
 use varstotas_i18n::tr;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use varstotas_kernel::TextureImage;
 
 /// Side of the generated image in pixels.
@@ -87,11 +89,39 @@ pub struct ProcState {
     pub params: Params,
     name: String,
     preview: Option<(Params, egui::TextureHandle)>,
+    /// The selected `@texture_generator` plugin (else a built-in pattern).
+    pub plugin: Option<PathBuf>,
+    plugin_values: HashMap<PathBuf, Vec<String>>,
+    /// The plugin preview: (plugin, values, texture).
+    plugin_preview: Option<(PathBuf, Vec<String>, egui::TextureHandle)>,
+    /// The last values a preview was started for (not retried after an error).
+    tried: Option<(PathBuf, Vec<String>)>,
+    pub job: Option<Job>,
+    error: Option<String>,
+}
+
+/// A plugin run in the background.
+pub struct Job {
+    create: bool,
+    path: PathBuf,
+    values: Vec<String>,
+    rx: std::sync::mpsc::Receiver<Result<varstotas_kernel::Material, String>>,
 }
 
 impl Default for ProcState {
     fn default() -> Self {
-        Self { open: false, params: Params::new(Kind::Bricks), name: String::new(), preview: None }
+        Self {
+            open: false,
+            params: Params::new(Kind::Bricks),
+            name: String::new(),
+            preview: None,
+            plugin: None,
+            plugin_values: HashMap::new(),
+            plugin_preview: None,
+            tried: None,
+            job: None,
+            error: None,
+        }
     }
 }
 
@@ -268,93 +298,247 @@ impl VarstotasApp {
         }
     }
 
-    /// Materials → + → New Procedural…: kind, colours, pieces, joints, variation, preview.
+    /// Materials → + → New Procedural…: a built-in pattern (kind, colours, pieces, joints,
+    /// variation) or a `@texture_generator` plugin (its parameters), a preview and Create.
     pub(crate) fn procedural_window(&mut self, ctx: &egui::Context) {
         if !self.procedural.open {
             return;
         }
+        self.procedural_poll(ctx);
+        let gens: Vec<(std::path::PathBuf, String)> = self.plugins.list.iter().filter(|p| p.texture_generator.is_some()).map(|p| (p.path.clone(), p.name.clone())).collect();
         let mut open = true;
         let mut create = false;
         egui::Window::new(tr!("proc-title")).id(egui::Id::new("procedural_win")).open(&mut open).resizable(false).default_pos([320.0, 160.0]).show(ctx, |ui| {
             let st = &mut self.procedural;
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 for k in Kind::ALL {
-                    let r = ui.selectable_label(st.params.kind == k, k.label());
+                    let r = ui.selectable_label(st.plugin.is_none() && st.params.kind == k, k.label());
                     super::tray_lib::spot(format!("proc:{}", k.key()), r.rect.center());
-                    if r.clicked() && st.params.kind != k {
+                    if r.clicked() && (st.plugin.is_some() || st.params.kind != k) {
                         let w = st.params.width_mm;
                         st.params = Params { width_mm: w, ..Params::new(k) };
+                        st.plugin = None;
+                    }
+                }
+                for (path, name) in &gens {
+                    let r = ui.selectable_label(st.plugin.as_ref() == Some(path), name).on_hover_text(tr!("proc-plugin-hover"));
+                    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    super::tray_lib::spot(format!("proc:plugin:{stem}"), r.rect.center());
+                    if r.clicked() {
+                        st.plugin = Some(path.clone());
                     }
                 }
             });
             ui.separator();
-            ui.horizontal_top(|ui| {
-                egui::Grid::new("proc_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-                    let p = &mut st.params;
-                    color_row(ui, tr!("proc-main"), &mut p.main, "main");
-                    color_row(ui, if p.kind == Kind::Noise || p.kind == Kind::Checker { tr!("proc-second") } else { tr!("proc-joint") }, &mut p.joint, "joint");
-                    ui.label(if p.kind == Kind::Noise { tr!("proc-scale") } else { tr!("proc-count") });
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut p.count[0]).range(1..=32));
-                        if p.kind != Kind::Noise {
-                            ui.label("×"); // i18n-ignore
-                            ui.add(egui::DragValue::new(&mut p.count[1]).range(1..=32));
-                        }
-                    });
-                    ui.end_row();
-                    if matches!(p.kind, Kind::Bricks | Kind::Tiles | Kind::Planks) {
-                        ui.label(tr!("proc-joint-width"));
-                        ui.add(egui::Slider::new(&mut p.joint_width, 0.0..=0.4).fixed_decimals(2));
-                        ui.end_row();
-                    }
-                    if p.kind != Kind::Checker {
-                        ui.label(tr!("proc-variation"));
-                        ui.add(egui::Slider::new(&mut p.variation, 0.0..=1.0).fixed_decimals(2));
-                        ui.end_row();
-                        ui.label(tr!("proc-seed"));
-                        ui.horizontal(|ui| {
-                            ui.add(egui::DragValue::new(&mut p.seed).range(1..=9999));
-                            if ui.small_button(tr!("proc-another")).clicked() {
-                                p.seed = p.seed % 9999 + 1;
-                            }
-                        });
-                        ui.end_row();
-                    }
-                    ui.label(tr!("proc-width"));
-                    ui.add(egui::DragValue::new(&mut p.width_mm).range(10.0..=100_000.0).suffix(" mm")); // i18n-ignore
-                    ui.end_row();
-                    ui.label(tr!("proc-name"));
-                    ui.add(egui::TextEdit::singleline(&mut st.name).hint_text(st.params.kind.label()).desired_width(140.0));
-                    ui.end_row();
-                });
-                // preview: 2 × 2 tiles, so the seams show
-                let stale = st.preview.as_ref().is_none_or(|(p, _)| *p != st.params);
-                if stale {
-                    let rgba = generate(&st.params, PREVIEW);
-                    let img = egui::ColorImage::from_rgba_unmultiplied([PREVIEW as usize; 2], &rgba);
-                    let opts = egui::TextureOptions { wrap_mode: egui::TextureWrapMode::Repeat, ..egui::TextureOptions::LINEAR };
-                    st.preview = Some((st.params.clone(), ui.ctx().load_texture("proc_preview", img, opts)));
-                }
-                if let Some((_, t)) = &st.preview {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(160.0, 160.0), egui::Sense::hover());
-                    ui.painter().image(t.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(2.0, 2.0)), Color32::WHITE);
-                    ui.painter().rect_stroke(rect, 2.0, egui::Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
-                }
-            });
+            if self.procedural.plugin.is_some() {
+                self.procedural_plugin(ui);
+            } else {
+                Self::procedural_builtin(ui, &mut self.procedural);
+            }
             ui.label(RichText::new(tr!("proc-hint")).small().color(theme::text_dim()));
             ui.horizontal(|ui| {
-                let r = ui.button(tr!("proc-create"));
+                let busy = self.procedural.job.is_some();
+                let r = ui.add_enabled(!busy, egui::Button::new(tr!("proc-create")));
                 super::tray_lib::spot("proc:create", r.rect.center());
                 if r.clicked() {
                     create = true;
                 }
+                if busy {
+                    ui.spinner();
+                    ui.label(RichText::new(tr!("proc-generating")).small().color(theme::text_dim()));
+                }
             });
+            if let Some(e) = &self.procedural.error {
+                ui.label(RichText::new(e).small().color(theme::warning()));
+            }
         });
         if create {
-            self.create_procedural();
+            match self.procedural.plugin.clone() {
+                Some(path) => self.procedural_run(&path, true),
+                None => self.create_procedural(),
+            }
         }
         self.procedural.open &= open;
     }
+
+    /// The built-in pattern's controls and preview.
+    fn procedural_builtin(ui: &mut egui::Ui, st: &mut ProcState) {
+        ui.horizontal_top(|ui| {
+            egui::Grid::new("proc_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                let p = &mut st.params;
+                color_row(ui, tr!("proc-main"), &mut p.main, "main");
+                color_row(ui, if p.kind == Kind::Noise || p.kind == Kind::Checker { tr!("proc-second") } else { tr!("proc-joint") }, &mut p.joint, "joint");
+                ui.label(if p.kind == Kind::Noise { tr!("proc-scale") } else { tr!("proc-count") });
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut p.count[0]).range(1..=32));
+                    if p.kind != Kind::Noise {
+                        ui.label("×"); // i18n-ignore
+                        ui.add(egui::DragValue::new(&mut p.count[1]).range(1..=32));
+                    }
+                });
+                ui.end_row();
+                if matches!(p.kind, Kind::Bricks | Kind::Tiles | Kind::Planks) {
+                    ui.label(tr!("proc-joint-width"));
+                    ui.add(egui::Slider::new(&mut p.joint_width, 0.0..=0.4).fixed_decimals(2));
+                    ui.end_row();
+                }
+                if p.kind != Kind::Checker {
+                    ui.label(tr!("proc-variation"));
+                    ui.add(egui::Slider::new(&mut p.variation, 0.0..=1.0).fixed_decimals(2));
+                    ui.end_row();
+                    ui.label(tr!("proc-seed"));
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut p.seed).range(1..=9999));
+                        if ui.small_button(tr!("proc-another")).clicked() {
+                            p.seed = p.seed % 9999 + 1;
+                        }
+                    });
+                    ui.end_row();
+                }
+                ui.label(tr!("proc-width"));
+                ui.add(egui::DragValue::new(&mut p.width_mm).range(10.0..=100_000.0).suffix(" mm")); // i18n-ignore
+                ui.end_row();
+                ui.label(tr!("proc-name"));
+                ui.add(egui::TextEdit::singleline(&mut st.name).hint_text(st.params.kind.label()).desired_width(140.0));
+                ui.end_row();
+            });
+            // preview: 2 × 2 tiles, so the seams show
+            let stale = st.preview.as_ref().is_none_or(|(p, _)| *p != st.params);
+            if stale {
+                let rgba = generate(&st.params, PREVIEW);
+                let img = egui::ColorImage::from_rgba_unmultiplied([PREVIEW as usize; 2], &rgba);
+                st.preview = Some((st.params.clone(), ui.ctx().load_texture("proc_preview", img, repeat())));
+            }
+            if let Some((_, t)) = &st.preview {
+                preview_tiles(ui, t.id());
+            }
+        });
+    }
+
+    /// A generator plugin's description, parameters and preview (rendered in the background).
+    fn procedural_plugin(&mut self, ui: &mut egui::Ui) {
+        let Some(path) = self.procedural.plugin.clone() else { return };
+        let Some(p) = self.plugins.list.iter().find(|p| p.path == path).cloned() else {
+            self.procedural.plugin = None;
+            return;
+        };
+        if !p.description.is_empty() {
+            ui.label(RichText::new(&p.description).small().color(theme::text_dim()));
+        }
+        let st = &mut self.procedural;
+        let values = st.plugin_values.entry(path.clone()).or_insert_with(|| p.params.iter().map(|q| q.default.clone()).collect());
+        ui.horizontal_top(|ui| {
+            egui::Grid::new("proc_plugin_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                for (q, v) in p.params.iter().zip(values.iter_mut()) {
+                    ui.label(&q.label);
+                    if q.kind == crate::plugins::ParamKind::Bool {
+                        let mut on = v == "true";
+                        if ui.checkbox(&mut on, "").changed() {
+                            *v = on.to_string();
+                        }
+                    } else {
+                        let w = if q.kind == crate::plugins::ParamKind::Text { 160.0 } else { 70.0 };
+                        ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(&q.default).id_salt(("proc_param", &q.key)));
+                    }
+                    ui.end_row();
+                }
+                ui.label(tr!("proc-width"));
+                ui.add(egui::DragValue::new(&mut st.params.width_mm).range(10.0..=100_000.0).suffix(" mm")); // i18n-ignore
+                ui.end_row();
+                ui.label(tr!("proc-name"));
+                ui.add(egui::TextEdit::singleline(&mut st.name).hint_text(&p.name).desired_width(140.0));
+                ui.end_row();
+            });
+            match &st.plugin_preview {
+                Some((_, _, t)) => preview_tiles(ui, t.id()),
+                None => {
+                    ui.allocate_exact_size(egui::vec2(160.0, 160.0), egui::Sense::hover());
+                }
+            }
+        });
+        // a new preview when the values settle (no text field focused, nothing running)
+        let values = values.clone();
+        let editing = ui.ctx().memory(|m| m.focused().is_some()) || ui.ctx().input(|i| i.pointer.any_down());
+        let stale = st.plugin_preview.as_ref().is_none_or(|(pp, v, _)| *pp != path || *v != values) && st.tried.as_ref() != Some(&(path.clone(), values.clone()));
+        if stale && !editing && st.job.is_none() {
+            st.tried = Some((path.clone(), values));
+            self.procedural_run(&path, false);
+        }
+    }
+
+    /// Start the plugin in the background: a preview (`PREVIEW` px) or the material.
+    fn procedural_run(&mut self, path: &std::path::Path, create: bool) {
+        let Some(p) = self.plugins.list.iter().find(|p| p.path == path).cloned() else { return };
+        let st = &mut self.procedural;
+        let values = st.plugin_values.get(path).cloned().unwrap_or_else(|| p.params.iter().map(|q| q.default.clone()).collect());
+        let params = match crate::plugins::param_values(&p, &values, self.doc.model.unit) {
+            Ok(v) => v,
+            Err(e) => {
+                st.error = Some(e);
+                return;
+            }
+        };
+        let size = if create { p.texture_generator.unwrap_or(512) } else { PREVIEW.min(p.texture_generator.unwrap_or(512)) };
+        let name = if st.name.trim().is_empty() { p.name.clone() } else { st.name.trim().to_string() };
+        let width = st.params.width_mm;
+        let (tx, rx) = std::sync::mpsc::channel();
+        st.job = Some(Job { create, path: path.to_path_buf(), values, rx });
+        st.error = None;
+        std::thread::spawn(move || {
+            let _ = tx.send(crate::mat_plugins::texture(&p, size, params, &name, width));
+        });
+    }
+
+    /// A finished plugin run: the preview, or the new material (one undo step).
+    fn procedural_poll(&mut self, ctx: &egui::Context) {
+        let Some(job) = &self.procedural.job else { return };
+        let Ok(res) = job.rx.try_recv() else {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            return;
+        };
+        let job = self.procedural.job.take().expect("job");
+        match res {
+            Err(e) => self.procedural.error = Some(e),
+            Ok(m) if job.create => {
+                let mut name = m.name.clone();
+                let mut k = 2;
+                while self.doc.model.materials.values().any(|x| x.name == name) {
+                    name = format!("{} {k}", m.name);
+                    k += 1;
+                }
+                let pm = PaletteMaterial { name: name.clone(), ..PaletteMaterial::of(&m) };
+                let p2 = pm.clone();
+                self.doc.commit(&tr!("app-undo-add-material"), |md| {
+                    p2.ensure_in(md);
+                });
+                self.doc.current_material = Some(pm);
+                self.set_tool(crate::tools::ToolId::Paint);
+                self.flash(tr!("proc-created", name = name.as_str()));
+            }
+            Ok(m) => {
+                let img = match m.image.as_ref().and_then(|i| crate::textures::decode(&i.bytes).ok()) {
+                    Some(d) => egui::ColorImage::from_rgba_unmultiplied([d.0 as usize, d.1 as usize], &d.2),
+                    None => {
+                        let c = super::color32(m.color);
+                        egui::ColorImage::new([4, 4], vec![c; 16])
+                    }
+                };
+                let t = ctx.load_texture("proc_plugin_preview", img, repeat());
+                self.procedural.plugin_preview = Some((job.path, job.values, t));
+            }
+        }
+    }
+}
+
+fn repeat() -> egui::TextureOptions {
+    egui::TextureOptions { wrap_mode: egui::TextureWrapMode::Repeat, ..egui::TextureOptions::LINEAR }
+}
+
+/// 2 × 2 tiles of a preview texture, so the seams show.
+fn preview_tiles(ui: &mut egui::Ui, t: egui::TextureId) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(160.0, 160.0), egui::Sense::hover());
+    ui.painter().image(t, rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(2.0, 2.0)), Color32::WHITE);
+    ui.painter().rect_stroke(rect, 2.0, egui::Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
 }
 
 #[cfg(test)]

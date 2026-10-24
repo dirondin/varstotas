@@ -7,13 +7,13 @@ wait 10
 action procedural bricks
 wait 5
 screenshot shots/proc_bricks.bmp
-raw click 404 91
+action click_spot proc:tiles
 wait 3
 screenshot shots/proc_tiles.bmp
-raw click 458 91
+action click_spot proc:planks
 wait 3
 screenshot shots/proc_planks.bmp
-raw click 380 367
+action click_spot proc:create
 wait 5
 expect mats={"-": 6}
 expect paint=Planks
@@ -23,7 +23,7 @@ rawp click 500 0 500
 wait 3
 expect mats={"-": 5, "Planks": 1}
 # a second one gets a new name
-raw click 515 91
+action click_spot proc:noise
 wait 3
 action click_spot proc:create
 wait 5
@@ -32,6 +32,22 @@ rawp click 1000 500 500
 wait 3
 expect mats={"-": 4, "Noise": 1, "Planks": 1}
 screenshot shots/proc_painted.bmp
+# generator plugins: a tab per plugin, a preview in the background, Create at the full size
+action click_spot proc:plugin:basket_weave
+wait 40
+screenshot shots/proc_basket.bmp
+action click_spot proc:create
+wait 60
+expect paint=Basket Weave
+action click_spot proc:plugin:marble
+wait 60
+screenshot shots/proc_marble.bmp
+action procedural plugin:terrazzo
+wait 40
+screenshot shots/proc_terrazzo.bmp
+action click_spot proc:create
+wait 60
+expect paint=Terrazzo
 # sphere thumbnails: a metal and a glass material in the model
 action mat_pbr Steel metallic=1 roughness=0.25
 action mat_pbr Glass glass=1 roughness=0.02

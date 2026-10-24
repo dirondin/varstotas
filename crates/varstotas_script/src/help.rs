@@ -110,6 +110,8 @@ pub const FNS: &[FnDoc] = &[
     f("max", &["max(a, b)"], "script-fn-max"),
     f("clamp", &["clamp(x, lo, hi)"], "script-fn-clamp"),
     f("ceil", &["ceil(x)"], "script-fn-ceil"),
+    f("noise", &["noise(x, y)", "noise(x, y, period, seed)"], "script-fn-noise"),
+    f("fbm", &["fbm(x, y, period, octaves, seed)"], "script-fn-fbm"),
 ];
 
 /// Sections of the in-app reference: a title and the [`FNS`] names in it (every function is
@@ -126,7 +128,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("script-group-parameters-and-generators", &["make_parametric", "set_params", "params", "reset_params", "generators", "add_generator", "generate"]),
     ("script-group-dimensions-and-notes", &["dimension", "note"]),
     ("script-group-files-and-network", &["read_text", "write_text", "file_exists", "list_files", "list_dirs", "parse_json", "fetch_text", "fetch_file", "url_encode"]),
-    ("script-group-output-and-numbers", &["print", "lang", "platform", "len", "range", "min", "max", "clamp", "ceil"]),
+    ("script-group-output-and-numbers", &["print", "lang", "platform", "len", "range", "min", "max", "clamp", "ceil", "noise", "fbm"]),
 ];
 
 /// What a script expression is, as far as the editor can tell (for completion after a dot).

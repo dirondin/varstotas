@@ -1930,6 +1930,8 @@ proc-width = Tile width
 proc-name = Name
 proc-hint = The tile repeats seamlessly; the preview shows 2 × 2 tiles.
 proc-create = Create Material
+proc-plugin-hover = A pattern from a plugin (@texture_generator)
+proc-generating = Generating…
 proc-created = Material { $name } created: click faces to paint
 mat-import = Import…
 mat-import-hover = Add material files (.vrstmat, plugin formats) to the document
@@ -3142,6 +3144,9 @@ ext-mat-catalogue-array = catalogue() must return an array of materials
 ext-mat-no-home = no home folder
 ext-mat-default-name = Material
 ext-mat-import-nothing = import_material() returned nothing
+ext-tex-bad-size = Inline image: "size" must be one side or [width, height] of 1..8192 pixels
+ext-tex-no-pixels = Inline image: give its pixels as "rgb", "rgba" or "grey" (an array of 0..255, base64 or a blob)
+ext-tex-pixel-count = Inline image: { $want } bytes expected, { $got } given
 ext-mat-spec-object = a material spec must be an object
 
 ## Extensions menu and plugin dialogs
@@ -3812,6 +3817,8 @@ script-fn-min = The smaller number.
 script-fn-max = The larger number.
 script-fn-clamp = x kept within lo..hi.
 script-fn-ceil = Round up to a whole number (as a float).
+script-fn-noise = Smooth value noise in 0..1 at x, y (one cell = 1). With period > 0 it repeats every period cells (seamless tiles); seed picks the pattern.
+script-fn-fbm = Fractal noise in 0..1: octaves of noise, each twice as fine and half as strong; period and seed as in noise.
 
 ## Sections
 script-group-points-and-vectors = Points and vectors

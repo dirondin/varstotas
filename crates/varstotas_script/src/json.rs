@@ -123,6 +123,10 @@ fn to_json(v: &Dynamic) -> Value {
     if let Some(a) = v.clone().try_cast::<Array>() {
         return Value::Array(a.iter().map(to_json).collect());
     }
+    // a blob (bytes, e.g. texture pixels): base64
+    if let Some(b) = v.clone().try_cast::<rhai::Blob>() {
+        return json!({ "$blob": varstotas_kernel::texture::base64_encode(&b) });
+    }
     if let Some(m) = v.clone().try_cast::<Map>() {
         return Value::Object(m.iter().map(|(k, x)| (k.to_string(), to_json(x))).collect());
     }

@@ -1968,6 +1968,8 @@ proc-width = Шырыня пліткі
 proc-name = Назва
 proc-hint = Плітка паўтараецца без швоў; у папярэднім праглядзе — 2 × 2 пліткі.
 proc-create = Стварыць матэрыял
+proc-plugin-hover = Узор з плагіна (@texture_generator)
+proc-generating = Генерацыя…
 proc-created = Створаны матэрыял { $name }: пстрыкайце па гранях, каб пафарбаваць
 mat-import = Імпарт…
 mat-import-hover = Дадаць файлы матэрыялаў (.vrstmat, фарматы ўбудоў) у дакумент
@@ -3212,6 +3214,9 @@ ext-mat-catalogue-array = catalogue() павінна вяртаць масіў �
 ext-mat-no-home = няма хатняй папкі
 ext-mat-default-name = Матэрыял
 ext-mat-import-nothing = import_material() нічога не вярнула
+ext-tex-bad-size = Убудаваная выява: "size" — адзін бок або [шырыня, вышыня] ад 1 да 8192 пікселяў
+ext-tex-no-pixels = Убудаваная выява: перадайце пікселі ў "rgb", "rgba" або "grey" (масіў 0..255, base64 або blob)
+ext-tex-pixel-count = Убудаваная выява: чакалася байтаў: { $want }, перададзена: { $got }
 ext-mat-spec-object = апісанне матэрыялу павінна быць аб’ектам
 
 ## Меню Пашырэнні і дыялогі плагінаў
@@ -3889,6 +3894,8 @@ script-fn-min = Меншы з лікаў.
 script-fn-max = Большы з лікаў.
 script-fn-clamp = x, абмежаваны ў межах lo..hi.
 script-fn-ceil = Акругліць уверх да цэлага (як float).
+script-fn-noise = Гладкі шум 0..1 у пункце x, y (адна ячэйка = 1). Пры period > 0 паўтараецца кожныя period ячэек (бясшвовыя пліткі); seed выбірае ўзор.
+script-fn-fbm = Фрактальны шум 0..1: актавы шуму, кожная ўдвая драбнейшая і ўдвая слабейшая; period і seed — як у noise.
 
 ## Раздзелы
 script-group-points-and-vectors = Кропкі і вектары

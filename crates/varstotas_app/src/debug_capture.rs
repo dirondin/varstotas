@@ -1883,11 +1883,16 @@ impl VarstotasApp {
             self.drop_image(std::path::Path::new(path.trim()), local);
             return;
         }
-        // `procedural <kind>`: the Procedural Material window with that kind.
+        // `procedural <kind>` / `procedural plugin:<file stem>`: the Procedural Material window
+        // with that pattern.
         if let Some(k) = name.strip_prefix("procedural ") {
             use crate::ui::procedural::{Kind, Params};
             if let Some(kind) = Kind::ALL.into_iter().find(|x| x.key() == k.trim()) {
                 self.procedural.params = Params::new(kind);
+                self.procedural.plugin = None;
+            }
+            if let Some(stem) = k.trim().strip_prefix("plugin:") {
+                self.procedural.plugin = self.plugins.list.iter().find(|p| p.texture_generator.is_some() && p.path.file_stem().is_some_and(|s| s == stem)).map(|p| p.path.clone());
             }
             self.procedural.open = true;
             return;

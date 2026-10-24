@@ -36,6 +36,7 @@ A plugin's description is comments at the start of the file (`//` for Rhai, `#` 
 | `@export json` | an exporter: an item in **File → Export**, the path arrives in `path` |
 | `@material_import mat,material` | a material importer: **Materials → Import…** reads these files with the plugin (see below) |
 | `@material_source` | a material source in the **Online Materials** window (see below) |
+| `@texture_generator [max side]` | a procedural texture generator: a tab in **Materials → + → New Procedural…** (see "Texture generator plugins"); the image side is at most this many pixels (default 512, 16..2048) |
 | `@model_import ply,…` | a 3D model importer: an item in **File → Import**, these files are also read by the **3D Library** (see "Model plugins") |
 | `@model_source` / `@model_source search` | a model source in the **3D Library** window: the whole catalogue at once / search on the site's side |
 | `@notice text` | the source's terms (licence, whether a key or account is needed, whom to credit as the author): shown with ⚠ above the catalogue in **3D Library** / **Online Materials**. Several lines are allowed, they are joined with a space. |
@@ -118,6 +119,22 @@ Material fields in the catalogue: `id` is required; then `name`, `category`, `ke
 | `metallic`, `roughness`, `transmission`, `ior`, `emission` (colour), `emission_strength`, `normal_scale`, `clearcoat`, `clearcoat_roughness`, `sheen`, `sheen_tint`, `anisotropy`, `anti_tiling`, `bevel` (mm) | physical parameters (Physical in the Materials card) |
 
 An example importer is `unity_material.rhai`. It reads `.mat` (Standard / URP / HDRP Lit): `m_Name`, `_BaseColor` / `_Color`, `_Metallic`, `_Smoothness` / `_Glossiness` (roughness = 1 − smoothness), `_BumpScale`, `_EmissionColor` and the textures `_BaseMap` / `_MainTex`, `_BumpMap`, `_OcclusionMap`, `_EmissionMap`. Textures are looked up by GUID in the `.meta` files of the project's `Assets` folder. The texture width is set by the `width` parameter. PSD / TIFF and `_MetallicGlossMap` (metal in the R channel) are not carried over.
+
+### Texture generator plugins
+
+A plugin with `@texture_generator` is a tab of the **New Procedural Material** window, next to the built-in Bricks / Tiles / Planks / Noise / Checker. Its `@param`s are the fields; **Tile width** and **Name** are added by the window. When the values settle, the window asks for a small preview (at most 128 px), and **Create** asks for the full size, adds the material, makes it current and switches to Paint. Both run in the background; an error is shown under the preview.
+
+**Rhai**: `fn texture(size, params)` → a material specification (see above). **Python**: `python3 plugin.py texture`, stdin `{ "size", "params", "dir" }`, the reply is JSON on the last line of stdout. `size` is the side in pixels the window wants. The working folder is `~/.varstotas/cache/online/<plugin>/texture`: relative paths in the reply are counted from it (a Python plugin may write a PNG there and answer `{"texture": "out.png"}`).
+
+Any image of the specification (`texture`, `maps.color`, `maps.normal`, …) can be given **inline**, without a file:
+
+```rhai
+#{ texture: #{ size: size, rgb: pixels }, maps: #{ roughness: #{ size: [w, h], grey: r } }, width: 600 }
+```
+
+`size` is a side or `[width, height]`; the pixels are `rgb`, `rgba` or `grey`, rows from the top, one byte per channel, as an array of 0..255, a base64 string or (Rhai) a blob — `blob(size * size * 3, 0)`, then `pixels[i] = v`. The number of bytes must match the size. The built-in `noise(x, y, period, seed)` and `fbm(x, y, period, octaves, seed)` repeat with a period, so a tile made with them is seamless.
+
+Examples in `examples/plugins`: `basket_weave.rhai` (parquet squares of planks with grain), `terrazzo.rhai` (stone chips in a cloudy base), `marble.py` (veined marble in pure Python, base64 RGB).
 
 ### Model plugins (3D Library)
 The **Window → 3D Library…** window (or the cloud in the top row of the Components card) searches for and downloads ready-made models. Built-in sources: **Poly Haven** (CC0, glTF with 1K textures, real size), **Smithsonian** (CC0, scans of museum objects; search on the server — Enter), **NASA** (GLB from the NASA-3D-Resources repository). What is downloaded is imported, wrapped into one component, put on the ground (bounding box from the origin) and saved to the component library: `<library>/<source>/<name>.vrst`. Download files are in `~/.varstotas/downloads/<source>/<id>/`. Double click — download and place (by a click in the model, like a component from the library), the buttons Download & Place / Download / Place / Download Again / Web Page. The **From URL** field downloads a direct link to a `.glb` / `.gltf` / `.obj` / `.stl` / `.dxf` / `.zip` (library folder "Web"). Models over 100 thousand triangles are marked ⚠. glTF with Draco compression is read (the `draco-core` decoder), meshopt is not.

@@ -4,7 +4,9 @@
 //!   Rhai `fn import_material(path, params)`, Python `plugin.py import`;
 //! - `@material_source` — a source of the Online Materials window: Rhai
 //!   `fn catalogue(params)` and `fn download(id, dir, params)`, Python `plugin.py catalogue` /
-//!   `plugin.py download`.
+//!   `plugin.py download`;
+//! - `@texture_generator [side]` — a pattern of the Procedural Material window: Rhai
+//!   `fn texture(size, params)`, Python `plugin.py texture` (stdin: `size`, `params`, `dir`).
 //!
 //! A Rhai plugin runs on its own (an empty model; the files, `fetch_text`, `fetch_file` and
 //! `parse_json` of the script API). A Python plugin gets its arguments as a JSON object on
@@ -17,6 +19,10 @@
 //!   "folder": "…" / "zip": "…"   (maps found by their file names),
 //!   "metallic": 0, "roughness": 0.8, "clearcoat": 0.5, … }
 //! ```
+//!
+//! Any image (`texture`, `maps.*`) may also be given inline: `{ "size": [w, h] (or one side),
+//! "rgb" | "rgba" | "grey": bytes }`, the bytes an array of 0..255, base64 text or a Rhai blob
+//! (`{"$blob": base64}` in JSON), rows from the top.
 
 use crate::online_mats::{Asset, MapKind, PluginSource, Source, embeddable, guess_map, material_from_maps, unzip};
 use crate::plugins::{Lang, Plugin};
@@ -149,6 +155,54 @@ pub fn download(src: &Arc<PluginSource>, asset: &Asset) -> Result<Material, Stri
     material_from_spec(&spec, &dir, &asset.name, asset.width_mm)
 }
 
+/// Run texture generator `p` for a `size` × `size` tile (the plugin may answer another size):
+/// the material it describes, named `name` and `width_mm` wide unless the answer says so.
+pub fn texture(p: &Plugin, size: u32, params: Map<String, Value>, name: &str, width_mm: f64) -> Result<Material, String> {
+    let dir = work_dir(p, "texture")?;
+    let mut args = vec![("size", json!(size)), ("params", Value::Object(params))];
+    if p.lang == Lang::Python {
+        args.push(("dir", json!(dir.to_string_lossy())));
+    }
+    let v = call(p, "texture", args)?;
+    let spec = if let Value::Array(a) = &v { a.first().cloned().unwrap_or(Value::Null) } else { v };
+    if spec.is_null() {
+        return Err(tr!("ext-mat-import-nothing"));
+    }
+    material_from_spec(&spec, &dir, name, width_mm)
+}
+
+/// An inline image of a spec (`{ size, rgb | rgba | grey }`) as PNG bytes.
+fn inline_image(o: &Map<String, Value>) -> Result<Vec<u8>, String> {
+    let (w, h) = match &o.get("size") {
+        Some(Value::Array(a)) => (a.first().and_then(Value::as_u64).unwrap_or(0), a.get(1).and_then(Value::as_u64).unwrap_or(0)),
+        Some(v) => (v.as_u64().unwrap_or(0), v.as_u64().unwrap_or(0)),
+        None => (0, 0),
+    };
+    if !(1..=8192).contains(&w) || !(1..=8192).contains(&h) {
+        return Err(tr!("ext-tex-bad-size"));
+    }
+    let (key, ch) = [("rgba", 4), ("rgb", 3), ("grey", 1)].into_iter().find(|(k, _)| o.contains_key(*k)).ok_or_else(|| tr!("ext-tex-no-pixels"))?;
+    let bytes: Vec<u8> = match &o[key] {
+        Value::Array(a) => a.iter().map(|x| x.as_f64().unwrap_or(0.0).round().clamp(0.0, 255.0) as u8).collect(),
+        Value::String(s) => varstotas_kernel::texture::base64_decode(s).ok_or_else(|| tr!("ext-tex-no-pixels"))?,
+        Value::Object(b) => b.get("$blob").and_then(Value::as_str).and_then(varstotas_kernel::texture::base64_decode).ok_or_else(|| tr!("ext-tex-no-pixels"))?,
+        _ => return Err(tr!("ext-tex-no-pixels")),
+    };
+    let n = (w * h) as usize;
+    if bytes.len() != n * ch {
+        return Err(tr!("ext-tex-pixel-count", want = n * ch, got = bytes.len()));
+    }
+    let rgba: Vec<u8> = match ch {
+        4 => bytes,
+        3 => bytes.as_chunks::<3>().0.iter().flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+        _ => bytes.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+    };
+    let img = image::RgbaImage::from_raw(w as u32, h as u32, rgba).ok_or_else(|| tr!("ext-tex-bad-size"))?;
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok(out.into_inner())
+}
+
 /// Read `path` with importer plugin `p`: its materials.
 pub fn import(p: &Plugin, path: &Path, params: Map<String, Value>) -> Result<Vec<Material>, String> {
     let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
@@ -196,6 +250,11 @@ fn map_key(k: &str) -> Option<MapKind> {
         "emission" | "emissive" => MapKind::Emission,
         _ => return None,
     })
+}
+
+/// The spec key of a map kind (inline images are named after it).
+fn map_label(k: MapKind) -> &'static str {
+    ["color", "normal", "roughness", "ao", "metallic", "emission"].into_iter().find(|n| map_key(n) == Some(k)).unwrap_or("map")
 }
 
 fn is_image(name: &str) -> bool {
@@ -258,6 +317,11 @@ pub fn material_from_spec(spec: &Value, base: &Path, name: &str, width_mm: f64) 
         named.push((MapKind::Color, t));
     }
     for (kind, v) in named {
+        if let Some(o) = v.as_object() {
+            maps.retain(|(k, _, _)| *k != kind);
+            maps.push((kind, format!("{}.png", map_label(kind)), inline_image(o)?));
+            continue;
+        }
         let Some(p) = path(v) else { continue };
         maps.retain(|(k, _, _)| *k != kind);
         maps.push((kind, file_name(&p), read(&p)?));
@@ -468,6 +532,36 @@ Material:
         assert_eq!((m.name.as_str(), m.image.as_ref().unwrap().size[0]), ("Oak Floor", 800.0));
         assert!(m.pbr.unwrap().roughness_map.is_some());
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// The texture generator examples answer `texture` with an inline colour map.
+    #[test]
+    fn texture_generator_examples() {
+        let python = std::process::Command::new("python3").arg("--version").output().is_ok();
+        for name in ["basket_weave.rhai", "terrazzo.rhai", "marble.py"] {
+            if name.ends_with(".py") && !python {
+                continue;
+            }
+            let p = example(name);
+            assert!(p.texture_generator.is_some(), "{name}");
+            let params = p.params.iter().map(|q| (q.key.clone(), crate::plugins::param_value(q, &q.default, varstotas_kernel::LengthUnit::Millimeter).unwrap())).collect();
+            let m = texture(&p, 32, params, "T", 500.0).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let img = m.image.as_ref().unwrap();
+            assert_eq!(crate::textures::decode(&img.bytes).unwrap().0, 32, "{name}");
+        }
+    }
+
+    /// Inline images: a grey map as a byte array, a wrong pixel count is an error.
+    #[test]
+    fn inline_images() {
+        let d = tmp("inline");
+        let spec = json!({ "texture": { "size": [2, 1], "rgb": [255, 0, 0, 0, 0, 255] }, "maps": { "roughness": { "size": 2, "grey": [0, 64, 128, 255] } } });
+        let m = material_from_spec(&spec, &d, "I", 100.0).unwrap();
+        let d0 = crate::textures::decode(&m.image.as_ref().unwrap().bytes).unwrap();
+        assert_eq!((d0.0, d0.1, &d0.2[..4]), (2, 1, &[255, 0, 0, 255][..]));
+        assert!(m.pbr.unwrap().roughness_map.is_some());
+        let bad = json!({ "texture": { "size": 2, "rgb": [1, 2, 3] } });
+        assert!(material_from_spec(&bad, &d, "I", 100.0).is_err());
     }
 
     /// The Python example answers `catalogue` from a cached catalogue file (no network).
