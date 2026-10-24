@@ -1883,6 +1883,15 @@ impl VarstotasApp {
             self.drop_image(std::path::Path::new(path.trim()), local);
             return;
         }
+        // `procedural <kind>`: the Procedural Material window with that kind.
+        if let Some(k) = name.strip_prefix("procedural ") {
+            use crate::ui::procedural::{Kind, Params};
+            if let Some(kind) = Kind::ALL.into_iter().find(|x| x.key() == k.trim()) {
+                self.procedural.params = Params::new(kind);
+            }
+            self.procedural.open = true;
+            return;
+        }
         // `mat_replace <name>`: the model material's uses repainted with the current material.
         if let Some(n) = name.strip_prefix("mat_replace ") {
             if let Some(id) = self.doc.model.materials.iter().find(|(_, m)| m.name == n.trim()).map(|(id, _)| id) {

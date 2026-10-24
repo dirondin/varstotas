@@ -537,6 +537,7 @@ pub struct VarstotasApp {
     pub(crate) mat_library: crate::ui::mat_library::MatLibraryState,
     pub(crate) mat_editor: crate::ui::mat_editor::MatEditorState,
     pub(crate) uv: crate::ui::uv_editor::UvState,
+    pub(crate) procedural: crate::ui::procedural::ProcState,
     /// A Components / Materials tile being dragged into the viewport.
     pub(crate) tray_drag: Option<crate::ui::tray_lib::TrayDrag>,
     /// Transient status message (text, expiry time).
@@ -719,6 +720,7 @@ impl VarstotasApp {
             mat_library: Default::default(),
             mat_editor: Default::default(),
             uv: Default::default(),
+            procedural: Default::default(),
             tray_drag: None,
             flash: None,
             tray: TrayState::default(),
@@ -2960,6 +2962,7 @@ impl eframe::App for VarstotasApp {
         self.shader_editor_window(&ctx);
         self.material_editor_window(&ctx);
         self.uv_editor_window(&ctx);
+        self.procedural_window(&ctx);
         self.texture_view_window(&ctx);
         self.poll_external_edits();
         self.plugin_dialog(&ctx);

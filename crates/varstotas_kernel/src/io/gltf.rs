@@ -694,6 +694,11 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
                 6 => (2..idx.len()).map(|k| [idx[0], idx[k - 1], idx[k]]).collect(),
                 _ => idx.as_chunks::<3>().0.to_vec(),
             };
+            // KHR_texture_transform of the base colour texture, applied in glTF's (v down) space.
+            let uv = match p["material"].as_u64().and_then(|i| texture_transform(&g.doc["materials"][i as usize])) {
+                Some(tt) => uv.map(|uv| uv.into_iter().map(|v| tt(DVec2::new(v.x, -v.y)) * DVec2::new(1.0, -1.0)).collect()),
+                None => uv,
+            };
             // A mirroring transform flips the winding.
             let flip = m.determinant() < 0.0;
             let mat = p["material"].as_u64().and_then(|i| get_mat(model, i as usize));
@@ -737,4 +742,26 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
         model.defs[pd].mesh.instances.insert(inst);
     }
     Ok(())
+}
+
+/// The `KHR_texture_transform` of a material's base colour texture as a map of glTF texture
+/// coordinates (offset · rotation · scale), if it has one.
+fn texture_transform(mat: &Value) -> Option<impl Fn(DVec2) -> DVec2> {
+    // i18n-ignore-next
+    let t = &mat["pbrMetallicRoughness"]["baseColorTexture"]["extensions"]["KHR_texture_transform"];
+    if !t.is_object() {
+        return None;
+    }
+    let pair = |v: &Value, d: f64| {
+        let a = v.as_array();
+        let at = |k: usize| a.and_then(|a| a.get(k)).and_then(|x| x.as_f64()).unwrap_or(d);
+        DVec2::new(at(0), at(1))
+    };
+    let offset = pair(&t["offset"], 0.0);
+    let scale = pair(&t["scale"], 1.0);
+    let (s, c) = t["rotation"].as_f64().unwrap_or(0.0).sin_cos();
+    Some(move |q: DVec2| {
+        let q = q * scale;
+        DVec2::new(c * q.x + s * q.y, -s * q.x + c * q.y) + offset
+    })
 }

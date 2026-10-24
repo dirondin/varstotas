@@ -374,3 +374,45 @@ fn legacy_blender_transmission_recovery_is_narrow_and_can_be_disabled() {
         assert_eq!(import(&other,true),[1.,1.],"authored glass must stay intact: {pointer}");
     }
 }
+
+#[test]
+fn gltf_texture_transform_is_applied_on_import() {
+    // One triangle in the glTF XY plane with texture coordinates (0,0), (1,0), (0,1) and a
+    // base colour texture scaled 2× and moved by (0.5, 0.25).
+    let mut buf: Vec<u8> = [0.0f32, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0].iter().flat_map(|v| v.to_le_bytes()).collect();
+    buf.extend([0.0f32, 0.0, 1.0, 0.0, 0.0, 1.0].iter().flat_map(|v| v.to_le_bytes()));
+    let uri = format!("data:application/octet-stream;base64,{}", base64_encode(&buf));
+    let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    let doc = serde_json::json!({
+        "asset": {"version": "2.0"},
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "TEXCOORD_0": 1}, "material": 0}]}],
+        "materials": [{"name": "T", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0,
+            "extensions": {"KHR_texture_transform": {"offset": [0.5, 0.25], "scale": [2.0, 2.0]}}}}}],
+        "textures": [{"source": 0}],
+        "images": [{"uri": png}],
+        "extensionsUsed": ["KHR_texture_transform"],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+            {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2"}
+        ],
+        "bufferViews": [{"buffer": 0, "byteLength": 36}, {"buffer": 0, "byteOffset": 36, "byteLength": 24}],
+        "buffers": [{"byteLength": 60, "uri": uri}],
+    });
+    let mut m = Model::default();
+    add_gltf(&mut m, &serde_json::to_vec(&doc).unwrap(), None, &ImportOptions::default()).unwrap();
+    let inst = m.root_mesh().instances.values().next().unwrap();
+    let mesh = &m.defs[inst.def].mesh;
+    let face = mesh.faces.values().next().unwrap();
+    let tile = m.materials[face.front.unwrap()].image.as_ref().unwrap().size;
+    let at = |p: DVec3| {
+        let t = varstotas_kernel::texture::face_uv_mm(p, face.normal, face.uv.as_ref());
+        (t.x / tile[0], t.y / tile[1])
+    };
+    // glTF (u, v) → (2u + 0.5, 2v + 0.25); Varstotas v grows upward: -(…)
+    let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6;
+    assert!(close(at(DVec3::ZERO), (0.5, -0.25)), "{:?}", at(DVec3::ZERO));
+    assert!(close(at(DVec3::new(1000.0, 0.0, 0.0)), (2.5, -0.25)), "{:?}", at(DVec3::new(1000.0, 0.0, 0.0)));
+    assert!(close(at(DVec3::new(0.0, 0.0, 1000.0)), (0.5, -2.25)), "{:?}", at(DVec3::new(0.0, 0.0, 1000.0)));
+}

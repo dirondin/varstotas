@@ -370,6 +370,10 @@ impl VarstotasApp {
                     texture = true;
                     ui.close();
                 }
+                if ui.button(tr!("mat-new-procedural")).on_hover_text(tr!("mat-new-procedural-hover")).clicked() {
+                    self.procedural.open = true;
+                    ui.close();
+                }
                 if ui.button(tr!("mat-import")).on_hover_text(tr!("mat-import-hover")).clicked() {
                     import = true;
                     ui.close();
@@ -747,7 +751,12 @@ impl VarstotasApp {
 
     /// How a material tile looks: its colour, the texture's thumbnail, a corner mark.
     pub(crate) fn material_look(&mut self, ctx: &egui::Context, m: &Material) -> MatLook {
-        let tex = m.image.as_ref().and_then(|img| self.thumbnail(ctx, img));
+        // physical materials: a rendered sphere; others: the swatch / texture tile
+        let tex = if super::mat_thumb::wants_sphere(m) {
+            Some(super::mat_thumb::sphere_texture(ctx, m))
+        } else {
+            m.image.as_ref().and_then(|img| self.thumbnail(ctx, img))
+        };
         let p = m.pbr_or_default();
         // A corner mark: metal (light), glass (blue), emissive (warm).
         let mark = if p.emission_strength > 0.0 && p.emission.iter().any(|c| *c > 0.0) {
