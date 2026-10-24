@@ -317,6 +317,27 @@ pub fn transform(mesh: &Mesh, faces: &[FaceId], op: IslandOp) -> Placements {
     }
 }
 
+/// The island turned by a random multiple of 90° and moved by a random part of the tile
+/// (`seed` picks the variant; the same seed gives the same result), so repeated textures on
+/// neighbouring islands don't line up.
+pub fn randomize(mesh: &Mesh, faces: &[FaceId], tile: [f64; 2], seed: u64) -> Placements {
+    let Some((lo, hi)) = bounds(mesh, faces) else { return Vec::new() };
+    let mut s = seed;
+    let mut next = move || {
+        // splitmix64
+        s = s.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = s;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let deg = (next() % 4) as f64 * 90.0;
+    let unit = |v: u64| (v >> 11) as f64 / (1u64 << 53) as f64;
+    let d = DVec2::new(unit(next()) * tile[0], unit(next()) * tile[1]);
+    let turn = rotation((lo + hi) / 2.0, deg);
+    map_faces(mesh, faces, |q| turn(q) + d)
+}
+
 /// The island scaled uniformly and moved so it fills one tile (`tile` mm), from its origin.
 pub fn fit_to_tile(mesh: &Mesh, faces: &[FaceId], tile: [f64; 2]) -> Placements {
     let Some((lo, hi)) = bounds(mesh, faces) else { return Vec::new() };

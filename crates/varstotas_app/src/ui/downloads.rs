@@ -60,6 +60,11 @@ impl VarstotasApp {
             self.downloads_link(&url, ctx);
             return;
         }
+        if crate::textures::is_image_file(p) {
+            let local = ctx.input(|i| i.pointer.latest_pos()).map(|q| (q - self.viewport.rect.min).to_pos2());
+            self.drop_image(p, local);
+            return;
+        }
         if crate::downloads::is_model_file(p) {
             // Dropped again: offer it again.
             self.models.dl.offered.remove(p);

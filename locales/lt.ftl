@@ -115,6 +115,7 @@ app-play-animation = Paleisti animaciją
 # { $path } yra failo kelias, { $error } yra klaidos tekstas.
 app-cant-use = Negalima naudoti { $path }: { $error }
 app-undo-add-material = Pridėti medžiagą
+app-dropped-material = Pridėta medžiaga { $name }: spustelėkite sieną, kad ją nudažytumėte
 app-no-scenes = Nėra scenų, kurias būtų galima paleisti. Pridėkite scenų skydelyje „Scenos“.
 # { $path } yra failo kelias.
 app-opened = Atidaryta: { $path }
@@ -1612,6 +1613,8 @@ uv-pack = Supakuoti
 uv-pack-hover = Išdėstyti salas vienoje plytelėje vienu masteliu
 uv-align = Išlygiuoti
 uv-align-hover = Pasukti kiekvieną salą, kad ilgiausia jos kraštinė eitų tiesiai
+uv-randomize = Atsitiktinai
+uv-randomize-hover = Pasukti kiekvieną salą atsitiktiniu 90° kartotiniu kampu ir pastumti plytelės ribose, kad pasikartojimai nesutaptų (paspauskite dar kartą – kitas variantas)
 uv-checker = Šachmatai
 uv-checker-hover = Rodyti šachmatų lentą vietoje tekstūrų (čia ir 3D vaizde), kad matytųsi ištempimai
 uv-density = Tekselių tankis
@@ -1937,6 +1940,10 @@ mat-export = Eksportuoti…
 mat-save-hover = Įrašyti į medžiagų bibliotekos aplanką, kad būtų prieinama bet kuriam dokumentui
 mat-copy-hover = Nukopijuoti į jūsų medžiagų biblioteką
 mat-delete-model-hover = Pašalinti iš modelio: tai, kas ja nudažyta, gauna numatytąją medžiagą (Atšaukti ją sugrąžina)
+mat-replace = Pakeisti dabartine medžiaga
+mat-replace-hover = Perdažyti viską, kas nudažyta šia medžiaga, dabartine medžiaga ir pašalinti ją iš modelio (Atšaukti ją grąžins)
+mat-undo-replace = Pakeisti { $name } į { $with }
+mat-replaced = { $name } → { $with }: perdažyta { $n }
 mat-file-filter = Varstotas medžiaga
 mat-all-filter = Visos medžiagos
 

@@ -2091,6 +2091,26 @@ impl VarstotasApp {
         self.set_tool(ToolId::Paint);
     }
 
+    /// An image file dropped on the window: a new textured material becomes the paint
+    /// material; dropped over the viewport (`local`: viewport position) it paints the face
+    /// or object there.
+    pub(crate) fn drop_image(&mut self, path: &Path, local: Option<egui::Pos2>) {
+        let before = self.doc.current_material.as_ref().map(|c| c.name.clone());
+        self.add_texture_material(path, 1000.0);
+        let Some(name) = self.doc.current_material.as_ref().map(|c| c.name.clone()).filter(|n| Some(n) != before.as_ref()) else { return };
+        let Some(local) = local.filter(|p| p.x >= 0.0 && p.y >= 0.0 && p.x < self.viewport.rect.width() && p.y < self.viewport.rect.height()) else {
+            self.flash(tr!("app-dropped-material", name = name.as_str()));
+            return;
+        };
+        self.last_pointer = Some(local);
+        let pi = self.pointer_info(local, egui::Vec2::ZERO, None, false);
+        self.with_tool(pi, |t, c| t.on_pointer_move(c));
+        let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(egui::PointerButton::Primary), true);
+        self.with_tool(pi, |t, c| t.on_pointer_down(c));
+        let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(egui::PointerButton::Primary), false);
+        self.with_tool(pi, |t, c| t.on_pointer_up(c));
+    }
+
     /// A scene of the current view: camera, display style and hidden tags.
     pub(crate) fn scene_from_camera(&self, name: String) -> Scene {
         let c = &self.camera;

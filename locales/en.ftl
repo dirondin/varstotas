@@ -111,6 +111,7 @@ app-play-animation = Play Animation
 # { $path } is a file path, { $error } the error text.
 app-cant-use = Can't use { $path }: { $error }
 app-undo-add-material = Add Material
+app-dropped-material = Material { $name } added: click a face to paint it
 app-no-scenes = No scenes to play. Add scenes in the Scenes panel.
 # { $path } is a file path.
 app-opened = Opened { $path }
@@ -1600,6 +1601,8 @@ uv-pack = Pack
 uv-pack-hover = Lay the islands out in one tile at one scale
 uv-align = Align
 uv-align-hover = Turn each island so its longest edge runs straight
+uv-randomize = Randomize
+uv-randomize-hover = Turn each island by a random multiple of 90° and shift it within the tile, so repeats don't line up (press again for another variant)
 uv-checker = Checker
 uv-checker-hover = Show a checker instead of the textures (here and in the 3D view) to see stretching
 uv-density = Texel density
@@ -1925,6 +1928,10 @@ mat-export = Export…
 mat-save-hover = Write it to the materials library folder, for any document
 mat-copy-hover = Copy it to your materials library
 mat-delete-model-hover = Remove it from the model: what it paints gets the default material (Undo brings it back)
+mat-replace = Replace with Current Material
+mat-replace-hover = Repaint everything painted with it with the current paint material and remove it from the model (Undo brings it back)
+mat-undo-replace = Replace { $name } with { $with }
+mat-replaced = { $name } → { $with }: { $n } repainted
 mat-file-filter = Varstotas material
 mat-all-filter = All materials
 

@@ -158,3 +158,17 @@ fn pack_fits_every_island_in_one_tile_at_one_scale() {
     }
     assert!(k > 0.15, "the tile is used well: {k}");
 }
+
+/// Randomize: the same seed repeats, another seed gives another variant; angles stay multiples of 90°.
+#[test]
+fn randomize_is_seeded() {
+    let m = boxed();
+    let f = m.faces.keys().next().unwrap();
+    let a = uv::randomize(&m, &[f], [800.0, 400.0], 7);
+    assert_eq!(a, uv::randomize(&m, &[f], [800.0, 400.0], 7));
+    let angles: std::collections::HashSet<i64> = (0..40)
+        .flat_map(|s| uv::randomize(&m, &[f], [800.0, 400.0], s))
+        .filter_map(|(_, p)| p.map(|p| p.angle_deg.rem_euclid(360.0).round() as i64 % 360))
+        .collect();
+    assert!(angles.len() > 1 && angles.iter().all(|a| a % 90 == 0), "{angles:?}");
+}

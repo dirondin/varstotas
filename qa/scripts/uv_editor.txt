@@ -41,7 +41,7 @@ undo
 wait 3
 expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
 # the checker stands in for the textures in the 3D view too
-raw click 599 108
+raw click 685 108
 wait 5
 expect uv=(true 6 6 1 true 12)
 screenshot shots/uv_checker.bmp

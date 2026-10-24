@@ -259,6 +259,33 @@ impl Model {
         Ok(uses)
     }
 
+    /// Paint everything painted with `old` (faces, objects, every definition) with `new`
+    /// instead and remove `old`. Returns the number of faces and objects repainted.
+    pub fn replace_material(&mut self, old: MaterialId, new: MaterialId) -> OpResult<usize> {
+        if old == new || !self.materials.contains_key(new) || self.materials.remove(old).is_none() {
+            return Err(OpError::NotFound);
+        }
+        let mut uses = 0;
+        let swap = |slot: &mut Option<MaterialId>| {
+            if *slot == Some(old) {
+                *slot = Some(new);
+                1
+            } else {
+                0
+            }
+        };
+        for def in self.defs.values_mut() {
+            for f in def.mesh.faces.values_mut() {
+                let n = swap(&mut f.front) + swap(&mut f.back);
+                uses += n.min(1);
+            }
+            for i in def.mesh.instances.values_mut() {
+                uses += swap(&mut i.material);
+            }
+        }
+        Ok(uses)
+    }
+
     /// Rename component `d` (a variant of a component with parameters renames its master);
     /// the variants of a master take the name too. Groups and the root can't be renamed.
     pub fn rename_definition(&mut self, d: DefId, name: &str) -> OpResult<()> {

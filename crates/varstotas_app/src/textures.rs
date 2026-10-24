@@ -63,6 +63,12 @@ pub fn preview_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Read an image file into a texture `width_mm` wide (height from the aspect ratio); also
 /// returns the decoded image (to check it and for the average colour).
+/// An image file the texture loader reads (by extension).
+pub fn is_image_file(path: &Path) -> bool {
+    let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    matches!(ext.as_str(), "png" | "jpg" | "jpeg")
+}
+
 pub fn load_file(path: &Path, width_mm: f64) -> Result<(TextureImage, Decoded), String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let decoded = decode(&bytes)?;

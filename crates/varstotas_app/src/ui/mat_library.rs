@@ -59,6 +59,8 @@ enum MatAct {
     Delete(PathBuf),
     /// A model material: remove it from the document.
     DeleteModel(MaterialId),
+    /// A model material: repaint its uses with the current material and remove it.
+    Replace(MaterialId),
     /// Toggle the favourite of this key.
     Favourite(String),
     /// Move a library file to a subfolder.
@@ -466,6 +468,12 @@ impl VarstotasApp {
                         act = Some(MatAct::Export(*id));
                         ui.close();
                     }
+                    let other = cur.as_deref().is_some_and(|c| c != m.name);
+                    let r = ui.add_enabled(other, egui::Button::new(tr!("mat-replace"))).on_hover_text(tr!("mat-replace-hover"));
+                    if r.clicked() {
+                        act = Some(MatAct::Replace(*id));
+                        ui.close();
+                    }
                     if ui.button(tr!("delete")).on_hover_text(tr!("mat-delete-model-hover")).clicked() {
                         act = Some(MatAct::DeleteModel(*id));
                         ui.close();
@@ -665,6 +673,7 @@ impl VarstotasApp {
             Some(MatAct::Export(id)) => self.export_material(id),
             Some(MatAct::Delete(p)) => self.mat_library.delete_ask = Some(p),
             Some(MatAct::DeleteModel(id)) => self.delete_model_material(id),
+            Some(MatAct::Replace(id)) => self.replace_with_current_material(id),
             Some(MatAct::Favourite(key)) => super::tray_lib::toggle(&mut self.prefs.mat_favourites, &key),
             Some(MatAct::Move(p, folder)) => {
                 if let Some(root) = self.material_library_dir() {
@@ -708,6 +717,21 @@ impl VarstotasApp {
 
     /// In Model → Delete: remove model material `id` (one undo step); what it painted gets the
     /// default material.
+    /// Repaint what material `id` paints with the current paint material (added to the model
+    /// if needed) and remove `id`: one undo step.
+    pub(crate) fn replace_with_current_material(&mut self, id: MaterialId) {
+        let Some(name) = self.doc.model.materials.get(id).map(|m| m.name.clone()) else { return };
+        let Some(cur) = self.doc.current_material.clone().filter(|c| c.name != name) else { return };
+        let label = tr!("mat-undo-replace", name = name.as_str(), with = cur.name.as_str());
+        match self.doc.commit(&label, |m| {
+            let new = cur.ensure_in(m);
+            m.replace_material(id, new)
+        }) {
+            Some(Ok(n)) => self.flash(tr!("mat-replaced", name = name.as_str(), with = cur.name.as_str(), n = n)),
+            _ => self.flash_error(tr!("mat-delete-failed", name = name.as_str())),
+        }
+    }
+
     pub(crate) fn delete_model_material(&mut self, id: MaterialId) {
         let Some(name) = self.doc.model.materials.get(id).map(|m| m.name.clone()) else { return };
         match self.doc.commit(&tr!("mat-undo-delete", name = name.as_str()), |m| m.delete_material(id)) {

@@ -1875,6 +1875,21 @@ impl VarstotasApp {
             self.mat_library.delete_ask = self.mat_library.items.iter().filter_map(|i| i.path.clone()).find(|p| p.file_stem().is_some_and(|s| s == n.trim()));
             return;
         }
+        // `drop_image <path>|<x> <y> <z>`: an image file dropped over that model point.
+        if let Some(args) = name.strip_prefix("drop_image ") {
+            let (path, at) = args.split_once('|').unwrap_or((args, ""));
+            let v: Vec<f64> = at.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+            let local = (v.len() == 3).then(|| self.script_screen(varstotas_kernel::glam::DVec3::new(v[0], v[1], v[2])));
+            self.drop_image(std::path::Path::new(path.trim()), local);
+            return;
+        }
+        // `mat_replace <name>`: the model material's uses repainted with the current material.
+        if let Some(n) = name.strip_prefix("mat_replace ") {
+            if let Some(id) = self.doc.model.materials.iter().find(|(_, m)| m.name == n.trim()).map(|(id, _)| id) {
+                self.replace_with_current_material(id);
+            }
+            return;
+        }
         // `tex_look hue=30 saturation=-1 lightness=0 cutoff=0.5 colorize=1 decal=0 world=1`:
         // the current material's texture look (one undo step).
         if let Some(args) = name.strip_prefix("tex_look ") {

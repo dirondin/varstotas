@@ -51,6 +51,8 @@ pub struct UvState {
     /// The checker stands in for textures (UV Editor and 3D view).
     pub checker: bool,
     density: String,
+    /// Variant of the last Randomize (each press gives a new one).
+    seed: u64,
     image: Option<(usize, egui::TextureHandle)>,
     checker_tex: Option<egui::TextureHandle>,
     /// (model version, faces) → islands.
@@ -188,7 +190,7 @@ impl VarstotasApp {
 
     /// Run a UV Editor command (buttons and scripts): `unfold`, `planar`, `box`, `cylinder`,
     /// `sphere`, `rotate`, `rotate_ccw`, `flip_u`, `flip_v`, `fit`, `pack`, `align`,
-    /// `density <px/m>`, `seams_mark`, `seams_clear`, `seams_hard`, `checker`, `select_all`,
+    /// `randomize`, `density <px/m>`, `seams_mark`, `seams_clear`, `seams_hard`, `checker`, `select_all`,
     /// `select_none`, `frame`.
     pub(crate) fn uv_run(&mut self, op: &str) {
         let (op, arg) = op.split_once(' ').unwrap_or((op, ""));
@@ -211,6 +213,11 @@ impl VarstotasApp {
             "fit" => per_island(&|m, i| uv::fit_to_tile(m, i, tile)),
             "pack" => uv::pack(mesh, &targets, tile, 0.02),
             "align" => per_island(&|m, i| uv::align(m, i)),
+            "randomize" => {
+                self.uv.seed = self.uv.seed.wrapping_add(1);
+                let base = self.uv.seed.wrapping_mul(0x1000_0000);
+                targets.iter().enumerate().flat_map(|(k, i)| uv::randomize(mesh, i, face_tile(&self.doc.model, mesh, i[0]), base + k as u64)).collect()
+            }
             "density" => {
                 let want: Option<f64> = arg.trim().replace(',', ".").parse().ok().filter(|v: &f64| *v > 0.0);
                 match want {
@@ -350,6 +357,7 @@ impl VarstotasApp {
             self.uv_button(ui, tr!("uv-fit"), tr!("uv-fit-hover"), "fit");
             self.uv_button(ui, tr!("uv-pack"), tr!("uv-pack-hover"), "pack");
             self.uv_button(ui, tr!("uv-align"), tr!("uv-align-hover"), "align");
+            self.uv_button(ui, tr!("uv-randomize"), tr!("uv-randomize-hover"), "randomize");
             ui.separator();
             let mut c = self.uv.checker;
             let r = ui.checkbox(&mut c, tr!("uv-checker")).on_hover_text(tr!("uv-checker-hover"));

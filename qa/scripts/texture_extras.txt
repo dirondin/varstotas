@@ -1,0 +1,46 @@
+# T6b: UV Editor Randomize, an image dropped on a face, Replace with Current Material.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+texture ../../qa/models/bricks.png 800
+wait 2
+rawp click 500 0 500
+rawp click 1000 500 500
+rawp click 500 500 1000
+wait 3
+expect mats={"-": 3, "bricks": 3}
+# Randomize: every face of the material turned / shifted (seeded), one undo step
+action uv randomize
+wait 3
+expect uv_placed=3
+expect undo=Some("UV Edit")
+screenshot shots/extras_random.bmp
+action uv randomize
+wait 3
+expect uv_placed=3
+undo
+undo
+wait 3
+expect uv_placed=0
+# an image dropped over the front face: a new material painted there
+action drop_image ../../qa/models/alpha_disc.png|500 0 500
+wait 5
+expect mats={"-": 3, "alpha_disc": 1, "bricks": 2}
+expect paint=alpha_disc
+expect tool=Paint
+screenshot shots/extras_dropped.bmp
+# dropped off the viewport: only the material
+action drop_image ../../qa/models/wide_strip.png
+wait 3
+expect paint=wide_strip
+expect mats={"-": 3, "alpha_disc": 1, "bricks": 2}
+# replace bricks with the current material (wide_strip): bricks leaves the model
+action mat_replace bricks
+wait 3
+expect mats={"-": 3, "alpha_disc": 1, "wide_strip": 2}
+expect undo=Some("Replace bricks with wide_strip")
+undo
+wait 3
+expect mats={"-": 3, "alpha_disc": 1, "bricks": 2}
+quit
