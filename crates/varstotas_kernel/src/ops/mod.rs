@@ -136,6 +136,9 @@ impl Mesh {
                 continue;
             }
             let nf = self.f_new(outer, holes, &face);
+            // The copy's texture is the original's, carried by `m`.
+            let pts: Vec<(VertexId, DVec3)> = face.loops().flatten().map(|v| (map_v(self, *v), self.pos(*v))).collect();
+            self.carry_texture(nf, face.normal, face.uv.as_ref(), &pts);
             out.push(EntityRef::Face(nf));
         }
         let mut verts: Vec<VertexId> = vmap.values().copied().collect();

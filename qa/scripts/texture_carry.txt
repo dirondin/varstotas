@@ -1,0 +1,30 @@
+# Textures stay on moved geometry: a positioned texture on a loose box face travels with the box.
+box -1000 0 0 2000 1000 1000
+view front
+zoom_extents
+wait 10
+texture ../../qa/models/bricks.png 800
+wait 2
+rawp click 0 0 500
+wait 3
+expect mats={"-": 5, "bricks": 1}
+tool texture_position
+rawp click 0 0 500
+wait 3
+rawp drag 0 0 500 100 0 600
+wait 3
+expect uvs=["o(100,100) a0 s(1.00,1.00)"]
+key Enter
+wait 2
+# move the whole box 500 to the right: the front face's u axis is +X, so the origin follows
+select_all
+tool move
+rawp click -1000 0 0
+rawp click -500 0 0
+wait 3
+expect uvs=["o(600,100) a0 s(1.00,1.00)"]
+screenshot shots/texture_carry_moved.bmp
+undo
+wait 3
+expect uvs=["o(100,100) a0 s(1.00,1.00)"]
+quit

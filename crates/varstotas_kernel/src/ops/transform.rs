@@ -4,8 +4,9 @@ use crate::geom::{self, Projector};
 use crate::mesh::{Mesh, PTOL};
 use crate::triangulate::triangulate;
 use crate::{EdgeId, FaceId, TOL, VertexId};
-use glam::{DMat4, DVec2};
-use std::collections::HashSet;
+use crate::texture::{TexPlacement, carried_placement};
+use glam::{DMat4, DVec2, DVec3};
+use std::collections::{HashMap, HashSet};
 
 impl Mesh {
     /// Apply transform to vertices; connected edges/faces stretch. Non-planar faces that
@@ -25,6 +26,16 @@ impl Mesh {
                 }
             }
         }
+        // Texture coordinates of every corner before the move: faces keep their texture on
+        // the geometry (moved whole it travels along, partly moved it stretches).
+        let before: HashMap<FaceId, (DVec3, Option<TexPlacement>, Vec<(VertexId, DVec3)>)> = affected
+            .iter()
+            .map(|&f| {
+                let face = &self.faces[f];
+                let pts = face.loops().flatten().map(|v| (*v, self.pos(*v))).collect();
+                (f, (face.normal, face.uv, pts))
+            })
+            .collect();
         for &v in &vs {
             let p = m.transform_point3(self.pos(v));
             self.v_set_pos(v, p);
@@ -50,7 +61,12 @@ impl Mesh {
                     h.reverse();
                 }
             }
-            new_edges.extend(self.fix_face_planarity(f));
+            let (diag, split) = self.fix_face_planarity_ex(f);
+            new_edges.extend(diag);
+            let (old_n, old_uv, old_pts) = &before[&f];
+            for g in if self.faces.contains_key(f) { vec![f] } else { split } {
+                self.carry_texture(g, *old_n, old_uv.as_ref(), old_pts);
+            }
         }
         self.merge_coplanar_at(&new_edges);
         // Merge coincident vertices.
@@ -75,12 +91,40 @@ impl Mesh {
     /// Recompute a face's normal; if it is no longer planar, replace it by triangles.
     /// Returns newly created (diagonal) edges.
     pub(crate) fn fix_face_planarity(&mut self, f: FaceId) -> Vec<EdgeId> {
+        self.fix_face_planarity_ex(f).0
+    }
+
+    /// Re-fit face `g`'s texture placement from where its corners were before a change:
+    /// `old_pts` are `(vertex, old position)` of the source face (normal `old_n`).
+    pub(crate) fn carry_texture(&mut self, g: FaceId, old_n: DVec3, old_uv: Option<&TexPlacement>, old_pts: &[(VertexId, DVec3)]) {
+        let Some(face) = self.faces.get(g) else { return };
+        // Unpainted faces with the default projection have no texture to keep.
+        if old_uv.is_none() && face.front.is_none() && face.back.is_none() {
+            return;
+        }
+        let (mut old, mut new) = (Vec::new(), Vec::new());
+        for v in face.loops().flatten() {
+            if let Some((_, p)) = old_pts.iter().find(|(w, _)| w == v) {
+                old.push(*p);
+                new.push(self.pos(*v));
+            }
+        }
+        if old.len() < 3 {
+            return;
+        }
+        let n = face.normal;
+        let uv = carried_placement(&old, old_n, old_uv, &new, n);
+        self.faces[g].uv = uv;
+    }
+
+    /// [`Self::fix_face_planarity`], also returning the triangles that replaced a non-planar face.
+    pub(crate) fn fix_face_planarity_ex(&mut self, f: FaceId) -> (Vec<EdgeId>, Vec<FaceId>) {
         let face = self.faces[f].clone();
         let outer_pos = self.loop_pos(&face.outer);
         let nn = geom::newell(&outer_pos);
         if nn.length() < 1e-12 {
             self.f_remove(f);
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
         let n = nn.normalize();
         let all: Vec<VertexId> = face.loops().flatten().copied().collect();
@@ -89,7 +133,7 @@ impl Mesh {
         if planar {
             self.f_unregister(f);
             self.f_register(f);
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
         let pr = Projector::new(c, n);
         let o2: Vec<DVec2> = face.outer.iter().map(|v| pr.to2(self.pos(*v))).collect();
@@ -99,6 +143,7 @@ impl Mesh {
         let ids: Vec<VertexId> = all.clone();
         self.f_remove(f);
         let mut diag: Vec<EdgeId> = Vec::new();
+        let mut split = Vec::new();
         for t in tris {
             let tri = vec![ids[t[0]], ids[t[1]], ids[t[2]]];
             if tri[0] == tri[1] || tri[1] == tri[2] || tri[0] == tri[2] {
@@ -117,8 +162,8 @@ impl Mesh {
                     }
                 }
             }
-            self.f_new(tri, Vec::new(), &face);
+            split.push(self.f_new(tri, Vec::new(), &face));
         }
-        diag
+        (diag, split)
     }
 }

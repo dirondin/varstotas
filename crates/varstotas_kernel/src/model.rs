@@ -916,6 +916,9 @@ impl Model {
                 tmpl.front = instance.material;
             }
             let f = parent.f_new(outer, holes, &tmpl);
+            // Keep the texture where it was on the instance.
+            let pts: Vec<(VertexId, DVec3)> = face.loops().flatten().map(|v| (vmap[v], child.vertices[*v].pos)).collect();
+            parent.carry_texture(f, face.normal, face.uv.as_ref(), &pts);
             out.push(EntityRef::Face(f));
         }
         for (_, ci) in &child.instances {

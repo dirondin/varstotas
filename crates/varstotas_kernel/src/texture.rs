@@ -167,6 +167,20 @@ pub fn face_uv_mm(p: DVec3, n: DVec3, place: Option<&TexPlacement>) -> DVec2 {
     place.map_or(q, |pl| pl.apply(q))
 }
 
+/// The placement that keeps a face's texture on its geometry after the face's points moved
+/// from `old` (normal `old_n`, placement `old_uv`) to `new` (normal `new_n`), point for point:
+/// the texture follows rigid moves, rotations, mirrors and scaling exactly and stretches with
+/// the face when only some of its points move (least squares). `None` = the default
+/// projection; the old placement is kept when the new points are degenerate.
+pub fn carried_placement(old: &[DVec3], old_n: DVec3, old_uv: Option<&TexPlacement>, new: &[DVec3], new_n: DVec3) -> Option<TexPlacement> {
+    let mapped: Vec<DVec2> = old.iter().map(|p| face_uv_mm(*p, old_n, old_uv)).collect();
+    match TexPlacement::fit(new, &mapped, new_n, [1.0, 1.0]) {
+        Some(p) if p.is_identity() || p.approx_eq(&TexPlacement::default()) => None,
+        Some(p) => Some(p),
+        None => old_uv.copied(),
+    }
+}
+
 /// Pixel size of a PNG or JPEG file from its header.
 pub fn image_dimensions(b: &[u8]) -> Option<[u32; 2]> {
     if b.len() >= 24 && b.starts_with(b"\x89PNG\r\n\x1a\n") && &b[12..16] == b"IHDR" {
