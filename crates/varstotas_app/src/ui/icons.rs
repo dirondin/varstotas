@@ -140,6 +140,7 @@ pub enum Icon {
     /// A solid tool, by its index in `SolidOp::ALL`.
     Solids(u8),
     Unfold,
+    UvEditor,
     Snap(crate::inference::InferenceKind),
     // View and Window menus (`cmd.rs`)
     SideBar,

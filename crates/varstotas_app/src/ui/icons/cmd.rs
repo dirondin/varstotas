@@ -344,6 +344,17 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
                 rect(pen, (x, y), (x + 5.0, y + 5.0), fill, pen.thin());
             }
         }
+        Icon::UvEditor => {
+            // a checkered tile with an island laid on it: four corners joined by the accent
+            rect(pen, (3.0, 3.0), (21.0, 21.0), FILL, pen.thin());
+            rect(pen, (3.0, 3.0), (12.0, 12.0), BLUE_SOFT, pen.thin());
+            rect(pen, (12.0, 12.0), (21.0, 21.0), BLUE_SOFT, pen.thin());
+            let island = [(6.0, 17.5), (9.5, 6.0), (18.0, 8.5), (16.0, 18.0)];
+            pen.path(pen.pts(&island), true, Stroke::new(W * pen.s, ORANGE));
+            for p in island {
+                pen.dot(p, 1.5, pen.ink);
+            }
+        }
         Icon::Snap(k) => snap(pen, k),
         Icon::SideBar => {
             rect(pen, (2.5, 4.0), (21.5, 20.0), FILL, pen.stroke());

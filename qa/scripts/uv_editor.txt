@@ -17,7 +17,7 @@ wait 5
 expect uv=(true 6 1 0 false 0)
 screenshot shots/uv_open.bmp
 # seams at every hard edge: six islands, drawn red in the 3D view
-raw click 656 81
+action click_spot uv:seams_hard
 wait 3
 expect uv=(true 6 6 0 false 12)
 expect undo=Some("Mark Seams")
@@ -26,13 +26,13 @@ wait 3
 screenshot shots/uv_packed.bmp
 expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
 # pick island 0 with the mouse, turn it 90°, drag it 40 pt right (rotate about its centre)
-raw click 608 527
+raw click 608 554
 wait 3
 expect uv=(true 6 6 1 false 12)
-raw click 315 108
+action click_spot uv:rotate
 wait 3
 expect uvs=["o(-135,-265) a90 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)"
-raw drag 608 527 648 527 8
+raw drag 608 554 648 554 8
 wait 3
 expect uvs=["o(-135,-714) a90 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)"
 screenshot shots/uv_moved.bmp
@@ -41,7 +41,7 @@ undo
 wait 3
 expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
 # the checker stands in for the textures in the 3D view too
-raw click 685 108
+action click_spot uv:checker
 wait 5
 expect uv=(true 6 6 1 true 12)
 screenshot shots/uv_checker.bmp
@@ -54,4 +54,45 @@ action uv cylinder
 wait 3
 expect uvs=["o(-500,779) a90 s(0.85,1.00)", "o(500,779) a-90 s(0.85,1.00)", "o(-500,200) a90 s(0.94,1.00)", "o(500,-869) a-90 s(0.94,1.00)"]
 screenshot shots/uv_cylinder.bmp
+# typed rotation and scale (an empty field takes its hint: 15°), Randomize at any angle with a scale spread
+action uv box
+wait 3
+action click_spot uv:rotate_by
+wait 3
+expect uvs=["o(-78,10) a-15 s(1.00,1.00)"
+action uv scale_by 2
+wait 3
+expect uvs=["o(-39,155) a-15 s(0.50,0.50)"
+action click_spot uv:rand_any
+action uv rand_scale 30
+action click_spot uv:randomize
+wait 3
+expect uvs=["o(236,494) a-168 s(0.42,0.42)"
+screenshot shots/uv_random.bmp
+# the backdrop: one tile only, another map of the material
+action click_spot uv:checker
+wait 3
+expect uv_view=(bricks base false)
+action click_spot uv:tile
+wait 3
+expect uv_view=(bricks base true)
+screenshot shots/uv_single_tile.bmp
+action mat_map bricks normal ../../qa/models/alpha_disc.png
+wait 5
+action click_spot uv:map
+wait 3
+action click_spot uv:map:normal
+wait 3
+expect uv_view=(bricks normal true)
+screenshot shots/uv_normal_map.bmp
+# the Material Editor's UV button opens the editor on the material's faces
+action click_spot uv:tile
+action uv_close
+action tray_only Material Editor
+wait 5
+action click_spot mated:uv
+wait 5
+expect uv=(true 6
+expect uv_view=(bricks normal false)
+screenshot shots/uv_from_material.bmp
 quit

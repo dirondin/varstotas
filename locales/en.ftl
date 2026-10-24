@@ -1602,12 +1602,26 @@ uv-pack-hover = Lay the islands out in one tile at one scale
 uv-align = Align
 uv-align-hover = Turn each island so its longest edge runs straight
 uv-randomize = Randomize
-uv-randomize-hover = Turn each island by a random multiple of 90° and shift it within the tile, so repeats don't line up (press again for another variant)
+uv-randomize-hover = Turn each island by a random angle (90° steps, or any with “Any angle”), scale it within the spread and shift it within the tile, so repeats don't line up (press again for another variant)
 uv-checker = Checker
 uv-checker-hover = Show a checker instead of the textures (here and in the 3D view) to see stretching
 uv-density = Texel density
 uv-px-per-m = px/m
 uv-summary = { $faces } faces · { $islands } islands · { $selected } selected
+uv-rotate-by = Rotate
+uv-rotate-by-hover = Turn the islands by this angle in degrees (positive = anticlockwise); Enter applies
+uv-scale-by = Scale
+uv-scale-by-hover = Scale the islands by this factor (above 1 the texture on the model gets smaller); Enter applies
+uv-rand-any-angle = Any angle
+uv-rand-any-angle-hover = Randomize turns by any angle, not only by 90° steps
+uv-rand-scale = Scale ±
+uv-rand-scale-hover = Randomize also scales each island by up to this many percent up or down (0 = keep the size)
+uv-material = Material: { $name }
+uv-material-clear = Show the selected faces (or every textured face) instead of this material's
+uv-map-hover = Which map of the material is shown behind the layout
+uv-no-texture = No texture: the faces and the current material have no image
+uv-tile = Tile
+uv-tile-hover = Repeat the texture over the whole canvas (else one tile only)
 tray-tex-width = Texture width
 tray-tex-height = Texture height
 tray-tex-keep-aspect = Keep aspect ratio
@@ -2036,6 +2050,7 @@ mated-pick-tip = Eyedropper: make the material of the selected face or object cu
 mated-pick-none = Select a painted face or object to pick its material
 mated-picked = Current material: { $name }
 mated-select-tip = Select the faces and objects in this context painted with this material
+mated-uv-tip = Open the UV Editor on the faces painted with this material, over its textures
 mated-selected = { $count ->
         [one] Selected { $count } entity
        *[other] Selected { $count } entities

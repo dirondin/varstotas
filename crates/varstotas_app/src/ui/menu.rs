@@ -170,7 +170,7 @@ impl VarstotasApp {
         if self.selected_textured_face() {
             ui.menu_button(tr!("menu-texture"), |ui| {
                 self.item(ui, &tr!("menu-texture-position"), None, true, Action::SetTool(ToolId::TexturePosition));
-                self.item(ui, &tr!("menu-uv-editor"), None, true, Action::UvEditor);
+                self.icon_item(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
         }
         // UV seams on the selected edges
@@ -488,7 +488,7 @@ impl VarstotasApp {
                 }
                 self.cmd_item(ui, Cmd::Text3d);
                 ui.separator();
-                self.item(ui, &tr!("menu-uv-editor"), None, true, Action::UvEditor);
+                self.icon_item(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
 
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));

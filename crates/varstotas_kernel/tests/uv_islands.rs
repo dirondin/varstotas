@@ -164,11 +164,24 @@ fn pack_fits_every_island_in_one_tile_at_one_scale() {
 fn randomize_is_seeded() {
     let m = boxed();
     let f = m.faces.keys().next().unwrap();
-    let a = uv::randomize(&m, &[f], [800.0, 400.0], 7);
-    assert_eq!(a, uv::randomize(&m, &[f], [800.0, 400.0], 7));
+    let j = uv::Jitter::default();
+    let a = uv::randomize(&m, &[f], [800.0, 400.0], 7, j);
+    assert_eq!(a, uv::randomize(&m, &[f], [800.0, 400.0], 7, j));
     let angles: std::collections::HashSet<i64> = (0..40)
-        .flat_map(|s| uv::randomize(&m, &[f], [800.0, 400.0], s))
+        .flat_map(|s| uv::randomize(&m, &[f], [800.0, 400.0], s, j))
         .filter_map(|(_, p)| p.map(|p| p.angle_deg.rem_euclid(360.0).round() as i64 % 360))
         .collect();
     assert!(angles.len() > 1 && angles.iter().all(|a| a % 90 == 0), "{angles:?}");
+}
+
+/// Randomize with any angle and a scale range: angles off the 90° steps, scales inside the range.
+#[test]
+fn randomize_any_angle_and_scale() {
+    let m = boxed();
+    let f = m.faces.keys().next().unwrap();
+    let j = uv::Jitter { any_angle: true, scale: [0.5, 2.0] };
+    let all: Vec<_> = (0..40).flat_map(|s| uv::randomize(&m, &[f], [800.0, 400.0], s, j)).filter_map(|(_, p)| p).collect();
+    assert!(all.iter().any(|p| p.angle_deg.rem_euclid(90.0) > 1.0), "some angle off the 90° steps");
+    assert!(all.iter().all(|p| (0.5 - 1e-9..=2.0 + 1e-9).contains(&p.scale[0])), "{:?}", all.iter().map(|p| p.scale).collect::<Vec<_>>());
+    assert!(all.iter().any(|p| p.scale[0] < 0.9) && all.iter().any(|p| p.scale[0] > 1.1));
 }

@@ -317,10 +317,26 @@ pub fn transform(mesh: &Mesh, faces: &[FaceId], op: IslandOp) -> Placements {
     }
 }
 
-/// The island turned by a random multiple of 90° and moved by a random part of the tile
-/// (`seed` picks the variant; the same seed gives the same result), so repeated textures on
-/// neighbouring islands don't line up.
-pub fn randomize(mesh: &Mesh, faces: &[FaceId], tile: [f64; 2], seed: u64) -> Placements {
+/// What [`randomize`] varies besides the shift.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Jitter {
+    /// Any angle (else a multiple of 90°).
+    pub any_angle: bool,
+    /// Uniform scale picked in `[min, max]` (`[1, 1]`: kept).
+    pub scale: [f64; 2],
+}
+
+impl Default for Jitter {
+    fn default() -> Self {
+        Self { any_angle: false, scale: [1.0, 1.0] }
+    }
+}
+
+/// The island turned by a random angle (a multiple of 90°, or any), scaled by a random
+/// factor in `jitter.scale` and moved by a random part of the tile (`seed` picks the
+/// variant; the same seed gives the same result), so repeated textures on neighbouring
+/// islands don't line up.
+pub fn randomize(mesh: &Mesh, faces: &[FaceId], tile: [f64; 2], seed: u64, jitter: Jitter) -> Placements {
     let Some((lo, hi)) = bounds(mesh, faces) else { return Vec::new() };
     let mut s = seed;
     let mut next = move || {
@@ -331,11 +347,15 @@ pub fn randomize(mesh: &Mesh, faces: &[FaceId], tile: [f64; 2], seed: u64) -> Pl
         z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
         z ^ (z >> 31)
     };
-    let deg = (next() % 4) as f64 * 90.0;
     let unit = |v: u64| (v >> 11) as f64 / (1u64 << 53) as f64;
+    let turn_pick = next();
+    let deg = if jitter.any_angle { unit(turn_pick) * 360.0 } else { (turn_pick % 4) as f64 * 90.0 };
     let d = DVec2::new(unit(next()) * tile[0], unit(next()) * tile[1]);
-    let turn = rotation((lo + hi) / 2.0, deg);
-    map_faces(mesh, faces, |q| turn(q) + d)
+    let [a, b] = jitter.scale;
+    let k = (a + (b - a) * unit(next())).max(1e-3);
+    let c = (lo + hi) / 2.0;
+    let turn = rotation(c, deg);
+    map_faces(mesh, faces, |q| c + (turn(q) - c) * k + d)
 }
 
 /// The island scaled uniformly and moved so it fills one tile (`tile` mm), from its origin.
