@@ -37,6 +37,9 @@ pub enum Marker2d {
     /// Tool cursor drawn at the pointer: a small crosshair (hotspot) plus the tool's icon,
     /// with an optional "+" badge (copy / keep face / guides). The OS cursor is hidden.
     ToolCursor { icon: crate::ui::icons::Icon, plus: bool },
+    /// An image stretched over a world quad (corners at image (0,0), (1,0), (1,1), (0,1),
+    /// image v up), faded to `alpha`: the full texture tile of Texture Position.
+    TileImage { bytes: std::sync::Arc<[u8]>, corners: [DVec3; 4], alpha: f32 },
 }
 
 pub struct OverlayPainter<'a> {
@@ -89,6 +92,7 @@ impl OverlayPainter<'_> {
                         paint_tool_cursor(self.painter, c, *icon, *plus);
                     }
                 }
+                Marker2d::TileImage { bytes, corners, alpha } => self.paint_tile(bytes, corners, *alpha),
                 Marker2d::ScreenLine { a, b, color, width, dashed } => {
                     let pts = [self.rect.min + a.to_vec2(), self.rect.min + b.to_vec2()];
                     let st = Stroke::new(*width, *color);
@@ -101,6 +105,66 @@ impl OverlayPainter<'_> {
             }
         }
     }
+}
+
+impl OverlayPainter<'_> {
+    /// The image on a world quad: a grid of small quads, so the perspective stays close
+    /// (cells behind the camera are skipped).
+    fn paint_tile(&self, bytes: &std::sync::Arc<[u8]>, c: &[DVec3; 4], alpha: f32) {
+        let Some(tex) = tile_texture(self.painter.ctx(), bytes) else { return };
+        const N: usize = 12;
+        let at = |s: f64, t: f64| {
+            let a = c[0].lerp(c[1], s);
+            let b = c[3].lerp(c[2], s);
+            a.lerp(b, t)
+        };
+        let tint = Color32::from_white_alpha((alpha.clamp(0.0, 1.0) * 255.0) as u8);
+        let mut mesh = egui::Mesh::with_texture(tex.id());
+        let mut idx = vec![None; (N + 1) * (N + 1)];
+        for j in 0..=N {
+            for i in 0..=N {
+                let (s, t) = (i as f64 / N as f64, j as f64 / N as f64);
+                if let Some(p) = self.to_screen(at(s, t)) {
+                    idx[j * (N + 1) + i] = Some(mesh.vertices.len() as u32);
+                    mesh.vertices.push(egui::epaint::Vertex { pos: p, uv: egui::pos2(s as f32, 1.0 - t as f32), color: tint });
+                }
+            }
+        }
+        for j in 0..N {
+            for i in 0..N {
+                let k = |di: usize, dj: usize| idx[(j + dj) * (N + 1) + i + di];
+                if let (Some(a), Some(b), Some(cc), Some(d)) = (k(0, 0), k(1, 0), k(1, 1), k(0, 1)) {
+                    mesh.add_triangle(a, b, cc);
+                    mesh.add_triangle(a, cc, d);
+                }
+            }
+        }
+        self.painter.with_clip_rect(self.rect).add(Shape::mesh(mesh));
+    }
+}
+
+thread_local! {
+    /// The last tile image's texture (keyed by its bytes), for [`Marker2d::TileImage`].
+    static TILE_TEX: std::cell::RefCell<Option<(usize, usize, egui::TextureHandle)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The texture of a tile image: decoded once (at most 1024 px) and kept while it is shown.
+fn tile_texture(ctx: &egui::Context, bytes: &std::sync::Arc<[u8]>) -> Option<egui::TextureHandle> {
+    let key = (bytes.as_ptr() as usize, bytes.len());
+    TILE_TEX.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some((p, l, t)) = c.as_ref()
+            && (*p, *l) == key
+        {
+            return Some(t.clone());
+        }
+        let img = image::load_from_memory(bytes).ok()?;
+        let img = if img.width().max(img.height()) > 1024 { img.thumbnail(1024, 1024) } else { img }.to_rgba8();
+        let ci = egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw());
+        let t = ctx.load_texture("texture_position_tile", ci, egui::TextureOptions::LINEAR);
+        *c = Some((key.0, key.1, t.clone()));
+        Some(t)
+    })
 }
 
 /// Horizontal offset of the cursor tooltip from the hotspot (clears the tool icon).

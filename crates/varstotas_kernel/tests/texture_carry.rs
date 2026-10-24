@@ -126,3 +126,67 @@ fn explode_keeps_the_texture_where_it_was() {
         assert!((got - uv).length() < 1e-6, "{uv} became {got}");
     }
 }
+
+#[test]
+fn texture_wraps_round_a_corner_and_across_coplanar_faces() {
+    let mut model = Model::new();
+    let mat = model.add_material("Brick", [0.8, 0.4, 0.3, 1.0]);
+    let m = model.root_mesh_mut();
+    // an L of two walls sharing the vertical edge at x = 1000, plus a separate panel in the
+    // first wall's plane
+    let front = m.add_face(&[v(0., 0., 0.), v(1000., 0., 0.), v(1000., 0., 800.), v(0., 0., 800.)]).unwrap();
+    let side = m.add_face(&[v(1000., 0., 0.), v(1000., 600., 0.), v(1000., 600., 800.), v(1000., 0., 800.)]).unwrap();
+    let panel = m.add_face(&[v(1500., 0., 0.), v(2000., 0., 0.), v(2000., 0., 300.), v(1500., 0., 300.)]).unwrap();
+    for f in [front, side, panel] {
+        m.faces[f].front = Some(mat);
+    }
+    let uv = TexPlacement { offset: [40.0, 10.0], angle_deg: 12.0, scale: [1.3, 0.9], shear: 0.0 };
+    let out = texture::wrap_placements(m, &[front, side, panel], front, Some(uv));
+    assert_eq!(out.len(), 2);
+    m.faces[front].uv = Some(uv);
+    for (f, p) in &out {
+        m.faces[*f].uv = *p;
+    }
+    let fu = |m: &Mesh, f: FaceId, p: DVec3| face_uv_mm(p, m.faces[f].normal, m.faces[f].uv.as_ref());
+    // the shared edge shows the same texture on both walls
+    for p in [v(1000., 0., 0.), v(1000., 0., 800.)] {
+        assert!((fu(m, front, p) - fu(m, side, p)).length() < 1e-6);
+    }
+    // the side wall continues the front's texture as if unfolded: a point 600 along the side
+    // matches a point 600 further along the front's u direction
+    let unfolded = v(1600., 0., 0.);
+    assert!((fu(m, side, v(1000., 600., 0.)) - face_uv_mm(unfolded, m.faces[front].normal, Some(&uv))).length() < 1e-6);
+    // the coplanar panel shares the front's mapping
+    assert!((fu(m, panel, v(1700., 0., 100.)) - face_uv_mm(v(1700., 0., 100.), m.faces[front].normal, Some(&uv))).length() < 1e-6);
+}
+
+#[test]
+fn fit_rotate_flip_and_align() {
+    use texture::{TexOp, align_to_edge, placement_op};
+    let n = DVec3::NEG_Y;
+    let pts = [v(0., 0., 0.), v(1000., 0., 0.), v(1000., 0., 500.), v(0., 0., 500.)];
+    let tile = [400.0, 200.0];
+    let t = |uv: Option<&TexPlacement>| -> Vec<DVec2> { pts.iter().map(|p| face_uv_mm(*p, n, uv)).collect() };
+    // fit: the face's corners land on the tile's corners
+    let fit = placement_op(TexOp::Fit, &pts, n, None, tile).unwrap().unwrap();
+    let got = t(Some(&fit));
+    let lo = got.iter().copied().reduce(DVec2::min).unwrap();
+    let hi = got.iter().copied().reduce(DVec2::max).unwrap();
+    assert!(lo.length() < 1e-6 && (hi - DVec2::new(400.0, 200.0)).length() < 1e-6, "{lo} {hi}");
+    // flipping twice is the identity; a flip mirrors u about the centre
+    let f1 = placement_op(TexOp::FlipU, &pts, n, Some(&fit), tile).unwrap();
+    let a = t(f1.as_ref());
+    assert!((a[0].x - 400.0).abs() < 1e-6 && (a[1].x).abs() < 1e-6);
+    let f2 = placement_op(TexOp::FlipU, &pts, n, f1.as_ref(), tile).unwrap();
+    assert!(t(f2.as_ref()).iter().zip(&got).all(|(x, y)| (*x - *y).length() < 1e-6));
+    // four quarter turns come back
+    let mut p = Some(fit);
+    for _ in 0..4 {
+        p = placement_op(TexOp::Rotate90, &pts, n, p.as_ref(), tile).unwrap();
+    }
+    assert!(t(p.as_ref()).iter().zip(&got).all(|(x, y)| (*x - *y).length() < 1e-6));
+    // align to the diagonal: its start is the origin, its end lies on the u axis
+    let al = align_to_edge(n, None, pts[0], pts[2]);
+    let e = face_uv_mm(pts[2], n, Some(&al));
+    assert!(face_uv_mm(pts[0], n, Some(&al)).length() < 1e-6 && e.y.abs() < 1e-6 && e.x > 0.0);
+}

@@ -750,6 +750,9 @@ tool-texture-move = Moving the texture. Esc cancels.
 tool-texture-green = Rotating and scaling the texture about the red pin.
 tool-texture-blue = Scaling the texture height.
 tool-texture-idle = Drag the face or the red pin to move, the green pin to rotate/scale, the blue pin to stretch. Enter or click outside when done.
+tool-texture-idle-many = { $count } faces: the texture continues from the picked face. Shift+click adds or removes a face, Alt+click continues it onto another.
+tool-texture-cant-continue = The texture can't continue onto that face (it is perpendicular).
+tool-texture-vcb = Tile
 
 tool-undo-add-guide-plane = Add Guide Plane
 tool-undo-edit-guide-plane = Edit Guide Plane
@@ -805,6 +808,9 @@ tool-texture-position-instructor =
     • Drag the face or the red pin: move the texture.
     • Green pin: rotate and scale about the red pin.
     • Blue pin: stretch the texture height.
+    • Pins snap to vertices and edges; a double-click on an edge aligns the texture to it.
+    • Shift+click adds a face, Alt+click continues the texture onto it (round corners).
+    • Type the tile size on the face (`800` or `800;400`) or an angle (`30°`).
     • Esc cancels a drag; Enter or a click outside finishes.
 tool-line-instructor =
     Click to start, click to end. Each end starts a new segment.
@@ -1550,6 +1556,15 @@ tray-tex-position = Position…
 tray-tex-position-hover = Texture Position tool (pins)
 tray-tex-rotate = Rotate 90°
 tray-tex-reset = Reset
+tray-tex-tile-w = Tile width
+tray-tex-tile-h = Tile height
+tray-tex-fit = Fit
+tray-tex-fit-hover = One tile exactly covers the face
+tray-tex-rotate-hover = Turn the texture 90° about the face's centre
+tray-tex-flip-u = Flip ↔
+tray-tex-flip-u-hover = Mirror the texture left to right
+tray-tex-flip-v = Flip ↕
+tray-tex-flip-v-hover = Mirror the texture top to bottom
 tray-tex-width = Texture width
 tray-tex-height = Texture height
 tray-tex-keep-aspect = Keep aspect ratio

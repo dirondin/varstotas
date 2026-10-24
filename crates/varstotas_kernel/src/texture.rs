@@ -181,6 +181,116 @@ pub fn carried_placement(old: &[DVec3], old_n: DVec3, old_uv: Option<&TexPlaceme
     }
 }
 
+/// One-click changes of a face's texture placement ([`placement_op`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TexOp {
+    /// One tile exactly covers the face (in the texture's current directions).
+    Fit,
+    /// The texture turns 90° on the face, about the face's centre.
+    Rotate90,
+    /// Mirror left ↔ right about the face's centre.
+    FlipU,
+    /// Mirror top ↔ bottom about the face's centre.
+    FlipV,
+}
+
+/// The placement after `op` on a face with points `pts` (local), normal `n`, placement `uv`
+/// and tile size `tile` (mm). Outer `None`: degenerate face; inner `None`: the default.
+pub fn placement_op(op: TexOp, pts: &[DVec3], n: DVec3, uv: Option<&TexPlacement>, tile: [f64; 2]) -> Option<Option<TexPlacement>> {
+    let t: Vec<DVec2> = pts.iter().map(|p| face_uv_mm(*p, n, uv)).collect();
+    let lo = t.iter().copied().reduce(DVec2::min)?;
+    let hi = t.iter().copied().reduce(DVec2::max)?;
+    let c = (lo + hi) / 2.0;
+    let size = hi - lo;
+    let want: Vec<DVec2> = match op {
+        TexOp::Fit => {
+            if size.x < 1e-9 || size.y < 1e-9 {
+                return None;
+            }
+            t.iter().map(|q| (*q - lo) / size * DVec2::from(tile)).collect()
+        }
+        TexOp::Rotate90 => t.iter().map(|q| c + DVec2::new(q.y - c.y, c.x - q.x)).collect(),
+        TexOp::FlipU => t.iter().map(|q| DVec2::new(2.0 * c.x - q.x, q.y)).collect(),
+        TexOp::FlipV => t.iter().map(|q| DVec2::new(q.x, 2.0 * c.y - q.y)).collect(),
+    };
+    let p = TexPlacement::fit(pts, &want, n, [1.0, 1.0])?;
+    Some((!(p.is_identity() || p.approx_eq(&TexPlacement::default()))).then_some(p))
+}
+
+/// The placement whose texture `u` axis runs along the edge `a` → `b` (local points on a
+/// face with normal `n`), its origin at `a`; the tile size (scale) of `uv` is kept.
+pub fn align_to_edge(n: DVec3, uv: Option<&TexPlacement>, a: DVec3, b: DVec3) -> TexPlacement {
+    let (qa, qb) = (face_uv_mm(a, n, None), face_uv_mm(b, n, None));
+    let d = qb - qa;
+    let scale = uv.map_or([1.0, 1.0], |p| p.scale);
+    TexPlacement { offset: qa.to_array(), angle_deg: d.y.atan2(d.x).to_degrees(), scale, shear: 0.0 }
+}
+
+/// The placement of face `dst` that continues the texture of face `src` (placement
+/// `src_uv`): across a shared edge the face is unfolded about that edge into `src`'s plane
+/// (the texture wraps round the corner without a seam); otherwise `dst` is projected onto
+/// `src`'s plane. Outer `None`: no sensible continuation (perpendicular, degenerate).
+pub fn continue_placement(mesh: &crate::Mesh, src: crate::FaceId, src_uv: Option<&TexPlacement>, dst: crate::FaceId) -> Option<Option<TexPlacement>> {
+    let (sf, df) = (mesh.faces.get(src)?, mesh.faces.get(dst)?);
+    let pts: Vec<DVec3> = mesh.face_vertices(dst).iter().filter_map(|v| mesh.vertices.get(*v).map(|x| x.pos)).collect();
+    let (ns, nd) = (sf.normal, df.normal);
+    let src_edges = mesh.face_edges(src);
+    let shared = mesh.face_edges(dst).into_iter().find(|e| src_edges.contains(e)).and_then(|e| mesh.edges.get(e));
+    let flat: Vec<DVec3> = match shared {
+        Some(e) => {
+            let (a, b) = (mesh.vertices[e.v[0]].pos, mesh.vertices[e.v[1]].pos);
+            let axis = (b - a).normalize_or_zero();
+            let rot = if nd.dot(ns) < -0.9999 {
+                glam::DQuat::from_axis_angle(axis, std::f64::consts::PI)
+            } else {
+                glam::DQuat::from_rotation_arc(nd, ns)
+            };
+            pts.iter().map(|p| a + rot * (*p - a)).collect()
+        }
+        None => {
+            if nd.dot(ns).abs() < 0.05 {
+                return None;
+            }
+            let o = mesh.vertices.get(*sf.outer.first()?)?.pos;
+            pts.iter().map(|p| *p - ns * (*p - o).dot(ns)).collect()
+        }
+    };
+    let mapped: Vec<DVec2> = flat.iter().map(|p| face_uv_mm(*p, ns, src_uv)).collect();
+    let p = TexPlacement::fit(&pts, &mapped, nd, [1.0, 1.0])?;
+    Some((!(p.is_identity() || p.approx_eq(&TexPlacement::default()))).then_some(p))
+}
+
+/// Placements of `faces` that continue the texture of `root` (placement `root_uv`): faces
+/// reached through shared edges are unfolded one after another (breadth first), the rest are
+/// projected from `root`. The root itself is not in the result.
+pub fn wrap_placements(mesh: &crate::Mesh, faces: &[crate::FaceId], root: crate::FaceId, root_uv: Option<TexPlacement>) -> Vec<(crate::FaceId, Option<TexPlacement>)> {
+    let mut placed: Vec<(crate::FaceId, Option<TexPlacement>)> = vec![(root, root_uv)];
+    let mut queue = std::collections::VecDeque::from([root]);
+    while let Some(f) = queue.pop_front() {
+        let uv = placed.iter().find(|(g, _)| *g == f).and_then(|x| x.1);
+        for e in mesh.face_edges(f) {
+            for g in mesh.edge_faces(e) {
+                if !faces.contains(&g) || placed.iter().any(|(h, _)| *h == g) {
+                    continue;
+                }
+                if let Some(p) = continue_placement(mesh, f, uv.as_ref(), g) {
+                    placed.push((g, p));
+                    queue.push_back(g);
+                }
+            }
+        }
+    }
+    for g in faces {
+        if !placed.iter().any(|(h, _)| h == g)
+            && let Some(p) = continue_placement(mesh, root, root_uv.as_ref(), *g)
+        {
+            placed.push((*g, p));
+        }
+    }
+    placed.remove(0);
+    placed
+}
+
 /// Pixel size of a PNG or JPEG file from its header.
 pub fn image_dimensions(b: &[u8]) -> Option<[u32; 2]> {
     if b.len() >= 24 && b.starts_with(b"\x89PNG\r\n\x1a\n") && &b[12..16] == b"IHDR" {

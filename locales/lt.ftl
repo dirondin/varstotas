@@ -756,6 +756,9 @@ tool-texture-move = Tekstūra perkeliama. Esc atšaukia.
 tool-texture-green = Tekstūra sukama ir keičiamas jos mastelis apie raudoną smeigtuką.
 tool-texture-blue = Keičiamas tekstūros aukštis.
 tool-texture-idle = Tempkite paviršių arba raudoną smeigtuką, kad perkeltumėte, žalią – kad sukti/keisti mastelį, mėlyną – kad ištempti. Baigę paspauskite Enter arba spustelėkite šalia.
+tool-texture-idle-many = Paviršių: { $count }, tekstūra tęsiama nuo pasirinkto. Shift+spustelėjimas prideda arba pašalina paviršių, Alt+spustelėjimas pratęsia tekstūrą ant kito.
+tool-texture-cant-continue = Tekstūros negalima pratęsti ant šio paviršiaus (jis statmenas).
+tool-texture-vcb = Plytelė
 
 tool-undo-add-guide-plane = Pridėti pagalbinę plokštumą
 tool-undo-edit-guide-plane = Redaguoti pagalbinę plokštumą
@@ -811,6 +814,9 @@ tool-texture-position-instructor =
     • Tempkite paviršių arba raudoną smeigtuką: perkelia tekstūrą.
     • Žalias smeigtukas: sukti ir keisti mastelį apie raudoną smeigtuką.
     • Mėlynas smeigtukas: ištempti tekstūros aukštį.
+    • Smeigtukai prilimpa prie viršūnių ir kraštinių; dvigubas spustelėjimas ant kraštinės išlygiuoja tekstūrą pagal ją.
+    • Shift+spustelėjimas prideda paviršių, Alt+spustelėjimas pratęsia ant jo tekstūrą (per kampus).
+    • Įveskite plytelės dydį paviršiuje (`800` arba `800;400`) arba kampą (`30°`).
     • Esc atšaukia tempimą; Enter arba spustelėjimas šalia baigia.
 tool-line-instructor =
     Spustelėkite pradžiai, spustelėkite pabaigai. Kiekvienas galas pradeda naują atkarpą.
@@ -1562,6 +1568,15 @@ tray-tex-position = Padėtis…
 tray-tex-position-hover = Įrankis „Tekstūros padėtis“ (smeigtukai)
 tray-tex-rotate = Pasukti 90°
 tray-tex-reset = Atkurti
+tray-tex-tile-w = Plytelės plotis
+tray-tex-tile-h = Plytelės aukštis
+tray-tex-fit = Pritaikyti
+tray-tex-fit-hover = Viena plytelė tiksliai uždengia paviršių
+tray-tex-rotate-hover = Pasukti tekstūrą 90° apie paviršiaus centrą
+tray-tex-flip-u = Apversti ↔
+tray-tex-flip-u-hover = Atspindėti tekstūrą iš kairės į dešinę
+tray-tex-flip-v = Apversti ↕
+tray-tex-flip-v-hover = Atspindėti tekstūrą iš viršaus į apačią
 tray-tex-width = Tekstūros plotis
 tray-tex-height = Tekstūros aukštis
 tray-tex-keep-aspect = Išlaikyti proporcijas

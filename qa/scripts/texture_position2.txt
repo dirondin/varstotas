@@ -1,0 +1,71 @@
+# Texture Position 2: several faces (Alt continues round a corner), pin snapping, Measurements
+# tile size, double-click on an edge aligns, Entity Info Fit / Rotate / Flip.
+box -1000 0 0 2000 1000 1000
+view iso
+zoom_extents
+wait 10
+texture ../../qa/models/bricks.png 800
+wait 2
+rawp click 0 0 500
+rawp click 1000 500 500
+rawp click 0 500 1000
+wait 3
+expect mats={"-": 3, "bricks": 3}
+tool select
+rawp click 0 0 500
+tool texture_position
+wait 3
+expect sel F=1
+# Alt+click the right face: the texture continues round the corner, both faces are edited
+raw mods alt
+rawp click 1000 500 500
+raw mods none
+wait 3
+expect sel F=2
+expect uvs=["o(-1000,0) a0 s(1.00,1.00)"]
+screenshot shots/texpos2_continued.bmp
+# drag the front face: both move together
+rawp drag 0 0 500 100 0 500
+wait 3
+expect uvs=["o(-900,0) a0 s(1.00,1.00)", "o(100,0) a0 s(1.00,1.00)"]
+# Measurements: tile 400 wide on the picked face (height follows)
+vcb 400
+wait 3
+expect uvs=["o(-900,0) a0 s(0.50,0.50)", "o(100,0) a0 s(0.50,0.50)"]
+expect vcbv="400 mm; 200 mm"
+# red pin snaps to the vertex (-1000,0,1000) when dropped near it
+rawp drag 100 0 0 -980 0 980
+wait 3
+expect uvs=["o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+screenshot shots/texpos2_snapped.bmp
+# double-click the bottom edge near its right end: the red pin goes to (1000,0,0), the
+# texture stays upright (0°, not 180°)
+rawp dblclick 800 0 0
+wait 3
+expect uvs=["o(0,0) a0 s(0.50,0.50)", "o(1000,0) a0 s(0.50,0.50)"]
+undo
+wait 3
+expect uvs=["o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+key Enter
+wait 2
+expect tool=Select
+# Entity Info buttons on the top face
+rawp click 0 500 1000
+action tray_only Entity Info
+wait 5
+expect uv_placed=2
+# Fit: one tile covers the 2000×1000 top face (tile 800×400): scale 2.5
+raw click 1162 451
+wait 3
+expect uvs=["o(-1000,-0) a0 s(2.50,2.50)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+raw click 1222 451
+wait 3
+raw click 1294 451
+wait 3
+screenshot shots/texpos2_info.bmp
+expect uv_placed=3
+undo
+undo
+wait 3
+expect uvs=["o(-1000,-0) a0 s(2.50,2.50)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+quit

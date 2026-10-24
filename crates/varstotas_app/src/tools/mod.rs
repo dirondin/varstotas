@@ -502,6 +502,8 @@ pub enum ToolRequest {
     PluginPoints(Vec<varstotas_kernel::glam::DVec3>),
     /// `@select` finished (Enter): the selection goes to the script as `objects`.
     PluginObjects,
+    /// A short message in the status bar.
+    Flash(String),
 }
 
 /// Everything a tool can touch while handling an event.

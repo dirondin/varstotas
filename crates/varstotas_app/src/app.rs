@@ -877,6 +877,7 @@ impl VarstotasApp {
                 ToolRequest::ConfirmResize(f) => self.resize_confirm = Some(f),
                 ToolRequest::PluginPoints(pts) => self.plugin_points(pts),
                 ToolRequest::PluginObjects => self.plugin_objects(),
+                ToolRequest::Flash(text) => self.flash(text),
                 ToolRequest::EditDimensionText(id) => {
                     let path = self.doc.active_path.clone();
                     if let Some(g) = self.doc.model.dimension_in(&path, id) {
