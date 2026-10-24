@@ -99,6 +99,22 @@ raw click 200 300
 wait 5
 expect hud=(Some(Top) true Wireframe true)
 expect panes=(4 0
+# dragging the splitters resizes the panes; the active pane stays, nothing is drawn
+expect split=(0.50,0.50)
+action drag_spot pane:split_v -200 0
+wait 5
+action drag_spot pane:split_h 0 120
+wait 5
+expect panes=(4 0
+expect model_faces=6
+expect split=(0.3
+screenshot shots/hud_panes_split.bmp
+# and back (the clicks below are at fixed places)
+action drag_spot pane:split_v 200 0
+wait 5
+action drag_spot pane:split_h 0 -120
+wait 5
+expect split=(0.50,0.50)
 # one view again (the top-left pane's view menu)
 raw click 405 22
 wait 5

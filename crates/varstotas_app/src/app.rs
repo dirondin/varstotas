@@ -600,6 +600,12 @@ pub struct VarstotasApp {
     /// Split view (`panes.rs`): 1, 2 or 4 panes shown, the active one (its settings are the
     /// app's own), the others' settings (the active slot holds nothing of use).
     pub(crate) pane_count: usize,
+    /// Where the splitters between the panes are: fractions of the view's width and height.
+    pub(crate) pane_split: egui::Vec2,
+    /// A splitter is being dragged this frame: the viewport ignores the pointer.
+    pub(crate) splitter_drag: bool,
+    /// The splitters' grab strips: presses there are theirs, not the tools'.
+    pub(crate) splitter_strips: Vec<egui::Rect>,
     /// The HUD drop-down open this frame: (the active pane then, which) — for the harness.
     pub(crate) hud_open: Option<(usize, &'static str)>,
     pub(crate) active_pane: usize,
@@ -756,6 +762,9 @@ impl VarstotasApp {
             preview_shot: None,
             hud_rect: egui::Rect::NOTHING,
             pane_count: 1,
+            pane_split: egui::vec2(0.5, 0.5),
+            splitter_drag: false,
+            splitter_strips: Vec::new(),
             hud_open: None,
             active_pane: 0,
             panes: (0..4).map(|_| Default::default()).collect(),
@@ -1104,8 +1113,9 @@ impl VarstotasApp {
         }
         // Not over the view / style controls drawn on top of the viewport.
         let hud = self.hud_rect.expand(2.0);
-        let on_hud = move |p: egui::Pos2| hud.contains(p);
-        let over = response.contains_pointer() && !ctx.input(|i| i.pointer.hover_pos()).is_some_and(on_hud);
+        let strips = self.splitter_strips.clone();
+        let on_hud = |p: egui::Pos2| hud.contains(p) || strips.iter().any(|s| s.contains(p));
+        let over = response.contains_pointer() && !ctx.input(|i| i.pointer.hover_pos()).is_some_and(&on_hud);
         let (events, modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
         // Primary-button state as of each event, NOT `i.pointer.primary_down()` (the state at
         // the end of the frame): one frame often holds the last moves of a drag *and* the
@@ -2852,13 +2862,19 @@ impl eframe::App for VarstotasApp {
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             self.viewport.view_rect = ui.available_rect_before_wrap();
-            let rects = crate::panes::pane_rects(self.viewport.view_rect, self.pane_count);
+            let rects = crate::panes::pane_rects(self.viewport.view_rect, self.pane_count, self.pane_split);
             self.hud_open = None;
             self.init_panes(&rects);
-            self.click_activate(ui, &rects);
             let active = self.active_pane;
             let response = self.viewport.allocate(ui, rects[active]);
-            self.handle_viewport_input(&ctx, &response);
+            // the splitters come after the viewport: on top of it for the pointer
+            self.splitter_drag = false;
+            let strips = self.splitters(ui);
+            self.click_activate(ui, &rects, &strips);
+            self.splitter_strips = strips;
+            if !self.splitter_drag {
+                self.handle_viewport_input(&ctx, &response);
+            }
             self.tray_drag_frame(&ctx, &response);
             if self.tool.animating() {
                 // Scripts get a fixed step so runs are repeatable.

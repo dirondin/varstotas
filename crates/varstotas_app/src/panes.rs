@@ -9,11 +9,15 @@
 
 use crate::app::{FaceStylePref, VarstotasApp};
 use crate::nav::{self, CameraAnimation};
-use egui::{Rect, pos2};
+use egui::{Pos2, Rect, Vec2, pos2, vec2};
 use varstotas_render::{Camera, StandardView};
 
 /// Gap between panes, points.
 const GAP: f32 = 2.0;
+/// Half the width of a splitter's grab strip, points.
+const SPLIT_GRAB: f32 = 4.0;
+/// The narrowest a pane gets, as a fraction of the view.
+const MIN_SHARE: f32 = 0.1;
 
 /// What a pane keeps of its own.
 pub struct PaneView {
@@ -55,9 +59,10 @@ impl Default for PaneView {
     }
 }
 
-/// The panes' rectangles in `full`: 1, 2 (left | right) or 4 (rows: 0 1 / 2 3).
-pub fn pane_rects(full: Rect, count: usize) -> Vec<Rect> {
-    let mid = full.center();
+/// The panes' rectangles in `full`: 1, 2 (left | right) or 4 (rows: 0 1 / 2 3), the
+/// splitters at `split` (fractions of the width and the height).
+pub fn pane_rects(full: Rect, count: usize, split: Vec2) -> Vec<Rect> {
+    let mid = split_point(full, split);
     let (l, r, t, b) = (full.left(), full.right(), full.top(), full.bottom());
     let h = GAP / 2.0;
     match count {
@@ -69,6 +74,24 @@ pub fn pane_rects(full: Rect, count: usize) -> Vec<Rect> {
             Rect::from_min_max(pos2(mid.x + h, mid.y + h), full.max),
         ],
         _ => vec![full],
+    }
+}
+
+/// Where the splitters cross in `full`.
+fn split_point(full: Rect, split: Vec2) -> Pos2 {
+    full.min + split * full.size()
+}
+
+/// The grab strips of the splitters: (strip, axis — 0 the vertical one, moved along x).
+pub fn splitter_rects(full: Rect, count: usize, split: Vec2) -> Vec<(Rect, usize)> {
+    let mid = split_point(full, split);
+    let w = SPLIT_GRAB;
+    let v = (Rect::from_min_max(pos2(mid.x - w, full.top()), pos2(mid.x + w, full.bottom())), 0);
+    let h = (Rect::from_min_max(pos2(full.left(), mid.y - w), pos2(full.right(), mid.y + w)), 1);
+    match count {
+        2 => vec![v],
+        4 => vec![v, h],
+        _ => vec![],
     }
 }
 
@@ -165,7 +188,7 @@ impl VarstotasApp {
         let Some(p) = PRESETS.get(i) else { return };
         self.activate_pane(0);
         self.set_pane_count(p.panes.len());
-        let rects = pane_rects(self.viewport.view_rect, self.pane_count);
+        let rects = pane_rects(self.viewport.view_rect, self.pane_count, self.pane_split);
         self.init_panes(&rects);
         for (k, (&(v, ortho), r)) in p.panes.iter().zip(&rects).enumerate() {
             let aspect = (r.width() / r.height().max(1.0)) as f64;
@@ -213,8 +236,37 @@ impl VarstotasApp {
         }
     }
 
+    /// Dragging a splitter between the panes resizes them; a double click centres it again.
+    /// Returns the grab strips (the viewport leaves presses there alone).
+    pub(crate) fn splitters(&mut self, ui: &mut egui::Ui) -> Vec<Rect> {
+        let full = self.viewport.view_rect;
+        let strips = splitter_rects(full, self.pane_count, self.pane_split);
+        for &(r, axis) in &strips {
+            let resp = ui.interact(r, ui.id().with(("pane_splitter", axis)), egui::Sense::click_and_drag());
+            crate::ui::tray_lib::spot(if axis == 0 { "pane:split_v" } else { "pane:split_h" }, r.center() + vec2(0.0, if axis == 0 { 40.0 } else { 0.0 }));
+            if resp.hovered() || resp.dragged() {
+                ui.ctx().set_cursor_icon(if axis == 0 { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical });
+            }
+            if resp.double_clicked() {
+                self.pane_split[axis] = 0.5;
+            } else if resp.dragged()
+                && let Some(p) = resp.interact_pointer_pos()
+            {
+                let t = (p - full.min)[axis] / full.size()[axis].max(1.0);
+                self.pane_split[axis] = t.clamp(MIN_SHARE, 1.0 - MIN_SHARE);
+            }
+            if resp.hovered() || resp.dragged() {
+                ui.painter().rect_filled(r.shrink2(vec2(if axis == 0 { 2.5 } else { 0.0 }, if axis == 0 { 0.0 } else { 2.5 })), 0.0, crate::ui::theme::accent_soft());
+            }
+            if resp.dragged() {
+                self.splitter_drag = true;
+            }
+        }
+        strips.into_iter().map(|s| s.0).collect()
+    }
+
     /// The pane clicked in becomes the active one.
-    pub(crate) fn click_activate(&mut self, ui: &egui::Ui, rects: &[Rect]) {
+    pub(crate) fn click_activate(&mut self, ui: &egui::Ui, rects: &[Rect], strips: &[Rect]) {
         if rects.len() < 2 || self.tool_pressed || self.viewport.nav.is_dragging() {
             return;
         }
@@ -226,6 +278,9 @@ impl VarstotasApp {
             })
         });
         let Some(p) = press else { return };
+        if strips.iter().any(|s| s.contains(p)) {
+            return;
+        }
         // not through a window or the tray over the view
         if ctx.layer_id_at(p) != Some(ui.layer_id()) {
             return;
@@ -257,13 +312,19 @@ mod tests {
     #[test]
     fn rects_tile_the_view() {
         let full = Rect::from_min_max(pos2(0.0, 0.0), pos2(800.0, 600.0));
-        assert_eq!(pane_rects(full, 1), vec![full]);
-        let two = pane_rects(full, 2);
+        let half = vec2(0.5, 0.5);
+        assert_eq!(pane_rects(full, 1, half), vec![full]);
+        let two = pane_rects(full, 2, half);
         assert_eq!(two.len(), 2);
         assert_eq!(two[0].right() + GAP, two[1].left());
-        let four = pane_rects(full, 4);
+        let four = pane_rects(full, 4, half);
         assert_eq!(four.len(), 4);
         assert_eq!(four[3].max, full.max);
         assert!((four[0].area() - four[3].area()).abs() < 1.0);
+        // moved splitters: the left column a quarter wide, the top row three quarters high
+        let moved = pane_rects(full, 4, vec2(0.25, 0.75));
+        assert!((moved[0].right() - (200.0 - GAP / 2.0)).abs() < 1e-3);
+        assert!((moved[3].top() - (450.0 + GAP / 2.0)).abs() < 1e-3);
+        assert_eq!(splitter_rects(full, 4, vec2(0.25, 0.75)).len(), 2);
     }
 }
