@@ -1,25 +1,94 @@
 //! UV Editor: the texture layout of the selected faces (else every textured face of the
 //! active context) drawn over the material's image, one tile per square. Faces joined by
-//! shared edges that are not seams form islands; islands are picked, dragged (Alt: rotate,
-//! Cmd/Ctrl: scale), unfolded, projected, turned, flipped, fitted, packed, aligned and given
-//! one texel density, turned / scaled by typed amounts or at random. Seams are marked on the
-//! selected edges or on the hard edges. The backdrop is one map of the material (colour,
-//! normal, roughness, …), one tile or repeated; a checker can stand in for the textures
-//! (here and in the 3D view).
+//! shared edges that are not seams form islands. Islands (or single faces in face mode) are
+//! picked by click or box and moved, turned and scaled right on the canvas with the Move,
+//! Rotate and Scale tools (about a pivot that can be dragged; snapping to corners and the
+//! tile grid, angle / scale / move increments; exact values typed in the status bar). The
+//! toolbar unfolds, projects, turns by 90°, flips, fits, packs and aligns, resets the turn,
+//! the scale or the whole placement, and marks seams. The backdrop is one map of the
+//! material (colour, normal, roughness, …), one tile or repeated; a checker can stand in for
+//! the textures (here and in the 3D view).
 
+use super::icons::Icon;
+use super::icons::uv::UvIcon;
 use super::theme;
 use crate::app::VarstotasApp;
+use crate::inference::settings::round_to;
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, Ui, pos2, vec2};
 use std::collections::HashSet;
 use varstotas_i18n::tr;
 use varstotas_kernel::glam::DVec2;
 use varstotas_kernel::texture::TextureImage;
-use varstotas_kernel::uv::{self, IslandOp, Jitter, Placements, Projection};
+use varstotas_kernel::uv::{self, IslandOp, Placements, Projection};
 use varstotas_kernel::{EdgeId, EntityRef, FaceId, Material, MaterialId, Mesh, Model};
 
 /// Pixel side of the checker texture and its squares per tile.
 const CHECKER_PX: usize = 512;
 const CHECKER_SQUARES: usize = 8;
+/// Screen distance (points) within which the pointer catches the pivot and points snap.
+const CATCH: f32 = 10.0;
+/// Height of the status bar.
+const STATUS_H: f32 = 22.0;
+
+/// The canvas tool.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UvTool {
+    /// Click / box picking; dragging a picked island moves it.
+    #[default]
+    Select,
+    Move,
+    Rotate,
+    Scale,
+}
+
+impl UvTool {
+    pub const ALL: [UvTool; 4] = [UvTool::Select, UvTool::Move, UvTool::Rotate, UvTool::Scale];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            UvTool::Select => "select",
+            UvTool::Move => "move",
+            UvTool::Rotate => "rotate",
+            UvTool::Scale => "scale",
+        }
+    }
+
+    fn icon(self) -> Icon {
+        match self {
+            UvTool::Select => Icon::Select,
+            UvTool::Move => Icon::Move,
+            UvTool::Rotate => Icon::Rotate,
+            UvTool::Scale => Icon::Scale,
+        }
+    }
+
+    fn hover(self) -> String {
+        match self {
+            UvTool::Select => tr!("uv-tool-select"),
+            UvTool::Move => tr!("uv-tool-move"),
+            UvTool::Rotate => tr!("uv-tool-rotate"),
+            UvTool::Scale => tr!("uv-tool-scale"),
+        }
+    }
+
+    fn hint(self) -> String {
+        match self {
+            UvTool::Select => tr!("uv-hint-select"),
+            UvTool::Move => tr!("uv-hint-move"),
+            UvTool::Rotate => tr!("uv-hint-rotate"),
+            UvTool::Scale => tr!("uv-hint-scale"),
+        }
+    }
+
+    /// The name of the value typed in the status bar.
+    fn value_label(self) -> String {
+        match self {
+            UvTool::Select | UvTool::Move => tr!("uv-value-move"),
+            UvTool::Rotate => tr!("uv-value-rotate"),
+            UvTool::Scale => tr!("uv-value-scale"),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DragKind {
@@ -27,43 +96,110 @@ enum DragKind {
     Rotate,
     Scale,
     Pan,
+    /// Box picking.
+    Marquee,
+    /// Dragging the pivot.
+    Pivot,
+}
+
+/// A transform of picked faces: a move (tile units, or texture mm when typed), a turn
+/// (degrees, anticlockwise) or a scale (per axis) about the pivot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Xform {
+    Move(DVec2),
+    MoveMm(DVec2),
+    Rotate(f64),
+    Scale(DVec2),
+}
+
+/// A part of the gizmo at the pivot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Handle {
+    /// The centre: moves the pivot (Rotate / Scale), or moves freely (Move).
+    Center,
+    /// One axis (0 = across, 1 = up): move or scale along it only.
+    Axis(usize),
+    /// Scale both axes alike.
+    Uniform,
+}
+
+/// Gizmo arm length (points).
+const ARM: f32 = 56.0;
+
+/// The gizmo part under `p` (`g` = the pivot on screen).
+fn gizmo_hit(tool: UvTool, g: Pos2, p: Pos2) -> Option<Handle> {
+    if tool == UvTool::Select {
+        return None;
+    }
+    let d = p - g;
+    if d.length() <= CATCH {
+        return Some(Handle::Center);
+    }
+    if tool == UvTool::Scale && (d - vec2(ARM * 0.62, -ARM * 0.62)).length() <= 8.0 {
+        return Some(Handle::Uniform);
+    }
+    if matches!(tool, UvTool::Move | UvTool::Scale) {
+        if d.y.abs() <= 6.0 && d.x > CATCH && d.x <= ARM + 8.0 {
+            return Some(Handle::Axis(0));
+        }
+        if d.x.abs() <= 6.0 && -d.y > CATCH && -d.y <= ARM + 8.0 {
+            return Some(Handle::Axis(1));
+        }
+    }
+    None
 }
 
 struct UvDrag {
     kind: DragKind,
+    /// Constrained to one axis (gizmo arm).
+    axis: Option<usize>,
     start: Pos2,
-    /// Islands being dragged (faces), with their placements at the start.
-    islands: Vec<Vec<FaceId>>,
+    /// Picked faces grouped by island, with their placements at the start.
+    groups: Vec<Vec<FaceId>>,
     orig: Placements,
-    /// Screen centre of the dragged islands (rotate / scale about it).
-    pivot: Pos2,
+    /// Pivot (tile units) of a turn / scale.
+    pivot: DVec2,
     /// View centre at the start (pan).
     center: DVec2,
+    /// The picked corner nearest the press (tile units): it snaps when moving.
+    grab: Option<DVec2>,
+    /// What the drag does now, and the point it snapped to (tile units).
+    now: Option<Xform>,
+    snapped: Option<DVec2>,
+}
+
+/// The last transform (drag or typed), so a value typed next replaces it.
+struct UvLast {
+    tool: UvTool,
+    version: u64,
+    pivot: DVec2,
+    groups: Vec<Vec<FaceId>>,
 }
 
 /// UV Editor state.
 #[derive(Default)]
 pub struct UvState {
     pub open: bool,
-    /// Faces of the selected islands.
+    /// Picked faces (whole islands, or single faces in face mode).
     pub selected: HashSet<FaceId>,
+    pub tool: UvTool,
+    /// Clicks pick single faces (else whole islands).
+    pub face_mode: bool,
+    /// Pivot of Rotate / Scale (tile units); `None` = the centre of the picked faces.
+    pub pivot: Option<DVec2>,
     /// View centre (tile units) and zoom (points per tile); 0 = frame the islands.
     center: DVec2,
     zoom: f32,
     drag: Option<UvDrag>,
+    last: Option<UvLast>,
+    /// The last click (screen point) and which of the overlapping faces / islands under it
+    /// it picked: clicking there again picks the next one down.
+    cycle: Option<(Pos2, usize)>,
+    /// The status bar value (shows the drag's, takes a typed one).
+    pub vcb: String,
     /// The checker stands in for textures (UV Editor and 3D view).
     pub checker: bool,
     density: String,
-    /// Variant of the last Randomize (each press gives a new one).
-    seed: u64,
-    /// Randomize: any angle (else 90° steps) and the scale spread in percent (0 = kept).
-    pub rand_any_angle: bool,
-    pub rand_scale_pct: f64,
-    /// Typed rotation (degrees) and scale factor.
-    angle: String,
-    scale: String,
-    /// Text of the face fields (face, offset x / y, rotation, scale x / y, tile w / h).
-    face_bufs: Option<(FaceId, [String; 7])>,
     /// The backdrop's map slot (`textures::SLOTS`; empty = the first the material has).
     pub map: &'static str,
     /// The backdrop shows one tile only (else repeated).
@@ -72,6 +208,21 @@ pub struct UvState {
     checker_tex: Option<egui::TextureHandle>,
     /// (model version, faces) → islands.
     cache: Option<(u64, Vec<FaceId>, Vec<Vec<FaceId>>)>,
+}
+
+/// Text of a transform for the status bar.
+fn xform_text(x: Xform, unit: varstotas_kernel::LengthUnit) -> String {
+    let num = |v: f64| {
+        let t = format!("{v:.3}");
+        t.trim_end_matches('0').trim_end_matches('.').to_string()
+    };
+    match x {
+        Xform::Rotate(d) => format!("{}°", num(d)),
+        Xform::Scale(k) if (k.x - k.y).abs() < 1e-9 => num(k.x),
+        Xform::Scale(k) => format!("{}; {}", num(k.x), num(k.y)),
+        Xform::MoveMm(d) => format!("{}; {}", super::fmt_len(d.x, unit), super::fmt_len(d.y, unit)),
+        Xform::Move(_) => String::new(),
+    }
 }
 
 /// Tile size (mm) of a face's own textured material (front, else back).
@@ -188,11 +339,94 @@ impl VarstotasApp {
         isl
     }
 
-    /// The selected islands, else all of them.
+    /// The picked faces grouped by island, else every island.
     fn uv_targets(&mut self) -> Vec<Vec<FaceId>> {
         let all = self.uv_islands();
-        let sel: Vec<Vec<FaceId>> = all.iter().filter(|i| i.iter().any(|f| self.uv.selected.contains(f))).cloned().collect();
+        let sel = picked_groups(&all, &self.uv.selected);
         if sel.is_empty() { all } else { sel }
+    }
+
+    /// Face outlines in tile units.
+    fn uv_polys(&self, mesh: &Mesh, faces: &[FaceId], fallback: Option<[f64; 2]>) -> Vec<(FaceId, Vec<DVec2>)> {
+        faces
+            .iter()
+            .map(|f| {
+                let t = DVec2::from(self.uv_tile(mesh, *f, fallback));
+                (*f, uv::face_tex(mesh, *f).into_iter().map(|q| q / t).collect())
+            })
+            .collect()
+    }
+
+    /// The pivot of Rotate / Scale (tile units): the set one, else the centre of the picked
+    /// faces (else of all of them).
+    pub(crate) fn uv_pivot(&mut self) -> DVec2 {
+        if let Some(p) = self.uv.pivot {
+            return p;
+        }
+        let faces: Vec<FaceId> = self.uv_targets().into_iter().flatten().collect();
+        let fallback = self.uv_fallback_tile(&faces);
+        let Some(mesh) = self.doc.model.mesh_at(&self.doc.active_path) else { return DVec2::ZERO };
+        let pts: Vec<DVec2> = self.uv_polys(mesh, &faces, fallback).into_iter().flat_map(|p| p.1).collect();
+        match (pts.iter().copied().reduce(DVec2::min), pts.iter().copied().reduce(DVec2::max)) {
+            (Some(lo), Some(hi)) => (lo + hi) / 2.0,
+            _ => DVec2::ZERO,
+        }
+    }
+
+    /// Placements after transform `x` of the groups about `pivot` (tile units; each island
+    /// in its own tile's millimetres).
+    fn uv_xform(&self, groups: &[Vec<FaceId>], x: Xform, pivot: DVec2, fallback: Option<[f64; 2]>) -> Placements {
+        let Some(mesh) = self.doc.model.mesh_at(&self.doc.active_path) else { return Vec::new() };
+        let mut out = Vec::new();
+        for g in groups {
+            let t = DVec2::from(g.first().map_or([1000.0; 2], |f| self.uv_tile(mesh, *f, fallback)));
+            let c = pivot * t;
+            out.extend(match x {
+                Xform::Move(d) => uv::map_faces(mesh, g, |q| q + d * t),
+                Xform::MoveMm(d) => uv::map_faces(mesh, g, |q| q + d),
+                Xform::Rotate(deg) => uv::map_faces(mesh, g, uv::rotation(c, deg)),
+                Xform::Scale(k) => uv::map_faces(mesh, g, |q| c + (q - c) * k),
+            });
+        }
+        out
+    }
+
+    /// Apply a typed status bar value with the current tool: right after a drag (or another
+    /// typed value) of the same tool it replaces that one, else it transforms the picked faces.
+    pub(crate) fn uv_typed(&mut self, text: &str) {
+        let tool = self.uv.tool;
+        let unit = self.doc.model.unit;
+        let parts: Vec<&str> = text.split(';').map(str::trim).filter(|t| !t.is_empty()).collect();
+        let num = |t: &str| -> Option<f64> { t.trim_end_matches(['°', '×', 'x']).trim().replace(',', ".").parse().ok().filter(|v: &f64| v.is_finite()) };
+        let len = |t: &str| varstotas_kernel::units::parse_length(t, unit);
+        let k_ok = |k: f64| k.abs() > 1e-3;
+        let x = match (tool, parts.as_slice()) {
+            (UvTool::Rotate, [a]) => num(a).map(Xform::Rotate),
+            (UvTool::Scale, [k]) => num(k).filter(|k| k_ok(*k)).map(|k| Xform::Scale(DVec2::splat(k))),
+            (UvTool::Scale, [a, b]) => num(a).zip(num(b)).filter(|(a, b)| k_ok(*a) && k_ok(*b)).map(|(a, b)| Xform::Scale(DVec2::new(a, b))),
+            (UvTool::Select | UvTool::Move, [a, b]) => len(a).zip(len(b)).map(|(a, b)| Xform::MoveMm(DVec2::new(a, b))),
+            _ => None,
+        };
+        let Some(x) = x else {
+            self.flash_error(tr!("tray-invalid-value"));
+            return;
+        };
+        let again = self.uv.last.as_ref().filter(|l| l.tool == tool && l.version == self.doc.model_version).map(|l| (l.pivot, l.groups.clone()));
+        let (pivot, groups) = match again {
+            Some(a) if self.doc.undo_last_commit().is_some() => a,
+            _ => (self.uv_pivot(), self.uv_targets()),
+        };
+        let faces: Vec<FaceId> = groups.iter().flatten().copied().collect();
+        let list = self.uv_xform(&groups, x, pivot, self.uv_fallback_tile(&faces));
+        self.uv_commit_last(list, pivot, groups);
+        self.uv.vcb = xform_text(x, unit);
+    }
+
+    /// Commit a transform and remember it for a typed value to replace.
+    fn uv_commit_last(&mut self, list: Placements, pivot: DVec2, groups: Vec<Vec<FaceId>>) {
+        let before = self.doc.model_version;
+        self.uv_commit(&tr!("uv-undo"), list);
+        self.uv.last = (self.doc.model_version != before).then_some(UvLast { tool: self.uv.tool, version: self.doc.model_version, pivot, groups });
     }
 
     /// One undo step setting the placements.
@@ -255,8 +489,11 @@ impl VarstotasApp {
     /// Run a UV Editor command (buttons and scripts): `unfold`, `planar`, `box`, `cylinder`,
     /// `sphere`, `rotate`, `rotate_ccw`, `flip_u`, `flip_v`, `fit`, `pack`, `align`,
     /// `rotate_by <deg>` (the islands, anticlockwise), `scale_by <k>` (the islands grow, so the
-    /// texture on the model shrinks), `reset`, `randomize`, `rand_scale <percent>`, `density <px/m>`, `seams_mark`, `seams_clear`, `seams_hard`, `checker`, `select_all`,
-    /// `select_none`, `frame`.
+    /// texture on the model shrinks), `reset`, `reset_rotation`, `reset_scale`,
+    /// `density <px/m>`, `seams_mark`, `seams_clear`, `seams_hard`, `checker`, `tile`,
+    /// `select_all`, `select_none`, `frame`, `tool <select|move|rotate|scale>`,
+    /// `mode <island|face>`, `pivot <u> <v>` (tile units) or `pivot center`, `type <value>` (the
+    /// status bar value of the current tool).
     pub(crate) fn uv_run(&mut self, op: &str) {
         let (op, arg) = op.split_once(' ').unwrap_or((op, ""));
         let targets = self.uv_targets();
@@ -279,6 +516,8 @@ impl VarstotasApp {
             "flip_v" => per_island(&|m, i| uv::transform(m, i, IslandOp::FlipV)),
             "fit" => per_island(&|m, i| uv::fit_to_tile(m, i, tile)),
             "reset" => faces.iter().map(|f| (*f, None)).collect(),
+            "reset_rotation" => per_island(&|m, i| uv::reset(m, i, true, false)),
+            "reset_scale" => per_island(&|m, i| uv::reset(m, i, false, true)),
             "pack" => uv::pack(mesh, &targets, tile, 0.02),
             "align" => per_island(&|m, i| uv::align(m, i)),
             "rotate_by" | "scale_by" => {
@@ -291,13 +530,6 @@ impl VarstotasApp {
                     }
                 };
                 per_island(&|m, i| uv::transform(m, i, op))
-            }
-            "randomize" => {
-                self.uv.seed = self.uv.seed.wrapping_add(1);
-                let base = self.uv.seed.wrapping_mul(0x1000_0000);
-                let p = (self.uv.rand_scale_pct / 100.0).clamp(0.0, 0.9);
-                let jitter = Jitter { any_angle: self.uv.rand_any_angle, scale: [1.0 - p, 1.0 + p] };
-                targets.iter().enumerate().flat_map(|(k, i)| uv::randomize(mesh, i, self.uv_tile(mesh, i[0], fallback), base + k as u64, jitter)).collect()
             }
             "density" => {
                 let want: Option<f64> = arg.trim().replace(',', ".").parse().ok().filter(|v: &f64| *v > 0.0);
@@ -331,8 +563,31 @@ impl VarstotasApp {
                 }
                 return;
             }
-            "rand_scale" => {
-                self.uv.rand_scale_pct = number(arg).unwrap_or(0.0).clamp(0.0, 90.0);
+            "tool" => {
+                match UvTool::ALL.into_iter().find(|t| t.key() == arg.trim()) {
+                    Some(t) => {
+                        self.uv.tool = t;
+                        self.uv.vcb.clear();
+                    }
+                    None => log::warn!("uv: unknown tool `{arg}`"),
+                }
+                return;
+            }
+            "mode" => {
+                self.uv.face_mode = arg.trim() == "face";
+                return;
+            }
+            "pivot" => {
+                let v: Vec<f64> = arg.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+                self.uv.pivot = if let [u, v] = v[..] { Some(DVec2::new(u, v)) } else { None };
+                return;
+            }
+            "type" => {
+                self.uv_typed(arg);
+                return;
+            }
+            "tile" => {
+                self.uv.single_tile = !self.uv.single_tile;
                 return;
             }
             "checker" => {
@@ -341,7 +596,7 @@ impl VarstotasApp {
                 return;
             }
             "select_all" => {
-                self.uv.selected = faces.into_iter().collect();
+                self.uv.selected = self.uv_islands().into_iter().flatten().collect();
                 return;
             }
             "select_none" => {
@@ -397,11 +652,15 @@ impl VarstotasApp {
             .resizable(true)
             .show(ctx, |ui| {
                 self.uv_toolbar(ui);
-                if let Some(f) = self.uv_single_face() {
-                    self.uv_face_fields(ui, f);
-                }
                 ui.separator();
-                self.uv_canvas(ui);
+                // the canvas takes exactly what the status bar leaves, and the status bar is a
+                // fixed rectangle: the content never pushes the window larger
+                let h = (ui.available_height() - STATUS_H - ui.spacing().item_spacing.y).max(120.0);
+                self.uv_canvas(ui, vec2(ui.available_width(), h));
+                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), STATUS_H), Sense::hover());
+                let mut bar = ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::left_to_right(egui::Align::Center)));
+                bar.set_clip_rect(r.intersect(ui.clip_rect()));
+                self.uv_status_bar(&mut bar);
             });
         if !open {
             self.uv.open = false;
@@ -409,107 +668,9 @@ impl VarstotasApp {
         }
     }
 
-    /// The one face the face fields edit: the only selected face, else the only face of the
-    /// picked islands.
-    fn uv_single_face(&self) -> Option<FaceId> {
-        let sel: Vec<FaceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Face(f) = e { Some(*f) } else { None }).collect();
-        match (sel.as_slice(), self.uv.selected.len()) {
-            ([f], _) => Some(*f),
-            ([], 1) => self.uv.selected.iter().next().copied(),
-            _ => None,
-        }
-    }
-
-    /// The numbers of one face's texture placement (the numeric form of Texture Position):
-    /// offset of the texture origin, rotation, scale and the tile size on the face.
-    fn uv_face_fields(&mut self, ui: &mut Ui, fid: FaceId) {
-        let path = self.doc.active_path.clone();
-        let unit = self.doc.model.unit;
-        let model = &self.doc.model;
-        let Some(face) = model.mesh_at(&path).and_then(|m| m.faces.get(fid)) else { return };
-        let Some(tile) = own_tile(model, model.mesh_at(&path).expect("face mesh"), fid).or_else(|| self.uv_fallback_tile(&[fid])) else {
-            return;
-        };
-        let pl = face.uv.unwrap_or_default();
-        let texts = [
-            super::fmt_len(pl.offset[0], unit),
-            super::fmt_len(pl.offset[1], unit),
-            format!("{:.1}°", pl.angle_deg),
-            format!("{}", pl.scale[0]),
-            format!("{}", pl.scale[1]),
-            super::fmt_len(tile[0] * pl.scale[0].abs(), unit),
-            super::fmt_len(tile[1] * pl.scale[1].abs(), unit),
-        ];
-        if self.uv.face_bufs.as_ref().map(|t| t.0) != Some(fid) {
-            self.uv.face_bufs = Some((fid, texts.clone()));
-        }
-        let mut new = None;
-        let mut bad = false;
-        let r = egui::CollapsingHeader::new(egui::RichText::new(tr!("tray-tex-title")).strong()).id_salt("uv_face").default_open(true).show(ui, |ui| {
-            let Some((_, bufs)) = self.uv.face_bufs.as_mut() else { return };
-            let labels = [
-                tr!("tray-tex-offset-x"),
-                tr!("tray-tex-offset-y"),
-                tr!("tray-tex-rotation"),
-                tr!("tray-tex-scale-x"),
-                tr!("tray-tex-scale-y"),
-                tr!("tray-tex-tile-w"),
-                tr!("tray-tex-tile-h"),
-            ];
-            // pairs side by side: offset, scale, tile size; the rotation last
-            egui::Grid::new("uv_face_fields").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
-                for row in [[0, 1], [3, 4], [5, 6], [2, usize::MAX]] {
-                    for i in row {
-                        if i == usize::MAX {
-                            continue;
-                        }
-                        ui.label(&labels[i]);
-                        let resp = ui.add(egui::TextEdit::singleline(&mut bufs[i]).desired_width(80.0));
-                        super::tray_lib::spot(format!("uv:face{i}"), resp.rect.center());
-                        if super::tray::committed(ui, &resp) && bufs[i] != texts[i] {
-                            let t = bufs[i].trim();
-                            let mut p = pl;
-                            let ok = match i {
-                                0 | 1 => varstotas_kernel::units::parse_length(t, unit).map(|v| p.offset[i] = v).is_some(),
-                                2 => t.trim_end_matches('°').trim().parse::<f64>().map(|v| p.angle_deg = v).is_ok(),
-                                3 | 4 => t.parse::<f64>().ok().filter(|v| v.abs() > 1e-6).map(|v| p.scale[i - 3] = v).is_some(),
-                                // tile size on the face: the scale keeps its sign (a flip stays)
-                                _ => varstotas_kernel::units::parse_length(t, unit)
-                                    .filter(|v| *v > 0.0)
-                                    .map(|v| p.scale[i - 5] = v / tile[i - 5] * if pl.scale[i - 5] < 0.0 { -1.0 } else { 1.0 })
-                                    .is_some(),
-                            };
-                            if ok {
-                                new = Some(p);
-                            } else {
-                                bad = true;
-                            }
-                        } else if !resp.has_focus() && bufs[i] != texts[i] {
-                            bufs[i] = texts[i].clone();
-                        }
-                    }
-                    ui.end_row();
-                }
-            });
-        });
-        super::tray_lib::spot("uv:face", r.header_response.rect.left_center() + egui::vec2(8.0, 0.0));
-        if bad {
-            self.uv.face_bufs = None;
-            self.flash_error(tr!("tray-invalid-value"));
-        }
-        if let Some(p) = new {
-            self.uv.face_bufs = None;
-            self.doc.commit(&tr!("tray-undo-texture-position"), |m| {
-                if let Some(f) = m.mesh_at_mut(&path).and_then(|mesh| mesh.faces.get_mut(fid)) {
-                    f.uv = (!p.is_identity()).then_some(p);
-                }
-            });
-        }
-    }
-
-
-    fn uv_button(&mut self, ui: &mut Ui, label: String, hover: String, op: &str) {
-        let r = ui.button(label).on_hover_text(hover);
+    /// A toolbar icon button running `op`.
+    fn uv_icon(&mut self, ui: &mut Ui, icon: Icon, selected: bool, hover: String, op: &str) {
+        let r = super::icon_button(ui, icon, selected, 28.0).on_hover_text(hover);
         super::tray_lib::spot(format!("uv:{op}"), r.rect.center());
         if r.clicked() {
             self.uv_run(op);
@@ -518,10 +679,39 @@ impl VarstotasApp {
 
     fn uv_toolbar(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
-            self.uv_button(ui, tr!("uv-unfold"), tr!("uv-unfold-hover"), "unfold");
-            let pr = ui.menu_button(tr!("uv-project"), |ui| {
-                for (op, label) in [("planar", tr!("uv-planar")), ("box", tr!("uv-box")), ("cylinder", tr!("uv-cylinder")), ("sphere", tr!("uv-sphere"))] {
-                    let r = ui.button(label);
+            ui.spacing_mut().item_spacing.x = 2.0;
+            for t in UvTool::ALL {
+                let r = super::icon_button(ui, t.icon(), self.uv.tool == t, 28.0).on_hover_text(t.hover());
+                super::tray_lib::spot(format!("uv:tool:{}", t.key()), r.rect.center());
+                if r.clicked() && self.uv.tool != t {
+                    self.uv.tool = t;
+                    self.uv.vcb.clear();
+                }
+            }
+            sep(ui);
+            for (face, icon, hover) in [(false, UvIcon::IslandMode, tr!("uv-mode-island")), (true, UvIcon::FaceMode, tr!("uv-mode-face"))] {
+                let r = super::icon_button(ui, Icon::Uv(icon), self.uv.face_mode == face, 28.0).on_hover_text(hover);
+                super::tray_lib::spot(format!("uv:mode:{}", if face { "face" } else { "island" }), r.rect.center());
+                if r.clicked() && self.uv.face_mode != face {
+                    self.uv.face_mode = face;
+                    self.uv.selected.clear();
+                }
+            }
+            self.uv_icon(ui, Icon::SelectAll, false, tr!("uv-select-all"), "select_all");
+            self.uv_icon(ui, Icon::ZoomExtents, false, tr!("uv-frame"), "frame");
+            sep(ui);
+            self.uv_icon(ui, Icon::Unfold, false, tr!("uv-unfold-hover"), "unfold");
+            let pr = super::icon_button(ui, Icon::Uv(UvIcon::Planar), false, 28.0).on_hover_text(tr!("uv-project-hover"));
+            super::tray_lib::spot("uv:project", pr.rect.center());
+            egui::Popup::menu(&pr).show(|ui| {
+                let items = [
+                    ("planar", Icon::Uv(UvIcon::Planar), tr!("uv-planar")),
+                    ("box", Icon::Box3d, tr!("uv-box")),
+                    ("cylinder", Icon::Cylinder, tr!("uv-cylinder")),
+                    ("sphere", Icon::Sphere, tr!("uv-sphere")),
+                ];
+                for (op, icon, label) in items {
+                    let r = super::menu::icon_row(ui, Some(icon), &label, None, true, false);
                     super::tray_lib::spot(format!("uv:{op}"), r.rect.center());
                     if r.clicked() {
                         self.uv_run(op);
@@ -529,110 +719,93 @@ impl VarstotasApp {
                     }
                 }
             });
-            super::tray_lib::spot("uv:project", pr.response.rect.center());
-            ui.separator();
-            self.uv_button(ui, tr!("uv-seams-mark"), tr!("uv-seams-mark-hover"), "seams_mark");
-            self.uv_button(ui, tr!("uv-seams-clear"), tr!("uv-seams-clear-hover"), "seams_clear");
-            self.uv_button(ui, tr!("uv-seams-hard"), tr!("uv-seams-hard-hover"), "seams_hard");
-        });
-        ui.horizontal_wrapped(|ui| {
-            self.uv_button(ui, "⟲".into(), tr!("uv-rotate-ccw"), "rotate_ccw");
-            self.uv_button(ui, "⟳".into(), tr!("uv-rotate"), "rotate");
-            self.uv_button(ui, "↔".into(), tr!("uv-flip-u"), "flip_u");
-            self.uv_button(ui, "↕".into(), tr!("uv-flip-v"), "flip_v");
-            ui.separator();
-            self.uv_button(ui, tr!("uv-fit"), tr!("uv-fit-hover"), "fit");
-            self.uv_button(ui, tr!("uv-pack"), tr!("uv-pack-hover"), "pack");
-            self.uv_button(ui, tr!("uv-align"), tr!("uv-align-hover"), "align");
-            self.uv_button(ui, tr!("tray-tex-reset"), tr!("uv-reset-hover"), "reset");
-        });
-        // typed rotation and scale, then Randomize with its options
-        ui.horizontal_wrapped(|ui| {
-            for (op, field, label, hover, unit) in [("rotate_by", 0, tr!("uv-rotate-by"), tr!("uv-rotate-by-hover"), "°"), ("scale_by", 1, tr!("uv-scale-by"), tr!("uv-scale-by-hover"), "×")] {
-                let buf = if field == 0 { &mut self.uv.angle } else { &mut self.uv.scale };
-                let hint = if field == 0 { "15" } else { "1.25" };
-                let resp = ui.add(egui::TextEdit::singleline(buf).desired_width(44.0).hint_text(hint)).on_hover_text(hover.clone());
-                super::tray_lib::spot(format!("uv:{op}_value"), resp.rect.center());
-                ui.label(unit);
-                let enter = super::tray::committed(ui, &resp) && !buf.trim().is_empty();
-                let b = ui.button(label).on_hover_text(hover);
-                super::tray_lib::spot(format!("uv:{op}"), b.rect.center());
-                if enter || b.clicked() {
-                    let v = if buf.trim().is_empty() { hint.to_string() } else { buf.clone() };
-                    self.uv_run(&format!("{op} {v}"));
-                }
-            }
-            ui.separator();
-            self.uv_button(ui, tr!("uv-randomize"), tr!("uv-randomize-hover"), "randomize");
-            let r = ui.checkbox(&mut self.uv.rand_any_angle, tr!("uv-rand-any-angle")).on_hover_text(tr!("uv-rand-any-angle-hover"));
-            super::tray_lib::spot("uv:rand_any", r.rect.center());
-            ui.label(tr!("uv-rand-scale"));
-            let r = ui.add(egui::DragValue::new(&mut self.uv.rand_scale_pct).range(0.0..=90.0).speed(1.0).suffix(" %")).on_hover_text(tr!("uv-rand-scale-hover"));
-            super::tray_lib::spot("uv:rand_scale", r.rect.center());
-        });
-        self.uv_backdrop_row(ui);
-        let targets = self.uv_targets();
-        let faces: Vec<FaceId> = targets.iter().flatten().copied().collect();
-        let now = self.uv_density(&faces);
-        ui.horizontal(|ui| {
-            ui.label(tr!("uv-density"));
-            let resp = ui.add(egui::TextEdit::singleline(&mut self.uv.density).desired_width(70.0).hint_text(now.map(|d| format!("{d:.0}")).unwrap_or_default()));
-            super::tray_lib::spot("uv:density", resp.rect.center());
-            ui.label(tr!("uv-px-per-m"));
-            if super::tray::committed(ui, &resp) && !self.uv.density.trim().is_empty() {
-                let v = std::mem::take(&mut self.uv.density);
-                self.uv_run(&format!("density {v}"));
-            }
-            let all = self.uv_islands();
-            let picked = all.iter().filter(|i| i.iter().any(|f| self.uv.selected.contains(f))).count();
-            ui.label(
-                egui::RichText::new(tr!("uv-summary", faces = self.uv_faces().len(), islands = all.len(), selected = picked))
-                    .small()
-                    .color(theme::text_dim()),
-            );
+            sep(ui);
+            self.uv_icon(ui, Icon::Uv(UvIcon::RotateCcw), false, tr!("uv-rotate-ccw"), "rotate_ccw");
+            self.uv_icon(ui, Icon::Uv(UvIcon::RotateCw), false, tr!("uv-rotate"), "rotate");
+            self.uv_icon(ui, Icon::Uv(UvIcon::FlipU), false, tr!("uv-flip-u"), "flip_u");
+            self.uv_icon(ui, Icon::Uv(UvIcon::FlipV), false, tr!("uv-flip-v"), "flip_v");
+            sep(ui);
+            self.uv_icon(ui, Icon::Uv(UvIcon::Fit), false, tr!("uv-fit-hover"), "fit");
+            self.uv_icon(ui, Icon::Uv(UvIcon::Pack), false, tr!("uv-pack-hover"), "pack");
+            self.uv_icon(ui, Icon::Uv(UvIcon::Align), false, tr!("uv-align-hover"), "align");
+            sep(ui);
+            self.uv_icon(ui, Icon::Uv(UvIcon::ResetRotation), false, tr!("uv-reset-rotation"), "reset_rotation");
+            self.uv_icon(ui, Icon::Uv(UvIcon::ResetScale), false, tr!("uv-reset-scale"), "reset_scale");
+            self.uv_icon(ui, Icon::Uv(UvIcon::Reset), false, tr!("uv-reset-hover"), "reset");
+            sep(ui);
+            self.uv_icon(ui, Icon::Uv(UvIcon::SeamMark), false, tr!("uv-seams-mark-hover"), "seams_mark");
+            self.uv_icon(ui, Icon::Uv(UvIcon::SeamClear), false, tr!("uv-seams-clear-hover"), "seams_clear");
+            self.uv_icon(ui, Icon::Uv(UvIcon::SeamHard), false, tr!("uv-seams-hard-hover"), "seams_hard");
+            sep(ui);
+            self.uv_backdrop(ui);
         });
     }
 
-    /// The backdrop row: which material and map, one tile or repeated, the checker.
-    fn uv_backdrop_row(&mut self, ui: &mut Ui) {
+    /// The backdrop controls: the map drop-down, one tile or repeated, the checker.
+    fn uv_backdrop(&mut self, ui: &mut Ui) {
         let faces = self.uv_faces();
         let mat = self.uv_material(&faces);
-        ui.horizontal_wrapped(|ui| {
-            if let Some(m) = mat.and_then(|id| self.doc.model.materials.get(id)) {
-                let name = m.name.clone();
-                let slots = slots_of(m);
-                ui.label(egui::RichText::new(tr!("uv-material", name = name)).color(theme::text_dim()));
-                let shown = if slots.contains(&self.uv.map) { self.uv.map } else { slots[0] };
-                if slots.len() > 1 {
-                    let cb = egui::ComboBox::from_id_salt("uv_map").selected_text(super::mat_maps::slot_label(shown)).show_ui(ui, |ui| {
-                        for s in &slots {
-                            let r = ui.selectable_label(*s == shown, super::mat_maps::slot_label(s));
-                            super::tray_lib::spot(format!("uv:map:{s}"), r.rect.center());
-                            if r.clicked() {
-                                self.uv.map = s;
-                            }
-                        }
-                    });
-                    super::tray_lib::spot("uv:map", cb.response.rect.center());
-                    cb.response.on_hover_text(tr!("uv-map-hover"));
-                } else {
-                    ui.label(super::mat_maps::slot_label(shown));
+        if let Some(m) = mat.and_then(|id| self.doc.model.materials.get(id)) {
+            let name = m.name.clone();
+            let slots = slots_of(m);
+            let shown = if slots.contains(&self.uv.map) { self.uv.map } else { slots[0] };
+            ui.add_space(4.0);
+            let cb = egui::ComboBox::from_id_salt("uv_map").width(110.0).selected_text(super::mat_maps::slot_label(shown)).show_ui(ui, |ui| {
+                for s in &slots {
+                    let r = ui.selectable_label(*s == shown, super::mat_maps::slot_label(s));
+                    super::tray_lib::spot(format!("uv:map:{s}"), r.rect.center());
+                    if r.clicked() {
+                        self.uv.map = s;
+                    }
                 }
-            } else {
-                ui.label(egui::RichText::new(tr!("uv-no-texture")).color(theme::text_dim()));
-            }
-            ui.separator();
-            let mut tiled = !self.uv.single_tile;
-            let r = ui.checkbox(&mut tiled, tr!("uv-tile")).on_hover_text(tr!("uv-tile-hover"));
-            super::tray_lib::spot("uv:tile", r.rect.center());
-            self.uv.single_tile = !tiled;
-            let mut c = self.uv.checker;
-            let r = ui.checkbox(&mut c, tr!("uv-checker")).on_hover_text(tr!("uv-checker-hover"));
-            super::tray_lib::spot("uv:checker", r.rect.center());
-            if r.changed() {
-                self.uv_run("checker");
-            }
-        });
+            });
+            super::tray_lib::spot("uv:map", cb.response.rect.center());
+            cb.response.on_hover_text(format!("{}\n{}", tr!("uv-material", name = name), tr!("uv-map-hover")));
+            ui.add_space(4.0);
+        } else {
+            ui.label(egui::RichText::new(tr!("uv-no-texture")).small().color(theme::text_dim()));
+        }
+        self.uv_icon(ui, Icon::Uv(UvIcon::Tile), !self.uv.single_tile, tr!("uv-tile-hover"), "tile");
+        self.uv_icon(ui, Icon::Uv(UvIcon::Checker), self.uv.checker, tr!("uv-checker-hover"), "checker");
+    }
+
+    /// The status bar: what the tool does, the value field (shows a drag's value, takes an
+    /// exact one), texel density and the counts.
+    fn uv_status_bar(&mut self, ui: &mut Ui) {
+        let targets = self.uv_targets();
+        let faces: Vec<FaceId> = targets.iter().flatten().copied().collect();
+        let now = self.uv_density(&faces);
+        let all = self.uv_islands();
+        let picked = picked_groups(&all, &self.uv.selected).len();
+        let n_faces = self.uv_faces().len();
+        ui.label(egui::RichText::new(self.uv.tool.value_label()).small());
+        let out = egui::TextEdit::singleline(&mut self.uv.vcb).desired_width(110.0).show(ui);
+        // focusing the field selects its text: what is typed replaces the shown value
+        if out.response.gained_focus() {
+            let mut state = out.state.clone();
+            state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(self.uv.vcb.chars().count()))));
+            state.store(ui.ctx(), out.response.id);
+        }
+        let resp = out.response.response.clone().on_hover_text(tr!("uv-value-hover"));
+        super::tray_lib::spot("uv:value", resp.rect.center());
+        if super::tray::committed(ui, &resp) && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !self.uv.vcb.trim().is_empty() {
+            let v = self.uv.vcb.clone();
+            self.uv_typed(&v);
+        }
+        ui.separator();
+        let resp = ui
+            .add(egui::TextEdit::singleline(&mut self.uv.density).desired_width(56.0).hint_text(now.map(|d| format!("{d:.0}")).unwrap_or_default()))
+            .on_hover_text(tr!("uv-density"));
+        super::tray_lib::spot("uv:density", resp.rect.center());
+        if super::tray::committed(ui, &resp) && !self.uv.density.trim().is_empty() {
+            let v = std::mem::take(&mut self.uv.density);
+            self.uv_run(&format!("density {v}"));
+        }
+        ui.label(egui::RichText::new(tr!("uv-px-per-m")).small());
+        ui.separator();
+        ui.label(egui::RichText::new(tr!("uv-summary", faces = n_faces, islands = all.len(), selected = picked)).small().color(theme::text_dim()));
+        ui.separator();
+        ui.add(egui::Label::new(egui::RichText::new(self.uv.tool.hint()).small().color(theme::text_dim())).truncate());
     }
 
     /// The backdrop image: the chosen map of [`Self::uv_material`] (or the checker).
@@ -653,7 +826,7 @@ impl VarstotasApp {
         self.uv.image.as_ref().map(|(_, t)| t.id())
     }
 
-    fn uv_canvas(&mut self, ui: &mut Ui) {
+    fn uv_canvas(&mut self, ui: &mut Ui, size: egui::Vec2) {
         let islands = self.uv_islands();
         let faces: Vec<FaceId> = islands.iter().flatten().copied().collect();
         if faces.is_empty() {
@@ -662,19 +835,12 @@ impl VarstotasApp {
         }
         let bg = self.uv_background(ui.ctx(), &faces);
         let fallback = self.uv_fallback_tile(&faces);
-        let size = ui.available_size().max(vec2(200.0, 200.0));
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
         super::tray_lib::spot("uv:canvas", rect.center());
+        super::tray_lib::spot("uv:canvas_tl", rect.min + vec2(6.0, 6.0));
+        let pivot = self.uv_pivot();
         let Some(mesh) = self.doc.model.mesh_at(&self.doc.active_path) else { return };
-        let model = &self.doc.model;
-        // face outlines in tile units
-        let polys: Vec<(FaceId, Vec<DVec2>)> = faces
-            .iter()
-            .map(|f| {
-                let t = DVec2::from(own_tile(model, mesh, *f).or(fallback).unwrap_or([1000.0; 2]));
-                (*f, uv::face_tex(mesh, *f).into_iter().map(|q| q / t).collect())
-            })
-            .collect();
+        let polys = self.uv_polys(mesh, &faces, fallback);
         if self.uv.zoom <= 0.0 {
             let lo = polys.iter().flat_map(|p| p.1.iter().copied()).fold(DVec2::splat(0.0), DVec2::min);
             let hi = polys.iter().flat_map(|p| p.1.iter().copied()).fold(DVec2::splat(1.0), DVec2::max);
@@ -710,7 +876,7 @@ impl VarstotasApp {
                 painter.line_segment([to_screen(DVec2::new(a.x, j as f64)), to_screen(DVec2::new(b.x, j as f64))], grid);
             }
         }
-        // faces: selected ones filled, edges by kind
+        // faces: picked ones filled, edges by kind
         let set: HashSet<FaceId> = faces.iter().copied().collect();
         for (f, poly) in &polys {
             let pts: Vec<Pos2> = poly.iter().map(|q| to_screen(*q)).collect();
@@ -743,6 +909,8 @@ impl VarstotasApp {
                     Stroke::new(2.5, Color32::from_rgb(240, 60, 70))
                 } else if inner {
                     Stroke::new(0.8, Color32::from_white_alpha(120))
+                } else if self.uv.selected.contains(f) {
+                    Stroke::new(1.8, Color32::from_rgb(255, 170, 70))
                 } else {
                     Stroke::new(1.6, Color32::WHITE)
                 };
@@ -750,20 +918,39 @@ impl VarstotasApp {
             }
         }
         painter.rect_stroke(rect, 0.0, Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
-        // QA: the centre of each island's first face
+        // QA: the centre of each island's first face, and of every face
         for (i, isl) in islands.iter().enumerate() {
             if let Some((_, poly)) = isl.first().and_then(|f| polys.iter().find(|p| p.0 == *f)) {
-                let c = poly.iter().copied().sum::<DVec2>() / poly.len().max(1) as f64;
-                super::tray_lib::spot(format!("uv:isl{i}"), to_screen(c));
+                super::tray_lib::spot(format!("uv:isl{i}"), to_screen(centroid(poly)));
             }
         }
-        let island_at = |p: Pos2| -> Option<usize> {
+        for (i, (_, poly)) in polys.iter().enumerate() {
+            super::tray_lib::spot(format!("uv:face_at{i}"), to_screen(centroid(poly)));
+        }
+        let tool = self.uv.tool;
+        let g = to_screen(pivot);
+        super::tray_lib::spot("uv:pivot", g);
+        super::tray_lib::spot("uv:gizmo_x", g + vec2(ARM * 0.8, 0.0));
+        super::tray_lib::spot("uv:gizmo_y", g + vec2(0.0, -ARM * 0.8));
+        super::tray_lib::spot("uv:gizmo_uniform", g + vec2(ARM * 0.62, -ARM * 0.62));
+        let face_at = |p: Pos2| -> Option<FaceId> {
             let q = to_uv(p);
-            let f = polys.iter().rev().find(|(_, poly)| inside(poly, q))?.0;
-            islands.iter().position(|i| i.contains(&f))
+            polys.iter().rev().find(|(_, poly)| inside(poly, q)).map(|x| x.0)
         };
-        // input: wheel zooms about the pointer, middle / right drag pans, primary drag moves
-        // (Alt rotates, Cmd/Ctrl scales) the picked islands
+        let face_mode = self.uv.face_mode;
+        let part_of = |f: FaceId| -> Vec<FaceId> {
+            if face_mode { vec![f] } else { islands.iter().find(|i| i.contains(&f)).cloned().unwrap_or_default() }
+        };
+        let hit = |p: Pos2| gizmo_hit(tool, g, p);
+        let pivot_tool = matches!(tool, UvTool::Rotate | UvTool::Scale);
+        // a point snapped to a corner of the faces not in `moving`, or to a tile grid corner
+        let snap_on = self.prefs.snapping.enabled;
+        let snap = |q: DVec2, moving: &HashSet<FaceId>| -> Option<DVec2> {
+            let reach = CATCH as f64 / zoom;
+            let corners = polys.iter().filter(|(f, _)| !moving.contains(f)).flat_map(|p| p.1.iter().copied());
+            corners.chain(std::iter::once(q.round())).filter(|c| c.distance(q) <= reach).min_by(|a, b| a.distance(q).total_cmp(&b.distance(q)))
+        };
+        // input: wheel zooms about the pointer, middle / right drag pans
         let hover = resp.hover_pos();
         if let Some(h) = hover {
             let scroll = ui.ctx().input(|i| i.smooth_scroll_delta.y);
@@ -776,18 +963,37 @@ impl VarstotasApp {
             }
         }
         let mods = ui.ctx().input(|i| i.modifiers);
-        if resp.clicked() {
-            match hover.and_then(island_at) {
-                Some(i) => {
-                    let isl: HashSet<FaceId> = islands[i].iter().copied().collect();
+        if resp.double_clicked() && pivot_tool && hover.and_then(hit) == Some(Handle::Center) {
+            self.uv.pivot = None;
+        } else if resp.clicked() && hover.and_then(hit).is_none() {
+            // every face (island) under the pointer, topmost first; a click on the same spot
+            // again goes one further down, so faces lying under others can be picked too
+            let stack: Vec<FaceId> = hover.map_or_else(Vec::new, |h| {
+                let q = to_uv(h);
+                let mut out: Vec<FaceId> = Vec::new();
+                for (f, poly) in polys.iter().rev() {
+                    if inside(poly, q) && !out.iter().any(|g| part_of(*g).contains(f)) {
+                        out.push(*f);
+                    }
+                }
+                out
+            });
+            let k = match (self.uv.cycle, hover) {
+                (Some((p, k)), Some(h)) if p.distance(h) <= 4.0 && !stack.is_empty() => (k + 1) % stack.len(),
+                _ => 0,
+            };
+            self.uv.cycle = hover.map(|h| (h, k));
+            match stack.get(k).copied() {
+                Some(f) => {
+                    let part: HashSet<FaceId> = part_of(f).into_iter().collect();
                     if mods.shift {
-                        if isl.iter().all(|f| self.uv.selected.contains(f)) {
-                            self.uv.selected.retain(|f| !isl.contains(f));
+                        if part.iter().all(|f| self.uv.selected.contains(f)) {
+                            self.uv.selected.retain(|f| !part.contains(f));
                         } else {
-                            self.uv.selected.extend(isl);
+                            self.uv.selected.extend(part);
                         }
                     } else {
-                        self.uv.selected = isl;
+                        self.uv.selected = part;
                     }
                 }
                 None if !mods.shift => self.uv.selected.clear(),
@@ -795,84 +1001,194 @@ impl VarstotasApp {
             }
         }
         if resp.drag_started()
-            && let Some(start) = resp.interact_pointer_pos()
+            && let Some(start) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos())
         {
             let pan = ui.ctx().input(|i| i.pointer.middle_down() || i.pointer.secondary_down());
-            let picked = island_at(start);
-            let kind = if pan || picked.is_none() {
-                DragKind::Pan
-            } else if mods.alt {
-                DragKind::Rotate
-            } else if mods.command {
-                DragKind::Scale
-            } else {
-                DragKind::Move
+            let at = face_at(start);
+            let has_sel = !self.uv.selected.is_empty();
+            let acts = at.is_some() || has_sel;
+            let (kind, axis) = match (tool, hit(start)) {
+                _ if pan => (DragKind::Pan, None),
+                (UvTool::Rotate | UvTool::Scale, Some(Handle::Center)) => (DragKind::Pivot, None),
+                (UvTool::Move, Some(Handle::Center)) => (DragKind::Move, None),
+                (UvTool::Move, Some(Handle::Axis(a))) => (DragKind::Move, Some(a)),
+                (UvTool::Scale, Some(Handle::Axis(a))) => (DragKind::Scale, Some(a)),
+                (UvTool::Scale, Some(_)) => (DragKind::Scale, None),
+                (UvTool::Select, _) if at.is_some() => (DragKind::Move, None),
+                (UvTool::Move, _) if acts => (DragKind::Move, None),
+                (UvTool::Rotate, _) if acts => (DragKind::Rotate, None),
+                (UvTool::Scale, _) if acts => (DragKind::Scale, None),
+                _ => (DragKind::Marquee, None),
             };
-            let mut drag_islands = Vec::new();
-            if let Some(i) = picked.filter(|_| kind != DragKind::Pan) {
-                if !islands[i].iter().any(|f| self.uv.selected.contains(f)) {
-                    self.uv.selected = islands[i].iter().copied().collect();
-                }
-                drag_islands = islands.iter().filter(|i| i.iter().any(|f| self.uv.selected.contains(f))).cloned().collect();
+            // pressing on a face not picked picks it (Select always, the others with nothing picked)
+            if matches!(kind, DragKind::Move | DragKind::Rotate | DragKind::Scale)
+                && let Some(f) = at
+                && !self.uv.selected.contains(&f)
+                && (tool == UvTool::Select || !has_sel)
+            {
+                self.uv.selected = part_of(f).into_iter().collect();
             }
-            let fs: Vec<FaceId> = drag_islands.iter().flatten().copied().collect();
-            let orig: Placements = fs.iter().map(|f| (*f, mesh.faces.get(*f).and_then(|x| x.uv))).collect();
-            let pts: Vec<DVec2> = polys.iter().filter(|(f, _)| fs.contains(f)).flat_map(|p| p.1.iter().copied()).collect();
-            let pivot = match (pts.iter().copied().reduce(DVec2::min), pts.iter().copied().reduce(DVec2::max)) {
-                (Some(lo), Some(hi)) => to_screen((lo + hi) / 2.0),
-                _ => start,
+            // nothing picked: the gizmo works on everything
+            let mut groups = picked_groups(&islands, &self.uv.selected);
+            if groups.is_empty() && matches!(kind, DragKind::Move | DragKind::Rotate | DragKind::Scale) {
+                groups = islands.clone();
+            }
+            let moving: HashSet<FaceId> = groups.iter().flatten().copied().collect();
+            let orig: Placements = moving.iter().map(|f| (*f, mesh.faces.get(*f).and_then(|x| x.uv))).collect();
+            let pts: Vec<DVec2> = polys.iter().filter(|(f, _)| moving.contains(f)).flat_map(|p| p.1.iter().copied()).collect();
+            let grab = pts.iter().filter(|_| axis.is_none()).copied().filter(|q| to_screen(*q).distance(start) <= CATCH * 1.5).min_by(|a, b| to_screen(*a).distance(start).total_cmp(&to_screen(*b).distance(start)));
+            let pivot = match (self.uv.pivot, pts.iter().copied().reduce(DVec2::min), pts.iter().copied().reduce(DVec2::max)) {
+                (Some(p), _, _) => p,
+                (None, Some(lo), Some(hi)) => (lo + hi) / 2.0,
+                _ => pivot,
             };
-            self.uv.drag = Some(UvDrag { kind, start, islands: drag_islands, orig, pivot, center: self.uv.center });
+            self.uv.drag = Some(UvDrag { kind, axis, start, groups, orig, pivot, center: self.uv.center, grab, now: None, snapped: None });
         }
-        if let (Some(d), Some(now)) = (self.uv.drag.as_ref(), resp.interact_pointer_pos().or(hover))
+        let pointer = resp.interact_pointer_pos().or(hover);
+        let inc = self.prefs.snapping.increments;
+        if let (Some(d), Some(now)) = (self.uv.drag.as_ref(), pointer)
             && resp.dragged()
         {
-            let delta = now - d.start;
-            if d.kind == DragKind::Pan {
-                self.uv.center = d.center - DVec2::new(delta.x as f64, -delta.y as f64) / self.uv.zoom as f64;
-            } else {
-                let orig = d.orig.clone();
-                let isl = d.islands.clone();
-                let (kind, pivot, start) = (d.kind, d.pivot, d.start);
-                self.uv_set_untracked(&orig);
-                let Some(mesh) = self.doc.model.mesh_at(&self.doc.active_path) else { return };
-                let mut out = Vec::new();
-                for i in &isl {
-                    let t = DVec2::from(i.first().map_or([1000.0; 2], |f| own_tile(&self.doc.model, mesh, *f).or(fallback).unwrap_or([1000.0; 2])));
-                    let op = match kind {
-                        DragKind::Move => IslandOp::Move(DVec2::new(delta.x as f64, -delta.y as f64) / zoom * t),
-                        DragKind::Rotate => {
-                            let (a0, a1) = (start - pivot, now - pivot);
-                            let mut deg = (-(a1.y.atan2(a1.x) - a0.y.atan2(a0.x)) as f64).to_degrees();
-                            if mods.shift {
-                                deg = (deg / 15.0).round() * 15.0;
-                            }
-                            IslandOp::Rotate(deg)
-                        }
-                        _ => IslandOp::Scale(((now - pivot).length() / (start - pivot).length().max(1.0)).max(0.01) as f64),
-                    };
-                    // rotate / scale every island about the common pivot, not its own centre
-                    out.extend(match op {
-                        IslandOp::Rotate(deg) => uv::map_faces(mesh, i, uv::rotation(to_uv(pivot) * t, deg)),
-                        IslandOp::Scale(k) => {
-                            let c = to_uv(pivot) * t;
-                            uv::map_faces(mesh, i, move |q| c + (q - c) * k)
-                        }
-                        op => uv::transform(mesh, i, op),
-                    });
+            let (kind, start, piv, axis) = (d.kind, d.start, d.pivot, d.axis);
+            let moving: HashSet<FaceId> = d.groups.iter().flatten().copied().collect();
+            let mut snapped = None;
+            let x = match kind {
+                DragKind::Pan => {
+                    let delta = now - start;
+                    self.uv.center = d.center - DVec2::new(delta.x as f64, -delta.y as f64) / zoom;
+                    None
                 }
-                self.uv_set_untracked(&out);
+                DragKind::Marquee => None,
+                DragKind::Pivot => {
+                    let q = to_uv(now);
+                    let none = HashSet::new();
+                    snapped = if snap_on && !mods.alt { snap(q, &none) } else { None };
+                    self.uv.pivot = Some(snapped.unwrap_or(q));
+                    None
+                }
+                DragKind::Move => {
+                    let mut dv = to_uv(now) - to_uv(start);
+                    match axis {
+                        Some(0) => dv.y = 0.0,
+                        Some(_) => dv.x = 0.0,
+                        None => {}
+                    }
+                    if let Some(g) = d.grab.filter(|_| snap_on && !mods.alt)
+                        && let Some(s) = snap(g + dv, &moving)
+                    {
+                        dv = s - g;
+                        snapped = Some(s);
+                    } else if inc.move_on != mods.shift {
+                        // the move step is in texture millimetres of the first island's tile
+                        let t = DVec2::from(d.groups.first().and_then(|g| g.first()).map_or([1000.0; 2], |f| self.uv_tile(mesh, *f, fallback)));
+                        dv = DVec2::new(round_to(dv.x * t.x, inc.move_step), round_to(dv.y * t.y, inc.move_step)) / t;
+                    }
+                    Some(Xform::Move(dv))
+                }
+                DragKind::Rotate => {
+                    let (a0, a1) = (start - to_screen(piv), now - to_screen(piv));
+                    let mut deg = (-(a1.y.atan2(a1.x) - a0.y.atan2(a0.x)) as f64).to_degrees();
+                    deg = (deg + 540.0).rem_euclid(360.0) - 180.0;
+                    if inc.rotate_on != mods.shift {
+                        deg = round_to(deg, inc.angle_step);
+                    }
+                    Some(Xform::Rotate(deg))
+                }
+                DragKind::Scale => {
+                    let p = to_screen(piv);
+                    let (a, b) = (start - p, now - p);
+                    let ratio = |a: f32, b: f32| if a.abs() < 1.0 { 1.0 } else { (b / a).max(0.01) as f64 };
+                    let mut k = match axis {
+                        Some(0) => ratio(a.x, b.x),
+                        Some(_) => ratio(a.y, b.y),
+                        None => (b.length() / a.length().max(1.0)).max(0.01) as f64,
+                    };
+                    if inc.scale_on != mods.shift {
+                        k = round_to(k, inc.scale_step).max(inc.scale_step.max(0.01));
+                    }
+                    Some(Xform::Scale(match axis {
+                        Some(0) => DVec2::new(k, 1.0),
+                        Some(_) => DVec2::new(1.0, k),
+                        None => DVec2::splat(k),
+                    }))
+                }
+            };
+            if let Some(x) = x {
+                let (orig, groups) = (d.orig.clone(), d.groups.clone());
+                let t = DVec2::from(groups.first().and_then(|g| g.first()).map_or([1000.0; 2], |f| self.uv_tile(mesh, *f, fallback)));
+                self.uv.vcb = match x {
+                    Xform::Move(dv) => xform_text(Xform::MoveMm(dv * t), self.doc.model.unit),
+                    x => xform_text(x, self.doc.model.unit),
+                };
+                self.uv_set_untracked(&orig);
+                let list = self.uv_xform(&groups, x, piv, fallback);
+                self.uv_set_untracked(&list);
+            }
+            if let Some(d) = self.uv.drag.as_mut() {
+                d.now = x;
+                d.snapped = snapped;
+            }
+        }
+        // overlays: the box being dragged, the snap point, the pivot
+        let painter = ui.painter_at(rect);
+        if let (Some(d), Some(now)) = (self.uv.drag.as_ref(), pointer) {
+            if d.kind == DragKind::Marquee {
+                let r = Rect::from_two_pos(d.start, now);
+                painter.rect(r, 0.0, Color32::from_rgba_unmultiplied(255, 170, 70, 30), Stroke::new(1.0, Color32::from_rgb(255, 170, 70)), egui::StrokeKind::Middle);
+            }
+            if let Some(s) = d.snapped {
+                painter.rect_stroke(Rect::from_center_size(to_screen(s), vec2(9.0, 9.0)), 0.0, Stroke::new(2.0, Color32::from_rgb(80, 220, 120)), egui::StrokeKind::Middle);
+            }
+        }
+        if tool != UvTool::Select {
+            // the gizmo: at the pivot (following a move), its hovered / dragged part lit
+            let drag = self.uv.drag.as_ref().filter(|d| d.kind != DragKind::Pan && d.kind != DragKind::Marquee);
+            let gp = match drag {
+                Some(d) if d.kind == DragKind::Pivot => to_screen(self.uv.pivot.unwrap_or(pivot)),
+                Some(d) => to_screen(d.pivot + if let Some(Xform::Move(dv)) = d.now { dv } else { DVec2::ZERO }),
+                None => g,
+            };
+            let lit = match drag {
+                Some(d) => match (d.kind, d.axis) {
+                    (DragKind::Pivot, _) => Some(Handle::Center),
+                    (_, Some(a)) => Some(Handle::Axis(a)),
+                    (DragKind::Scale, None) => Some(Handle::Uniform),
+                    _ => None,
+                },
+                None => hover.and_then(|h| gizmo_hit(tool, gp, h)),
+            };
+            paint_gizmo(&painter, tool, gp, lit);
+            if let Some(d) = self.uv.drag.as_ref().filter(|d| d.kind == DragKind::Rotate)
+                && let Some(now) = pointer
+            {
+                painter.line_segment([gp, d.start], Stroke::new(1.0, Color32::from_white_alpha(120)));
+                painter.line_segment([gp, now], Stroke::new(1.4, Color32::from_rgb(255, 140, 30)));
             }
         }
         if resp.drag_stopped()
             && let Some(d) = self.uv.drag.take()
-            && d.kind != DragKind::Pan
         {
-            let mesh = self.doc.model.mesh_at(&self.doc.active_path);
-            let now: Placements = d.orig.iter().map(|(f, _)| (*f, mesh.and_then(|m| m.faces.get(*f)).and_then(|x| x.uv))).collect();
-            if now != d.orig {
-                self.uv_set_untracked(&d.orig);
-                self.uv_commit(&tr!("uv-undo"), now);
+            match d.kind {
+                DragKind::Marquee => {
+                    if let Some(now) = pointer {
+                        let r = Rect::from_two_pos(d.start, now);
+                        let hit: HashSet<FaceId> = polys.iter().filter(|(_, poly)| r.contains(to_screen(centroid(poly)))).flat_map(|(f, _)| part_of(*f)).collect();
+                        if mods.shift {
+                            self.uv.selected.extend(hit);
+                        } else {
+                            self.uv.selected = hit;
+                        }
+                    }
+                }
+                DragKind::Move | DragKind::Rotate | DragKind::Scale => {
+                    let mesh = self.doc.model.mesh_at(&self.doc.active_path);
+                    let now: Placements = d.orig.iter().map(|(f, _)| (*f, mesh.and_then(|m| m.faces.get(*f)).and_then(|x| x.uv))).collect();
+                    if now != d.orig {
+                        self.uv_set_untracked(&d.orig);
+                        self.uv_commit_last(now, d.pivot, d.groups);
+                    }
+                }
+                DragKind::Pan | DragKind::Pivot => {}
             }
         }
     }
@@ -885,6 +1201,15 @@ impl VarstotasApp {
         format!("({} {} {})", m.map_or("-", |m| m.name.as_str()), slot.unwrap_or("-"), self.uv.single_tile)
     }
 
+    /// Script dump of the canvas tool: (tool, island / face mode, pivot or `-`, status value,
+    /// picked faces as indices into [`Self::uv_faces`]).
+    pub(crate) fn uv_tool_dump(&self) -> String {
+        let pivot = self.uv.pivot.map_or("-".to_string(), |p| format!("{:.3},{:.3}", p.x, p.y));
+        let faces = self.uv_faces();
+        let picked: Vec<usize> = faces.iter().enumerate().filter(|(_, f)| self.uv.selected.contains(f)).map(|(i, _)| i).collect();
+        format!("({} {} {} {:?} {:?})", self.uv.tool.key(), if self.uv.face_mode { "face" } else { "island" }, pivot, self.uv.vcb, picked)
+    }
+
     /// Script dump: (open, faces, islands, selected faces, checker, seams in the active context).
     pub(crate) fn uv_dump(&self) -> String {
         let mesh = self.doc.model.mesh_at(&self.doc.active_path);
@@ -893,6 +1218,59 @@ impl VarstotasApp {
         let islands = mesh.map_or(0, |m| uv::islands(m, &faces).len());
         format!("({} {} {} {} {} {})", self.uv.open, faces.len(), islands, self.uv.selected.len(), self.uv.checker, seams)
     }
+}
+
+/// The gizmo of `tool` at `g`: the axes (arrows for Move, square ends for Scale, plus the
+/// uniform corner), the ring of Rotate and the centre; `lit` is drawn highlighted.
+fn paint_gizmo(painter: &egui::Painter, tool: UvTool, g: Pos2, lit: Option<Handle>) {
+    let hi = Color32::from_rgb(255, 225, 60);
+    let pick = |h: Handle, c: Color32| if lit == Some(h) { hi } else { c };
+    let (red, green, orange) = (Color32::from_rgb(235, 75, 60), Color32::from_rgb(80, 205, 95), Color32::from_rgb(255, 140, 30));
+    for (axis, dir, base) in [(0, vec2(1.0, 0.0), red), (1, vec2(0.0, -1.0), green)] {
+        if tool == UvTool::Rotate {
+            break;
+        }
+        let c = pick(Handle::Axis(axis), base);
+        let w = if lit == Some(Handle::Axis(axis)) { 3.0 } else { 2.0 };
+        let end = g + dir * ARM;
+        painter.line_segment([g + dir * CATCH, end], Stroke::new(w, c));
+        if tool == UvTool::Move {
+            let n = vec2(-dir.y, dir.x);
+            painter.add(Shape::convex_polygon(vec![end + dir * 9.0, end + n * 5.0, end - n * 5.0], c, Stroke::NONE));
+        } else {
+            painter.rect_filled(Rect::from_center_size(end, vec2(9.0, 9.0)), 1.0, c);
+        }
+    }
+    if tool == UvTool::Scale {
+        let c = pick(Handle::Uniform, orange);
+        painter.rect(Rect::from_center_size(g + vec2(ARM * 0.62, -ARM * 0.62), vec2(11.0, 11.0)), 1.0, c.gamma_multiply(0.5), Stroke::new(1.5, c), egui::StrokeKind::Middle);
+    }
+    if tool == UvTool::Rotate {
+        painter.circle_stroke(g, ARM, Stroke::new(2.0, orange.gamma_multiply(0.8)));
+    }
+    let c = pick(Handle::Center, if tool == UvTool::Move { Color32::WHITE } else { orange });
+    painter.circle(g, 6.0, c.gamma_multiply(0.3), Stroke::new(1.8, c));
+    if tool != UvTool::Move {
+        painter.line_segment([g - vec2(10.0, 0.0), g + vec2(10.0, 0.0)], Stroke::new(1.2, c));
+        painter.line_segment([g - vec2(0.0, 10.0), g + vec2(0.0, 10.0)], Stroke::new(1.2, c));
+    }
+}
+
+/// The picked faces of each island (islands with none left out).
+fn picked_groups(islands: &[Vec<FaceId>], picked: &HashSet<FaceId>) -> Vec<Vec<FaceId>> {
+    islands.iter().map(|i| i.iter().copied().filter(|f| picked.contains(f)).collect::<Vec<_>>()).filter(|g| !g.is_empty()).collect()
+}
+
+/// Mean of a polygon's corners.
+fn centroid(poly: &[DVec2]) -> DVec2 {
+    poly.iter().copied().sum::<DVec2>() / poly.len().max(1) as f64
+}
+
+/// A thin gap between toolbar groups.
+fn sep(ui: &mut Ui) {
+    ui.add_space(3.0);
+    ui.separator();
+    ui.add_space(3.0);
 }
 
 /// Point `q` inside polygon `poly` (even-odd).

@@ -169,7 +169,7 @@ impl VarstotasApp {
         }
         if self.selected_textured_face() {
             ui.menu_button(tr!("menu-texture"), |ui| {
-                self.item(ui, &tr!("menu-texture-position"), None, true, Action::SetTool(ToolId::TexturePosition));
+                self.icon_item(ui, Some(Icon::TexturePosition), &tr!("menu-texture-position"), None, true, Action::SetTool(ToolId::TexturePosition));
                 self.icon_item(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
         }

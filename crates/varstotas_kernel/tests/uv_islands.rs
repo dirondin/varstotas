@@ -159,29 +159,30 @@ fn pack_fits_every_island_in_one_tile_at_one_scale() {
     assert!(k > 0.15, "the tile is used well: {k}");
 }
 
-/// Randomize: the same seed repeats, another seed gives another variant; angles stay multiples of 90°.
+/// Reset rotation / scale: the reference face loses its turn / scale, the island keeps its
+/// shape and centre (a flip stays).
 #[test]
-fn randomize_is_seeded() {
-    let m = boxed();
-    let f = m.faces.keys().next().unwrap();
-    let j = uv::Jitter::default();
-    let a = uv::randomize(&m, &[f], [800.0, 400.0], 7, j);
-    assert_eq!(a, uv::randomize(&m, &[f], [800.0, 400.0], 7, j));
-    let angles: std::collections::HashSet<i64> = (0..40)
-        .flat_map(|s| uv::randomize(&m, &[f], [800.0, 400.0], s, j))
-        .filter_map(|(_, p)| p.map(|p| p.angle_deg.rem_euclid(360.0).round() as i64 % 360))
-        .collect();
-    assert!(angles.len() > 1 && angles.iter().all(|a| a % 90 == 0), "{angles:?}");
-}
-
-/// Randomize with any angle and a scale range: angles off the 90° steps, scales inside the range.
-#[test]
-fn randomize_any_angle_and_scale() {
-    let m = boxed();
-    let f = m.faces.keys().next().unwrap();
-    let j = uv::Jitter { any_angle: true, scale: [0.5, 2.0] };
-    let all: Vec<_> = (0..40).flat_map(|s| uv::randomize(&m, &[f], [800.0, 400.0], s, j)).filter_map(|(_, p)| p).collect();
-    assert!(all.iter().any(|p| p.angle_deg.rem_euclid(90.0) > 1.0), "some angle off the 90° steps");
-    assert!(all.iter().all(|p| (0.5 - 1e-9..=2.0 + 1e-9).contains(&p.scale[0])), "{:?}", all.iter().map(|p| p.scale).collect::<Vec<_>>());
-    assert!(all.iter().any(|p| p.scale[0] < 0.9) && all.iter().any(|p| p.scale[0] > 1.1));
+fn reset_rotation_and_scale() {
+    let mut m = boxed();
+    let faces: Vec<FaceId> = m.faces.keys().collect();
+    let top = faces.iter().copied().find(|f| m.faces[*f].normal.z > 0.5).unwrap();
+    let pl = |angle_deg, scale| Some(texture::TexPlacement { offset: [0.0; 2], angle_deg, scale, shear: 0.0 });
+    // the texture's edge directions (mm per mm along x and y of the face) under a placement
+    let n = m.faces[top].normal;
+    let dirs = |p: Option<texture::TexPlacement>| {
+        let at = |q: DVec3| texture::face_uv_mm(q, n, p.as_ref());
+        let o = at(v(0., 0., 400.));
+        (at(v(1., 0., 400.)) - o, at(v(0., 1., 400.)) - o)
+    };
+    let close = |a: (DVec2, DVec2), b: (DVec2, DVec2)| a.0.distance(b.0) < 1e-6 && a.1.distance(b.1) < 1e-6;
+    apply(&mut m, vec![(top, Some(texture::TexPlacement { offset: [30.0, 40.0], angle_deg: 33.0, scale: [-2.0, 2.0], shear: 0.0 }))]);
+    let c0 = uv::bounds(&m, &[top]).map(|(lo, hi)| (lo + hi) / 2.0).unwrap();
+    let p = uv::reset(&m, &[top], true, false);
+    apply(&mut m, p);
+    assert!(close(dirs(m.faces[top].uv), dirs(pl(0.0, [-2.0, 2.0]))), "{:?}", m.faces[top].uv);
+    let p = uv::reset(&m, &[top], false, true);
+    apply(&mut m, p);
+    assert!(close(dirs(m.faces[top].uv), dirs(pl(0.0, [-1.0, 1.0]))), "{:?}", m.faces[top].uv);
+    let c1 = uv::bounds(&m, &[top]).map(|(lo, hi)| (lo + hi) / 2.0).unwrap();
+    assert!(c0.distance(c1) < 1e-6, "the centre stays: {c0} {c1}");
 }

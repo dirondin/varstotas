@@ -19,13 +19,14 @@ pub(super) fn all_icons() -> Vec<Icon> {
         More, Trash, Refresh, Info, Group, Magnet, GuidePlane, Box3d, Cylinder, Cone, Pyramid, Sphere, Torus,
         FileNew, FileOpen, FileSave, FileSaveAs, Film, Drawing, Sheets, Report, Json, Credits, Script, Quit, Cut,
         Copy, Paste, PasteInPlace, Purge, DeleteGuides, SelectAll, SelectNone, Component, Parametric, Explode,
-        CloseGroup, ReverseFaces, OrientFaces, Unfold, UvEditor, SideBar, Outliner, Tag, Render, Console, Log, Gear,
+        CloseGroup, ReverseFaces, OrientFaces, Unfold, UvEditor, TexturePosition, SideBar, Outliner, Tag, Render, Console, Log, Gear,
         Generator, Play, Pause, NextScene, PrevScene, AddScene,
     ];
     v.extend((0..4).map(Picture));
     v.extend([Import("OBJ"), Export("STL")]);
     v.extend((0..3).map(Intersect));
     v.extend((0..3).map(Flip));
+    v.extend(super::uv::all());
     v.extend((0..SolidOp::ALL.len() as u8).map(Solids));
     use crate::inference::InferenceKind as K;
     v.extend(

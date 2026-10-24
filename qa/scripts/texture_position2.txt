@@ -1,5 +1,5 @@
 # Texture Position 2: several faces (Alt continues round a corner), pin snapping, Measurements
-# tile size, double-click on an edge aligns, the UV Editor face fields and Reset.
+# tile size, double-click on an edge aligns, a typed one-axis scale in the UV Editor and Reset.
 box -1000 0 0 2000 1000 1000
 view iso
 zoom_extents
@@ -49,25 +49,24 @@ expect uvs=["o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
 key Enter
 wait 2
 expect tool=Select
-# the UV Editor's face fields on the top face: the tile width typed, then Reset (undoable)
+# the UV Editor on the top face: a one-axis scale typed in the status bar, then Reset (undoable)
 rawp click 0 500 1000
 action uv_open
 wait 5
 expect uv_placed=2
-action click_spot uv:face5
+action uv tool scale
+action click_spot uv:value
 wait 2
-raw mods cmd
-raw key A
-raw mods none
-raw text 1600
+raw text 0.5; 1
 raw key Enter
 wait 3
-expect uvs=["o(0,0) a0 s(2.00,1.00)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
-screenshot shots/texpos2_fields.bmp
+expect uv_tool=(scale island - "0.5; 1" 
+expect uvs=["o(-0,-0) a0 s(2.00,1.00)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+screenshot shots/texpos2_scale_x.bmp
 action click_spot uv:reset
 wait 3
 expect uv_placed=2
 undo
 wait 3
-expect uvs=["o(0,0) a0 s(2.00,1.00)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+expect uvs=["o(-0,-0) a0 s(2.00,1.00)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
 quit

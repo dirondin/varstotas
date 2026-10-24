@@ -5,6 +5,7 @@ use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2, vec2};
 use std::f32::consts::PI;
 
 mod cmd;
+pub mod uv;
 #[cfg(test)]
 mod sheet;
 
@@ -141,6 +142,9 @@ pub enum Icon {
     Solids(u8),
     Unfold,
     UvEditor,
+    TexturePosition,
+    /// The UV Editor's toolbar (`uv.rs`).
+    Uv(uv::UvIcon),
     Snap(crate::inference::InferenceKind),
     // View and Window menus (`cmd.rs`)
     SideBar,
@@ -1065,6 +1069,7 @@ pub fn paint_icon(painter: &Painter, rect: Rect, icon: Icon, active: bool) {
                 pen.stroke(),
             );
         }
+        Icon::Uv(k) => uv::paint(&pen, k),
         _ => cmd::paint(&pen, icon),
     }
 }

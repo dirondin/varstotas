@@ -355,6 +355,29 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
                 pen.dot(p, 1.5, pen.ink);
             }
         }
+        Icon::TexturePosition => {
+            // a face in perspective with brick courses, the red pin and the green turn handle
+            let face = [(2.5, 9.0), (15.0, 4.0), (21.5, 12.0), (9.0, 19.5)];
+            pen.poly_c(&face, Color32::from_rgb(0xE9, 0xB8, 0x8F), Stroke::NONE);
+            let lerp = |a: (f32, f32), b: (f32, f32), t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+            let mortar = Stroke::new(W_THIN * pen.s, Color32::from_rgb(0xA8, 0x5A, 0x3A));
+            for (i, t) in [0.25f32, 0.5, 0.75].into_iter().enumerate() {
+                let (a, b) = (lerp(face[0], face[1], t), lerp(face[3], face[2], t));
+                pen.line_c(&[a, b], mortar);
+                // head joints, staggered course by course
+                for u in [0.3f32, 0.7] {
+                    let u = if i % 2 == 0 { u } else { u - 0.2 };
+                    let (c0, c1) = (lerp(face[0], face[1], t - 0.25), lerp(face[3], face[2], t - 0.25));
+                    let p0 = lerp(c0, c1, u);
+                    let p1 = lerp(a, b, u);
+                    pen.line_c(&[p0, p1], mortar);
+                }
+            }
+            pen.path(pen.pts(&face), true, pen.thin());
+            pen.line_c(&[(7.0, 11.5), (15.5, 7.0)], Stroke::new(W * pen.s, pal::GREEN));
+            pen.circle((15.5, 7.0), 2.1, pal::GREEN);
+            pen.circle((7.0, 11.5), 2.8, pal::RED);
+        }
         Icon::Snap(k) => snap(pen, k),
         Icon::SideBar => {
             rect(pen, (2.5, 4.0), (21.5, 20.0), FILL, pen.stroke());

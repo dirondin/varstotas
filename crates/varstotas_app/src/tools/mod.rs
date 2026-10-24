@@ -259,7 +259,7 @@ impl ToolId {
             ToolId::Select => Icon::Select,
             ToolId::Eraser => Icon::Eraser,
             ToolId::Paint => Icon::Paint,
-            ToolId::TexturePosition => Icon::Paint,
+            ToolId::TexturePosition => Icon::TexturePosition,
             ToolId::Line => Icon::Line,
             ToolId::Arc => Icon::Arc,
             ToolId::ArcCenter => Icon::ArcCenter,

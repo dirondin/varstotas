@@ -317,45 +317,60 @@ pub fn transform(mesh: &Mesh, faces: &[FaceId], op: IslandOp) -> Placements {
     }
 }
 
-/// What [`randomize`] varies besides the shift.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Jitter {
-    /// Any angle (else a multiple of 90°).
-    pub any_angle: bool,
-    /// Uniform scale picked in `[min, max]` (`[1, 1]`: kept).
-    pub scale: [f64; 2],
-}
-
-impl Default for Jitter {
-    fn default() -> Self {
-        Self { any_angle: false, scale: [1.0, 1.0] }
+/// The faces turned and / or scaled back so the reference face (the largest) has no rotation
+/// (`rotation`) and a scale of ±1 (`scale`; a flip stays), about the faces' centre: the
+/// layout keeps its shape and place.
+pub fn reset(mesh: &Mesh, faces: &[FaceId], rotation: bool, scale: bool) -> Placements {
+    let Some(r) = largest_face(mesh, faces) else { return Vec::new() };
+    let Some(face) = mesh.faces.get(r) else { return Vec::new() };
+    let now = face.uv.unwrap_or_default();
+    let mut want = now;
+    if rotation {
+        want.angle_deg = 0.0;
     }
+    if scale {
+        want.scale = now.scale.map(|s| if s < 0.0 { -1.0 } else { 1.0 });
+    }
+    if want.approx_eq(&now) {
+        return Vec::new();
+    }
+    // the affine map of the texture plane taking the reference face from `now` to `want`
+    let pts = corners(mesh, r);
+    let from: Vec<DVec2> = pts.iter().map(|p| face_uv_mm(*p, face.normal, Some(&now))).collect();
+    let to: Vec<DVec2> = pts.iter().map(|p| face_uv_mm(*p, face.normal, Some(&want))).collect();
+    let Some(map) = affine(&from, &to) else { return Vec::new() };
+    let Some((lo, hi)) = bounds(mesh, faces) else { return Vec::new() };
+    let c = (lo + hi) / 2.0;
+    let shift = c - map(c);
+    map_faces(mesh, faces, |q| map(q) + shift)
 }
 
-/// The island turned by a random angle (a multiple of 90°, or any), scaled by a random
-/// factor in `jitter.scale` and moved by a random part of the tile (`seed` picks the
-/// variant; the same seed gives the same result), so repeated textures on neighbouring
-/// islands don't line up.
-pub fn randomize(mesh: &Mesh, faces: &[FaceId], tile: [f64; 2], seed: u64, jitter: Jitter) -> Placements {
-    let Some((lo, hi)) = bounds(mesh, faces) else { return Vec::new() };
-    let mut s = seed;
-    let mut next = move || {
-        // splitmix64
-        s = s.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = s;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    };
-    let unit = |v: u64| (v >> 11) as f64 / (1u64 << 53) as f64;
-    let turn_pick = next();
-    let deg = if jitter.any_angle { unit(turn_pick) * 360.0 } else { (turn_pick % 4) as f64 * 90.0 };
-    let d = DVec2::new(unit(next()) * tile[0], unit(next()) * tile[1]);
-    let [a, b] = jitter.scale;
-    let k = (a + (b - a) * unit(next())).max(1e-3);
-    let c = (lo + hi) / 2.0;
-    let turn = rotation(c, deg);
-    map_faces(mesh, faces, |q| c + (turn(q) - c) * k + d)
+/// The affine map taking points `from` to `to` (exact on the widest corner triangle).
+fn affine(from: &[DVec2], to: &[DVec2]) -> Option<impl Fn(DVec2) -> DVec2 + use<>> {
+    let n = from.len().min(to.len());
+    let mut best = (0.0, 0, 0);
+    for i in 1..n {
+        for j in i + 1..n {
+            let c = (from[i] - from[0]).perp_dot(from[j] - from[0]).abs();
+            if c > best.0 {
+                best = (c, i, j);
+            }
+        }
+    }
+    let (det, i, j) = best;
+    if det < 1e-9 {
+        return None;
+    }
+    let (a, b) = (from[i] - from[0], from[j] - from[0]);
+    let (p, q) = (to[i] - to[0], to[j] - to[0]);
+    let det = a.perp_dot(b);
+    // M a = p, M b = q: M = [p q] [a b]^-1
+    let (o, t) = (from[0], to[0]);
+    Some(move |x: DVec2| {
+        let v = x - o;
+        let k = DVec2::new(v.perp_dot(b), a.perp_dot(v)) / det;
+        t + p * k.x + q * k.y
+    })
 }
 
 /// The island scaled uniformly and moved so it fills one tile (`tile` mm), from its origin.
