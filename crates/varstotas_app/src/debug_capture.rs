@@ -1932,7 +1932,6 @@ impl VarstotasApp {
         }
         if name == "uv_close" {
             self.uv.open = false;
-            self.uv.material = None;
             return;
         }
         if let Some(op) = name.strip_prefix("uv ") {

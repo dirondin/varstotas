@@ -23,7 +23,6 @@ pub struct TrayState {
     curve_edit: Option<(u32, String, String)>,
     dim_text: Option<(varstotas_kernel::DimId, String)>,
     /// Texture position edit buffers of a face: offset x, offset y, angle, scale x, scale y.
-    tex_pos: Option<(varstotas_kernel::FaceId, [String; 7])>,
     /// Parametric group edit buffers: (instance, size X, Y, Z, gap, copies).
     params_edit: Option<(InstanceId, [String; 5])>,
     /// Section plane name being edited in Entity Info.
@@ -712,9 +711,6 @@ impl VarstotasApp {
                 }
             });
         }
-        if let [EntityRef::Face(fid)] = sel.as_slice() {
-            self.face_texture_info(ui, *fid);
-        }
         if !self.generator_info(ui)
             && !self.rig_info(ui)
             && let [EntityRef::Instance(id)] = sel.as_slice()
@@ -798,122 +794,6 @@ impl VarstotasApp {
         } else if next != p {
             self.tray.params_edit = None;
             self.actions.push(Action::SetParams(next));
-        }
-    }
-
-    /// Texture position of a textured face (the numeric form of the classic Texture Position):
-    /// offset of the texture origin, rotation and scale.
-    fn face_texture_info(&mut self, ui: &mut Ui, fid: varstotas_kernel::FaceId) {
-        let path = self.doc.active_path.clone();
-        let unit = self.doc.model.unit;
-        let model = &self.doc.model;
-        let Some(face) = model.mesh_at(&path).and_then(|m| m.faces.get(fid)) else { return };
-        let Some(tile) = [face.front, face.back].into_iter().flatten().find_map(|id| model.materials.get(id)?.image.as_ref().map(|i| i.size))
-        else {
-            return;
-        };
-        let pl = face.uv.unwrap_or_default();
-        let normal = face.normal;
-        let pts: Vec<varstotas_kernel::glam::DVec3> = model
-            .mesh_at(&path)
-            .map(|m| m.face_vertices(fid).iter().filter_map(|v| m.vertices.get(*v).map(|x| x.pos)).collect())
-            .unwrap_or_default();
-        let texts = [
-            fmt_len(pl.offset[0], unit),
-            fmt_len(pl.offset[1], unit),
-            format!("{:.1}°", pl.angle_deg),
-            format!("{}", pl.scale[0]),
-            format!("{}", pl.scale[1]),
-            fmt_len(tile[0] * pl.scale[0].abs(), unit),
-            fmt_len(tile[1] * pl.scale[1].abs(), unit),
-        ];
-        if self.tray.tex_pos.as_ref().map(|t| t.0) != Some(fid) {
-            self.tray.tex_pos = Some((fid, texts.clone()));
-        }
-        let mut new = None;
-        let mut bad = false;
-        ui.add_space(6.0);
-        egui::Grid::new("entity_info_texture").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(RichText::new(tr!("tray-tex-title")).strong());
-            ui.end_row();
-            let Some((_, bufs)) = self.tray.tex_pos.as_mut() else { return };
-            let labels = [
-                tr!("tray-tex-offset-x"),
-                tr!("tray-tex-offset-y"),
-                tr!("tray-tex-rotation"),
-                tr!("tray-tex-scale-x"),
-                tr!("tray-tex-scale-y"),
-                tr!("tray-tex-tile-w"),
-                tr!("tray-tex-tile-h"),
-            ];
-            for (i, label) in labels.into_iter().enumerate() {
-                ui.label(label);
-                let resp = ui.add(egui::TextEdit::singleline(&mut bufs[i]).desired_width(120.0));
-                if committed(ui, &resp) && bufs[i] != texts[i] {
-                    let t = bufs[i].trim();
-                    let mut p = pl;
-                    let ok = match i {
-                        0 | 1 => varstotas_kernel::units::parse_length(t, unit).map(|v| p.offset[i] = v).is_some(),
-                        2 => t.trim_end_matches('°').trim().parse::<f64>().map(|v| p.angle_deg = v).is_ok(),
-                        3 | 4 => t.parse::<f64>().ok().filter(|v| v.abs() > 1e-6).map(|v| p.scale[i - 3] = v).is_some(),
-                        // tile size on the face: the scale keeps its sign (a flip stays)
-                        _ => varstotas_kernel::units::parse_length(t, unit)
-                            .filter(|v| *v > 0.0)
-                            .map(|v| p.scale[i - 5] = v / tile[i - 5] * if pl.scale[i - 5] < 0.0 { -1.0 } else { 1.0 })
-                            .is_some(),
-                    };
-                    if ok {
-                        new = Some(p);
-                    } else {
-                        bad = true;
-                    }
-                } else if !resp.has_focus() && bufs[i] != texts[i] {
-                    bufs[i] = texts[i].clone();
-                }
-                ui.end_row();
-            }
-        });
-        ui.horizontal(|ui| {
-            if ui.button(tr!("tray-tex-position")).on_hover_text(tr!("tray-tex-position-hover")).clicked() {
-                self.actions.push(Action::SetTool(crate::tools::ToolId::TexturePosition));
-            }
-            let uv = ui.button(tr!("menu-uv-editor"));
-            super::tray_lib::spot("tex:uv_editor", uv.rect.center());
-            if uv.clicked() {
-                self.actions.push(Action::UvEditor);
-            }
-            if ui.add_enabled(!pl.is_identity(), egui::Button::new(tr!("tray-tex-reset"))).clicked() {
-                new = Some(Default::default());
-            }
-        });
-        ui.horizontal(|ui| {
-            use varstotas_kernel::texture::{TexOp, placement_op};
-            for (op, label, hover, spot) in [
-                (TexOp::Fit, tr!("tray-tex-fit"), tr!("tray-tex-fit-hover"), "tex:fit"),
-                (TexOp::Rotate90, tr!("tray-tex-rotate"), tr!("tray-tex-rotate-hover"), "tex:rotate"),
-                (TexOp::FlipU, tr!("tray-tex-flip-u"), tr!("tray-tex-flip-u-hover"), "tex:flip_u"),
-                (TexOp::FlipV, tr!("tray-tex-flip-v"), tr!("tray-tex-flip-v-hover"), "tex:flip_v"),
-            ] {
-                let resp = ui.button(label).on_hover_text(hover);
-                super::tray_lib::spot(spot, resp.rect.center());
-                if resp.clicked()
-                    && let Some(p) = placement_op(op, &pts, normal, face.uv.as_ref(), tile)
-                {
-                    new = Some(p.unwrap_or_default());
-                }
-            }
-        });
-        if bad {
-            self.tray.tex_pos = None;
-            self.flash_error(tr!("tray-invalid-value"));
-        }
-        if let Some(p) = new {
-            self.tray.tex_pos = None;
-            self.doc.commit(&tr!("tray-undo-texture-position"), |m| {
-                if let Some(f) = m.mesh_at_mut(&path).and_then(|mesh| mesh.faces.get_mut(fid)) {
-                    f.uv = (!p.is_identity()).then_some(p);
-                }
-            });
         }
     }
 

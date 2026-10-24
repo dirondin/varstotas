@@ -85,14 +85,14 @@ action click_spot uv:map:normal
 wait 3
 expect uv_view=(bricks normal true)
 screenshot shots/uv_normal_map.bmp
-# the Material Editor's UV button opens the editor on the material's faces
+# Window → UV Editor
 action click_spot uv:tile
 action uv_close
-action tray_only Material Editor
-wait 5
-action click_spot mated:uv
+wait 3
+raw click 408 -106
+wait 3
+screenshot shots/uv_window_menu.bmp
+action click_spot menu:UvEditor
 wait 5
 expect uv=(true 6
-expect uv_view=(bricks normal false)
-screenshot shots/uv_from_material.bmp
 quit

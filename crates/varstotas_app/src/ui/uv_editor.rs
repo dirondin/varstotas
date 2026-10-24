@@ -62,9 +62,8 @@ pub struct UvState {
     /// Typed rotation (degrees) and scale factor.
     angle: String,
     scale: String,
-    /// Opened from the Material Editor: the faces of this material (with no faces selected)
-    /// and its maps for the backdrop.
-    pub material: Option<MaterialId>,
+    /// Text of the face fields (face, offset x / y, rotation, scale x / y, tile w / h).
+    face_bufs: Option<(FaceId, [String; 7])>,
     /// The backdrop's map slot (`textures::SLOTS`; empty = the first the material has).
     pub map: &'static str,
     /// The backdrop shows one tile only (else repeated).
@@ -129,9 +128,6 @@ impl VarstotasApp {
             return sel;
         }
         let model = &self.doc.model;
-        if let Some(mat) = self.uv.material.filter(|id| model.materials.contains_key(*id)) {
-            return mesh.faces.iter().filter(|(_, f)| f.front == Some(mat) || f.back == Some(mat)).map(|(k, _)| k).collect();
-        }
         // faces with no material of their own show the open groups' material
         let path = &self.doc.active_path;
         let inherits = (0..path.len()).rev().find_map(|i| model.mesh_at(&path[..i])?.instances.get(path[i])?.material).and_then(|id| model.materials.get(id)).is_some_and(|m| m.image.is_some());
@@ -144,15 +140,11 @@ impl VarstotasApp {
             .collect()
     }
 
-    /// The material whose maps the UV Editor shows: the one it was opened for, else the first
-    /// face's textured material, else the one the faces inherit from the open groups, else the
-    /// current paint material.
+    /// The material whose maps the UV Editor shows: the first face's textured material, else
+    /// the one the faces inherit from the open groups, else the current paint material.
     pub(crate) fn uv_material(&self, faces: &[FaceId]) -> Option<MaterialId> {
         let model = &self.doc.model;
         let textured = |id: MaterialId| model.materials.get(id).is_some_and(|m| !slots_of(m).is_empty());
-        if let Some(id) = self.uv.material.filter(|id| textured(*id)) {
-            return Some(id);
-        }
         let path = &self.doc.active_path;
         let mesh = model.mesh_at(path)?;
         let own = faces.iter().find_map(|f| {
@@ -174,10 +166,8 @@ impl VarstotasApp {
         slots_of(m).first().and_then(|s| slot_image(m, s)).map(|i| i.size)
     }
 
-    /// Open the UV Editor (on the faces and maps of `material`, else the selection / textured
-    /// faces), framed, with no island picked.
-    pub(crate) fn open_uv_editor(&mut self, material: Option<MaterialId>) {
-        self.uv.material = material;
+    /// Open the UV Editor (on the selected / textured faces), framed, with no island picked.
+    pub(crate) fn open_uv_editor(&mut self) {
         self.uv.open = true;
         self.uv.selected.clear();
         self.uv_run("frame");
@@ -265,7 +255,7 @@ impl VarstotasApp {
     /// Run a UV Editor command (buttons and scripts): `unfold`, `planar`, `box`, `cylinder`,
     /// `sphere`, `rotate`, `rotate_ccw`, `flip_u`, `flip_v`, `fit`, `pack`, `align`,
     /// `rotate_by <deg>` (the islands, anticlockwise), `scale_by <k>` (the islands grow, so the
-    /// texture on the model shrinks), `randomize`, `density <px/m>`, `seams_mark`, `seams_clear`, `seams_hard`, `checker`, `select_all`,
+    /// texture on the model shrinks), `reset`, `randomize`, `rand_scale <percent>`, `density <px/m>`, `seams_mark`, `seams_clear`, `seams_hard`, `checker`, `select_all`,
     /// `select_none`, `frame`.
     pub(crate) fn uv_run(&mut self, op: &str) {
         let (op, arg) = op.split_once(' ').unwrap_or((op, ""));
@@ -288,6 +278,7 @@ impl VarstotasApp {
             "flip_u" => per_island(&|m, i| uv::transform(m, i, IslandOp::FlipU)),
             "flip_v" => per_island(&|m, i| uv::transform(m, i, IslandOp::FlipV)),
             "fit" => per_island(&|m, i| uv::fit_to_tile(m, i, tile)),
+            "reset" => faces.iter().map(|f| (*f, None)).collect(),
             "pack" => uv::pack(mesh, &targets, tile, 0.02),
             "align" => per_island(&|m, i| uv::align(m, i)),
             "rotate_by" | "scale_by" => {
@@ -406,15 +397,116 @@ impl VarstotasApp {
             .resizable(true)
             .show(ctx, |ui| {
                 self.uv_toolbar(ui);
+                if let Some(f) = self.uv_single_face() {
+                    self.uv_face_fields(ui, f);
+                }
                 ui.separator();
                 self.uv_canvas(ui);
             });
         if !open {
             self.uv.open = false;
             self.uv.drag = None;
-            self.uv.material = None;
         }
     }
+
+    /// The one face the face fields edit: the only selected face, else the only face of the
+    /// picked islands.
+    fn uv_single_face(&self) -> Option<FaceId> {
+        let sel: Vec<FaceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Face(f) = e { Some(*f) } else { None }).collect();
+        match (sel.as_slice(), self.uv.selected.len()) {
+            ([f], _) => Some(*f),
+            ([], 1) => self.uv.selected.iter().next().copied(),
+            _ => None,
+        }
+    }
+
+    /// The numbers of one face's texture placement (the numeric form of Texture Position):
+    /// offset of the texture origin, rotation, scale and the tile size on the face.
+    fn uv_face_fields(&mut self, ui: &mut Ui, fid: FaceId) {
+        let path = self.doc.active_path.clone();
+        let unit = self.doc.model.unit;
+        let model = &self.doc.model;
+        let Some(face) = model.mesh_at(&path).and_then(|m| m.faces.get(fid)) else { return };
+        let Some(tile) = own_tile(model, model.mesh_at(&path).expect("face mesh"), fid).or_else(|| self.uv_fallback_tile(&[fid])) else {
+            return;
+        };
+        let pl = face.uv.unwrap_or_default();
+        let texts = [
+            super::fmt_len(pl.offset[0], unit),
+            super::fmt_len(pl.offset[1], unit),
+            format!("{:.1}°", pl.angle_deg),
+            format!("{}", pl.scale[0]),
+            format!("{}", pl.scale[1]),
+            super::fmt_len(tile[0] * pl.scale[0].abs(), unit),
+            super::fmt_len(tile[1] * pl.scale[1].abs(), unit),
+        ];
+        if self.uv.face_bufs.as_ref().map(|t| t.0) != Some(fid) {
+            self.uv.face_bufs = Some((fid, texts.clone()));
+        }
+        let mut new = None;
+        let mut bad = false;
+        let r = egui::CollapsingHeader::new(egui::RichText::new(tr!("tray-tex-title")).strong()).id_salt("uv_face").default_open(true).show(ui, |ui| {
+            let Some((_, bufs)) = self.uv.face_bufs.as_mut() else { return };
+            let labels = [
+                tr!("tray-tex-offset-x"),
+                tr!("tray-tex-offset-y"),
+                tr!("tray-tex-rotation"),
+                tr!("tray-tex-scale-x"),
+                tr!("tray-tex-scale-y"),
+                tr!("tray-tex-tile-w"),
+                tr!("tray-tex-tile-h"),
+            ];
+            // pairs side by side: offset, scale, tile size; the rotation last
+            egui::Grid::new("uv_face_fields").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
+                for row in [[0, 1], [3, 4], [5, 6], [2, usize::MAX]] {
+                    for i in row {
+                        if i == usize::MAX {
+                            continue;
+                        }
+                        ui.label(&labels[i]);
+                        let resp = ui.add(egui::TextEdit::singleline(&mut bufs[i]).desired_width(80.0));
+                        super::tray_lib::spot(format!("uv:face{i}"), resp.rect.center());
+                        if super::tray::committed(ui, &resp) && bufs[i] != texts[i] {
+                            let t = bufs[i].trim();
+                            let mut p = pl;
+                            let ok = match i {
+                                0 | 1 => varstotas_kernel::units::parse_length(t, unit).map(|v| p.offset[i] = v).is_some(),
+                                2 => t.trim_end_matches('°').trim().parse::<f64>().map(|v| p.angle_deg = v).is_ok(),
+                                3 | 4 => t.parse::<f64>().ok().filter(|v| v.abs() > 1e-6).map(|v| p.scale[i - 3] = v).is_some(),
+                                // tile size on the face: the scale keeps its sign (a flip stays)
+                                _ => varstotas_kernel::units::parse_length(t, unit)
+                                    .filter(|v| *v > 0.0)
+                                    .map(|v| p.scale[i - 5] = v / tile[i - 5] * if pl.scale[i - 5] < 0.0 { -1.0 } else { 1.0 })
+                                    .is_some(),
+                            };
+                            if ok {
+                                new = Some(p);
+                            } else {
+                                bad = true;
+                            }
+                        } else if !resp.has_focus() && bufs[i] != texts[i] {
+                            bufs[i] = texts[i].clone();
+                        }
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+        super::tray_lib::spot("uv:face", r.header_response.rect.left_center() + egui::vec2(8.0, 0.0));
+        if bad {
+            self.uv.face_bufs = None;
+            self.flash_error(tr!("tray-invalid-value"));
+        }
+        if let Some(p) = new {
+            self.uv.face_bufs = None;
+            self.doc.commit(&tr!("tray-undo-texture-position"), |m| {
+                if let Some(f) = m.mesh_at_mut(&path).and_then(|mesh| mesh.faces.get_mut(fid)) {
+                    f.uv = (!p.is_identity()).then_some(p);
+                }
+            });
+        }
+    }
+
 
     fn uv_button(&mut self, ui: &mut Ui, label: String, hover: String, op: &str) {
         let r = ui.button(label).on_hover_text(hover);
@@ -452,6 +544,7 @@ impl VarstotasApp {
             self.uv_button(ui, tr!("uv-fit"), tr!("uv-fit-hover"), "fit");
             self.uv_button(ui, tr!("uv-pack"), tr!("uv-pack-hover"), "pack");
             self.uv_button(ui, tr!("uv-align"), tr!("uv-align-hover"), "align");
+            self.uv_button(ui, tr!("tray-tex-reset"), tr!("uv-reset-hover"), "reset");
         });
         // typed rotation and scale, then Randomize with its options
         ui.horizontal_wrapped(|ui| {
@@ -509,14 +602,6 @@ impl VarstotasApp {
                 let name = m.name.clone();
                 let slots = slots_of(m);
                 ui.label(egui::RichText::new(tr!("uv-material", name = name)).color(theme::text_dim()));
-                if self.uv.material.is_some() {
-                    let x = ui.small_button("×").on_hover_text(tr!("uv-material-clear"));
-                    super::tray_lib::spot("uv:material_clear", x.rect.center());
-                    if x.clicked() {
-                        self.uv.material = None;
-                        self.uv.zoom = 0.0;
-                    }
-                }
                 let shown = if slots.contains(&self.uv.map) { self.uv.map } else { slots[0] };
                 if slots.len() > 1 {
                     let cb = egui::ComboBox::from_id_salt("uv_map").selected_text(super::mat_maps::slot_label(shown)).show_ui(ui, |ui| {

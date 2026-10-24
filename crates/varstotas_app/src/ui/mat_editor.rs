@@ -209,13 +209,6 @@ impl VarstotasApp {
                 if sel.clicked() {
                     self.select_material_faces(id);
                 }
-                if self.doc.model.materials.get(id).is_some_and(|m| m.image.is_some() || m.pbr.as_ref().is_some_and(|p| crate::textures::SLOTS.iter().any(|s| p.map(s).is_some()))) {
-                    let uv = small_icon_button(ui, Icon::UvEditor, &tr!("mated-uv-tip"));
-                    super::tray_lib::spot("mated:uv", uv.rect.center());
-                    if uv.clicked() {
-                        self.actions.push(crate::app::Action::UvEditorFor(id));
-                    }
-                }
             }
             if !big {
                 let win = small_icon_button(ui, Icon::SideBar, &tr!("mated-window-tip"));

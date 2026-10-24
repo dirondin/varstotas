@@ -276,8 +276,6 @@ pub enum Action {
     Unfold,
     /// Open the UV Editor.
     UvEditor,
-    /// The UV Editor on the faces and maps of this material (Material Editor).
-    UvEditorFor(varstotas_kernel::MaterialId),
     /// Window → Sheets…: layout sheets.
     Sheets,
     WorkPlanes,
@@ -1358,8 +1356,7 @@ impl VarstotasApp {
             Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
-            Action::UvEditor => self.open_uv_editor(None),
-            Action::UvEditorFor(id) => self.open_uv_editor(Some(id)),
+            Action::UvEditor => self.open_uv_editor(),
             Action::Sheets => self.sheets.open = true,
             Action::WorkPlanes => self.planes_window.open = true,
             Action::Undo => match self.doc.undo() {

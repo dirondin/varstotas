@@ -487,8 +487,6 @@ impl VarstotasApp {
                     self.tool_item(ui, id);
                 }
                 self.cmd_item(ui, Cmd::Text3d);
-                ui.separator();
-                self.icon_item(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
 
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));
@@ -517,6 +515,13 @@ impl VarstotasApp {
                 // None: a separator
                 for c in [Some(Sheets), Some(Render), Some(WorkPlanes), Some(ModelInfo), Some(ComponentParams), Some(Library3d), Some(GeneratorEditor), Some(Console), Some(Log), None, Some(Preferences)] {
                     let Some(c) = c else {
+                        // the UV Editor (no command of its own) closes the window list
+                        let r = icon_row(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, self.uv.open);
+                        super::tray_lib::spot("menu:UvEditor", r.rect.center());
+                        if r.clicked() {
+                            self.actions.push(Action::UvEditor);
+                            ui.close();
+                        }
                         ui.separator();
                         continue;
                     };

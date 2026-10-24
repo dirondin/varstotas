@@ -1,5 +1,5 @@
 # Texture Position 2: several faces (Alt continues round a corner), pin snapping, Measurements
-# tile size, double-click on an edge aligns, Entity Info Fit / Rotate / Flip.
+# tile size, double-click on an edge aligns, the UV Editor face fields and Reset.
 box -1000 0 0 2000 1000 1000
 view iso
 zoom_extents
@@ -49,23 +49,25 @@ expect uvs=["o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
 key Enter
 wait 2
 expect tool=Select
-# Entity Info buttons on the top face
+# the UV Editor's face fields on the top face: the tile width typed, then Reset (undoable)
 rawp click 0 500 1000
-action tray_only Entity Info
+action uv_open
 wait 5
 expect uv_placed=2
-# Fit: one tile covers the 2000×1000 top face (tile 800×400): scale 2.5
-raw click 1162 451
+action click_spot uv:face5
+wait 2
+raw mods cmd
+raw key A
+raw mods none
+raw text 1600
+raw key Enter
 wait 3
-expect uvs=["o(-1000,-0) a0 s(2.50,2.50)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
-raw click 1222 451
+expect uvs=["o(0,0) a0 s(2.00,1.00)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+screenshot shots/texpos2_fields.bmp
+action click_spot uv:reset
 wait 3
-raw click 1294 451
-wait 3
-screenshot shots/texpos2_info.bmp
-expect uv_placed=3
+expect uv_placed=2
 undo
-undo
 wait 3
-expect uvs=["o(-1000,-0) a0 s(2.50,2.50)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
+expect uvs=["o(0,0) a0 s(2.00,1.00)", "o(-2000,1000) a0 s(0.50,0.50)", "o(-1000,1000) a0 s(0.50,0.50)"]
 quit
