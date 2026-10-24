@@ -141,6 +141,12 @@ expect uv_tool=(select face 0.275,0.749 "" [2])
 action click_spot uv:face_at0
 wait 10
 expect uv_tool=(select face 0.275,0.749 "" [0])
+# pressing and dragging there moves the face found, it does not cycle on
+action drag_spot uv:face_at0 30 0
+wait 5
+expect mm; 0 mm" [0])
+undo
+wait 3
 action click_spot uv:mode:island
 # the backdrop: one tile only, another map of the material
 action click_spot uv:checker

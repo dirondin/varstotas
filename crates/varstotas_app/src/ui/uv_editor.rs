@@ -778,7 +778,23 @@ impl VarstotasApp {
         let all = self.uv_islands();
         let picked = picked_groups(&all, &self.uv.selected).len();
         let n_faces = self.uv_faces().len();
-        ui.label(egui::RichText::new(self.uv.tool.value_label()).small());
+        // the fields sit on the right (laid out right to left, so in reverse order), the hint
+        // takes what is left on the left
+        let full = ui.max_rect();
+        let mut right = ui.new_child(egui::UiBuilder::new().max_rect(full).layout(egui::Layout::right_to_left(egui::Align::Center)));
+        let ui = &mut right;
+        ui.label(egui::RichText::new(tr!("uv-summary", faces = n_faces, islands = all.len(), selected = picked)).small().color(theme::text_dim()));
+        ui.separator();
+        ui.label(egui::RichText::new(tr!("uv-px-per-m")).small());
+        let resp = ui
+            .add(egui::TextEdit::singleline(&mut self.uv.density).desired_width(56.0).hint_text(now.map(|d| format!("{d:.0}")).unwrap_or_default()))
+            .on_hover_text(tr!("uv-density"));
+        super::tray_lib::spot("uv:density", resp.rect.center());
+        if super::tray::committed(ui, &resp) && !self.uv.density.trim().is_empty() {
+            let v = std::mem::take(&mut self.uv.density);
+            self.uv_run(&format!("density {v}"));
+        }
+        ui.separator();
         let out = egui::TextEdit::singleline(&mut self.uv.vcb).desired_width(110.0).show(ui);
         // focusing the field selects its text: what is typed replaces the shown value
         if out.response.gained_focus() {
@@ -792,20 +808,14 @@ impl VarstotasApp {
             let v = self.uv.vcb.clone();
             self.uv_typed(&v);
         }
-        ui.separator();
-        let resp = ui
-            .add(egui::TextEdit::singleline(&mut self.uv.density).desired_width(56.0).hint_text(now.map(|d| format!("{d:.0}")).unwrap_or_default()))
-            .on_hover_text(tr!("uv-density"));
-        super::tray_lib::spot("uv:density", resp.rect.center());
-        if super::tray::committed(ui, &resp) && !self.uv.density.trim().is_empty() {
-            let v = std::mem::take(&mut self.uv.density);
-            self.uv_run(&format!("density {v}"));
+        ui.label(egui::RichText::new(self.uv.tool.value_label()).small());
+        let used = ui.min_rect().left() - ui.spacing().item_spacing.x * 2.0;
+        if used > full.left() + 20.0 {
+            let r = Rect::from_min_max(full.min, pos2(used, full.max.y));
+            let mut left = ui.new_child(egui::UiBuilder::new().max_rect(r).layout(egui::Layout::left_to_right(egui::Align::Center)));
+            left.set_clip_rect(r.intersect(ui.clip_rect()));
+            left.add(egui::Label::new(egui::RichText::new(self.uv.tool.hint()).small().color(theme::text_dim())).truncate());
         }
-        ui.label(egui::RichText::new(tr!("uv-px-per-m")).small());
-        ui.separator();
-        ui.label(egui::RichText::new(tr!("uv-summary", faces = n_faces, islands = all.len(), selected = picked)).small().color(theme::text_dim()));
-        ui.separator();
-        ui.add(egui::Label::new(egui::RichText::new(self.uv.tool.hint()).small().color(theme::text_dim())).truncate());
     }
 
     /// The backdrop image: the chosen map of [`Self::uv_material`] (or the checker).
@@ -1004,7 +1014,10 @@ impl VarstotasApp {
             && let Some(start) = ui.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos())
         {
             let pan = ui.ctx().input(|i| i.pointer.middle_down() || i.pointer.secondary_down());
-            let at = face_at(start);
+            // a press on a spot where a picked face lies (even under others, found by clicking
+            // through the stack) drags that pick; only a release without a drag cycles
+            let q0 = to_uv(start);
+            let at = polys.iter().rev().find(|(f, poly)| self.uv.selected.contains(f) && inside(poly, q0)).map(|x| x.0).or_else(|| face_at(start));
             let has_sel = !self.uv.selected.is_empty();
             let acts = at.is_some() || has_sel;
             let (kind, axis) = match (tool, hit(start)) {
