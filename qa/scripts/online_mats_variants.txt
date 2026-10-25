@@ -1,0 +1,18 @@
+# Online Materials, Poly Haven: an asset with colour variants instead of a Diffuse map
+# (Fabric Pattern 05: col_01..col_03) downloads with its first variant. Needs the network.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+action tray_only Materials
+wait 10
+raw click 1347 257
+wait 5
+action online_wait
+wait 5
+expect online=(true polyhaven catalogue=
+action online_get polyhaven:fabric_pattern_05
+wait 5
+action online_wait
+wait 10
+expect last=Some("polyhaven:fabric_pattern_05 ok
+expect matlib=["Poly Haven/Fabric Pattern 05"]

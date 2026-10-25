@@ -303,7 +303,18 @@ pub fn parse_ambientcg(json: &[u8]) -> Result<Vec<Asset>, String> {
 pub fn polyhaven_maps(json: &[u8]) -> Result<Vec<(MapKind, String)>, String> {
     let v: Value = serde_json::from_slice(json).map_err(|e| e.to_string())?;
     let keys = [("Diffuse", MapKind::Color), ("nor_gl", MapKind::Normal), ("Rough", MapKind::Roughness), ("AO", MapKind::Ao), ("Metal", MapKind::Metal)]; // i18n-ignore
-    let maps: Vec<(MapKind, String)> = keys.iter().filter_map(|(k, kind)| Some((*kind, v[*k]["1k"]["jpg"]["url"].as_str()?.to_string()))).collect();
+    let url = |k: &str| v[k]["1k"]["jpg"]["url"].as_str().map(str::to_string);
+    let mut maps: Vec<(MapKind, String)> = keys.iter().filter_map(|(k, kind)| Some((*kind, url(k)?))).collect();
+    // a few assets have colour variants instead (`col_01`, `col1`, `coll1`, `diff_png`): the first
+    if !maps.iter().any(|(k, _)| *k == MapKind::Color)
+        && let Some(obj) = v.as_object()
+    {
+        let mut variants: Vec<&String> = obj.keys().filter(|k| k.starts_with("col") || k.starts_with("diff")).collect();
+        variants.sort();
+        if let Some(u) = variants.into_iter().find_map(|k| url(k)) {
+            maps.insert(0, (MapKind::Color, u));
+        }
+    }
     if !maps.iter().any(|(k, _)| *k == MapKind::Color) {
         return Err(tr!("mat-err-no-colour-map"));
     }
@@ -557,6 +568,9 @@ pub(crate) mod tests {
         let f = br#"{"Diffuse":{"1k":{"jpg":{"url":"https://d/a_diff_1k.jpg"}}},"nor_gl":{"1k":{"jpg":{"url":"https://d/a_nor_gl_1k.jpg"}}},"nor_dx":{"1k":{"jpg":{"url":"x"}}}}"#;
         assert_eq!(polyhaven_maps(f).unwrap(), vec![(MapKind::Color, "https://d/a_diff_1k.jpg".into()), (MapKind::Normal, "https://d/a_nor_gl_1k.jpg".into())]);
         assert!(polyhaven_maps(br#"{"nor_gl":{}}"#).is_err());
+        // colour variants instead of Diffuse (fabric_pattern_05): the first one
+        let v = br#"{"col_02":{"1k":{"jpg":{"url":"c2"}}},"col_01":{"1k":{"jpg":{"url":"c1"}}},"Rough":{"1k":{"jpg":{"url":"r"}}}}"#;
+        assert_eq!(polyhaven_maps(v).unwrap(), vec![(MapKind::Color, "c1".into()), (MapKind::Roughness, "r".into())]);
         assert_eq!(ambientcg_map("Bricks090_1K-JPG_NormalGL.jpg"), Some(MapKind::Normal));
         assert_eq!(ambientcg_map("Bricks090_1K-JPG_NormalDX.jpg"), None);
         assert_eq!(ambientcg_map("Bricks090_1K-JPG_Color.jpg"), Some(MapKind::Color));
