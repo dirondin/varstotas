@@ -18,14 +18,14 @@ expect toolbar="Paint Eraser | Line
 raw click 353 187
 wait 5
 expect toolbar="Eraser Paint | Line
-# Smooth Curve from the reserve: the end of the toolbar
+# Save (the reserve starts with the File menu): the end of the toolbar
 raw click 465 261
 wait 5
-expect ZoomExtents | Snapping SmoothCurve"
+expect ZoomExtents | Snapping Save"
 # a separator after it
 raw click 465 160
 wait 5
-expect Snapping SmoothCurve |"
+expect Snapping Save |"
 screenshot shots/toolbar_prefs.bmp
 # the toolbar's first button is now Eraser
 raw click 27 -65

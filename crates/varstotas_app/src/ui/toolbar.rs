@@ -29,7 +29,7 @@ pub fn icon_size_label(id: &str) -> String {
     })
 }
 
-/// The shown heading of a reserve group id (`GROUPS`).
+/// The shown heading of a reserve group id (`Item::group`).
 pub fn group_label(id: &str) -> String {
     tr(match id {
         "Draw" => "toolbar-group-draw", // i18n-ignore
@@ -105,26 +105,33 @@ impl Item {
             ) => Some("Draw"), // i18n-ignore
             Item::Tool(id) if crate::tools::SHAPES.contains(&id) => Some("Draw"),
             Item::Tool(_) => Some("Tools"), // i18n-ignore
-            Item::Cmd(Cmd::ZoomExtents) => Some("Camera"), // i18n-ignore
-            Item::Cmd(c) => Some(c.group()),
+            Item::Cmd(c) => c.group(),
             Item::Snapping => Some("Snapping"), // i18n-ignore
             Item::Sep => None,
         }
     }
 
-    /// Every button there is (separators aside), by menu (`GROUPS`), in each the menu's order.
+    /// The buttons of the reserve: what the menus hold, in the menu bar's order, in each in
+    /// the menu's order.
     pub fn all() -> Vec<Item> {
-        let mut v: Vec<Item> = ToolId::ALL.iter().copied().filter(|t| t.implemented()).map(Item::Tool).collect();
+        use crate::tools::*;
+        let cmds = |g: &'static str| Cmd::all().into_iter().filter(move |c| c.group() == Some(g)).map(Item::Cmd);
+        let tools = |ids: &[ToolId]| ids.iter().copied().filter(|t| t.implemented()).map(Item::Tool).collect::<Vec<_>>();
+        let mut v: Vec<Item> = cmds("File").chain(cmds("Edit")).collect(); // i18n-ignore
+        v.extend(tools(&CAMERA_NAV));
+        v.push(Item::Cmd(Cmd::ZoomExtents));
+        v.extend(tools(&CAMERA_EYE));
+        v.extend(tools(&[ToolId::Line]));
+        v.extend([&DRAW_CURVES[..], &DRAW_FLAT, &SHAPES].into_iter().flat_map(tools));
+        v.push(Item::Cmd(Cmd::Text3d));
+        v.extend([&TOOLS_PICK[..], &TOOLS_MODIFY].into_iter().flat_map(tools));
+        v.extend(cmds("Tools")); // i18n-ignore
+        v.extend(tools(&TOOLS_MEASURE));
         v.push(Item::Snapping);
-        v.extend(Cmd::all().into_iter().map(Item::Cmd));
-        // stable: the order inside a group stays
-        v.sort_by_key(|i| GROUPS.iter().position(|g| Some(*g) == i.group()).unwrap_or(GROUPS.len()));
+        v.extend(cmds("Snapping").chain(cmds("Window"))); // i18n-ignore
         v
     }
 }
-
-/// The reserve's headings, in order.
-pub const GROUPS: [&str; 7] = ["Draw", "Tools", "Camera", "File", "Edit", "Snapping", "Window"]; // i18n-ignore
 
 /// The toolbar out of the box. 3 Point Arc, Pie, Rotated Rectangle, Smooth Curve, Freehand,
 /// Protractor … wait in reserve (the toolbar stays short at the default window width).
@@ -269,5 +276,31 @@ mod tests {
             assert_eq!(Item::from_key(&i.key()), Some(i));
         }
         assert_eq!(r.len() + 2, Item::all().len());
+    }
+
+    #[test]
+    fn the_reserve_follows_the_menus() {
+        let all = Item::all();
+        let mut keys: Vec<String> = all.iter().map(|i| i.key()).collect();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(keys.len(), all.len(), "no button twice");
+        // the menu bar's order, each menu in one run
+        let mut groups: Vec<&str> = all.iter().filter_map(|i| i.group()).collect();
+        groups.dedup();
+        assert_eq!(groups, ["File", "Edit", "Camera", "Draw", "Tools", "Snapping", "Window"]);
+        // every tool of the menus (Solid Tools is a menu of commands there) …
+        for t in ToolId::ALL.into_iter().filter(|t| *t != ToolId::SolidTools) {
+            assert!(all.contains(&Item::Tool(t)), "{t:?}");
+        }
+        assert!(!all.contains(&Item::Tool(ToolId::SolidTools)));
+        // … and every command in a menu; the 3D Printing window's own buttons are not
+        for c in Cmd::all() {
+            assert_eq!(all.contains(&Item::Cmd(c)), c.group().is_some(), "{c:?}");
+        }
+        // the Window menu's order
+        let window: Vec<Cmd> = all.iter().filter_map(|i| if let Item::Cmd(c) = i { Some(*c) } else { None }).filter(|c| crate::ui::commands::WINDOW_MENU.contains(&Some(*c))).collect();
+        assert_eq!(window, crate::ui::commands::WINDOW_MENU.into_iter().flatten().collect::<Vec<_>>());
+        assert_eq!(all.iter().position(|i| *i == Item::Cmd(Cmd::Physics)).unwrap() + 1, all.iter().position(|i| *i == Item::Cmd(Cmd::Unfold)).unwrap());
     }
 }

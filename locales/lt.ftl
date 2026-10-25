@@ -354,6 +354,7 @@ cmd-desc-model-info = Dokumento statistika, nenaudojamų elementų išvalymas.
 cmd-desc-component-params = Pažymėto komponento parametrai: reikšmės, kurios pasuka, pastumia, parodo ar nuspalvina jo dalis.
 cmd-desc-library-3d = Nemokami modeliai iš internetinių bibliotekų.
 cmd-desc-materials-online = Nemokamos PBR medžiagos iš internetinių bibliotekų.
+cmd-desc-uv-editor = Pasirinktų sienų tekstūros koordinačių išdėstymas.
 cmd-desc-generator-editor = Rašyti ir vykdyti generatorių scenarijus.
 cmd-desc-console = Vykdyti Rhai komandas su modeliu.
 cmd-desc-log = Klaidos ir įspėjimai iš visur: scenarijai, importas / eksportas, bibliotekos, atsisiuntimai …

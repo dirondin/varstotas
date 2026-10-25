@@ -350,6 +350,7 @@ cmd-desc-model-info = Statistics of the document, Purge Unused.
 cmd-desc-component-params = Parameters of the selected component: values that turn, slide, show or paint its parts.
 cmd-desc-library-3d = Free models from online libraries.
 cmd-desc-materials-online = Free PBR materials from online libraries.
+cmd-desc-uv-editor = Lay out the texture coordinates of the selected faces.
 cmd-desc-generator-editor = Write and run generator scripts.
 cmd-desc-console = Run Rhai commands on the model.
 cmd-desc-log = Errors and warnings from everywhere: scripts, import / export, libraries, downloads …

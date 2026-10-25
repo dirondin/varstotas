@@ -433,24 +433,24 @@ impl VarstotasApp {
                     self.actions.push(Action::SetParallel(false));
                 }
                 ui.separator();
-                self.tool_item(ui, ToolId::Orbit);
-                self.tool_item(ui, ToolId::Pan);
-                self.tool_item(ui, ToolId::Zoom);
+                for id in crate::tools::CAMERA_NAV {
+                    self.tool_item(ui, id);
+                }
                 self.cmd_item(ui, Cmd::ZoomExtents);
                 ui.separator();
-                self.tool_item(ui, ToolId::PositionCamera);
-                self.tool_item(ui, ToolId::LookAround);
-                self.tool_item(ui, ToolId::Walk);
+                for id in crate::tools::CAMERA_EYE {
+                    self.tool_item(ui, id);
+                }
             });
 
             ui.menu_button(tr!("menu-draw"), |ui| {
                 self.tool_item(ui, ToolId::Line);
                 ui.separator();
-                for id in [ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie, ToolId::Bezier, ToolId::SmoothCurve, ToolId::Freehand, ToolId::EditCurve] {
+                for id in crate::tools::DRAW_CURVES {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
-                for id in [ToolId::Rectangle, ToolId::RotatedRectangle, ToolId::Circle, ToolId::Polygon] {
+                for id in crate::tools::DRAW_FLAT {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
@@ -462,20 +462,11 @@ impl VarstotasApp {
             });
 
             ui.menu_button(tr!("menu-tools"), |ui| {
-                for id in [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section, ToolId::GuidePlane, ToolId::Slice] {
+                for id in crate::tools::TOOLS_PICK {
                     self.tool_item(ui, id);
                 }
                 ui.separator();
-                for id in [
-                    ToolId::Move,
-                    ToolId::Rotate,
-                    ToolId::Scale,
-                    ToolId::PushPull,
-                    ToolId::FollowMe,
-                    ToolId::Offset,
-                    ToolId::Chamfer,
-                    ToolId::Fillet,
-                ] {
+                for id in crate::tools::TOOLS_MODIFY {
                     self.tool_item(ui, id);
                 }
                 icon_menu(ui, Some(Icon::Solids(2)), &tr!("menu-solid-tools"), |ui| {
@@ -484,7 +475,7 @@ impl VarstotasApp {
                     }
                 });
                 ui.separator();
-                for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
+                for id in crate::tools::TOOLS_MEASURE {
                     self.tool_item(ui, id);
                 }
             });
@@ -512,42 +503,9 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 use Cmd::*;
-                // by feature: the model, the online libraries, its look, making things from it, scripting; Some(None): the
-                // UV Editor (no command of its own); None: a separator
-                for c in [
-                    Some(Some(ModelInfo)),
-                    Some(Some(ComponentParams)),
-                    Some(Some(WorkPlanes)),
-                    None,
-                    Some(Some(Library3d)),
-                    Some(Some(MaterialsOnline)),
-                    None,
-                    Some(None),
-                    Some(Some(Render)),
-                    None,
-                    Some(Some(Physics)),
-                    Some(Some(Unfold)),
-                    Some(Some(Sheets)),
-                    Some(Some(PrintCheck)),
-                    None,
-                    Some(Some(GeneratorEditor)),
-                    Some(Some(Console)),
-                    Some(Some(Log)),
-                    None,
-                    Some(Some(Preferences)),
-                ] {
+                for c in super::commands::WINDOW_MENU {
                     let Some(c) = c else {
                         ui.separator();
-                        continue;
-                    };
-                    let Some(c) = c else {
-                        let label = tr!("menu-uv-editor");
-                        let r = icon_row(ui, Some(Icon::UvEditor), label.trim_end_matches('…'), None, true, self.uv.open);
-                        super::tray_lib::spot("menu:UvEditor", r.rect.center());
-                        if r.clicked() {
-                            self.actions.push(Action::UvEditor);
-                            ui.close();
-                        }
                         continue;
                     };
                     let label = match c {

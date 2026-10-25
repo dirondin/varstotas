@@ -420,6 +420,24 @@ impl ToolId {
 /// Draw → Shapes: the solid primitives (`primitives.rs`).
 pub const SHAPES: [ToolId; 6] = [ToolId::Box, ToolId::Cylinder, ToolId::Cone, ToolId::Pyramid, ToolId::Sphere, ToolId::Torus];
 
+// The menus' tools by section (the Preferences → Toolbar reserve follows them too).
+/// Camera: navigating, before Zoom Extents.
+pub const CAMERA_NAV: [ToolId; 3] = [ToolId::Orbit, ToolId::Pan, ToolId::Zoom];
+/// Camera: from the eye.
+pub const CAMERA_EYE: [ToolId; 3] = [ToolId::PositionCamera, ToolId::LookAround, ToolId::Walk];
+/// Draw: arcs and curves (after Line).
+pub const DRAW_CURVES: [ToolId; 8] =
+    [ToolId::ArcCenter, ToolId::Arc, ToolId::Arc3, ToolId::Pie, ToolId::Bezier, ToolId::SmoothCurve, ToolId::Freehand, ToolId::EditCurve];
+/// Draw: flat shapes.
+pub const DRAW_FLAT: [ToolId; 4] = [ToolId::Rectangle, ToolId::RotatedRectangle, ToolId::Circle, ToolId::Polygon];
+/// Tools: picking and cutting.
+pub const TOOLS_PICK: [ToolId; 7] = [ToolId::Select, ToolId::Eraser, ToolId::Paint, ToolId::TexturePosition, ToolId::Section, ToolId::GuidePlane, ToolId::Slice];
+/// Tools: changing shapes (Solid Tools follow).
+pub const TOOLS_MODIFY: [ToolId; 8] =
+    [ToolId::Move, ToolId::Rotate, ToolId::Scale, ToolId::PushPull, ToolId::FollowMe, ToolId::Offset, ToolId::Chamfer, ToolId::Fillet];
+/// Tools: measuring and notes.
+pub const TOOLS_MEASURE: [ToolId; 5] = [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text];
+
 /// Create a fresh instance of a tool.
 pub fn make_tool(id: ToolId) -> Box<dyn Tool> {
     match id {

@@ -87,6 +87,7 @@ pub enum Cmd {
     SideBar,
     /// A card of the side bar shown / hidden (`tray::TRAY_CARDS`).
     Card(&'static str),
+    UvEditor,
     Render,
     WorkPlanes,
     ModelInfo,
@@ -102,48 +103,63 @@ pub enum Cmd {
     Preferences,
 }
 
+/// The Window menu below the side bar and its cards, by feature: the model, the online
+/// libraries, its look, making things from it, scripting; `None`: a separator.
+pub const WINDOW_MENU: [Option<Cmd>; 20] = {
+    use Cmd::*;
+    [
+        Some(ModelInfo), Some(ComponentParams), Some(WorkPlanes), None,
+        Some(Library3d), Some(MaterialsOnline), None,
+        Some(UvEditor), Some(Render), None,
+        Some(Physics), Some(Unfold), Some(Sheets), Some(PrintCheck), None,
+        Some(GeneratorEditor), Some(Console), Some(Log), None,
+        Some(Preferences),
+    ]
+};
+
 impl Cmd {
-    /// Every command, in the menus' order.
+    /// Every command, in the menus' order (commands in no menu last).
     pub fn all() -> Vec<Cmd> {
         use Cmd::*;
         let mut v = vec![
             New, Open, Save, SaveAs, PreviewShow, PreviewFromFile, PreviewFromView, PreviewRemove, ImportObj, ImportStl, ImportDxf,
             ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv, ExportImage, ExportAnimation, ExportObj, ExportStl,
-            ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing, Sheets, ExportReport, ExportFacesJson, ExportAttributions,
+            ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing, ExportReport, ExportFacesJson, ExportAttributions,
             RunScript, Quit, Undo, Redo, Cut, Copy, Paste, PasteInPlace, Delete, PurgeUnused, DeleteGuides, SelectAll, SelectNone,
-            Hide, Lock, UnlockAll, UnhideAll, MakeGroup, MakeComponent, MakeUnique, MakeParametric, Explode, CloseGroup, IntersectModel, IntersectSelection,
-            IntersectContext, ReverseFaces, OrientFaces, FlipRed, FlipGreen, FlipBlue,
+            Hide, Lock, UnhideAll, UnlockAll, MakeGroup, MakeComponent, MakeUnique, MakeParametric, Explode, CloseGroup, IntersectModel, IntersectSelection,
+            IntersectContext, ReverseFaces, OrientFaces, FlipRed, FlipGreen, FlipBlue, ZoomExtents, Text3d,
         ];
         v.extend(SolidOp::ALL.map(Solid));
-        v.extend([Unfold, Physics, Text3d, ZoomExtents, Snapping, ShowGrid]);
-        v.extend(crate::inference::settings::all_kinds().map(Snap));
+        // Snapping: the switch, then the inferences by group; Show Grid heads the grid ones
+        v.push(Snapping);
+        for (group, kinds) in crate::inference::settings::GROUPS {
+            if group == "Grid" { // i18n-ignore
+                v.push(ShowGrid);
+            }
+            v.extend(kinds.iter().map(|k| Snap(*k)));
+        }
         v.push(SideBar);
         v.extend(crate::ui::tray::TRAY_CARDS.map(Card));
-        v.extend([PrintCheck, PrintRepair, PrintAnalysis, PrintBed, PrintSplit, PrintExport]);
-        v.extend([Render, WorkPlanes, ModelInfo, ComponentParams, Library3d, MaterialsOnline, GeneratorEditor, Console, Log, Preferences]);
+        v.extend(WINDOW_MENU.into_iter().flatten());
+        v.extend([PrintRepair, PrintAnalysis, PrintBed, PrintSplit, PrintExport]);
         v
     }
 
-    /// Its menu (the headings of Preferences → Toolbar's reserve).
-    pub fn group(self) -> &'static str {
-        if matches!(self, Cmd::PrintCheck | Cmd::PrintRepair | Cmd::PrintAnalysis | Cmd::PrintBed | Cmd::PrintSplit | Cmd::PrintExport) {return "3D Printing";} // i18n-ignore
-        if self == Cmd::Text3d {
-            return "Draw"; // i18n-ignore
-        }
-        let all = Cmd::all();
-        let at = |c: Cmd| all.iter().position(|x| *x == c).unwrap_or(0);
-        let i = at(self);
-        if i < at(Cmd::Undo) {
-            "File" // i18n-ignore
-        } else if i < at(Cmd::Solid(SolidOp::ALL[0])) {
-            "Edit" // i18n-ignore
-        } else if i < at(Cmd::Snapping) {
-            "Tools" // i18n-ignore
-        } else if i < at(Cmd::SideBar) {
-            "Snapping" // i18n-ignore
-        } else {
-            "Window" // i18n-ignore
-        }
+    /// Its menu (the headings of Preferences → Toolbar's reserve); `None`: in no menu (the
+    /// 3D Printing window's buttons).
+    pub fn group(self) -> Option<&'static str> {
+        use Cmd::*;
+        Some(match self {
+            PrintRepair | PrintAnalysis | PrintBed | PrintSplit | PrintExport => return None,
+            ZoomExtents => "Camera", // i18n-ignore
+            Text3d => "Draw", // i18n-ignore
+            Solid(_) => "Tools", // i18n-ignore
+            Snapping | ShowGrid | Snap(_) => "Snapping", // i18n-ignore
+            SideBar | Card(_) => "Window", // i18n-ignore
+            c if WINDOW_MENU.contains(&Some(c)) => "Window", // i18n-ignore
+            c if Cmd::all().iter().position(|x| *x == c) < Cmd::all().iter().position(|x| *x == Undo) => "File", // i18n-ignore
+            _ => "Edit", // i18n-ignore
+        })
     }
 
     /// The id kept in the preferences (the toolbar's layout).
@@ -280,6 +296,7 @@ impl Cmd {
             Cmd::ComponentParams => "cmd-component-params",
             Cmd::Library3d => "cmd-library-3d",
             Cmd::MaterialsOnline => "cmd-materials-online",
+            Cmd::UvEditor => "menu-uv-editor",
             Cmd::GeneratorEditor => "cmd-generator-editor",
             Cmd::Console => "cmd-console",
             Cmd::Log => "cmd-log",
@@ -383,6 +400,7 @@ impl Cmd {
             Cmd::ComponentParams => Icon::Parametric,
             Cmd::Library3d => Icon::Cloud,
             Cmd::MaterialsOnline => Icon::Cloud,
+            Cmd::UvEditor => Icon::UvEditor,
             Cmd::GeneratorEditor => Icon::Generator,
             Cmd::Console => Icon::Console,
             Cmd::Log => Icon::Log,
@@ -483,6 +501,7 @@ impl Cmd {
             Cmd::ComponentParams => tr!("cmd-desc-component-params"),
             Cmd::Library3d => tr!("cmd-desc-library-3d"),
             Cmd::MaterialsOnline => tr!("cmd-desc-materials-online"),
+            Cmd::UvEditor => tr!("cmd-desc-uv-editor"),
             Cmd::GeneratorEditor => tr!("cmd-desc-generator-editor"),
             Cmd::Console => tr!("cmd-desc-console"),
             Cmd::Log => tr!("cmd-desc-log"),
@@ -577,6 +596,7 @@ impl Cmd {
             Cmd::ComponentParams => Action::RigEditor,
             Cmd::Library3d => Action::ModelLibrary,
             Cmd::MaterialsOnline => Action::OnlineMaterials,
+            Cmd::UvEditor => Action::UvEditor,
             Cmd::GeneratorEditor => Action::GeneratorEditor,
             Cmd::Console => Action::ToggleConsole,
             Cmd::Log => Action::ToggleLog,
@@ -606,6 +626,7 @@ impl Cmd {
             Cmd::ComponentParams => Some(app.rig_editor.open),
             Cmd::Library3d => Some(app.models.open),
             Cmd::MaterialsOnline => Some(app.online.open),
+            Cmd::UvEditor => Some(app.uv.open),
             Cmd::GeneratorEditor => Some(app.gen_editor.open),
             Cmd::Console => Some(app.console.open),
             Cmd::Log => Some(app.log_window.open),
