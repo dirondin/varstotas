@@ -511,32 +511,39 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 use Cmd::*;
-                // None: a separator
+                // by feature: the model, its look, making things from it, scripting; Some(None): the
+                // UV Editor (no command of its own); None: a separator
                 for c in [
-                    Some(Sheets),
-                    Some(Render),
-                    Some(WorkPlanes),
-                    Some(ModelInfo),
-                    Some(ComponentParams),
-                    Some(Library3d),
-                    Some(GeneratorEditor),
-                    Some(Unfold),
-                    Some(Physics),
-                    Some(PrintCheck),
-                    Some(Console),
-                    Some(Log),
+                    Some(Some(ModelInfo)),
+                    Some(Some(ComponentParams)),
+                    Some(Some(WorkPlanes)),
+                    Some(Some(Library3d)),
                     None,
-                    Some(Preferences),
+                    Some(None),
+                    Some(Some(Render)),
+                    None,
+                    Some(Some(Physics)),
+                    Some(Some(Unfold)),
+                    Some(Some(Sheets)),
+                    Some(Some(PrintCheck)),
+                    None,
+                    Some(Some(GeneratorEditor)),
+                    Some(Some(Console)),
+                    Some(Some(Log)),
+                    None,
+                    Some(Some(Preferences)),
                 ] {
                     let Some(c) = c else {
-                        // the UV Editor (no command of its own) closes the window list
+                        ui.separator();
+                        continue;
+                    };
+                    let Some(c) = c else {
                         let r = icon_row(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, self.uv.open);
                         super::tray_lib::spot("menu:UvEditor", r.rect.center());
                         if r.clicked() {
                             self.actions.push(Action::UvEditor);
                             ui.close();
                         }
-                        ui.separator();
                         continue;
                     };
                     let label = match c {
