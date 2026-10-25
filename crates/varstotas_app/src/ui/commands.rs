@@ -75,6 +75,7 @@ pub enum Cmd {
     FlipBlue,
     Solid(SolidOp),
     Unfold,
+    Physics,
     Text3d,
     ZoomExtents,
     /// The master switch of snapping.
@@ -113,7 +114,7 @@ impl Cmd {
             IntersectContext, ReverseFaces, OrientFaces, FlipRed, FlipGreen, FlipBlue,
         ];
         v.extend(SolidOp::ALL.map(Solid));
-        v.extend([Unfold, Text3d, ZoomExtents, Snapping, ShowGrid]);
+        v.extend([Unfold, Physics, Text3d, ZoomExtents, Snapping, ShowGrid]);
         v.extend(crate::inference::settings::all_kinds().map(Snap));
         v.push(SideBar);
         v.extend(crate::ui::tray::TRAY_CARDS.map(Card));
@@ -258,6 +259,7 @@ impl Cmd {
             Cmd::FlipBlue => "cmd-flip-blue",
             Cmd::Solid(op) => return op.name(),
             Cmd::Unfold => "cmd-unfold",
+            Cmd::Physics => "cmd-physics",
             Cmd::Text3d => "cmd-text-3d",
             Cmd::ZoomExtents => "cmd-zoom-extents",
             Cmd::Snapping => "cmd-snapping",
@@ -348,6 +350,7 @@ impl Cmd {
             Cmd::FlipBlue => Icon::Flip(2),
             Cmd::Solid(op) => Icon::Solids(SolidOp::ALL.iter().position(|o| *o == op).unwrap_or(0) as u8),
             Cmd::Unfold => Icon::Unfold,
+            Cmd::Physics => Icon::Physics,
             Cmd::Text3d => Icon::Text3d,
             Cmd::ZoomExtents => Icon::ZoomExtents,
             Cmd::Snapping => Icon::Magnet,
@@ -457,6 +460,7 @@ impl Cmd {
                 SolidOp::Split => "cmd-desc-solid-split",
             }),
             Cmd::Unfold => tr!("cmd-desc-unfold"),
+            Cmd::Physics => tr!("cmd-desc-physics"),
             Cmd::Text3d => tr!("cmd-desc-text-3d"),
             Cmd::ZoomExtents => tr!("cmd-desc-zoom-extents"),
             Cmd::Snapping => tr!("cmd-desc-snapping"),
@@ -549,6 +553,7 @@ impl Cmd {
             Cmd::FlipBlue => Action::FlipAlong(2),
             Cmd::Solid(op) => Action::SolidTool(op),
             Cmd::Unfold => Action::Unfold,
+            Cmd::Physics => Action::Physics,
             Cmd::Text3d => Action::Text3d,
             Cmd::ZoomExtents => Action::ZoomExtents,
             Cmd::Snapping => Action::ToggleSnapping,
@@ -592,6 +597,7 @@ impl Cmd {
             Cmd::PrintExport => Some(app.printing.open && app.printing.advanced_tab == Some(super::printing_tools::PrintTab::Export)),
             Cmd::PrintRepair => Some(app.printing.open && app.printing.advanced_tab.is_none() && app.printing.repair_tab),
             Cmd::ModelInfo => Some(app.model_info.open),
+            Cmd::Physics => Some(app.physics.open),
             Cmd::ComponentParams => Some(app.rig_editor.open),
             Cmd::Library3d => Some(app.models.open),
             Cmd::GeneratorEditor => Some(app.gen_editor.open),

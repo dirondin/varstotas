@@ -275,6 +275,13 @@ impl Document {
         self.after_change();
     }
 
+    /// Show a temporary state of the model (a live preview, e.g. a physics run): redrawn,
+    /// no undo step, the document's dirty flag untouched. The caller restores or records it.
+    pub fn preview_change(&mut self, f: impl FnOnce(&mut Model)) {
+        f(&mut self.model);
+        self.model_version = next_model_version();
+    }
+
     /// Record an undo step for changes already made in place since `before`.
     pub fn record_step(&mut self, label: &str, before: Model) {
         self.rig_hook();

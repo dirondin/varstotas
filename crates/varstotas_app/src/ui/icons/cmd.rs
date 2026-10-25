@@ -378,6 +378,14 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             pen.circle((15.5, 7.0), 2.1, pal::GREEN);
             pen.circle((7.0, 11.5), 2.8, pal::RED);
         }
+        Icon::Physics => {
+            // a box falling onto a block, speed lines above it, tilted as it comes down
+            rect(pen, (3.0, 16.0), (21.0, 21.0), SHADE, pen.stroke());
+            pen.poly_c(&[(9.5, 5.5), (16.5, 7.0), (15.0, 14.0), (8.0, 12.5)], BLUE_SOFT, pen.stroke());
+            for (x, y0, y1) in [(9.0, 1.5, 3.5), (12.5, 1.0, 4.0), (16.0, 2.0, 4.0)] {
+                pen.line_c(&[(x, y0), (x, y1)], Stroke::new(W_THIN * pen.s, ORANGE));
+            }
+        }
         Icon::Print3d => {
             // the printer's frame and bed, the hot end on its gantry, a part growing layer by layer
             rect(pen, (2.5, 19.0), (21.5, 21.5), SHADE, pen.thin());

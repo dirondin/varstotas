@@ -1,0 +1,10 @@
+[package]
+name = "varstotas_physics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+varstotas_kernel = { workspace = true }
+glam.workspace = true
+rapier3d = "0.36"

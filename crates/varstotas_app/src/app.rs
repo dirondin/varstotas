@@ -274,6 +274,8 @@ pub enum Action {
     ExportDrawing,
     /// Tools → Unfold…: the flat pattern window.
     Unfold,
+    /// Tools → Physics…: drop the selected groups / components.
+    Physics,
     /// Open the UV Editor.
     UvEditor,
     /// Window → Sheets…: layout sheets.
@@ -579,6 +581,8 @@ pub struct VarstotasApp {
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
     /// Tools → Unfold… window.
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
+    /// Tools → Physics… window and its run.
+    pub(crate) physics: crate::ui::physics::PhysicsState,
     /// Window → Sheets… window.
     pub(crate) sheets: crate::ui::sheets::SheetsState,
     /// Window → Work Planes… window.
@@ -753,6 +757,7 @@ impl VarstotasApp {
             last_vector: None,
             text3d_dialog: None,
             unfold: Default::default(),
+            physics: Default::default(),
             sheets: Default::default(),
             planes_window: Default::default(),
             render_window: Default::default(),
@@ -977,6 +982,13 @@ impl VarstotasApp {
         if focused || was_focused || self.modal_open() || self.prefs_win.capture.is_some() {
             return;
         }
+        if self.physics_live() {
+            // Esc puts a physics run back; other keys wait for Apply / Cancel
+            if ctx.input(|i| i.key_pressed(Key::Escape)) {
+                self.physics_cancel();
+            }
+            return;
+        }
         let events = ctx.input(|i| i.events.clone());
         for ev in events {
             match ev {
@@ -1110,6 +1122,13 @@ impl VarstotasApp {
         }
         if self.scene_player.is_some() && response.contains_pointer() && ctx.input(|i| i.pointer.any_pressed()) {
             self.scene_player = None;
+        }
+        if self.physics_live() {
+            // a physics run is shown: the view can be turned, the tools wait
+            self.primary_held = ctx.input(|i| i.pointer.primary_down());
+            self.tool_pressed = false;
+            self.press_local = None;
+            return;
         }
         // Not over the view / style controls drawn on top of the viewport.
         let hud = self.hud_rect.expand(2.0);
@@ -1290,6 +1309,9 @@ impl VarstotasApp {
     fn run_actions(&mut self, ctx: &egui::Context) {
         let actions = std::mem::take(&mut self.actions);
         for a in actions {
+            if !self.physics_before_action(&a) {
+                continue;
+            }
             self.run_action(ctx, a);
         }
     }
@@ -1366,6 +1388,7 @@ impl VarstotasApp {
             Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
+            Action::Physics => self.physics.open = true,
             Action::UvEditor => self.open_uv_editor(),
             Action::Sheets => self.sheets.open = true,
             Action::WorkPlanes => self.planes_window.open = true,
@@ -2589,7 +2612,8 @@ impl VarstotasApp {
             return;
         }
         let minutes = self.prefs.autosave_minutes.max(1);
-        if !self.doc.dirty || self.doc.model_version == self.autosave.version {
+        // a physics run shows positions that are not the document's yet
+        if !self.doc.dirty || self.doc.model_version == self.autosave.version || self.physics_live() {
             // Nothing new to protect: the interval starts at the first unsaved change.
             self.autosave.last = self.now;
             return;
@@ -2979,6 +3003,7 @@ impl eframe::App for VarstotasApp {
         self.poll_external_edits();
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
+        self.physics_window(&ctx);
         self.sheets_window(&ctx);
         self.work_planes_window(&ctx);
         self.render_window(&ctx);

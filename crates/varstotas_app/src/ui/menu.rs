@@ -483,6 +483,7 @@ impl VarstotasApp {
                     }
                 });
                 self.cmd_item(ui, Cmd::Unfold);
+                self.cmd_item(ui, Cmd::Physics);
                 ui.separator();
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);

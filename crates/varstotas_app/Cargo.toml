@@ -13,6 +13,7 @@ varstotas_i18n = { workspace = true }
 varstotas_kernel.workspace = true
 varstotas_render.workspace = true
 varstotas_script.workspace = true
+varstotas_physics.workspace = true
 glam.workspace = true
 egui.workspace = true
 egui-wgpu.workspace = true

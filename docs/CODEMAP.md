@@ -8,6 +8,7 @@ Status: `docs/06-STATUS.md`. UI regression scripts: `qa/scripts/` (run by `qa/ru
 - `varstotas_kernel`: geometry and document. It has no UI or GPU code.
 - `varstotas_render`: camera and wgpu renderer.
 - `varstotas_script`: Rhai scripting API over the kernel (no UI); used by the Script Console and the bridge.
+- `varstotas_physics`: one-shot physics on rapier3d (no UI): `DropSim` (selected groups / components fall onto the rest of the visible model, optional floor at Z = 0; frames carry the bodies' new transforms), `drop_bodies`, `set_transforms`. Plan: `docs/PHYSICS-PLAN.md`.
 - `python/`: `varstotas.py` (Python client of the bridge) and `varstotas_mcp.py` (MCP server, stdio); embedded into the app and installed to `~/.varstotas/python/`.
 - `varstotas_app`: the `varstotas` binary (UI, tools, inference).
 
@@ -130,6 +131,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | `vector_export.rs` | 2D drawing of the view (visibility by raycast, profiles, sections, dims) → SVG / PDF (`to_pdf_pages`: one page per drawing) |
 | `layout.rs` | Sheets on paper: `viewport_drawing` (scene camera → `view_lines`, fit or 1:N, clipped), `sheet_drawing` (border, title block, texts with `{credits}` (`CREDITS`, `credits_text`), parts tables), `standard_views` (3 views + iso at a standard scale), overall dims (`auto_dims`), `table_rows` / `table_size`, `sheets_pdf`, `scene_camera` / `camera_scene` |
 | `ui/sheets.rs` | Window → Sheets…: sheet list, paper, title block, item properties, preview with pick / move / resize (working copy → one undo step), `export_sheets`, harness dumps |
+| `ui/physics.rs` | Tools → Physics… window: Drop settings, the run on a thread shown live through `Document::preview_change`, Apply (one undo step) / Cancel, `physics_before_action` (an edit cancels a shown run), `physics_dump` (QA `physics=(…) physics_z=[…]`) |
 | `ui/unfold.rs` | Tools → Unfold… window (live preview, paper, scale, tabs), `sheet_drawing`, `export_unfold` (SVG / PDF / DXF) |
 | `nav.rs` | mouse and trackpad camera navigation; `startup_camera` (new documents: the standard Iso view) |
 | `animation.rs` | animation export frames: `scene_frames` (scene tour: holds + `CameraAnimation` transitions), `orbit_frames`, `frame_path`, `ffmpeg()` lookup, `encode` (H.264 MP4) |

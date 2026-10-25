@@ -2279,6 +2279,7 @@ impl VarstotasApp {
             "flip_blue" => Action::FlipAlong(2),
             "export_dialog" => Action::ExportImage,
             "unfold" => Action::Unfold,
+            "physics" => Action::Physics,
             "sheets" => Action::Sheets,
             "work_planes" => Action::WorkPlanes,
             "model_info" => Action::ModelInfo,
@@ -2602,7 +2603,7 @@ impl VarstotasApp {
             f.y + 0.0,
             f.z + 0.0
         );
-        let extra = format!("{extra} {} {}",self.printing_dump(),self.print_tools_dump());
+        let extra = format!("{extra} {} {} {}", self.printing_dump(), self.print_tools_dump(), self.physics_dump());
         let sh = &m.shadows;
         let sun = sh.sun_direction();
         let extra = format!(

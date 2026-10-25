@@ -1,0 +1,33 @@
+# Physics: a box drops onto a slab and rests; Apply is one undo step; Cancel puts it back.
+box 30 30 200 20 20 20
+select_all
+action make_group
+box 0 0 0 100 100 50
+view iso
+zoom_extents
+wait 5
+expect physics=(idle bodies=1 fell=0
+expect physics_z=[200]
+action physics
+wait 10
+screenshot shots/physics-window.bmp
+action click_spot physics:run
+wait 120
+expect physics=(done bodies=1 fell=0
+expect physics_z=[50]
+screenshot shots/physics-done.bmp
+action click_spot physics:apply
+wait 10
+expect physics=(idle
+expect physics_z=[50]
+undo
+wait 10
+expect physics_z=[200]
+action click_spot physics:run
+wait 120
+expect physics=(done
+expect physics_z=[50]
+action click_spot physics:cancel
+wait 10
+expect physics=(idle
+expect physics_z=[200]
