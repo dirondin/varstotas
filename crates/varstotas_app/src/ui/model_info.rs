@@ -1,4 +1,4 @@
-//! Window → Model Info…: statistics of the document — what the scene shows (every placed copy
+//! Window → Model Info: statistics of the document — what the scene shows (every placed copy
 //! counted) and what the file stores (definitions, materials, textures …), the libraries — and
 //! Purge Unused: remove the components and materials nothing in the scene uses. Also File →
 //! Preview Image → Show…: the document's preview picture in a window of its own.

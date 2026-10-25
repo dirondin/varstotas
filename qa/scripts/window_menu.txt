@@ -1,4 +1,5 @@
-# Window menu: Physics…, Unfold… and 3D Printing open from it (moved from Tools / Extensions).
+# Window menu: Physics, Unfold, 3D Printing (moved from Tools / Extensions) and the Materials
+# Online Library open from it.
 box 0 0 0 100 100 100
 view iso
 zoom_extents
@@ -15,3 +16,8 @@ wait 5
 action click_spot cmd:Unfold
 wait 10
 expect unfold_open=true
+action click_spot menu:Window
+wait 5
+action click_spot cmd:MaterialsOnline
+wait 10
+expect online=(true

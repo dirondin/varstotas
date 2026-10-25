@@ -293,7 +293,8 @@ cmd-flip-blue = Mėlyna kryptis
 cmd-unfold = Išklostyti…
 cmd-physics = Fizika…
 cmd-text-3d = 3D tekstas…
-cmd-library-3d = 3D biblioteka…
+cmd-library-3d = Internetinė 3D biblioteka…
+cmd-materials-online = Internetinė medžiagų biblioteka…
 cmd-zoom-extents = Rodyti visą modelį
 cmd-snapping = Prisitraukimas
 cmd-show-grid = Rodyti tinklelį
@@ -352,6 +353,7 @@ cmd-desc-work-planes = Išsaugotos braižymo plokštumos.
 cmd-desc-model-info = Dokumento statistika, nenaudojamų elementų išvalymas.
 cmd-desc-component-params = Pažymėto komponento parametrai: reikšmės, kurios pasuka, pastumia, parodo ar nuspalvina jo dalis.
 cmd-desc-library-3d = Nemokami modeliai iš internetinių bibliotekų.
+cmd-desc-materials-online = Nemokamos PBR medžiagos iš internetinių bibliotekų.
 cmd-desc-generator-editor = Rašyti ir vykdyti generatorių scenarijus.
 cmd-desc-console = Vykdyti Rhai komandas su modeliu.
 cmd-desc-log = Klaidos ir įspėjimai iš visur: scenarijai, importas / eksportas, bibliotekos, atsisiuntimai …
@@ -929,7 +931,7 @@ tool-guide-plane-instructor =
     • Po pirmo spustelėjimo rodyklės nustato normalę: → raudona, ← žalia, ↑ mėlyna, ↓ paskutinė briauna.
     • Nauja plokštuma tampa aktyvia: taškai ore krenta ant jos, ašys ir tinklelis seka paskui ją.
     • Tempkite aktyvios plokštumos rankenėles: pradžią, normalės galą (pakreipti), raudoną rankenėlę (sukti).
-    • Langas → Darbo plokštumos…: aktyvuoti, slėpti, pervadinti, ištrinti ar įvesti kampus.
+    • Langas → Darbo plokštumos: aktyvuoti, slėpti, pervadinti, ištrinti ar įvesti kampus.
 tool-slice-instructor =
     Nustatykite pjovimo plokštumą kaip pagalbinę plokštumą: spustelėkite tris taškus.
     • Dvigubas spustelėjimas ant paviršiaus (arba Enter po pirmo spustelėjimo): to paviršiaus plokštuma.
@@ -1251,7 +1253,7 @@ prefs-use-current-doc = Naudoti dabartinio dokumento
 prefs-use-current-doc-tip = Perimti atidaryto dokumento vaizdavimo nustatymus
 prefs-apply-current-doc = Taikyti dabartiniam dokumentui
 prefs-apply-current-doc-tip = Atidarytas dokumentas gauna šiuos nustatymus (Atšaukti juos grąžina)
-prefs-render-note = Failas → Naujas pradedamas su šiais; Langas → Vaizdavimas… keičia atidaryto dokumento nustatymus.
+prefs-render-note = Failas → Naujas pradedamas su šiais; Langas → Vaizdavimas keičia atidaryto dokumento nustatymus.
 prefs-programs = Programos
 prefs-ffmpeg = ffmpeg (vaizdo įrašai iš Failas → Eksportuoti → Animacija)
 prefs-ffmpeg-missing = nerasta: įdiekite (brew install ffmpeg) arba pasirinkite programą
@@ -1292,7 +1294,7 @@ prefs-watch-offer = Siūlyti importuoti naujus modelių failus
 prefs-watch-offer-tip = Kiekvienas naujas modelio failas ar archyvas aplanke siūlomas importuoti (visada įjungta, kol laukiama puslapio iš Kitų svetainių)
 prefs-watched-folder = Stebimas aplankas
 prefs-watched-folder-tip = Kur naršyklė įrašo failus
-prefs-downloads-note = Taip pat Langas → 3D biblioteka… → Kitos svetainės.
+prefs-downloads-note = Taip pat Langas → Internetinė 3D biblioteka → Kitos svetainės.
 
 ## Toolbar
 
@@ -1656,7 +1658,7 @@ tray-dim-text = Tekstas
 tray-dim-linear = Linijinis matmuo
 tray-light-title = Šviesa
 tray-light-render = Vaizdavimas…
-tray-light-render-hover = Langas → Vaizdavimas…
+tray-light-render-hover = Langas → Vaizdavimas
 tray-light-hint = Perkelti / Sukti ją perkelia ir pasuka; tempkite kvadratinę rankenėlę, kad nusitaikytumėte.
 tray-section-title = Pjūvio plokštuma
 tray-section-name = Pavadinimas
@@ -1784,7 +1786,7 @@ library-show-in-finder = Rodyti programoje Finder
 ## Top row and the … menu
 
 library-plus-hover = Išsaugoti pasirinkimą bibliotekoje, naujas generatorius
-library-online-hover = 3D biblioteka: nemokami modeliai iš interneto (Poly Haven, Smithsonian, NASA, Kenney, papildiniai)
+library-online-hover = Internetinė 3D biblioteka: nemokami modeliai iš interneto (Poly Haven, Smithsonian, NASA, Kenney, papildiniai)
 library-save-selection = Išsaugoti pasirinkimą bibliotekoje…
 library-select-first = Pirmiausia ką nors pasirinkite
 library-new-generator = Naujas generatorius…
@@ -1924,7 +1926,7 @@ library-rename-failed = Pervadinti { $path }: { $error }
 ## Library card
 
 mat-plus-hover = Nauja medžiaga iš paveikslėlio, importuoti medžiagų failus
-mat-online-hover = Medžiagos internete: nemokamos PBR medžiagos (Poly Haven, ambientCG, papildiniai)
+mat-online-hover = Internetinė medžiagų biblioteka: nemokamos PBR medžiagos (Poly Haven, ambientCG, papildiniai)
 mat-new-from-texture = Nauja iš tekstūros…
 mat-new-from-texture-hover = Medžiaga iš paveikslėlio failo (PNG, JPEG)
 mat-new-procedural = Nauja procedūrinė…
@@ -2016,7 +2018,7 @@ mat-deleted-from-library = Ištrinta iš medžiagų bibliotekos: { $name }
 
 ## Online materials (window and catalogues)
 
-mat-online-title = Medžiagos internete
+mat-online-title = Internetinė medžiagų biblioteka
 mat-online-plugins-hint =
     Papildiniai su @material_source
     rodomi čia
@@ -2118,7 +2120,7 @@ mated-editing = Redaguojama { $file }: išsaugokite, kad atnaujintumėte medžia
 mated-cant-open-editor = Nepavyko atidaryti vaizdų redaktoriaus: { $error }
 mated-reloaded = { $slot }: įkelta iš naujo iš vaizdų redaktoriaus
 
-## ======== 3D biblioteka ========
+## ======== Internetinė 3D biblioteka ========
 
 model-lib-licence-any = Bet kuri licencija
 model-lib-licence-commercial = Komercinis naudojimas leidžiamas
@@ -2127,7 +2129,7 @@ model-lib-licence-known = Žinoma licencija
 
 ## Window and filters
 
-model-lib-title = 3D biblioteka
+model-lib-title = Internetinė 3D biblioteka
 model-lib-source = Šaltinis
 model-lib-source-count = { $label } ({ $n })
 model-lib-plugins-hint =
@@ -2870,7 +2872,7 @@ dialog-about-licences = Licencijos…
 sheets-title = Lapai
 sheets-custom = Pasirinktinis
 sheets-none-yet = Lapų dar nėra.
-sheets-none-first = Nėra lapo: pirmiausia pridėkite (Langas → Lapai…)
+sheets-none-first = Nėra lapo: pirmiausia pridėkite (Langas → Lapai)
 sheets-nothing-to-export = Lapai: nėra ką eksportuoti (pirmiausia pridėkite lapą)
 # $i is the sheet's number, $n the number of sheets
 sheets-exported-one = Eksportuotas lapas { $i } iš { $n }: { $path }
@@ -3270,7 +3272,7 @@ console-ref-console-4 = Eilutės `// @tag …` viršuje paverčia scenarijų pap
 console-ref-console-6 = Žymės
 ## Puslapis: generatoriai
 console-ref-generators-1 = Generatorius yra komponentas su parametrais: scenarijus, kurio `build(p)` sukuria komponento turinį jo paties ašyse (pradžios taškas yra įterpimo taškas). Kiekviena kopija turi savo reikšmes Objekto informacijoje; kopijos su vienodomis reikšmėmis dalijasi vienu apibrėžimu.
-console-ref-generators-2 = Langas → Generatorių redaktorius… (arba Redaguoti generatorių… ant plytelės): kairėje šaltinis, dešinėje gyvas peržiūros langas su parametrų laukais; Taikyti atnaujina dokumentą, Išsaugoti bibliotekoje įrašo failą.
+console-ref-generators-2 = Langas → Generatorių redaktorius (arba Redaguoti generatorių… ant plytelės): kairėje šaltinis, dešinėje gyvas peržiūros langas su parametrų laukais; Taikyti atnaujina dokumentą, Išsaugoti bibliotekoje įrašo failą.
 console-ref-generators-4 = Antraštė
 console-ref-generators-5 = privaloma; generatoriaus raktas dokumente
 console-ref-generators-6 = `p` reikšmė; kiekviena intervalo dalis neprivaloma
@@ -3278,7 +3280,7 @@ console-ref-generators-7 = iš parametrų apskaičiuota reikšmė (Objekto infor
 console-ref-generators-8 = reikšmės, kurioms ji klaidinga, atmetamos
 console-ref-generators-9 = Parametrų tipai
 ## Puslapis: komponentas
-console-ref-component-1 = Langas → Komponento parametrai… suteikia bet kuriam komponentui parametrus: reikšmių eilutes, formules, jo dalių judesius (sukti, stumti, rodyti, dažyti, nustatyti dalies parametrą) ir pasirinktinį scenarijų.
+console-ref-component-1 = Langas → Komponento parametrai suteikia bet kuriam komponentui parametrus: reikšmių eilutes, formules, jo dalių judesius (sukti, stumti, rodyti, dažyti, nustatyti dalies parametrą) ir pasirinktinį scenarijų.
 console-ref-component-2 = Scenarijus apibrėžia `update(p)`. Jis vykdomas po judesių, komponento viduje, su visa scenarijų API — tomis pačiomis funkcijomis kaip konsolėje ir generatoriuose. `p` laiko reikšmes ir formules.
 console-ref-component-4 = Dalių radimas
 console-ref-component-5 = grupė / komponentas tiesiai komponento viduje
@@ -3571,7 +3573,7 @@ help-modifying-13 = Apversti išilgai
 help-modifying-14 = atspindėti pažymėtą dalyką išilgai raudonos, žalios ar mėlynos krypties
 help-modifying-15 = Švelninti briaunas kortelė
 help-modifying-16 = švelninti / glotninti briaunas pagal kampą
-help-modifying-17 = Langas → Išklostyti…
+help-modifying-17 = Langas → Išklostyti
 help-modifying-18 = išklostyti paviršius ar grupes į iškirpimo šabloną (SVG / PDF / DXF)
 ## inference
 help-inference-1 = Piešiant žymeklis prilimpa prie modelio taškų ir krypčių; ženklas ir paaiškinimas parodo, ką rado.
@@ -3593,7 +3595,7 @@ help-inference-16 = Prilipimo meniu
 help-inference-17 = Magneto mygtukas (ir Prilipimo meniu) įjungia ar išjungia kiekvieną išvedimą; `Shift+S` išjungia ir įjungia prilipimą visiškai. Žingsniai apvalina laisvus perkėlimus (10 mm), kampus (15°) ir mastelio koeficientus — prilipimas prie geometrijos ir įvestos reikšmės turi pirmenybę.
 help-inference-18 = Rodinys → Tinklelis rodo tinklelį su savo prilipimu; žingsnis yra Langas → Nustatymai → Piešimas, o kai aktyvus Žymėti, įvedus ilgį jis nustatomas.
 help-inference-19 = Darbo plokštumos
-help-inference-20 = Pagalbinės plokštumos įrankis (Įrankių meniu) ir Langas → Darbo plokštumos… sukuria plokštumą piešti ore: taškai tuščioje erdvėje nusileidžia ant jos, ašys ir tinklelis seka paskui ją.
+help-inference-20 = Pagalbinės plokštumos įrankis (Įrankių meniu) ir Langas → Darbo plokštumos sukuria plokštumą piešti ore: taškai tuščioje erdvėje nusileidžia ant jos, ašys ir tinklelis seka paskui ją.
 ## measurements
 help-measurements-1 = Matmenų laukas būsenos juostos dešinėje rodo dabartinį ilgį, kampą ar dydį. Tiesiog renkite, kol įrankis veikia, ir paspauskite Enter; Backspace taiso, Esc išvalo.
 help-measurements-2 = 1200, 1.2m, 120cm, 4', 1'6"
@@ -3626,8 +3628,8 @@ help-groups-12 = Vėl padėti iš bibliotekos
 help-groups-13 = modelyje esanti kopija naudojama pakartotinai, kol nepakeista; ją suredagavus, bibliotekos originalas ateina kaip naujas apibrėžimas („Kėdė 2“)
 help-groups-14 = Komponentai su parametrais
 help-groups-15 = Redaguoti → Padaryti parametrinį suteikia komponentui dydžius X / Y / Z (tempti ar keisti mastelį) ir kopijų eilę Objekto informacijoje.
-help-groups-16 = Langas → Komponento parametrai… suteikia bet kuriam komponentui parametrus: reikšmes ir formules, kurios sukioja, stumdo, rodo ar dažo jo dalis, pasirinktinį scenarijų; kiekviena kopija turi savo reikšmes (slankikliai Objekto informacijoje).
-help-groups-17 = Generatoriai yra komponentai, sukurti scenarijaus su tipizuotais parametrais (Langas → Generatorių redaktorius…). Braižyti → Formos kūnai taip pat yra generatoriai.
+help-groups-16 = Langas → Komponento parametrai suteikia bet kuriam komponentui parametrus: reikšmes ir formules, kurios sukioja, stumdo, rodo ar dažo jo dalis, pasirinktinį scenarijų; kiekviena kopija turi savo reikšmes (slankikliai Objekto informacijoje).
+help-groups-17 = Generatoriai yra komponentai, sukurti scenarijaus su tipizuotais parametrais (Langas → Generatorių redaktorius). Braižyti → Formos kūnai taip pat yra generatoriai.
 help-groups-18 = Komponento scenarijus Scenarijų žinyne
 help-groups-19 = Generatoriai Scenarijų žinyne
 ## library
@@ -3649,8 +3651,8 @@ help-library-15 = Dešinysis spustelėjimas ant plytelės
 help-library-16 = Padėti, Nustatyti peržiūrą iš rodinio, Nustatyti peržiūros vaizdą…, Pašalinti peržiūros vaizdą, Pervadinti…, Rodyti Finder, Ištrinti…; dokumento komponentui taip pat Pažymėti egzempliorius, Išsaugoti bibliotekoje, Parametrai…, Ištrinti iš dokumento…
 help-library-17 = Paveikslėliai
 help-library-18 = Plytelė rodo failo paveikslėlį, jei jis yra, kitaip — sugeneruotą miniatiūrą. Nustatyti peržiūrą iš rodinio paima rodinį tokį, koks jis dabar — pirmiausia sukadruokite komponentą. Iš bibliotekos padėtas komponentas pasiima failo paveikslėlį su savimi; Failas → Peržiūros vaizdas nustato atverto dokumento paveikslėlį.
-help-library-19 = 3D biblioteka
-help-library-20 = Debesies mygtukas Komponentų kortelėje (arba Langas → 3D biblioteka…) atsisiunčia modelius: Poly Haven, Smithsonian, NASA, Kenney rinkinius, pagal URL arba iš papildinių šaltinių. Atsisiųstas modelis tampa bibliotekos komponentu su savo padėka (Objekto informacija → Šaltinis, Failas → Eksportuoti → Priskyrimai). Filtrai pagal licenciją, formatą ir dydį; mėgstami ir atsisiuntimų istorija.
+help-library-19 = Internetinė 3D biblioteka
+help-library-20 = Debesies mygtukas Komponentų kortelėje (arba Langas → Internetinė 3D biblioteka) atsisiunčia modelius: Poly Haven, Smithsonian, NASA, Kenney rinkinius, pagal URL arba iš papildinių šaltinių. Atsisiųstas modelis tampa bibliotekos komponentu su savo padėka (Objekto informacija → Šaltinis, Failas → Eksportuoti → Priskyrimai). Filtrai pagal licenciją, formatą ir dydį; mėgstami ir atsisiuntimų istorija.
 help-library-21 = Kiekvienas šaltinis rodo savo sąlygas virš modelių (papildinio eilutė @notice). Modelis, kurio licencija riboja naudojimą (nekomercinė, be išvestinių darbų, dalytis tomis pačiomis sąlygomis, paties tinklalapio licencija, nežinoma), gauna įspėjimą jį padedant ir eksportuojant dokumentą. Pagalba → Licencijos… išvardija Varstotas licenciją, atvirojo kodo komponentus, failų formatus ir internetines bibliotekas su jų sąlygomis.
 ## materials
 help-materials-1 = Medžiagų kortelė rodo modelio medžiagas (Modelyje), jūsų biblioteką (`~/.varstotas/materials` arba aplanką, kurį pasirenkate su …) ir Pavyzdžius; dešiniuoju mygtuku spustelėkite plytelę: Naudoti, Pervadinti…, Išsaugoti bibliotekoje, Rodyti Finder, Eksportuoti…, Ištrinti…. Pasirinkus bibliotekos medžiagą, tik parengiamas Dažų kibiras: medžiaga prisijungia prie modelio (Modelyje) nudažius pirmąjį paviršių. Ištrinti ant plytelės Modelyje pašalina medžiagą iš modelio, jos paviršiai grįžta į numatytąją (Redaguoti → Atšaukti ją grąžina). Medžiagą redaguokite ten: spalva, nepermatomumas, tekstūros vaizdas ir jo dydis, fizinės savybės Realistiniam stiliui (metalas, šiurkštumas, stiklas, spinduliavimas, žemėlapiai, danga, blizgesys).
@@ -3669,7 +3671,7 @@ help-organizing-4 = žymių (sluoksnių) matomumas, spalva ir pavadinimas; ištr
 help-organizing-5 = Struktūra
 help-organizing-6 = grupių ir komponentų medis: Priartinti prie, Redaguoti, Paslėpti, Išskaidyti, Iškelti iš grupės, Ištrinti; vilkite eilutes, kad perkeltumėte objektus tarp grupių
 help-organizing-7 = Paslėpti / Rodyti viską
-help-organizing-8 = Langas → Modelio informacija…
+help-organizing-8 = Langas → Modelio informacija
 help-organizing-9 = dokumento statistika (paviršiai, trikampiai, komponentai, medžiagos, tekstūros …) ir Pašalinti nenaudojamus
 ## construction
 help-construction-1 = Pagalbinės linijos žymimos, perkeliamos ir trinamos kaip geometrija; Redaguoti → Ištrinti pagalbines linijas pašalina jas visas, Rodinys → Pagalbinės linijos paslepia. Įrankiai → 3D tekstas… sukuria tekstą kaip geometriją.
@@ -3687,7 +3689,7 @@ help-styles-9 = matyti pro paviršius; briaunos ir storos kontūro linijos įjun
 help-styles-10 = Šešėliai
 help-styles-11 = saulės šešėliai; laikas ir data yra Šešėlių kortelėje
 help-styles-12 = Vaizdo kūrimas
-help-styles-13 = Langas → Vaizdo kūrimas… sukuria rodinio vaizdą spindulių sekimu GPU: stiklas, atspindžiai, šviesos, švelnūs šešėliai; kokybės šablonai, kadro dydis, lauko gylis, triukšmo šalinimas (kai įdiegtas Intel OIDN), spalvų korekcija; PNG / EXR arba visos scenos iš karto.
+help-styles-13 = Langas → Vaizdo kūrimas sukuria rodinio vaizdą spindulių sekimu GPU: stiklas, atspindžiai, šviesos, švelnūs šešėliai; kokybės šablonai, kadro dydis, lauko gylis, triukšmo šalinimas (kai įdiegtas Intel OIDN), spalvų korekcija; PNG / EXR arba visos scenos iš karto.
 help-styles-14 = Šviesos (taškinė, prožektoriaus, srities) padedamos iš Vaizdo kūrimo lango; jos pažymimos spustelėjus jų ženklą, perkeliamos ir sukamos kaip kiti objektai.
 help-styles-15 = Failas → Eksportuoti → 2D grafika (PNG) išsaugo rodinį toks, koks jis yra; Failas → Eksportuoti → Animacija… sukuria vaizdo įrašą ar PNG kadrus iš scenų arba apsisukimo aplink.
 ## scenes
@@ -3695,7 +3697,7 @@ help-scenes-1 = Scenų kortelė
 help-scenes-2 = išsaugoti rodiniai su savo stiliumi, matomomis žymėmis ir pjūviu; skirtukai virš rodinio juos perjungia
 help-scenes-3 = Rodinys → Animacija
 help-scenes-4 = Groti scenas; PgDn / PgUp — kita / ankstesnė scena
-help-scenes-5 = Langas → Lapai…
+help-scenes-5 = Langas → Lapai
 help-scenes-6 = maketavimo puslapiai: scenų rodiniai mastelio 1:N, tekstai, pagrindinis užrašas, standartiniai rodiniai su matmenimis, dalių lentelė; kelių puslapių PDF
 help-scenes-7 = Failas → Eksportuoti → 2D brėžinys
 help-scenes-8 = dabartinis rodinys kaip vektorinis SVG / PDF su kontūrais, paslėptomis linijomis, pjūviais ir matmenimis
@@ -3703,7 +3705,7 @@ help-scenes-9 = Failas → Eksportuoti → Ataskaita
 help-scenes-10 = dalys su pjovimo dydžiais, plotai pagal medžiagą (CSV)
 ## files
 help-files-1 = Dokumentai yra `.vrst` failai (tekstūros ir paveikslėliai išsaugomi viduje). Failas → Naujas iš šablono pasirenka vienetus; Langas → Nustatymai nustato numatytąjį šabloną ir automatinio išsaugojimo intervalą.
-help-files-2 = Langas → Nustatymai… turi skiltis kairėje ir paiešką: Bendra (automatinis išsaugojimas, Failas → Naujas šablonas, kiek atšaukimo žingsnių laikoma), Sąsaja (šviesi, tamsi ar sistemos tema, meniu ir skydelių mastelis, įrankių juostos piktogramų dydis), Piešimas (tinklelis, prilipimas ir žingsniai — tie patys jungikliai kaip Prilipimo meniu), Bibliotekos (komponentų ir medžiagų aplankai, Pavyzdžiai, plytelių dydis), Atsisiuntimai (stebimas aplankas), Naršymas (pelė ir jutiklinis kilimėlis), Spartieji klavišai (spustelėkite sparčiąjį klavišą ir paspauskite naujus klavišus; Backspace jį pašalina, ↺ grąžina numatytąjį), Vaizdo kūrimas (naujų dokumentų vaizdo kūrimo nustatymai; kur yra ffmpeg ir Open Image Denoise biblioteka) ir Rodinys (kaip atrodo naujas dokumentas: stilius, briaunos, ašys, žemė, dangus, tinklelis, šešėliai, projekcija, matymo laukas; Naudoti dabartinį rodinį / Taikyti dabartiniam rodiniui). Pakeitimai taikomi iš karto; Atkurti grąžina skiltį į numatytąsias reikšmes.
+help-files-2 = Langas → Nustatymai turi skiltis kairėje ir paiešką: Bendra (automatinis išsaugojimas, Failas → Naujas šablonas, kiek atšaukimo žingsnių laikoma), Sąsaja (šviesi, tamsi ar sistemos tema, meniu ir skydelių mastelis, įrankių juostos piktogramų dydis), Piešimas (tinklelis, prilipimas ir žingsniai — tie patys jungikliai kaip Prilipimo meniu), Bibliotekos (komponentų ir medžiagų aplankai, Pavyzdžiai, plytelių dydis), Atsisiuntimai (stebimas aplankas), Naršymas (pelė ir jutiklinis kilimėlis), Spartieji klavišai (spustelėkite sparčiąjį klavišą ir paspauskite naujus klavišus; Backspace jį pašalina, ↺ grąžina numatytąjį), Vaizdo kūrimas (naujų dokumentų vaizdo kūrimo nustatymai; kur yra ffmpeg ir Open Image Denoise biblioteka) ir Rodinys (kaip atrodo naujas dokumentas: stilius, briaunos, ašys, žemė, dangus, tinklelis, šešėliai, projekcija, matymo laukas; Naudoti dabartinį rodinį / Taikyti dabartiniam rodiniui). Pakeitimai taikomi iš karto; Atkurti grąžina skiltį į numatytąsias reikšmes.
 help-files-3 = Automatinis išsaugojimas įrašo neišsaugotus pakeitimus į `<name>.vrst~autosave` šalia failo; po strigties Varstotas pasiūlo juos atkurti.
 help-files-4 = Importas
 help-files-5 = OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, taškai iš CSV ir formatai, pridėti papildinių; failus taip pat galite numesti ant lango
@@ -3727,12 +3729,12 @@ help-problems-1 = Langas → Žurnalas
 help-problems-2 = kiekviena seanso klaida ir įspėjimas — scenarijai, importas / eksportas, bibliotekos, atsisiuntimai; raudonas skaitiklis būsenos juostoje reiškia naujas klaidas
 help-problems-3 = Redaguoti → Atšaukti
 help-problems-4 = kiekvieną operaciją galima atšaukti; nepavykusi operacija nieko nekeičia
-help-problems-5 = Langas → Modelio informacija… → Pašalinti nenaudojamus
+help-problems-5 = Langas → Modelio informacija → Pašalinti nenaudojamus
 help-problems-6 = pašalinti nenaudojamus komponentus, medžiagas ir žymes, kad failas būtų mažesnis
 help-problems-7 = Paviršiai atrodo pilkai mėlyni
 help-problems-8 = matote jų galinę pusę: pažymėkite juos, dešinysis spustelėjimas → Apversti paviršius arba Orientuoti paviršius
 help-problems-9 = Negalima piešti ten, kur tikėtasi
-help-problems-10 = patikrinkite Shift / rodyklių užraktus, aktyvią darbo plokštumą (Langas → Darbo plokštumos…) ir ar nesate grupės viduje (Esc iš jos išeina)
+help-problems-10 = patikrinkite Shift / rodyklių užraktus, aktyvią darbo plokštumą (Langas → Darbo plokštumos) ir ar nesate grupės viduje (Esc iš jos išeina)
 help-problems-11 = Kažko trūksta
 help-problems-12 = Redaguoti → Rodyti viską, Žymių kortelė (paslėptos žymės), Rodinys → Pjūvio plokštumos
 
@@ -4537,7 +4539,7 @@ print-go-check = Eiti į patikrą
 print-analysis-run = Vykdyti analizę
 print-bed-refresh = Atnaujinti stalo patikrą
 
-# Window → Physics…
+# Window → Physics
 physics-title = Fizika
 physics-drop = Kritimas
 physics-drop-hint = Pažymėtos grupės ir komponentai nukrenta ir nurimsta ant visko, kas matoma.

@@ -511,13 +511,15 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 use Cmd::*;
-                // by feature: the model, its look, making things from it, scripting; Some(None): the
+                // by feature: the model, the online libraries, its look, making things from it, scripting; Some(None): the
                 // UV Editor (no command of its own); None: a separator
                 for c in [
                     Some(Some(ModelInfo)),
                     Some(Some(ComponentParams)),
                     Some(Some(WorkPlanes)),
+                    None,
                     Some(Some(Library3d)),
+                    Some(Some(MaterialsOnline)),
                     None,
                     Some(None),
                     Some(Some(Render)),
@@ -538,7 +540,8 @@ impl VarstotasApp {
                         continue;
                     };
                     let Some(c) = c else {
-                        let r = icon_row(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, self.uv.open);
+                        let label = tr!("menu-uv-editor");
+                        let r = icon_row(ui, Some(Icon::UvEditor), label.trim_end_matches('…'), None, true, self.uv.open);
                         super::tray_lib::spot("menu:UvEditor", r.rect.center());
                         if r.clicked() {
                             self.actions.push(Action::UvEditor);
@@ -552,7 +555,8 @@ impl VarstotasApp {
                         _ => c.menu_label(),
                     };
                     let on = c.checked(self).unwrap_or(false);
-                    let r = icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), on).on_hover_text(c.description());
+                    // window names without the trailing "…" here
+                    let r = icon_row(ui, Some(c.icon()), label.trim_end_matches('…'), c.shortcut().as_deref(), c.enabled(self), on).on_hover_text(c.description());
                     super::tray_lib::spot(format!("cmd:{}", c.key()), r.rect.center());
                     if r.clicked() {
                         self.actions.push(c.action());

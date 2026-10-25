@@ -1,4 +1,4 @@
-//! Window → Unfold…: flat patterns of the selection (or the whole context) with a live
+//! Window → Unfold: flat patterns of the selection (or the whole context) with a live
 //! preview; export to SVG (sheets one under another), PDF (a page per sheet) or DXF.
 
 use crate::app::VarstotasApp;

@@ -95,6 +95,7 @@ pub enum Cmd {
     PrintAnalysis, PrintBed, PrintSplit, PrintExport,
     ComponentParams,
     Library3d,
+    MaterialsOnline,
     GeneratorEditor,
     Console,
     Log,
@@ -119,7 +120,7 @@ impl Cmd {
         v.push(SideBar);
         v.extend(crate::ui::tray::TRAY_CARDS.map(Card));
         v.extend([PrintCheck, PrintRepair, PrintAnalysis, PrintBed, PrintSplit, PrintExport]);
-        v.extend([Render, WorkPlanes, ModelInfo, ComponentParams, Library3d, GeneratorEditor, Console, Log, Preferences]);
+        v.extend([Render, WorkPlanes, ModelInfo, ComponentParams, Library3d, MaterialsOnline, GeneratorEditor, Console, Log, Preferences]);
         v
     }
 
@@ -278,6 +279,7 @@ impl Cmd {
             Cmd::ModelInfo => "cmd-model-info",
             Cmd::ComponentParams => "cmd-component-params",
             Cmd::Library3d => "cmd-library-3d",
+            Cmd::MaterialsOnline => "cmd-materials-online",
             Cmd::GeneratorEditor => "cmd-generator-editor",
             Cmd::Console => "cmd-console",
             Cmd::Log => "cmd-log",
@@ -380,6 +382,7 @@ impl Cmd {
             Cmd::ModelInfo => Icon::ModelInfo,
             Cmd::ComponentParams => Icon::Parametric,
             Cmd::Library3d => Icon::Cloud,
+            Cmd::MaterialsOnline => Icon::Cloud,
             Cmd::GeneratorEditor => Icon::Generator,
             Cmd::Console => Icon::Console,
             Cmd::Log => Icon::Log,
@@ -479,6 +482,7 @@ impl Cmd {
             Cmd::ModelInfo => tr!("cmd-desc-model-info"),
             Cmd::ComponentParams => tr!("cmd-desc-component-params"),
             Cmd::Library3d => tr!("cmd-desc-library-3d"),
+            Cmd::MaterialsOnline => tr!("cmd-desc-materials-online"),
             Cmd::GeneratorEditor => tr!("cmd-desc-generator-editor"),
             Cmd::Console => tr!("cmd-desc-console"),
             Cmd::Log => tr!("cmd-desc-log"),
@@ -572,6 +576,7 @@ impl Cmd {
             Cmd::ModelInfo => Action::ModelInfo,
             Cmd::ComponentParams => Action::RigEditor,
             Cmd::Library3d => Action::ModelLibrary,
+            Cmd::MaterialsOnline => Action::OnlineMaterials,
             Cmd::GeneratorEditor => Action::GeneratorEditor,
             Cmd::Console => Action::ToggleConsole,
             Cmd::Log => Action::ToggleLog,
@@ -600,6 +605,7 @@ impl Cmd {
             Cmd::Physics => Some(app.physics.open),
             Cmd::ComponentParams => Some(app.rig_editor.open),
             Cmd::Library3d => Some(app.models.open),
+            Cmd::MaterialsOnline => Some(app.online.open),
             Cmd::GeneratorEditor => Some(app.gen_editor.open),
             Cmd::Console => Some(app.console.open),
             Cmd::Log => Some(app.log_window.open),

@@ -1,4 +1,4 @@
-//! Window → Sheets…: paper sheets with viewports of the model (the current view or a scene,
+//! Window → Sheets: paper sheets with viewports of the model (the current view or a scene,
 //! fitted or to scale), texts and a title block; a live preview where items are picked,
 //! moved and resized with the mouse; export to PDF (all sheets) or SVG (the current one).
 //! Edits go to a working copy that becomes one undo step when the mouse and keyboard let go.

@@ -1,4 +1,4 @@
-//! Window → Preferences…: one window with the sections on the left (General, Drawing,
+//! Window → Preferences: one window with the sections on the left (General, Drawing,
 //! Libraries, Downloads, View) and a search. The menus keep their own switches (Snapping,
 //! View, the cards' … menus, the Downloads window); the window shows the same values.
 

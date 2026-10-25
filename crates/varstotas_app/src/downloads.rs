@@ -47,7 +47,7 @@ struct SitesFile {
     sites: Vec<Site>,
 }
 
-const SITES_HEADER: &str = "# Sites searched by Window → 3D Library → Search on.\n# `{query}` is replaced by the search. Edit, remove or add sites; Varstotas reads the file when the 3D Library opens.\n\n";
+const SITES_HEADER: &str = "# Sites searched by Window → 3D Online Library → Search on.\n# `{query}` is replaced by the search. Edit, remove or add sites; Varstotas reads the file when the 3D Library opens.\n\n";
 
 pub fn default_sites() -> Vec<Site> {
     let s = |name: &str, search: &str, license: &str| Site { name: name.into(), search: search.into(), license: license.into() };

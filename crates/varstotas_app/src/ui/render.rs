@@ -1,4 +1,4 @@
-//! Window → Render…: path traced images of the current view or of every scene (the GPU path
+//! Window → Render: path traced images of the current view or of every scene (the GPU path
 //! tracer of `varstotas_render`, driven by `Viewport::pt`), saved as PNG or EXR; the model's
 //! lights and render settings. Edits of lights and settings record one undo step when the
 //! pointer is released and no field has focus.

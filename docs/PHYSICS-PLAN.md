@@ -11,7 +11,7 @@ caught.
 
 ## Ph1 — Drop (done)
 
-Window → Physics… (`ui/physics.rs`), engine `varstotas_physics::DropSim`.
+Window → Physics (`ui/physics.rs`), engine `varstotas_physics::DropSim`.
 
 - **Bodies**: the selected groups and components of the open context that are neither locked
   nor hidden (`drop_bodies`). Everything else that is visible is static (one triangle mesh).

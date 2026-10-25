@@ -254,7 +254,7 @@ pub enum Action {
     ExportAttributions,
     /// File → Import with a `@model_import` plugin (its index).
     ImportModelPlugin(usize),
-    /// Window → 3D Library.
+    /// Window → 3D Online Library.
     ModelLibrary,
     /// Window → Model Info.
     ModelInfo,
@@ -272,13 +272,15 @@ pub enum Action {
     PreviewRemove,
     /// File → Export → 2D Drawing (SVG / PDF)…: the options dialog.
     ExportDrawing,
-    /// Window → Unfold…: the flat pattern window.
+    /// Window → Unfold: the flat pattern window.
     Unfold,
-    /// Window → Physics…: drop the selected groups / components.
+    /// Window → Physics: drop the selected groups / components.
     Physics,
+    /// Window → Materials Online Library: the online materials window.
+    OnlineMaterials,
     /// Open the UV Editor.
     UvEditor,
-    /// Window → Sheets…: layout sheets.
+    /// Window → Sheets: layout sheets.
     Sheets,
     WorkPlanes,
     Quit,
@@ -579,13 +581,13 @@ pub struct VarstotasApp {
     pub(crate) last_vector: Option<(usize, usize)>,
     /// Tools → 3D Text… dialog (its values); the last placed values are kept for the next one.
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
-    /// Window → Unfold… window.
+    /// Window → Unfold window.
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
-    /// Window → Physics… window and its run.
+    /// Window → Physics window and its run.
     pub(crate) physics: crate::ui::physics::PhysicsState,
-    /// Window → Sheets… window.
+    /// Window → Sheets window.
     pub(crate) sheets: crate::ui::sheets::SheetsState,
-    /// Window → Work Planes… window.
+    /// Window → Work Planes window.
     pub(crate) planes_window: crate::ui::workplanes::WorkPlanesWindow,
     pub(crate) render_window: crate::ui::render::RenderWindow,
     pub(crate) anim_window: crate::ui::animation::AnimWindow,
@@ -1389,6 +1391,7 @@ impl VarstotasApp {
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
             Action::Physics => self.physics.open = true,
+            Action::OnlineMaterials => self.online.open = !self.online.open,
             Action::UvEditor => self.open_uv_editor(),
             Action::Sheets => self.sheets.open = true,
             Action::WorkPlanes => self.planes_window.open = true,

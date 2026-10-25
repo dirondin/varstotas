@@ -1,4 +1,4 @@
-//! 3D Library window (Window → 3D Library…, the cloud button of the Components card): browse free models
+//! 3D Library window (Window → 3D Online Library, the cloud button of the Components card): browse free models
 //! of Poly Haven, the Smithsonian and NASA (and of `@model_source` plugins), download one into
 //! the components library (`<library>/<source>/<name>.vrst`, the credit kept in the
 //! component) and place it; a model file URL imports the same way. See `crate::online_models`.

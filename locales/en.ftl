@@ -289,7 +289,8 @@ cmd-flip-blue = Blue Direction
 cmd-unfold = Unfold…
 cmd-physics = Physics…
 cmd-text-3d = 3D Text…
-cmd-library-3d = 3D Library…
+cmd-library-3d = 3D Online Library…
+cmd-materials-online = Materials Online Library…
 cmd-zoom-extents = Zoom Extents
 cmd-snapping = Snapping
 cmd-show-grid = Show Grid
@@ -348,6 +349,7 @@ cmd-desc-work-planes = Saved drawing planes.
 cmd-desc-model-info = Statistics of the document, Purge Unused.
 cmd-desc-component-params = Parameters of the selected component: values that turn, slide, show or paint its parts.
 cmd-desc-library-3d = Free models from online libraries.
+cmd-desc-materials-online = Free PBR materials from online libraries.
 cmd-desc-generator-editor = Write and run generator scripts.
 cmd-desc-console = Run Rhai commands on the model.
 cmd-desc-log = Errors and warnings from everywhere: scripts, import / export, libraries, downloads …
@@ -923,7 +925,7 @@ tool-guide-plane-instructor =
     • After the first click, arrows set the normal: → red, ← green, ↑ blue, ↓ last edge.
     • The new plane is active: points in the air land on it, axes and grid follow it.
     • Drag the active plane's handles: origin, normal tip (tilt), red handle (spin).
-    • Window → Work Planes… to activate, hide, rename, delete or type angles.
+    • Window → Work Planes to activate, hide, rename, delete or type angles.
 tool-slice-instructor =
     Set the cutting plane like a guide plane: click three points.
     • Double-click a face (or Enter after the first click): the plane of that face.
@@ -1245,7 +1247,7 @@ prefs-use-current-doc = Use Current Document's
 prefs-use-current-doc-tip = Take the render settings of the open document
 prefs-apply-current-doc = Apply to Current Document
 prefs-apply-current-doc-tip = The open document gets these settings (Undo puts them back)
-prefs-render-note = File → New starts with these; Window → Render… changes the open document's.
+prefs-render-note = File → New starts with these; Window → Render changes the open document's.
 prefs-programs = Programs
 prefs-ffmpeg = ffmpeg (videos of File → Export → Animation)
 prefs-ffmpeg-missing = not found: install it (brew install ffmpeg) or choose the program
@@ -1286,7 +1288,7 @@ prefs-watch-offer = Offer new model files for import
 prefs-watch-offer-tip = Every new model file or archive in the folder is offered for import (always on while a page of Other Sites waits)
 prefs-watched-folder = Watched folder
 prefs-watched-folder-tip = Where your browser saves files
-prefs-downloads-note = Also in Window → 3D Library… → Other Sites.
+prefs-downloads-note = Also in Window → 3D Online Library → Other Sites.
 
 ## Toolbar
 
@@ -1644,7 +1646,7 @@ tray-dim-text = Text
 tray-dim-linear = Linear Dimension
 tray-light-title = Light
 tray-light-render = Render…
-tray-light-render-hover = Window → Render…
+tray-light-render-hover = Window → Render
 tray-light-hint = Move / Rotate move and turn it; drag the square handle to aim it.
 tray-section-title = Section Plane
 tray-section-name = Name
@@ -1772,7 +1774,7 @@ library-show-in-finder = Show in Finder
 ## Top row and the … menu
 
 library-plus-hover = Save the selection to the library, new generator
-library-online-hover = 3D Library: free models from the web (Poly Haven, Smithsonian, NASA, Kenney, plugins)
+library-online-hover = 3D Online Library: free models from the web (Poly Haven, Smithsonian, NASA, Kenney, plugins)
 library-save-selection = Save Selection to Library…
 library-select-first = Select something first
 library-new-generator = New Generator…
@@ -1912,7 +1914,7 @@ library-rename-failed = Rename { $path }: { $error }
 ## Library card
 
 mat-plus-hover = New material from an image, import material files
-mat-online-hover = Online Materials: free PBR materials (Poly Haven, ambientCG, plugins)
+mat-online-hover = Materials Online Library: free PBR materials (Poly Haven, ambientCG, plugins)
 mat-new-from-texture = New from Texture…
 mat-new-from-texture-hover = A material from an image file (PNG, JPEG)
 mat-new-procedural = New Procedural…
@@ -2004,7 +2006,7 @@ mat-deleted-from-library = Deleted from the materials library: { $name }
 
 ## Online materials (window and catalogues)
 
-mat-online-title = Online Materials
+mat-online-title = Materials Online Library
 mat-online-plugins-hint =
     Plugins with @material_source
     are listed here
@@ -2100,7 +2102,7 @@ mated-editing = Editing { $file }: save it to update the material
 mated-cant-open-editor = Can't open the image editor: { $error }
 mated-reloaded = { $slot } reloaded from the image editor
 
-## ======== 3D Library ========
+## ======== 3D Online Library ========
 
 model-lib-licence-any = Any licence
 model-lib-licence-commercial = Commercial use OK
@@ -2109,7 +2111,7 @@ model-lib-licence-known = Known licence
 
 ## Window and filters
 
-model-lib-title = 3D Library
+model-lib-title = 3D Online Library
 model-lib-source = Source
 model-lib-source-count = { $label } ({ $n })
 model-lib-plugins-hint =
@@ -2846,7 +2848,7 @@ dialog-about-licences = Licences…
 sheets-title = Sheets
 sheets-custom = Custom
 sheets-none-yet = No sheets yet.
-sheets-none-first = No sheet: add one first (Window → Sheets…)
+sheets-none-first = No sheet: add one first (Window → Sheets)
 sheets-nothing-to-export = Sheets: nothing to export (add a sheet first)
 # $i is the sheet's number, $n the number of sheets
 sheets-exported-one = Exported sheet { $i } of { $n }: { $path }
@@ -3246,7 +3248,7 @@ console-ref-console-4 = Lines `// @tag …` at the top turn a script into a plug
 console-ref-console-6 = Tags
 ## Page: generators
 console-ref-generators-1 = A generator is a component with parameters: a script whose `build(p)` builds the component's content in its own axes (the origin is the insertion point). Each copy has its own values in Entity Info; copies with equal values share one definition.
-console-ref-generators-2 = Window → Generator Editor… (or Edit Generator… on a tile): the source on the left, a live preview with parameter fields on the right; Apply updates the document, Save to Library writes the file.
+console-ref-generators-2 = Window → Generator Editor (or Edit Generator… on a tile): the source on the left, a live preview with parameter fields on the right; Apply updates the document, Save to Library writes the file.
 console-ref-generators-4 = Header
 console-ref-generators-5 = required; the generator's key in the document
 console-ref-generators-6 = a value in `p`; every part of the range is optional
@@ -3254,7 +3256,7 @@ console-ref-generators-7 = a value computed from the parameters (read-only in En
 console-ref-generators-8 = values for which it is false are refused
 console-ref-generators-9 = Parameter types
 ## Page: component
-console-ref-component-1 = Window → Component Parameters… gives any component parameters: rows of values, formulas, motions of its parts (turn, slide, show, paint, set a part's parameter) and an optional script.
+console-ref-component-1 = Window → Component Parameters gives any component parameters: rows of values, formulas, motions of its parts (turn, slide, show, paint, set a part's parameter) and an optional script.
 console-ref-component-2 = The script defines `update(p)`. It runs after the motions, inside the component, with the whole script API — the same functions as the console and generators. `p` holds the values and the formulas.
 console-ref-component-4 = Finding parts
 console-ref-component-5 = a group / component directly inside the component
@@ -3546,7 +3548,7 @@ help-modifying-13 = Flip Along
 help-modifying-14 = mirror the selection along the red, green or blue direction
 help-modifying-15 = Soften Edges card
 help-modifying-16 = soften / smooth edges by angle
-help-modifying-17 = Window → Unfold…
+help-modifying-17 = Window → Unfold
 help-modifying-18 = flatten faces or groups into a cutting pattern (SVG / PDF / DXF)
 ## inference
 help-inference-1 = While you draw, the cursor snaps to points and directions of the model; a marker and a tooltip say what it found.
@@ -3568,7 +3570,7 @@ help-inference-16 = Snapping menu
 help-inference-17 = The magnet button (and the Snapping menu) turns each inference on or off; `Shift+S` turns snapping off and on altogether. Increments round free moves (10 mm), angles (15°) and scale factors — snapping to geometry and typed values win over them.
 help-inference-18 = View → Grid shows a grid with its own snapping; the step is in Window → Preferences → Drawing, and with Select active typing a length sets it.
 help-inference-19 = Work planes
-help-inference-20 = The Guide Plane tool (Tools menu) and Window → Work Planes… make a plane to draw on in the air: points in empty space land on it, the axes and the grid follow it.
+help-inference-20 = The Guide Plane tool (Tools menu) and Window → Work Planes make a plane to draw on in the air: points in empty space land on it, the axes and the grid follow it.
 ## measurements
 help-measurements-1 = The Measurements box at the right of the status bar shows the current length, angle or size. Just type while a tool runs and press Enter; Backspace corrects, Esc clears.
 help-measurements-2 = 1200, 1.2m, 120cm, 4', 1'6"
@@ -3601,8 +3603,8 @@ help-groups-12 = Place from the library again
 help-groups-13 = the copy in the model is reused while it is unchanged; after you edited it the library's original comes in as a new definition ("Chair 2")
 help-groups-14 = Components with parameters
 help-groups-15 = Edit → Make Parametric gives a component sizes X / Y / Z (stretch or scale) and a row of copies in Entity Info.
-help-groups-16 = Window → Component Parameters… gives any component parameters: values and formulas that turn, slide, show or paint its parts, an optional script; every copy has its own values (sliders in Entity Info).
-help-groups-17 = Generators are components built by a script with typed parameters (Window → Generator Editor…). The Draw → Shapes solids are generators too.
+help-groups-16 = Window → Component Parameters gives any component parameters: values and formulas that turn, slide, show or paint its parts, an optional script; every copy has its own values (sliders in Entity Info).
+help-groups-17 = Generators are components built by a script with typed parameters (Window → Generator Editor). The Draw → Shapes solids are generators too.
 help-groups-18 = Component script in the Script Reference
 help-groups-19 = Generators in the Script Reference
 ## library
@@ -3624,8 +3626,8 @@ help-library-15 = Right-click a tile
 help-library-16 = Place, Set Preview from View, Set Preview Image…, Remove Preview Image, Rename…, Show in Finder, Delete…; for a document component also Select Instances, Save to Library, Parameters…, Delete from Document…
 help-library-17 = Pictures
 help-library-18 = A tile shows the file's picture when it has one, else a rendered thumbnail. Set Preview from View takes the viewport as it is now — frame the component first. A component placed from the library takes the file's picture with it; File → Preview Image sets the picture of the open document.
-help-library-19 = 3D Library
-help-library-20 = The cloud button in the Components card (or Window → 3D Library…) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Entity Info → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads.
+help-library-19 = 3D Online Library
+help-library-20 = The cloud button in the Components card (or Window → 3D Online Library) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Entity Info → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads.
 help-library-21 = Each source shows its terms above its models (a plugin's @notice line). A model whose licence limits its use (non-commercial, no derivatives, share-alike, a site's own licence, unknown) gets a warning when it is placed and when the document is exported. Help → Licences… lists Varstotas's licence, the open-source components, file formats and the online libraries with their terms.
 ## materials
 help-materials-1 = The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Picking a library material only arms the Paint Bucket: the material joins the model (In Model) with the first face painted. Delete on an In Model tile removes the material from the model, its faces go back to the default (Edit → Undo brings it back). Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen).
@@ -3644,7 +3646,7 @@ help-organizing-4 = visibility, colour and name of tags (layers); deleting a tag
 help-organizing-5 = Outliner
 help-organizing-6 = the tree of groups and components: Zoom To, Edit, Hide, Explode, Move Out of Group, Delete; drag rows to move objects between groups
 help-organizing-7 = Hide / Unhide All
-help-organizing-8 = Window → Model Info…
+help-organizing-8 = Window → Model Info
 help-organizing-9 = statistics of the document (faces, triangles, components, materials, textures …) and Purge Unused
 ## construction
 help-construction-1 = Guides are selected, moved and deleted like geometry; Edit → Delete Guides removes them all, View → Guides hides them. Tools → 3D Text… makes text as geometry.
@@ -3662,7 +3664,7 @@ help-styles-9 = see through faces; edges and thick outlines on and off
 help-styles-10 = Shadows
 help-styles-11 = sun shadows; the time and date are in the Shadows card
 help-styles-12 = Rendering
-help-styles-13 = Window → Render… renders the view with a path tracer on the GPU: glass, reflections, lights, soft shadows; quality presets, frame size, depth of field, denoising (when Intel OIDN is installed), colour grading; PNG / EXR, or every scene at once.
+help-styles-13 = Window → Render renders the view with a path tracer on the GPU: glass, reflections, lights, soft shadows; quality presets, frame size, depth of field, denoising (when Intel OIDN is installed), colour grading; PNG / EXR, or every scene at once.
 help-styles-14 = Lights (point, spot, area) are placed from the Render window; they are selected by clicking their marker and moved and rotated like other objects.
 help-styles-15 = File → Export → 2D Graphic (PNG) saves the view as it is; File → Export → Animation… makes a video or PNG frames of the scenes or a fly-around.
 ## scenes
@@ -3670,7 +3672,7 @@ help-scenes-1 = Scenes card
 help-scenes-2 = saved views with their style, visible tags and section; tabs above the viewport switch them
 help-scenes-3 = View → Animation
 help-scenes-4 = Play the scenes; PgDn / PgUp — next / previous scene
-help-scenes-5 = Window → Sheets…
+help-scenes-5 = Window → Sheets
 help-scenes-6 = layout pages: viewports of scenes at a scale 1:N, texts, a title block, standard views with dimensions, a parts table; multi-page PDF
 help-scenes-7 = File → Export → 2D Drawing
 help-scenes-8 = the current view as a vector SVG / PDF with profiles, hidden lines, sections and dimensions
@@ -3678,7 +3680,7 @@ help-scenes-9 = File → Export → Report
 help-scenes-10 = parts with sizes for cutting, areas by material (CSV)
 ## files
 help-files-1 = Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval.
-help-files-2 = Window → Preferences… has sections on the left and a search: General (auto-save, the template of File → New, how many undo steps are kept), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back), Render (the render settings of new documents; where ffmpeg and the Open Image Denoise library are) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults.
+help-files-2 = Window → Preferences has sections on the left and a search: General (auto-save, the template of File → New, how many undo steps are kept), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back), Render (the render settings of new documents; where ffmpeg and the Open Image Denoise library are) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults.
 help-files-3 = Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it.
 help-files-4 = Import
 help-files-5 = OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window
@@ -3702,12 +3704,12 @@ help-problems-1 = Window → Log
 help-problems-2 = every error and warning of the session — scripts, import / export, libraries, downloads; a red counter in the status bar means new errors
 help-problems-3 = Edit → Undo
 help-problems-4 = every operation can be undone; a failed operation changes nothing
-help-problems-5 = Window → Model Info… → Purge Unused
+help-problems-5 = Window → Model Info → Purge Unused
 help-problems-6 = remove unused components, materials and tags to make the file smaller
 help-problems-7 = Faces look grey-blue
 help-problems-8 = you see their back: select them, right-click → Reverse Faces or Orient Faces
 help-problems-9 = Cannot draw where expected
-help-problems-10 = check Shift / arrow locks, the active work plane (Window → Work Planes…) and whether you are inside a group (Esc leaves it)
+help-problems-10 = check Shift / arrow locks, the active work plane (Window → Work Planes) and whether you are inside a group (Esc leaves it)
 help-problems-11 = Something is missing
 help-problems-12 = Edit → Unhide All, the Tags card (hidden tags), View → Section Planes
 
@@ -4317,7 +4319,7 @@ tutorial-6-title = Keep a model organised
 tutorial-6-body = Outliner shows nested groups and components. Tags control visibility and editing locks. Entity Info exposes the current selection and its parameters. Hidden and locked objects are separate states.
 tutorial-6-task = Give the tabletop a name in Entity Info. Create a tag in Tags, assign it and toggle visibility. Try the lock, then unlock it again before painting.
 tutorial-7-title = Add materials and choose a style
-tutorial-7-body = Paint assigns colours and textures; Texture Position adjusts their placement. Online Materials downloads reusable materials. Shaded with Textures is useful while modelling; Monochrome exposes front/back faces, and Realistic uses physical material properties and lighting.
+tutorial-7-body = Paint assigns colours and textures; Texture Position adjusts their placement. Materials Online Library downloads reusable materials. Shaded with Textures is useful while modelling; Monochrome exposes front/back faces, and Realistic uses physical material properties and lighting.
 tutorial-7-task = Choose a material and paint a face. Compare Shaded with Textures, Monochrome and Realistic in the style menu. Try X-Ray to see hidden edges.
 tutorial-8-title = Present the result
 tutorial-8-body = Scenes remember views and model display settings. Dimensions annotate the model, section planes reveal the inside, and sheets arrange views on paper. Render creates a finished image; animation can move between scenes.
@@ -4512,7 +4514,7 @@ print-go-check = Go to Print Check
 print-analysis-run = Run analysis
 print-bed-refresh = Refresh bed check
 
-# Window → Physics…
+# Window → Physics
 physics-title = Physics
 physics-drop = Drop
 physics-drop-hint = The selected groups and components fall and come to rest on everything else that is visible.

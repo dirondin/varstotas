@@ -87,7 +87,7 @@ pub struct Viewport {
     pub pt: Option<PtJob>,
 }
 
-/// A path traced render (Window → Render…), advanced by every `paint` while it runs.
+/// A path traced render (Window → Render), advanced by every `paint` while it runs.
 pub struct PtJob {
     pub camera: Camera,
     /// A Realistic style (environment, materials, effects).

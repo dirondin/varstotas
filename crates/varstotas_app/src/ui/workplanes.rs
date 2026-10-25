@@ -1,4 +1,4 @@
-//! Window → Work Planes…: the document's guide planes (active, visible, name, delete) and the
+//! Window → Work Planes: the document's guide planes (active, visible, name, delete) and the
 //! active plane's origin and angles. Edits apply live; one undo step is recorded when the
 //! pointer is released and no field has focus.
 
