@@ -4236,7 +4236,7 @@ edit-locked = This operation would change locked objects. Unlock them first.
 script-member-locked = Effective editing lock (read-only; includes tag and ancestor locks).
 
 ## Startup screen and feedback
-start-menu = Start Screen…
+start-menu = Start Screen
 start-subtitle = Create a model, continue your work, or explore the examples.
 start-create = New model
 start-new = Create

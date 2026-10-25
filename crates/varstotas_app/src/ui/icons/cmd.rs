@@ -399,6 +399,14 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             }
             pen.line_c(&[(12.0, 12.5), (12.0, 13.5)], Stroke::new(W_BOLD * pen.s, ORANGE));
         }
+        Icon::StartScreen => {
+            // a window (its title bar) with a house in it: home
+            rect(pen, (2.5, 3.5), (21.5, 20.5), FILL, pen.stroke());
+            pen.line_c(&[(2.5, 7.5), (21.5, 7.5)], pen.thin());
+            rect(pen, (8.0, 13.5), (16.0, 18.5), FILL, pen.thin());
+            pen.poly_c(&[(6.0, 14.0), (12.0, 9.5), (18.0, 14.0)], BLUE_SOFT, pen.thin());
+            rect(pen, (11.0, 15.5), (13.0, 18.5), ORANGE, pen.thin());
+        }
         Icon::Snap(k) => snap(pen, k),
         Icon::SideBar => {
             rect(pen, (2.5, 4.0), (21.5, 20.0), FILL, pen.stroke());

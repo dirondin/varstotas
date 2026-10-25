@@ -4261,7 +4261,7 @@ edit-locked = Šis veiksmas pakeistų užrakintus objektus. Pirmiausia juos atra
 script-member-locked = Veiksmingas redagavimo užraktas, įskaitant žymos ir tėvinių objektų užraktus (tik skaityti).
 
 ## Pradžios ekranas ir atsiliepimai
-start-menu = Pradžios ekranas…
+start-menu = Pradžios ekranas
 start-subtitle = Kurkite modelį, tęskite darbą arba peržiūrėkite pavyzdžius.
 start-create = Naujas modelis
 start-new = Kurti

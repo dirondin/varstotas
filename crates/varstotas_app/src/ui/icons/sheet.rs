@@ -19,7 +19,7 @@ pub(super) fn all_icons() -> Vec<Icon> {
         More, Trash, Refresh, Info, Group, Magnet, GuidePlane, Box3d, Cylinder, Cone, Pyramid, Sphere, Torus,
         FileNew, FileOpen, FileSave, FileSaveAs, Film, Drawing, Sheets, Report, Json, Credits, Script, Quit, Cut,
         Copy, Paste, PasteInPlace, Purge, DeleteGuides, SelectAll, SelectNone, Component, Parametric, Explode,
-        CloseGroup, ReverseFaces, OrientFaces, Unfold, Physics, UvEditor, TexturePosition, Print3d, SideBar, Outliner, Tag, Render, Console, Log, Gear,
+        CloseGroup, ReverseFaces, OrientFaces, Unfold, Physics, UvEditor, TexturePosition, Print3d, StartScreen, SideBar, Outliner, Tag, Render, Console, Log, Gear,
         Generator, Play, Pause, NextScene, PrevScene, AddScene,
     ];
     v.extend((0..4).map(Picture));

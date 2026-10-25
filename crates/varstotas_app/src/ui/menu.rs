@@ -210,7 +210,7 @@ impl VarstotasApp {
         // Collect QA targets for the whole frame, including menus before the toolbar.
         super::tray_lib::clear_spots();
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button(tr!("menu-file"), |ui| {
+            let file_menu = ui.menu_button(tr!("menu-file"), |ui| {
                 self.cmd_item(ui, Cmd::New);
                 icon_menu(ui, None, &tr!("menu-new-from-template"), |ui| {
                     for t in Template::ALL {
@@ -256,7 +256,7 @@ impl VarstotasApp {
                         }
                     });
                 });
-                let r = ui.button(tr!("start-menu"));
+                let r = icon_row(ui, Some(Icon::StartScreen), &tr!("start-menu"), None, true, self.show_start);
                 super::tray_lib::spot("menu:StartScreen", r.rect.center());
                 if r.clicked() { self.actions.push(Action::StartScreen); ui.close(); }
                 ui.separator();
@@ -300,6 +300,7 @@ impl VarstotasApp {
                 ui.separator();
                 self.cmd_item(ui, Cmd::Quit);
             });
+            super::tray_lib::spot("menu:File", file_menu.response.rect.center());
 
             let edit_menu = ui.menu_button(tr!("menu-edit"), |ui| {
                 let undo = self.doc.history.undo_label().map(|l| tr!("menu-undo-named", name = l)).unwrap_or_else(|| Cmd::Undo.menu_label());

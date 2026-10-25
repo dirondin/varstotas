@@ -147,6 +147,8 @@ pub enum Icon {
     TexturePosition,
     /// 3D Printing: a printer laying down a part.
     Print3d,
+    /// File → Start Screen: a window with a house in it.
+    StartScreen,
     /// The UV Editor's toolbar (`uv.rs`).
     Uv(uv::UvIcon),
     Snap(crate::inference::InferenceKind),
