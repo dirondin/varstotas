@@ -33,13 +33,23 @@ pub enum PrintMap {
     Thickness,
     Overhang,
 }
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PrintingPrefs {
     pub bed: BedProfile,
     pub analysis: AnalysisOptions,
     pub show_bed: bool,
     pub slicer: Option<PathBuf>,
+}
+impl Default for PrintingPrefs {
+    fn default() -> Self {
+        Self {
+            bed: BedProfile::default(),
+            analysis: AnalysisOptions::default(),
+            show_bed: true,
+            slicer: None,
+        }
+    }
 }
 pub(super) struct ToolResult {
     model: Option<Model>,
@@ -94,9 +104,6 @@ impl VarstotasApp {
     }
     pub(super) fn select_print_tab(&mut self, tab: PrintTab) {
         self.printing.advanced_tab = Some(tab);
-        if tab == PrintTab::Bed {
-            self.prefs.printing.show_bed = true;
-        }
         if tab == PrintTab::Split
             && let [EntityRef::Instance(i)] = self.doc.selection.as_slice()
             && let Some(b) = self
@@ -176,7 +183,6 @@ impl VarstotasApp {
         self.printing.use_selection = true;
         self.printing.error = None;
         self.printing.message = Some(tr!("print-placement-done"));
-        self.prefs.printing.show_bed = true;
         self.actions.push(crate::app::Action::ZoomExtents);
     }
     pub(crate) fn print_lay_action(&mut self) {
