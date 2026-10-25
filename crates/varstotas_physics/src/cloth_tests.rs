@@ -52,7 +52,7 @@ fn a_cloth_drapes_over_a_box() {
     assert!(lo < 40.0, "hangs down: {lo}");
     assert!(lo > -1.0, "stays above the floor: {lo}");
     // a mesh of it, smooth
-    let mesh = cloth_mesh(&sim.grid, &fr.positions, DMat4::IDENTITY);
+    let mesh = cloth_mesh(&src, &sim.grid, &fr.positions, DMat4::IDENTITY);
     assert_eq!(mesh.faces.len(), sim.grid.triangles.len());
     assert!(mesh.edges.values().filter(|e| e.soft && e.smooth).count() > mesh.edges.len() / 2);
 }
@@ -81,7 +81,7 @@ fn placing_a_cloth_replaces_its_source() {
     let edges = m.root_mesh().edges.len();
     let src = cloth_source(&m, &[], &[EntityRef::Face(top)]).unwrap();
     let grid = cloth_grid(&src, 20.0).unwrap();
-    let id = place_cloth(&mut m, &[], &src, cloth_mesh(&grid, &grid.positions, DMat4::IDENTITY)).unwrap();
+    let id = place_cloth(&mut m, &[], &src, cloth_mesh(&src, &grid, &grid.positions, DMat4::IDENTITY)).unwrap();
     assert_eq!(m.root_mesh().faces.len(), 5);
     assert_eq!(m.root_mesh().edges.len(), edges);
     let def = m.root_mesh().instances[id].def;
@@ -91,10 +91,43 @@ fn placing_a_cloth_replaces_its_source() {
     let f = sheet(&mut m, DVec3::ZERO, 100.0);
     let src = cloth_source(&m, &[], &[EntityRef::Face(f)]).unwrap();
     let grid = cloth_grid(&src, 20.0).unwrap();
-    let id = place_cloth(&mut m, &[], &src, cloth_mesh(&grid, &grid.positions, DMat4::IDENTITY)).unwrap();
+    let id = place_cloth(&mut m, &[], &src, cloth_mesh(&src, &grid, &grid.positions, DMat4::IDENTITY)).unwrap();
     assert!(m.root_mesh().faces.is_empty() && m.root_mesh().edges.is_empty());
     let moved: Vec<DVec3> = grid.positions.iter().map(|p| *p + DVec3::Z * 5.0).collect();
-    set_cloth_mesh(&mut m, &[], id, cloth_mesh(&grid, &moved, DMat4::IDENTITY));
+    set_cloth_mesh(&mut m, &[], id, cloth_mesh(&src, &grid, &moved, DMat4::IDENTITY));
     let b = m.instance_world_bounds(&[], id).unwrap();
     assert!((b.min.z - 5.0).abs() < 1e-9, "{b:?}");
 }
+
+#[test]
+fn a_draped_cloth_keeps_the_faces_material_and_texture() {
+    use varstotas_kernel::TexPlacement;
+    use varstotas_kernel::texture::face_uv_mm;
+    let mut m = Model::new();
+    add_box(&mut m, DVec3::new(100.0, 100.0, 0.0), DVec3::splat(100.0), false);
+    let f = sheet(&mut m, DVec3::new(0.0, 0.0, 150.0), 300.0);
+    let mat = m.add_material("Fabric", [0.8, 0.2, 0.2, 1.0]);
+    let place = TexPlacement { offset: [12.0, -7.0], angle_deg: 30.0, scale: [1.5, 0.8], shear: 0.0 };
+    {
+        let face = &mut m.root_mesh_mut().faces[f];
+        face.front = Some(mat);
+        face.uv = Some(place);
+    }
+    let (normal, uv) = (m.root_mesh().faces[f].normal, m.root_mesh().faces[f].uv);
+    let src = cloth_source(&m, &[], &[EntityRef::Face(f)]).unwrap();
+    let (sim, fr) = run(&m, &src, ClothSettings { spacing: 15.0, ..ClothSettings::default() });
+    let mesh = cloth_mesh(&src, &sim.grid, &fr.positions, DMat4::IDENTITY);
+    // every corner of every triangle shows the texture point it had on the flat face
+    let mut worst: f64 = 0.0;
+    for t in &sim.grid.triangles {
+        let new: Vec<DVec3> = t.iter().map(|k| fr.positions[*k as usize]).collect();
+        let face = mesh.faces.values().find(|g| g.outer.iter().all(|v| new.iter().any(|p| (*p - mesh.vertices[*v].pos).length() < 1e-9))).unwrap();
+        assert_eq!(face.front, Some(mat));
+        for (k, p) in t.iter().zip(&new) {
+            let was = face_uv_mm(sim.grid.positions[*k as usize], normal, uv.as_ref());
+            worst = worst.max((face_uv_mm(*p, face.normal, face.uv.as_ref()) - was).length());
+        }
+    }
+    assert!(worst < 1e-6, "texture moved by {worst} mm");
+}
+

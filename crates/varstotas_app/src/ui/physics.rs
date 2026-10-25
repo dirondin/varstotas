@@ -167,7 +167,7 @@ impl VarstotasApp {
                         let last = f.done || t_stop.load(Ordering::Relaxed);
                         if last || sent.is_none_or(|t| t.elapsed() >= CLOTH_FRAME_EVERY) {
                             sent = Some(Instant::now());
-                            let mesh = cloth_mesh(&sim.grid, &f.positions, parent);
+                            let mesh = cloth_mesh(&src, &sim.grid, &f.positions, parent);
                             if !send(Shot::Cloth { mesh: Box::new(mesh), time: f.time, done: f.done }) {
                                 return Ok(());
                             }

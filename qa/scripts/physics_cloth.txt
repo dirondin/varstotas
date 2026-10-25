@@ -1,11 +1,17 @@
 # Physics, cloth: a sheet over a box falls and drapes over it; Apply turns it into a group in
-# one undo step (the face is gone); Cancel puts the face back and selects it again.
+# one undo step (the face is gone), keeping the face's texture on every fold; Cancel puts the
+# face back and selects it again.
 box 100 100 0 100 100 100
 box 0 0 150 300 300 0
 view iso
 zoom_extents
 wait 5
 expect active_mesh F=7
+texture ../../qa/models/bricks.png 100
+wait 2
+rawp click 20 280 150
+wait 3
+expect mats={"-": 6, "bricks": 1}
 tool select
 wait 3
 rawp click 20 280 150

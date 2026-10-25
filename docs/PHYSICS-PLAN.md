@@ -44,6 +44,9 @@ body: particles, structural / shear / bending edges, contacts with rigid collide
   it used, or the group) by a new group; later frames swap its mesh (`set_cloth_mesh`). The mesh
   is built on the thread (`cloth_mesh`, ~20 ms for 20 000 triangles) at most every 30 ms.
   `Model::add_group_mesh` adds the group directly (`make_group` takes ~0.7 s for 20 000 faces).
+- **Look**: each triangle keeps the face's front / back materials and gets the texture placement
+  that maps its corners to where they lay on the flat face (`carried_placement`), so the texture
+  follows the folds; a material painted on the source group goes to the cloth group.
 - **Result**: a group of triangles, edges soft and smooth (`io::mesh_from_triangles`); Apply is
   one undo step and selects it, Cancel brings the face and the selection back.
 - Tests: `crates/varstotas_physics/src/cloth_tests.rs`; QA: `qa/scripts/physics_cloth.txt`.

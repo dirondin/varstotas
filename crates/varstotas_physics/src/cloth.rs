@@ -7,7 +7,8 @@ use super::{MM, owner_body, to_m};
 use glam::{DMat4, DVec2, DVec3};
 use rapier3d::prelude::*;
 use varstotas_kernel::io::mesh_from_triangles;
-use varstotas_kernel::{EntityRef, FaceId, InstanceId, Mesh, Model, tessellate::tessellate};
+use varstotas_kernel::texture::carried_placement;
+use varstotas_kernel::{EntityRef, FaceId, InstanceId, MaterialId, Mesh, Model, TexPlacement, tessellate::tessellate};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClothSettings {
@@ -80,6 +81,15 @@ pub struct ClothSource {
     pub outer: Vec<DVec3>,
     pub holes: Vec<Vec<DVec3>>,
     pub normal: DVec3,
+    /// The face's look, carried over to the cloth: its materials, its texture placement (in the
+    /// axes of its context: `to_local` maps world points there, `local_normal` is the face's
+    /// own normal) and the material painted on its group.
+    pub front: Option<MaterialId>,
+    pub back: Option<MaterialId>,
+    pub uv: Option<TexPlacement>,
+    pub to_local: DMat4,
+    pub local_normal: DVec3,
+    pub material: Option<MaterialId>,
 }
 
 /// The cloth's source in `selection` of the context `path`: one face, or one group / component
@@ -87,8 +97,8 @@ pub struct ClothSource {
 pub fn cloth_source(model: &Model, path: &[InstanceId], selection: &[EntityRef]) -> Option<ClothSource> {
     let faces: Vec<FaceId> = selection.iter().filter_map(|e| if let EntityRef::Face(f) = e { Some(*f) } else { None }).collect();
     let insts: Vec<InstanceId> = selection.iter().filter_map(|e| if let EntityRef::Instance(i) = e { Some(*i) } else { None }).collect();
-    let (ctx, face, group) = match (faces.as_slice(), insts.as_slice()) {
-        ([f], []) => (path.to_vec(), *f, None),
+    let (ctx, face, group, material) = match (faces.as_slice(), insts.as_slice()) {
+        ([f], []) => (path.to_vec(), *f, None, None),
         ([], [i]) => {
             let inst = model.mesh_at(path)?.instances.get(*i)?;
             if inst.locked {
@@ -100,7 +110,7 @@ pub fn cloth_source(model: &Model, path: &[InstanceId], selection: &[EntityRef])
             }
             let mut ctx = path.to_vec();
             ctx.push(*i);
-            (ctx, inner.faces.keys().next()?, Some(*i))
+            (ctx, inner.faces.keys().next()?, Some(*i), inst.material)
         }
         _ => return None,
     };
@@ -112,7 +122,20 @@ pub fn cloth_source(model: &Model, path: &[InstanceId], selection: &[EntityRef])
     let xf = model.transform_at(&ctx);
     let pts = |l: &[varstotas_kernel::VertexId]| l.iter().map(|v| xf.transform_point3(mesh.vertices[*v].pos)).collect::<Vec<_>>();
     let normal = xf.transform_vector3(f.normal).normalize_or_zero();
-    Some(ClothSource { path: ctx, face, group, outer: pts(&f.outer), holes: f.holes.iter().map(|h| pts(h)).collect(), normal })
+    Some(ClothSource {
+        path: ctx,
+        face,
+        group,
+        outer: pts(&f.outer),
+        holes: f.holes.iter().map(|h| pts(h)).collect(),
+        normal,
+        front: f.front,
+        back: f.back,
+        uv: f.uv,
+        to_local: xf.inverse(),
+        local_normal: f.normal,
+        material,
+    })
 }
 
 /// The cloth's particles at rest (world, mm) and its triangles.
@@ -356,8 +379,9 @@ impl ClothSim {
 }
 
 /// The cloth of a frame as a mesh in the axes of `parent` (the world transform of the context
-/// it goes into): smooth, its inner edges soft.
-pub fn cloth_mesh(grid: &ClothGrid, positions: &[DVec3], parent: DMat4) -> Mesh {
+/// it goes into): smooth, its inner edges soft. Each triangle keeps the source face's materials
+/// and its texture as it lay on the flat face (the texture follows the folds).
+pub fn cloth_mesh(src: &ClothSource, grid: &ClothGrid, positions: &[DVec3], parent: DMat4) -> Mesh {
     let inv = parent.inverse();
     let local: Vec<DVec3> = positions.iter().map(|p| inv.transform_point3(*p)).collect();
     let mut normals = vec![DVec3::ZERO; local.len()];
@@ -371,7 +395,13 @@ pub fn cloth_mesh(grid: &ClothGrid, positions: &[DVec3], parent: DMat4) -> Mesh 
     for n in &mut normals {
         *n = n.normalize_or_zero();
     }
-    mesh_from_triangles(&local, &grid.triangles, &normals)
+    let rest: Vec<DVec3> = grid.positions.iter().map(|p| src.to_local.transform_point3(*p)).collect();
+    mesh_from_triangles(&local, &grid.triangles, &normals, |i, face| {
+        face.front = src.front;
+        face.back = src.back;
+        let t = grid.triangles[i].map(|k| k as usize);
+        face.uv = carried_placement(&t.map(|k| rest[k]), src.local_normal, src.uv.as_ref(), &t.map(|k| local[k]), face.normal);
+    })
 }
 
 /// Replace the cloth's source with `mesh` (made by [`cloth_mesh`] with the transform of the
@@ -390,7 +420,11 @@ pub fn place_cloth(model: &mut Model, path: &[InstanceId], src: &ClothSource, me
         }
     }
     // i18n-ignore-next
-    model.add_group_mesh(path, mesh, "Cloth", DMat4::IDENTITY)
+    let id = model.add_group_mesh(path, mesh, "Cloth", DMat4::IDENTITY)?;
+    if let Some(inst) = model.mesh_at_mut(path).and_then(|m| m.instances.get_mut(id)) {
+        inst.material = src.material;
+    }
+    Some(id)
 }
 
 /// Swap the mesh of a cloth placed by [`place_cloth`].
