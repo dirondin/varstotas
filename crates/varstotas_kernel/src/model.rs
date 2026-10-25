@@ -795,6 +795,15 @@ impl Model {
         self.new_def_from(path, ents, &[], &[], "Group", true)
     }
 
+    /// A new group of the context `path` holding `mesh` (in the group's own axes) at `transform`
+    /// (made geometry, e.g. a draped cloth; no welding with the context).
+    pub fn add_group_mesh(&mut self, path: &[InstanceId], mesh: Mesh, name: &str, transform: DMat4) -> Option<InstanceId> {
+        self.mesh_at(path)?;
+        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+        let inst = Instance { def, transform, name: String::new(), material: None, tag: None, hidden: false, locked: false };
+        self.mesh_at_mut(path).map(|m| m.instances.insert(inst))
+    }
+
     /// Like make_group but the definition is a reusable component.
     pub fn make_component(&mut self, path: &[InstanceId], ents: &[EntityRef], name: &str) -> OpResult<InstanceId> {
         self.new_def_from(path, ents, &[], &[], name, false)

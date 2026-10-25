@@ -11,6 +11,8 @@ use glam::{DMat4, DQuat, DVec3};
 use rapier3d::prelude::*;
 use varstotas_kernel::{EntityRef, InstanceId, Model, tessellate::tessellate};
 
+pub mod cloth;
+
 const MM: f64 = 0.001;
 
 /// How a falling body collides.
@@ -244,18 +246,18 @@ impl DropSim {
 }
 
 /// Index of the body whose subtree `owner` is in.
-fn owner_body(owner: &[InstanceId], path: &[InstanceId], bodies: &[InstanceId]) -> Option<usize> {
+pub(crate) fn owner_body(owner: &[InstanceId], path: &[InstanceId], bodies: &[InstanceId]) -> Option<usize> {
     if owner.len() <= path.len() || owner[..path.len()] != *path {
         return None;
     }
     bodies.iter().position(|b| *b == owner[path.len()])
 }
 
-fn bounds(points: &[Vector]) -> (Vector, Vector) {
+pub(crate) fn bounds(points: &[Vector]) -> (Vector, Vector) {
     points.iter().fold((Vector::splat(f32::MAX), Vector::splat(f32::MIN)), |(a, b), v| (a.min(*v), b.max(*v)))
 }
 
-fn to_m(p: DVec3) -> Vector {
+pub(crate) fn to_m(p: DVec3) -> Vector {
     Vector::new((p.x * MM) as f32, (p.y * MM) as f32, (p.z * MM) as f32)
 }
 
@@ -278,4 +280,8 @@ pub fn set_transforms(model: &mut Model, path: &[InstanceId], bodies: &[Instance
 }
 
 #[cfg(test)]
+mod tests_util;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod cloth_tests;

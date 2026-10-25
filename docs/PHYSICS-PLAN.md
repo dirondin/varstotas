@@ -28,24 +28,28 @@ Tools → Physics… (`ui/physics.rs`), engine `varstotas_physics::DropSim`.
 - Settings: friction, bounce, gravity, time limit, shape, floor.
 - Tests: `crates/varstotas_physics/src/tests.rs`; QA: `qa/scripts/physics.txt`.
 
-## Ph2 — Cloth (next)
+## Ph2 — Cloth (done)
 
-rapier 0.36 has soft bodies (`SoftBodyBuilder`): `cloth` (a rectangular particle grid with
-structural, shear and bending edges), `trimesh` (any triangle mesh, dihedral bending), volume
-preservation, pinning, collisions with rigid colliders. So no own solver is needed.
+The Cloth mode of the same window, engine `varstotas_physics::cloth::ClothSim` (a rapier soft
+body: particles, structural / shear / bending edges, contacts with rigid colliders).
 
-- Input: a selected face (or a group with one face) → a uniform triangle grid at a chosen
-  resolution (a rectangle maps to `cloth`; any other planar polygon: a clipped grid, `trimesh`).
-- Colliders: every other visible face, as in Drop.
-- Options: resolution, stiffness / bending, thickness, pinned vertices (selected edges or
-  vertices stay in place), time limit.
-- Result: a new group of triangles with the inner edges soft and smooth; the source face is
-  replaced (or kept hidden — an option).
-- Risk to check first: a 100 × 100 cloth is ~20 000 faces — selection, saving and Undo of such
-  groups must stay fast.
+- **Input**: one selected face, or one unlocked group / component whose content is a single face
+  (`cloth_source`). `cloth_grid` lays a regular grid along the face's first edge, clipped to the
+  face with its holes (whole cells only), at most 25 600 points.
+- **Colliders**: every other visible face (one static triangle mesh), optional floor.
+- **Settings**: spacing, stiffness and bending (0..1, mapped to spring frequencies), thickness
+  (the contact gap; at least a tenth of the spacing, thinner slips through), friction, gravity,
+  self-collision, time limit. At rest: no point moved faster than 8 mm/s over 0.5 s.
+- **Preview**: the first frame replaces the source (`place_cloth`: the face with the edges only
+  it used, or the group) by a new group; later frames swap its mesh (`set_cloth_mesh`). The mesh
+  is built on the thread (`cloth_mesh`, ~20 ms for 20 000 triangles) at most every 30 ms.
+  `Model::add_group_mesh` adds the group directly (`make_group` takes ~0.7 s for 20 000 faces).
+- **Result**: a group of triangles, edges soft and smooth (`io::mesh_from_triangles`); Apply is
+  one undo step and selects it, Cancel brings the face and the selection back.
+- Tests: `crates/varstotas_physics/src/cloth_tests.rs`; QA: `qa/scripts/physics_cloth.txt`.
 
 ## Ph3 — Later
 
 - A box as a pillow: `trimesh` with volume preservation.
-- Self-collision quality, wind, tearing (rapier has it).
+- Cloth: pinned points (selected edges / vertices stay), wind, tearing; self-collision quality.
 - Drop: remembered settings, pieces by default for concave bodies.

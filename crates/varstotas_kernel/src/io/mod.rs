@@ -12,6 +12,7 @@ mod ply;
 mod points;
 mod security;
 mod surface;
+pub use surface::mesh_from_triangles;
 mod stl;
 mod threemf;
 mod xml;

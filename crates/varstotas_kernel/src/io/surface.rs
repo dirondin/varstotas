@@ -163,3 +163,20 @@ pub(super) fn corner_normals(
         mesh.faces[face].normals = values;
     }
 }
+
+/// A mesh of triangles (`tris` index `positions`), welded where positions are equal, with a
+/// normal per position for smooth shading: edges whose corner normals agree become soft and
+/// smooth (a draped cloth, a scanned surface). Degenerate triangles are skipped.
+pub fn mesh_from_triangles(positions: &[DVec3], tris: &[[u32; 3]], normals: &[DVec3]) -> Mesh {
+    let mut mesh = Mesh::new();
+    let mut surface = SurfaceBuilder::default();
+    for t in tris {
+        let pts = t.map(|i| positions[i as usize]);
+        if let Ok(Some(f)) = surface.triangle(&mut mesh, pts) {
+            let ns: Option<Vec<DVec3>> = t.iter().map(|i| normals.get(*i as usize).copied()).collect();
+            corner_normals(&mut mesh, f, &pts, ns.as_deref());
+        }
+    }
+    surface.finish(&mut mesh, &ImportOptions { merge_coplanar: false, ..ImportOptions::default() });
+    mesh
+}
