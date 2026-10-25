@@ -3571,7 +3571,7 @@ help-modifying-13 = Apversti išilgai
 help-modifying-14 = atspindėti pažymėtą dalyką išilgai raudonos, žalios ar mėlynos krypties
 help-modifying-15 = Švelninti briaunas kortelė
 help-modifying-16 = švelninti / glotninti briaunas pagal kampą
-help-modifying-17 = Įrankiai → Išklostyti…
+help-modifying-17 = Langas → Išklostyti…
 help-modifying-18 = išklostyti paviršius ar grupes į iškirpimo šabloną (SVG / PDF / DXF)
 ## inference
 help-inference-1 = Piešiant žymeklis prilimpa prie modelio taškų ir krypčių; ženklas ir paaiškinimas parodo, ką rado.
@@ -4537,7 +4537,7 @@ print-go-check = Eiti į patikrą
 print-analysis-run = Vykdyti analizę
 print-bed-refresh = Atnaujinti stalo patikrą
 
-# Tools → Physics…
+# Window → Physics…
 physics-title = Fizika
 physics-drop = Kritimas
 physics-drop-hint = Pažymėtos grupės ir komponentai nukrenta ir nurimsta ant visko, kas matoma.

@@ -141,7 +141,7 @@ pub enum Icon {
     /// A solid tool, by its index in `SolidOp::ALL`.
     Solids(u8),
     Unfold,
-    /// Tools → Physics: a box falling onto a block.
+    /// Window → Physics: a box falling onto a block.
     Physics,
     UvEditor,
     TexturePosition,

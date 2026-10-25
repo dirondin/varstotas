@@ -4,7 +4,7 @@ view iso
 zoom_extents
 save models/printing-before.vrst
 wait 10
-action click_spot menu:Extensions
+action click_spot menu:Window
 wait 5
 action click_spot cmd:PrintCheck
 wait 100

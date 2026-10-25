@@ -272,9 +272,9 @@ pub enum Action {
     PreviewRemove,
     /// File → Export → 2D Drawing (SVG / PDF)…: the options dialog.
     ExportDrawing,
-    /// Tools → Unfold…: the flat pattern window.
+    /// Window → Unfold…: the flat pattern window.
     Unfold,
-    /// Tools → Physics…: drop the selected groups / components.
+    /// Window → Physics…: drop the selected groups / components.
     Physics,
     /// Open the UV Editor.
     UvEditor,
@@ -579,9 +579,9 @@ pub struct VarstotasApp {
     pub(crate) last_vector: Option<(usize, usize)>,
     /// Tools → 3D Text… dialog (its values); the last placed values are kept for the next one.
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
-    /// Tools → Unfold… window.
+    /// Window → Unfold… window.
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
-    /// Tools → Physics… window and its run.
+    /// Window → Physics… window and its run.
     pub(crate) physics: crate::ui::physics::PhysicsState,
     /// Window → Sheets… window.
     pub(crate) sheets: crate::ui::sheets::SheetsState,

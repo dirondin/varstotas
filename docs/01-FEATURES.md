@@ -149,7 +149,7 @@ Status: ⬜ not started · 🟨 in progress · ✅ done.
 | Standard views on a sheet with one command (3 projections + iso, standard scale), automatic overall dimensions, a parts table | P2 | ✅ |
 | Report: parts of groups/components with sizes for cutting, areas by material (CSV) | P2 | ✅ |
 | Unfold of faces / groups → SVG / PDF / DXF: mountain/valley folds, flaps, edge numbers, scale, sheets | P2 | ✅ |
-| Physics for still scenes (Tools → Physics…): drop the selected groups / components under gravity onto the model, or let a face fall as cloth and drape over it (a group of smooth triangles); live preview, Apply as one undo step (`PHYSICS-PLAN.md`) | P2 | ✅ |
+| Physics for still scenes (Window → Physics…): drop the selected groups / components under gravity onto the model, or let a face fall as cloth and drape over it (a group of smooth triangles); live preview, Apply as one undo step (`PHYSICS-PLAN.md`) | P2 | ✅ |
 | Undo/Redo (Ctrl+Z / Ctrl+Y / Cmd+Shift+Z) | P0 | ✅ |
 | Copy/Paste/Paste in place | P1 | ✅ |
 | Model units, Model Info (Window → Model Info…: polygons / triangles / edges / groups / components in the scene and in the file, components / groups / materials "used across everything", textures, tags, scenes, libraries; Purge Unused — also Edit → Purge Unused and a button next to "In Model" / the "…" menu in Materials and Components) | P0 | ✅ |

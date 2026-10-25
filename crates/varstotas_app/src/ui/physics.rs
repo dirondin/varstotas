@@ -1,4 +1,4 @@
-//! Tools → Physics…: drop the selected groups / components under gravity onto the rest of the
+//! Window → Physics…: drop the selected groups / components under gravity onto the rest of the
 //! model, or let a selected face fall as cloth and drape over it (`varstotas_physics`). The
 //! simulation runs on a thread; its frames are shown live by writing into the model without an
 //! undo step (`preview_change`): the bodies' transforms, or the cloth group's mesh (which takes

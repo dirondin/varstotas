@@ -482,8 +482,6 @@ impl VarstotasApp {
                         self.cmd_item(ui, Cmd::Solid(op));
                     }
                 });
-                self.cmd_item(ui, Cmd::Unfold);
-                self.cmd_item(ui, Cmd::Physics);
                 ui.separator();
                 for id in [ToolId::Tape, ToolId::Dimension, ToolId::Protractor, ToolId::Axes, ToolId::Text] {
                     self.tool_item(ui, id);
@@ -497,7 +495,7 @@ impl VarstotasApp {
 
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
-            egui::containers::menu::MenuButton::new(tr!("menu-window")).config(keep).ui(ui, |ui| {
+            let (window_menu, _) = egui::containers::menu::MenuButton::new(tr!("menu-window")).config(keep).ui(ui, |ui| {
                 let mut open = self.prefs.tray_open;
                 if icon_check(ui, &mut open, Icon::SideBar, &tr!("menu-side-bar")).clicked() {
                     self.actions.push(Action::ToggleTray);
@@ -514,7 +512,22 @@ impl VarstotasApp {
                 ui.separator();
                 use Cmd::*;
                 // None: a separator
-                for c in [Some(Sheets), Some(Render), Some(WorkPlanes), Some(ModelInfo), Some(ComponentParams), Some(Library3d), Some(GeneratorEditor), Some(Console), Some(Log), None, Some(Preferences)] {
+                for c in [
+                    Some(Sheets),
+                    Some(Render),
+                    Some(WorkPlanes),
+                    Some(ModelInfo),
+                    Some(ComponentParams),
+                    Some(Library3d),
+                    Some(GeneratorEditor),
+                    Some(Unfold),
+                    Some(Physics),
+                    Some(PrintCheck),
+                    Some(Console),
+                    Some(Log),
+                    None,
+                    Some(Preferences),
+                ] {
                     let Some(c) = c else {
                         // the UV Editor (no command of its own) closes the window list
                         let r = icon_row(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, self.uv.open);
@@ -526,14 +539,21 @@ impl VarstotasApp {
                         ui.separator();
                         continue;
                     };
-                    let label = if c == Sheets { tr!("menu-sheets") } else { c.menu_label() };
+                    let label = match c {
+                        Sheets => tr!("menu-sheets"),
+                        PrintCheck => tr!("print-title"),
+                        _ => c.menu_label(),
+                    };
                     let on = c.checked(self).unwrap_or(false);
-                    if icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), true, on).on_hover_text(c.description()).clicked() {
+                    let r = icon_row(ui, Some(c.icon()), &label, c.shortcut().as_deref(), c.enabled(self), on).on_hover_text(c.description());
+                    super::tray_lib::spot(format!("cmd:{}", c.key()), r.rect.center());
+                    if r.clicked() {
                         self.actions.push(c.action());
                         ui.close();
                     }
                 }
             });
+            super::tray_lib::spot("menu:Window", window_menu.rect.center());
 
             let help_menu=ui.menu_button(tr!("menu-help"), |ui| {
                 let r = ui.button(tr!("tutorial-title"));

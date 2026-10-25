@@ -3546,7 +3546,7 @@ help-modifying-13 = Flip Along
 help-modifying-14 = mirror the selection along the red, green or blue direction
 help-modifying-15 = Soften Edges card
 help-modifying-16 = soften / smooth edges by angle
-help-modifying-17 = Tools → Unfold…
+help-modifying-17 = Window → Unfold…
 help-modifying-18 = flatten faces or groups into a cutting pattern (SVG / PDF / DXF)
 ## inference
 help-inference-1 = While you draw, the cursor snaps to points and directions of the model; a marker and a tooltip say what it found.
@@ -4512,7 +4512,7 @@ print-go-check = Go to Print Check
 print-analysis-run = Run analysis
 print-bed-refresh = Refresh bed check
 
-# Tools → Physics…
+# Window → Physics…
 physics-title = Physics
 physics-drop = Drop
 physics-drop-hint = The selected groups and components fall and come to rest on everything else that is visible.

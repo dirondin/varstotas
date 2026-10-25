@@ -5,7 +5,7 @@ action make_group
 view iso
 zoom_extents
 wait 10
-action click_spot menu:Extensions
+action click_spot menu:Window
 wait 5
 action click_spot cmd:PrintCheck
 wait 120

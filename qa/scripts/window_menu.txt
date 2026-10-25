@@ -1,0 +1,17 @@
+# Window menu: Physics…, Unfold… and 3D Printing open from it (moved from Tools / Extensions).
+box 0 0 0 100 100 100
+view iso
+zoom_extents
+wait 5
+action click_spot menu:Window
+wait 5
+action click_spot cmd:Physics
+wait 10
+action click_spot physics:mode-cloth
+wait 5
+expect physics=(idle cloth=
+action click_spot menu:Window
+wait 5
+action click_spot cmd:Unfold
+wait 10
+expect unfold_open=true
