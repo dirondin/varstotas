@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Varstotas
+GenericName=3D Modeler
+Comment=3D modeling
+Exec=varstotas %f
+Icon=varstotas
+Terminal=false
+Categories=Graphics;3DGraphics;
+MimeType=application/x-varstotas;
+StartupWMClass=varstotas

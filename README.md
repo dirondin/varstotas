@@ -137,11 +137,27 @@ and saving reports an error. Autosave/recovery remains separate and does not rot
 Artifacts go to `dist/` (not tracked by git).
 
 ```bash
-scripts/build-macos.sh      # macOS universal (arm64 + x86_64)
+scripts/build-macos.sh      # macOS universal (arm64 + x86_64): .dmg + .zip
 scripts/build-macos.sh --debug  # local target/Varstotas.app (correct Dock name and icon)
-scripts/build-windows.sh    # Windows x86_64, cross-built from macOS
+scripts/build-windows.sh    # Windows x86_64 portable .zip, cross-built from macOS
+scripts/build-windows.sh --native  # on Windows (MSVC, Git Bash): .zip + installer
+scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage
 ```
 
-- **macOS** — `scripts/build-macos.sh [--no-dmg]`: installs the `x86_64-apple-darwin` target if needed, builds release for both architectures, joins them with `lipo`, assembles `dist/Varstotas.app` (Info.plist: `dev.varstotas.app`, version from Cargo, macOS ≥ 11, Retina), builds the icon (`crates/varstotas_app/assets/icon.png`, drawn by `scripts/make_icon.py` → `iconutil` → `.icns`), signs ad-hoc (`codesign -s -`) and packs `Varstotas-<version>-macos-universal.zip` and `.dmg`. There is no Developer ID signature or notarization — on first launch: right click → "Open".
-- **Windows** — `scripts/build-windows.sh`: installs the `x86_64-pc-windows-gnu` target and `mingw-w64` (via brew), builds `varstotas.exe` (GUI subsystem, no console; the icon and version resource are embedded via `crates/varstotas_app/build.rs` / `winresource` + `windres`) and puts it into `dist/varstotas-windows-x86_64.zip`. Requires Windows 10+ (UCRT); no external DLLs.
+- **macOS** — `scripts/build-macos.sh [--no-dmg]`: installs the `x86_64-apple-darwin` target if needed, builds release for both architectures, joins them with `lipo`, assembles `dist/Varstotas.app` (Info.plist: `dev.varstotas.app`, macOS ≥ 11, Retina), builds the icon (`crates/varstotas_app/assets/icon.png`, drawn by `scripts/make_icon.py` → `iconutil` → `.icns`), signs ad-hoc (`codesign -s -`) and packs `Varstotas-<version>-macos-universal.zip` and `.dmg` (with an Applications link). There is no Developer ID signature or notarization — on first launch: right click → "Open".
+- **Windows** — `varstotas.exe` is a GUI-subsystem binary with the icon and version resource embedded (`crates/varstotas_app/build.rs`, `winresource`); Windows 10+, no external DLLs. `Varstotas-<version>-windows-x86_64.zip` is the portable build. With `--native` (MSVC on Windows) the script also builds `Varstotas-<version>-windows-x86_64-setup.exe` with Inno Setup 6 (`packaging/windows/varstotas.iss`; installed with Chocolatey when missing): per-user or all-users install, Start menu entry, optional desktop icon, the `.vrst` file association, uninstaller; English and Russian wizard. Without `--native` it cross-compiles with mingw-w64 (installed via brew) and makes the zip only.
+- **Linux** — `scripts/build-linux.sh [--no-appimage]`: needs `pkg-config`, `libwayland-dev` and `libxkbcommon-dev`. `Varstotas-<version>-linux-<arch>.tar.gz` holds the binary, icons, `varstotas.desktop`, the `.vrst` file type (`packaging/linux`) and `install.sh` (into `~/.local`, `--uninstall`; `PREFIX=/usr/local` for everyone). `Varstotas-<version>-linux-<arch>.AppImage` is one runnable file, made with `appimagetool` (downloaded into `target/tools`). X11 and Wayland both work (loaded at run time); release builds are made on Ubuntu 22.04 (glibc 2.35).
+- `VARSTOTAS_VERSION` overrides the version from Cargo in every script.
 - Checking the build without a UI click: `VARSTOTAS_SCREENSHOT=shot.bmp dist/Varstotas.app/Contents/MacOS/varstotas` — captures the window and exits.
+
+## CI and releases
+GitHub Actions in `.github/workflows`:
+
+- **CI** (`ci.yml`) — every pull request and push to `master`: `cargo clippy -D warnings` and `cargo test --workspace` on Linux.
+- **Release** (`release.yml`) — pushing a tag `release-<version>`: unit tests and release builds on macOS, Windows and Linux, then a GitHub release of the tag titled "Varstotas <version>" with all the packages above and `SHA256SUMS.txt`. Its notes are a downloads table (`.github/release-notes.md`) followed by the changes since the previous release. A version with a `-` (`release-0.3.0-rc1`) makes a pre-release. Running the workflow by hand (Actions → Release → Run workflow) with an existing tag rebuilds and replaces the release's files.
+
+The tag must match the workspace version in `Cargo.toml` (the release fails at once otherwise), so a release is: bump `version` under `[workspace.package]`, build once (updates `Cargo.lock`), commit, then
+
+```bash
+git tag release-0.2.0 && git push origin master release-0.2.0
+```

@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 type OutputObserver<'a> = dyn FnMut(usize, &[u8]) + 'a;
 type PrefixState = (Arc<AtomicUsize>, Arc<Mutex<Vec<u8>>>);
 
-pub fn isolate_group(cmd: &mut Command) {
+/// Starts the child in its own process group (Unix), so [`terminate`] kills its children too.
+pub fn isolate_group(#[cfg_attr(not(unix), allow(unused_variables))] cmd: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

@@ -17,7 +17,8 @@ thiserror = "2"
 bytemuck = { version = "1", features = ["derive"] }
 egui = "0.36"
 egui-wgpu = "0.36"
-eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts", "persistence"] }
+# x11 + wayland: the Linux window backends (no-ops elsewhere).
+eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts", "persistence", "x11", "wayland"] }
 rfd = "0.17"
 log = "0.4"
 env_logger = "0.11"

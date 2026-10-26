@@ -4,10 +4,12 @@
 #
 # Usage: scripts/build-macos.sh [--no-dmg] [--debug]
 # --debug builds a local target/Varstotas.app without universal slices or archives.
+# VARSTOTAS_VERSION overrides the version taken from Cargo (CI passes the release tag's).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 
 MAKE_DMG=1
 DEBUG_BUILD=0
@@ -28,7 +30,8 @@ DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
 [[ "$DEBUG_BUILD" == 1 ]] && APP="$ROOT/target/$APP_NAME.app"
 
-VERSION="$(cargo metadata --no-deps --format-version 1 \
+VERSION="${VARSTOTAS_VERSION:-}"
+[[ -n "$VERSION" ]] || VERSION="$(cargo metadata --no-deps --format-version 1 \
   | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="varstotas_app"))')"
 echo "==> Varstotas $VERSION"
 
@@ -53,10 +56,10 @@ fi
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 if [[ "$DEBUG_BUILD" == 1 ]]; then
-  cp "target/debug/$BIN" "$APP/Contents/MacOS/$BIN"
+  cp "$TARGET_DIR/debug/$BIN" "$APP/Contents/MacOS/$BIN"
 else
   SLICES=()
-  for t in "${TARGETS[@]}"; do SLICES+=("target/$t/release/$BIN"); done
+  for t in "${TARGETS[@]}"; do SLICES+=("$TARGET_DIR/$t/release/$BIN"); done
   lipo -create -output "$APP/Contents/MacOS/$BIN" "${SLICES[@]}"
 fi
 chmod +x "$APP/Contents/MacOS/$BIN"
@@ -122,7 +125,12 @@ if [[ $MAKE_DMG == 1 ]]; then
   cp -R "$APP" "$STAGE/"
   cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY-LICENSES.txt" "$STAGE/"
   ln -s /Applications "$STAGE/Applications"
-  hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+  # hdiutil now and then fails with "Resource busy" (CI runners): try again
+  for attempt in 1 2 3; do
+    hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null && break
+    [[ $attempt == 3 ]] && exit 1
+    sleep 5
+  done
 fi
 
 echo "==> done"

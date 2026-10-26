@@ -1,0 +1,17 @@
+## Downloads
+
+| System | File | |
+|---|---|---|
+| **macOS** 11+ (Apple Silicon and Intel) | `Varstotas-{version}-macos-universal.dmg` | open, drag Varstotas to Applications |
+| | `Varstotas-{version}-macos-universal.zip` | the same app, zipped |
+| **Windows** 10+ (x64) | `Varstotas-{version}-windows-x86_64-setup.exe` | installer: Start menu, `.vrst` files, uninstall |
+| | `Varstotas-{version}-windows-x86_64.zip` | portable: unzip and run `varstotas.exe` |
+| **Linux** (x86_64, glibc 2.35+) | `Varstotas-{version}-linux-x86_64.AppImage` | `chmod +x` and run |
+| | `Varstotas-{version}-linux-x86_64.tar.gz` | unpack, run `./varstotas` or `./install.sh` |
+
+`SHA256SUMS.txt` lists the files' checksums (`shasum -a 256 -c SHA256SUMS.txt`).
+
+The builds are not signed with a paid certificate:
+
+- **macOS** — the first time, right-click Varstotas → **Open** → **Open**.
+- **Windows** — SmartScreen may warn: **More info** → **Run anyway**.

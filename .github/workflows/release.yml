@@ -1,0 +1,121 @@
+# A release-* tag: unit tests and release builds on macOS, Windows and Linux; the packages
+# (macOS .dmg + .zip, Windows installer + .zip, Linux .AppImage + .tar.gz) and their
+# SHA256SUMS go to a GitHub release of the tag (notes: .github/release-notes.md + the changes).
+# release-1.2.3-rc1 (any version with a "-") makes a pre-release.
+name: Release
+
+on:
+  push:
+    tags: ['release-*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release-* tag to (re)build'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # no debug info in test builds: smaller target/ (runner disk) and faster links
+  CARGO_PROFILE_DEV_DEBUG: 0
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  check:
+    name: Tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Version
+        run: |
+          cargo_version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+          if [[ "${TAG#release-}" != "$cargo_version" ]]; then
+            echo "::error::Tag $TAG does not match the workspace version $cargo_version in Cargo.toml (expected release-$cargo_version)"
+            exit 1
+          fi
+          echo "Varstotas $cargo_version"
+
+  build:
+    name: ${{ matrix.name }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            build: scripts/build-macos.sh
+          - name: Windows
+            os: windows-latest
+            build: scripts/build-windows.sh --native
+          - name: Linux
+            os: ubuntu-22.04
+            build: scripts/build-linux.sh
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Version from the tag
+        run: echo "VARSTOTAS_VERSION=${TAG#release-}" >> "$GITHUB_ENV"
+      - name: System packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libwayland-dev libxkbcommon-dev zip
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests
+        run: cargo test --workspace --locked
+      - name: Build and package
+        run: ${{ matrix.build }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: varstotas-${{ matrix.name }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.tar.gz
+            dist/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          sparse-checkout: .github
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and notes
+        run: |
+          (cd dist && sha256sum -- * > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+          VERSION="${TAG#release-}"
+          sed "s/{version}/$VERSION/g" .github/release-notes.md > notes.md
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            pre=()
+            [[ "$VERSION" == *-* ]] && pre=(--prerelease)
+            gh release create "$TAG" dist/* --verify-tag --title "Varstotas $VERSION" \
+              --notes-file notes.md --generate-notes "${pre[@]}"
+          fi
