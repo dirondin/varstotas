@@ -2911,6 +2911,8 @@ dialog-template-intro = Новыя мадэлі пачынаюцца з гэты
 dialog-about-tagline = Лёгкі натыўны 3D-рэдактар для малявання і пабудовы.
 # $version is the app version
 dialog-about-version = Версія { $version }
+dialog-about-build = Зборка { $build } · { $commit }
+dialog-about-dev-build = Зборка для распрацоўкі · { $commit }
 dialog-about-licence = Свабоднае праграмнае забеспячэнне пад ліцэнзіяй MIT.
 dialog-about-licences = Ліцэнзіі…
 

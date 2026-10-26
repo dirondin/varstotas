@@ -47,6 +47,28 @@ mod viewport;
 const EXAMPLES_URL: &str = "https://github.com/dirondin/varstotas/tree/master/examples";
 const ISSUES_URL: &str = "https://github.com/dirondin/varstotas/issues/new";
 const APP_NAME: &str = "Varstotas"; // i18n-ignore
+const BUILD: &str = env!("VARSTOTAS_BUILD"); // CI run number; empty in local builds
+const COMMIT: &str = env!("VARSTOTAS_COMMIT");
+
+/// `0.1.0 (build 42, 4cc73e5)`; local builds: `0.1.0 (dev, 4cc73e5)`. For `--version`,
+/// the bridge and reports — not translated.
+fn version_full() -> String {
+    let build = if BUILD.is_empty() { "dev".to_string() } else { format!("build {BUILD}") }; // i18n-ignore
+    match COMMIT {
+        "" => format!("{} ({build})", env!("CARGO_PKG_VERSION")),
+        c => format!("{} ({build}, {c})", env!("CARGO_PKG_VERSION")),
+    }
+}
+
+/// The build line under the version in About and Report a Problem.
+fn build_line() -> String {
+    let commit = if COMMIT.is_empty() { "—" } else { COMMIT };
+    if BUILD.is_empty() {
+        varstotas_i18n::tr!("dialog-about-dev-build", commit = commit)
+    } else {
+        varstotas_i18n::tr!("dialog-about-build", build = BUILD, commit = commit)
+    }
+}
 
 fn main() -> eframe::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
@@ -55,7 +77,7 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
     if args.len() == 1 && (args[0] == "--version" || args[0] == "-V") {
-        println!("{APP_NAME} {}", env!("CARGO_PKG_VERSION"));
+        println!("{APP_NAME} {}", version_full());
         return Ok(());
     }
     let startup_document = startup::document(args).unwrap_or_else(|error| {

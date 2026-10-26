@@ -36,6 +36,8 @@ VERSION="${VARSTOTAS_VERSION:-}"
 echo "==> Varstotas $VERSION"
 # Bundle versions are numeric: 0.2.0-rc.1 → 0.2.0
 NUM_VERSION="$(sed -nE 's/^([0-9]+(\.[0-9]+){0,2}).*/\1/p' <<<"$VERSION")"
+# CFBundleVersion is the CI build number (the same one shown in About)
+BUILD_NUMBER="${VARSTOTAS_BUILD:-${GITHUB_RUN_NUMBER:-}}"
 
 # 1–2. A local debug build, or release builds for both architectures.
 if [[ "$DEBUG_BUILD" == 1 ]]; then
@@ -94,7 +96,7 @@ cat >"$APP/Contents/Info.plist" <<EOF
   <key>CFBundleIconFile</key><string>Varstotas</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleVersion</key><string>${NUM_VERSION:-0.0.0}</string>
+  <key>CFBundleVersion</key><string>${BUILD_NUMBER:-${NUM_VERSION:-0.0.0}}</string>
   <key>CFBundleShortVersionString</key><string>${NUM_VERSION:-0.0.0}</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_MACOS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>

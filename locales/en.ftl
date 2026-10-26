@@ -2841,6 +2841,8 @@ dialog-template-intro = New models start with these units. You can change the de
 dialog-about-tagline = A light, native 3D modeler for drawing and building.
 # $version is the app version
 dialog-about-version = Version { $version }
+dialog-about-build = Build { $build } · { $commit }
+dialog-about-dev-build = Development build · { $commit }
 dialog-about-licence = Free software under the MIT licence.
 dialog-about-licences = Licences…
 

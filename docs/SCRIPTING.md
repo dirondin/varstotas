@@ -158,7 +158,7 @@ A request is a JSON line `{"id": 1, "token": "…", "method": "…", "params": {
 
 | Method | Parameters → result |
 |---|---|
-| `hello` | → `{app, version, api}` |
+| `hello` | → `{app, version, build, api}` (`build`: `0.1.0 (build 42, 4cc73e5)`, or `dev` instead of the number in local builds) |
 | `eval` | `code`, `vars` (JSON), `label` → `{value, output, changed}`; entities — `{"$entity": id, "kind"}`, vectors — `{"$vec": [x, y, z]}` (passed the same way in `vars`) |
 | `begin` / `commit` / `abort` | an operation (one Undo step); connection-owned staged model; closing or aborting discards it; commit rejects concurrent document/context changes |
 | `info`, `docs` | document summary; this reference |

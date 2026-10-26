@@ -31,7 +31,7 @@ impl FeedbackWindow {
             include_errors: false,
             diagnostics: format!(
                 "Varstotas: {}\nOS: {}\nArchitecture: {}\n{gpu}", // i18n-ignore: stable diagnostic field names
-                env!("CARGO_PKG_VERSION"),
+                crate::version_full(),
                 std::env::consts::OS,
                 std::env::consts::ARCH
             ),
@@ -92,6 +92,15 @@ impl VarstotasApp {
             .open(&mut open)
             .default_size([620.0, 540.0])
             .show(ctx, |ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "{} · {}",
+                        tr!("dialog-about-version", version = env!("CARGO_PKG_VERSION")),
+                        crate::build_line()
+                    ))
+                    .small()
+                    .weak(),
+                );
                 ui.label(tr!("report-intro"));
                 ui.label(RichText::new(tr!("report-access")).small());
                 ui.add_space(6.0);

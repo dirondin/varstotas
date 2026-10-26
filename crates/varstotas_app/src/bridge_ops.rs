@@ -281,6 +281,7 @@ impl VarstotasApp {
             "hello" => done(Ok(json!({
                 "app": "Varstotas",
                 "version": env!("CARGO_PKG_VERSION"),
+                "build": crate::version_full(),
                 "api": varstotas_script::api_names(),
             }))),
             "docs" => done(Ok(Value::String(include_str!("../../../docs/SCRIPTING.md").into(),

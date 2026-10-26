@@ -107,8 +107,9 @@ if [[ $NATIVE == 1 ]]; then
     choco install innosetup -y --no-progress >/dev/null
     ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
   fi
-  # Windows file versions are numeric: 1.2.3 → 1.2.3.0 (anything else → 0.0.0.0)
-  NUM="$(sed -nE 's/^([0-9]+)\.([0-9]+)\.([0-9]+).*/\1.\2.\3.0/p' <<<"$VERSION")"
+  # Windows file versions are numeric: 1.2.3 + CI build 42 → 1.2.3.42 (no build → .0; anything else → 0.0.0.0)
+  BUILD_NUMBER="${VARSTOTAS_BUILD:-${GITHUB_RUN_NUMBER:-0}}"
+  NUM="$(sed -nE "s/^([0-9]+)\\.([0-9]+)\\.([0-9]+).*/\\1.\\2.\\3.$BUILD_NUMBER/p" <<<"$VERSION")"
   echo "==> installer"
   "$ISCC" -Q "/DAppVersion=$VERSION" "/DNumVersion=${NUM:-0.0.0.0}" \
     "/DSourceDir=$(win "$STAGE")" "/DIconFile=$(win "$WORK/varstotas.ico")" \

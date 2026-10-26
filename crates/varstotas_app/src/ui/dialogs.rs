@@ -447,6 +447,7 @@ impl VarstotasApp {
                         ui.label(RichText::new(crate::APP_NAME).size(28.0).strong());
                         ui.add_space(4.0);
                         ui.label(RichText::new(tr!("dialog-about-version", version = env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));
+                        ui.label(RichText::new(crate::build_line()).small().color(theme::text_dim()));
                         ui.add_space(16.0);
                         ui.label(tr!("dialog-about-tagline"));
                         ui.add_space(14.0);

@@ -2865,6 +2865,8 @@ dialog-template-intro = Nauji modeliai pradedami su šiais vienetais. Numatytąj
 dialog-about-tagline = Lengvas, vietinis 3D modeliavimo įrankis braižymui ir kūrimui.
 # $version is the app version
 dialog-about-version = Versija { $version }
+dialog-about-build = Kompiliacija { $build } · { $commit }
+dialog-about-dev-build = Kūrėjo kompiliacija · { $commit }
 dialog-about-licence = Laisvoji programinė įranga pagal MIT licenciją.
 dialog-about-licences = Licencijos…
 
