@@ -1,7 +1,7 @@
 # Code map (read this first instead of sweeping the code)
 
 Varstotas: a 3D modeller in Rust (eframe/egui 0.36 + wgpu, glam f64, slotmap). Units are millimetres, Z is up.
-Status: `docs/06-STATUS.md`. UI regression scripts: `qa/scripts/` (run by `qa/run_all.sh`).
+UI regression scripts: `qa/scripts/` (run by `qa/run_all.sh`).
 
 ## Crates
 - `varstotas_i18n`: localization (Fluent): `tr!` / `tr_args`, `set_language`, `languages`, `platform_keys` (modifier markers), `pick_variant` (plugin header variants), `with_language` (tests); `build.rs` embeds `locales/*.ftl`. Texts: `locales/en.ftl` (base), `locales/ru.ftl`, `locales/lt.ftl`, `locales/be.ftl`; rules in `docs/LOCALIZATION.md`.
@@ -70,7 +70,7 @@ Benchmark: `cargo run --release -p varstotas_kernel --example bench [filter]`.
 | `post.rs`, `post.wgsl` | Realistic effects: `Post` (pipelines), `PostTargets` (HDR, G-buffer, linear depth, AO, bloom mips; `encode`), `PostUniform`; AO, SSR, fog, DOF, bloom, tone curve, NPR stylize, vignette |
 | `custom.rs` | custom WGSL surfaces: `compose` (per-shader name suffix, `Params` structs, `custom_surface` dispatch), `validate` (naga), `check` (message with the shader's line) |
 
-Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in `06-STATUS.md`).
+Viewer: `cargo run -p varstotas_render --example viewer` (env vars are listed in the header of `crates/varstotas_render/examples/viewer.rs`).
 
 ### varstotas_script/src
 | File | Contents |

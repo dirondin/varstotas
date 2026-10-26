@@ -16,10 +16,10 @@ UI languages: English, Russian, Lithuanian, Belarusian (Preferences → Interfac
 - [Architecture](docs/02-ARCHITECTURE.md)
 - [Code map](docs/CODEMAP.md)
 - [Roadmap](docs/03-ROADMAP.md)
-- [**Current status and progress**](docs/06-STATUS.md)
 - [UX specification of the tools](docs/05-UX-SPEC.md)
 - [Scripting (Rhai, Python, bridge)](docs/SCRIPTING.md) · [Generators](docs/GENERATORS.md) · [Plugins](docs/PLUGINS.md) · [Shaders](docs/SHADERS.md)
 - [Localization](docs/LOCALIZATION.md)
+- [Security model](SECURITY.md)
 - [Native document format and metadata](docs/FILE-FORMAT.md)
 
 ## Structure

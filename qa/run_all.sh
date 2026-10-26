@@ -15,6 +15,8 @@ for n in $names; do
   [[ -d $root/qa/fixtures/$n/components ]] && cp -R $root/qa/fixtures/$n/components $out/home/.varstotas/   # or with the script's fixture
   # Explicit repository fixtures for regression tests, never installed by the application.
   [[ $n == templates ]] && rm -rf $out/models/custom_templates
+  # printing_all hands its export to this stub slicer, which records the file it received.
+  [[ $n == printing_all ]] && printf '#!/bin/sh\n[ "$#" -eq 1 ] || exit 21\nprintf "%%s\\n" "$1" >> %s/slicer-received.txt\n' $out > $out/fake-print-slicer && chmod 700 $out/fake-print-slicer
   qa_home=$out/home
   qa_examples=$root/examples
   if [[ $n == no_examples ]]; then

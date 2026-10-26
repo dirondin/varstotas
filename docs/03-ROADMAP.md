@@ -80,7 +80,7 @@ Searching and downloading ready-made models and materials from free sources righ
   - The component attributes keep the source, author, licence and link. File → Export → Attributions produces a list of credits (needed for CC-BY).
   - Network: HTTP client, timeouts and cancelling, offline work from the cache.
   - Sources without keys or with a free key: Poly Haven (CC0, public API), Smithsonian Open Access 3D (CC0), Poly Pizza (CC0/CC-BY, free key), NASA 3D Resources (open repository).
-- **Batch 2 — more sources and import by link.** ✅ (2026-10-19: Kenney, Quaternius via the browser, filters, favourites and history, cancelling, semi-automatic mode for sites without an API, 3MF / DAE / FBX import; see `docs/06-STATUS.md`. Not done: STEP; the ND badge is shown at once, not "after an edit".)
+- **Batch 2 — more sources and import by link.** ✅ (2026-10-19: Kenney, Quaternius via the browser, filters, favourites and history, cancelling, semi-automatic mode for sites without an API, 3MF / DAE / FBX import. Not done: STEP; the ND badge is shown at once, not "after an edit".)
   - Sketchfab: only downloadable models with CC licences, with the user's personal token.
   - CC0 sets from Kenney and Quaternius (a catalogue with previews).
   - **Import from URL**: a direct link to `.glb` / `.gltf` / `.obj` / `.stl` / `.zip`.
@@ -193,4 +193,3 @@ Items 2 and 4 agreed with the owner on 2026-10-19.
 
 ## Open questions (to be decided in the future)
 - Intersect Faces of two groups in empty space: currently only edges are created (faces — only where the loop lies in an existing face). Options: keep or create faces from closed flat loops (a switch in `imprint_segments`, `Classify::None` → `Classify::NewEdges`). The owner's decision — later.
-- Release bundles (`.app`/`.exe`) are rebuilt only at the owner's request; for checking — `target/release/varstotas`.

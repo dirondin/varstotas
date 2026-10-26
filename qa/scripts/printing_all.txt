@@ -1,4 +1,5 @@
 # Full native workflow: analysis, bed, capped split with sockets/dowels, layout and scoped export.
+# Runs in target/qa; qa/run_all.sh writes the stub ./fake-print-slicer there.
 box 0 0 0 20 20 20
 select_all
 action make_group
@@ -48,10 +49,10 @@ wait 10
 screenshot shots/printing-wall-map.bmp
 action print_export
 wait 10
-action print_export_to target/qa/models/printing-prepared.3mf
+action print_export_to models/printing-prepared.3mf
 wait 120
 expect export=true
-action print_slicer target/qa/fake-print-slicer
+action print_slicer ./fake-print-slicer
 action click_spot printing:slicer-open
 wait 10
 screenshot shots/printing-export.bmp
