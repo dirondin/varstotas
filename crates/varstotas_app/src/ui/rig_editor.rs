@@ -479,10 +479,7 @@ impl VarstotasApp {
         let mut pick = None;
         let mut help: Option<Option<String>> = None;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 40.0);
-        let mut win = egui::Window::new(tr!("rig-title")).id(egui::Id::new("rig_editor_window")).open(&mut open).collapsible(false).resizable(true).default_pos(pos).default_width(760.0);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+        let win = self.placed(egui::Window::new(tr!("rig-title")).id(egui::Id::new("rig_editor_window")).open(&mut open).collapsible(false).resizable(true).default_width(760.0), pos);
         let ed = &mut self.rig_editor;
         win.show(ctx, |ui| {
             let Some(name) = name else {

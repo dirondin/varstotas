@@ -107,11 +107,7 @@ impl VarstotasApp {
         let mut help: Option<Option<String>> = None;
         let pos = self.viewport.view_rect.min + egui::vec2(16.0, 16.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(theme::card_bg());
-        let mut win = egui::Window::new(tr!("console-title")).id(egui::Id::new("Script Console")).open(&mut open).default_pos(pos);
-        if self.debug.script_active() {
-            // Scripted runs: a fixed place (egui remembers window positions between runs).
-            win = win.fixed_pos(pos);
-        }
+        let win = self.placed(egui::Window::new(tr!("console-title")).id(egui::Id::new("Script Console")).open(&mut open), pos);
         win
             .default_size([560.0, 460.0])
             .frame(frame)

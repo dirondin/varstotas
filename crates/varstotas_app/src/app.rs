@@ -852,6 +852,14 @@ impl VarstotasApp {
         self.flash = Some((msg.into(), self.now + FLASH_SECS, true));
     }
 
+    /// `win` at `pos`, fixed there in scripted runs (egui remembers window positions between
+    /// runs).
+    pub(crate) fn placed<'a>(&self, win: egui::Window<'a>, pos: impl Into<Pos2>) -> egui::Window<'a> {
+        let pos = pos.into();
+        let win = win.default_pos(pos);
+        if self.debug.script_active() { win.fixed_pos(pos) } else { win }
+    }
+
     pub(crate) fn aspect(&self) -> f64 {
         let s = self.viewport.size();
         (s.x / s.y.max(1.0)) as f64

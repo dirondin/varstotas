@@ -227,16 +227,13 @@ impl VarstotasApp {
         }
         let mut open = true;
         let pos = self.viewport.view_rect.min + egui::vec2(60.0, 40.0);
-        let mut win = egui::Window::new(tr!("prefs-title"))
+        let win = egui::Window::new(tr!("prefs-title"))
             .id(egui::Id::new("preferences_window"))
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
-            .default_pos(pos)
             .default_size([620.0, 460.0]);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+        let win = self.placed(win, pos);
         let shown = win.show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 // the list of sections and the search

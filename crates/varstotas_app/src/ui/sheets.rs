@@ -281,10 +281,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(20.0, 20.0);
         let mut open = true;
         let (mut add, mut delete, mut duplicate, mut goto, mut save) = (false, false, false, None, None);
-        let mut win = egui::Window::new(tr!("sheets-title")).id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(false).default_pos(pos);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+        let win = self.placed(egui::Window::new(tr!("sheets-title")).id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(false), pos);
         let model = &self.doc.model;
         let st = &mut self.sheets;
         win.show(ctx, |ui| {

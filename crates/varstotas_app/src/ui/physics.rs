@@ -341,15 +341,12 @@ impl VarstotasApp {
         }
         let pos = self.viewport.view_rect.min + egui::vec2(40.0, 40.0);
         let mut open = true;
-        let mut win = egui::Window::new(tr!("physics-title"))
+        let win = egui::Window::new(tr!("physics-title"))
             .id(egui::Id::new("physics_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false)
-            .default_pos(pos);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+            .resizable(false);
+        let win = self.placed(win, pos);
         // what a run would start from (not while one is shown: the selection is the run's)
         let ready: Result<String, String> = match (self.physics_live(), self.physics.mode) {
             (true, _) => Ok(String::new()),

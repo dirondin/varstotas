@@ -68,10 +68,7 @@ impl VarstotasApp {
         }
         let mut open = true;
         let pos = self.viewport.view_rect.left_bottom() + egui::vec2(20.0, -340.0);
-        let mut win = egui::Window::new(tr!("log-title")).id(egui::Id::new("log_window")).open(&mut open).default_pos(pos).default_size([640.0, 300.0]).resizable(true);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+        let win = self.placed(egui::Window::new(tr!("log-title")).id(egui::Id::new("log_window")).open(&mut open).default_size([640.0, 300.0]).resizable(true), pos);
         win.show(ctx, |ui| {
             let lw = &mut self.log_window;
             let (n_err, n_warn) = lw.cache.1.iter().fold((0, 0), |(a, b), e| if e.level == Level::Error { (a + 1, b) } else { (a, b + 1) });

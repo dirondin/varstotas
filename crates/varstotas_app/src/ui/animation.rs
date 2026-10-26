@@ -241,15 +241,12 @@ impl VarstotasApp {
         let mut export = false;
         let mut cancel = false;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 40.0);
-        let mut win = egui::Window::new(tr!("anim-title"))
+        let win = egui::Window::new(tr!("anim-title"))
             .id(egui::Id::new("animation_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false)
-            .default_pos(pos);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+            .resizable(false);
+        let win = self.placed(win, pos);
         let w = &mut self.anim_window;
         let progress = w.run.as_ref().map(|r| r.progress());
         win.show(ctx, |ui| {

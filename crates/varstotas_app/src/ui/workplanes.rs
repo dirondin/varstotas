@@ -33,15 +33,12 @@ impl VarstotasApp {
         let mut remove: Option<usize> = None;
         let mut open = true;
         let pos = self.viewport.view_rect.right_top() + vec2(-380.0, 40.0);
-        let mut win = egui::Window::new(tr!("workplane-title"))
+        let win = egui::Window::new(tr!("workplane-title"))
             .id(egui::Id::new("work_planes_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false)
-            .default_pos(pos);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+            .resizable(false);
+        let win = self.placed(win, pos);
         win.show(ctx, |ui| {
             ui.set_width(340.0);
             if planes.is_empty() {

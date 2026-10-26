@@ -196,15 +196,12 @@ impl VarstotasApp {
         let mut open = true;
         let mut action = None;
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 60.0);
-        let mut win = egui::Window::new(tr!("model-info-preview-title"))
+        let win = egui::Window::new(tr!("model-info-preview-title"))
             .id(egui::Id::new("doc_preview_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false)
-            .default_pos(pos);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+            .resizable(false);
+        let win = self.placed(win, pos);
         win.show(ctx, |ui| {
             ui.set_width(360.0);
             match tex {
@@ -288,17 +285,14 @@ impl VarstotasApp {
         let mut open = true;
         let mut purge = false;
         let pos = self.viewport.view_rect.left_top() + vec2(40.0, 40.0);
-        let mut win = egui::Window::new(tr!("model-info-title"))
+        let win = egui::Window::new(tr!("model-info-title"))
             .id(egui::Id::new("model_info_window"))
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
             .default_size([480.0, 520.0])
-            .min_size([340.0, 260.0])
-            .default_pos(pos);
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+            .min_size([340.0, 260.0]);
+        let win = self.placed(win, pos);
         let response = win.show(ctx, |ui| {
             let row = |ui: &mut egui::Ui, k: &str, v: RichText| {
                 ui.label(k);

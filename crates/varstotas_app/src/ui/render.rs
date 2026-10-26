@@ -139,15 +139,12 @@ impl VarstotasApp {
         let mut all = false;
         let has_scenes = !m.scenes.is_empty();
         let pos = self.viewport.view_rect.left_top() + vec2(40.0, 30.0);
-        let mut win = egui::Window::new(tr!("render-title"))
+        let win = egui::Window::new(tr!("render-title"))
             .id(egui::Id::new("render_window"))
             .open(&mut open)
             .collapsible(false)
-            .default_pos(pos)
             .default_size(vec2(880.0, 640.0));
-        if self.debug.script_active() {
-            win = win.fixed_pos(pos);
-        }
+        let win = self.placed(win, pos);
         let tex = self.viewport.pt_texture();
         let mut job = self.viewport.pt.as_mut();
         let batch = self.render_window.batch.as_ref().map(|b| (b.next, b.written.len()));
