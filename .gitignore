@@ -3,3 +3,4 @@
 *~autosave
 /dist
 __pycache__/
+/.claude/
