@@ -9,8 +9,8 @@ use crate::downloads::{Downloads, LibraryState, SavedAsset};
 use crate::online_models::{ModelAsset, ModelSource};
 use varstotas_kernel::LicenseKind;
 use varstotas_i18n::tr;
-use crate::plugins::{ParamKind, Plugin};
-use crate::ui::online_mats::{ThumbState, open_url};
+use crate::plugins::Plugin;
+use crate::ui::online_mats::{ThumbState, open_url, plugin_params_ui};
 use egui::{Color32, RichText, Ui};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -200,11 +200,6 @@ impl ModelWindow {
     }
 }
 
-/// A parameter that names a folder or a file (`folder`, `dir`, `path`…).
-fn is_path_param(key: &str) -> bool {
-    let k = key.to_lowercase();
-    ["folder", "dir", "path", "file"].iter().any(|w| k.contains(w))
-}
 
 /// "12.3 MB".
 fn megabytes(b: u64) -> String {
@@ -225,7 +220,7 @@ impl VarstotasApp {
     fn model_plugin_source(&self, p: &Plugin) -> Result<ModelSource, String> {
         let values = self.models.plugin_values.get(&p.path).cloned().unwrap_or_default();
         let mut params = crate::plugins::param_values(p, &values, self.doc.model.unit)?;
-        for q in p.params.iter().filter(|q| q.kind == ParamKind::Text && is_path_param(&q.key)) {
+        for q in p.params.iter().filter(|q| q.is_path()) {
             if let Some(serde_json::Value::String(v)) = params.get_mut(&q.key)
                 && !v.trim().is_empty()
             {
@@ -353,7 +348,7 @@ impl VarstotasApp {
                 return found;
             }
         }
-        let (folder, name) = (a.source.folder(), crate::ui::mat_library::safe_name(&a.name));
+        let (folder, name) = (a.source.folder(), crate::files::safe_name(&a.name, crate::files::MODEL));
         if a.pack {
             let sub = std::path::Path::new(&folder).join(&name).to_string_lossy().to_string();
             return self.library.items.iter().position(|i| i.folder == sub);
@@ -365,7 +360,7 @@ impl VarstotasApp {
     pub(crate) fn library_show_folder(&mut self, a: &ModelAsset) {
         let sub = match self.models_in_library(a) {
             Some(i) => self.library.items[i].folder.clone(),
-            None => Path::new(&a.source.folder()).join(crate::ui::mat_library::safe_name(&a.name)).to_string_lossy().to_string(),
+            None => Path::new(&a.source.folder()).join(crate::files::safe_name(&a.name, crate::files::MODEL)).to_string_lossy().to_string(),
         };
         self.show_library_folder(&sub);
     }
@@ -818,27 +813,7 @@ impl VarstotasApp {
         values.resize(p.params.len(), String::new());
         let mut load = false;
         ui.horizontal_wrapped(|ui| {
-            for (q, v) in p.params.iter().zip(values.iter_mut()) {
-                ui.label(&q.label);
-                if q.kind == ParamKind::Bool {
-                    let mut on = v == "true";
-                    if ui.checkbox(&mut on, "").changed() {
-                        *v = on.to_string();
-                    }
-                } else {
-                    let w = if q.kind == ParamKind::Text { 220.0 } else { 70.0 };
-                    let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(if !q.default.is_empty() { q.default.clone() } else if is_path_param(&q.key) { tr!("model-lib-choose-with") } else { "—".to_string() }).id_salt(("models_param", &q.key)));
-                    load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    if q.kind == ParamKind::Text && is_path_param(&q.key) && ui.small_button("…").on_hover_text(tr!("model-lib-choose-it")).clicked() {
-                        let d = rfd::FileDialog::new();
-                        let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
-                        if let Some(d) = picked {
-                            *v = d.to_string_lossy().to_string();
-                            load = true;
-                        }
-                    }
-                }
-            }
+            load |= plugin_params_ui(ui, "models_param", &p.params, values);
             let tip = tr!(if searches { "model-lib-plugin-apply-hover" } else { "model-lib-plugin-load-hover" });
             load |= ui.button(tr!(if searches { "apply" } else { "model-lib-load" })).on_hover_text(tip).clicked();
         });

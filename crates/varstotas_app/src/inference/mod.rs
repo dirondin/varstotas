@@ -207,6 +207,11 @@ pub struct InferenceResult {
 }
 
 impl InferenceResult {
+    /// The normal of the face under the cursor.
+    pub fn face_normal(&self) -> Option<DVec3> {
+        Some(self.face.as_ref()?.plane.normal).filter(|n| n.length() > 0.5)
+    }
+
     pub fn free(point: DVec3) -> Self {
         Self {
             point,

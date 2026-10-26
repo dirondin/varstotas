@@ -10,6 +10,7 @@
 use crate::app::{Action, VarstotasApp};
 use super::tray_lib::{DragItem, FolderAct, LibMenuAct, TrayDrag, file_key};
 use crate::document::PaletteMaterial;
+use crate::files::{MATERIAL, safe_name};
 use varstotas_i18n::tr;
 use egui::{Color32, RichText, Ui};
 use varstotas_kernel::io::MATERIAL_EXT;
@@ -127,12 +128,6 @@ fn scan(root: &Path, old: Vec<MatItem>) -> (Vec<MatItem>, Vec<String>) {
         }
     }
     (items, errors)
-}
-
-pub(crate) fn safe_name(s: &str) -> String {
-    let n: String = s.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
-    let n = n.trim().trim_matches('.').to_string();
-    if n.is_empty() { "Material".into() } else { n } // i18n-ignore
 }
 
 /// The materials of the Material Gallery demo (its floor and backdrop left out).
@@ -257,7 +252,7 @@ impl VarstotasApp {
     pub(crate) fn save_material_value(&mut self, mat: &Material) {
         let Some(dir) = self.material_library_dir() else { return };
         let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name)));
+        let path = dir.join(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name, MATERIAL)));
         match varstotas_kernel::io::save_material(mat, &path) {
             Ok(()) => {
                 self.flash(tr!("mat-saved", name = mat.name.as_str()));
@@ -272,7 +267,7 @@ impl VarstotasApp {
         let Some(mat) = self.doc.model.materials.get(id).cloned() else { return };
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter(tr!("mat-file-filter"), &[MATERIAL_EXT])
-            .set_file_name(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name)))
+            .set_file_name(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name, MATERIAL)))
             .save_file()
         else {
             return;
@@ -789,7 +784,7 @@ impl VarstotasApp {
         let r = (|| -> Result<PathBuf, String> {
             let mut mat = varstotas_kernel::io::load_material(path).map_err(|e| e.to_string())?;
             mat.name = name.to_string();
-            let to = path.with_file_name(format!("{}.{MATERIAL_EXT}", safe_name(name)));
+            let to = path.with_file_name(format!("{}.{MATERIAL_EXT}", safe_name(name, MATERIAL)));
             if to != path && to.exists() {
                 return Err(tr!("mat-file-exists", path = to.display().to_string()));
             }

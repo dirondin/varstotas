@@ -16,13 +16,6 @@ pub struct WorkPlanesWindow {
     orig: Option<PlanesState>,
 }
 
-fn len_drag(v: &mut f64, unit: varstotas_kernel::LengthUnit) -> egui::DragValue<'_> {
-    egui::DragValue::new(v)
-        .speed(1.0)
-        .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
-        .custom_parser(move |s| varstotas_kernel::units::parse_length(s, unit))
-}
-
 fn deg_drag(v: &mut f64) -> egui::DragValue<'_> {
     egui::DragValue::new(v).speed(0.5).max_decimals(2).suffix("°")
 }
@@ -81,9 +74,9 @@ impl VarstotasApp {
                 ui.label(RichText::new(tr!("workplane-world", name = p.name.clone())).strong());
                 egui::Grid::new("work_plane_fields").num_columns(4).spacing([8.0, 4.0]).show(ui, |ui| {
                     ui.label(tr!("workplane-origin"));
-                    ui.add(len_drag(&mut p.origin.x, unit));
-                    ui.add(len_drag(&mut p.origin.y, unit));
-                    ui.add(len_drag(&mut p.origin.z, unit));
+                    ui.add(super::len_drag(&mut p.origin.x, unit));
+                    ui.add(super::len_drag(&mut p.origin.y, unit));
+                    ui.add(super::len_drag(&mut p.origin.z, unit));
                     ui.end_row();
                     let (mut t, mut a, mut s) = p.angles();
                     let (t0, a0, s0) = (t, a, s);

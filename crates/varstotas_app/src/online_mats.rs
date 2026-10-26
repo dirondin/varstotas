@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::files::{MATERIAL, file_safe, safe_name};
 use crate::plugins::Plugin;
 
 /// A material plugin as a source, with the values of its parameters for this catalogue.
@@ -85,7 +86,7 @@ impl Source {
 
     /// The library folder of its downloads.
     pub fn folder(&self) -> String {
-        crate::ui::mat_library::safe_name(self.label())
+        safe_name(self.label(), MATERIAL)
     }
 
     fn catalogue_url(&self) -> &'static str {
@@ -235,10 +236,6 @@ fn store(path: &Path, bytes: &[u8]) {
         let _ = std::fs::create_dir_all(d);
     }
     let _ = std::fs::write(path, bytes);
-}
-
-pub(crate) fn file_safe(s: &str) -> String {
-    s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
 }
 
 /// Poly Haven's `assets?t=textures` (most downloaded first).
@@ -498,7 +495,7 @@ impl Online {
         std::thread::spawn(move || {
             let _progress = progress.observe(&ctx);
             let res = download(&asset).and_then(|m| {
-                let path = dir.join(asset.source.folder()).join(format!("{}.{}", crate::ui::mat_library::safe_name(&m.name), varstotas_kernel::io::MATERIAL_EXT));
+                let path = dir.join(asset.source.folder()).join(format!("{}.{}", safe_name(&m.name, MATERIAL), varstotas_kernel::io::MATERIAL_EXT));
                 let _ = std::fs::create_dir_all(path.parent().unwrap_or(&dir));
                 varstotas_kernel::io::save_material(&m, &path).map_err(|e| e.to_string())?;
                 Ok((path, Box::new(m)))

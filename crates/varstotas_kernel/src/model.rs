@@ -211,6 +211,14 @@ impl Material {
     pub fn pbr_or_default(&self) -> crate::pbr::Pbr {
         self.pbr.clone().unwrap_or_default()
     }
+
+    /// The image in texture slot `slot` ("base" or a PBR map name).
+    pub fn slot_image(&self, slot: &str) -> Option<&crate::TextureImage> {
+        match slot {
+            "base" => self.image.as_ref(),
+            _ => self.pbr.as_ref().and_then(|p| p.map(slot)),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

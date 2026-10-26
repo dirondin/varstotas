@@ -342,13 +342,6 @@ impl VarstotasApp {
 
         if let Some(mut p) = self.text3d_dialog.clone() {
             let unit = self.doc.model.unit;
-            fn len_drag(v: &mut f64, unit: varstotas_kernel::LengthUnit) -> egui::DragValue<'_> {
-                egui::DragValue::new(v)
-                    .range(0.1..=1.0e6)
-                    .speed(1.0)
-                    .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
-                    .custom_parser(move |s| varstotas_kernel::units::parse_length(s, unit))
-            }
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("text3d")).show(ctx, |ui| {
                 ui.set_width(360.0);
@@ -368,13 +361,13 @@ impl VarstotasApp {
                     });
                     ui.end_row();
                     ui.label(tr!("dialog-height"));
-                    ui.add(len_drag(&mut p.height, unit));
+                    ui.add(super::len_drag(&mut p.height, unit).range(0.1..=1.0e6));
                     ui.end_row();
                     ui.checkbox(&mut p.filled, tr!("dialog-text3d-filled"));
                     ui.label("");
                     ui.end_row();
                     ui.add_enabled_ui(p.filled, |ui| ui.checkbox(&mut p.extruded, tr!("dialog-text3d-extruded")));
-                    ui.add_enabled_ui(p.filled && p.extruded, |ui| ui.add(len_drag(&mut p.depth, unit)));
+                    ui.add_enabled_ui(p.filled && p.extruded, |ui| ui.add(super::len_drag(&mut p.depth, unit).range(0.1..=1.0e6)));
                     ui.end_row();
                 });
                 ui.label(RichText::new(tr!("dialog-text3d-hint")).small().color(theme::text_dim()));

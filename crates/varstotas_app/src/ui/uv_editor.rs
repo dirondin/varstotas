@@ -18,7 +18,6 @@ use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, Ui, pos2, vec2};
 use std::collections::HashSet;
 use varstotas_i18n::tr;
 use varstotas_kernel::glam::DVec2;
-use varstotas_kernel::texture::TextureImage;
 use varstotas_kernel::uv::{self, IslandOp, Placements, Projection};
 use varstotas_kernel::{EdgeId, EntityRef, FaceId, Material, MaterialId, Mesh, Model};
 
@@ -231,17 +230,9 @@ fn own_tile(model: &Model, mesh: &Mesh, f: FaceId) -> Option<[f64; 2]> {
     [face.front, face.back].into_iter().flatten().find_map(|id| model.materials.get(id)?.image.as_ref().map(|i| i.size))
 }
 
-/// The image in `slot` (`textures::SLOTS`) of a material.
-fn slot_image<'a>(m: &'a Material, slot: &str) -> Option<&'a TextureImage> {
-    match slot {
-        "base" => m.image.as_ref(),
-        _ => m.pbr.as_ref().and_then(|p| p.map(slot)),
-    }
-}
-
 /// The map slots a material has images in.
 fn slots_of(m: &Material) -> Vec<&'static str> {
-    crate::textures::SLOTS.into_iter().filter(|s| slot_image(m, s).is_some()).collect()
+    crate::textures::SLOTS.into_iter().filter(|s| m.slot_image(s).is_some()).collect()
 }
 
 /// A checker image (`CHECKER_SQUARES` squares a side, numbered colours down the diagonal so
@@ -314,7 +305,7 @@ impl VarstotasApp {
     /// The backdrop material's colour tile size.
     fn uv_fallback_tile(&self, faces: &[FaceId]) -> Option<[f64; 2]> {
         let m = self.doc.model.materials.get(self.uv_material(faces)?)?;
-        slots_of(m).first().and_then(|s| slot_image(m, s)).map(|i| i.size)
+        slots_of(m).first().and_then(|s| m.slot_image(s)).map(|i| i.size)
     }
 
     /// Open the UV Editor (on the selected / textured faces), framed, with no island picked.
@@ -827,7 +818,7 @@ impl VarstotasApp {
         let m = self.doc.model.materials.get(self.uv_material(faces)?)?;
         let slots = slots_of(m);
         let slot = if slots.contains(&self.uv.map) { self.uv.map } else { *slots.first()? };
-        let img = slot_image(m, slot)?.clone();
+        let img = m.slot_image(slot)?.clone();
         let key = std::sync::Arc::as_ptr(&img.bytes) as *const u8 as usize;
         if self.uv.image.as_ref().is_none_or(|(k, _)| *k != key) {
             let ci = crate::textures::thumbnail(&img.bytes, 1024)?;

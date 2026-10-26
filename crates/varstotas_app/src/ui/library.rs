@@ -8,6 +8,7 @@
 use super::tray_lib::{DragItem, FolderAct, FolderAsk, LibMenuAct, TrayDrag, file_key};
 use crate::app::{Action, VarstotasApp};
 use crate::clipboard::Clipboard;
+use crate::files::{COMPONENT, safe_name};
 use varstotas_i18n::tr;
 use egui::{Color32, RichText, Stroke, Ui, pos2, vec2};
 use varstotas_kernel::glam::DVec3;
@@ -242,17 +243,11 @@ fn scan(root: &Path, old: Vec<LibItem>) -> (Vec<LibItem>, Vec<String>) {
     (items, errors)
 }
 
-fn safe_name(s: &str) -> String {
-    let n: String = s.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
-    let n = n.trim().trim_matches('.').to_string();
-    if n.is_empty() { "Component".into() } else { n } // i18n-ignore
-}
-
 /// Rename the library file `path` to `<name>.vrst` in its folder; a file holding one
 /// component (or a component with parameters) named after the file gets the new name too.
 /// Returns the new path.
 fn rename_library_file(path: &Path, name: &str) -> Result<PathBuf, String> {
-    let to = path.with_file_name(format!("{}.vrst", safe_name(name)));
+    let to = path.with_file_name(format!("{}.vrst", safe_name(name, COMPONENT)));
     if to == path {
         return Ok(to);
     }
@@ -350,7 +345,7 @@ impl VarstotasApp {
             Ok(m) => m,
             Err(e) => return self.flash_error(tr!("library-save-error", error = e.to_string())),
         };
-        let base = safe_name(name);
+        let base = safe_name(name, COMPONENT);
         let mut path = dir.join(format!("{base}.vrst"));
         let mut n = 2;
         while path.exists() {

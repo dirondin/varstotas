@@ -2950,7 +2950,7 @@ impl VarstotasApp {
         let Some(cur) = &self.doc.current_material else { return Vec::new() };
         crate::textures::SLOTS
             .iter()
-            .filter_map(|s| crate::ui::mat_maps::slot_image(cur, s).map(|i| (*s, i.file_name.clone(), i.pixels)))
+            .filter_map(|s| cur.slot_image(s).map(|i| (*s, i.file_name.clone(), i.pixels)))
             .collect()
     }
 

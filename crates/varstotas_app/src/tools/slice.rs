@@ -39,12 +39,6 @@ impl Default for SliceTool {
     }
 }
 
-/// World normal of the face under an inference result.
-fn face_normal(r: &InferenceResult) -> Option<DVec3> {
-    let f = r.face.as_ref()?;
-    Some(f.plane.normal).filter(|n| n.length() > 0.5)
-}
-
 impl SliceTool {
     fn update(&mut self, ctx: &ToolContext) {
         self.split.update(copy_mod(&ctx.pointer.modifiers));
@@ -116,7 +110,7 @@ impl SliceTool {
         self.update(ctx);
         let Some(r) = self.cur.clone() else { return };
         match self.stage.clone() {
-            Stage::Idle => self.stage = Stage::A { a: r.point, face_n: face_normal(&r) },
+            Stage::Idle => self.stage = Stage::A { a: r.point, face_n: r.face_normal() },
             Stage::A { a, .. } => {
                 if a.distance(r.point) > TOL {
                     self.stage = Stage::B { a, b: r.point };

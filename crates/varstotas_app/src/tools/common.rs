@@ -452,6 +452,11 @@ pub fn parse_angle(s: &str) -> Option<f64> {
     v.is_finite().then_some(v)
 }
 
+/// The world size of a screen pixel at `p`.
+pub fn px_at(cam: &varstotas_render::Camera, viewport: egui::Vec2, p: DVec3) -> f64 {
+    cam.pixel_size_at(p, DVec2::new(viewport.x as f64, viewport.y as f64))
+}
+
 pub fn parse_len(unit: LengthUnit, s: &str) -> Option<f64> {
     units::parse_length(s, unit).filter(|v| v.is_finite())
 }

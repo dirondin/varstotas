@@ -471,11 +471,7 @@ impl VarstotasApp {
             }
             ui.label(tr!("prefs-grid-step"));
             ui.add(
-                egui::DragValue::new(&mut self.prefs.grid.step)
-                    .range(0.01..=1.0e6)
-                    .speed(1.0)
-                    .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
-                    .custom_parser(move |t| varstotas_kernel::units::parse_length(t, unit)),
+                super::len_drag(&mut self.prefs.grid.step, unit).range(0.01..=1.0e6),
             );
             ui.label(tr!("prefs-grid-major"));
             ui.add(egui::DragValue::new(&mut self.prefs.grid.major).range(2..=20).speed(0.1));

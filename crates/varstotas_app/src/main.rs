@@ -17,6 +17,7 @@ mod demo;
 mod document;
 mod downloads;
 mod download_progress;
+mod files;
 mod inference;
 mod keymap;
 mod layout;

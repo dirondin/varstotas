@@ -6,7 +6,7 @@
 
 use crate::app::VarstotasApp;
 use crate::online_mats::{Asset, Msg, Online, PluginSource, Source};
-use crate::plugins::{ParamKind, Plugin};
+use crate::plugins::{Param, ParamKind, Plugin};
 use egui::{Color32, RichText, Ui};
 use varstotas_i18n::tr;
 use std::collections::{HashMap, HashSet};
@@ -99,11 +99,6 @@ impl OnlineWindow {
     }
 }
 
-/// A parameter that names a folder or a file (`folder`, `dir`, `path`…).
-fn is_path_param(key: &str) -> bool {
-    let k = key.to_lowercase();
-    ["folder", "dir", "path", "file"].iter().any(|w| k.contains(w))
-}
 
 /// Open `url` in the browser (not in scripted runs).
 pub(crate) fn open_url(url: &str) {
@@ -134,7 +129,7 @@ impl VarstotasApp {
         let values = self.online.plugin_values.get(&p.path).cloned().unwrap_or_default();
         let mut params = crate::plugins::param_values(p, &values, self.doc.model.unit)?;
         // Folders and files as absolute paths (the plugin's answers resolve against other folders).
-        for q in p.params.iter().filter(|q| q.kind == ParamKind::Text && is_path_param(&q.key)) {
+        for q in p.params.iter().filter(|q| q.is_path()) {
             if let Some(serde_json::Value::String(v)) = params.get_mut(&q.key)
                 && !v.trim().is_empty()
             {
@@ -447,32 +442,39 @@ impl VarstotasApp {
         values.resize(p.params.len(), String::new());
         let mut load = false;
         ui.horizontal_wrapped(|ui| {
-            for (q, v) in p.params.iter().zip(values.iter_mut()) {
-                ui.label(&q.label);
-                if q.kind == ParamKind::Bool {
-                    let mut on = v == "true";
-                    if ui.checkbox(&mut on, "").changed() {
-                        *v = on.to_string();
-                    }
-                } else {
-                    let w = if q.kind == ParamKind::Text { 220.0 } else { 70.0 };
-                    let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(&q.default).id_salt(("online_param", &q.key)));
-                    load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    // A folder / file parameter: pick it.
-                    if q.kind == ParamKind::Text && is_path_param(&q.key) && ui.small_button("…").on_hover_text(tr!("model-lib-choose-it")).clicked() {
-                        let d = rfd::FileDialog::new();
-                        let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
-                        if let Some(d) = picked {
-                            *v = d.to_string_lossy().to_string();
-                            load = true;
-                        }
-                    }
-                }
-            }
+            load |= plugin_params_ui(ui, "online_param", &p.params, values);
             load |= ui.button(tr!("model-lib-load")).on_hover_text(tr!("mat-online-load-hover")).clicked();
         });
         if load {
             self.online_plugin_source(&p.name, true, ctx);
         }
     }
+}
+
+/// A source plugin's parameter fields (a folder / file one gets a picker): whether to load now
+/// (Enter in a field or a pick).
+pub(crate) fn plugin_params_ui(ui: &mut Ui, salt: &str, params: &[Param], values: &mut [String]) -> bool {
+    let mut load = false;
+    for (q, v) in params.iter().zip(values.iter_mut()) {
+        ui.label(&q.label);
+        if q.kind == ParamKind::Bool {
+            let mut on = v == "true";
+            if ui.checkbox(&mut on, "").changed() {
+                *v = on.to_string();
+            }
+        } else {
+            let w = if q.kind == ParamKind::Text { 220.0 } else { 70.0 };
+            let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(if !q.default.is_empty() { q.default.clone() } else if q.is_path() { tr!("model-lib-choose-with") } else { "—".to_string() }).id_salt((salt, &q.key)));
+            load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if q.is_path() && ui.small_button("…").on_hover_text(tr!("model-lib-choose-it")).clicked() {
+                let d = rfd::FileDialog::new();
+                let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
+                if let Some(d) = picked {
+                    *v = d.to_string_lossy().to_string();
+                    load = true;
+                }
+            }
+        }
+    }
+    load
 }

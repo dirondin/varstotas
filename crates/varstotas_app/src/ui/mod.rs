@@ -71,6 +71,14 @@ pub fn small_icon_button(ui: &mut Ui, icon: Icon, tooltip: &str) -> Response {
     icon_button(ui, icon, false, 22.0).on_hover_text(tooltip)
 }
 
+/// A drag field for a length in model units (mm inside).
+pub fn len_drag(v: &mut f64, unit: LengthUnit) -> egui::DragValue<'_> {
+    egui::DragValue::new(v)
+        .speed(1.0)
+        .custom_formatter(move |v, _| units::format_length(v, unit))
+        .custom_parser(move |s| units::parse_length(s, unit))
+}
+
 pub fn fmt_len(mm: f64, unit: LengthUnit) -> String {
     guarded(|| units::format_length(mm, unit))
         .unwrap_or_else(|_| format!("{:.1} {}", mm / unit.mm(), unit.suffix()))

@@ -49,14 +49,6 @@ pub fn slot_label(slot: &str) -> String {
     }
 }
 
-/// The image in `slot` of a material.
-pub fn slot_image<'a>(m: &'a PaletteMaterial, slot: &str) -> Option<&'a TextureImage> {
-    match slot {
-        "base" => m.image.as_ref(),
-        _ => m.pbr.as_ref().and_then(|p| p.map(slot)),
-    }
-}
-
 fn size_text(bytes: usize) -> String {
     if bytes >= 1 << 20 { format!("{:.1} MB", bytes as f64 / (1 << 20) as f64) } else { format!("{} KB", bytes.div_ceil(1024)) }
 }
@@ -156,7 +148,7 @@ impl VarstotasApp {
     /// Write the image of a slot to `path`.
     pub(crate) fn export_slot(&mut self, name: &str, slot: &str, path: &Path) {
         let Some(m) = self.doc.model.materials.values().find(|m| m.name == name) else { return };
-        let Some(img) = slot_image(&PaletteMaterial::of(m), slot).cloned() else { return };
+        let Some(img) = m.slot_image(slot).cloned() else { return };
         match varstotas_kernel::io::atomic_write(path, &img.bytes[..]) {
             Ok(()) => self.flash(tr!("mated-exported", path = path.display().to_string())),
             Err(e) => self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string())),
@@ -166,7 +158,7 @@ impl VarstotasApp {
     /// Re-encode a large image of a slot at [`LARGE_SIDE`] pixels.
     pub(crate) fn downscale_slot(&mut self, name: &str, slot: &'static str) {
         let Some(m) = self.doc.model.materials.values().find(|m| m.name == name) else { return };
-        let Some(img) = slot_image(&PaletteMaterial::of(m), slot).cloned() else { return };
+        let Some(img) = m.slot_image(slot).cloned() else { return };
         match crate::textures::downscale(&img.bytes, LARGE_SIDE) {
             Ok(bytes) => {
                 let mut t = TextureImage::new(bytes, img.file_name.clone(), img.size[0]);
@@ -181,7 +173,7 @@ impl VarstotasApp {
     /// system's default); saving it there reloads the slot.
     pub(crate) fn edit_slot_externally(&mut self, name: &str, slot: &'static str) {
         let Some(m) = self.doc.model.materials.values().find(|m| m.name == name) else { return };
-        let Some(img) = slot_image(&PaletteMaterial::of(m), slot).cloned() else { return };
+        let Some(img) = m.slot_image(slot).cloned() else { return };
         let Some(dir) = edit_dir() else { return };
         let safe: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' }).collect();
         let path = dir.join(format!("{safe}-{slot}.{}", img.extension()));
@@ -233,7 +225,7 @@ impl VarstotasApp {
             if crate::textures::decode(&bytes).is_err() {
                 continue; // half-written: the next poll retries
             }
-            let old = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| slot_image(&PaletteMaterial::of(m), slot).cloned());
+            let old = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| m.slot_image(slot).cloned());
             let Some(old) = old else { continue };
             let mut t = TextureImage::new(bytes, old.file_name.clone(), old.size[0]);
             t.size[1] = old.size[0] * t.size[1] / t.size[0].max(1e-9);
@@ -330,7 +322,7 @@ impl VarstotasApp {
         let Some(cur) = self.doc.current_material.clone() else { return };
         let name = cur.name.clone();
         for slot in SLOTS {
-            let img = slot_image(&cur, slot).cloned();
+            let img = cur.slot_image(slot).cloned();
             ui.horizontal(|ui| {
                 let side = if big { 56.0 } else { 40.0 };
                 let (rect, resp) = ui.allocate_exact_size(vec2(side, side), Sense::click());
@@ -410,7 +402,7 @@ impl VarstotasApp {
     /// The large view of one texture: fitted (or 3 × 3 tiles), with its file and sizes.
     pub(crate) fn texture_view_window(&mut self, ctx: &egui::Context) {
         let Some((name, slot)) = self.mat_editor.maps.view.clone() else { return };
-        let img = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| slot_image(&PaletteMaterial::of(m), slot).cloned());
+        let img = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| m.slot_image(slot).cloned());
         let Some(img) = img else {
             self.mat_editor.maps.view = None;
             return;

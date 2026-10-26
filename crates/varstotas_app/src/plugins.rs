@@ -73,6 +73,14 @@ pub struct Param {
     pub default: String,
 }
 
+impl Param {
+    /// A text parameter that names a folder or a file (`folder`, `dir`, `path`…).
+    pub fn is_path(&self) -> bool {
+        let k = self.key.to_lowercase();
+        self.kind == ParamKind::Text && ["folder", "dir", "path", "file"].iter().any(|w| k.contains(w))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plugin {
     pub name: String,

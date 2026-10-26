@@ -1768,7 +1768,7 @@ impl VarstotasApp {
             }
             Action::ExportSlot(name, slot) => {
                 let img = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| {
-                    crate::ui::mat_maps::slot_image(&crate::document::PaletteMaterial::of(m), slot).cloned()
+                    m.slot_image(slot).cloned()
                 });
                 if let Some(img) = img {
                     let file = if img.file_name.is_empty() { format!("{name}-{slot}.{}", img.extension()) } else { img.file_name };

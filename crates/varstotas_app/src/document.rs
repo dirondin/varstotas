@@ -74,6 +74,14 @@ impl PaletteMaterial {
         Self { name: name.into(), color, image: None, pbr: None }
     }
 
+    /// The image in texture slot `slot` ("base" or a PBR map name).
+    pub fn slot_image(&self, slot: &str) -> Option<&varstotas_kernel::TextureImage> {
+        match slot {
+            "base" => self.image.as_ref(),
+            _ => self.pbr.as_ref().and_then(|p| p.map(slot)),
+        }
+    }
+
     /// The palette entry for a model material.
     pub fn of(m: &varstotas_kernel::Material) -> Self {
         Self { name: m.name.clone(), color: m.color, image: m.image.clone(), pbr: m.pbr.clone() }

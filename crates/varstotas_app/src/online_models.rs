@@ -20,7 +20,8 @@
 //! shows instead of the drawn model.
 
 use crate::mat_plugins::call;
-use crate::online_mats::{Msg, Online, PluginSource, cached, fetch, file_safe, unzip};
+use crate::files::{MODEL, file_safe, safe_name, safe_rel};
+use crate::online_mats::{Msg, Online, PluginSource, cached, fetch, unzip};
 use crate::plugins::Plugin;
 use varstotas_i18n::tr;
 use varstotas_kernel::glam::{DMat4, DVec3};
@@ -121,7 +122,7 @@ impl ModelSource {
 
     /// The components library folder of its downloads.
     pub fn folder(&self) -> String {
-        crate::ui::mat_library::safe_name(self.label())
+        safe_name(self.label(), MODEL)
     }
 
     /// Its models are downloaded by the user in the browser (Download in Browser, then the
@@ -483,7 +484,7 @@ pub fn parse_plugin_catalogue(source: &ModelSource, v: &Value) -> Result<Vec<Mod
 fn unique_names(list: &mut [ModelAsset]) {
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for a in list.iter_mut() {
-        let n = seen.entry(crate::ui::mat_library::safe_name(&a.name).to_lowercase()).or_insert(0);
+        let n = seen.entry(safe_name(&a.name, MODEL).to_lowercase()).or_insert(0);
         *n += 1;
         if *n > 1 {
             a.name = format!("{} {n}", a.name);
@@ -564,13 +565,6 @@ fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
         std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
     }
     std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
-}
-
-/// A relative path from an archive / a web listing, safe to join to a folder (no `..`, not
-/// absolute).
-fn safe_rel(p: &str) -> Option<PathBuf> {
-    let parts: Vec<&str> = p.split(['/', '\\']).filter(|s| !s.is_empty() && *s != ".").collect();
-    (!parts.is_empty() && !parts.contains(&"..") && !parts.iter().any(|s| s.contains(':'))).then(|| parts.iter().collect())
 }
 
 /// The last part of a URL path (decoded spaces), for a file name.
@@ -828,13 +822,13 @@ pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<
         let files = dir.join("files");
         let _ = std::fs::remove_dir_all(&files);
         extract(&zip, &files)?;
-        let out = lib.join(asset.source.folder()).join(crate::ui::mat_library::safe_name(&asset.name));
+        let out = lib.join(asset.source.folder()).join(safe_name(&asset.name, MODEL));
         let n = import_pack(&files, &out, &asset.attribution(), importers)?;
         return Ok((out, n));
     }
     let (m, xf) = model_from_spec(&spec, &dir, importers, 0)?;
     let faces = face_count(&m);
-    let name = crate::ui::mat_library::safe_name(&asset.name);
+    let name = safe_name(&asset.name, MODEL);
     let mut m = library_model(m, xf, &name, Some(asset.attribution()))?;
     m.set_preview(preview_of(asset, &spec, &dir));
     let path = lib.join(asset.source.folder()).join(format!("{name}.vrst"));
@@ -885,10 +879,10 @@ pub fn import_pack(dir: &Path, out: &Path, credit: &Attribution, importers: &[Pl
     let mut used = std::collections::HashSet::new();
     for (k, (_, f)) in &best {
         let raw = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let mut name = crate::ui::mat_library::safe_name(&pretty_name(&raw));
+        let mut name = safe_name(&pretty_name(&raw), MODEL);
         let mut i = 2;
         while !used.insert(name.to_lowercase()) {
-            name = format!("{} {i}", crate::ui::mat_library::safe_name(&pretty_name(&raw)));
+            name = format!("{} {i}", safe_name(&pretty_name(&raw), MODEL));
             i += 1;
         }
         let c = Attribution { title: format!("{}: {name}", credit.title), ..credit.clone() };
@@ -1026,11 +1020,7 @@ mod tests {
     }
 
     #[test]
-    fn paths_and_names() {
-        assert_eq!(safe_rel("textures/a.jpg"), Some(PathBuf::from("textures").join("a.jpg")));
-        assert_eq!(safe_rel("../x"), None);
-        assert_eq!(safe_rel("/etc/x").map(|p| p.to_string_lossy().to_string()), Some("etc/x".into()));
-        assert_eq!(safe_rel("C:/x"), None);
+    fn names() {
         assert_eq!(url_file("https://a/b/My%20Chair.glb?x=1"), "My Chair.glb");
         assert_eq!(url_asset("https://a/b/chair.glb").name, "chair");
         assert_eq!(k_count("chair-(england)-1750-60-150k-4096.glb"), 150_000);

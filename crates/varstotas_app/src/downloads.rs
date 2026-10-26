@@ -352,16 +352,16 @@ pub fn manual_dir(hash: u64) -> Option<PathBuf> {
 /// [`manual_dir`]): one model → `<lib>/<source>/<title>.vrst`, several → the pack folder
 /// `<lib>/<source>/<title>/`. The path made and the models saved.
 pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugins::Plugin]) -> Result<(PathBuf, usize), String> {
-    use crate::ui::mat_library::safe_name;
+    use crate::files::{safe_name, safe_rel};
     let dir = dir.to_path_buf();
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = o.path.file_name().ok_or_else(|| tr!("downloads-err-no-file-name"))?;
     let copy = dir.join(name);
     std::fs::copy(&o.path, &copy).map_err(|e| format!("{}: {e}", o.path.display()))?;
-    let source = safe_name(if o.credit.source.trim().is_empty() { "Downloads" } else { o.credit.source.trim() }); // i18n-ignore
+    let source = safe_name(o.credit.source.trim(), "Downloads"); // i18n-ignore
     let stem = o.path.file_stem().map(|s| crate::online_models::pretty_name(&s.to_string_lossy())).unwrap_or_default();
-    let title = safe_name(if o.credit.title.trim().is_empty() { &stem } else { o.credit.title.trim() });
+    let title = safe_name(o.credit.title.trim(), &safe_name(&stem, crate::files::MODEL));
     let chosen: Vec<&String> = o.models.iter().filter(|(_, on)| *on).map(|(n, _)| n).collect();
     if chosen.is_empty() {
         return Err(tr!("downloads-err-no-model-chosen"));
@@ -409,12 +409,6 @@ pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugi
     let out = lib.join(&source).join(&title);
     let n = crate::online_models::import_pack(&files, &out, &o.credit, importers)?;
     Ok((out, n))
-}
-
-/// A relative archive path made safe (no `..`, not absolute).
-fn safe_rel(p: &str) -> Option<PathBuf> {
-    let parts: Vec<&str> = p.split(['/', '\\']).filter(|s| !s.is_empty() && *s != ".").collect();
-    (!parts.is_empty() && !parts.contains(&"..") && !parts[0].contains(':')).then(|| parts.iter().collect())
 }
 
 // ---- Licences --------------------------------------------------------------------------

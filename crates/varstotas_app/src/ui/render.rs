@@ -32,13 +32,6 @@ pub struct Batch {
     pub written: Vec<PathBuf>,
 }
 
-fn len_drag(v: &mut f64, unit: varstotas_kernel::LengthUnit) -> egui::DragValue<'_> {
-    egui::DragValue::new(v)
-        .speed(5.0)
-        .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
-        .custom_parser(move |s| varstotas_kernel::units::parse_length(s, unit))
-}
-
 /// Lens opening (radius, mm) of a 35 mm camera with the view's field of view at `f_stop`.
 pub fn lens_radius(camera: &Camera, f_stop: f32) -> f32 {
     (focal_length(camera) / (2.0 * f_stop.max(0.5) as f64)) as f32
@@ -371,7 +364,7 @@ pub(crate) fn light_editor(ui: &mut egui::Ui, id: &str, l: &mut Light, unit: var
     };
     ui.label(tr!("render-light-position"));
     let p = &mut l.position;
-    xyz(ui, [len_drag(&mut p.x, unit), len_drag(&mut p.y, unit), len_drag(&mut p.z, unit)]);
+    xyz(ui, [super::len_drag(&mut p.x, unit).speed(5.0), super::len_drag(&mut p.y, unit).speed(5.0), super::len_drag(&mut p.z, unit).speed(5.0)]);
     ui.horizontal_wrapped(|ui| {
         if ui.small_button(tr!("render-light-to-centre")).on_hover_text(tr!("render-light-to-centre-tip")).clicked() {
             l.position = camera.target + DVec3::Z * 2000.0;
@@ -405,7 +398,7 @@ pub(crate) fn light_editor(ui: &mut egui::Ui, id: &str, l: &mut Light, unit: var
                 ui.label(tr!("render-light-radius"));
                 ui.horizontal(|ui| {
                     let mut r = l.radius as f64;
-                    if small(ui, len_drag(&mut r, unit)).on_hover_text(tr!("render-light-radius-tip")).changed() {
+                    if small(ui, super::len_drag(&mut r, unit).speed(5.0)).on_hover_text(tr!("render-light-radius-tip")).changed() {
                         l.radius = r.max(0.0) as f32;
                     }
                 });
@@ -424,7 +417,7 @@ pub(crate) fn light_editor(ui: &mut egui::Ui, id: &str, l: &mut Light, unit: var
                 ui.label(tr!("render-size"));
                 ui.horizontal(|ui| {
                     let (mut a, mut b) = (l.size[0] as f64, l.size[1] as f64);
-                    if small(ui, len_drag(&mut a, unit)).changed() | small(ui, len_drag(&mut b, unit)).changed() {
+                    if small(ui, super::len_drag(&mut a, unit).speed(5.0)).changed() | small(ui, super::len_drag(&mut b, unit).speed(5.0)).changed() {
                         l.size = [a.max(1.0) as f32, b.max(1.0) as f32];
                     }
                 });
@@ -526,7 +519,7 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
             ui.label(tr!("render-focus"));
             ui.horizontal(|ui| {
                 let mut f = if s.focus > 0.0 { s.focus } else { camera.distance() };
-                if ui.add(len_drag(&mut f, unit)).changed() {
+                if ui.add(super::len_drag(&mut f, unit).speed(5.0)).changed() {
                     s.focus = f.max(1.0);
                 }
                 if ui.small_button(tr!("render-focus-target")).on_hover_text(tr!("render-focus-target-tip")).clicked() {

@@ -4,6 +4,7 @@
 //! (`transform::Targets::light`); Entity Info edits it.
 
 use super::OverlayView;
+use super::common::px_at;
 use egui::Pos2;
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{Light, LightKind};
@@ -15,10 +16,6 @@ pub const PICK_PX: f32 = 10.0;
 const AIM_PX: f64 = 70.0;
 const LIGHT_ON: [f32; 4] = [0.95, 0.7, 0.1, 1.0];
 const LIGHT_OFF: [f32; 4] = [0.6, 0.6, 0.6, 1.0];
-
-fn px_at(cam: &Camera, viewport: egui::Vec2, p: DVec3) -> f64 {
-    cam.pixel_size_at(p, DVec2::new(viewport.x as f64, viewport.y as f64))
-}
 
 fn screen(cam: &Camera, viewport: egui::Vec2, p: DVec3) -> Option<Pos2> {
     cam.world_to_screen(p, DVec2::new(viewport.x as f64, viewport.y as f64)).map(|s| Pos2::new(s.x as f32, s.y as f32))

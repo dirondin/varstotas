@@ -31,10 +31,6 @@ fn rgba(c: Color32, a: f32) -> [f32; 4] {
     [c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0, a]
 }
 
-fn px_at(cam: &varstotas_render::Camera, viewport: egui::Vec2, p: DVec3) -> f64 {
-    cam.pixel_size_at(p, DVec2::new(viewport.x as f64, viewport.y as f64))
-}
-
 /// One plane: a translucent square around the origin (sized on screen), its border and short
 /// red / green ticks; the active one in orange with its name.
 pub fn draw_plane(p: &WorkPlane, active: bool, half: f64, out: &mut Overlay3d) {
@@ -118,12 +114,6 @@ pub fn gizmo_screen(doc: &crate::document::Document, cam: &varstotas_render::Cam
         .collect()
 }
 
-/// World normal of the face under an inference result.
-fn face_normal(r: &InferenceResult) -> Option<DVec3> {
-    let f = r.face.as_ref()?;
-    Some(f.plane.normal).filter(|n| n.length() > 0.5)
-}
-
 impl GuidePlaneTool {
     fn gizmo_len(ctx_cam: &varstotas_render::Camera, viewport: egui::Vec2, p: &WorkPlane) -> f64 {
         px_at(ctx_cam, viewport, p.origin) * GIZMO_PX
@@ -197,7 +187,7 @@ impl GuidePlaneTool {
         self.update(ctx);
         let Some(r) = self.cur.clone() else { return };
         match self.stage.clone() {
-            Stage::Idle => self.stage = Stage::A { a: r.point, face_n: face_normal(&r) },
+            Stage::Idle => self.stage = Stage::A { a: r.point, face_n: r.face_normal() },
             Stage::A { a, .. } => {
                 if a.distance(r.point) > TOL {
                     self.stage = Stage::B { a, b: r.point };

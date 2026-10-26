@@ -612,11 +612,7 @@ impl VarstotasApp {
             egui::Grid::new("snap_increments").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
                 ui.checkbox(&mut inc.move_on, tr!("menu-increments-move"));
                 ui.add(
-                    egui::DragValue::new(&mut inc.move_step)
-                        .range(0.001..=1.0e6)
-                        .speed(1.0)
-                        .custom_formatter(move |v, _| varstotas_kernel::units::format_length(v, unit))
-                        .custom_parser(move |t| varstotas_kernel::units::parse_length(t, unit)),
+                    super::len_drag(&mut inc.move_step, unit).range(0.001..=1.0e6),
                 );
                 ui.end_row();
                 ui.checkbox(&mut inc.rotate_on, tr!("menu-increments-rotate"));

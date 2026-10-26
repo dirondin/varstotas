@@ -486,7 +486,7 @@ fn on_plane(ctx: &ToolContext, r: &InferenceResult, pl: &Plane) -> DVec3 {
 
 /// Protractor overlay shared by Rotate and the Protractor tool.
 pub fn draw_protractor(view: &OverlayView, c: DVec3, n: DVec3, zero: Option<DVec3>, out3d: &mut Overlay3d) {
-    let px = view.camera.pixel_size_at(c, DVec2::new(view.viewport.x as f64, view.viewport.y as f64));
+    let px = px_at(view.camera, view.viewport, c);
     let r = px * 45.0;
     let color = normal_color(n);
     let start = zero.unwrap_or(plane_axes(n).0);
@@ -715,7 +715,7 @@ impl Tool for RotateTool {
             }
             Some(RotStage::Angle { c, n, zero }) => {
                 draw_protractor(view, c, n, Some(zero), out3d);
-                let px = view.camera.pixel_size_at(c, DVec2::new(view.viewport.x as f64, view.viewport.y as f64));
+                let px = px_at(view.camera, view.viewport, c);
                 let len = px * 70.0;
                 dashed(out3d, c, c + zero * len, Color32::from_gray(60), 1.5);
                 let cur = DMat4::from_axis_angle(n, self.angle.to_radians()).transform_vector3(zero);
