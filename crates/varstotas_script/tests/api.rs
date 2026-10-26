@@ -231,7 +231,8 @@ fn all_faces_and_text_files() {
         write_text("{p}.out", "" + all_faces().len());
         all_faces().len()
     "#,
-        p = f.display()
+        // forward slashes: a Windows path with backslashes is not a valid Rhai string literal
+        p = f.to_string_lossy().replace('\\', "/")
     );
     let r = go(&mut m, &code);
     assert_eq!(r.output, "7\n");
