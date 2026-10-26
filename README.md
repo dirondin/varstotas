@@ -1,14 +1,48 @@
 # Varstotas
 
-A lightweight native classic-style 3D editor for macOS and Windows. Rust + egui + wgpu.
+A lightweight native 3D modeller in the classic push/pull style, for macOS, Windows and Linux.
+Written in Rust (egui + wgpu). Models are in real units, and everything can be scripted.
+
+![Varstotas with the country house demo](docs/images/house.jpg)
+
+## Features
+
+- **Direct modelling** — lines, arcs, Bézier and freehand curves, Push/Pull, Offset, Follow Me,
+  chamfer and fillet, with inference snapping (endpoints, midpoints, axes, parallel /
+  perpendicular) and typed exact values.
+- **Organising** — groups and reusable components, tags, outliner, scenes, section planes,
+  dimensions and text, locks, several viewports.
+- **Materials and rendering** — PBR materials with texture maps and a UV editor; a realistic
+  real-time style with shadows, AO, reflections and bloom; a progressive GPU path tracer with
+  denoising; custom WGSL shaders; animation export through scenes.
+- **Libraries** — materials and components trays, online models and materials (Poly Haven,
+  Smithsonian, NASA and more), parametric generators (shelves, stairs, railings…).
+- **Scripting and automation** — Rhai console and scripts, plugins that add menu commands and
+  importers, a Python client over a local bridge and an MCP server for AI agents.
+- **Making things** — 3D-printing checks and repair, wall-thickness maps, cutting with dowels,
+  bed layout and STL / 3MF export; unfolding to SVG / PDF / DXF; sheets with scaled views;
+  simple physics (drop objects, drape cloth).
+- **Formats** — import glTF / GLB, OBJ, STL, PLY, FBX, DAE, 3MF, DXF; export glTF / GLB, OBJ,
+  STL, PLY, DAE, 3MF, PNG.
+- **Languages** — English, Russian, Lithuanian, Belarusian (Preferences → Interface → Language).
+
+<p>
+  <img src="docs/images/gallery.jpg" width="49%" alt="Material gallery in the Realistic style">
+  <img src="docs/images/workshop.jpg" width="49%" alt="Small workshop model">
+</p>
+
+## Download
+
+Builds for macOS (`.dmg`), Windows (installer or portable `.zip`) and Linux (AppImage or
+`.tar.gz`) are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
+
+## Building from source
 
 ```bash
 cargo run --release -p varstotas_app     # run
-cargo test --workspace                 # tests
-tests/ui/run_all.sh [name …]           # UI regression scripts (explicit repository fixtures)
+cargo test --workspace                   # tests
+tests/ui/run_all.sh [name …]             # UI regression scripts (macOS; explicit repository fixtures)
 ```
-
-UI languages: English, Russian, Lithuanian, Belarusian (Preferences → Interface → Language).
 
 ## Documents
 - [Vision and UX principles](docs/00-VISION.md)
