@@ -129,9 +129,11 @@ if [[ $MAKE_DMG == 1 ]]; then
   cp -R "$APP" "$STAGE/"
   cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY-LICENSES.txt" "$STAGE/"
   ln -s /Applications "$STAGE/Applications"
-  # hdiutil now and then fails with "Resource busy" (CI runners): try again
+  # An explicit size: hdiutil's own estimate is sometimes too small on CI runners ("No space left
+  # on device"); and it now and then fails with "Resource busy": try again.
+  SIZE_MB=$(( $(du -sm "$STAGE" | cut -f1) * 3 / 2 + 32 ))
   for attempt in 1 2 3; do
-    hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null && break
+    hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -size "${SIZE_MB}m" -ov -format UDZO "$DMG" >/dev/null && break
     [[ $attempt == 3 ]] && exit 1
     sleep 5
   done

@@ -75,6 +75,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Tests
         run: cargo test --workspace --locked --no-fail-fast
+      - name: Free disk space
+        # the test build is not needed any more; the release builds (two on macOS) and the
+        # disk image need the room
+        run: |
+          cargo clean --profile dev
+          df -h . || true
       - name: Build and package
         run: ${{ matrix.build }}
       - uses: actions/upload-artifact@v4

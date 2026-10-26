@@ -111,7 +111,8 @@ if [[ $NATIVE == 1 ]]; then
   BUILD_NUMBER="${VARSTOTAS_BUILD:-${GITHUB_RUN_NUMBER:-0}}"
   NUM="$(sed -nE "s/^([0-9]+)\\.([0-9]+)\\.([0-9]+).*/\\1.\\2.\\3.$BUILD_NUMBER/p" <<<"$VERSION")"
   echo "==> installer"
-  "$ISCC" -Q "/DAppVersion=$VERSION" "/DNumVersion=${NUM:-0.0.0.0}" \
+  # MSYS_NO_PATHCONV: Git Bash would turn the /D… options into paths ("more than one script filename")
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$ISCC" -Q "/DAppVersion=$VERSION" "/DNumVersion=${NUM:-0.0.0.0}" \
     "/DSourceDir=$(win "$STAGE")" "/DIconFile=$(win "$WORK/varstotas.ico")" \
     "/DOutputDir=$(win "$DIST")" "/DOutputBase=$SETUP" "$(win "$ROOT/packaging/windows/varstotas.iss")"
 fi
