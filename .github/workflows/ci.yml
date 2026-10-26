@@ -1,4 +1,6 @@
-# Unit tests and lints for pull requests and pushes to master.
+# Unit tests and lints for pull requests and pushes to master: clippy and tests on Linux, tests on
+# Windows and macOS (paths, line endings, compilers and graphics backends differ there), so
+# platform problems show up here rather than in a release build.
 name: CI
 
 on:
@@ -32,4 +34,22 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
+
+  test-other:
+    name: Tests (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests
+        run: cargo test --workspace --locked --no-fail-fast

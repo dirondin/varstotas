@@ -187,7 +187,7 @@ scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage
 ## CI and releases
 GitHub Actions in `.github/workflows`:
 
-- **CI** (`ci.yml`) — every pull request and push to `master`: `cargo clippy -D warnings` and `cargo test --workspace` on Linux.
+- **CI** (`ci.yml`) — every pull request and push to `master`: `cargo clippy -D warnings` and `cargo test --workspace` on Linux, and the tests on Windows and macOS.
 - **Release** (`release.yml`) — pushing a tag `release-<version>`: unit tests and release builds on macOS, Windows and Linux, then a GitHub release of the tag titled "Varstotas <version>" with all the packages above and `SHA256SUMS.txt`. Its notes are a downloads table (`.github/release-notes.md`) followed by the changes since the previous release. A version with a `-` (`release-0.2.0-rc.1`) makes a pre-release. Running the workflow by hand (Actions → Release → Run workflow) with an existing tag rebuilds and replaces the release's files.
 
 Every CI build is stamped with the run number and commit: `varstotas --version`, About and Report a Problem show `0.1.0 (build 42, 4cc73e5)` (Windows file version `0.1.0.42`, macOS `CFBundleVersion` `42`). Local builds show `dev` instead of a number; `VARSTOTAS_BUILD=<n>` sets one by hand.
