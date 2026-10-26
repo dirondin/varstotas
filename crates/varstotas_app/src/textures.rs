@@ -197,7 +197,7 @@ impl TextureSync {
             return None;
         }
         if checker {
-            let img = crate::ui::uv_editor::checker_image();
+            let img = checker_image();
             let rgba: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
             let data = imgs
                 .iter()
@@ -250,6 +250,36 @@ impl TextureSync {
         self.key = Some((key, false));
         Some(data)
     }
+}
+
+
+/// Pixel side of the checker texture and its squares per tile.
+const CHECKER_PX: usize = 512;
+const CHECKER_SQUARES: usize = 8;
+
+/// A checker image (`CHECKER_SQUARES` squares a side, numbered colours down the diagonal so
+/// mirrored or turned tiles show).
+pub fn checker_image() -> egui::ColorImage {
+    let n = CHECKER_PX;
+    let sq = n / CHECKER_SQUARES;
+    let mut rgba = vec![0u8; n * n * 4];
+    for y in 0..n {
+        for x in 0..n {
+            let (i, j) = (x / sq, (n - 1 - y) / sq);
+            let dark = (i + j) % 2 == 1;
+            let mut c = if dark { [70, 70, 78] } else { [225, 225, 230] };
+            // the first row runs red → yellow, the first column blue: orientation at a glance
+            if j == 0 && !dark {
+                c = [235, 120 + (i * 16) as u8, 90];
+            }
+            if i == 0 && !dark && j > 0 {
+                c = [110, 150, 235];
+            }
+            let k = (y * n + x) * 4;
+            rgba[k..k + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
+        }
+    }
+    egui::ColorImage::from_rgba_unmultiplied([n, n], &rgba)
 }
 
 #[cfg(test)]

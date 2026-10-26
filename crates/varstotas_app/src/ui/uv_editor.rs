@@ -21,9 +21,6 @@ use varstotas_kernel::glam::DVec2;
 use varstotas_kernel::uv::{self, IslandOp, Placements, Projection};
 use varstotas_kernel::{EdgeId, EntityRef, FaceId, Material, MaterialId, Mesh, Model};
 
-/// Pixel side of the checker texture and its squares per tile.
-const CHECKER_PX: usize = 512;
-const CHECKER_SQUARES: usize = 8;
 /// Screen distance (points) within which the pointer catches the pivot and points snap.
 const CATCH: f32 = 10.0;
 /// Height of the status bar.
@@ -233,31 +230,6 @@ fn own_tile(model: &Model, mesh: &Mesh, f: FaceId) -> Option<[f64; 2]> {
 /// The map slots a material has images in.
 fn slots_of(m: &Material) -> Vec<&'static str> {
     crate::textures::SLOTS.into_iter().filter(|s| m.slot_image(s).is_some()).collect()
-}
-
-/// A checker image (`CHECKER_SQUARES` squares a side, numbered colours down the diagonal so
-/// mirrored or turned tiles show).
-pub fn checker_image() -> egui::ColorImage {
-    let n = CHECKER_PX;
-    let sq = n / CHECKER_SQUARES;
-    let mut rgba = vec![0u8; n * n * 4];
-    for y in 0..n {
-        for x in 0..n {
-            let (i, j) = (x / sq, (n - 1 - y) / sq);
-            let dark = (i + j) % 2 == 1;
-            let mut c = if dark { [70, 70, 78] } else { [225, 225, 230] };
-            // the first row runs red → yellow, the first column blue: orientation at a glance
-            if j == 0 && !dark {
-                c = [235, 120 + (i * 16) as u8, 90];
-            }
-            if i == 0 && !dark && j > 0 {
-                c = [110, 150, 235];
-            }
-            let k = (y * n + x) * 4;
-            rgba[k..k + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
-        }
-    }
-    egui::ColorImage::from_rgba_unmultiplied([n, n], &rgba)
 }
 
 impl VarstotasApp {
@@ -812,7 +784,7 @@ impl VarstotasApp {
     /// The backdrop image: the chosen map of [`Self::uv_material`] (or the checker).
     fn uv_background(&mut self, ctx: &egui::Context, faces: &[FaceId]) -> Option<egui::TextureId> {
         if self.uv.checker {
-            let t = self.uv.checker_tex.get_or_insert_with(|| ctx.load_texture("uv_checker", checker_image(), egui::TextureOptions::LINEAR_REPEAT));
+            let t = self.uv.checker_tex.get_or_insert_with(|| ctx.load_texture("uv_checker", crate::textures::checker_image(), egui::TextureOptions::LINEAR_REPEAT));
             return Some(t.id());
         }
         let m = self.doc.model.materials.get(self.uv_material(faces)?)?;
@@ -1299,7 +1271,7 @@ mod tests {
         let sq = [DVec2::new(0.0, 0.0), DVec2::new(1.0, 0.0), DVec2::new(1.0, 1.0), DVec2::new(0.0, 1.0)];
         assert!(inside(&sq, DVec2::new(0.5, 0.5)));
         assert!(!inside(&sq, DVec2::new(1.5, 0.5)));
-        let img = checker_image();
-        assert_eq!(img.size, [CHECKER_PX, CHECKER_PX]);
+        let img = crate::textures::checker_image();
+        assert_eq!(img.size, [512, 512]);
     }
 }

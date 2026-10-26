@@ -154,7 +154,7 @@ impl VarstotasApp {
         let page = self.unfold.page_size();
         let n = u.sheets.len();
         let name = self.doc.display_name();
-        let scale = crate::ui::unfold::scale_label(self.unfold.scale_n);
+        let scale = crate::layout::scale_label(self.unfold.scale_n);
         u.sheets
             .iter()
             .enumerate()
@@ -337,8 +337,3 @@ impl VarstotasApp {
     }
 }
 
-/// "1:N" with N trimmed.
-pub(crate) fn scale_label(n: f64) -> String {
-    let s = format!("{n:.3}");
-    format!("1:{}", s.trim_end_matches('0').trim_end_matches('.'))
-}

@@ -5,7 +5,6 @@
 //! standard scale. Exported as PDF (a page per sheet) or SVG (one sheet).
 
 use crate::vector_export::{Drawing, Pen, Text2, VectorOptions, view_lines};
-use crate::ui::unfold::scale_label;
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::layout::{LayoutSheet, SheetTable, SheetViewport};
 use varstotas_kernel::{LengthUnit, Model, Scene};
@@ -356,6 +355,13 @@ pub fn sheets_pdf(model: &Model, file: &str) -> Vec<u8> {
     let n = model.sheets.len();
     let pages: Vec<Drawing> = model.sheets.iter().enumerate().map(|(i, s)| sheet_drawing(model, s, i, n, file)).collect();
     crate::vector_export::to_pdf_pages(&pages)
+}
+
+
+/// "1:N" with N trimmed.
+pub fn scale_label(n: f64) -> String {
+    let s = format!("{n:.3}");
+    format!("1:{}", s.trim_end_matches('0').trim_end_matches('.'))
 }
 
 #[cfg(test)]
