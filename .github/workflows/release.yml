@@ -52,9 +52,13 @@ jobs:
           - name: macOS
             os: macos-latest
             build: scripts/build-macos.sh
+            # the target the package build uses, so it reuses what the tests compiled
+            # (the x86_64 half of the universal app is built on its own)
+            test_target: aarch64-apple-darwin
           - name: Windows
             os: windows-latest
             build: scripts/build-windows.sh --native
+            test_target: x86_64-pc-windows-msvc
           - name: Linux
             os: ubuntu-22.04
             build: scripts/build-linux.sh
@@ -73,14 +77,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libwayland-dev libxkbcommon-dev zip
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Tests
-        run: cargo test --workspace --locked --no-fail-fast
-      - name: Free disk space
-        # the test build is not needed any more; the release builds (two on macOS) and the
-        # disk image need the room
-        run: |
-          cargo clean --profile dev
-          df -h . || true
+      - name: Tests (release profile)
+        # The same optimised code that is packaged; dependencies compiled here are reused by the
+        # package build below. Debug-profile tests (debug assertions, overflow checks) run in CI.
+        run: cargo test --workspace --locked --release --no-fail-fast ${{ matrix.test_target && format('--target {0}', matrix.test_target) || '' }}
       - name: Build and package
         run: ${{ matrix.build }}
       - uses: actions/upload-artifact@v4
