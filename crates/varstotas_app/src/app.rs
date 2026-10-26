@@ -2335,8 +2335,8 @@ impl VarstotasApp {
                 self.replace_document(doc);
                 self.flash(tr!("template-created", path = path.display().to_string()));
             }
-            Ok(Err(e)) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e.to_string())),
-            Err(e) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e)),
+            Ok(Err(e)) => self.flash_error(tr!("template-load-failed", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash_error(tr!("template-load-failed", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -2395,8 +2395,8 @@ impl VarstotasApp {
                     self.autosave.recoveries.insert(0, r);
                 }
             }
-            Ok(Err(e)) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
-            Err(e) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e)),
+            Ok(Err(e)) => self.flash_error(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash_error(tr!("app-could-not-open", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -2455,11 +2455,11 @@ impl VarstotasApp {
                 true
             }
             Ok(Err(e)) => {
-                self.flash(tr!("app-save-failed", error = e.to_string()));
+                self.flash_error(tr!("app-save-failed", error = e.to_string()));
                 false
             }
             Err(e) => {
-                self.flash(tr!("app-save-failed", error = e));
+                self.flash_error(tr!("app-save-failed", error = e));
                 false
             }
         }
@@ -2549,8 +2549,8 @@ impl VarstotasApp {
                 Some(w) if ext != "txt" => self.flash_error(tr!("app-exported-warning", path = path.display().to_string(), warning = w)),
                 _ => self.flash(tr!("app-exported", path = path.display().to_string())),
             },
-            Ok(Err(e)) => self.flash(tr!("app-export-failed", error = e.to_string())),
-            Err(e) => self.flash(tr!("app-export-failed", error = e)),
+            Ok(Err(e)) => self.flash_error(tr!("app-export-failed", error = e.to_string())),
+            Err(e) => self.flash_error(tr!("app-export-failed", error = e)),
         }
     }
 

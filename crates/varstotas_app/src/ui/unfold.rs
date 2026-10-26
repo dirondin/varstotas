@@ -182,7 +182,7 @@ impl VarstotasApp {
             Ok(()) => {
                 self.flash(tr!("unfold-done", faces = u.faces, pieces = u.pieces, sheets = u.sheets.len(), oversize = u.oversize, path = path.display().to_string()));
             }
-            Err(e) => self.flash(tr!("unfold-export-failed", error = e.to_string())),
+            Err(e) => self.flash_error(tr!("unfold-export-failed", error = e.to_string())),
         }
     }
 

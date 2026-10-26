@@ -562,11 +562,11 @@ impl VarstotasApp {
     pub(crate) fn run_python_with(&mut self, path: &Path, params: Option<String>) {
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let Some(b) = &self.bridge.server else {
-            self.flash_error("Python scripts need the bridge (disabled by VARSTOTAS_NO_BRIDGE)");
+            self.flash_error(varstotas_i18n::tr!("ext-python-no-bridge"));
             return;
         };
         if self.bridge.python.is_some() {
-            self.flash_error("A Python script is already running");
+            self.flash_error(varstotas_i18n::tr!("ext-python-busy"));
             return;
         }
         let py = std::env::var("VARSTOTAS_PYTHON").unwrap_or_else(|_| {
@@ -596,8 +596,9 @@ impl VarstotasApp {
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
-                self.flash_error(format!("Cannot start {py}: {e}"));
-                self.console.push(LogLine::Error(format!("cannot start {py}: {e} (set VARSTOTAS_PYTHON)")));
+                let msg = varstotas_i18n::tr!("ext-python-cant-start", python = py.as_str(), error = e.to_string());
+                self.flash_error(msg.clone());
+                self.console.push(LogLine::Error(msg));
                 self.console.open = true;
                 return;
             }
@@ -676,9 +677,9 @@ impl VarstotasApp {
         let p = self.bridge.python.take().expect("python run");
         if status.success() {
             self.console.last = Some((true, p.text.trim_end().to_string()));
-            self.flash(format!("{} finished", p.name));
+            self.flash(varstotas_i18n::tr!("ext-done", name = p.name.as_str()));
         } else {
-            let msg = format!("{} exited with {status}", p.name);
+            let msg = varstotas_i18n::tr!("ext-exited", name = p.name.as_str(), status = status.to_string());
             self.console.push(LogLine::Error(msg.clone()));
             self.console.last = Some((false, p.text.trim_end().to_string()));
             self.flash_error(msg);
