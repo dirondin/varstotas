@@ -114,8 +114,8 @@ face orientation, capped diagonal/cavity cuts, sockets/dowels, shared nested ins
 no-op placement and automatic bed-sized cuts. The pre-existing repair tests cover hidden and
 procedural geometry, shared copies, winding/cavities and conservative hole closing.
 
-Native scripted QA: `qa/scripts/printing.txt`, `printing_holes.txt`, `printing_all.txt` and
-`printing_autocut.txt`. Screenshots and logs are under `target/qa/shots/printing-*` and
+Native scripted QA: `tests/ui/scripts/printing.txt`, `printing_holes.txt`, `printing_all.txt` and
+`printing_autocut.txt`. Screenshots and logs are under `target/ui-tests/shots/printing-*` and
 `target/printing-*-native.log`. Test and build results are recorded in `target/printing-all-workspace.log`
 and `target/printing-all-build.log`. The local signed debug bundle is `target/Varstotas.app`.
 The user's production NASA/Sofa library assets are not rewritten by printing QA.

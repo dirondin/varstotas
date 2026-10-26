@@ -380,7 +380,7 @@ mod tests {
         // roughness comes from G; occlusion / metalness default to 1
         assert_eq!((d[0].width, &d[0].rgba[..4]), (4, &[255, 128, 255, 255][..]));
         assert!(s.changed(&m).is_none());
-        let hdr = decode_hdri(include_bytes!("../../../qa/models/studio.hdr")).unwrap();
+        let hdr = decode_hdri(include_bytes!("../../../tests/ui/models/studio.hdr")).unwrap();
         assert_eq!((hdr.width, hdr.height, hdr.rgb.len()), (256, 128, 256 * 128 * 3));
         assert!(hdr.rgb.iter().any(|v| *v > 5.0), "HDR values above 1 survive");
         assert!((realistic_alpha(1.0, Some(&Pbr { transmission: 1.0, ..Default::default() })) - 0.1).abs() < 1e-6);

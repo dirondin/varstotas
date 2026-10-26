@@ -1,0 +1,44 @@
+# Fixture: a 2 mm box with the top face removed (target/ui-tests/models/printing-hole.vrst).
+open models/printing-hole.vrst
+view iso
+zoom_extents
+action print_repair
+wait 100
+expect printing=(true true busy=false stale=false faces=5 open=4
+expect document_dirty=false
+action click_spot printing:fill-holes
+wait 5
+action click_spot printing:repair-tab
+wait 5
+action click_spot printing:repair
+wait 100
+expect printing=(true true busy=false stale=false faces=6 open=0
+expect repaired=true
+undo
+wait 5
+action click_spot printing:check-tab
+wait 5
+action click_spot printing:check
+wait 100
+expect faces=5 open=4
+select_all
+action make_group
+wait 5
+action print_repair
+wait 100
+expect printing=(true true busy=false stale=false faces=5 open=4
+action click_spot printing:repair-tab
+wait 5
+action click_spot printing:repair
+wait 100
+expect printing=(true true busy=false stale=false faces=6 open=0
+expect repaired=true
+screenshot shots/printing-repaired-ru.bmp
+undo
+wait 5
+action click_spot printing:check-tab
+wait 5
+action click_spot printing:check
+wait 100
+expect faces=5 open=4
+quit

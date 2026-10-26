@@ -26,7 +26,7 @@ Window → Physics (`ui/physics.rs`), engine `varstotas_physics::DropSim`.
   or closing the window) restores it. While a run is shown the view can be turned, the tools
   wait, and any action other than the view's cancels the run first (Undo only cancels it).
 - Settings: friction, bounce, gravity, time limit, shape, floor.
-- Tests: `crates/varstotas_physics/src/tests.rs`; QA: `qa/scripts/physics.txt`.
+- Tests: `crates/varstotas_physics/src/tests.rs`; QA: `tests/ui/scripts/physics.txt`.
 
 ## Ph2 — Cloth (done)
 
@@ -49,7 +49,7 @@ body: particles, structural / shear / bending edges, contacts with rigid collide
   follows the folds; a material painted on the source group goes to the cloth group.
 - **Result**: a group of triangles, edges soft and smooth (`io::mesh_from_triangles`); Apply is
   one undo step and selects it, Cancel brings the face and the selection back.
-- Tests: `crates/varstotas_physics/src/cloth_tests.rs`; QA: `qa/scripts/physics_cloth.txt`.
+- Tests: `crates/varstotas_physics/src/cloth_tests.rs`; QA: `tests/ui/scripts/physics_cloth.txt`.
 
 ## Ph3 — Later
 

@@ -5,7 +5,7 @@ A lightweight native classic-style 3D editor for macOS and Windows. Rust + egui 
 ```bash
 cargo run --release -p varstotas_app     # run
 cargo test --workspace                 # tests
-qa/run_all.sh [name …]                 # UI regression scripts (explicit repository fixtures)
+tests/ui/run_all.sh [name …]           # UI regression scripts (explicit repository fixtures)
 ```
 
 UI languages: English, Russian, Lithuanian, Belarusian (Preferences → Interface → Language).
@@ -32,7 +32,7 @@ crates/varstotas_app     — application: UI, tools, inference, VCB, plugins
 locales/                 — UI texts, one .ftl file per language
 python/                  — Python client of the local bridge and the MCP server
 examples/                — example plugins, scripts, generators and the demo models (.vrst)
-qa/                      — UI regression scripts, fixtures, models
+tests/ui/                — UI regression scripts, fixtures, models
 vendor/                  — egui_code_editor with a local fix
 ```
 

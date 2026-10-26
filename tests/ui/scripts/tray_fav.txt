@@ -1,0 +1,147 @@
+# Track U 2b / 2c: favourites, Recent, folders from the tray, deleting a model material, and
+# dragging tiles into the viewport. A library material joins the model only when it paints
+# something. Real mouse and keys. Fixture: tests/ui/fixtures/tray_fav/components (Box, Kitchen/counter.rhai).
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+action tray_only Materials
+wait 20
+# Examples: unfold, right-click Gold → Add to Favourites
+raw click 1154 360
+wait 5
+raw rclick 1186 410
+wait 5
+raw click 1246 482
+wait 5
+expect favs=([], ["Gold"])
+# a click picks Gold to paint with: not in the model yet, but in Recent
+raw click 1186 370
+wait 5
+expect current_mat=Some(("Gold"
+expect tool=Paint
+expect stats=(6 12 0 0 | 0/0 0/0 0/0)
+expect recent=([], ["Gold"])
+# the first paint brings it into the model (one undo step: Paint)
+rawp click 500 0 500
+wait 5
+expect mats={"-": 5, "Gold": 1}
+expect undo=Some("Paint")
+# In Model → Gold → Delete: the face is back to the default; Undo brings Gold back
+raw rclick 1186 336
+wait 5
+raw click 1220 455
+wait 5
+expect mats={"-": 6}
+expect stats=(6 12 0 0 | 0/0 0/0 0/0)
+expect undo=Some("Delete Material Gold")
+action undo
+wait 5
+expect mats={"-": 5, "Gold": 1}
+# drag Gold (Favourites) onto the model: the face under the drop is painted
+tool select
+wait 3
+raw drag 1186 469 565 300 16
+wait 10
+expect mats={"-": 4, "Gold": 2}
+expect tray_drag=None
+# Components: drag Box from My Library into the view — placed where it is dropped
+action tray_only Components
+action components
+wait 40
+raw drag 1186 140 250 600 16
+wait 10
+expect undo=Some("Paste")
+expect outliner={*Box}
+expect recent=(["Box"], ["Gold"])
+expect tray_drag=None
+expect tool=Select
+# My Library Box (below Document and Recent now) → Add to Favourites
+raw rclick 1186 396
+wait 5
+raw click 1260 549
+wait 10
+expect favs=(["Box"], ["Gold"])
+# My Library title → New Folder… "Parts"
+raw rclick 1195 468
+wait 5
+raw click 1243 486
+wait 5
+raw text Parts
+raw key Enter
+wait 10
+# (an empty folder is listed as a heading, lib_folders counts only filled ones)
+expect "§Parts"
+# My Library Box → Move to Folder ▸ Parts: still a favourite (the key follows the file)
+raw rclick 1186 396
+wait 5
+raw move 1260 576
+wait 10
+raw move 1145 576
+wait 3
+raw click 1145 630
+wait 10
+expect ("Parts", 1, false)
+expect favs=(["Box"], ["Gold"])
+expect recent=(["Box"], ["Gold"])
+# Parts title → Rename Folder… "Bits": the favourite and the recent follow
+raw rclick 1180 625
+wait 5
+raw click 1239 670
+wait 5
+raw key End
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw key Backspace
+raw text Bits
+raw key Enter
+wait 10
+expect ("Bits", 1, false)
+expect favs=(["Box"], ["Gold"])
+expect recent=(["Box"], ["Gold"])
+# Box back to My Library, then the empty Bits → Delete Folder
+raw rclick 1186 553
+wait 5
+raw move 1266 733
+wait 10
+raw move 1145 733
+wait 3
+raw click 1145 679
+wait 10
+expect lib_folders=[("Document", 1, false), ("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
+expect favs=(["Box"], ["Gold"])
+raw rclick 1176 596
+wait 5
+raw click 1235 668
+wait 10
+# Delete Folder asks first, also for an empty folder
+expect folder_delete=Some(("Bits", 0, 0))
+raw click 863 397
+wait 10
+expect folder_delete=None
+# (Bits is gone: Kitchen moved up into its place)
+expect ("§Kitchen", 1187, 596)
+expect lib_folders=[("Document", 1, false), ("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
+# Kitchen holds a file: the question warns; Cancel keeps it
+raw rclick 1176 596
+wait 5
+raw click 1235 668
+wait 10
+expect folder_delete=Some(("Kitchen", 1, 0))
+screenshot shots/folder_delete.bmp
+raw click 728 414
+wait 10
+expect folder_delete=None
+expect lib_folders=[("Document", 1, false), ("", 1, false), ("Kitchen", 1, false), ("Examples", 6, false)]
+# again, Delete with 1 file: the folder goes with its file
+raw rclick 1176 596
+wait 5
+raw click 1235 668
+wait 10
+raw click 826 414
+wait 10
+expect folder_delete=None
+expect lib_folders=[("Document", 1, false), ("", 1, false), ("Examples", 6, false)]
+quit

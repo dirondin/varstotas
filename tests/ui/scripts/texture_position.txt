@@ -1,0 +1,46 @@
+# Texture Position tool: pick a textured face, drag it (move), green pin (rotate+scale), blue pin (height), undo, Enter finishes.
+box -1000 0 0 2000 1000 1000
+view front
+zoom_extents
+wait 10
+texture ../../tests/ui/models/bricks.png 800
+wait 2
+rawp click 0 0 500
+wait 3
+expect mats={"-": 5, "bricks": 1}
+tool texture_position
+expect tool=TexturePosition
+rawp click 0 0 500
+wait 3
+expect sel F=1
+# drag the face body: texture moves by (100, 100); red pin (0,0,0)->(100,0,100)
+rawp drag 0 0 500 100 0 600
+wait 3
+expect uvs=["o(100,100) a0 s(1.00,1.00)"]
+screenshot shots/texpos_moved.bmp
+# green pin (tile 800 wide) at (900,0,100) dragged to (100,0,500): 90°, uniform scale 0.5
+rawp drag 900 0 100 100 0 500
+wait 3
+expect uvs=["o(100,100) a90 s(0.50,0.50)"]
+screenshot shots/texpos_rotated.bmp
+# Shaded (no textures) style, then back
+style color
+wait 3
+screenshot shots/texpos_shaded_color.bmp
+style shaded
+wait 3
+# blue pin: v is now -x, tile height 400*0.5 => pin at (-100,0,100); drag to (-300,0,100) => scale y 1.0
+rawp drag -100 0 100 -300 0 100
+wait 3
+expect uvs=["o(100,100) a90 s(0.50,1.00)"]
+undo
+wait 3
+expect uvs=["o(100,100) a90 s(0.50,0.50)"]
+undo
+undo
+wait 3
+expect uv_placed=0
+key Enter
+wait 2
+expect tool=Select
+quit

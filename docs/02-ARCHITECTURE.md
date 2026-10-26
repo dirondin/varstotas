@@ -65,7 +65,7 @@ Tool.overlay() ─→ Overlay3d + 2D markers ──→ Renderer.render → egui 
 
 ## Rules
 1. A crate's public API is described in its `lib.rs`; breaking changes — only with an update of this document.
-2. `cargo build`, `cargo test`, `cargo clippy` — green before a commit; UI changes also pass their `qa/scripts/` regressions (`qa/run_all.sh <name>`).
+2. `cargo build`, `cargo test`, `cargo clippy` — green before a commit; UI changes also pass their `tests/ui/scripts/` regressions (`tests/ui/run_all.sh <name>`).
 3. The kernel is covered by unit tests for every operation (especially face topology).
 4. Every UI text comes from `locales/<lang>.ftl` by key (`tr!`), see `LOCALIZATION.md`.
 

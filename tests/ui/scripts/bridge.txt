@@ -1,0 +1,35 @@
+# Bridge: Python scripts (File → Run Script… with a .py), the Python client, HTTP and the MCP
+# server against the running app (tests/ui/py/bridge_check.py prints its checks into the console).
+action run_script ../../examples/scripts/bookshelf.py
+wait 5
+expect script=Some((true, "Bookshelf 800 x 304 x 1800, 9 parts"))
+expect undo=Some("Bookshelf")
+expect I=1
+expect defs=11
+view iso
+zoom_extents
+wait 10
+screenshot shots/bridge_bookshelf.bmp
+action undo
+wait 5
+action run_script ../../tests/ui/py/bridge_check.py
+# the export over an existing file waits for the user: deny it
+expect bridge_confirm=1
+wait 5
+screenshot shots/bridge_confirm.bmp
+action bridge_confirm deny
+wait 5
+# Screenshot destination exists: deny replacing it.
+expect bridge_confirm=1
+action bridge_confirm deny
+wait 5
+# OBJ destination is new, but its MTL exists: deny replacing the sidecar.
+expect bridge_confirm=1
+action bridge_confirm deny
+wait 5
+expect bridge_confirm=0
+expect bridge checks: 33 ok
+expect undo=Some("Agent")
+expect defs=3 model_faces=32
+screenshot shots/bridge_check.bmp
+dump done

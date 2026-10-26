@@ -1,0 +1,45 @@
+# Components list: Set Preview from View / Remove Preview Image in a tile's context menu — a
+# library file (written into the file) and a component of the document (one undo step, saved
+# with the document; its tile shows the picture). Real mouse.
+# Fixture: tests/ui/fixtures/component_preview/components/Box.vrst.
+wait 10
+action script let c = component([box(vec3(0, 0, 0), 500, 500, 500)], "Cube");\ncopy(c, vec3(800, 0, 0));
+view iso
+zoom_extents
+action components
+wait 40
+expect previews=(None, [], [])
+# Box (library) → Set Preview from View
+raw rclick 1185 273
+wait 5
+screenshot shots/cprev_libmenu.bmp
+raw click 1220 320
+wait 30
+expect previews=(None, ["Box"], [])
+# Cube (In Model, the first section) → Set Preview from View
+raw rclick 1185 145
+wait 5
+screenshot shots/cprev_docmenu.bmp
+raw click 1220 216
+wait 30
+expect previews=(None, ["Box"], ["Cube"])
+expect undo=Some("Set Component Preview")
+screenshot shots/cprev_doctile.bmp
+# Cube → Remove Preview Image (below Set Preview Image… now)
+raw rclick 1185 145
+wait 5
+screenshot shots/cprev_docmenu2.bmp
+raw click 1220 264
+wait 10
+expect previews=(None, ["Box"], [])
+expect undo=Some("Remove Component Preview")
+action undo
+wait 10
+expect previews=(None, ["Box"], ["Cube"])
+# Box → Remove Preview Image
+raw rclick 1185 273
+wait 5
+raw click 1220 368
+wait 20
+expect previews=(None, [], ["Cube"])
+screenshot shots/cprev_end.bmp

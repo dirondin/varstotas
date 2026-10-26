@@ -1,0 +1,86 @@
+# 3D Library → sites without an API (offline): a page (dl_page: address, title, licence)
+# makes a waiting card; the archive downloaded from that page (dropped on the window) is
+# offered with the card's credit; one of its two models unticked (real click), Import makes
+# a component in Components → Printables; the Downloaded list shows it, ☆ marks it, Place
+# puts it in the model, an export warns about its non-commercial licence. A model file with
+# no card gets its credit from its name, the licence chosen in the list (CC0), Import places
+# it. The licence filter hides the NC model; the same archive again is a duplicate (Ignore).
+action tray_only Components
+action components
+wait 10
+action models favourites
+wait 10
+action dl_page url=https%3A%2F%2Fwww.printables.com%2Fmodel%2F1-chairs&title=Two+Chairs+%7C+Printables&author=Bob&license=CC+BY-NC+4.0
+wait 5
+expect downloads=(waiting=["Two Chairs [CC BY-NC 4.0]"] offers=0
+screenshot shots/dl_1.bmp
+action dl_drop ../../tests/ui/fixtures/downloads/chairs.zip
+wait 5
+expect first=("Two Chairs" "Printables" "CC-BY-NC" 2/2 dup=false place=false)
+screenshot shots/dl_2.bmp
+raw click 234 330
+wait 3
+expect first=("Two Chairs" "Printables" "CC-BY-NC" 1/2
+raw click 254 400
+wait 5
+action online_wait
+wait 10
+expect last=Some("ok Two Chairs.vrst models=1")
+expect waiting=[] offers=0
+expect favs=0 history=1
+screenshot shots/dl_3.bmp
+raw click 265 90
+wait 5
+screenshot shots/dl_4.bmp
+raw click 235 384
+wait 5
+expect models=(true history models=1 shown=1
+raw click 205 340
+wait 5
+screenshot shots/dl_5.bmp
+raw click 302 599
+wait 3
+expect favs=1 history=1
+raw click 178 599
+wait 5
+raw click 945 579
+wait 10
+expect credits=["Two Chairs"]
+action export_attributions dl_export.obj
+wait 3
+screenshot shots/dl_6.bmp
+# A model file with no card: credit from its name, licence chosen (real clicks), placed.
+action dl_drop ../../tests/ui/fixtures/downloads/lamp.obj
+wait 5
+expect first=("Lamp" "Downloads" "Unknown" 1/1 dup=false place=true)
+screenshot shots/dl_7.bmp
+raw click 325 234
+wait 3
+screenshot shots/dl_8.bmp
+raw click 310 259
+wait 3
+expect first=("Lamp" "Downloads" "CC0" 1/1
+screenshot shots/dl_9.bmp
+raw click 254 315
+wait 5
+action online_wait
+wait 10
+expect last=Some("ok Lamp.vrst models=1")
+raw click 1000 450
+wait 10
+expect credits=["Lamp", "Two Chairs"]
+expect models=(true history models=2 shown=2
+# Licence filter: Commercial use OK hides the CC-BY-NC chairs.
+action models_filter license=commercial
+wait 3
+expect models=(true history models=2 shown=1
+screenshot shots/dl_10.bmp
+action models_filter
+# The same archive again: a duplicate; Ignore (real click).
+action dl_drop ../../tests/ui/fixtures/downloads/chairs.zip
+wait 5
+expect dup=true
+screenshot shots/dl_11.bmp
+raw click 314 411
+wait 3
+expect offers=0

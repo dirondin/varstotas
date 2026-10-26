@@ -1,0 +1,81 @@
+# Texture look (T6): HSL, colorize, alpha cut-off, decal, world mapping. Real mouse on the
+# Material Editor checkboxes; spots from lib_spots.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+wait 10
+texture ../../tests/ui/models/bricks.png 800
+wait 2
+rawp click 500 0 500
+rawp click 1000 500 500
+rawp click 500 500 1000
+wait 3
+expect mats={"-": 3, "bricks": 3}
+action tray_only Material Editor
+wait 5
+expect tex_look=Some("0 0.00 0.00 0.50 ")
+# open the Look section
+raw click 1173 330
+wait 5
+screenshot shots/look_default.bmp
+# saturation slider dragged to its left end: grey, one undo step on release
+raw drag 1310 383 1200 383
+wait 5
+expect tex_look=Some("0 -1.00 0.00 0.50 ")
+expect undo=Some("Texture look")
+screenshot shots/look_grey.bmp
+undo
+wait 3
+expect tex_look=Some("0 0.00 0.00 0.50 ")
+# colorize with the material colour
+raw click 1183 462
+wait 5
+expect tex_look=Some("0 0.00 0.00 0.50 c")
+screenshot shots/look_colorize.bmp
+undo
+wait 3
+# rotate the placements (UV Editor command) so world mapping differs from them
+action uv rotate
+wait 3
+expect uv_placed=3
+# decal: one 800 mm tile per face, the rest in the material colour
+raw click 1183 489
+wait 5
+expect tex_look=Some("0 0.00 0.00 0.50 d")
+screenshot shots/look_decal.bmp
+# world mapping (with the decal): the tiles are upright again, ignoring the rotated placements
+raw click 1183 516
+wait 5
+expect tex_look=Some("0 0.00 0.00 0.50 dw")
+screenshot shots/look_world_decal.bmp
+action tex_look decal=0
+wait 5
+expect tex_look=Some("0 0.00 0.00 0.50 w")
+screenshot shots/look_world.bmp
+# alpha cut-off: disc (opaque centre, ring alpha 100/255) on the top face
+texture ../../tests/ui/models/alpha_disc.png 1000
+wait 2
+rawp click 500 500 1000
+wait 5
+screenshot shots/look_cut_default.bmp
+action tex_look cutoff=0.3
+wait 5
+expect tex_look=Some("0 0.00 0.00 0.30 ")
+screenshot shots/look_cut_low.bmp
+action tex_look cutoff=0 decal=1
+wait 5
+screenshot shots/look_cut_none_decal.bmp
+# the path tracer honours the cut-off and the decal too
+action tex_look cutoff=0.3 decal=1
+action render_set w=320 h=200 samples=16 bounces=3 denoise=off match=on
+action render_start
+action render_wait
+expect job=Some("16spp
+action render_save look_render.png
+undo
+undo
+undo
+undo
+wait 3
+expect tex_look=Some("0 0.00 0.00 0.50 ")
+quit

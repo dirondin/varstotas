@@ -1,0 +1,81 @@
+# 3D Library (Components card → the cloud button): the Poly Haven catalogue opens first; the
+# Model Folders source plugin (Source dropdown, Folder / Unit typed, Load) lists the fixture
+# models (an OBJ with its thumbnail, a PLY read by the PLY Import plugin), double-click
+# downloads and places one (credit kept), Download saves the other; File → Import with the
+# PLY importer; Export → Attributions. Preview pictures: the Stool download keeps its
+# thumbnail (the Components tile shows it), Tetra gets one set, the document gets one from
+# the current view and loses it again. Needs the network only for the first catalogue.
+action tray_only Components
+action components
+wait 10
+raw click 1347 56
+wait 10
+action online_wait
+wait 60
+screenshot shots/modlib_1.bmp
+raw click 266 90
+wait 5
+screenshot shots/modlib_2.bmp
+raw click 248 265
+wait 10
+screenshot shots/modlib_3.bmp
+raw click 294 144
+raw text ../../tests/ui/fixtures/model_library/models
+wait 3
+screenshot shots/modlib_4.bmp
+raw click 259 170
+raw text m
+wait 3
+raw click 395 170
+wait 5
+action online_wait
+wait 30
+screenshot shots/modlib_5.bmp
+expect models=(true plugin-model_folders models=2 shown=2
+raw dblclick 195 407
+wait 5
+action online_wait
+wait 10
+expect last=Some("plugin-model_folders:
+raw click 945 579
+wait 10
+expect credits=["Stool"]
+screenshot shots/modlib_6.bmp
+raw click 297 407
+wait 5
+screenshot shots/modlib_7.bmp
+expect models=(true plugin-model_folders models=2 shown=2 busy=0 sel=Some("plugin-model_folders:
+raw click 318 599
+wait 5
+action online_wait
+wait 10
+expect last=Some("plugin-model_folders:
+expect Tetra.vrst faces=4")
+expect previews=(None, ["Stool"], ["Stool"])
+screenshot shots/modlib_8.bmp
+action import_model ../../tests/ui/fixtures/model_library/models/Shapes/Tetra.ply
+wait 5
+expect credits=["Stool"]
+action export_attributions credits.txt
+wait 3
+raw click 783 56
+wait 5
+screenshot shots/modlib_9.bmp
+action library_preview Tetra|../../tests/ui/fixtures/model_library/models/Furniture/Stool.png
+wait 5
+expect previews=(None, ["Stool", "Tetra"], ["Stool"])
+action library_preview Tetra|clear
+wait 5
+expect previews=(None, ["Stool"], ["Stool"])
+action preview_view
+wait 10
+expect previews=(Some([512,
+action preview_clear
+wait 5
+expect previews=(None, ["Stool"], ["Stool"])
+screenshot shots/modlib_10.bmp
+raw rclick 1186 140
+wait 5
+screenshot shots/modlib_11.bmp
+raw key Escape
+wait 3

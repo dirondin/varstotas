@@ -1,0 +1,51 @@
+# Material plugins: the Unity Material importer (Materials → Import… of a .mat: textures by
+# GUID from the .meta files) and the Texture Folders source in the Online Materials window
+# (Source dropdown, its Folder parameter, Load, double-click downloads and paints). Offline.
+box 0 0 0 1000 1000 1000
+view iso
+zoom_extents
+action mat_import ../../tests/ui/fixtures/mat_plugins/unity/Assets/Materials/Old Brick.mat
+wait 5
+expect current_mat=Some(("Old Brick"
+action mat_import ../../tests/ui/fixtures/mat_plugins/unity/Assets/Materials/Blue Glow.mat
+wait 5
+expect current_mat=Some(("Blue Glow", Some((1.0, 0.0))))
+action tray_only Materials
+wait 10
+raw click 1347 257
+wait 10
+screenshot shots/matplug_1.bmp
+raw click 245 110
+wait 5
+screenshot shots/matplug_2.bmp
+raw click 231 205
+wait 10
+expect online=(true plugin-texture_folders catalogue=error
+screenshot shots/matplug_3.bmp
+expect catalogue=error "Set the folder (one subfolder per material) and press Load"
+raw click 300 163
+raw text ../../tests/ui/fixtures/mat_plugins/texture_sets
+wait 3
+raw click 616 163
+wait 5
+action online_wait
+wait 10
+screenshot shots/matplug_4.bmp
+expect online=(true plugin-texture_folders catalogue=2 shown=2
+# (thumbnails settle first: slow frames would stretch the double-click)
+wait 30
+raw dblclick 175 215
+wait 5
+action online_wait
+wait 10
+expect last=Some("plugin-texture_folders:
+expect matlib=["Texture Folders/Green Tiles"]
+expect current_mat=Some(("Green Tiles"
+screenshot shots/matplug_5.bmp
+raw click 743 76
+wait 5
+rawp click 500 0 500
+wait 5
+expect mats={"-": 5, "Green Tiles": 1}
+# a library material joins the model with the first paint, maps and all
+expect ("Green Tiles", 0.0, 1.0, 0.0, ["normal", "roughness"])

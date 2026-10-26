@@ -1,0 +1,177 @@
+# UV Editor: seams at hard edges split a box into six islands; pack, unfold, projections,
+# island picking / dragging with the real mouse, canvas tools (Rotate / Scale about a pivot
+# dragged with the mouse, typed values, reset turn / scale, box picking, face mode), checker
+# in the 3D view, undo.
+box 0 0 0 1000 600 400
+view iso
+zoom_extents
+wait 10
+texture ../../tests/ui/models/bricks.png 800
+wait 2
+raw mods shift
+rawp click 500 300 400
+raw mods none
+wait 3
+expect mats={"bricks": 6}
+tool select
+action uv_open
+wait 5
+expect uv=(true 6 1 0 false 0)
+screenshot shots/uv_open.bmp
+# seams at every hard edge: six islands, drawn red in the 3D view
+action click_spot uv:seams_hard
+wait 3
+expect uv=(true 6 6 0 false 12)
+expect undo=Some("Mark Seams")
+action uv pack
+wait 3
+screenshot shots/uv_packed.bmp
+expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
+# pick island 0 with the mouse, turn it 90°, drag it 40 pt right (rotate about its centre)
+action click_spot uv:isl0
+wait 3
+expect uv=(true 6 6 1 false 12)
+action click_spot uv:rotate
+wait 3
+expect uvs=["o(-135,-265) a90 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)"
+action drag_spot uv:isl0 40 0
+wait 3
+expect uvs=["o(-135,-863) a90 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)"
+screenshot shots/uv_moved.bmp
+undo
+undo
+wait 3
+expect uvs=["o(-1065,-65) a0 s(4.08,4.08)", "o(-1130,-65) a0 s(4.08,4.08)", "o(-3196,-65) a0 s(4.08,4.08)", "o(-65,-730) a0 s(4.08,4.08)", "o(-730,-730) a0 s(4.08,4.08)", "o(-2396,-730) a0 s(4.08,4.08)"]
+# the checker stands in for the textures in the 3D view too
+action click_spot uv:checker
+wait 5
+expect uv=(true 6 6 1 true 12)
+screenshot shots/uv_checker.bmp
+# no seams: one island; a cylinder round the walls and top / bottom
+action uv seams_clear
+wait 3
+expect uv=(true 6 1 1 true 0)
+action uv select_none
+action uv cylinder
+wait 3
+expect uvs=["o(-500,779) a90 s(0.85,1.00)", "o(500,779) a-90 s(0.85,1.00)", "o(-500,200) a90 s(0.94,1.00)", "o(500,-869) a-90 s(0.94,1.00)"]
+screenshot shots/uv_cylinder.bmp
+# canvas tools: a typed angle, another typed right after it replaces it; reset the turn,
+# a typed scale, a one-axis scale typed after it replaces it, reset the scale
+action uv box
+wait 3
+action uv select_all
+action click_spot uv:tool:rotate
+wait 3
+expect uv_tool=(rotate island - "" 
+action click_spot uv:value
+raw text 30
+raw key Enter
+wait 3
+expect uv_tool=(rotate island - "30°" 
+expect uvs=["o(-150,40) a-30 s(1.00,1.00)"
+action click_spot uv:value
+raw mods cmd
+raw key A
+raw mods none
+raw text 45
+raw key Enter
+wait 3
+expect uvs=["o(-212,88) a-45 s(1.00,1.00)"
+screenshot shots/uv_typed_rotate.bmp
+action click_spot uv:reset_rotation
+wait 3
+expect uvs=[]
+action click_spot uv:tool:scale
+action uv type 2
+wait 3
+expect uv_tool=(scale island - "2" 
+expect uvs=["o(-0,150) a0 s(0.50,0.50)"
+action uv type 2; 1
+wait 3
+expect uvs=["o(-0,-0) a0 s(0.50,1.00)"
+action click_spot uv:reset_scale
+wait 3
+expect uvs=[]
+# the gizmo: the red square scales across only, the green arrow of Move moves up only
+action drag_spot uv:gizmo_x 22 0
+wait 3
+expect uv_tool=(scale island - "1.4
+screenshot shots/uv_gizmo_scale.bmp
+undo
+action click_spot uv:tool:move
+wait 3
+action drag_spot uv:gizmo_y 0 -30
+wait 3
+expect uv_tool=(move island - "0 mm;
+undo
+# the pivot dragged off with the mouse (Alt: no snapping), then a real-mouse turn about it
+action click_spot uv:tool:rotate
+wait 3
+raw mods alt
+action drag_spot uv:pivot 60 0
+raw mods none
+wait 3
+expect uv_tool=(rotate island 
+action drag_spot uv:face_at0 0 -40
+wait 3
+screenshot shots/uv_mouse_rotate.bmp
+undo
+wait 3
+# box picking and face mode
+action uv select_none
+action click_spot uv:tool:select
+action click_spot uv:mode:face
+wait 3
+expect uv_tool=(select face
+action drag_spot uv:canvas_tl 400 400
+wait 3
+screenshot shots/uv_marquee.bmp
+# overlapping faces (the box projection lays opposite sides on each other): clicking the
+# same spot again picks the next face down
+action uv box
+action uv select_none
+wait 3
+action click_spot uv:face_at0
+wait 10
+expect uv_tool=(select face 0.275,0.749 "" [5])
+action click_spot uv:face_at0
+wait 10
+expect uv_tool=(select face 0.275,0.749 "" [2])
+action click_spot uv:face_at0
+wait 10
+expect uv_tool=(select face 0.275,0.749 "" [0])
+# pressing and dragging there moves the face found, it does not cycle on
+action drag_spot uv:face_at0 30 0
+wait 5
+expect mm; 0 mm" [0])
+undo
+wait 3
+action click_spot uv:mode:island
+# the backdrop: one tile only, another map of the material
+action click_spot uv:checker
+wait 3
+expect uv_view=(bricks base false)
+action click_spot uv:tile
+wait 3
+expect uv_view=(bricks base true)
+screenshot shots/uv_single_tile.bmp
+action mat_map bricks normal ../../tests/ui/models/alpha_disc.png
+wait 5
+action click_spot uv:map
+wait 3
+action click_spot uv:map:normal
+wait 3
+expect uv_view=(bricks normal true)
+screenshot shots/uv_normal_map.bmp
+# Window → UV Editor
+action click_spot uv:tile
+action uv_close
+wait 3
+raw click 408 -106
+wait 3
+screenshot shots/uv_window_menu.bmp
+action click_spot cmd:UvEditor
+wait 5
+expect uv=(true 6
+quit

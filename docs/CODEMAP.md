@@ -1,7 +1,7 @@
 # Code map (read this first instead of sweeping the code)
 
 Varstotas: a 3D modeller in Rust (eframe/egui 0.36 + wgpu, glam f64, slotmap). Units are millimetres, Z is up.
-UI regression scripts: `qa/scripts/` (run by `qa/run_all.sh`).
+UI regression scripts: `tests/ui/scripts/` (run by `tests/ui/run_all.sh`).
 
 ## Crates
 - `varstotas_i18n`: localization (Fluent): `tr!` / `tr_args`, `set_language`, `languages`, `platform_keys` (modifier markers), `pick_variant` (plugin header variants), `with_language` (tests); `build.rs` embeds `locales/*.ftl`. Texts: `locales/en.ftl` (base), `locales/ru.ftl`, `locales/lt.ftl`, `locales/be.ftl`; rules in `docs/LOCALIZATION.md`.
@@ -187,7 +187,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 - To run a UI script: `VARSTOTAS_SCRIPT=file cargo run -p varstotas_app`.
   - Check state with `dump` rather than screenshots.
   - Take a screenshot only for visual checks: convert the BMP with `sips -s format png -Z 1200`, then crop.
-- Regression scripts for UI behaviour live in `qa/scripts/` and run with `qa/run_all.sh`; `qa/fixtures/<script>/components` is copied into the run's home first.
+- Regression scripts for UI behaviour live in `tests/ui/scripts/` and run with `tests/ui/run_all.sh`; `tests/ui/fixtures/<script>/components` is copied into the run's home first.
 
 ## Repository examples (2026-10-22)
-Normal app builds do not embed or install optional examples. Help → Examples opens the repository in a browser. Existing installed files are retained. The debug QA harness alone can read repository fixtures when both `VARSTOTAS_SCRIPT` and `VARSTOTAS_QA_EXAMPLES` are set; `qa/run_all.sh` supplies the path and explicitly copies plugin fixtures into its isolated HOME. `no_examples` skips these fixtures and checks normal startup.
+Normal app builds do not embed or install optional examples. Help → Examples opens the repository in a browser. Existing installed files are retained. The debug QA harness alone can read repository fixtures when both `VARSTOTAS_SCRIPT` and `VARSTOTAS_QA_EXAMPLES` are set; `tests/ui/run_all.sh` supplies the path and explicitly copies plugin fixtures into its isolated HOME. `no_examples` skips these fixtures and checks normal startup.
