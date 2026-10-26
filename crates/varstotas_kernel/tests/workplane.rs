@@ -33,7 +33,7 @@ fn planes_from_points_normal_and_angles() {
 fn active_plane_is_the_drawing_frame_and_saved() {
     let mut m = Model::new();
     let wall = WorkPlane::from_normal("", DVec3::new(0.0, 500.0, 0.0), DVec3::Y, Some(DVec3::X)).unwrap();
-    assert_eq!(m.add_work_plane(wall.clone()), 0);
+    assert_eq!(m.add_work_plane(wall), 0);
     assert_eq!(m.work_planes[0].name, "Plane 1");
     let f = m.drawing_frame();
     assert!(close(f.translation, DVec3::new(0.0, 500.0, 0.0)) && close(f.matrix3.z_axis, DVec3::Y));

@@ -502,7 +502,7 @@ fn corner_cut_splits_into_triangle_and_pentagon() {
     m.add_line(v(0., 3., 0.), v(3., 0., 0.));
     ok(&m);
     let mut sizes: Vec<usize> = m.faces.values().map(|f| f.outer.len()).collect();
-    sizes.sort();
+    sizes.sort_unstable();
     assert_eq!(sizes, vec![3, 5]);
 }
 

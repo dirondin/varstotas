@@ -154,7 +154,7 @@ pub fn parse_lengths(s: &str, default_unit: LengthUnit) -> Option<Vec<f64>> {
 }
 
 fn trim_num(v: f64, decimals: usize) -> String {
-    let s = format!("{:.*}", decimals, v);
+    let s = format!("{v:.decimals$}");
     let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
     if s == "-0" { "0".into() } else { s }
 }

@@ -72,7 +72,7 @@ impl VarstotasApp {
         match run.error {
             Some(e) => {
                 self.console.push(LogLine::Error(e.clone()));
-                self.flash_error_quiet(tr!("console-script-error", error = e.to_string()));
+                self.flash_error_quiet(tr!("console-script-error", error = e.clone()));
                 self.console.last = Some((false, e));
             }
             None => self.console.last = Some((true, run.output.trim_end().to_string())),

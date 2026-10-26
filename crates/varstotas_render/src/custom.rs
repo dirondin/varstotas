@@ -121,7 +121,7 @@ pub fn check(sh: &CustomSurface) -> Option<String> {
         Err((line, msg)) => {
             let msg = msg.replace("_c0", "");
             Some(match line {
-                Some(l) if l >= starts[0] && l < starts[0] + sh.source.lines().count() => varstotas_i18n::tr!("render-shader-line", line = l - starts[0] + 1, msg = msg.clone()),
+                Some(l) if l >= starts[0] && l < starts[0] + sh.source.lines().count() => varstotas_i18n::tr!("render-shader-line", line = l - starts[0] + 1, msg = msg),
                 _ => msg,
             })
         }

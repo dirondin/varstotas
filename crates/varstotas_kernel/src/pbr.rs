@@ -533,7 +533,7 @@ mod tests {
         assert_eq!((ps[2].min, ps[2].max), (0.0, 100.0));
         let sh = CustomShader::new(src);
         assert_eq!(sh.params, vec![4.0, 0.3, 50.0]);
-        assert_eq!(CustomShader { params: vec![], ..sh.clone() }.param(1), 0.3);
+        assert_eq!(CustomShader { params: vec![], ..sh }.param(1), 0.3);
     }
 
     #[test]

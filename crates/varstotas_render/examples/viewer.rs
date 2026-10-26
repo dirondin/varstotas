@@ -201,7 +201,7 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
     {
         let c = [0.3, 0.3, 0.35, 1.0];
         let (x0, x1, y0, y1, zr) = (-4500.0, -2500.0, 4200.0, 5400.0, 900.0);
-        let ym = (y0 + y1) * 0.5;
+        let ym = f32::midpoint(y0, y1);
         let (a0, a1) = (Vec3::new(x0, y0, 0.0), Vec3::new(x1, y0, 0.0));
         let (b0, b1) = (Vec3::new(x0, y1, 0.0), Vec3::new(x1, y1, 0.0));
         let (r0, r1) = (Vec3::new(x0, ym, zr), Vec3::new(x1, ym, zr));
@@ -215,7 +215,7 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
     {
         let (x0, x1, y0, y1, zw, zr) = (3800.0, 6000.0, -3000.0, -1500.0, 1500.0, 2400.0);
         b.cuboid(Vec3::new(x0, y0, 0.0), Vec3::new(x1, y1, zw), [1.0; 4], false);
-        let ym = (y0 + y1) * 0.5;
+        let ym = f32::midpoint(y0, y1);
         let (a0, a1) = (Vec3::new(x0, y0, zw), Vec3::new(x1, y0, zw));
         let (b0, b1) = (Vec3::new(x0, y1, zw), Vec3::new(x1, y1, zw));
         let (r0, r1) = (Vec3::new(x0, ym, zr), Vec3::new(x1, ym, zr));
@@ -228,7 +228,7 @@ fn build_scene() -> (SceneGeometry, DVec3, DVec3) {
         }
     }
     let stress = std::env::var("VARSTOTAS_STRESS").unwrap_or_default();
-    let stress_faces: usize = stress.trim().parse().unwrap_or(if stress.is_empty() { 0 } else { 1 });
+    let stress_faces: usize = stress.trim().parse().unwrap_or(usize::from(!stress.is_empty()));
     if stress_faces >= 100 {
         // `VARSTOTAS_STRESS=<faces>`: a grid of boxes (6 faces, 12 tris, 12 edges + 12 profiles each).
         // `VARSTOTAS_STRESS_GLASS=1`: every 8th box is translucent (exercises the sorted blend pass).

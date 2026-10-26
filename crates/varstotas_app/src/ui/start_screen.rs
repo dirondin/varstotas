@@ -132,7 +132,7 @@ fn banner(ui: &mut Ui, icon: Option<&egui::TextureHandle>) {
     // isometric projection of the scene (world units) into the right part of the banner
     let s = 24.0;
     let origin = pos2(rect.right() - 128.0, rect.top() + 84.0);
-    let iso = |x: f32, y: f32, z: f32| pos2(origin.x + (x - y) * 0.866 * s, origin.y + (x + y) * 0.5 * s - z * s);
+    let iso = |x: f32, y: f32, z: f32| pos2(origin.x + (x - y) * 0.866 * s, origin.y + f32::midpoint(x, y) * s - z * s);
     // a faint isometric grid on the ground
     let grid = if dark { Color32::from_white_alpha(14) } else { Color32::from_black_alpha(16) };
     for i in -6..=9 {
@@ -171,7 +171,7 @@ fn banner(ui: &mut Ui, icon: Option<&egui::TextureHandle>) {
     for p in [a, b] {
         painter.line_segment([p + vec2(-3.0, -3.0), p + vec2(3.0, 3.0)], Stroke::new(1.6, ink));
     }
-    let mid = pos2((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+    let mid = pos2(f32::midpoint(a.x, b.x), f32::midpoint(a.y, b.y));
     painter.text(mid + vec2(-12.0, -9.0), egui::Align2::CENTER_CENTER, "600", FontId::proportional(11.0), ink);
     // the icon, the name and the subtitle on the left
     let mut x = rect.left() + 18.0;

@@ -176,7 +176,7 @@ fn draw_preview(ui: &Ui, rect: egui::Rect, edges: &[(DVec3, DVec3)], yaw: f32, p
     }
     let inner = rect.shrink(14.0);
     let s = (inner.width() as f64 / (hi.0 - lo.0).max(1e-9)).min(inner.height() as f64 / (hi.1 - lo.1).max(1e-9));
-    let c = ((lo.0 + hi.0) / 2.0, (lo.1 + hi.1) / 2.0);
+    let c = (f64::midpoint(lo.0, hi.0), f64::midpoint(lo.1, hi.1));
     let to = |q: (f64, f64)| pos2(rect.center().x + ((q.0 - c.0) * s) as f32, rect.center().y + ((q.1 - c.1) * s) as f32);
     let painter = ui.painter_at(rect);
     let stroke = Stroke::new(1.0, super::theme::pick(Color32::from_gray(50), Color32::from_gray(200)));
@@ -387,7 +387,7 @@ impl VarstotasApp {
         let Ok(g) = &self.gen_editor.parsed else { return };
         let Some(dir) = self.library_dir() else { return self.flash_error(tr!("gen-no-home")) };
         let path = save_path(&dir, self.gen_editor.file.as_deref(), &g.name);
-        match std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, &self.gen_editor.source)) {
+        match std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, &self.gen_editor.source)) {
             Ok(()) => {
                 self.gen_editor.status = tr!("gen-saved", path = path.display().to_string());
                 self.gen_editor.file = Some(path);
@@ -413,7 +413,7 @@ impl VarstotasApp {
                 varstotas_script::generator::rebuild_all(m, &name)
             });
             self.gen_editor.status = match r {
-                Some(_) => {
+                Some(()) => {
                     self.gen_editor.doc = Some(name.clone());
                     tr!("gen-renamed-applied", old = old.clone(), name = name.clone())
                 }

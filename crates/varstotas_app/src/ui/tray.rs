@@ -420,8 +420,8 @@ impl VarstotasApp {
         let summary = self.selection_summary();
         // Only the first two entities are needed to pick the layout; the multi-selection
         // details come from the cached summary (selections can hold 100k+ entities).
-        let sel: Vec<EntityRef> = self.doc.selection.iter().take(2).cloned().collect();
-        let guides: Vec<GuideRef> = self.doc.guide_sel.iter().take(2).cloned().collect();
+        let sel: Vec<EntityRef> = self.doc.selection.iter().take(2).copied().collect();
+        let guides: Vec<GuideRef> = self.doc.guide_sel.iter().take(2).copied().collect();
         if let Some(i) = self.doc.section_sel {
             self.section_info(ui, i);
             return;
@@ -654,7 +654,7 @@ impl VarstotasApp {
             });
         });
         if let Err(e) = r {
-            ui.label(RichText::new(tr!("tray-kernel-not-ready", error = e.to_string())).color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-kernel-not-ready", error = e)).color(theme::text_dim()));
         }
 
         if let Some(u) = set_unit {
@@ -670,10 +670,9 @@ impl VarstotasApp {
         }
         if let Some((soft, smooth)) = toggle_edge_soft {
             let p = path.clone();
-            let sel2 = sel.clone();
             self.doc.commit(&tr!(if soft { "tray-undo-soften-edge" } else { "tray-undo-unsoften-edge" }), |m| {
                 if let Some(mesh) = m.mesh_at_mut(&p) {
-                    for e in &sel2 {
+                    for e in &sel {
                         if let EntityRef::Edge(id) = e
                             && let Some(e) = mesh.edges.get_mut(*id) {
                                 e.soft = soft;
@@ -1395,7 +1394,7 @@ impl VarstotasApp {
         });
         outliner_drag_label(ui.ctx());
         if let Err(e) = r {
-            ui.label(RichText::new(tr!("tray-kernel-not-ready", error = e.to_string())).color(theme::text_dim()));
+            ui.label(RichText::new(tr!("tray-kernel-not-ready", error = e)).color(theme::text_dim()));
         }
         self.actions.extend(actions);
     }
@@ -1546,7 +1545,7 @@ fn outliner_level(
         child_path.push(id);
         let row = |ui: &mut Ui, actions: &mut Vec<Action>| {
             let lock = small_icon_button(ui, if model.entity_locked(path, EntityRef::Instance(id)) { Icon::Lock } else { Icon::Unlock }, &tr!(if inst.locked { "cmd-unlock" } else { "cmd-lock" }));
-            super::tray_lib::spot(format!("outliner_lock:{}", label), lock.rect.center());
+            super::tray_lib::spot(format!("outliner_lock:{label}"), lock.rect.center());
             if lock.clicked() { actions.push(Action::ToggleInstanceLocked(path.clone(), id)); }
             if small_icon_button(ui, if inst.hidden { Icon::EyeOff } else { Icon::Eye }, &tr!("tray-outliner-hide-show")).clicked() {
                 actions.push(Action::ToggleInstanceHidden(path.clone(), id));

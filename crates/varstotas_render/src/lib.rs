@@ -551,7 +551,7 @@ mod tests {
         assert!(g.dashed && !g.on_top && g.color == GUIDE_COLOR);
         assert!(g.a[0] == 100.0 && g.b[0] == 100.0 && g.a[1] < -1e4 && g.b[1] > 1e4);
         // centred on the closest point to the camera target
-        let mid_y = (g.a[1] + g.b[1]) * 0.5;
+        let mid_y = f32::midpoint(g.a[1], g.b[1]);
         assert!((mid_y as f64 - cam.target.y).abs() < 1.0);
         assert!(o.lines[1..].iter().all(|l| l.color == HIGHLIGHT_SELECTED && !l.dashed));
         // guide point: pulled toward the eye, same screen position, arms still GUIDE_POINT_SIZE pts

@@ -916,7 +916,7 @@ mod tests {
                 if a < b { [a, b] } else { [b, a] }
             })
             .collect();
-        out.sort();
+        out.sort_unstable();
         out
     }
 

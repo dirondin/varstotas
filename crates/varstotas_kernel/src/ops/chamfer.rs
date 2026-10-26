@@ -209,7 +209,7 @@ impl Mesh {
                 l.reverse();
                 n = -n;
             }
-            let mut tmpl = face_tmpls[if k * 2 < last { 0 } else { 1 }].clone();
+            let mut tmpl = face_tmpls[usize::from(k * 2 >= last)].clone();
             tmpl.normal = n.normalize_or(DVec3::Z);
             tmpl.uv = None;
             created.push(self.f_new(l, Vec::new(), &tmpl));

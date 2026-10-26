@@ -131,7 +131,7 @@ impl VarstotasApp {
     pub(crate) fn load_slot_file(&mut self, name: &str, slot: &'static str, path: &Path) {
         match crate::textures::load_file(path, 1000.0) {
             Ok((tex, _)) => self.set_material_slots(name, vec![(slot, Some(tex))], &tr!("mated-undo-texture")),
-            Err(e) => self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -185,7 +185,7 @@ impl VarstotasApp {
         let Some(dir) = edit_dir() else { return };
         let safe: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' }).collect();
         let path = dir.join(format!("{safe}-{slot}.{}", img.extension()));
-        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, &img.bytes[..])) {
+        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, &img.bytes[..])) {
             self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string()));
             return;
         }
@@ -428,7 +428,7 @@ impl VarstotasApp {
         let tex = tex.id();
         let unit = self.doc.model.unit;
         let mut open = true;
-        egui::Window::new(tr!("mated-view-title", material = name.clone(), slot = slot_label(slot)))
+        egui::Window::new(tr!("mated-view-title", material = name, slot = slot_label(slot)))
             .id(egui::Id::new("texture_view_window"))
             .open(&mut open)
             .default_size([520.0, 560.0])

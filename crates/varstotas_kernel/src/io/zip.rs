@@ -37,7 +37,7 @@ pub fn unzip(data: &[u8], want: impl Fn(&str) -> bool) -> Result<Vec<(String, Ve
             continue;
         }
         if !data.get(local..).is_some_and(|d| d.starts_with(b"PK\x03\x04")) {
-            return Err(tr!("kernel-io-bad-zip-entry-name", name = name.to_string()));
+            return Err(tr!("kernel-io-bad-zip-entry-name", name = name));
         }
         let start = local + 30 + u16_at(local + 26)? + u16_at(local + 28)?;
         let raw = data.get(start..start + csize).ok_or_else(|| tr!("kernel-io-truncated-zip"))?;
@@ -50,7 +50,7 @@ pub fn unzip(data: &[u8], want: impl Fn(&str) -> bool) -> Result<Vec<(String, Ve
                     .take(usize_ as u64 + 1).read_to_end(&mut v).map_err(|e| format!("{name}: {e}"))?;
                 v
             }
-            m => return Err(tr!("kernel-io-name-zip-method-m-not-supported", name = name.to_string(), m = m.to_string())),
+            m => return Err(tr!("kernel-io-name-zip-method-m-not-supported", name = name, m = m.to_string())),
         };
         if bytes.len() != usize_ {
             return Err("ZIP decompressed size mismatch".into());

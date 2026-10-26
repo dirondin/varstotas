@@ -33,13 +33,13 @@ fn face_pushpull_and_queries() {
     let mut m = Model::new();
     let r = go(
         &mut m,
-        r##"
+        r#"
         let f = rect(ORIGIN, 1000, 500);
         let top = pushpull(f, 300);
         print(top.kind + " " + top.area + " " + top.normal);
         print(faces().len() + " " + edges().len());
         bounds(all()).size
-    "##,
+    "#,
     );
     assert!(r.changed);
     assert_eq!(r.output.lines().collect::<Vec<_>>(), ["face 500000.0 vec3(0, 0, 1)", "6 12", "vec3(1000, 500, 300)"]);
@@ -51,7 +51,7 @@ fn groups_cylinders_transforms_and_context() {
     let mut m = Model::new();
     go(
         &mut m,
-        r##"
+        r#"
         let b = box(vec3(0, 0, 0), 600, 400, 18);
         b.name = "Shelf";
         let c = copy(b, vec3(0, 0, 300));
@@ -61,7 +61,7 @@ fn groups_cylinders_transforms_and_context() {
         let tip = box(vec3(990, -10, 700), 20, 20, 20);
         exit();
         print(groups().len());
-    "##,
+    "#,
     );
     let root = m.root_mesh();
     assert_eq!(root.instances.len(), 3);
@@ -124,12 +124,12 @@ fn solid_subtract_is_a_minus_b() {
     let mut m = Model::new();
     let r = go(
         &mut m,
-        r##"
+        r"
         let a = box(ORIGIN, 1000, 1000, 1000);
         let b = box(vec3(500, 500, 500), 1000, 1000, 1000);
         let out = subtract(a, b);
         bounds(out).size
-    "##,
+    ",
     );
     assert_eq!(r.output, "vec3(1000, 1000, 1000)\n");
     assert_eq!(m.root_mesh().instances.len(), 1);
@@ -140,13 +140,13 @@ fn circle_face_and_follow_me() {
     let mut m = Model::new();
     let r = go(
         &mut m,
-        r##"
+        r"
         let path = line(vec3(0, 0, 0), vec3(0, 0, 1000));
         let prof = circle(ORIGIN, 50, 12);
         print(prof.kind);
         let top = pushpull(prof, 200);
         top.normal
-    "##,
+    ",
     );
     assert_eq!(r.output, "face\nvec3(0, 0, 1)\n");
 }
@@ -198,7 +198,7 @@ fn json_vars_values_and_entity_ids_round_trip() {
     let r = varstotas_script::eval_json(&mut m, &ctx, "box(a0, a1, a2, a3)", &vars(json!({"a0": [0, 0, 0], "a1": 600, "a2": "40cm", "a3": 18.5})));
     assert!(r.run.error.is_none() && r.run.changed, "{:?}", r.run.error);
     assert_eq!(r.value["kind"], "group");
-    let g = r.value.clone();
+    let g = r.value;
     // The id from the first call names the same group in the next one.
     let r = varstotas_script::eval_json(&mut m, &ctx, "g.name = \"Shelf\"; [g.name, bounds(g).size, #{ n: 1, ok: true }]", &vars(json!({"g": g})));
     assert!(r.run.error.is_none(), "{:?}", r.run.error);
@@ -218,7 +218,7 @@ fn all_faces_and_text_files() {
     let f = dir.join("pts.csv");
     std::fs::write(&f, "0,0\n100,0\n100,50\n").unwrap();
     let code = format!(
-        r##"
+        r#"
         let pts = [];
         for l in read_text("{p}").split("\n") {{
             l.trim();
@@ -230,7 +230,7 @@ fn all_faces_and_text_files() {
         box(vec3(500, 0, 0), 10, 10, 10);
         write_text("{p}.out", "" + all_faces().len());
         all_faces().len()
-    "##,
+    "#,
         p = f.display()
     );
     let r = go(&mut m, &code);

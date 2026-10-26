@@ -417,7 +417,7 @@ impl Model {
             }
         }
         let Some((lo, hi)) = ext else { return Err(OpError::Invalid(tr!("kernel-err-nothing-to-flip"))) };
-        let m = reflection(n, (lo + hi) * 0.5);
+        let m = reflection(n, f64::midpoint(lo, hi));
         let mesh = &mut self.defs[d].mesh;
         for i in insts {
             let inst = &mut mesh.instances[i];

@@ -539,7 +539,7 @@ impl RotateTool {
             (self.hover, self.hover_guide) = hover_with_guides(ctx);
         }
         let (anchor, plane) = match self.stage {
-            Some(RotStage::Center { c, n }) | Some(RotStage::Angle { c, n, .. }) => (Some(c), Some(Plane::new(c, n))),
+            Some(RotStage::Center { c, n } | RotStage::Angle { c, n, .. }) => (Some(c), Some(Plane::new(c, n))),
             None => (None, None),
         };
         let r = infer(&mut self.engine, ctx, anchor, None, plane);

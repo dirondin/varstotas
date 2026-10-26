@@ -997,7 +997,7 @@ impl Model {
         if !lo.is_finite() {
             return Err(bad(&varstotas_i18n::tr!("print-error-33")));
         }
-        let axis = if hi.x - lo.x >= hi.y - lo.y { 0 } else { 1 };
+        let axis = usize::from(hi.x - lo.x < hi.y - lo.y);
         let mut centers = Vec::new();
         let radius = o.diameter_mm / 2. + o.clearance_mm;
         let depth = o.length_mm / 2. + o.clearance_mm;

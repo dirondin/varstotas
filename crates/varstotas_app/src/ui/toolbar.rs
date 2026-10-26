@@ -189,7 +189,7 @@ impl VarstotasApp {
     fn tool_button(&mut self, ui: &mut Ui, id: ToolId) {
         let active = self.tool_id() == id;
         let resp = icon_button(ui, id.icon(), active, BTN());
-        let mut desc = id.description().to_string();
+        let mut desc = id.description();
         if !id.implemented() {
             desc.push_str("\n(not implemented yet)");
         }

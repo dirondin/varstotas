@@ -93,7 +93,7 @@ impl CurveInfo {
 
     /// Point halfway along the arc (the "bulge" apex of a 2-point arc).
     pub fn mid_point(&self) -> DVec3 {
-        self.point_at((self.start_angle + self.end_angle) * 0.5)
+        self.point_at(f64::midpoint(self.start_angle, self.end_angle))
     }
 
     /// Arc length of the true arc / circumference.
@@ -685,7 +685,7 @@ impl Mesh {
     ) -> HashMap<u32, u32> {
         let mut map = HashMap::new();
         let mut ids: Vec<u32> = ids.into_iter().collect();
-        ids.sort();
+        ids.sort_unstable();
         ids.dedup();
         for (next, c) in (self.next_curve_id()..).zip(ids) {
             map.insert(c, next);

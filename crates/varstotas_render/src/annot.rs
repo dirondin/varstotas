@@ -493,7 +493,7 @@ mod tests {
         assert_eq!(b.size, DVec2::new(42.0, 28.0));
         assert_eq!(b.min, DVec2::new(-21.0, -34.0)); // above the anchor by the 3 pt gap
         assert_eq!(b.text_origin, b.min);
-        let boxed = t.clone().background([1.0; 4]).align(HAlign::Left, VAlign::Top).offset(0.0, 0.0);
+        let boxed = t.background([1.0; 4]).align(HAlign::Left, VAlign::Top).offset(0.0, 0.0);
         let b = text_box(&boxed, DVec2::new(20.0, 14.0), 1.5, true);
         assert_eq!(b.min, DVec2::ZERO);
         assert_eq!(b.size, DVec2::new(39.0, 30.0)); // (20 + 6) * 1.5, (14 + 6) * 1.5
@@ -519,7 +519,7 @@ mod tests {
         assert!(out[30..].iter().all(|v| v.mode == SPRITE_GLYPH && v.color == t.color));
         // centred: box symmetric around the anchor, whole pixels
         let xs: Vec<f32> = out[..6].iter().map(|v| v.offset[0]).collect();
-        let (lo, hi) = (xs.iter().cloned().fold(f32::MAX, f32::min), xs.iter().cloned().fold(f32::MIN, f32::max));
+        let (lo, hi) = (xs.iter().copied().fold(f32::MAX, f32::min), xs.iter().copied().fold(f32::MIN, f32::max));
         assert!((lo + hi).abs() <= 1.0 && lo.fract() == 0.0, "{lo} {hi}");
         // glyph quads use atlas texels and stay inside the box
         assert!(out[30..].iter().all(|v| v.offset[0] >= lo && v.offset[0] <= hi && v.uv[0] > 0.0));
@@ -533,7 +533,7 @@ mod tests {
         push_text(&mut out, &OverlayText::new(cam.target, "1250 mm").along(DVec3::Y), &galley, &p, 2.0, [0.0; 3]);
         assert!(out.iter().all(|v| v.mode == SPRITE_GLYPH + SPRITE_NO_SNAP));
         let ys: Vec<f32> = out.iter().map(|v| v.offset[1]).collect();
-        let span_y = ys.iter().cloned().fold(f32::MIN, f32::max) - ys.iter().cloned().fold(f32::MAX, f32::min);
+        let span_y = ys.iter().copied().fold(f32::MIN, f32::max) - ys.iter().copied().fold(f32::MAX, f32::min);
         assert!(span_y > galley.rect.width() * 2.0 * 0.9, "{span_y}");
     }
 

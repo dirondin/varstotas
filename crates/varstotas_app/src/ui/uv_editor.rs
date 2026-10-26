@@ -802,7 +802,7 @@ impl VarstotasApp {
             state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(self.uv.vcb.chars().count()))));
             state.store(ui.ctx(), out.response.id);
         }
-        let resp = out.response.response.clone().on_hover_text(tr!("uv-value-hover"));
+        let resp = out.response.response.on_hover_text(tr!("uv-value-hover"));
         super::tray_lib::spot("uv:value", resp.rect.center());
         if super::tray::committed(ui, &resp) && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !self.uv.vcb.trim().is_empty() {
             let v = self.uv.vcb.clone();

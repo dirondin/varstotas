@@ -61,7 +61,7 @@ impl VarstotasApp {
         let name = mat.name.clone();
         match crate::textures::load_file(path, width) {
             Ok((tex, _)) => self.set_pbr_map(&name, map, Some(tex)),
-            Err(e) => self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -92,7 +92,7 @@ impl VarstotasApp {
             }
         };
         if let Err(e) = crate::pbr::decode_hdri(&bytes) {
-            self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e.to_string()));
+            self.flash_error(tr!("realistic-cant-use", path = path.display().to_string(), error = e));
             return;
         }
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("environment.hdr").to_string();

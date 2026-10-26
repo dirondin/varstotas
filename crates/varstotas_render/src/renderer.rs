@@ -694,9 +694,7 @@ impl Renderer {
         let mut n = geo.tris.len() - geo.tris.len() % 3;
         if n > max_tris_verts {
             log::warn!(
-                "varstotas_render: {} triangle vertices exceed the device buffer limit, truncating to {}", // i18n-ignore
-                n,
-                max_tris_verts
+                "varstotas_render: {n} triangle vertices exceed the device buffer limit, truncating to {max_tris_verts}"
             );
             n = max_tris_verts - max_tris_verts % 3;
         }
@@ -1706,7 +1704,7 @@ impl Renderer {
         if let Err((line, msg)) = crate::custom::validate(&src) {
             // Each one compiles alone but not together (a name clash): keep the old module.
             log::warn!("custom shaders: line {line:?}: {msg}");
-            let all = Some(varstotas_i18n::tr!("render-shader-clash", error = msg.to_string()));
+            let all = Some(varstotas_i18n::tr!("render-shader-clash", error = msg));
             return vec![all; shaders.len()];
         }
         let device = &rs.device;

@@ -88,7 +88,7 @@ fn load() -> Option<Api> {
         }
         log::info!("denoiser: Open Image Denoise ({})", path.display());
         if let Ok(mut l) = LOADED.lock() {
-            *l = Some(path.clone());
+            *l = Some(path);
         }
         return Some(api);
     }

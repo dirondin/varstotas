@@ -959,7 +959,7 @@ pub fn draw_result(r: &InferenceResult, out3d: &mut Overlay3d, out2d: &mut Vec<M
     if let Some(shape) = r.kind.marker() {
         out2d.push(Marker2d::Point { at: r.point, shape, color: r.kind.color() });
     }
-    let mut label = r.kind.label().to_string();
+    let mut label = r.kind.label();
     if r.kind.is_direction() && r.from_point.is_some() {
         label = tr!("inference-from-point");
     }

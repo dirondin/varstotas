@@ -163,7 +163,7 @@ impl Default for ViewDefaults {
 /// A folder row: the path (or "default: …"), Choose…, Default, Show in Finder.
 fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: Option<PathBuf>, tip: &str) {
     ui.label(label).on_hover_text(tip);
-    let shown = custom.clone().or(default.clone());
+    let shown = custom.clone().or(default);
     ui.horizontal(|ui| {
         let text = match (&custom, &shown) {
             (Some(p), _) => p.display().to_string(),
@@ -712,7 +712,7 @@ impl VarstotasApp {
                         None => {
                             let taken = keymap::assign(&mut self.prefs.shortcuts, cmd, Some(sc));
                             self.flash(match taken {
-                                Some(o) => tr!("prefs-shortcut-taken", command = cmd.name(), keys = sc.label(), other = o.to_string()),
+                                Some(o) => tr!("prefs-shortcut-taken", command = cmd.name(), keys = sc.label(), other = o),
                                 None => tr!("prefs-shortcut-set", command = cmd.name(), keys = sc.label()),
                             });
                         }

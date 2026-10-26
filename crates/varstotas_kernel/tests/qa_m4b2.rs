@@ -176,7 +176,7 @@ fn set_curve_enclosing_other_circle_no_overlap() {
     // Square with A's hole, A's disc with B's hole, B's disc.
     assert_eq!(m.faces.len(), 3);
     let mut holes: Vec<usize> = m.faces.values().map(|f| f.holes.len()).collect();
-    holes.sort();
+    holes.sort_unstable();
     assert_eq!(holes, [0, 1, 1]);
     let total: f64 = m.faces.keys().map(|f| m.face_area(f)).sum();
     assert!((total / 16e6 - 1.0).abs() < 1e-9, "{total}");
@@ -184,7 +184,7 @@ fn set_curve_enclosing_other_circle_no_overlap() {
     m.set_curve(cid, Some(200.0), None).unwrap();
     sane(&m);
     let mut holes: Vec<usize> = m.faces.values().map(|f| f.holes.len()).collect();
-    holes.sort();
+    holes.sort_unstable();
     assert_eq!(holes, [0, 0, 2]);
     let total: f64 = m.faces.keys().map(|f| m.face_area(f)).sum();
     assert!((total / 16e6 - 1.0).abs() < 1e-9, "{total}");

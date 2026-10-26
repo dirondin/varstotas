@@ -228,7 +228,7 @@ impl Camera {
             (v.dot(b.right) / (z * t * aspect), v.dot(b.up) / (z * t))
         };
         Some(DVec2::new(
-            (x + 1.0) * 0.5 * viewport.x,
+            f64::midpoint(x, 1.0) * viewport.x,
             (1.0 - y) * 0.5 * viewport.y,
         ))
     }
@@ -340,7 +340,7 @@ impl Camera {
                 y1 = y1.max(y);
             }
             let h = ((y1 - y0).max((x1 - x0) / aspect) * margin).max(1.0);
-            let c = center + b.right * ((x0 + x1) * 0.5) + b.up * ((y0 + y1) * 0.5);
+            let c = center + b.right * f64::midpoint(x0, x1) + b.up * f64::midpoint(y0, y1);
             self.ortho_height = h;
             let dist = (h * 0.5 / ty).max(radius * 2.0);
             self.target = c;
@@ -491,7 +491,7 @@ mod tests {
             ] {
                 let clip = vp * p.extend(1.0);
                 let ndc = clip.truncate() / clip.w;
-                let s = DVec2::new((ndc.x + 1.0) * 0.5 * VP.x, (1.0 - ndc.y) * 0.5 * VP.y);
+                let s = DVec2::new(f64::midpoint(ndc.x, 1.0) * VP.x, (1.0 - ndc.y) * 0.5 * VP.y);
                 assert_close(s, c.world_to_screen(p, VP).unwrap(), 1e-6);
                 assert!(ndc.z > 0.0 && ndc.z < 1.0, "depth {} ortho {}", ndc.z, c.ortho);
             }

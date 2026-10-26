@@ -439,7 +439,7 @@ mod tests {
         assert_eq!(old.two_finger, NavGesture::Pan);
         assert_eq!(old.twist, TwistGesture::Orbit);
         assert_eq!(old.pinch_factor(2.0), 2.0);
-        let mut p = old.clone();
+        let mut p = old;
         p.pinch_speed = 2.0;
         assert_eq!(p.pinch_factor(2.0), 4.0);
         p.invert_pinch = true;

@@ -198,7 +198,7 @@ fn serve(stream: TcpStream, conn: u64, token: &str, tx: &SyncSender<Request>, ct
             Ok(req) => handle(&req, &mut authed, token, tx, ctx, conn),
             Err(e) => answer(&Value::Null, Err(format!("bad JSON: {e}"))),
         };
-        if writeln!(w, "{resp}").and_then(|_| w.flush()).is_err() {
+        if writeln!(w, "{resp}").and_then(|()| w.flush()).is_err() {
             break;
         }
     }

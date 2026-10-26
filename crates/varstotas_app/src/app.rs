@@ -1771,7 +1771,7 @@ impl VarstotasApp {
                     crate::ui::mat_maps::slot_image(&crate::document::PaletteMaterial::of(m), slot).cloned()
                 });
                 if let Some(img) = img {
-                    let file = if img.file_name.is_empty() { format!("{name}-{slot}.{}", img.extension()) } else { img.file_name.clone() };
+                    let file = if img.file_name.is_empty() { format!("{name}-{slot}.{}", img.extension()) } else { img.file_name };
                     if let Some(path) = rfd::FileDialog::new().set_file_name(file).save_file() {
                         self.export_slot(&name, slot, &path);
                     }
@@ -1956,7 +1956,7 @@ impl VarstotasApp {
                 false
             }
             Err(e) => {
-                self.flash_error(tr!("app-copy-failed", error = e.to_string()));
+                self.flash_error(tr!("app-copy-failed", error = e));
                 false
             }
         }
@@ -2100,7 +2100,7 @@ impl VarstotasApp {
         let (tex, decoded) = match crate::textures::load_file(path, width_mm) {
             Ok(t) => t,
             Err(e) => {
-                self.flash_error(tr!("app-cant-use", path = path.display().to_string(), error = e.to_string()));
+                self.flash_error(tr!("app-cant-use", path = path.display().to_string(), error = e));
                 return;
             }
         };
@@ -2336,7 +2336,7 @@ impl VarstotasApp {
                 self.flash(tr!("template-created", path = path.display().to_string()));
             }
             Ok(Err(e)) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e.to_string())),
-            Err(e) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash(tr!("template-load-failed", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -2396,7 +2396,7 @@ impl VarstotasApp {
                 }
             }
             Ok(Err(e)) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
-            Err(e) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
+            Err(e) => self.flash(tr!("app-could-not-open", path = path.display().to_string(), error = e)),
         }
     }
 
@@ -2459,7 +2459,7 @@ impl VarstotasApp {
                 false
             }
             Err(e) => {
-                self.flash(tr!("app-save-failed", error = e.to_string()));
+                self.flash(tr!("app-save-failed", error = e));
                 false
             }
         }
@@ -2546,11 +2546,11 @@ impl VarstotasApp {
         });
         match r {
             Ok(Ok(())) => match crate::downloads::licence_warning(&self.doc.model.attributions()) {
-                Some(w) if ext != "txt" => self.flash_error(tr!("app-exported-warning", path = path.display().to_string(), warning = w.to_string())),
+                Some(w) if ext != "txt" => self.flash_error(tr!("app-exported-warning", path = path.display().to_string(), warning = w)),
                 _ => self.flash(tr!("app-exported", path = path.display().to_string())),
             },
             Ok(Err(e)) => self.flash(tr!("app-export-failed", error = e.to_string())),
-            Err(e) => self.flash(tr!("app-export-failed", error = e.to_string())),
+            Err(e) => self.flash(tr!("app-export-failed", error = e)),
         }
     }
 
@@ -2608,7 +2608,7 @@ impl VarstotasApp {
     fn autosave_tick(&mut self, ctx: &egui::Context) {
         for r in self.autosave.worker.poll() {
             if let Err(e) = r.result {
-                self.flash_error(tr!("app-autosave-failed", path = r.path.display().to_string(), error = e.to_string()));
+                self.flash_error(tr!("app-autosave-failed", path = r.path.display().to_string(), error = e.clone()));
             }
         }
         if !self.autosave.allowed || !self.prefs.autosave {
@@ -2657,7 +2657,7 @@ impl VarstotasApp {
                     self.flash(tr!("app-recovered", name = r.display_name()));
                 }
                 Ok(Err(e)) => self.flash_error(tr!("app-could-not-recover", name = r.display_name(), error = e.to_string())),
-                Err(e) => self.flash_error(tr!("app-could-not-recover", name = r.display_name(), error = e.to_string())),
+                Err(e) => self.flash_error(tr!("app-could-not-recover", name = r.display_name(), error = e)),
             },
             Some(false) => self.autosave.worker.delete(r.autosave),
             None => {}
@@ -2972,13 +2972,13 @@ impl eframe::App for VarstotasApp {
             Some(Ok(p)) => {
                 log::info!("exported {}", p.display());
                 match crate::downloads::licence_warning(&self.doc.model.attributions()) {
-                    Some(w) => self.flash_error(tr!("app-exported-warning", path = p.display().to_string(), warning = w.to_string())),
+                    Some(w) => self.flash_error(tr!("app-exported-warning", path = p.display().to_string(), warning = w)),
                     None => self.flash(tr!("app-exported", path = p.display().to_string())),
                 }
             }
             Some(Err(e)) => {
                 log::warn!("PNG export failed: {e}");
-                self.flash_error(tr!("app-export-failed", error = e.to_string()));
+                self.flash_error(tr!("app-export-failed", error = e));
             }
             None => {}
         }

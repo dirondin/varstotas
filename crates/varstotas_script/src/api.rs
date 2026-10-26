@@ -357,7 +357,7 @@ fn face_id(st: &State, e: &Entity) -> R<FaceId> {
     check(st, e)?;
     match e.r {
         EntityRef::Face(f) => Ok(f),
-        _ => err(tr!("script-err-expected-a-face-got-e", e = kind(st, e).to_string())),
+        _ => err(tr!("script-err-expected-a-face-got-e", e = kind(st, e))),
     }
 }
 
@@ -365,7 +365,7 @@ fn inst_id(st: &State, e: &Entity) -> R<InstanceId> {
     check(st, e)?;
     match e.r {
         EntityRef::Instance(i) => Ok(i),
-        _ => err(tr!("script-err-expected-a-group-or-component-got", e = kind(st, e).to_string())),
+        _ => err(tr!("script-err-expected-a-group-or-component-got", e = kind(st, e))),
     }
 }
 
@@ -375,7 +375,7 @@ fn edge_ids(st: &State, es: &[Entity]) -> R<Vec<EdgeId>> {
             check(st, e)?;
             match e.r {
                 EntityRef::Edge(x) => Ok(x),
-                _ => err(tr!("script-err-expected-edges-got-e", e = kind(st, e).to_string())),
+                _ => err(tr!("script-err-expected-edges-got-e", e = kind(st, e))),
             }
         })
         .collect()
@@ -1392,7 +1392,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     e.register_fn("entities", |x: Dynamic| -> R<Array> {
         let g = one(&x)?;
         let i = with(|st| inst_id(st, &g))?;
-        let mut p = g.path.clone();
+        let mut p = g.path;
         p.push(i);
         list(3, Some(p))
     });

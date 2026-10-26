@@ -44,8 +44,8 @@ pub fn platform() -> &'static str {
 
 fn key_name(marker: &str, mac: bool) -> &'static str {
     match (marker, mac) {
-        ("COPY", true) | ("ALT", true) => "Option",
-        ("COPY", false) | ("CMD", false) => "Ctrl",
+        ("COPY" | "ALT", true) => "Option",
+        ("COPY" | "CMD", false) => "Ctrl",
         ("CMD", true) => "Cmd",
         ("ALT", false) => "Alt",
         ("CMDK", true) => "⌘",

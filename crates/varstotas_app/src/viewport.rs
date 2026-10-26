@@ -401,7 +401,7 @@ impl Viewport {
                                 .ok_or_else(|| tr!("view-nothing-rendered"))
                                 .and_then(|img| img.write_png(&path).map_err(|e| e.to_string()))
                         };
-                        job.saved = Some(r.map(|_| path));
+                        job.saved = Some(r.map(|()| path));
                     }
                 }
                 if let Some(job) = self.export.take_if(|_| active) {
@@ -415,7 +415,7 @@ impl Viewport {
                     let r = guarded(|| renderer.render_to_image(rs, &job.camera, &job.overlay, &style, job.size, &opts))
                         .and_then(|r| r.map_err(|e| e.to_string()))
                         .and_then(|img| img.write_png(&job.path).map_err(|e| e.to_string()))
-                        .map(|_| job.path.clone());
+                        .map(|()| job.path.clone());
                     self.export_result = Some(r);
                 }
                 match guarded(|| renderer.render(rs, camera, overlay3d, style, size_px, ppp)) {
@@ -437,7 +437,7 @@ impl Viewport {
             }
             paint_fallback_background(&painter, rect);
             let msg = match self.gpus.get(pane).and_then(|g| g.renderer_error.as_ref()) {
-                Some(e) => tr!("view-renderer-unavailable-yet", error = e.to_string()),
+                Some(e) => tr!("view-renderer-unavailable-yet", error = e.clone()),
                 None => tr!("view-renderer-unavailable"),
             };
             hud_text(&painter, rect.center(), Align2::CENTER_CENTER, &msg, Color32::from_gray(90));

@@ -217,7 +217,7 @@ impl Model {
                     .iter()
                     .map(|p| p.to_array().map(|x| (x / tol).round() as i64))
                     .collect::<Vec<_>>();
-                key.sort();
+                key.sort_unstable();
                 if duplicates.insert(key, ()).is_some() {
                     report.issue(PrintIssueKind::DuplicateTriangles, 1, segs);
                 }

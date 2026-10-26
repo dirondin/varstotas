@@ -90,7 +90,7 @@ impl TexLook {
 pub fn rgb_to_hsl(c: [f32; 3]) -> (f32, f32, f32) {
     let max = c[0].max(c[1]).max(c[2]);
     let min = c[0].min(c[1]).min(c[2]);
-    let l = (max + min) / 2.0;
+    let l = f32::midpoint(max, min);
     let d = max - min;
     if d < 1e-6 {
         return (0.0, 0.0, l);

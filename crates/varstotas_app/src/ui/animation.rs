@@ -210,7 +210,7 @@ impl VarstotasApp {
                     let (tx, rx) = std::sync::mpsc::channel();
                     let (dir, fps) = (run.dir.clone(), run.fps);
                     std::thread::spawn(move || {
-                        let r = encode(&bin, &dir, fps, &out).map(|_| out);
+                        let r = encode(&bin, &dir, fps, &out).map(|()| out);
                         let _ = std::fs::remove_dir_all(&dir);
                         let _ = tx.send(r);
                     });

@@ -464,7 +464,7 @@ mod tests {
         std::fs::write(tex.join("brick_albedo.png.meta"), "fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n").unwrap();
         std::fs::write(tex.join("brick_normal.png"), png([128, 128, 255])).unwrap();
         std::fs::write(tex.join("brick_normal.png.meta"), "fileFormatVersion: 2\nguid: fedcba9876543210fedcba9876543210\n").unwrap();
-        let mat = r#"%YAML 1.1
+        let mat = r"%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!21 &2100000
 Material:
@@ -493,7 +493,7 @@ Material:
     m_Colors:
     - _BaseColor: {r: 1, g: 0.5, b: 0.25, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-"#;
+";
         let f = mats.join("RedBrick.mat");
         std::fs::write(&f, mat).unwrap();
         let ms = import(&p, &f, Map::new()).unwrap();

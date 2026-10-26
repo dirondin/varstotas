@@ -385,12 +385,12 @@ pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugi
         }
         out
     } else {
-        dir.clone()
+        dir
     };
     if chosen.len() == 1 {
         let f = match safe_rel(chosen[0]) {
             Some(rel) if ext(&copy) == "zip" => files.join(rel),
-            _ => copy.clone(),
+            _ => copy,
         };
         let (m, xf) = crate::online_models::import_file(&f, importers, 0)?;
         let mut m = crate::online_models::library_model(m, xf, &title, Some(o.credit.clone()))?;

@@ -720,16 +720,16 @@ mod tests {
     fn member_completion_by_type() {
         let at = |s: &str| member_context(s, s.chars().count()).map(|(t, p, _)| (t, p));
         assert_eq!(at("let g = box(ORIGIN, 1, 2, 3);\ng.na"), Some((Ty::Group, "na".into())));
-        assert_eq!(at("let f = rect(ORIGIN, 1, 2);\nf."), Some((Ty::Face, "".into())));
-        assert_eq!(at("let f = rect(ORIGIN, 1, 2);\nf.normal."), Some((Ty::Vector, "".into())));
-        assert_eq!(at("for e in edges() { e."), Some((Ty::Edge, "".into())));
-        assert_eq!(at("for i in 0..3 { i."), Some((Ty::Num, "".into())));
+        assert_eq!(at("let f = rect(ORIGIN, 1, 2);\nf."), Some((Ty::Face, String::new())));
+        assert_eq!(at("let f = rect(ORIGIN, 1, 2);\nf.normal."), Some((Ty::Vector, String::new())));
+        assert_eq!(at("for e in edges() { e."), Some((Ty::Edge, String::new())));
+        assert_eq!(at("for i in 0..3 { i."), Some((Ty::Num, String::new())));
         assert_eq!(at("faces()[0].ar"), Some((Ty::Face, "ar".into())));
-        assert_eq!(at("box(ORIGIN, 1, 2, 3)."), Some((Ty::Group, "".into())));
+        assert_eq!(at("box(ORIGIN, 1, 2, 3)."), Some((Ty::Group, String::new())));
         assert_eq!(at("bounds(g).size.x"), Some((Ty::Vector, "x".into())));
-        assert_eq!(at("points[0]."), Some((Ty::Vector, "".into())));
-        assert_eq!(at("let p = ORIGIN; p."), Some((Ty::Vector, "".into())));
-        assert_eq!(at("unknown."), Some((Ty::Any, "".into())));
+        assert_eq!(at("points[0]."), Some((Ty::Vector, String::new())));
+        assert_eq!(at("let p = ORIGIN; p."), Some((Ty::Vector, String::new())));
+        assert_eq!(at("unknown."), Some((Ty::Any, String::new())));
         assert_eq!(at("let x = 1.5"), None);
         assert_eq!(at("// g."), None);
         assert_eq!(at("print(\"a.b"), None);
@@ -751,9 +751,9 @@ mod tests {
     fn header_tag_completion() {
         let at = |s: &str| tag_context(s, s.chars().count()).map(|(t, p, _)| (t, p));
         assert_eq!(at("// @pa"), Some((TagCtx::Tag, "pa".into())));
-        assert_eq!(at("let a = 1;\n  //@"), Some((TagCtx::Tag, "".into())));
+        assert_eq!(at("let a = 1;\n  //@"), Some((TagCtx::Tag, String::new())));
         assert_eq!(at("// @param w:in"), Some((TagCtx::ParamType, "in".into())));
-        assert_eq!(at("// @param w : "), Some((TagCtx::ParamType, "".into())));
+        assert_eq!(at("// @param w : "), Some((TagCtx::ParamType, String::new())));
         assert_eq!(at("// @param w = 1"), None);
         assert_eq!(at("// @pick 2"), None);
         assert_eq!(at("let x = a@"), None);

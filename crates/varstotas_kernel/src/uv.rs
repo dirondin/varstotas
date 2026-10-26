@@ -452,7 +452,7 @@ pub fn pack(mesh: &Mesh, islands: &[Vec<FaceId>], tile: [f64; 2], pad: f64) -> P
     }
     let (mut lo_k, mut hi_k) = (0.0, tile[0].max(tile[1]) / max_side);
     for _ in 0..40 {
-        let mid = (lo_k + hi_k) / 2.0;
+        let mid = f64::midpoint(lo_k, hi_k);
         if layout(mid).is_some() {
             lo_k = mid;
         } else {

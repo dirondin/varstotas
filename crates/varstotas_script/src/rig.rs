@@ -74,7 +74,7 @@ pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> R
             };
             match &j.kind {
                 JointKind::Rotate { .. } | JointKind::Slide { .. } => {
-                    let x = number(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-a-3", what = what().to_string()))?;
+                    let x = number(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-a-3", what = what()))?;
                     let amount = match g.param(&j.param).filter(|_| j.expr.is_empty()) {
                         Some(pp) if pp.min.zip(pp.max).is_some_and(|(a, b)| b > a) => {
                             let (a, b) = (pp.min.unwrap(), pp.max.unwrap());
@@ -90,15 +90,15 @@ pub fn rig_ops(model: &Model, master: DefId, rig: &Rig, values: &GenValues) -> R
                     ops.push(PartOp::Transform(j.part.clone(), m));
                 }
                 JointKind::Visible => {
-                    let on = flag(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-true", what = what().to_string()))?;
+                    let on = flag(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-true", what = what()))?;
                     ops.push(PartOp::Visible(j.part.clone(), on));
                 }
                 JointKind::Material => {
-                    let s = v.clone().into_string().map_err(|_| tr!("script-err-what-the-value-is-not-a-2", what = what().to_string()))?;
+                    let s = v.clone().into_string().map_err(|_| tr!("script-err-what-the-value-is-not-a-2", what = what()))?;
                     ops.push(PartOp::Paint(j.part.clone(), s));
                 }
                 JointKind::Param { key } => {
-                    let x = to_value(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-a", what = what().to_string()))?;
+                    let x = to_value(&v).ok_or_else(|| tr!("script-err-what-the-value-is-not-a", what = what()))?;
                     ops.push(PartOp::Values(j.part.clone(), GenValues::from([(key.clone(), x)])));
                 }
             }
@@ -168,9 +168,9 @@ fn resolve(model: &mut Model, master: DefId, ops: Vec<PartOp>) -> Result<Vec<Par
     let parts = model.rig_parts(master);
     let mut swaps = Vec::new();
     for (part, over) in merged {
-        let (id, _) = parts.iter().find(|(_, n)| *n == part).ok_or_else(|| tr!("script-err-part-no-such-part", part = part.to_string()))?;
+        let (id, _) = parts.iter().find(|(_, n)| *n == part).ok_or_else(|| tr!("script-err-part-no-such-part", part = part.clone()))?;
         let def = model.defs.get(master).and_then(|d| d.mesh.instances.get(*id)).map(|i| i.def).ok_or_else(|| tr!("script-err-no-such-component"))?;
-        let (kind, mut values) = part_kind(model, def).ok_or_else(|| tr!("script-err-part-the-part-has-no-parameters-2", part = part.to_string()))?;
+        let (kind, mut values) = part_kind(model, def).ok_or_else(|| tr!("script-err-part-the-part-has-no-parameters-2", part = part.clone()))?;
         values.extend(over);
         let d = match kind {
             PartKind::Generated(name) => crate::generator::def_for(model, &name, &values),
@@ -571,7 +571,7 @@ fn validate(rig: &Rig) -> Result<(), String> {
     let mut keys = HashSet::new();
     for k in rig.params.iter().map(|p| &p.key).chain(rig.formulas.iter().map(|f| &f.key)) {
         if !keys.insert(k.as_str()) {
-            return Err(tr!("script-err-k-twice-parameters-and-formulas-share", k = k.to_string()));
+            return Err(tr!("script-err-k-twice-parameters-and-formulas-share", k = k.clone()));
         }
     }
     for j in &rig.joints {
@@ -579,25 +579,25 @@ fn validate(rig: &Rig) -> Result<(), String> {
             return Err(tr!("script-err-a-joint-without-a-part"));
         }
         if j.expr.trim().is_empty() && !keys.contains(j.param.as_str()) {
-            return Err(tr!("script-err-part-choose-a-parameter-or-write", part = j.part.to_string()));
+            return Err(tr!("script-err-part-choose-a-parameter-or-write", part = j.part.clone()));
         }
         if let JointKind::Rotate { axis, .. } = j.kind
             && axis.length() < 1e-9
         {
-            return Err(tr!("script-err-part-the-axis-has-no-direction", part = j.part.to_string()));
+            return Err(tr!("script-err-part-the-axis-has-no-direction", part = j.part.clone()));
         }
         if let JointKind::Slide { dir } = j.kind
             && dir.length() < 1e-9
         {
-            return Err(tr!("script-err-part-the-direction-is-zero", part = j.part.to_string()));
+            return Err(tr!("script-err-part-the-direction-is-zero", part = j.part.clone()));
         }
         if let JointKind::Param { key } = &j.kind
             && key.trim().is_empty()
         {
-            return Err(tr!("script-err-part-choose-the-part-s-parameter", part = j.part.to_string()));
+            return Err(tr!("script-err-part-choose-the-part-s-parameter", part = j.part.clone()));
         }
         if matches!(j.kind, JointKind::Visible) && j.expr.is_empty() && rig.params.iter().find(|p| p.key == j.param).is_some_and(|p| matches!(p.kind, GenKind::Material | GenKind::Choice(_))) {
-            return Err(tr!("script-err-part-show-hide-needs-a-yes", part = j.part.to_string()));
+            return Err(tr!("script-err-part-show-hide-needs-a-yes", part = j.part.clone()));
         }
     }
     Ok(())
@@ -607,10 +607,10 @@ fn validate(rig: &Rig) -> Result<(), String> {
 fn check_part_params(model: &Model, master: DefId, ops: &[PartOp]) -> Result<(), String> {
     for op in ops {
         if let PartOp::Values(part, v) = op {
-            let g = part_generator(model, master, part).ok_or_else(|| tr!("script-err-part-the-part-has-no-parameters", part = part.to_string()))?;
+            let g = part_generator(model, master, part).ok_or_else(|| tr!("script-err-part-the-part-has-no-parameters", part = part.clone()))?;
             for k in v.keys() {
                 if g.param(k).is_none() {
-                    return Err(tr!("script-err-part-no-parameter-k-it-has", part = part.to_string(), k = k.to_string(), keys = g.params.iter().map(|p| p.key.as_str()).collect::<Vec<_>>().join(", ")));
+                    return Err(tr!("script-err-part-no-parameter-k-it-has", part = part.clone(), k = k.clone(), keys = g.params.iter().map(|p| p.key.as_str()).collect::<Vec<_>>().join(", ")));
                 }
             }
         }
@@ -624,15 +624,15 @@ pub fn warnings(model: &Model, master: DefId, rig: &Rig) -> Vec<String> {
     let parts: HashSet<String> = model.rig_parts(master).into_iter().map(|(_, n)| n).collect();
     let mut seen = HashSet::new();
     let mut out: Vec<String> =
-        rig.joints.iter().filter(|j| !parts.contains(&j.part) && seen.insert(j.part.clone())).map(|j| tr!("script-err-no-part-part-in-the-component", part = j.part.to_string())).collect();
+        rig.joints.iter().filter(|j| !parts.contains(&j.part) && seen.insert(j.part.clone())).map(|j| tr!("script-err-no-part-part-in-the-component", part = j.part.clone())).collect();
     for j in &rig.joints {
         let JointKind::Param { key } = &j.kind else { continue };
         if !parts.contains(&j.part) {
             continue;
         }
         match part_generator(model, master, &j.part) {
-            None => out.push(tr!("script-err-part-has-no-parameters", part = j.part.to_string())),
-            Some(g) if g.param(key).is_none() => out.push(tr!("script-err-part-has-no-parameter-key", part = j.part.to_string(), key = key.to_string())),
+            None => out.push(tr!("script-err-part-has-no-parameters", part = j.part.clone())),
+            Some(g) if g.param(key).is_none() => out.push(tr!("script-err-part-has-no-parameter-key", part = j.part.clone(), key = key.clone())),
             _ => {}
         }
     }

@@ -131,14 +131,14 @@ impl GenParam {
                 };
                 match opts.iter().find(|o| o.eq_ignore_ascii_case(s.trim())) {
                     Some(o) => Ok(GenValue::Text(o.clone())),
-                    None => Err(tr!("kernel-gen-key-s-is-not-one-of", key = self.key.to_string(), s = s.to_string(), join = opts.join(" / ").to_string())),
+                    None => Err(tr!("kernel-gen-key-s-is-not-one-of", key = self.key.clone(), s = s.clone(), join = opts.join(" / "))),
                 }
             }
             _ => {
                 let mut x = match v {
                     GenValue::Num(x) => *x,
                     GenValue::Text(s) => {
-                        parse_number(&self.kind, s).ok_or_else(|| tr!("kernel-gen-key-not-a-name-s", key = self.key.to_string(), name = self.kind.name().to_string(), s = s.to_string()))?
+                        parse_number(&self.kind, s).ok_or_else(|| tr!("kernel-gen-key-not-a-name-s", key = self.key.clone(), name = self.kind.name().to_string(), s = s.clone()))?
                     }
                     GenValue::Bool(_) => return Err(bad()),
                 };
@@ -240,7 +240,7 @@ fn parse_range(p: &mut GenParam, r: &str) -> Result<(), String> {
         if s.is_empty() {
             return Ok(None);
         }
-        parse_number(&p.kind, s).map(Some).ok_or_else(|| tr!("kernel-gen-key-bad-number-s-in-the", key = p.key.to_string(), s = s.to_string()))
+        parse_number(&p.kind, s).map(Some).ok_or_else(|| tr!("kernel-gen-key-bad-number-s-in-the", key = p.key.clone(), s = s.to_string()))
     };
     if !range.is_empty() {
         let (a, b) = range.split_once("..").ok_or_else(|| format!("{}: range is `min..max/step`", p.key))?;
@@ -309,7 +309,7 @@ fn parse_check(s: &str) -> Result<GenCheck, String> {
     if expr.is_empty() {
         return Err("empty @check".into());
     }
-    let message = msg.unwrap_or_else(|| tr!("kernel-gen-check-failed-expr", expr = expr.to_string()));
+    let message = msg.unwrap_or_else(|| tr!("kernel-gen-check-failed-expr", expr = expr.clone()));
     Ok(GenCheck { expr, message })
 }
 
@@ -437,7 +437,7 @@ impl Generator {
                 "formula" => {
                     let f = parse_formula(rest)?;
                     if g.param(&f.key).is_some() || g.formulas.iter().any(|x| x.key == f.key) {
-                        return Err(tr!("kernel-gen-key-twice-formulas-and-parameters-share", key = f.key.to_string()));
+                        return Err(tr!("kernel-gen-key-twice-formulas-and-parameters-share", key = f.key));
                     }
                     g.formulas.push(f);
                 }
@@ -469,7 +469,7 @@ impl Generator {
     pub fn normalize(&self, values: &GenValues) -> Result<GenValues, String> {
         if let Some(k) = values.keys().find(|k| self.param(k).is_none()) {
             let keys: Vec<&str> = self.params.iter().map(|p| p.key.as_str()).collect();
-            return Err(tr!("kernel-gen-name-no-parameter-k-join", name = self.name.to_string(), k = k.to_string(), join = keys.join(", ").to_string()));
+            return Err(tr!("kernel-gen-name-no-parameter-k-join", name = self.name.clone(), k = k.clone(), join = keys.join(", ")));
         }
         self.params
             .iter()
@@ -646,7 +646,7 @@ impl Model {
             .map(|i| i.def)
             .chain(def.params.iter().flat_map(|p| [Some(p.base), p.variant]).flatten())
             .chain(def.rigged.as_ref().map(|r| r.master));
-        for k in kids.collect::<Vec<_>>() {
+        for k in kids {
             if out.insert(k) {
                 self.nested_defs(k, out);
             }

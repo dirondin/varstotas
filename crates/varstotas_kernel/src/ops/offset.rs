@@ -128,7 +128,7 @@ impl Mesh {
         }
         seeds.extend(face.outer.iter().copied());
         let plane = crate::Plane::new(pr.origin, face.normal);
-        let cls = Classify::Region { outer: o3.clone(), holes: h3.clone() };
+        let cls = Classify::Region { outer: o3, holes: h3 };
         let regs = self.refresh_plane(plane, &seeds, &[f], &cls, Orient::prefer(face.normal));
         let inside_new = |p: DVec2| geom::point_in_region(p, &new_outer, &new_holes, TOL) == PointLoc::Inside;
         let inside_old = |p: DVec2| geom::point_in_polygon(p, &outer2, TOL) == PointLoc::Inside;

@@ -848,7 +848,7 @@ impl VarstotasApp {
             ScriptCmd::Action(name) => self.script_action(&name, ctx),
             ScriptCmd::Raw(r) => self.queue_raw(r),
             ScriptCmd::RawWorld(sub, pts, steps) => {
-                let mut txt = sub.clone();
+                let mut txt = sub;
                 // (projected in the active pane; raw positions count from the whole view's corner)
                 let pane = self.viewport.rect.min - self.viewport.view_rect.min;
                 for p in &pts {
@@ -869,7 +869,7 @@ impl VarstotasApp {
                     return;
                 };
                 let origin = self.viewport.view_rect.min;
-                let mut txt = sub.clone();
+                let mut txt = sub;
                 for c in v.as_chunks::<2>().0 {
                     let s = o + egui::vec2(c[0] as f32, c[1] as f32) * k - origin.to_vec2();
                     txt.push_str(&format!(" {} {}", s.x, s.y));

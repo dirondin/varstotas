@@ -321,7 +321,7 @@ impl VarstotasApp {
                         }
                     });
                     if o.kind != before {
-                        o.credit.license = if o.kind == LicenseKind::Unknown { String::new() } else { o.kind.label().to_string() };
+                        o.credit.license = if o.kind == LicenseKind::Unknown { String::new() } else { o.kind.label() };
                     }
                     if o.credit.license_kind() != o.kind {
                         o.kind = o.credit.license_kind();

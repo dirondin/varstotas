@@ -292,7 +292,7 @@ pub struct ProtractorTool {
 impl ProtractorTool {
     fn update(&mut self, ctx: &ToolContext) {
         let (anchor, plane) = match self.stage {
-            Some(ProStage::Center { c, n }) | Some(ProStage::Angle { c, n, .. }) => (Some(c), Some(Plane::new(c, n))),
+            Some(ProStage::Center { c, n } | ProStage::Angle { c, n, .. }) => (Some(c), Some(Plane::new(c, n))),
             None => (None, None),
         };
         let r = infer(&mut self.engine, ctx, anchor, None, plane);

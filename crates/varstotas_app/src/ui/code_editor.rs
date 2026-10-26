@@ -66,7 +66,7 @@ impl Item {
             Some(_) => format!("{rest}("),
             None => rest.to_string(),
         };
-        let what = if m.sig.is_some() { m.ty.label().to_string() } else { format!(": {}", m.ty.label()) };
+        let what = if m.sig.is_some() { m.ty.label() } else { format!(": {}", m.ty.label()) };
         Self { name: m.name.to_string(), label: m.sig.unwrap_or(m.name).to_string(), insert, detail: format!("{what}  — {}", m.text()) }
     }
 }
@@ -383,7 +383,7 @@ fn hint_job(ui: &Ui, sig: &str, arg: usize, doc: &str, font: f32) -> LayoutJob {
     let strong = if ui.visuals().dark_mode { Color32::from_rgb(120, 180, 255) } else { Color32::from_rgb(20, 90, 200) };
     let mut job = LayoutJob::default();
     let plain = TextFormat::simple(mono.clone(), base);
-    let hi = TextFormat { underline: egui::Stroke::new(1.0, strong), ..TextFormat::simple(mono.clone(), strong) };
+    let hi = TextFormat { underline: egui::Stroke::new(1.0, strong), ..TextFormat::simple(mono, strong) };
     match sig.find('(') {
         Some(open) => {
             job.append(&sig[..=open], 0.0, plain.clone());

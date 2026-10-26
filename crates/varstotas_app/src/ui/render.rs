@@ -98,7 +98,7 @@ impl VarstotasApp {
                 match r {
                     Ok(p) => b.written.push(p),
                     Err(e) => {
-                        self.flash_error(tr!("render-failed", error = e.to_string()));
+                        self.flash_error(tr!("render-failed", error = e));
                         return;
                     }
                 }
@@ -304,7 +304,7 @@ impl VarstotasApp {
         {
             match r {
                 Ok(p) => self.flash(tr!("render-saved", path = p.display().to_string())),
-                Err(e) => self.flash_error(tr!("render-error", error = e.to_string())),
+                Err(e) => self.flash_error(tr!("render-error", error = e)),
             }
         }
     }
@@ -553,8 +553,8 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
         ui.add(egui::DragValue::new(&mut s.exposure).range(-10.0..=10.0).speed(0.02).suffix(" EV")).on_hover_text(tr!("render-exposure-tip"));
         ui.label(tr!("render-tone-curve"));
         let label = |t: Option<Tonemap>| match t {
-            None => tr!("render-tone-environment", name = crate::ui::realistic::tonemap_name(env.tonemap).to_string()),
-            Some(t) => crate::ui::realistic::tonemap_name(t).to_string(),
+            None => tr!("render-tone-environment", name = crate::ui::realistic::tonemap_name(env.tonemap)),
+            Some(t) => crate::ui::realistic::tonemap_name(t),
         };
         egui::ComboBox::from_id_salt("render_tonemap").selected_text(label(s.tonemap)).width(130.0).show_ui(ui, |ui| {
             for t in [None, Some(Tonemap::Aces), Some(Tonemap::Agx), Some(Tonemap::Clamp)] {

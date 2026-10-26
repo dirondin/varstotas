@@ -96,7 +96,7 @@ pub fn derive(g: &Generator, values: &GenValues) -> Result<rhai::Map, String> {
     }
     for c in &g.checks {
         let ok = engine.eval_with_scope::<rhai::Dynamic>(&mut scope, &c.expr).map_err(|e| format!("{}: check `{}`: {e}", g.name, c.expr))?;
-        if !ok.as_bool().map_err(|_| tr!("script-err-name-check-expr-is-not-true", name = g.name.to_string(), expr = c.expr.to_string()))? {
+        if !ok.as_bool().map_err(|_| tr!("script-err-name-check-expr-is-not-true", name = g.name.clone(), expr = c.expr.clone()))? {
             return Err(format!("{}: {}", g.name, c.message));
         }
     }
@@ -112,7 +112,7 @@ pub fn formula_values(g: &Generator, values: &GenValues) -> Result<Vec<(varstota
 /// Run the generator with `values` (normalized) into a fresh model.
 fn build(model: &Model, g: &Generator, values: &GenValues) -> Result<Model, String> {
     if DEPTH.get() >= 4 {
-        return Err(tr!("script-err-name-generators-nested-too-deep", name = g.name.to_string()));
+        return Err(tr!("script-err-name-generators-nested-too-deep", name = g.name.clone()));
     }
     let p = derive(g, values)?;
     let mut tmp = Model::new();

@@ -64,7 +64,7 @@ pub fn build(tris: &[[[f32; 3]; 3]]) -> Bvh {
         for p in t {
             b.grow(*p);
         }
-        centers.push([(b.min[0] + b.max[0]) * 0.5, (b.min[1] + b.max[1]) * 0.5, (b.min[2] + b.max[2]) * 0.5]);
+        centers.push([f32::midpoint(b.min[0], b.max[0]), f32::midpoint(b.min[1], b.max[1]), f32::midpoint(b.min[2], b.max[2])]);
         boxes.push(b);
     }
     let mut order: Vec<u32> = (0..n as u32).collect();
@@ -244,7 +244,7 @@ mod tests {
         let bvh = build(&tris);
         assert_eq!(bvh.order.len(), tris.len());
         let mut seen = bvh.order.clone();
-        seen.sort();
+        seen.sort_unstable();
         assert!(seen.iter().enumerate().all(|(i, &t)| t == i as u32));
         // Under the roof: the roof; elsewhere: the grid triangle under the point.
         assert_eq!(trace(&bvh, &tris, [2.2, 2.3, 10.0], [0.0, 0.0, -1.0]).map(|h| h.0), Some(roof));

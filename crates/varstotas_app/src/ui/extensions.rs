@@ -75,7 +75,7 @@ impl VarstotasApp {
             }
             Ok(_) => self.run_script_source(src, &tr!("ext-script-undo")),
             Err(e) => {
-                self.console.push(LogLine::Error(tr!("ext-header-error", error = e.to_string())));
+                self.console.push(LogLine::Error(tr!("ext-header-error", error = e.clone())));
                 self.console.last = Some((false, e));
             }
         }

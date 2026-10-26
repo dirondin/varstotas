@@ -143,7 +143,7 @@ impl Mesh {
         let h2: Vec<Vec<DVec2>> = face.holes.iter().map(|h| h.iter().map(|v| pr.to2(self.pos(*v))).collect()).collect();
         let hr: Vec<&[DVec2]> = h2.iter().map(|h| h.as_slice()).collect();
         let tris = triangulate(&o2, &hr);
-        let ids: Vec<VertexId> = all.clone();
+        let ids: Vec<VertexId> = all;
         self.f_remove(f);
         let mut diag: Vec<EdgeId> = Vec::new();
         let mut split = Vec::new();

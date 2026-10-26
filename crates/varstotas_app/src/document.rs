@@ -200,7 +200,7 @@ impl Document {
             }
             Err(msg) => {
                 self.model = before;
-                self.last_error = Some(tr!("edit-failed", label = label, error = msg.to_string()));
+                self.last_error = Some(tr!("edit-failed", label = label, error = msg.clone()));
                 log::warn!("{label} failed: {msg}");
                 None
             }
@@ -253,7 +253,7 @@ impl Document {
             }
             Err(msg) => {
                 self.model = before;
-                self.last_error = Some(tr!("edit-failed", label = label, error = msg.to_string()));
+                self.last_error = Some(tr!("edit-failed", label = label, error = msg.clone()));
                 log::warn!("{label} failed: {msg}");
                 None
             }
@@ -264,7 +264,7 @@ impl Document {
     /// (e.g. tag visibility). Still marks the document dirty.
     pub fn mutate_untracked(&mut self, f: impl FnOnce(&mut Model)) {
         let before = self.model.has_locks().then(|| self.model.clone());
-        let result = guarded(|| f(&mut self.model)).and_then(|_| {
+        let result = guarded(|| f(&mut self.model)).and_then(|()| {
             before.as_ref().map_or(Ok(()), |m| m.validate_locked_changes(&self.model))
         });
         if let Err(msg) = result {
@@ -311,7 +311,7 @@ impl Document {
     fn rig_hook(&mut self) {
         if let Err(e) = varstotas_script::rig::after_edit(&mut self.model, &self.active_path) {
             log::warn!("parameters: {e}");
-            self.last_error = Some(tr!("edit-parameters-error", error = e.to_string()));
+            self.last_error = Some(tr!("edit-parameters-error", error = e));
         }
     }
 

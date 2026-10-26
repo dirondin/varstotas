@@ -181,7 +181,7 @@ impl Model {
         if delta.abs() <= TOL {
             return;
         }
-        let mid = (bb.min[k] + bb.max[k]) * 0.5;
+        let mid = f64::midpoint(bb.min[k], bb.max[k]);
         let child_bounds: Vec<(InstanceId, Aabb)> = self.defs[d]
             .mesh
             .instances
@@ -191,7 +191,7 @@ impl Model {
         let mesh = &self.defs[d].mesh;
         let moved: HashSet<VertexId> = mesh.vertices.iter().filter(|(_, v)| v.pos[k] > mid + TOL).map(|(id, _)| id).collect();
         let moved_inst: Vec<InstanceId> =
-            child_bounds.iter().filter(|(_, b)| (b.min[k] + b.max[k]) * 0.5 > mid + TOL).map(|(id, _)| *id).collect();
+            child_bounds.iter().filter(|(_, b)| f64::midpoint(b.min[k], b.max[k]) > mid + TOL).map(|(id, _)| *id).collect();
         // Clamp a shrink: the closest moved part must stay beyond the farthest fixed one.
         let mut moved_lo = f64::INFINITY;
         let mut fixed_hi = f64::NEG_INFINITY;

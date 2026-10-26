@@ -87,7 +87,7 @@ pub(super) fn emit_intervals(ts: &mut Vec<f64>, at: impl Fn(f64) -> DVec3, accep
     let mut cur: Option<(f64, f64)> = None;
     for w in ts.windows(2) {
         let (t0, t1) = (w[0], w[1]);
-        if accept(at((t0 + t1) * 0.5)) {
+        if accept(at(f64::midpoint(t0, t1))) {
             cur = Some(match cur {
                 Some((s, _)) => (s, t1),
                 None => (t0, t1),

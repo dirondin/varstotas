@@ -26,7 +26,7 @@ fn a_box_falls_onto_another_and_rests() {
     set_transforms(&mut m, &[], &[cube], &f.transforms);
     let b = bottom(&m, cube);
     assert!((b.min.z - 50.0).abs() < 1.0, "rests on the base: {}", b.min.z);
-    assert!((b.max.z - b.min.z - 20.0).abs() < 0.5, "upright: {:?}", b);
+    assert!((b.max.z - b.min.z - 20.0).abs() < 0.5, "upright: {b:?}");
     // the static base did not move
     assert_eq!(bottom(&m, base).min.z, 0.0);
 }

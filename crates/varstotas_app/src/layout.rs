@@ -185,7 +185,7 @@ fn overall_dims(d: &mut Drawing, lo: DVec2, hi: DVec2, world: DVec2, unit: Lengt
         d.lines.push((DVec2::new(lo.x, y), DVec2::new(hi.x, y), Pen::Dim));
         arrow(d, DVec2::new(lo.x, y), DVec2::NEG_X);
         arrow(d, DVec2::new(hi.x, y), DVec2::X);
-        let at = DVec2::new((lo.x + hi.x) * 0.5, y - 1.0);
+        let at = DVec2::new(f64::midpoint(lo.x, hi.x), y - 1.0);
         d.texts.push(Text2 { at, angle: 0.0, size: DIM_TEXT, lines: vec![dim_text(world.x, unit)], left: false });
     }
     if hi.y - lo.y > 1.0 {
@@ -196,7 +196,7 @@ fn overall_dims(d: &mut Drawing, lo: DVec2, hi: DVec2, world: DVec2, unit: Lengt
         d.lines.push((DVec2::new(x, lo.y), DVec2::new(x, hi.y), Pen::Dim));
         arrow(d, DVec2::new(x, lo.y), DVec2::NEG_Y);
         arrow(d, DVec2::new(x, hi.y), DVec2::Y);
-        let at = DVec2::new(x - 1.0, (lo.y + hi.y) * 0.5);
+        let at = DVec2::new(x - 1.0, f64::midpoint(lo.y, hi.y));
         d.texts.push(Text2 { at, angle: -std::f64::consts::FRAC_PI_2, size: DIM_TEXT, lines: vec![dim_text(world.y, unit)], left: false });
     }
 }
@@ -212,7 +212,7 @@ pub fn table_rows(model: &Model) -> Vec<[String; 5]> {
         rows.push([(i + 1).to_string(), name, p.count.to_string(), size, material]);
     }
     if parts.is_empty() {
-        rows.push(["".into(), tr!("layout-no-parts"), "".into(), "".into(), "".into()]);
+        rows.push([String::new(), tr!("layout-no-parts"), String::new(), String::new(), String::new()]);
     }
     rows
 }
@@ -460,7 +460,7 @@ mod tests {
         // The front view is 1000 / 5 = 200 mm wide on paper.
         let d = viewport_drawing(&model, &views[0]);
         let xs: Vec<f64> = d.lines.iter().filter(|l| l.2 != Pen::Dim).flat_map(|l| [l.0.x, l.1.x]).collect();
-        let w = xs.iter().cloned().fold(f64::MIN, f64::max) - xs.iter().cloned().fold(f64::MAX, f64::min);
+        let w = xs.iter().copied().fold(f64::MIN, f64::max) - xs.iter().copied().fold(f64::MAX, f64::min);
         assert!((w - 200.0).abs() < 0.5, "{w}");
         // A fixed scale is kept; a small sheet gets a smaller scale.
         assert!(standard_views(&model, &sheet, Some(10.0)).iter().take(3).all(|v| v.scale == Some(10.0)));

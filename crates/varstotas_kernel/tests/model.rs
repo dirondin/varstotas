@@ -423,7 +423,7 @@ fn obj_export_polygons_only_for_convex_faces_without_holes() {
     let face_sizes = |model: &Model| {
         let (obj, _) = io::write_obj(model, "x.mtl");
         let mut n: Vec<usize> = obj.lines().filter(|l| l.starts_with("f ")).map(|l| l.split(' ').count() - 1).collect();
-        n.sort();
+        n.sort_unstable();
         n
     };
     let mut m = Model::new();

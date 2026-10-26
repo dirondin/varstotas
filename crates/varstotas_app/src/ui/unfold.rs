@@ -220,9 +220,9 @@ impl VarstotasApp {
             ui.set_width(560.0);
             let what = tr(if selection { "unfold-selection" } else { "unfold-everything" });
             let summary = if u.faces == 0 {
-                tr!("unfold-no-faces", what = what.clone())
+                tr!("unfold-no-faces", what = what)
             } else {
-                tr!("unfold-summary", what = what.clone(), faces = u.faces, pieces = u.pieces, sheets = u.sheets.len())
+                tr!("unfold-summary", what = what, faces = u.faces, pieces = u.pieces, sheets = u.sheets.len())
             };
             ui.label(RichText::new(summary).strong());
             if u.oversize > 0 {

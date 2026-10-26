@@ -153,7 +153,7 @@ impl Model {
         }
         out.sampled_triangles = measured.len();
         let mut measured: Vec<_> = measured.into_iter().collect();
-        measured.sort();
+        measured.sort_unstable();
         out.thickness = measured
             .into_iter()
             .map(|i| HeatTriangle {

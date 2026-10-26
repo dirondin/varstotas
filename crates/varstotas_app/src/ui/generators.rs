@@ -94,7 +94,7 @@ fn migrate_legacy(old: &Path, lib: &Path) {
         let to_dir = lib.join(rel);
         let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let to = (1..).map(|n| to_dir.join(if n == 1 { format!("{stem}.rhai") } else { format!("{stem} {n}.rhai") })).find(|p| !p.exists()).expect("a free name");
-        match std::fs::create_dir_all(&to_dir).and_then(|_| std::fs::rename(&f, &to)) {
+        match std::fs::create_dir_all(&to_dir).and_then(|()| std::fs::rename(&f, &to)) {
             Ok(()) => log::info!("generators: moved {} to {}", f.display(), to.display()),
             Err(e) => log::warn!("generators: cannot move {}: {e}", f.display()),
         }
@@ -156,7 +156,7 @@ pub(crate) fn show_value(v: &GenValue, kind: &GenKind, unit: varstotas_kernel::L
         (GenValue::Num(x), GenKind::Length) => fmt_len(*x, unit),
         (GenValue::Num(x), GenKind::Int) => format!("{}", x.round()),
         (GenValue::Num(x), k) => {
-            let t = format!("{:.3}", x);
+            let t = format!("{x:.3}");
             let t = t.trim_end_matches('0').trim_end_matches('.');
             match k {
                 GenKind::Angle => format!("{t}°"),
@@ -358,7 +358,7 @@ impl VarstotasApp {
         let (thumb, size) = match &self.library.gens.thumbs[&it.source] {
             Ok((t, s)) => (t.as_slice(), *s),
             Err(e) => {
-                note += &format!("\n{}", tr!("gen-tile-error", error = e.to_string()));
+                note += &format!("\n{}", tr!("gen-tile-error", error = e.clone()));
                 (&[][..], DVec3::ZERO)
             }
         };
@@ -417,7 +417,7 @@ impl VarstotasApp {
                 let tool = crate::tools::transform::PasteTool::named(std::rc::Rc::new(clip), name);
                 self.install_tool(Box::new(tool));
             }
-            Err(e) => self.flash_error(tr!("gen-error", error = e.to_string())),
+            Err(e) => self.flash_error(tr!("gen-error", error = e)),
         }
     }
 
