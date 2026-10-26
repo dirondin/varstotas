@@ -710,22 +710,37 @@ impl Model {
 
 /// `source` with its `@generator` header line naming `name`.
 pub fn renamed_source(source: &str, name: &str) -> String {
+    // Line endings are kept as they are (a CRLF script stays CRLF), so an unchanged script
+    // still compares equal to its renamed copy.
     let mut done = false;
-    let lines: Vec<String> = source
-        .lines()
-        .map(|l| {
-            let t = l.trim_start();
-            if !done && t.starts_with("//") && t.trim_start_matches('/').trim_start().starts_with("@generator") {
-                done = true;
-                format!("// @generator {name}")
-            } else {
-                l.to_string()
-            }
-        })
-        .collect();
-    let mut out = lines.join("\n");
-    if source.ends_with('\n') {
-        out.push('\n');
+    let mut out = String::with_capacity(source.len() + name.len());
+    for piece in source.split_inclusive('\n') {
+        let body = piece.trim_end_matches(['\r', '\n']);
+        let t = body.trim_start();
+        if !done && t.starts_with("//") && t.trim_start_matches('/').trim_start().starts_with("@generator") {
+            done = true;
+            out.push_str(&format!("// @generator {name}"));
+            out.push_str(&piece[body.len()..]);
+        } else {
+            out.push_str(piece);
+        }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::renamed_source;
+
+    #[test]
+    fn renaming_keeps_line_endings() {
+        let lf = "// header\n// @generator Shelf\nlet x = 1;\n";
+        assert_eq!(renamed_source(lf, "Shelf 2"), "// header\n// @generator Shelf 2\nlet x = 1;\n");
+        assert_eq!(renamed_source(lf, "Shelf"), lf);
+        // a Windows checkout or a script saved with CRLF stays CRLF (and equal to itself)
+        let crlf = lf.replace('\n', "\r\n");
+        assert_eq!(renamed_source(&crlf, "Shelf"), crlf);
+        assert_eq!(renamed_source(&crlf, "Shelf 2"), "// header\r\n// @generator Shelf 2\r\nlet x = 1;\r\n");
+        assert_eq!(renamed_source("// @generator A", "B"), "// @generator B");
+    }
 }
