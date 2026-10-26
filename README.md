@@ -19,8 +19,8 @@ Written in Rust (egui + wgpu). Models are in real units, and everything can be s
   Smithsonian, NASA and more), parametric generators (shelves, stairs, railings…).
 - **Scripting and automation** — Rhai console and scripts, plugins that add menu commands and
   importers, a Python client over a local bridge and an MCP server for AI agents.
-- **Making things** — 3D-printing checks and repair, wall-thickness maps, cutting with dowels,
-  bed layout and STL / 3MF export; unfolding to SVG / PDF / DXF; sheets with scaled views;
+- **Making things** — preparing models for a slicer (checks and repair, wall-thickness maps,
+  cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF / DXF; sheets with scaled views;
   simple physics (drop objects, drape cloth).
 - **Formats** — import glTF / GLB, OBJ, STL, PLY, FBX, DAE, 3MF, DXF; export glTF / GLB, OBJ,
   STL, PLY, DAE, 3MF, PNG.
