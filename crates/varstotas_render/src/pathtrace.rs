@@ -93,7 +93,7 @@ fn blackbody(kelvin: f32) -> [f32; 3] {
     } else {
         138.517_73 * (t - 10.0).ln() - 305.044_8
     };
-    [r, g, b].map(|c| lin(c / 255.0))
+    [r, g, b].map(|c| crate::srgb_to_linear(c / 255.0))
 }
 
 /// White balance multipliers for a `kelvin` setting (6500 = neutral; higher is warmer, as in a
@@ -821,11 +821,6 @@ fn map_read(rs: &egui_wgpu::RenderState, buf: &wgpu::Buffer, enc: wgpu::CommandE
     Some(data)
 }
 
-fn lin(x: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
-}
-
 fn set_grade(u: &mut PtUniform, o: &PtOutput) {
     u.grade = [o.exposure.max(0.0), o.tonemap as f32, o.saturation, o.contrast];
     u.grade2 = [o.white[0], o.white[1], o.white[2], o.vignette];
@@ -870,7 +865,7 @@ fn frame_uniform(camera: &Camera, style: &RenderStyle, origin: DVec3, size: [u32
         lens: [focus as f32, sun_radius.cos() as f32, lights as f32, if s.clamp > 0.0 { s.clamp } else { 1e9 }],
         sun: v4(sun, strength as f64),
         misc: [origin.z as f32, fx.time, if style.show_ground { 1.0 } else { 0.0 }, 0.0],
-        ground: [lin(style.ground[0]), lin(style.ground[1]), lin(style.ground[2]), -origin.z as f32],
+        ground: [crate::srgb_to_linear(style.ground[0]), crate::srgb_to_linear(style.ground[1]), crate::srgb_to_linear(style.ground[2]), -origin.z as f32],
         grade: [1.0, 0.0, 1.0, 1.0],
         grade2: [1.0, 1.0, 1.0, 0.0],
         extra: [if s.transparent { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],

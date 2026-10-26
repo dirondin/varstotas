@@ -174,13 +174,14 @@ pub fn exposure_mult(ev: f32) -> f32 {
     EXPOSURE_SCALE * 2f32.powf(ev.clamp(-20.0, 20.0))
 }
 
-fn srgb(x: f32) -> f32 {
+/// An sRGB-encoded channel (clamped to 0..1) as linear light.
+pub fn srgb_to_linear(x: f32) -> f32 {
     let x = x.clamp(0.0, 1.0);
     if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
 }
 
 fn srgb3(c: [f32; 3]) -> [f32; 3] {
-    [srgb(c[0]), srgb(c[1]), srgb(c[2])]
+    c.map(srgb_to_linear)
 }
 
 /// Linear RGB panorama, rows top (up) to bottom.

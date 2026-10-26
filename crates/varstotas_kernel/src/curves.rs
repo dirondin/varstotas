@@ -257,11 +257,12 @@ impl CurveInfo {
 pub fn circumcenter(a: DVec3, b: DVec3, c: DVec3) -> Option<DVec3> {
     let (ab, ac) = (b - a, c - a);
     let n = ab.cross(ac);
-    let d = 2.0 * n.length_squared();
-    if d < 1e-18 {
+    let n2 = n.length_squared();
+    // collinear: relative to the sides' lengths, and absolutely tiny
+    if n2 < 1e-18 * ab.length_squared().max(1e-30) * ac.length_squared().max(1e-30) || n2 < 1e-24 {
         return None;
     }
-    Some(a + (n.cross(ab) * ac.length_squared() + ac.cross(n) * ab.length_squared()) / d)
+    Some(a + (n.cross(ab) * ac.length_squared() + ac.cross(n) * ab.length_squared()) / (2.0 * n2))
 }
 
 impl Mesh {

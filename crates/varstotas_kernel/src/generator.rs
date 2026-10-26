@@ -220,7 +220,9 @@ pub struct Generated {
 pub const SIZE_KEYS: [&[&str]; 3] = [&["width", "length"], &["depth"], &["height"]];
 
 /// `text "quoted label"` → (text, label).
-fn split_label(s: &str) -> (&str, Option<String>) {
+/// `value "Label"` → the value and the optional quoted label (`@param` lines of generators
+/// and plugins).
+pub fn split_label(s: &str) -> (&str, Option<String>) {
     match s.find('"') {
         Some(i) => {
             let rest = &s[i + 1..];
@@ -559,16 +561,18 @@ impl Model {
     }
 }
 
-/// Source-model id → this-model id maps for [`Model::graft_content`].
+/// Source-model id → target-model id maps for copying content between models (generator
+/// output, the clipboard): materials and tags match by name (added when missing).
 #[derive(Default)]
-struct Graft {
-    defs: HashMap<DefId, DefId>,
+pub struct IdMaps {
+    pub defs: HashMap<DefId, DefId>,
     materials: HashMap<MaterialId, MaterialId>,
     tags: HashMap<TagId, TagId>,
 }
 
-impl Graft {
-    fn material(&mut self, src: &Model, dst: &mut Model, m: MaterialId) -> MaterialId {
+impl IdMaps {
+    /// The target's material named as `m` of `src` (added if missing).
+    pub fn material(&mut self, src: &Model, dst: &mut Model, m: MaterialId) -> MaterialId {
         if let Some(x) = self.materials.get(&m) {
             return *x;
         }
@@ -581,7 +585,8 @@ impl Graft {
         id
     }
 
-    fn tag(&mut self, src: &Model, dst: &mut Model, t: TagId) -> TagId {
+    /// The target's tag named as `t` of `src` (added if missing).
+    pub fn tag(&mut self, src: &Model, dst: &mut Model, t: TagId) -> TagId {
         if let Some(x) = self.tags.get(&t) {
             return *x;
         }
@@ -594,13 +599,10 @@ impl Graft {
         id
     }
 
-    /// `mesh` of `src` with its ids mapped into `dst` (nested definitions copied).
-    fn mesh(&mut self, src: &Model, dst: &mut Model, mut mesh: Mesh) -> Mesh {
-        let children: Vec<(InstanceId, DefId)> = mesh.instances.iter().map(|(i, x)| (i, x.def)).collect();
-        for (i, cd) in children {
-            let nd = self.def(src, dst, cd);
-            let inst = &mut mesh.instances[i];
-            inst.def = nd;
+    /// Map the materials and tags of `mesh` (faces, edges, instances) from `src` into `dst`;
+    /// the instances' definitions are left to the caller.
+    pub fn restyle(&mut self, src: &Model, dst: &mut Model, mesh: &mut Mesh) {
+        for inst in mesh.instances.values_mut() {
             inst.material = inst.material.map(|m| self.material(src, dst, m));
             inst.tag = inst.tag.map(|t| self.tag(src, dst, t));
         }
@@ -612,6 +614,15 @@ impl Graft {
         for e in mesh.edges.values_mut() {
             e.tag = e.tag.map(|t| self.tag(src, dst, t));
         }
+    }
+
+    /// `mesh` of `src` with its ids mapped into `dst` (nested definitions copied).
+    fn mesh(&mut self, src: &Model, dst: &mut Model, mut mesh: Mesh) -> Mesh {
+        let children: Vec<(InstanceId, DefId)> = mesh.instances.iter().map(|(i, x)| (i, x.def)).collect();
+        for (i, cd) in children {
+            mesh.instances[i].def = self.def(src, dst, cd);
+        }
+        self.restyle(src, dst, &mut mesh);
         mesh
     }
 
@@ -660,7 +671,7 @@ impl Model {
     pub fn graft_content(&mut self, into: DefId, src: &Model) {
         let mut old = HashSet::new();
         self.nested_defs(into, &mut old);
-        let mut g = Graft::default();
+        let mut g = IdMaps::default();
         let mesh = g.mesh(src, self, src.root_mesh().clone());
         if let Some(d) = self.defs.get_mut(into) {
             d.mesh = mesh;
@@ -671,7 +682,7 @@ impl Model {
     /// `mesh` of `src` with its ids mapped into this model: definitions in `pre` map as given,
     /// the others reachable from it are copied. Returns the mesh and the definitions' mapping.
     pub fn graft_mesh_with(&mut self, src: &Model, mesh: Mesh, pre: HashMap<DefId, DefId>) -> (Mesh, HashMap<DefId, DefId>) {
-        let mut g = Graft { defs: pre, ..Default::default() };
+        let mut g = IdMaps { defs: pre, ..Default::default() };
         let mesh = g.mesh(src, self, mesh);
         (mesh, g.defs)
     }

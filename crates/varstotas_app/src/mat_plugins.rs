@@ -97,14 +97,6 @@ fn thrown(e: &str) -> String {
     }
 }
 
-fn text(v: &Value) -> Option<String> {
-    match v {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => Some(n.to_string()),
-        Value::Array(a) => Some(a.iter().filter_map(text).collect::<Vec<_>>().join(" ")),
-        _ => None,
-    }
-}
 
 /// The catalogue answer: an array of `{ id, name, category, keywords, width, thumb, page,
 /// license }` (only `id` needed).
@@ -113,11 +105,11 @@ pub fn parse_catalogue(source: &Source, v: &Value) -> Result<Vec<Asset>, String>
     Ok(list
         .iter()
         .filter_map(|a| {
-            let id = text(&a["id"]).filter(|s| !s.is_empty())?;
-            let s = |k: &str| text(&a[k]).unwrap_or_default();
+            let id = crate::online_models::json_text(&a["id"]).filter(|s| !s.is_empty())?;
+            let s = |k: &str| crate::online_models::json_text(&a[k]).unwrap_or_default();
             Some(Asset {
                 source: source.clone(),
-                name: text(&a["name"]).unwrap_or_else(|| id.clone()),
+                name: crate::online_models::json_text(&a["name"]).unwrap_or_else(|| id.clone()),
                 category: s("category"),
                 keywords: format!("{} {} {id}", s("keywords"), s("tags")),
                 width_mm: a["width"].as_f64().filter(|w| *w > 0.0).unwrap_or(1000.0),

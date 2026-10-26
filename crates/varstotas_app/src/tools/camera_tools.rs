@@ -24,13 +24,6 @@ const WALK_DEAD_ZONE_PT: f64 = 4.0;
 const STEP_MM: f64 = 300.0;
 const STEP_TURN_DEG: f64 = 5.0;
 
-fn parse_len(ctx: &ToolContext, input: &str) -> Option<f64> {
-    super::common::parse_len(ctx.doc.model.unit, input).filter(|v| v.is_finite())
-}
-
-fn fmt_len(unit: LengthUnit, v: f64) -> String {
-    varstotas_kernel::units::format_length(v, unit)
-}
 
 /// Horizontal view direction (the current one, or +Y when looking straight down/up).
 fn level_dir(cam: &Camera) -> DVec3 {
@@ -113,7 +106,7 @@ impl Tool for PositionCameraTool {
         false
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
-        match parse_len(ctx, input) {
+        match super::common::parse_len(ctx.doc.model.unit, input) {
             Some(v) => {
                 self.height = v;
                 true
@@ -125,7 +118,7 @@ impl Tool for PositionCameraTool {
         tr!("tool-vcb-height-offset")
     }
     fn vcb_value(&self) -> String {
-        fmt_len(self.unit, self.height)
+        varstotas_kernel::units::format_length(self.height, self.unit)
     }
     fn status_text(&self) -> String {
         tr!("tool-position-camera-status")
@@ -178,7 +171,7 @@ impl Tool for LookAroundTool {
         false
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
-        match parse_len(ctx, input) {
+        match super::common::parse_len(ctx.doc.model.unit, input) {
             Some(v) => {
                 let dz = v - ctx.camera.eye.z;
                 translate(ctx.camera, DVec3::Z * dz);
@@ -192,7 +185,7 @@ impl Tool for LookAroundTool {
         tr!("tool-vcb-eye-height")
     }
     fn vcb_value(&self) -> String {
-        fmt_len(self.unit.unwrap_or(LengthUnit::Millimeter), self.eye_z)
+        varstotas_kernel::units::format_length(self.eye_z, self.unit.unwrap_or(LengthUnit::Millimeter))
     }
     fn status_text(&self) -> String {
         tr!("tool-look-around-status")
@@ -292,7 +285,7 @@ impl Tool for WalkTool {
         true
     }
     fn on_vcb(&mut self, ctx: &mut ToolContext, input: &str) -> bool {
-        match parse_len(ctx, input) {
+        match super::common::parse_len(ctx.doc.model.unit, input) {
             Some(v) => {
                 translate(ctx.camera, DVec3::Z * (v - ctx.camera.eye.z));
                 self.eye_z = v;
@@ -305,7 +298,7 @@ impl Tool for WalkTool {
         tr!("tool-vcb-eye-height")
     }
     fn vcb_value(&self) -> String {
-        fmt_len(self.unit.unwrap_or(LengthUnit::Millimeter), self.eye_z)
+        varstotas_kernel::units::format_length(self.eye_z, self.unit.unwrap_or(LengthUnit::Millimeter))
     }
     fn status_text(&self) -> String {
         tr!("tool-walk-status")

@@ -178,7 +178,7 @@ impl VarstotasApp {
             "pdf" => crate::vector_export::to_pdf_pages(&self.unfold_drawings()),
             _ => crate::vector_export::to_svg(&stack(self.unfold_drawings())).into_bytes(),
         };
-        match std::fs::write(path, bytes) {
+        match varstotas_kernel::io::atomic_write(path, bytes) {
             Ok(()) => {
                 self.flash(tr!("unfold-done", faces = u.faces, pieces = u.pieces, sheets = u.sheets.len(), oversize = u.oversize, path = path.display().to_string()));
             }

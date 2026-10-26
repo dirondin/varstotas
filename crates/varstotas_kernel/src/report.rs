@@ -8,7 +8,7 @@
 
 use crate::model::Model;
 use crate::tessellate::triangulate_face;
-use crate::{DefId, LengthUnit, MaterialId};
+use crate::{DefId, MaterialId};
 use glam::{DMat4, DVec3};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -132,26 +132,6 @@ fn part_bounds(model: &Model, def: DefId, xf: DMat4) -> (DVec3, DVec3) {
     (lo, hi)
 }
 
-fn mm_per(unit: LengthUnit) -> f64 {
-    match unit {
-        LengthUnit::Millimeter => 1.0,
-        LengthUnit::Centimeter => 10.0,
-        LengthUnit::Meter => 1000.0,
-        LengthUnit::Inch => 25.4,
-        LengthUnit::Foot => 304.8,
-    }
-}
-
-fn suffix(unit: LengthUnit) -> &'static str {
-    match unit {
-        LengthUnit::Millimeter => "mm",
-        LengthUnit::Centimeter => "cm",
-        LengthUnit::Meter => "m",
-        LengthUnit::Inch => "in",
-        LengthUnit::Foot => "ft",
-    }
-}
-
 fn csv_field(s: &str) -> String {
     if s.contains([',', '"', '\n', ';']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.to_string() }
 }
@@ -166,7 +146,7 @@ fn num(v: f64) -> String {
 pub fn report_csv(model: &Model) -> String {
     let (rows, areas) = model_report(model);
     let u = model.unit;
-    let (k, sx) = (mm_per(u), suffix(u));
+    let (k, sx) = (u.mm(), u.suffix());
     let mut s = String::new();
     let _ = writeln!(
         s,

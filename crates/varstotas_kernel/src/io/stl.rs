@@ -32,7 +32,7 @@ pub fn write_stl_binary(model: &Model) -> Vec<u8> {
 }
 
 pub fn export_stl(model: &Model, path: &Path) -> Result<(), IoError> {
-    std::fs::write(path, write_stl_binary(model))?;
+    super::atomic_write(path, write_stl_binary(model))?;
     Ok(())
 }
 

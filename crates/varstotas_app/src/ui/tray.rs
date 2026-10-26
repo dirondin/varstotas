@@ -474,7 +474,7 @@ impl VarstotasApp {
                         ui.label(tr!("tray-info-units"));
                         let mut u = unit;
                         egui::ComboBox::from_id_salt("units")
-                            .selected_text(super::unit_suffix(u))
+                            .selected_text(u.suffix())
                             .show_ui(ui, |ui| {
                                 for (v, n) in [
                                     (LengthUnit::Millimeter, tr!("tray-unit-millimeters")),

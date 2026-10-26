@@ -231,6 +231,30 @@ pub enum LengthUnit {
     Foot,
 }
 
+impl LengthUnit {
+    /// Millimetres in one unit.
+    pub fn mm(self) -> f64 {
+        match self {
+            LengthUnit::Millimeter => 1.0,
+            LengthUnit::Centimeter => 10.0,
+            LengthUnit::Meter => 1000.0,
+            LengthUnit::Inch => 25.4,
+            LengthUnit::Foot => 304.8,
+        }
+    }
+
+    /// The short unit name (`mm`, `cm`, `m`, `in`, `ft`).
+    pub fn suffix(self) -> &'static str {
+        match self {
+            LengthUnit::Millimeter => "mm",
+            LengthUnit::Centimeter => "cm",
+            LengthUnit::Meter => "m",
+            LengthUnit::Inch => "in",
+            LengthUnit::Foot => "ft",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Scene {
     pub name: String,

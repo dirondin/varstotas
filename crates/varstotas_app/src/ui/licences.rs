@@ -173,7 +173,7 @@ impl VarstotasApp {
                 && let Some(p) = rfd::FileDialog::new().set_file_name("THIRD-PARTY-LICENSES.txt") // i18n-ignore
 .save_file()
             {
-                match std::fs::write(&p, all_text()) {
+                match varstotas_kernel::io::atomic_write(&p, all_text()) {
                     Ok(()) => self.flash(tr!("licences-saved", path = p.display().to_string())),
                     Err(e) => self.flash_error(format!("{}: {e}", p.display())),
                 }

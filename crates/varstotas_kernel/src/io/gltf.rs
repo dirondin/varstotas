@@ -346,7 +346,7 @@ pub fn write_glb(model: &Model) -> Vec<u8> {
 }
 
 pub fn export_glb(model: &Model, path: &Path) -> Result<(), IoError> {
-    std::fs::write(path, write_glb(model))?;
+    super::atomic_write(path, write_glb(model))?;
     Ok(())
 }
 

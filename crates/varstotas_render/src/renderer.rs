@@ -35,7 +35,7 @@ mod export;
 mod annot;
 #[path = "env.rs"]
 mod env;
-pub use env::exposure_mult;
+pub use env::{exposure_mult, srgb_to_linear};
 #[path = "post.rs"]
 mod post;
 use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
@@ -400,16 +400,9 @@ pub struct Renderer {
     pt: Option<crate::pathtrace::PathTracer>,
 }
 
-fn srgb_to_linear(c: [f32; 4]) -> [f32; 4] {
-    let f = |x: f32| {
-        let x = x.clamp(0.0, 1.0);
-        if x <= 0.04045 {
-            x / 12.92
-        } else {
-            ((x + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    [f(c[0]), f(c[1]), f(c[2]), c[3]]
+/// An sRGB colour with alpha as linear light (alpha kept).
+fn srgb4_to_linear(c: [f32; 4]) -> [f32; 4] {
+    [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2]), c[3]]
 }
 
 fn hex(rgb: u32, a: f32) -> [f32; 4] {
@@ -1151,7 +1144,7 @@ impl Renderer {
             (4e-4f32, 0.0)
         };
         // Shading is done in linear space; uniforms are converted once here.
-        let conv = srgb_to_linear;
+        let conv = srgb4_to_linear;
         let face_mode = match style.face_style {
             FaceStyle::Shaded => 0.0,
             // Wireframe: faces are only drawn as a flat selection tint (QA2-006).

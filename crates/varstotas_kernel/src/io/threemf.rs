@@ -152,7 +152,7 @@ pub fn write_3mf(model: &Model) -> Vec<u8> {
 }
 
 pub fn export_3mf(model: &Model, path: &Path) -> Result<(), IoError> {
-    std::fs::write(path, write_3mf(model))?;
+    super::atomic_write(path, write_3mf(model))?;
     Ok(())
 }
 

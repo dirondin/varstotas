@@ -2529,17 +2529,17 @@ impl VarstotasApp {
             "ply" => io::export_ply(model, path),
             "dae" => io::export_dae(model, path),
             "json" => io::export_faces_json(model, path),
-            "csv" => std::fs::write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
+            "csv" => varstotas_kernel::io::atomic_write(path, varstotas_kernel::report::report_csv(model)).map_err(Into::into),
             "txt" => {
                 let lines: Vec<String> = model.attributions().iter().map(|a| a.line()).collect();
-                std::fs::write(path, format!("Credits of the 3D models in {}\n\n{}\n", self.doc.display_name(), lines.join("\n"))).map_err(Into::into) // i18n-ignore
+                varstotas_kernel::io::atomic_write(path, format!("Credits of the 3D models in {}\n\n{}\n", self.doc.display_name(), lines.join("\n"))).map_err(Into::into) // i18n-ignore
             }
             "svg" | "pdf" => {
                 let vp = self.viewport.size();
                 let d = crate::vector_export::build(model, &self.camera, varstotas_kernel::glam::DVec2::new(vp.x as f64, vp.y as f64), &self.vector_opts);
                 self.last_vector = Some((d.lines.len(), d.texts.len()));
                 let bytes = if ext == "svg" { crate::vector_export::to_svg(&d).into_bytes() } else { crate::vector_export::to_pdf(&d) };
-                std::fs::write(path, bytes).map_err(Into::into)
+                varstotas_kernel::io::atomic_write(path, bytes).map_err(Into::into)
             }
             _ => io::export_stl(model, path),
             }

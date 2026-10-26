@@ -47,11 +47,6 @@ pub fn data_layers(model: &Model) -> Vec<(MaterialId, DataKind)> {
     v
 }
 
-fn srgb(x: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
-}
-
 /// The custom surface shaders of the table's materials (each source once, in order of first
 /// use): `PbrMaterial::shader` = index + 1.
 pub fn custom_surfaces(model: &Model) -> Vec<varstotas_render::CustomSurface> {
@@ -97,7 +92,7 @@ pub fn material_table(model: &Model) -> Vec<PbrMaterial> {
                 roughness: p.roughness,
                 transmission: p.transmission,
                 ior: p.ior,
-                emission: p.emission.map(|c| srgb(c) * p.emission_strength),
+                emission: p.emission.map(|c| varstotas_render::srgb_to_linear(c) * p.emission_strength),
                 normal_scale: p.normal_scale,
                 emission_layer: layer(em),
                 orm_layer: layer(orm),
@@ -217,7 +212,7 @@ pub fn decode_hdri(bytes: &[u8]) -> Result<EnvImage, String> {
     let mut data = rgb.into_raw();
     if !hdr {
         for v in &mut data {
-            *v = srgb(*v);
+            *v = varstotas_render::srgb_to_linear(*v);
         }
     }
     Ok(EnvImage { width, height, rgb: data })
@@ -339,7 +334,7 @@ pub fn pt_lights(model: &Model) -> Vec<varstotas_render::PtLight> {
             },
             position: l.position.to_array(),
             direction: l.direction.as_vec3().to_array(),
-            color: l.color.map(srgb),
+            color: l.color.map(varstotas_render::srgb_to_linear),
             power: l.power,
             radius: l.radius,
             spot_angle: l.spot_angle,

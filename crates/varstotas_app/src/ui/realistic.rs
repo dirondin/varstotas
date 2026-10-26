@@ -21,11 +21,6 @@ pub(crate) const PBR_PRESETS: [(&str, f32, f32, f32, f32); 7] = [
 ];
 
 impl VarstotasApp {
-    /// The current paint material if it is in the model.
-    fn current_model_material(&self) -> Option<MaterialId> {
-        let cur = self.doc.current_material.as_ref()?;
-        self.doc.model.materials.iter().find(|(_, m)| m.name == cur.name).map(|(id, _)| id)
-    }
 
     /// Change the physical properties of material `name` (added to the model from the palette
     /// if needed): one undo step.
@@ -201,7 +196,7 @@ impl VarstotasApp {
     /// Physical properties of the current material (Materials card).
     pub(crate) fn pbr_editor(&mut self, ui: &mut Ui) {
         let Some(cur) = self.doc.current_material.clone() else { return };
-        let mid = self.current_model_material();
+        let mid = self.current_material_id();
         let stored = mid.and_then(|id| self.doc.model.materials[id].pbr.clone());
         let base = stored.clone().unwrap_or_default();
         // A slider drag edits a draft (shown in the preview); the model changes when it ends.
@@ -498,11 +493,6 @@ fn effect_preset_label(id: &str) -> String {
     })
 }
 
-fn srgb_lin(x: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
-}
-
 fn lin_srgb(x: f32) -> f32 {
     let x = x.clamp(0.0, 1.0);
     if x <= 0.0031308 { x * 12.92 } else { 1.055 * x.powf(1.0 / 2.4) - 0.055 }
@@ -513,7 +503,7 @@ fn lin_srgb(x: f32) -> f32 {
 pub(crate) fn preview_sphere(color: [f32; 4], p: &Pbr, env: &Environment, side: usize) -> egui::ColorImage {
     use glam::Vec3;
     let p = p.clone().sanitized();
-    let albedo = Vec3::new(srgb_lin(color[0]), srgb_lin(color[1]), srgb_lin(color[2]));
+    let albedo = Vec3::new(varstotas_render::srgb_to_linear(color[0]), varstotas_render::srgb_to_linear(color[1]), varstotas_render::srgb_to_linear(color[2]));
     let alpha = crate::pbr::realistic_alpha(color[3], Some(&p));
     let sky = |d: Vec3| -> Vec3 {
         // bright top, warm horizon, dark floor, a soft box light up-left
@@ -527,7 +517,7 @@ pub(crate) fn preview_sphere(color: [f32; 4], p: &Pbr, env: &Environment, side: 
     let diffuse = albedo * (1.0 - p.metallic) * (1.0 - p.transmission);
     let tint = albedo / albedo.max_element().max(1e-3);
     let sheen = Vec3::ONE.lerp(tint, p.sheen_tint) * p.sheen * (1.0 - p.metallic);
-    let emission = Vec3::new(srgb_lin(p.emission[0]), srgb_lin(p.emission[1]), srgb_lin(p.emission[2])) * p.emission_strength;
+    let emission = Vec3::new(varstotas_render::srgb_to_linear(p.emission[0]), varstotas_render::srgb_to_linear(p.emission[1]), varstotas_render::srgb_to_linear(p.emission[2])) * p.emission_strength;
     let light = Vec3::new(-0.5, 0.6, 0.62).normalize();
     let sun = env.sun.max(0.0);
     let expo = 0.6 * 2f32.powf(env.exposure);

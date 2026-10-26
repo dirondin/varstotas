@@ -87,7 +87,7 @@ pub fn save_with_backup(model: &Model, path: &Path) -> Result<(), IoError> {
             let previous = super::read_limited(path, super::MAX_MODEL_BYTES)?;
             // Repeated Save without changes must not discard the last distinct version.
             if previous == text.as_bytes() { return Ok(()); }
-            super::atomic_write(&backup_path(path), &previous)?;
+            super::atomic_write(backup_path(path), &previous)?;
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(e.into()),

@@ -157,7 +157,7 @@ impl VarstotasApp {
     pub(crate) fn export_slot(&mut self, name: &str, slot: &str, path: &Path) {
         let Some(m) = self.doc.model.materials.values().find(|m| m.name == name) else { return };
         let Some(img) = slot_image(&PaletteMaterial::of(m), slot).cloned() else { return };
-        match std::fs::write(path, &img.bytes[..]) {
+        match varstotas_kernel::io::atomic_write(path, &img.bytes[..]) {
             Ok(()) => self.flash(tr!("mated-exported", path = path.display().to_string())),
             Err(e) => self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string())),
         }
@@ -185,7 +185,7 @@ impl VarstotasApp {
         let Some(dir) = edit_dir() else { return };
         let safe: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' }).collect();
         let path = dir.join(format!("{safe}-{slot}.{}", img.extension()));
-        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, &img.bytes[..])) {
+        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| varstotas_kernel::io::atomic_write(&path, &img.bytes[..])) {
             self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string()));
             return;
         }

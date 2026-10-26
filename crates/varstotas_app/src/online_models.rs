@@ -443,11 +443,12 @@ pub fn quaternius_download(html: &str) -> Option<String> {
     html.split(['"', '\'']).find(|s| s.starts_with("https://drive.google.com/")).map(str::to_string)
 }
 
-fn text(v: &Value) -> Option<String> {
+/// A JSON value as text (numbers written out, arrays joined by spaces).
+pub(crate) fn json_text(v: &Value) -> Option<String> {
     match v {
         Value::String(s) => Some(s.clone()),
         Value::Number(n) => Some(n.to_string()),
-        Value::Array(a) => Some(a.iter().filter_map(text).collect::<Vec<_>>().join(" ")),
+        Value::Array(a) => Some(a.iter().filter_map(json_text).collect::<Vec<_>>().join(" ")),
         _ => None,
     }
 }
@@ -459,10 +460,10 @@ pub fn parse_plugin_catalogue(source: &ModelSource, v: &Value) -> Result<Vec<Mod
     Ok(list
         .iter()
         .filter_map(|a| {
-            let id = text(&a["id"]).filter(|s| !s.is_empty())?;
-            let s = |k: &str| text(&a[k]).unwrap_or_default();
+            let id = json_text(&a["id"]).filter(|s| !s.is_empty())?;
+            let s = |k: &str| json_text(&a[k]).unwrap_or_default();
             let mut m = ModelAsset::blank(source.clone(), id.clone());
-            m.name = text(&a["name"]).unwrap_or(id.clone());
+            m.name = json_text(&a["name"]).unwrap_or(id.clone());
             m.category = s("category");
             m.keywords = format!("{} {} {id}", s("keywords"), s("tags"));
             m.author = s("author");

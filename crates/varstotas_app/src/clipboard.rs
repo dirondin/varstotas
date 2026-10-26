@@ -11,10 +11,9 @@ use varstotas_i18n::tr;
 use crate::document::Document;
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::{
-    Aabb, DefId, EntityRef, GuideGeom, GuideLine, GuideRef, Instance, InstanceId, MaterialId, Mesh, Model, OpError, OpResult,
-    TagId,
+    Aabb, DefId, EntityRef, GuideGeom, GuideLine, GuideRef, IdMaps, Instance, InstanceId, Mesh, Model, OpError, OpResult,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 pub struct Clipboard {
     /// Pruned clone of the source model holding the copied definition.
@@ -300,7 +299,7 @@ impl Clipboard {
     ) -> OpResult<(Vec<EntityRef>, Vec<GuideRef>)> {
         let mut ents = Vec::new();
         if let Some(d) = self.def {
-            let mut maps = Maps::default();
+            let mut maps = IdMaps::default();
             let nd = self.copy_def(model, doc_uid, d, &mut maps, true)?;
             let ctx_xf = model.transform_at(path);
             let transform = ctx_xf.inverse() * *t_world * self.src_xf;
@@ -349,7 +348,7 @@ impl Clipboard {
 
     /// Copy definition `d` of the clipboard model into `model`; returns the new id.
     /// `top` = the copied selection itself (always copied; it is exploded after insertion).
-    fn copy_def(&self, model: &mut Model, doc_uid: u64, d: DefId, maps: &mut Maps, top: bool) -> OpResult<DefId> {
+    fn copy_def(&self, model: &mut Model, doc_uid: u64, d: DefId, maps: &mut IdMaps, top: bool) -> OpResult<DefId> {
         if let Some(n) = maps.defs.get(&d) {
             return Ok(*n);
         }
@@ -439,8 +438,6 @@ impl Clipboard {
             let nd = self.copy_def(model, doc_uid, cd, maps, false)?;
             if let Some(inst) = def.mesh.instances.get_mut(i) {
                 inst.def = nd;
-                inst.material = inst.material.map(|m| maps.material(&self.model, model, m));
-                inst.tag = inst.tag.map(|t| maps.tag(&self.model, model, t));
             }
         }
         // A parametric group brings its base (and stretched variant) along.
@@ -452,14 +449,7 @@ impl Clipboard {
             };
             def.params = Some(p);
         }
-        for f in def.mesh.faces.values_mut() {
-            f.front = f.front.map(|m| maps.material(&self.model, model, m));
-            f.back = f.back.map(|m| maps.material(&self.model, model, m));
-            f.tag = f.tag.map(|t| maps.tag(&self.model, model, t));
-        }
-        for e in def.mesh.edges.values_mut() {
-            e.tag = e.tag.map(|t| maps.tag(&self.model, model, t));
-        }
+        maps.restyle(&self.model, model, &mut def.mesh);
         // A library definition beside a changed copy of it in the model: "<name> 2".
         if from_library {
             def.name = model.free_def_name(&def.name);
@@ -473,43 +463,6 @@ impl Clipboard {
 /// `name` is `base` or `base` with a number ("Chair 2"): a copy [`Model::free_def_name`] made.
 fn same_or_numbered(name: &str, base: &str) -> bool {
     name == base || name.strip_prefix(base).and_then(|r| r.strip_prefix(' ')).is_some_and(|n| n.parse::<u32>().is_ok())
-}
-
-/// Clipboard-model id → target-model id maps for one paste.
-#[derive(Default)]
-struct Maps {
-    defs: HashMap<DefId, DefId>,
-    materials: HashMap<MaterialId, MaterialId>,
-    tags: HashMap<TagId, TagId>,
-}
-
-impl Maps {
-    /// Same-named material of the target (added if missing).
-    fn material(&mut self, src: &Model, dst: &mut Model, m: MaterialId) -> MaterialId {
-        if let Some(x) = self.materials.get(&m) {
-            return *x;
-        }
-        let Some(mat) = src.materials.get(m) else { return m };
-        let id = match dst.materials.iter().find(|(_, x)| x.name == mat.name) {
-            Some((id, _)) => id,
-            None => dst.materials.insert(mat.clone()),
-        };
-        self.materials.insert(m, id);
-        id
-    }
-
-    fn tag(&mut self, src: &Model, dst: &mut Model, t: TagId) -> TagId {
-        if let Some(x) = self.tags.get(&t) {
-            return *x;
-        }
-        let Some(tag) = src.tags.get(t) else { return t };
-        let id = match dst.tags.iter().find(|(_, x)| x.name == tag.name) {
-            Some((id, _)) => id,
-            None => dst.tags.insert(tag.clone()),
-        };
-        self.tags.insert(t, id);
-        id
-    }
 }
 
 #[cfg(test)]

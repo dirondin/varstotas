@@ -73,6 +73,6 @@ pub fn faces_json(model: &Model) -> Value {
 
 pub fn export_faces_json(model: &Model, path: &Path) -> Result<(), IoError> {
     let s = serde_json::to_string_pretty(&faces_json(model)).map_err(|e| IoError::Format(e.to_string()))?;
-    std::fs::write(path, s)?;
+    super::atomic_write(path, s.as_bytes())?;
     Ok(())
 }

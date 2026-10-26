@@ -60,7 +60,7 @@ pub fn write_dxf(model: &Model) -> String {
 }
 
 pub fn export_dxf(model: &Model, path: &Path) -> Result<(), IoError> {
-    std::fs::write(path, write_dxf(model))?;
+    super::atomic_write(path, write_dxf(model).as_bytes())?;
     Ok(())
 }
 

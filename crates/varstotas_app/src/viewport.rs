@@ -394,12 +394,12 @@ impl Viewport {
                             renderer
                                 .pt_linear(rs, job.denoised)
                                 .ok_or_else(|| tr!("view-nothing-rendered"))
-                                .and_then(|(w, h, rgb)| std::fs::write(&path, varstotas_render::encode_exr(w, h, &rgb)).map_err(|e| e.to_string()))
+                                .and_then(|(w, h, rgb)| varstotas_kernel::io::atomic_write(&path, varstotas_render::encode_exr(w, h, &rgb)).map_err(|e| e.to_string()))
                         } else {
                             renderer
                                 .pt_image(rs)
                                 .ok_or_else(|| tr!("view-nothing-rendered"))
-                                .and_then(|img| img.write_png(&path).map_err(|e| e.to_string()))
+                                .and_then(|img| img.encode_png(None).and_then(|png| varstotas_kernel::io::atomic_write(&path, png)).map_err(|e| e.to_string()))
                         };
                         job.saved = Some(r.map(|()| path));
                     }
@@ -414,7 +414,7 @@ impl Viewport {
                     let style = RenderStyle { show_axes: style.show_axes && job.axes, grid: None, ..style.clone() };
                     let r = guarded(|| renderer.render_to_image(rs, &job.camera, &job.overlay, &style, job.size, &opts))
                         .and_then(|r| r.map_err(|e| e.to_string()))
-                        .and_then(|img| img.write_png(&job.path).map_err(|e| e.to_string()))
+                        .and_then(|img| img.encode_png(None).and_then(|png| varstotas_kernel::io::atomic_write(&job.path, png)).map_err(|e| e.to_string()))
                         .map(|()| job.path.clone());
                     self.export_result = Some(r);
                 }

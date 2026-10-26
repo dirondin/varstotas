@@ -36,7 +36,7 @@ impl PostUniform {
     pub(crate) fn new(fx: &Effects, inv_vp: glam::Mat4, size: [u32; 2], ppp: f32, exposure: f32, radius: f32, gradient_bg: bool) -> Self {
         let on = |b: bool| if b { 1.0 } else { 0.0 };
         let hq = fx.high_quality;
-        let fog_lin = fx.fog_color.map(srgb);
+        let fog_lin = fx.fog_color.map(super::srgb_to_linear);
         let e = exposure.max(1e-6);
         Self {
             inv_vp: inv_vp.to_cols_array_2d(),
@@ -65,11 +65,6 @@ impl PostUniform {
             ],
         }
     }
-}
-
-fn srgb(x: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
 }
 
 /// Pipelines and resources shared by all sizes.

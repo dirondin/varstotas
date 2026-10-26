@@ -35,19 +35,6 @@ const MAX_DEPTH: usize = 32;
 /// Safety cap for huge models (inference stays interactive).
 const MAX_EDGES: usize = 200_000;
 
-/// Circumcenter of three points (None if collinear).
-pub fn circumcenter(a: DVec3, b: DVec3, c: DVec3) -> Option<DVec3> {
-    let ab = b - a;
-    let ac = c - a;
-    let n = ab.cross(ac);
-    let n2 = n.length_squared();
-    if n2 < 1e-18 * ab.length_squared().max(1e-30) * ac.length_squared().max(1e-30) || n2 < 1e-24 {
-        return None;
-    }
-    let p = (n.cross(ab) * ac.length_squared() + ac.cross(n) * ab.length_squared()) / (2.0 * n2);
-    Some(a + p)
-}
-
 impl GeoCache {
     /// `version` identifies the model state + open context (`active`) for cache keys.
     pub fn build(model: &Model, version: u64, active: &[varstotas_kernel::InstanceId]) -> Self {
@@ -125,7 +112,7 @@ impl GeoCache {
                 continue;
             }
             let n = pts.len();
-            if let Some(c) = circumcenter(pts[0], pts[n / 3], pts[(2 * n) / 3]) {
+            if let Some(c) = varstotas_kernel::curves::circumcenter(pts[0], pts[n / 3], pts[(2 * n) / 3]) {
                 let r = c.distance(pts[0]);
                 if r > 0.0 && pts.iter().all(|p| (p.distance(c) - r).abs() <= r * 0.01 + 1e-6) {
                     self.points.push(PointCand { pos: c, kind: InferenceKind::Center, r: None });

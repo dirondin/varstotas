@@ -132,18 +132,6 @@ pub fn param_values(p: &Plugin, values: &[String], unit: varstotas_kernel::Lengt
     p.params.iter().enumerate().map(|(i, q)| Ok((q.key.clone(), param_value(q, values.get(i).unwrap_or(&q.default), unit)?))).collect()
 }
 
-/// Split `text "quoted label"` → (text, label).
-fn split_label(s: &str) -> (&str, Option<String>) {
-    match s.find('"') {
-        Some(i) => {
-            let rest = &s[i + 1..];
-            let label = rest.rfind('"').map_or(rest, |j| &rest[..j]);
-            (s[..i].trim(), Some(label.to_string()))
-        }
-        None => (s.trim(), None),
-    }
-}
-
 fn parse_param(s: &str) -> Result<Param, String> {
     let (decl, default) = s.split_once('=').ok_or_else(|| tr!("ext-param-needs-default", text = s))?;
     let (key, ty) = match decl.trim().split_once(':') {
@@ -157,10 +145,10 @@ fn parse_param(s: &str) -> Result<Param, String> {
     let d = default.trim();
     let (default, label) = if let Some(rest) = d.strip_prefix('"') {
         let end = rest.find('"').ok_or_else(|| tr!("ext-param-unclosed-quote", text = s))?;
-        let (_, label) = split_label(&rest[end + 1..]);
+        let (_, label) = varstotas_kernel::generator::split_label(&rest[end + 1..]);
         (rest[..end].to_string(), label)
     } else {
-        let (v, label) = split_label(d);
+        let (v, label) = varstotas_kernel::generator::split_label(d);
         (v.to_string(), label)
     };
     let quoted = d.starts_with('"');
@@ -233,11 +221,11 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
                     v.push_str(rest);
                 }
                 "pick" | "select" => {
-                    let label = split_label(rest).1.unwrap_or_else(|| rest.to_string());
+                    let label = varstotas_kernel::generator::split_label(rest).1.unwrap_or_else(|| rest.to_string());
                     variants.entry(if base == "pick" { "pick" } else { "select" }).or_default().insert(suffix, label);
                 }
                 "param" => {
-                    let (k, label) = split_label(rest);
+                    let (k, label) = varstotas_kernel::generator::split_label(rest);
                     param_labels.entry(k.to_string()).or_default().insert(suffix, label.unwrap_or_default());
                 }
                 _ => {}
@@ -251,14 +239,14 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
             "description" => p.description = rest.to_string(),
             "param" => p.params.push(parse_param(rest)?),
             "pick" => {
-                let (n, label) = split_label(rest);
+                let (n, label) = varstotas_kernel::generator::split_label(rest);
                 let n: usize = n.parse().map_err(|_| tr!("ext-pick-needs-number", text = rest))?;
                 if !(1..=16).contains(&n) {
                     return Err(tr!("ext-pick-range"));
                 }
                 p.pick = Some((n, label.unwrap_or_else(|| tr!("ext-pick-default", n = n))));
             }
-            "select" => p.select = Some(split_label(rest).1.unwrap_or_else(|| tr!("ext-select-default"))),
+            "select" => p.select = Some(varstotas_kernel::generator::split_label(rest).1.unwrap_or_else(|| tr!("ext-select-default"))),
             "import" => p.import = exts(),
             "export" => p.export = exts(),
             "material_import" => p.material_import = exts(),

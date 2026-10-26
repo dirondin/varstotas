@@ -140,8 +140,9 @@ pub fn validate_model(m: &crate::Model) -> Result<(), IoError> {
 
 /// Replace a file without following a destination symlink or a predictable temp symlink.
 /// Parent directories must be trusted by the caller.
-pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub fn atomic_write(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> std::io::Result<()> {
     use std::io::Write;
+    let (path, bytes) = (path.as_ref(), bytes.as_ref());
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {

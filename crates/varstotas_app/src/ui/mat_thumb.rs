@@ -50,10 +50,6 @@ pub fn sphere_texture(ctx: &egui::Context, m: &Material) -> egui::TextureId {
     })
 }
 
-fn to_linear(c: f32) -> f32 {
-    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
-}
-
 fn to_srgb(c: f32) -> f32 {
     let c = c.clamp(0.0, 1.0);
     if c <= 0.003_130_8 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
@@ -63,7 +59,7 @@ fn to_srgb(c: f32) -> f32 {
 fn backdrop(x: f32, y: f32) -> Vec3 {
     let g = 0.55 - 0.25 * y;
     let check = ((x * 6.0).floor() as i32 + (y * 6.0).floor() as i32).rem_euclid(2) as f32;
-    Vec3::splat(to_linear(g + 0.04 * check))
+    Vec3::splat(varstotas_render::srgb_to_linear(g + 0.04 * check))
 }
 
 /// Sky seen along a direction (y up): bright above, darker ground.
@@ -75,7 +71,7 @@ fn sky(d: Vec3) -> Vec3 {
 /// Render the sphere (2 × 2 samples per pixel).
 pub fn render(m: &Material) -> ColorImage {
     let p = m.pbr_or_default();
-    let tint = Vec3::new(to_linear(m.color[0]), to_linear(m.color[1]), to_linear(m.color[2]));
+    let tint = Vec3::new(varstotas_render::srgb_to_linear(m.color[0]), varstotas_render::srgb_to_linear(m.color[1]), varstotas_render::srgb_to_linear(m.color[2]));
     let tex = m.image.as_ref().and_then(|i| {
         let d = crate::textures::decode(&i.bytes).ok()?;
         let mut rgba = d.2.clone();
@@ -88,7 +84,7 @@ pub fn render(m: &Material) -> ColorImage {
                 let x = ((u.rem_euclid(1.0) * *w as f32) as usize).min(w - 1);
                 let y = ((v.clamp(0.0, 1.0) * *h as f32) as usize).min(h - 1);
                 let i = (y * w + x) * 4;
-                Vec3::new(to_linear(px[i] as f32 / 255.0), to_linear(px[i + 1] as f32 / 255.0), to_linear(px[i + 2] as f32 / 255.0))
+                Vec3::new(varstotas_render::srgb_to_linear(px[i] as f32 / 255.0), varstotas_render::srgb_to_linear(px[i + 1] as f32 / 255.0), varstotas_render::srgb_to_linear(px[i + 2] as f32 / 255.0))
             }
             None => tint,
         }

@@ -1308,7 +1308,7 @@ mod tests {
 
     #[test]
     fn circumcenter_works() {
-        let c = geo::circumcenter(DVec3::new(1.0, 0.0, 0.0), DVec3::new(0.0, 1.0, 0.0), DVec3::new(-1.0, 0.0, 0.0)).unwrap();
+        let c = varstotas_kernel::curves::circumcenter(DVec3::new(1.0, 0.0, 0.0), DVec3::new(0.0, 1.0, 0.0), DVec3::new(-1.0, 0.0, 0.0)).unwrap();
         assert!(c.length() < 1e-9);
     }
 }

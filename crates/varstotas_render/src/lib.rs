@@ -532,7 +532,7 @@ pub use textures::{MAX_LAYERS as MAX_TEXTURE_LAYERS, MAX_MATERIALS as MAX_PBR_MA
 pub use renderer::{
     DEFAULT_AMBIENT, DEFAULT_BACK_COLOR, DEFAULT_FRONT_COLOR, DEFAULT_LIGHT_DIR, DIM_EDGE_COLOR, DIM_FACE_MIX,
     DIM_FACE_TARGET, ExportError, ExportOptions, HIGHLIGHT_FACE_MIX, HIGHLIGHT_SELECTED, MAX_EXPORT_DIM,
-    OVERLAY_DASH_PERIOD, Renderer, RgbaImage, encode_exr, exposure_mult,
+    OVERLAY_DASH_PERIOD, Renderer, RgbaImage, encode_exr, exposure_mult, srgb_to_linear,
 };
 
 #[cfg(test)]

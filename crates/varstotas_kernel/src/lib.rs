@@ -69,7 +69,7 @@ pub use model::{
     ModelMetadata,
     Attribution, ContextPath, LicenseKind, Definition, GuideLine, LengthUnit, Material, Model, ModelHit, Scene, SceneSettings, SceneStyle, Tag,
 };
-pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator};
+pub use generator::{GenCheck, GenFormula, GenKind, GenParam, GenValue, GenValues, Generated, Generator, IdMaps};
 pub use params::Parametric;
 pub use rig::{Joint, JointKind, PartOp, Rig, Rigged, SceneRig};
 pub use lights::{Light, LightKind, RENDER_PRESETS, RENDER_SIZES, RenderDof, RenderSettings, render_preset_label, render_size_label};

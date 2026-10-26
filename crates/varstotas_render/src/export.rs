@@ -178,10 +178,7 @@ fn tile_transform(w: u32, h: u32, x0: u32, y0: u32, tw: u32, th: u32) -> [f32; 4
 /// Premultiplied -> straight alpha, in place. `linear_blend`: colours were blended in linear
 /// space and stored sRGB-encoded (sRGB render target), so divide in linear space.
 fn unpremultiply(px: &mut [u8], linear_blend: bool) {
-    let to_lin: [f32; 256] = std::array::from_fn(|i| {
-        let x = i as f32 / 255.0;
-        if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
-    });
+    let to_lin: [f32; 256] = std::array::from_fn(|i| crate::srgb_to_linear(i as f32 / 255.0));
     let to_srgb = |x: f32| {
         let x = x.clamp(0.0, 1.0);
         let s = if x <= 0.003_130_8 { x * 12.92 } else { 1.055 * x.powf(1.0 / 2.4) - 0.055 };

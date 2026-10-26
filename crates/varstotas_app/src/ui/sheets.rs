@@ -239,7 +239,7 @@ impl VarstotasApp {
                 sheets_pdf(model, &name)
             }
         });
-        match bytes.and_then(|b| std::fs::write(path, b).map_err(|e| e.to_string())) {
+        match bytes.and_then(|b| varstotas_kernel::io::atomic_write(path, b).map_err(|e| e.to_string())) {
             Ok(()) if svg => self.flash(tr!("sheets-exported-one", i = cur + 1, n = n, path = path.display().to_string())),
             Ok(()) => self.flash(tr!("sheets-exported-all", n = n, path = path.display().to_string())),
             Err(e) => self.flash(tr!("sheets-export-failed", error = e)),

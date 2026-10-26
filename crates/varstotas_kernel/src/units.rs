@@ -18,16 +18,6 @@ use crate::LengthUnit;
 
 const MM_PER_IN: f64 = 25.4;
 
-fn unit_scale(u: LengthUnit) -> f64 {
-    match u {
-        LengthUnit::Millimeter => 1.0,
-        LengthUnit::Centimeter => 10.0,
-        LengthUnit::Meter => 1000.0,
-        LengthUnit::Inch => MM_PER_IN,
-        LengthUnit::Foot => 12.0 * MM_PER_IN,
-    }
-}
-
 fn suffix_scale(s: &str) -> Option<f64> {
     Some(match s {
         "mm" => 1.0,
@@ -105,7 +95,7 @@ pub fn parse_length(s: &str, default_unit: LengthUnit) -> Option<f64> {
         let split = s.find(|c: char| c.is_ascii_alphabetic() || c == '"').unwrap_or(s.len());
         let (num, suf) = (s[..split].trim(), s[split..].trim());
         let v = parse_scalar(num)?;
-        let k = if suf.is_empty() { unit_scale(default_unit) } else { suffix_scale(suf)? };
+        let k = if suf.is_empty() { default_unit.mm() } else { suffix_scale(suf)? };
         v * k
     };
     if !mm.is_finite() {

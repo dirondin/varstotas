@@ -387,7 +387,7 @@ impl VarstotasApp {
         let Ok(g) = &self.gen_editor.parsed else { return };
         let Some(dir) = self.library_dir() else { return self.flash_error(tr!("gen-no-home")) };
         let path = save_path(&dir, self.gen_editor.file.as_deref(), &g.name);
-        match std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, &self.gen_editor.source)) {
+        match std::fs::create_dir_all(&dir).and_then(|()| varstotas_kernel::io::atomic_write(&path, &self.gen_editor.source)) {
             Ok(()) => {
                 self.gen_editor.status = tr!("gen-saved", path = path.display().to_string());
                 self.gen_editor.file = Some(path);
@@ -453,9 +453,9 @@ mod tests {
         // A file outside the folder is saved as a copy in it.
         assert_eq!(save_path(&dir, Some(Path::new("/elsewhere/shelf.rhai")), "Shelf"), dir.join("shelf.rhai"));
         // Another generator's file is not overwritten.
-        std::fs::write(dir.join("shelf.rhai"), "// @generator Other\nfn build(p) {}").unwrap();
+        varstotas_kernel::io::atomic_write(dir.join("shelf.rhai"), "// @generator Other\nfn build(p) {}").unwrap();
         assert_eq!(save_path(&dir, None, "Shelf"), dir.join("shelf_2.rhai"));
-        std::fs::write(dir.join("mine.rhai"), "x").unwrap();
+        varstotas_kernel::io::atomic_write(dir.join("mine.rhai"), "x").unwrap();
         assert_eq!(save_path(&dir, Some(&dir.join("mine.rhai")), "Shelf"), dir.join("mine.rhai"));
         let _ = std::fs::remove_dir_all(&dir);
     }

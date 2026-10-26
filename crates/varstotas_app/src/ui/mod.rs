@@ -71,29 +71,9 @@ pub fn small_icon_button(ui: &mut Ui, icon: Icon, tooltip: &str) -> Response {
     icon_button(ui, icon, false, 22.0).on_hover_text(tooltip)
 }
 
-pub fn unit_suffix(u: LengthUnit) -> &'static str {
-    match u {
-        LengthUnit::Millimeter => "mm",
-        LengthUnit::Centimeter => "cm",
-        LengthUnit::Meter => "m",
-        LengthUnit::Inch => "in",
-        LengthUnit::Foot => "ft",
-    }
-}
-
-pub fn unit_mm(u: LengthUnit) -> f64 {
-    match u {
-        LengthUnit::Millimeter => 1.0,
-        LengthUnit::Centimeter => 10.0,
-        LengthUnit::Meter => 1000.0,
-        LengthUnit::Inch => 25.4,
-        LengthUnit::Foot => 304.8,
-    }
-}
-
 pub fn fmt_len(mm: f64, unit: LengthUnit) -> String {
     guarded(|| units::format_length(mm, unit))
-        .unwrap_or_else(|_| format!("{:.1} {}", mm / unit_mm(unit), unit_suffix(unit)))
+        .unwrap_or_else(|_| format!("{:.1} {}", mm / unit.mm(), unit.suffix()))
 }
 
 pub fn fmt_area(mm2: f64, unit: LengthUnit) -> String {
@@ -103,10 +83,10 @@ pub fn fmt_area(mm2: f64, unit: LengthUnit) -> String {
     } else {
         unit
     };
-    let f = unit_mm(unit);
+    let f = unit.mm();
     let v = mm2 / (f * f);
     let digits = if v.abs() >= 100.0 { 0 } else { 2 };
-    format!("{v:.digits$} {}²", unit_suffix(unit))
+    format!("{v:.digits$} {}²", unit.suffix())
 }
 
 pub fn fmt_volume(mm3: f64, unit: LengthUnit) -> String {
@@ -116,10 +96,10 @@ pub fn fmt_volume(mm3: f64, unit: LengthUnit) -> String {
     } else {
         unit
     };
-    let f = unit_mm(unit);
+    let f = unit.mm();
     let v = mm3 / (f * f * f);
     let digits = if v.abs() >= 100.0 { 0 } else { 2 };
-    format!("{v:.digits$} {}³", unit_suffix(unit))
+    format!("{v:.digits$} {}³", unit.suffix())
 }
 
 pub fn color32(c: [f32; 4]) -> Color32 {

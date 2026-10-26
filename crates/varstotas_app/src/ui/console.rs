@@ -187,7 +187,7 @@ impl VarstotasApp {
                 }
                 if ui.button(tr!("console-save")).clicked()
                     && let Some(p) = rfd::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).set_file_name("script.rhai").save_file()
-                    && let Err(e) = std::fs::write(&p, &self.prefs.console_code)
+                    && let Err(e) = varstotas_kernel::io::atomic_write(&p, &self.prefs.console_code)
                 {
                     self.console.push(LogLine::Error(format!("{}: {e}", p.display())));
                 }

@@ -278,6 +278,6 @@ pub fn write_ply(model: &Model) -> Vec<u8> {
 }
 
 pub fn export_ply(model: &Model, path: &Path) -> Result<(), IoError> {
-    std::fs::write(path, write_ply(model))?;
+    super::atomic_write(path, write_ply(model))?;
     Ok(())
 }
