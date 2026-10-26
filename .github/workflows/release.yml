@@ -2,6 +2,8 @@
 # (macOS .dmg + .zip, Windows installer + .zip, Linux .AppImage + .tar.gz) and their
 # SHA256SUMS go to a GitHub release of the tag (notes: .github/release-notes.md + the changes).
 # release-1.2.3-rc1 (any version with a "-") makes a pre-release.
+# A tag pushed in the same push that first adds this file does not start it; rebuild such a tag
+# with Actions → Release → Run workflow (or: gh workflow run release.yml -f tag=release-x.y.z).
 name: Release
 
 on:
