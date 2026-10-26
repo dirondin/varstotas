@@ -34,6 +34,8 @@ VERSION="${VARSTOTAS_VERSION:-}"
 [[ -n "$VERSION" ]] || VERSION="$(cargo metadata --no-deps --format-version 1 \
   | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="varstotas_app"))')"
 echo "==> Varstotas $VERSION"
+# Bundle versions are numeric: 0.2.0-rc.1 → 0.2.0
+NUM_VERSION="$(sed -nE 's/^([0-9]+(\.[0-9]+){0,2}).*/\1/p' <<<"$VERSION")"
 
 # 1–2. A local debug build, or release builds for both architectures.
 if [[ "$DEBUG_BUILD" == 1 ]]; then
@@ -92,8 +94,8 @@ cat >"$APP/Contents/Info.plist" <<EOF
   <key>CFBundleIconFile</key><string>Varstotas</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleVersion</key><string>$VERSION</string>
-  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>${NUM_VERSION:-0.0.0}</string>
+  <key>CFBundleShortVersionString</key><string>${NUM_VERSION:-0.0.0}</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_MACOS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
   <key>NSHighResolutionCapable</key><true/>
