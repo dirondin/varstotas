@@ -419,7 +419,7 @@ fn main() {
         let sel: Vec<EntityRef> = model.root_mesh().faces.keys().map(EntityRef::Face).collect();
         let f0 = sel.len();
         let t = Instant::now();
-        let new = model.intersect_with_model(&[], &sel).unwrap();
+        let new = model.intersect_faces(&[], &sel, IntersectScope::Model).unwrap();
         let dt = ms(t.elapsed());
         let m = model.root_mesh();
         b.report(name, dt, format!("{f0} sel faces -> {} faces, {} new edges", m.faces.len(), new.len()));

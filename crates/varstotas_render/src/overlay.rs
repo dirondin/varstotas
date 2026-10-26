@@ -424,39 +424,6 @@ impl Overlay3d {
         self.polygons.push(OverlayPolygon { tris, color: [color[0], color[1], color[2], color[3] * 0.18], on_top: false });
     }
 
-    /// Full protractor (Rotate / Protractor tools): circle of `radius_pt` points with 15° ticks
-    /// (longer every 90°), zero direction `zero_dir`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn add_protractor(
-        &mut self,
-        camera: &Camera,
-        viewport: DVec2,
-        center: DVec3,
-        normal: DVec3,
-        zero_dir: DVec3,
-        radius_pt: f64,
-        color: [f32; 4],
-    ) {
-        let r = camera.pixel_size_at(center, viewport) * radius_pt;
-        let mut pts = arc_points(center, normal, zero_dir, r, std::f64::consts::TAU, 48);
-        if pts.is_empty() {
-            return;
-        }
-        pts.pop();
-        self.add_polyline(&pts, true, color, 1.5, false, false);
-        for (i, d) in arc_points(DVec3::ZERO, normal, zero_dir, 1.0, std::f64::consts::TAU, 24).iter().take(24).enumerate() {
-            let inner = if i % 6 == 0 { 0.7 } else { 0.85 };
-            self.lines.push(OverlayLine {
-                a: f3(center + *d * (r * inner)),
-                b: f3(center + *d * r),
-                color,
-                width_px: 1.0,
-                dashed: false,
-                on_top: false,
-            });
-        }
-    }
-
     /// classic linear dimension between `a` and `b`, the dimension line moved by `offset`
     /// (world): extension lines from the points past the dimension line, the dimension line with
     /// end marks, and `text` centred on it (above it / along it per `style`, kept readable).

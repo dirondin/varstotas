@@ -137,12 +137,6 @@ impl Mesh {
         self.dims.insert(Dimension { a, b: a, offset, text: Some(text), leader: true })
     }
 
-    /// Current anchor positions of dimension `id`.
-    pub fn dim_points(&self, id: DimId) -> Option<(DVec3, DVec3)> {
-        let d = self.dims.get(id)?;
-        Some((self.anchor_pos(&d.a), self.anchor_pos(&d.b)))
-    }
-
     /// Local geometry of dimension `id` with current anchor positions.
     pub fn dim_geom(&self, id: DimId) -> Option<DimGeom> {
         let d = self.dims.get(id)?;

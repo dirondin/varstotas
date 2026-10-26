@@ -183,18 +183,18 @@ impl Model {
     /// dimensions (free anchors and offsets; attached anchors follow their vertices).
     pub fn transform_def_guides(&mut self, d: crate::DefId, m: &DMat4) {
         self.transform_def_dims(d, m);
-        if d == self.root {
-            let all = self.all_guides();
-            self.transform_guides(&all, m);
+        let (lines, points) = if d == self.root {
+            (&mut self.guides, &mut self.guide_points)
         } else if let Some(def) = self.defs.get_mut(d) {
-            let all: Vec<GuideRef> = def
-                .guides
-                .lines
-                .keys()
-                .map(GuideRef::Line)
-                .chain(def.guides.points.keys().map(GuideRef::Point))
-                .collect();
-            transform_in(&mut def.guides.lines, &mut def.guides.points, &all, m);
+            (&mut def.guides.lines, &mut def.guides.points)
+        } else {
+            return;
+        };
+        for l in lines.values_mut() {
+            *l = l.transformed(m);
+        }
+        for p in points.values_mut() {
+            *p = m.transform_point3(*p);
         }
     }
 
@@ -212,34 +212,6 @@ impl Model {
         }
     }
 
-    pub fn add_guide_line(&mut self, g: GuideLine) -> GuideId {
-        self.guides.insert(g)
-    }
-
-    pub fn add_guide_point(&mut self, p: DVec3) -> GuidePointId {
-        self.guide_points.insert(p)
-    }
-
-    pub fn has_guide(&self, g: GuideRef) -> bool {
-        match g {
-            GuideRef::Line(id) => self.guides.contains_key(id),
-            GuideRef::Point(id) => self.guide_points.contains_key(id),
-        }
-    }
-
-    /// Remove the given guides (missing ids are ignored). Returns how many were removed.
-    pub fn remove_guides(&mut self, gs: &[GuideRef]) -> usize {
-        let mut n = 0;
-        for g in gs {
-            let removed = match *g {
-                GuideRef::Line(id) => self.guides.remove(id).is_some(),
-                GuideRef::Point(id) => self.guide_points.remove(id).is_some(),
-            };
-            n += removed as usize;
-        }
-        n
-    }
-
     /// Remove every guide line and guide point (model level and inside all definitions).
     pub fn delete_all_guides(&mut self) {
         self.guides.clear();
@@ -249,20 +221,6 @@ impl Model {
         }
     }
 
-    /// Transform model-level guides in place (world transform `m`).
-    pub fn transform_guides(&mut self, gs: &[GuideRef], m: &DMat4) {
-        transform_in(&mut self.guides, &mut self.guide_points, gs, m);
-    }
-
-    /// Insert transformed copies of model-level guides; returns the new guides (same order).
-    pub fn copy_guides(&mut self, gs: &[GuideRef], m: &DMat4) -> Vec<GuideRef> {
-        copy_in(&mut self.guides, &mut self.guide_points, gs, m)
-    }
-
-    /// All model-level guides.
-    pub fn all_guides(&self) -> Vec<GuideRef> {
-        self.guides.keys().map(GuideRef::Line).chain(self.guide_points.keys().map(GuideRef::Point)).collect()
-    }
 }
 
 fn transform_in(lines: &mut GuideLines, points: &mut GuidePoints, gs: &[GuideRef], m: &DMat4) {
@@ -332,8 +290,8 @@ mod tests {
     #[test]
     fn guides_roundtrip_as_arrays_and_load_old_files() {
         let mut m = Model::new();
-        let a = m.add_guide_line(GuideLine { origin: DVec3::new(1.0, 2.0, 3.0), dir: DVec3::X });
-        let p = m.add_guide_point(DVec3::new(5.0, 6.0, 7.0));
+        let a = m.add_guide_in(&[], GuideGeom::Line(GuideLine { origin: DVec3::new(1.0, 2.0, 3.0), dir: DVec3::X })).unwrap();
+        let p = m.add_guide_in(&[], GuideGeom::Point(DVec3::new(5.0, 6.0, 7.0))).unwrap();
         let json = crate::io::to_json(&m).unwrap();
         // Plain arrays on disk (backward compatible with pre-M4 files).
         assert!(json.contains(r#""guides":[{"origin":[1.0,2.0,3.0],"dir":[1.0,0.0,0.0]}]"#), "{json}");
@@ -343,14 +301,14 @@ mod tests {
         assert_eq!(back.guide_points.values().next().copied(), Some(DVec3::new(5.0, 6.0, 7.0)));
         // Moving / copying / removing by id.
         let t = DMat4::from_translation(DVec3::new(0.0, 0.0, 10.0));
-        let copies = m.copy_guides(&[GuideRef::Line(a), GuideRef::Point(p)], &t);
+        let copies = m.copy_guides_in(&[], &[a, p], &t);
         assert_eq!(copies.len(), 2);
         assert_eq!(m.guides.len(), 2);
-        m.transform_guides(&[GuideRef::Point(p)], &t);
-        assert_eq!(m.guide_points[p], DVec3::new(5.0, 6.0, 17.0));
-        assert_eq!(m.remove_guides(&[GuideRef::Line(a), GuideRef::Line(a)]), 1);
-        assert!(!m.has_guide(GuideRef::Line(a)));
-        assert_eq!(m.all_guides().len(), 3);
+        m.transform_guides_in(&[], &[p], &t);
+        assert_eq!(m.guide_geom_in(&[], p), Some(GuideGeom::Point(DVec3::new(5.0, 6.0, 17.0))));
+        assert_eq!(m.remove_guides_in(&[], &[a, a]), 1);
+        assert!(!m.has_guide_in(&[], a));
+        assert_eq!(m.all_guides_in(&[]).len(), 3);
         // A file without guide fields / without the visibility flag still loads (also checked
         // below for definitions without a `guides` field).
         let old = json.replace(r#","guides_hidden":false"#, "");

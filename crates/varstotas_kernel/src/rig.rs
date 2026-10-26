@@ -20,7 +20,7 @@
 use crate::generator::{GenFormula, GenParam, GenValues};
 use crate::mesh::Mesh;
 use crate::model::{Definition, Model};
-use crate::{Aabb, DefId, InstanceId};
+use crate::{DefId, InstanceId};
 use glam::{DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -160,16 +160,6 @@ impl Model {
         let mut v: Vec<_> = def.mesh.instances.iter().map(|(id, i)| (id, part_name(self, i))).collect();
         v.sort_by_key(|a| a.1.to_lowercase());
         v
-    }
-
-    /// Rest-pose bounds of each part of `d` (in `d`'s axes), by name.
-    pub fn rig_part_bounds(&self, d: DefId) -> Vec<(String, Aabb)> {
-        let Some(def) = self.defs.get(d) else { return Vec::new() };
-        def.mesh
-            .instances
-            .values()
-            .filter_map(|i| Some((part_name(self, i), self.def_bounds(i.def)?.transformed(&i.transform))))
-            .collect()
     }
 
     /// Give the unnamed parts of `d` unique names (their definitions' names, numbered when

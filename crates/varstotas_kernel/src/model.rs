@@ -1129,36 +1129,6 @@ impl Model {
         self.axes.unwrap_or(DAffine3::IDENTITY)
     }
 
-    pub fn axes_origin(&self) -> DVec3 {
-        self.axes_frame().translation
-    }
-
-    /// Unit red / green / blue directions of the drawing axes (world space).
-    pub fn axes_dirs(&self) -> [DVec3; 3] {
-        let m = self.axes_frame().matrix3;
-        [m.x_axis, m.y_axis, m.z_axis]
-    }
-
-    /// World point → drawing-axes coordinates.
-    pub fn world_to_axes(&self, p: DVec3) -> DVec3 {
-        self.axes_frame().inverse().transform_point3(p)
-    }
-
-    /// Drawing-axes coordinates → world point.
-    pub fn axes_to_world(&self, p: DVec3) -> DVec3 {
-        self.axes_frame().transform_point3(p)
-    }
-
-    /// World direction → drawing-axes components.
-    pub fn world_dir_to_axes(&self, d: DVec3) -> DVec3 {
-        self.axes_frame().matrix3.transpose() * d
-    }
-
-    /// Drawing-axes direction → world direction.
-    pub fn axes_dir_to_world(&self, d: DVec3) -> DVec3 {
-        self.axes_frame().matrix3 * d
-    }
-
     /// Rebuild caches of every mesh (call after deserializing a model by hand).
     pub fn rebuild_caches(&mut self) {
         for d in self.defs.values_mut() {

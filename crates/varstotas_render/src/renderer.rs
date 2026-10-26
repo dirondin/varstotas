@@ -1775,10 +1775,6 @@ impl Renderer {
         Some((pt.texture_id()?, pt.size()?))
     }
 
-    pub fn pt_samples(&self) -> u32 {
-        self.pt.as_ref().map_or(0, |p| p.samples())
-    }
-
     /// The shown image (after `pt_resolve`), sRGB.
     pub fn pt_image(&self, rs: &egui_wgpu::RenderState) -> Option<RgbaImage> {
         self.pt.as_ref()?.read_image(rs)
@@ -1788,13 +1784,6 @@ impl Renderer {
     pub fn pt_linear(&mut self, rs: &egui_wgpu::RenderState, denoise: bool) -> Option<(u32, u32, Vec<f32>)> {
         let pt = self.pt.as_mut()?;
         pt.read_linear(rs, [&self.bind_group, &self.face_textures.bind_group], denoise)
-    }
-
-    /// Drop the render (its buffers and texture).
-    pub fn pt_clear(&mut self, rs: &egui_wgpu::RenderState) {
-        if let Some(pt) = &mut self.pt {
-            pt.clear(rs);
-        }
     }
 
     /// Section cut (world plane `[n.x, n.y, n.z, d]`, unit `n`): model faces and edges with

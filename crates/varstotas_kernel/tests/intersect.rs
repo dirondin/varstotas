@@ -69,7 +69,7 @@ fn box_group_through_plane() {
     let mut model = Model::new();
     let plane = model.root_mesh_mut().add_face(&[v(-100., -100., 50.), v(300., -100., 50.), v(300., 300., 50.), v(-100., 300., 50.)]).unwrap();
     let g = group_box(&mut model, v(0., 0., 0.), v(100., 100., 100.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert_eq!(new.len(), 4);
@@ -82,7 +82,7 @@ fn box_group_through_plane() {
     assert_eq!(model.mesh_at(&[g]).unwrap().faces.len(), 6);
     // Selecting the plane instead gives the same result (idempotent now).
     let plane = if r.faces.contains_key(plane) { plane } else { r.faces.keys().next().unwrap() };
-    let again = model.intersect_with_model(&[], &[EntityRef::Face(plane)]).unwrap();
+    let again = model.intersect_faces(&[], &[EntityRef::Face(plane)], IntersectScope::Model).unwrap();
     assert!(again.is_empty());
     assert_eq!(model.root_mesh().faces.len(), 2);
 }
@@ -92,7 +92,7 @@ fn plane_selected_intersects_with_group() {
     let mut model = Model::new();
     let plane = model.root_mesh_mut().add_face(&[v(-100., -100., 50.), v(300., -100., 50.), v(300., 300., 50.), v(-100., 300., 50.)]).unwrap();
     group_box(&mut model, v(0., 0., 0.), v(100., 100., 100.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Face(plane)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Face(plane)], IntersectScope::Model).unwrap();
     assert_eq!(new.len(), 4);
     sane(model.root_mesh());
     assert_eq!(model.root_mesh().faces.len(), 2);
@@ -107,7 +107,7 @@ fn intersect_scopes() {
     let b = group_box(&mut model, v(50., 50., 50.), v(150., 150., 150.));
     let sel = [EntityRef::Instance(a), EntityRef::Instance(b)];
     // Selection only: loose edges along A ∩ B, the plane is not split.
-    let new = model.intersect_with_selection(&[], &sel).unwrap();
+    let new = model.intersect_faces(&[], &sel, IntersectScope::Selection).unwrap();
     let r = model.root_mesh();
     ok(r);
     assert_eq!(r.faces.len(), 1);
@@ -115,7 +115,7 @@ fn intersect_scopes() {
     assert!(new.iter().all(|e| r.edge_faces(*e).is_empty()));
     // With the model: the plane gets both footprints.
     let n0 = model.root_mesh().faces.len();
-    model.intersect_with_model(&[], &[EntityRef::Instance(a)]).unwrap();
+    model.intersect_faces(&[], &[EntityRef::Instance(a)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert!(r.faces.len() > n0);
@@ -143,7 +143,7 @@ fn coplanar_overlap_with_group_imprints_boundary() {
         hidden: false,
         locked: false,
     });
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert_eq!(new.len(), 2);
@@ -159,14 +159,14 @@ fn faces_touching_along_edges_add_nothing() {
     let mut model = Model::new();
     box_at(model.root_mesh_mut(), v(0., 0., 0.), v(100., 100., 100.));
     let g = group_box(&mut model, v(100., 0., 0.), v(200., 100., 100.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     assert!(new.is_empty(), "created {} edges", new.len());
     assert_eq!(model.root_mesh().faces.len(), 6);
     // Shifted by half: the shared wall gets the group's wall outline.
     let mut model = Model::new();
     box_at(model.root_mesh_mut(), v(0., 0., 0.), v(100., 100., 100.));
     let g = group_box(&mut model, v(100., 50., 0.), v(200., 150., 100.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert_eq!(new.len(), 1);
@@ -178,7 +178,7 @@ fn box_group_sitting_on_plane_imprints_footprint() {
     let mut model = Model::new();
     model.root_mesh_mut().add_face(&[v(-100., -100., 0.), v(300., -100., 0.), v(300., 300., 0.), v(-100., 300., 0.)]).unwrap();
     let g = group_box(&mut model, v(0., 0., 0.), v(100., 100., 100.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert_eq!(new.len(), 4);
@@ -197,7 +197,7 @@ fn plane_with_hole_crossed_by_box() {
     }
     let area = total_area(model.root_mesh());
     let g = group_box(&mut model, v(150., 120., -50.), v(250., 180., 50.));
-    model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert_eq!(r.faces.len(), 2);
@@ -219,7 +219,7 @@ fn nested_transformed_instances() {
     model.root_mesh_mut().instances[inner].transform = DMat4::from_rotation_z(std::f64::consts::FRAC_PI_2);
     let outer = model.make_group(&[], &[EntityRef::Instance(inner)]).unwrap();
     model.root_mesh_mut().instances[outer].transform = DMat4::from_translation(v(200., 0., -20.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(outer)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(outer)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
     sane(r);
     assert_eq!(new.len(), 4);
@@ -241,9 +241,9 @@ fn intersect_inside_group_lands_in_group() {
     box_at(model.root_mesh_mut(), v(0., 0., 0.), v(100., 100., 100.));
     let gf = model.mesh_at(&[g]).unwrap().faces.keys().next().unwrap();
     // Context scope: nothing else in the group.
-    let none = model.intersect_with_context(&[g], &[EntityRef::Face(gf)]).unwrap();
+    let none = model.intersect_faces(&[g], &[EntityRef::Face(gf)], IntersectScope::Context).unwrap();
     assert!(none.is_empty());
-    let new = model.intersect_with_model(&[g], &[EntityRef::Face(gf)]).unwrap();
+    let new = model.intersect_faces(&[g], &[EntityRef::Face(gf)], IntersectScope::Model).unwrap();
     assert_eq!(new.len(), 4);
     let gm = model.mesh_at(&[g]).unwrap();
     sane(gm);
@@ -292,7 +292,7 @@ fn intersect_is_one_undo_step() {
     let g = group_box(&mut model, v(0., 0., 0.), v(100., 100., 100.));
     let mut h = History::default();
     let before = model.clone();
-    model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     h.push("Intersect Faces", before);
     assert_eq!(model.root_mesh().faces.len(), 2);
     h.undo(&mut model);
@@ -308,8 +308,8 @@ fn intersect_bad_path_and_empty_selection() {
         let f = other.root_mesh_mut().add_face(&[v(0., 0., 1.), v(1., 0., 1.), v(1., 1., 1.)]).unwrap();
         other.make_group(&[], &[EntityRef::Face(f)]).unwrap()
     };
-    assert_eq!(model.intersect_with_model(&[bogus], &[]), Err(OpError::NotFound));
-    assert_eq!(model.intersect_with_model(&[], &[]).unwrap(), Vec::<EdgeId>::new());
+    assert_eq!(model.intersect_faces(&[bogus], &[], IntersectScope::Model), Err(OpError::NotFound));
+    assert_eq!(model.intersect_faces(&[], &[], IntersectScope::Model).unwrap(), Vec::<EdgeId>::new());
 }
 
 // ---- Reverse / Orient / Flip -----------------------------------------------------------------
@@ -524,7 +524,7 @@ fn group_prism_through_loose_face_makes_inner_face() {
     let nd = model.defs.insert(d);
     let r = model.root;
     let g = model.defs[r].mesh.instances.insert(Instance { def: nd, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false });
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     assert_eq!(new.len(), 7);
     let m = model.root_mesh();
     sane(m);
@@ -542,7 +542,7 @@ fn group_box_across_face_edge_splits_inside_part() {
     let mut model = Model::new();
     model.root_mesh_mut().add_face(&[v(0., 0., 50.), v(200., 0., 50.), v(200., 200., 50.), v(0., 200., 50.)]).unwrap();
     let g = group_box(&mut model, v(-50., 50., 0.), v(50., 150., 100.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(g)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     assert_eq!(new.len(), 3);
     let m = model.root_mesh();
     sane(m);
@@ -559,7 +559,7 @@ fn group_vs_group_leaves_edges_only() {
     let mut model = Model::new();
     let a = group_box(&mut model, v(0., 0., 0.), v(100., 100., 100.));
     group_box(&mut model, v(50., 50., 50.), v(150., 150., 150.));
-    let new = model.intersect_with_model(&[], &[EntityRef::Instance(a)]).unwrap();
+    let new = model.intersect_faces(&[], &[EntityRef::Instance(a)], IntersectScope::Model).unwrap();
     let m = model.root_mesh();
     sane(m);
     assert_eq!(new.len(), 6);

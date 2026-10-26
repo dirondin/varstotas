@@ -829,9 +829,9 @@ mod tests {
     #[test]
     fn copy_guides_only() {
         let mut doc = Document::new();
-        let gid = doc.commit("g", |m| m.add_guide_line(GuideLine { origin: DVec3::new(0.0, 500.0, 0.0), dir: DVec3::X }));
-        let pid = doc.commit("p", |m| m.add_guide_point(DVec3::new(10.0, 20.0, 30.0)));
-        doc.set_selection_with_guides(Vec::new(), vec![GuideRef::Line(gid.unwrap()), GuideRef::Point(pid.unwrap())]);
+        let g = doc.commit("g", |m| m.add_guide_in(&[], GuideGeom::Line(GuideLine { origin: DVec3::new(0.0, 500.0, 0.0), dir: DVec3::X })));
+        let p = doc.commit("p", |m| m.add_guide_in(&[], GuideGeom::Point(DVec3::new(10.0, 20.0, 30.0))));
+        doc.set_selection_with_guides(Vec::new(), vec![g.flatten().unwrap(), p.flatten().unwrap()]);
         let clip = Clipboard::from_selection(&doc).unwrap();
         assert_eq!(clip.count, 2);
         let uid = doc.uid;

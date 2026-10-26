@@ -423,19 +423,4 @@ impl Model {
         let mesh = &mut self.defs[ad].mesh;
         Ok(mesh.imprint_segments(&segs))
     }
-
-    /// [`Model::intersect_faces`] with [`IntersectScope::Model`].
-    pub fn intersect_with_model(&mut self, path: &[InstanceId], sel: &[EntityRef]) -> OpResult<Vec<EdgeId>> {
-        self.intersect_faces(path, sel, IntersectScope::Model)
-    }
-
-    /// [`Model::intersect_faces`] with [`IntersectScope::Selection`].
-    pub fn intersect_with_selection(&mut self, path: &[InstanceId], sel: &[EntityRef]) -> OpResult<Vec<EdgeId>> {
-        self.intersect_faces(path, sel, IntersectScope::Selection)
-    }
-
-    /// [`Model::intersect_faces`] with [`IntersectScope::Context`].
-    pub fn intersect_with_context(&mut self, path: &[InstanceId], sel: &[EntityRef]) -> OpResult<Vec<EdgeId>> {
-        self.intersect_faces(path, sel, IntersectScope::Context)
-    }
 }

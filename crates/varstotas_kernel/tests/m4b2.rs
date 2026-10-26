@@ -479,7 +479,7 @@ fn dimension_detaches_on_delete_and_follows_merge() {
     let second: HashSet<VertexId> = m.vertices.iter().filter(|(_, x)| x.pos.x > 250.0).map(|(k, _)| k).collect();
     m.transform_vertices(&second, &DMat4::from_translation(v(-200., 0., 0.)));
     ok(&m);
-    let (a, b) = m.dim_points(id).unwrap();
+    let DimGeom { a, b, .. } = m.dim_geom(id).unwrap();
     assert!(close(a, v(100., 0., 0.)) && close(b, v(100., 0., 0.)));
     assert_eq!(m.dims[id].a.vertex, m.dims[id].b.vertex, "merged into the same vertex");
     // Deleting the geometry: the anchors stay where the vertex was.
@@ -487,7 +487,7 @@ fn dimension_detaches_on_delete_and_follows_merge() {
     m.erase(&all);
     assert!(m.vertices.is_empty());
     ok(&m);
-    let (a, _) = m.dim_points(id).unwrap();
+    let a = m.dim_geom(id).unwrap().a;
     assert!(close(a, v(100., 0., 0.)));
     assert!(m.dims[id].a.vertex.is_none());
 }
@@ -582,17 +582,13 @@ fn dimensions_in_groups_make_group_and_explode() {
 fn custom_axes_round_trip() {
     let mut model = Model::new();
     assert_eq!(model.axes_frame(), varstotas_kernel::glam::DAffine3::IDENTITY);
-    assert!(close(model.world_to_axes(v(1., 2., 3.)), v(1., 2., 3.)));
     // Rotated 90° about Z, origin at (100, 0, 0); y given non-perpendicular.
     model.set_axes(v(100., 0., 0.), v(0., 2., 0.), v(-1., 1., 0.)).unwrap();
-    let [x, y, z] = model.axes_dirs();
-    assert!(close(x, DVec3::Y) && close(y, -DVec3::X) && close(z, DVec3::Z));
-    assert!(close(model.axes_origin(), v(100., 0., 0.)));
+    let f = model.axes_frame();
+    assert!(close(f.matrix3.x_axis, DVec3::Y) && close(f.matrix3.y_axis, -DVec3::X) && close(f.matrix3.z_axis, DVec3::Z));
+    assert!(close(f.translation, v(100., 0., 0.)));
     let p = v(100., 50., 7.);
-    assert!(close(model.world_to_axes(p), v(50., 0., 7.)));
-    assert!(close(model.axes_to_world(model.world_to_axes(p)), p));
-    assert!(close(model.world_dir_to_axes(DVec3::Y), DVec3::X));
-    assert!(close(model.axes_dir_to_world(DVec3::X), DVec3::Y));
+    assert!(close(f.inverse().transform_point3(p), v(50., 0., 7.)));
     // Save / load.
     let json = io::to_json(&model).unwrap();
     assert!(json.contains("\"axes\""));

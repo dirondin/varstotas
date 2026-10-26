@@ -608,23 +608,12 @@ impl PathTracer {
         }
     }
 
-    pub fn samples(&self) -> u32 {
-        self.job.as_ref().map_or(0, |j| j.samples)
-    }
-
     pub fn size(&self) -> Option<[u32; 2]> {
         self.job.as_ref().map(|j| j.size)
     }
 
     pub fn texture_id(&self) -> Option<egui::TextureId> {
         self.job.as_ref().and_then(|j| j.texture_id)
-    }
-
-    /// Free the render's buffers and its egui texture.
-    pub fn clear(&mut self, rs: &egui_wgpu::RenderState) {
-        if let Some(id) = self.job.take().and_then(|j| j.texture_id) {
-            rs.renderer.write().free_texture(&id);
-        }
     }
 
     fn groups(&self, groups: [&wgpu::BindGroup; 2]) -> impl Fn(&mut wgpu::ComputePass<'_>, &wgpu::BindGroup) + use<> {
