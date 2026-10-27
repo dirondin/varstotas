@@ -109,7 +109,7 @@ jobs:
         run: ${{ matrix.build }}
       - uses: actions/upload-artifact@v4
         with:
-          name: varstotas-${{ matrix.name }}
+          name: package-${{ matrix.name }}
           path: |
             dist/*.dmg
             dist/*.zip
@@ -130,7 +130,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: varstotas-*
+          # only the packages: flatpak.yml uploads its test bundles (varstotas-<arch>.flatpak) to the same run
+          pattern: package-*
           path: dist
           merge-multiple: true
       - name: Checksums
