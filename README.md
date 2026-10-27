@@ -30,8 +30,8 @@ everything can be scripted.
 
 <p>
   <img src="docs/images/workbench.jpg" width="32%" alt="Workbench demo with its length, depth and height dimensions">
-  <img src="docs/images/dining-set.jpg" width="32%" alt="Dining set demo with the table's dimensions">
-  <img src="docs/images/bookshelf.jpg" width="32%" alt="Bookshelf demo with its dimensions and the shelf spacing">
+  <img src="docs/images/desk-caddy.jpg" width="32%" alt="Desk caddy for a 3D printer with its length, depth and height dimensions">
+  <img src="docs/images/gallery.jpg" width="32%" alt="Material gallery demo in the Realistic style: wood, metal, glass, brick and glowing materials">
 </p>
 
 <p align="center">

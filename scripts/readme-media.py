@@ -3,7 +3,7 @@
 
 Drives a debug build with UI scripts (`record` writes window frames), then encodes with
 ffmpeg / ImageMagick:
-  docs/images/push-pull.gif, house-orbit.gif, workbench.jpg, dining-set.jpg, bookshelf.jpg
+  docs/images/push-pull.gif, house-orbit.gif, gallery.jpg, workbench.jpg, desk-caddy.jpg
   .github/social-preview.png
 Needs macOS (like tests/ui), ffmpeg, ImageMagick 7 and curl. The app window must stay uncovered.
 usage: scripts/readme-media.py
@@ -102,14 +102,20 @@ def main():
         os.link(os.path.join(orbit, f"frame_{i:05d}.bmp"), os.path.join(seq, f"f_{n:05d}.bmp"))
     gif(os.path.join(seq, "f_%05d.bmp"), "house-orbit.gif",
         "fps=12,crop=1108:666:0:197,scale=640:-1:flags=lanczos", "max_colors=96", "dither=none")
+    # the material gallery in its Studio scene (Realistic style, given time to settle)
+    gallery = frames("gallery")
+    app_script("gallery", ["open " + os.path.join(ROOT, "examples/demos/material_gallery.vrst"), "wait 60",
+                           "action scene_0", "wait 420", f"record {gallery} 2", "wait 1", "record off", "quit"])
+    run("magick", os.path.join(gallery, "frame_00000.bmp"), "-quality", "86", os.path.join(IMAGES, "gallery.jpg"))
     # hobby projects with their main dimensions: stills, then the workbench shifted right for the social preview
     # (one recorded frame each: `screenshot` can miss while the demo's thumbnails render)
     shots = {name: frames(name) for name in MAKER}
     bench = frames("workbench_preview")
     lines = []
     for name, dims in MAKER.items():
-        lines += [f"action demo {name}", "wait 300", dimension_script(dims), "wait 10", "zoompx 0.9 520 420", "wait 20",
-                  f"record {shots[name]} 2", "wait 1", "record off"]
+        view, zoom = VIEW.get(name, ([], 0.9))
+        lines += [f"action demo {name}", "wait 300", dimension_script(dims), "wait 10", *view, f"zoompx {zoom} 520 420",
+                  "wait 20", f"record {shots[name]} 2", "wait 1", "record off"]
     lines += ["action demo workbench", "wait 300", dimension_script(MAKER["workbench"]), "wait 10", "zoompx 0.75 520 420",
               "wait 4", "rawp move 800 400 450", "panpx 150 -40", "wait 20", f"record {bench} 2", "wait 1", "record off",
               "quit"]
@@ -124,11 +130,11 @@ def main():
 MAKER = {
     "workbench": [((0, 0, 895), (1600, 0, 895), (0, 0, 250)), ((1600, 0, 895), (1600, 800, 895), (0, 0, 250)),
                   ((1600, 800, 0), (1600, 800, 895), (250, 0, 0))],
-    "dining_set": [((0, 0, 765), (1600, 0, 765), (0, 0, 350)), ((1600, 0, 765), (1600, 850, 765), (0, 0, 350)),
-                   ((1600, 0, 0), (1600, 0, 765), (350, 0, 0))],
-    "bookshelf": [((0, 0, 1800), (800, 0, 1800), (0, 0, 220)), ((800, 0, 1800), (800, 304, 1800), (0, 0, 220)),
-                  ((800, 0, 0), (800, 0, 1800), (280, 0, 0)), ((400, 0, 374), (400, 0, 712), (0, -30, 0))],
+    "desk_caddy": [((0, 0, 0), (140, 0, 0), (0, -25, 0)), ((140, 0, 0), (140, 90, 0), (25, 0, 0)),
+                   ((0, 0, 0), (0, 0, 80), (-25, 0, 0))],
 }
+# demos saved without a camera: the view to take, and the zoom after it
+VIEW = {"desk_caddy": (["action console_close", "view iso", "zoom_extents"], 1.15)}
 
 
 def dimension_script(dims):
