@@ -1,5 +1,8 @@
 # Bridge: Python scripts (File → Run Script… with a .py), the Python client, HTTP and the MCP
 # server against the running app (tests/ui/py/bridge_check.py prints its checks into the console).
+# The bridge starts with the first Python script; bridge.json (other clients, MCP) only once
+# Preferences → General lets them connect.
+expect bridge_open=None
 action run_script ../../examples/scripts/bookshelf.py
 wait 5
 expect script=Some((true, "Bookshelf 800 x 304 x 1800, 9 parts"))
@@ -11,6 +14,16 @@ zoom_extents
 wait 10
 screenshot shots/bridge_bookshelf.bmp
 action undo
+wait 5
+expect bridge_open=Some(false)
+action preferences
+wait 10
+action click_spot prefs:General
+wait 5
+action click_spot prefs:bridge_external
+wait 5
+expect bridge_open=Some(true)
+action preferences
 wait 5
 action run_script ../../tests/ui/py/bridge_check.py
 # the export over an existing file waits for the user: deny it
@@ -32,4 +45,11 @@ expect bridge checks: 33 ok
 expect undo=Some("Agent")
 expect defs=3 model_faces=32
 screenshot shots/bridge_check.bmp
+action preferences
+wait 10
+action click_spot prefs:bridge_external
+wait 5
+expect bridge_open=Some(false)
+action preferences
+wait 5
 dump done

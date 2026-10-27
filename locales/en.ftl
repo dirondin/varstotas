@@ -1191,7 +1191,7 @@ prefs-section-render = Render
 
 ## Search words of the sections (besides their names; a translation lists its own)
 
-prefs-words-general = auto-save autosave minutes template new document units undo steps history backup previous version
+prefs-words-general = auto-save autosave minutes template new document units undo steps history backup previous version bridge python mcp ai agent scripts
 prefs-words-render = render image size samples bounces quality denoise programs gif animation oidn open image denoise
 prefs-words-drawing = snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle
 prefs-words-libraries = components materials folder examples in model tiles small large list
@@ -1237,6 +1237,9 @@ prefs-undo = Undo
 prefs-keep = Keep
 prefs-undo-steps = undo steps per document
 prefs-undo-note = Each step keeps a copy of the model: big models with many steps take more memory.
+prefs-bridge = Scripts and AI agents
+prefs-bridge-external = Let scripts and AI agents outside Varstotas connect (MCP)
+prefs-bridge-note = Off: only scripts started from Varstotas (File → Run Script…, plugins) reach the bridge. On: { DATA_DIR() }/bridge.json holds the local address and token for other programs, such as an MCP server for an AI assistant. The bridge listens on 127.0.0.1 only.
 
 ## Render
 

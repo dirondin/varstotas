@@ -92,6 +92,8 @@ pub struct Prefs {
     pub autosave_minutes: u32,
     /// Keep the previous distinct version beside explicitly saved documents.
     pub save_backups: bool,
+    /// Scripts and AI agents outside Varstotas may connect to the bridge (`bridge.json`, MCP).
+    pub bridge_external: bool,
     /// Template for File → New (None until chosen on first start).
     pub template: Option<Template>,
     /// User document templates (None = <data folder>/templates).
@@ -183,6 +185,7 @@ impl Default for Prefs {
             recent: Vec::new(),
             autosave: true,
             save_backups: true,
+            bridge_external: false,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
             template: None,
             templates_dir: None,

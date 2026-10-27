@@ -10,9 +10,11 @@ Varstotas is a desktop application. It runs as the current user and is not an OS
 - **Untrusted code** — generators and component scripts inside documents (including automatic
   previews) and every bridge / MCP `eval`. They get the geometry API only: no file reads or
   writes, no directory listing, no downloads. Opening a `.vrst` file never gains host IO.
-- **The local bridge** listens only on `127.0.0.1` on a random port and needs the random token
-  from `bridge.json` in the app's data folder (permissions 0600). Browser requests (with an `Origin` header)
-  are rejected. `VARSTOTAS_NO_BRIDGE=1` turns it off.
+- **The local bridge** listens only on `127.0.0.1` on a random port and needs a random token.
+  Scripts the app starts get it in their environment; other programs (MCP) only from
+  `bridge.json` in the app's data folder (permissions 0600), written only while Preferences →
+  General lets scripts and AI agents outside Varstotas connect (off by default). Browser
+  requests (with an `Origin` header) are rejected. `VARSTOTAS_NO_BRIDGE=1` turns it off.
 
 Rhai runs have a deadline and memory / operation limits; downloads accept HTTP(S) only, with size
 and time caps. Details: [docs/SCRIPTING.md](docs/SCRIPTING.md#trust-and-execution-limits).

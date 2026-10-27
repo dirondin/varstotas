@@ -61,7 +61,9 @@ pub struct PythonRun {
 
 #[derive(Default)]
 pub struct BridgeState {
+    /// Started on the first Python script, or at once when other clients may connect.
     pub server: Option<Bridge>,
+    ctx: Option<egui::Context>,
     pub txn: Option<Txn>,
     /// Destructive calls waiting for the user's answer.
     pub confirm: VecDeque<(String, Request, u64, Option<HashSet<PathBuf>>)>,
@@ -125,14 +127,40 @@ fn view_by_name(s: &str) -> Option<StandardView> {
 }
 
 impl VarstotasApp {
-    /// Start the bridge server (unless disabled with `VARSTOTAS_NO_BRIDGE`).
+    /// At startup: the bridge listens at once only when Preferences → General lets clients
+    /// outside Varstotas connect; otherwise on the first Python script (`ensure_bridge`).
     pub(crate) fn start_bridge(&mut self, ctx: &egui::Context) {
+        self.bridge.ctx = Some(ctx.clone());
+        self.sync_bridge();
+    }
+
+    /// The bridge server, started if needed (None when disabled with `VARSTOTAS_NO_BRIDGE`).
+    pub(crate) fn ensure_bridge(&mut self) -> Option<&Bridge> {
         if std::env::var_os("VARSTOTAS_NO_BRIDGE").is_some_and(|v| !v.is_empty()) {
-            return;
+            return None;
         }
-        match Bridge::start(ctx.clone()) {
-            Ok(b) => self.bridge.server = Some(b),
-            Err(e) => log::warn!("bridge: cannot listen: {e}"),
+        if self.bridge.server.is_none() {
+            let ctx = self.bridge.ctx.clone()?;
+            match Bridge::start(ctx) {
+                Ok(mut b) => {
+                    b.publish(self.prefs.bridge_external);
+                    self.bridge.server = Some(b);
+                }
+                Err(e) => log::warn!("bridge: cannot listen: {e}"),
+            }
+        }
+        self.bridge.server.as_ref()
+    }
+
+    /// Follow Preferences → General: `bridge.json` exists only while other clients may connect.
+    fn sync_bridge(&mut self) {
+        let on = self.prefs.bridge_external;
+        match self.bridge.server.as_mut() {
+            Some(b) => b.publish(on),
+            None if on => {
+                self.ensure_bridge();
+            }
+            None => {}
         }
     }
 
@@ -147,6 +175,7 @@ impl VarstotasApp {
 
     /// Serve calls that arrived, show the confirmation dialog, collect Python output.
     pub(crate) fn bridge_tick(&mut self, ctx: &egui::Context) {
+        self.sync_bridge();
         if self
             .bridge
             .txn
@@ -564,10 +593,11 @@ impl VarstotasApp {
         // absolute: the script runs in its own folder, where a relative path means something else
         let path = &std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let Some(b) = &self.bridge.server else {
+        if self.ensure_bridge().is_none() {
             self.flash_error(varstotas_i18n::tr!("ext-python-no-bridge"));
             return;
-        };
+        }
+        let Some(b) = &self.bridge.server else { return };
         if self.bridge.python.is_some() {
             self.flash_error(varstotas_i18n::tr!("ext-python-busy"));
             return;

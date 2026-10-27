@@ -36,6 +36,9 @@ expect new_render=(1280x720 256spp b6 dn=true match=true)
 raw click 137 120
 wait 5
 expect prefs_win=(true General)
+# Undo is at the bottom of General: scroll to it
+raw scroll 450 370 -400
+wait 5
 action click_spot undo_steps
 wait 5
 raw text 10
@@ -56,6 +59,8 @@ box 2000 0 0 100 100 100
 box 2200 0 0 100 100 100
 wait 5
 expect undo_steps=(10 10)
+raw scroll 450 370 400
+wait 5
 raw click 649 92
 wait 5
 expect undo_steps=(100 10)

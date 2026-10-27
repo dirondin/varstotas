@@ -4,8 +4,9 @@
 
 (<data folder>: macOS ~/Library/Application Support/Varstotas, Linux ~/.local/share/varstotas,
 Flatpak ~/.var/app/io.github.dirondin.Varstotas/data/varstotas, Windows %APPDATA%\\Varstotas\\data;
-Preferences → General shows it.) The app must be running and its bridge on (it writes
-bridge.json there and installs this file next to varstotas.py). Every edit is one undo step in the app; saving over another file, exporting
+Preferences → General shows it.) The app must be running with Preferences → General → "Let
+scripts and AI agents outside Varstotas connect" on (off by default; it then writes bridge.json
+there and installs this file next to varstotas.py). Every edit is one undo step in the app; saving over another file, exporting
 over an existing file, opening a file or starting a new one with unsaved changes asks the
 user in the app first. No dependencies beyond the standard library.
 """

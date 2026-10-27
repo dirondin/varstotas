@@ -13,7 +13,8 @@ Every function of the Rhai API (docs/SCRIPTING.md) is a method of the model obje
 the same name and arguments; entities have the same properties. A call outside
 `operation()` is one undo step by itself. `m.rhai(code)` runs Rhai code in one call.
 
-The app writes its address and token to bridge.json in its data folder (macOS:
+With Preferences -> General -> "Let scripts and AI agents outside Varstotas connect" on
+(off by default), the app writes its address and token to bridge.json in its data folder (macOS:
 ~/Library/Application Support/Varstotas, Linux: ~/.local/share/varstotas or, for the Flatpak,
 ~/.var/app/io.github.dirondin.Varstotas/data/varstotas, Windows: %APPDATA%\\Varstotas\\data),
 next to the python/ folder it installs this module into; scripts started from the app
@@ -351,7 +352,8 @@ def connect(host=None, port=None, token=None, timeout=None):
             with open(path or "", encoding="utf-8") as f:
                 info = json.load(f)
         except OSError:
-            raise VarstotasError("Varstotas is not running (no bridge.json in %s)" % ", ".join(data_dirs())) from None
+            raise VarstotasError("Varstotas is not running or does not let outside scripts connect "
+                                 "(Preferences -> General; no bridge.json in %s)" % ", ".join(data_dirs())) from None
         host, port, token = host or info["host"], port or info["port"], token or info["token"]
     try:
         return Model(host or "127.0.0.1", port, token, timeout)

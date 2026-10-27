@@ -40,6 +40,8 @@ pub struct Bridge {
     pub port: u16,
     pub token: String,
     rx: Receiver<Request>,
+    /// `bridge.json` written: clients outside Varstotas may connect.
+    published: bool,
 }
 
 /// Directory with `varstotas.py` / `varstotas_mcp.py` (for `PYTHONPATH`).
@@ -71,7 +73,9 @@ impl Drop for ClientSlot {
 }
 
 impl Bridge {
-    /// Listen on 127.0.0.1 (random port), write `bridge.json` and the Python modules.
+    /// Listen on 127.0.0.1 (random port) and write the Python modules. Scripts started by
+    /// Varstotas get the port and token in their environment; `bridge.json` (for other
+    /// clients) only after [`Self::publish`].
     pub fn start(ctx: egui::Context) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         let port = listener.local_addr()?.port();
@@ -101,26 +105,47 @@ impl Bridge {
                         });
             }
         })?;
-        let b = Self { port, token, rx };
-        if let Err(e) = b.write_files() {
-            log::warn!("bridge: cannot write the bridge file: {e}");
+        let b = Self { port, token, rx, published: false };
+        if let Err(e) = b.write_modules() {
+            log::warn!("bridge: cannot write the Python modules: {e}");
         }
         log::info!("bridge: listening on 127.0.0.1:{port}");
         Ok(b)
     }
 
-    fn write_files(&self) -> std::io::Result<()> {
-        let Some(dir) = crate::paths::data_dir() else { return Ok(()) };
-        let py = dir.join("python");
+    fn write_modules(&self) -> std::io::Result<()> {
+        let Some(py) = python_dir() else { return Ok(()) };
         std::fs::create_dir_all(&py)?;
         std::fs::write(py.join("varstotas.py"), PY_CLIENT)?;
-        std::fs::write(py.join("varstotas_mcp.py"), PY_MCP)?;
-        let info = json!({ "host": "127.0.0.1", "port": self.port, "token": self.token, "pid": std::process::id() });
-        let path = dir.join("bridge.json");
-        varstotas_kernel::io::atomic_write(&path, info.to_string().as_bytes())
+        std::fs::write(py.join("varstotas_mcp.py"), PY_MCP)
     }
 
-    /// Remove `bridge.json` when it is still ours (the app is closing).
+    /// `bridge.json` is written.
+    pub fn published(&self) -> bool {
+        self.published
+    }
+
+    /// Let clients outside Varstotas connect (write `bridge.json`) or not (remove it).
+    pub fn publish(&mut self, on: bool) {
+        if on == self.published {
+            return;
+        }
+        self.published = on;
+        if !on {
+            self.remove_file();
+            return;
+        }
+        let Some(dir) = crate::paths::data_dir() else { return };
+        let info = json!({ "host": "127.0.0.1", "port": self.port, "token": self.token, "pid": std::process::id() });
+        let r = std::fs::create_dir_all(&dir)
+            .and_then(|()| varstotas_kernel::io::atomic_write(dir.join("bridge.json"), info.to_string().as_bytes()));
+        match r {
+            Ok(()) => log::info!("bridge: open to other clients (bridge.json)"),
+            Err(e) => log::warn!("bridge: cannot write the bridge file: {e}"),
+        }
+    }
+
+    /// Remove `bridge.json` when it is still ours (closed to other clients, or the app is closing).
     pub fn remove_file(&self) {
         let Some(path) = crate::paths::data_dir().map(|d| d.join("bridge.json")) else { return };
         let ours = std::fs::read_to_string(&path)

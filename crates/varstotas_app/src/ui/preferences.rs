@@ -288,6 +288,7 @@ impl VarstotasApp {
                 p.undo_steps = d.undo_steps;
                 p.autosave = d.autosave;
                 p.save_backups = d.save_backups;
+                p.bridge_external = d.bridge_external;
                 p.autosave_minutes = d.autosave_minutes;
                 p.template = d.template;
                 p.templates_dir = None;
@@ -335,6 +336,10 @@ impl VarstotasApp {
             });
             note(ui, &tr!("prefs-data-folder-note"));
         }
+        heading(ui, &tr!("prefs-bridge"));
+        let r = ui.checkbox(&mut self.prefs.bridge_external, tr!("prefs-bridge-external"));
+        super::tray_lib::spot("prefs:bridge_external", r.rect.center());
+        note(ui, &tr!("prefs-bridge-note"));
         heading(ui, &tr!("prefs-autosave"));
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.prefs.autosave, tr!("prefs-autosave-every"));

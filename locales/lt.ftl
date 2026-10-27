@@ -1197,7 +1197,7 @@ prefs-section-render = Vaizdavimas
 
 ## Search words of the sections (besides their names; a translation lists its own)
 
-prefs-words-general = automatinis išsaugojimas minutės šablonas naujas dokumentas vienetai atšaukimo žingsniai istorija atsarginė kopija ankstesnė versija
+prefs-words-general = automatinis išsaugojimas minutės šablonas naujas dokumentas vienetai atšaukimo žingsniai istorija atsarginė kopija ankstesnė versija tiltas python mcp di agentas scenarijai
 prefs-words-render = vaizdavimas paveikslėlis dydis mėginiai atšokimai kokybė triukšmo šalinimas programos gif animacija oidn open image denoise
 prefs-words-drawing = prisitraukimas nuspėjimas galinis taškas vidurio taškas briauna paviršius ašis tinklelis žingsnis pagrindinis žingsniai perkelti sukti mastelis kampas
 prefs-words-libraries = komponentai medžiagos aplankas pavyzdžiai modelyje plytelės mažos didelės sąrašas
@@ -1243,6 +1243,9 @@ prefs-undo = Atšaukti
 prefs-keep = Saugoti
 prefs-undo-steps = atšaukimo žingsnių kiekvienam dokumentui
 prefs-undo-note = Kiekvienas žingsnis saugo modelio kopiją: dideli modeliai su daug žingsnių užima daugiau atminties.
+prefs-bridge = Scenarijai ir DI agentai
+prefs-bridge-external = Leisti jungtis scenarijams ir DI agentams už Varstotas ribų (MCP)
+prefs-bridge-note = Išjungta: tiltą pasiekia tik iš Varstotas paleisti scenarijai (Failas → Vykdyti scenarijų…, papildiniai). Įjungta: { DATA_DIR() }/bridge.json saugo vietinį adresą ir raktą kitoms programoms, pvz., MCP serveriui DI asistentui. Tiltas klausosi tik 127.0.0.1.
 
 ## Render
 
