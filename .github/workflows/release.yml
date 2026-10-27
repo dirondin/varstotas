@@ -48,6 +48,14 @@ jobs:
             echo "::error::$metainfo has no <release version=\"$cargo_version\" date=\"YYYY-MM-DD\"> entry"
             exit 1
           fi
+          # screenshots by stable URLs: this release's tag, files that exist in it
+          prefix="https://raw.githubusercontent.com/dirondin/varstotas/$TAG/"
+          while read -r url; do
+            if [[ "$url" != "$prefix"* || ! -f "${url#"$prefix"}" ]]; then
+              echo "::error::$metainfo: screenshot $url is not a file of $TAG (expected $prefix<path>)"
+              exit 1
+            fi
+          done < <(sed -n 's:.*<image>\(.*\)</image>.*:\1:p' "$metainfo")
           echo "Varstotas $cargo_version"
 
   build:

@@ -36,18 +36,19 @@
   <url type="bugtracker">https://github.com/dirondin/varstotas/issues</url>
   <url type="vcs-browser">https://github.com/dirondin/varstotas</url>
 
+  <!-- the release tag's images (stable URLs); Release build checks the tag and the files -->
   <screenshots>
     <screenshot type="default">
       <caption>A workbench with its dimensions</caption>
-      <image>https://raw.githubusercontent.com/dirondin/varstotas/master/docs/images/workbench.jpg</image>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.1.0/docs/images/workbench.jpg</image>
     </screenshot>
     <screenshot>
       <caption>A dining set</caption>
-      <image>https://raw.githubusercontent.com/dirondin/varstotas/master/docs/images/dining-set.jpg</image>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.1.0/docs/images/dining-set.jpg</image>
     </screenshot>
     <screenshot>
       <caption>A bookshelf with the shelf spacing</caption>
-      <image>https://raw.githubusercontent.com/dirondin/varstotas/master/docs/images/bookshelf.jpg</image>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.1.0/docs/images/bookshelf.jpg</image>
     </screenshot>
   </screenshots>
 
