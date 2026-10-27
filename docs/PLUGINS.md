@@ -1,9 +1,9 @@
 # Plugins and the component library
 
 ## Plugins
-A plugin is a `.rhai` or `.py` file in the `~/.varstotas/plugins/` folder (subfolders are scanned too, two levels deep). Plugins are loaded at startup; after editing, choose **Plugins → Reload Plugins**. **Open Plugins Folder** is there too.
+A plugin is a `.rhai` or `.py` file in the `<data folder>/plugins/` folder (subfolders are scanned too, two levels deep). Plugins are loaded at startup; after editing, choose **Plugins → Reload Plugins**. **Open Plugins Folder** is there too.
 
-Examples are available only in the repository at `examples/plugins/` (Help → Examples). They are not shipped or installed automatically. Copy the plugins you want into `~/.varstotas/plugins/`, then choose Plugins → Reload Plugins:
+Examples are available only in the repository at `examples/plugins/` (Help → Examples). They are not shipped or installed automatically. Copy the plugins you want into `<data folder>/plugins/`, then choose Plugins → Reload Plugins:
 - `stairs.rhai` — a staircase: parameters and one point.
 - `beam.rhai` — a beam between two points.
 - `import_points_csv.rhai` — import a contour from CSV ("Points from CSV (plugin)"; the format is built in: File → Import → Points (CSV)).
@@ -102,7 +102,7 @@ fn download(id, dir, params) {    // → a material specification
 fn import_material(path, params) { … }   // → a specification or an array of specifications
 ```
 
-Material fields in the catalogue: `id` is required; then `name`, `category`, `keywords` / `tags` (a string or an array, search works on them), `width` (the real width of the texture, mm), `thumb` (a URL or a path to an image), `page` (the page for Web Page), `license`. `dir` in `download` is the working folder `~/.varstotas/cache/online/<plugin>/<id>`, relative paths in the reply are counted from it. For an importer, relative paths are counted from the file's folder.
+Material fields in the catalogue: `id` is required; then `name`, `category`, `keywords` / `tags` (a string or an array, search works on them), `width` (the real width of the texture, mm), `thumb` (a URL or a path to an image), `page` (the page for Web Page), `license`. `dir` in `download` is the working folder `<data folder>/cache/online/<plugin>/<id>`, relative paths in the reply are counted from it. For an importer, relative paths are counted from the file's folder.
 
 **Python**: `python3 plugin.py catalogue|download|import`. Arguments arrive as a JSON object on stdin: `params`, `id`, `dir`, `path`. The reply is JSON on the last line of stdout; other lines go to the log. An error is a non-zero exit code, the text is the last line of stderr (`sys.exit("message")`). Example: `ambientcg_python.py`.
 
@@ -124,7 +124,7 @@ An example importer is `unity_material.rhai`. It reads `.mat` (Standard / URP / 
 
 A plugin with `@texture_generator` is a tab of the **New Procedural Material** window, next to the built-in Bricks / Tiles / Planks / Noise / Checker. Its `@param`s are the fields; **Tile width** and **Name** are added by the window. When the values settle, the window asks for a small preview (at most 128 px), and **Create** asks for the full size, adds the material, makes it current and switches to Paint. Both run in the background; an error is shown under the preview.
 
-**Rhai**: `fn texture(size, params)` → a material specification (see above). **Python**: `python3 plugin.py texture`, stdin `{ "size", "params", "dir" }`, the reply is JSON on the last line of stdout. `size` is the side in pixels the window wants. The working folder is `~/.varstotas/cache/online/<plugin>/texture`: relative paths in the reply are counted from it (a Python plugin may write a PNG there and answer `{"texture": "out.png"}`).
+**Rhai**: `fn texture(size, params)` → a material specification (see above). **Python**: `python3 plugin.py texture`, stdin `{ "size", "params", "dir" }`, the reply is JSON on the last line of stdout. `size` is the side in pixels the window wants. The working folder is `<data folder>/cache/online/<plugin>/texture`: relative paths in the reply are counted from it (a Python plugin may write a PNG there and answer `{"texture": "out.png"}`).
 
 Any image of the specification (`texture`, `maps.color`, `maps.normal`, …) can be given **inline**, without a file:
 
@@ -137,7 +137,7 @@ Any image of the specification (`texture`, `maps.color`, `maps.normal`, …) can
 Examples in `examples/plugins`: `basket_weave.rhai` (parquet squares of planks with grain), `terrazzo.rhai` (stone chips in a cloudy base), `marble.py` (veined marble in pure Python, base64 RGB).
 
 ### Model plugins (3D Library)
-The **Window → 3D Library…** window (or the cloud in the top row of the Components card) searches for and downloads ready-made models. Built-in sources: **Poly Haven** (CC0, glTF with 1K textures, real size), **Smithsonian** (CC0, scans of museum objects; search on the server — Enter), **NASA** (GLB from the NASA-3D-Resources repository). What is downloaded is imported, wrapped into one component, put on the ground (bounding box from the origin) and saved to the component library: `<library>/<source>/<name>.vrst`. Download files are in `~/.varstotas/downloads/<source>/<id>/`. Double click — download and place (by a click in the model, like a component from the library), the buttons Download & Place / Download / Place / Download Again / Web Page. The **From URL** field downloads a direct link to a `.glb` / `.gltf` / `.obj` / `.stl` / `.dxf` / `.zip` (library folder "Web"). Models over 100 thousand triangles are marked ⚠. glTF with Draco compression is read (the `draco-core` decoder), meshopt is not.
+The **Window → 3D Library…** window (or the cloud in the top row of the Components card) searches for and downloads ready-made models. Built-in sources: **Poly Haven** (CC0, glTF with 1K textures, real size), **Smithsonian** (CC0, scans of museum objects; search on the server — Enter), **NASA** (GLB from the NASA-3D-Resources repository). What is downloaded is imported, wrapped into one component, put on the ground (bounding box from the origin) and saved to the component library: `<library>/<source>/<name>.vrst`. Download files are in `<data folder>/downloads/<source>/<id>/`. Double click — download and place (by a click in the model, like a component from the library), the buttons Download & Place / Download / Place / Download Again / Web Page. The **From URL** field downloads a direct link to a `.glb` / `.gltf` / `.obj` / `.stl` / `.dxf` / `.zip` (library folder "Web"). Models over 100 thousand triangles are marked ⚠. glTF with Draco compression is read (the `draco-core` decoder), meshopt is not.
 
 A component remembers its source: name, author, licence, link (Properties → the Source row). **File → Export → Attributions…** saves the list of credits of all downloaded components of the model — needed for CC-BY.
 
@@ -161,7 +161,7 @@ A component remembers its source: name, author, licence, link (Properties → th
 Python plugins: `python3 plugin.py catalogue|search|download|import_model`, arguments (`params`, `query`, `id`, `dir`, `path`) — JSON on stdin, the reply — JSON on the last line of stdout. Examples in `examples/plugins`: `model_folders.rhai` (models from a folder on disk; an image with the same name is the preview), `poly_pizza.rhai` (Poly Pizza, a free API key, search), `sketchfab.py` (Sketchfab: search is open, download with a personal token), `import_ply.py` (a PLY importer, ASCII and binary; "PLY Import (Python) (plugin)" — PLY is now built in, the plugin is kept as an example). Unity `.mat` remains a plugin (the format is closed).
 
 ## Component library
-The **Components** section in the Default Tray (enabled by a checkbox in the **Window** menu) shows the `.vrst` files from the library folder. By default this is `~/.varstotas/components`; the "…" button chooses another folder, "Default" in the root folder's header returns the default folder. Subfolders are shown as categories with a collapse arrow.
+The **Components** section in the Default Tray (enabled by a checkbox in the **Window** menu) shows the `.vrst` files from the library folder. By default this is `<data folder>/components`; the "…" button chooses another folder, "Default" in the root folder's header returns the default folder. Subfolders are shown as categories with a collapse arrow.
 
 - **A click on a thumbnail** places the file's content as a component: it follows the cursor, with the corner of its bounding box at the snap point, a click fixes it. There is one definition in the document no matter how many times the component is placed (matched by file name). Esc cancels.
 - **+ → Save Selection to Library…** saves the selection to `<folder>/<name>.vrst` under a new name if that one is already taken. The file's origin is the corner of the bounding box. If a single group or component is selected, its content goes into the file.

@@ -30,6 +30,7 @@ mod pbr;
 mod shader_help;
 mod shaders;
 mod overlay;
+mod paths;
 mod panes;
 mod plugins;
 mod scene_builder;
@@ -90,6 +91,13 @@ fn main() -> eframe::Result<()> {
     objc2_foundation::NSProcessInfo::processInfo()
         .setProcessName(&objc2_foundation::NSString::from_str(APP_NAME));
     applog::init();
+    let moved = paths::migrate_legacy();
+    if !moved.is_empty() {
+        log::info!("moved from ~/.varstotas to the data folder: {}", moved.join(", ")); // i18n-ignore
+    }
+    if let Some(d) = paths::data_dir() {
+        varstotas_i18n::set_data_dir(&paths::display(&d));
+    }
     let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
     if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
         // Ray queries (hardware / driver ray tracing) for the path tracer, where there are any.

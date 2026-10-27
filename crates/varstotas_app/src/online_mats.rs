@@ -1,7 +1,7 @@
 //! Online PBR materials: the catalogues of Poly Haven and ambientCG (CC0 photo scans: colour,
 //! normal, roughness, occlusion, metalness maps at their real-world size). Downloads go
 //! through the system `curl` (no HTTP stack in the app) on background threads; catalogues and
-//! thumbnails are cached in `~/.varstotas/cache/online`. A downloaded material becomes a
+//! thumbnails are cached in `<data folder>/cache/online`. A downloaded material becomes a
 //! `.vrstmat` in the materials library (`<library>/Poly Haven/…`, `<library>/ambientCG/…`).
 //! Plugins add more sources (`@material_source`, see `mat_plugins`).
 
@@ -206,9 +206,9 @@ pub fn fetch(url: &str) -> Result<Vec<u8>, String> {
     varstotas_script::network::fetch(url, &[], Duration::from_secs(60), cancelled)
 }
 
-/// `~/.varstotas/cache/online`.
+/// `<data folder>/cache/online`.
 pub fn cache_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("cache").join("online"))
+    crate::paths::data_dir().map(|d| d.join("cache").join("online"))
 }
 
 /// `url` through the cache file `name` (re-fetched when older than `max_age`; a stale copy

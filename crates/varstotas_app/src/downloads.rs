@@ -2,7 +2,7 @@
 //! user in their own browser. Varstotas never reads the site's pages or downloads from it by
 //! itself; it removes the routine before and after:
 //!
-//! - **Search on sites**: `~/.varstotas/sources.toml` keeps each site's own search address
+//! - **Search on sites**: `<data folder>/sources.toml` keeps each site's own search address
 //!   (`{query}` is replaced); a click opens the site's results in the browser.
 //! - **A page link dropped on the window** (or a pack downloaded in the browser): Varstotas
 //!   shows a *waiting card* with the page as the credit.
@@ -12,7 +12,7 @@
 //!   Zone.Identifier stream on Windows).
 //! - A file dropped on the window is offered the same way.
 //!
-//! The import itself (`ImportJob`): the file is copied to `~/.varstotas/downloads/manual/`,
+//! The import itself (`ImportJob`): the file is copied to `<data folder>/downloads/manual/`,
 //! an archive is unpacked, the chosen models become library components with the credit
 //! (one component, or a pack folder for several), duplicates are found by the file's hash.
 
@@ -65,9 +65,9 @@ pub fn default_sites() -> Vec<Site> {
     ]
 }
 
-/// `~/.varstotas/sources.toml`.
+/// `<data folder>/sources.toml`.
 pub fn sites_path() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("sources.toml"))
+    crate::paths::data_dir().map(|d| d.join("sources.toml"))
 }
 
 /// The sites of `sources.toml` (written with the defaults when missing).
@@ -343,7 +343,7 @@ pub struct Offer {
     pub place: bool,
 }
 
-/// `~/.varstotas/downloads/manual/<hash>/`: where an offer is copied and unpacked.
+/// `<data folder>/downloads/manual/<hash>/`: where an offer is copied and unpacked.
 pub fn manual_dir(hash: u64) -> Option<PathBuf> {
     crate::online_models::downloads_dir().map(|d| d.join("manual").join(format!("{hash:016x}")))
 }
@@ -523,7 +523,7 @@ impl SavedAsset {
     }
 }
 
-/// `~/.varstotas/library_state.json`.
+/// `<data folder>/library_state.json`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LibraryState {
@@ -538,7 +538,7 @@ const HISTORY: usize = 300;
 
 impl LibraryState {
     fn path() -> Option<PathBuf> {
-        crate::bridge::home_dir().map(|d| d.join("library_state.json"))
+        crate::paths::data_dir().map(|d| d.join("library_state.json"))
     }
 
     pub fn load() -> Self {

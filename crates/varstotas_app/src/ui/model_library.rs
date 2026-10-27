@@ -102,7 +102,7 @@ pub struct ModelWindow {
     /// Cancelled downloads whose answer hasn't come yet.
     cancelled: HashSet<String>,
     pub filter: Filter,
-    /// Favourites, the download history, imported files (`~/.varstotas/library_state.json`).
+    /// Favourites, the download history, imported files (`<data folder>/library_state.json`).
     pub state: LibraryState,
     /// The Favourites / Downloaded lists are to be made again.
     pub(crate) saved_dirty: bool,

@@ -1,7 +1,7 @@
 """Bookshelf from Python: the same model as bookshelf.rhai, built through the bridge.
 
 Run it from Varstotas (File -> Run Script...) or from a terminal while Varstotas is open:
-    PYTHONPATH=~/.varstotas/python python3 examples/scripts/bookshelf.py
+    PYTHONPATH=python python3 examples/scripts/bookshelf.py      (from the repository root)
 """
 import varstotas
 from varstotas import vec3

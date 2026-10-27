@@ -1,5 +1,5 @@
 //! Materials library: `.vrstmat` files (one material each — colour, texture, PBR parameters,
-//! maps, shader) in `~/.varstotas/materials`, shared between documents and sessions like the
+//! maps, shader) in `<data folder>/materials`, shared between documents and sessions like the
 //! components library; subfolders are categories, the demo gallery's materials show under
 //! "Examples". In the Materials card: a click on a library swatch paints with the material (it
 //! is added to the document by the first paint, `pick_material`); a model material's context
@@ -90,9 +90,9 @@ impl MatLook {
     }
 }
 
-/// `~/.varstotas/materials`.
+/// `<data folder>/materials`.
 pub fn default_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("materials"))
+    crate::paths::data_dir().map(|d| d.join("materials"))
 }
 
 fn scan(root: &Path, old: Vec<MatItem>) -> (Vec<MatItem>, Vec<String>) {

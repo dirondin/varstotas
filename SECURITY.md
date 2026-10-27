@@ -11,7 +11,7 @@ Varstotas is a desktop application. It runs as the current user and is not an OS
   previews) and every bridge / MCP `eval`. They get the geometry API only: no file reads or
   writes, no directory listing, no downloads. Opening a `.vrst` file never gains host IO.
 - **The local bridge** listens only on `127.0.0.1` on a random port and needs the random token
-  from `~/.varstotas/bridge.json` (permissions 0600). Browser requests (with an `Origin` header)
+  from `bridge.json` in the app's data folder (permissions 0600). Browser requests (with an `Origin` header)
   are rejected. `VARSTOTAS_NO_BRIDGE=1` turns it off.
 
 Rhai runs have a deadline and memory / operation limits; downloads accept HTTP(S) only, with size

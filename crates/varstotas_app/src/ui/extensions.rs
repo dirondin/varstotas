@@ -47,7 +47,7 @@ fn vec_json(p: DVec3) -> Value {
 }
 
 impl VarstotasApp {
-    /// Scan user-installed plugins in `~/.varstotas/plugins`.
+    /// Scan user-installed plugins in `<data folder>/plugins`.
     pub(crate) fn load_plugins(&mut self) {
         let Some(dir) = crate::plugins::plugins_dir() else { return;
         };

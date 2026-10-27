@@ -1,6 +1,7 @@
 //! The bridge: a local server for external scripts (Python, see `python/varstotas.py`) and AI
 //! agents (the MCP server `python/varstotas_mcp.py`). It listens on 127.0.0.1 only, on a random
-//! port; the port and a random token are written to `~/.varstotas/bridge.json` (mode 0600).
+//! port; the port and a random token are written to `bridge.json` (mode 0600) in the data folder
+//! (`crate::paths`).
 //!
 //! Protocol: JSON requests `{"id", "token", "method", "params"}`, one per line, answered by
 //! `{"id", "result"}` or `{"id", "error": {"message"}}` lines. The same JSON can be sent as an
@@ -41,14 +42,9 @@ pub struct Bridge {
     rx: Receiver<Request>,
 }
 
-/// `~/.varstotas` (the bridge file and the Python modules).
-pub fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|h| PathBuf::from(h).join(".varstotas"))
-}
-
 /// Directory with `varstotas.py` / `varstotas_mcp.py` (for `PYTHONPATH`).
 pub fn python_dir() -> Option<PathBuf> {
-    home_dir().map(|d| d.join("python"))
+    crate::paths::data_dir().map(|d| d.join("python"))
 }
 
 pub(crate) fn random_token() -> std::io::Result<String> {
@@ -75,7 +71,7 @@ impl Drop for ClientSlot {
 }
 
 impl Bridge {
-    /// Listen on 127.0.0.1 (random port), write `~/.varstotas/bridge.json` and the Python modules.
+    /// Listen on 127.0.0.1 (random port), write `bridge.json` and the Python modules.
     pub fn start(ctx: egui::Context) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         let port = listener.local_addr()?.port();
@@ -107,14 +103,14 @@ impl Bridge {
         })?;
         let b = Self { port, token, rx };
         if let Err(e) = b.write_files() {
-            log::warn!("bridge: cannot write ~/.varstotas: {e}");
+            log::warn!("bridge: cannot write the bridge file: {e}");
         }
         log::info!("bridge: listening on 127.0.0.1:{port}");
         Ok(b)
     }
 
     fn write_files(&self) -> std::io::Result<()> {
-        let Some(dir) = home_dir() else { return Ok(()) };
+        let Some(dir) = crate::paths::data_dir() else { return Ok(()) };
         let py = dir.join("python");
         std::fs::create_dir_all(&py)?;
         std::fs::write(py.join("varstotas.py"), PY_CLIENT)?;
@@ -126,7 +122,7 @@ impl Bridge {
 
     /// Remove `bridge.json` when it is still ours (the app is closing).
     pub fn remove_file(&self) {
-        let Some(path) = home_dir().map(|d| d.join("bridge.json")) else { return };
+        let Some(path) = crate::paths::data_dir().map(|d| d.join("bridge.json")) else { return };
         let ours = std::fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str::<Value>(&s).ok())
@@ -163,7 +159,7 @@ fn handle(req: &Value, authed: &mut bool, token: &str, tx: &SyncSender<Request>,
     let id = req.get("id").cloned().unwrap_or(Value::Null);
     if !*authed {
         if req.get("token").and_then(Value::as_str) != Some(token) {
-            return answer(&id, Err("bad or missing token (see ~/.varstotas/bridge.json)".into()));
+            return answer(&id, Err("bad or missing token (see bridge.json in the Varstotas data folder)".into()));
         }
         *authed = true;
     }

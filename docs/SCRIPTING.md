@@ -123,10 +123,10 @@ print(bounds(groups()).size);
 ```
 
 ## Python
-While Varstotas is open, it can be controlled from Python 3. Only the standard library is needed: the client `varstotas.py` lives in the repository's `python/` folder, and the application copies it to `~/.varstotas/python/` at startup.
+While Varstotas is open, it can be controlled from Python 3. Only the standard library is needed: the client `varstotas.py` lives in the repository's `python/` folder, and the application copies it to `python/` in the data folder (Preferences → General → Data folder: macOS `~/Library/Application Support/Varstotas`, Linux `~/.local/share/varstotas`, Flatpak `~/.var/app/io.github.dirondin.Varstotas/data/varstotas`, Windows `%APPDATA%\Varstotas\data`) when the bridge starts.
 
 - **File → Run Script…** runs a `.py` file through `python3` (another interpreter can be set with the `VARSTOTAS_PYTHON` variable). The script's output appears in the Script Console, the "Stop Python" button interrupts it.
-- **From a terminal:** `PYTHONPATH=~/.varstotas/python python3 my_script.py`. The client takes the address and token from `~/.varstotas/bridge.json`.
+- **From a terminal:** `PYTHONPATH="<data folder>/python" python3 my_script.py` (or the repository's `python/` folder). The client takes the address and token from `bridge.json` in the data folder; it looks in the places listed above (`VARSTOTAS_DATA_DIR` overrides them).
 
 ```python
 import varstotas
@@ -152,7 +152,7 @@ print(m.bounds(m.groups())["size"])   # vec3(1200, 800, 30)
 Example — `examples/scripts/bookshelf.py`.
 
 ## Bridge (protocol)
-The application listens only on `127.0.0.1`, on a random port. The port and a random token are written to `~/.varstotas/bridge.json` (permissions 0600). The bridge can be disabled with the `VARSTOTAS_NO_BRIDGE=1` variable.
+The application listens only on `127.0.0.1`, on a random port. The port and a random token are written to `bridge.json` in the data folder (permissions 0600). The bridge can be disabled with the `VARSTOTAS_NO_BRIDGE=1` variable.
 
 A request is a JSON line `{"id": 1, "token": "…", "method": "…", "params": {…}}`. The token is needed in the first request of a connection. The reply: `{"id": 1, "result": …}` or `{"id": 1, "error": {"message": "…"}}`. The same JSON is accepted as an HTTP `POST /rpc`, with a required `Authorization: Bearer …` header (validated before reading the body). Requests from a browser (with an `Origin` header) are rejected.
 
@@ -166,10 +166,11 @@ A request is a JSON line `{"id": 1, "token": "…", "method": "…", "params": {
 | `save`, `export`, `open`, `new` | with the user's confirmation (see above) |
 
 ## MCP server for AI agents
-`~/.varstotas/python/varstotas_mcp.py` is an MCP server (stdio) that works with a running Varstotas through the bridge. Connecting in Claude Code:
+`<data folder>/python/varstotas_mcp.py` is an MCP server (stdio) that works with a running Varstotas through the bridge. Connecting in Claude Code:
 
 ```
-claude mcp add varstotas -- python3 ~/.varstotas/python/varstotas_mcp.py
+claude mcp add varstotas -- python3 "$HOME/Library/Application Support/Varstotas/python/varstotas_mcp.py"   # macOS
+claude mcp add varstotas -- python3 ~/.local/share/varstotas/python/varstotas_mcp.py                    # Linux
 ```
 
 Tools:

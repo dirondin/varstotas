@@ -1,4 +1,4 @@
-//! Plugins: `.rhai` / `.py` files in `~/.varstotas/plugins` (subfolders too) described by a
+//! Plugins: `.rhai` / `.py` files in `<data folder>/plugins` (subfolders too) described by a
 //! comment header (see `docs/PLUGINS.md`):
 //!
 //! ```text
@@ -310,9 +310,9 @@ pub fn parse(src: &str, path: &Path) -> Result<Plugin, String> {
     Ok(p)
 }
 
-/// `~/.varstotas/plugins`.
+/// `<data folder>/plugins`.
 pub fn plugins_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("plugins"))
+    crate::paths::data_dir().map(|d| d.join("plugins"))
 }
 
 /// All plugins under `dir` (two folder levels), sorted by menu path; parse errors per file.

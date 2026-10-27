@@ -1182,7 +1182,7 @@ layout-tb-sheet-of = { $n } iš { $total }
 prefs-language = Kalba
 # { $language } is the name of the system's language.
 prefs-language-system = Kaip sistemoje ({ $language })
-prefs-language-note = Savo vertimai: įdėkite <code>.ftl į ~/.varstotas/locales/ (žr. docs/LOCALIZATION.md); jis taip pat pakeičia atskirus integruotos kalbos tekstus.
+prefs-language-note = Savo vertimai: įdėkite <code>.ftl į { DATA_DIR() }/locales/ (žr. docs/LOCALIZATION.md); jis taip pat pakeičia atskirus integruotos kalbos tekstus.
 
 prefs-section-general = Bendra
 prefs-section-drawing = Braižymas
@@ -1232,6 +1232,8 @@ prefs-show-in-finder = Rodyti failų tvarkyklėje
 
 ## General
 
+prefs-data-folder = Duomenų aplankas
+prefs-data-folder-note = Čia laikomi papildiniai, bibliotekos, šablonai, jūsų vertimai ir tiltas Python scenarijams bei DI agentams (bridge.json, python/).
 prefs-autosave = Automatinis išsaugojimas
 prefs-autosave-every = Automatiškai išsaugoti kas
 prefs-minutes = min.
@@ -1794,7 +1796,7 @@ library-new-generator = Naujas generatorius…
 library-new-generator-hover = Scenarijaus sukurtas komponentas su parametrais (Langas → Generatorių redaktorius)
 library-choose-folder = Pasirinkti aplanką…
 library-default-folder = Numatytasis aplankas
-library-default-folder-hover = Atgal į ~/.varstotas/components
+library-default-folder-hover = Atgal į { DATA_DIR() }/components
 library-purge = Pašalinti nenaudojamus komponentus
 library-purge-hover = Pašalinti komponentus (ir grupių apibrėžtis), kurių modelyje niekas nenaudoja
 library-show-examples = Rodyti pavyzdžius
@@ -1958,7 +1960,7 @@ mat-import = Importuoti…
 mat-import-hover = Pridėti medžiagų failus (.vrstmat, papildinių formatai) prie dokumento
 mat-choose-folder = Pasirinkti aplanką…
 mat-default-folder = Numatytasis aplankas
-mat-default-folder-hover = Atgal į ~/.varstotas/materials
+mat-default-folder-hover = Atgal į { DATA_DIR() }/materials
 mat-purge = Pašalinti nenaudojamas medžiagas
 mat-purge-hover = Pašalinti medžiagas, kurių modelyje niekas nenaudoja
 mat-show-examples-hover = Kartu su Varstotas pateikiamos medžiagos (demonstracija „Medžiagų galerija“)
@@ -2276,7 +2278,7 @@ downloads-search-on = Ieškoti:
 # $site is the site, $query the search.
 downloads-search-hover = Atidaryti { $site } paiešką pagal „{ $query }“ naršyklėje
 downloads-edit = Redaguoti…
-downloads-edit-hover = Redaguoti svetaines (~/.varstotas/sources.toml); sąrašas perskaitomas iš naujo
+downloads-edit-hover = Redaguoti svetaines ({ DATA_DIR() }/sources.toml); sąrašas perskaitomas iš naujo
 downloads-other = Kitos svetainės
 # $waiting is the number of waiting downloads.
 downloads-other-waiting = Kitos svetainės — laukiama atsisiuntimų: { $waiting }
@@ -3041,7 +3043,7 @@ gen-new-hint = Pradėti nuo šablono
 gen-open = Atidaryti…
 gen-filter = Generatorius
 gen-save = Išsaugoti bibliotekoje
-gen-save-hint = Įrašyti generatorių į ~/.varstotas/generators (jis rodomas Komponentų dėkle)
+gen-save-hint = Įrašyti generatorių į { DATA_DIR() }/generators (jis rodomas Komponentų dėkle)
 gen-apply-hint = Atnaujinti šį dokumento generatorių: visi jo komponentai perkuriami (vienas atšaukimo žingsnis)
 gen-apply-doc = Taikyti dokumentui
 gen-apply-doc-hint = Naudoti šį šaltinį dokumente: jo komponentai perkuriami (vienas atšaukimo žingsnis)
@@ -3227,7 +3229,7 @@ console-stop-python = Stabdyti Python
 console-clear = Išvalyti išvestį
 # $port is a TCP port number
 console-bridge = Python / MCP tiltas: 127.0.0.1:{ $port }
-console-bridge-hint = import varstotas; m = varstotas.connect()  — žr. ~/.varstotas/python
+console-bridge-hint = import varstotas; m = varstotas.connect()  — žr. { DATA_DIR() }/python
 console-filter-rhai = Rhai scenarijus
 
 ## Scenarijų žinyno langas
@@ -3275,7 +3277,7 @@ console-ref-basics-13 = `print(x)` rašo į išvestį; paskutinės išraiškos r
 console-ref-console-1 = Langas → Scenarijų konsolė vykdo kodą atvertame modelyje. %CMD%+Enter paleidžia, %CMD%+↑ / ↓ naršo ankstesnius paleidimus, Atverti… / Išsaugoti… dirba su `.rhai` failais. Failas → Paleisti scenarijų… paleidžia failą.
 console-ref-console-2 = Užbaigimas renkant rodo API funkcijas, po taško — savybes (pagal kairėje esantį tipą), o virš žymeklio — šaukiamos funkcijos parašą. F1 atveria šį žinyną ties žodžiu prie žymeklio.
 console-ref-console-3 = Antraštė: dialogai ir meniu elementai
-console-ref-console-4 = Eilutės `// @tag …` viršuje paverčia scenarijų papildiniu: Paleisti pirmiausia paklausia parametrų, taškų ir objektų. Failas aplanke `~/.varstotas/plugins` tampa Papildiniai meniu elementu.
+console-ref-console-4 = Eilutės `// @tag …` viršuje paverčia scenarijų papildiniu: Paleisti pirmiausia paklausia parametrų, taškų ir objektų. Failas aplanke `{ DATA_DIR() }/plugins` tampa Papildiniai meniu elementu.
 console-ref-console-6 = Žymės
 ## Puslapis: generatoriai
 console-ref-generators-1 = Generatorius yra komponentas su parametrais: scenarijus, kurio `build(p)` sukuria komponento turinį jo paties ašyse (pradžios taškas yra įterpimo taškas). Kiekviena kopija turi savo reikšmes Savybėse; kopijos su vienodomis reikšmėmis dalijasi vienu apibrėžimu.
@@ -3524,7 +3526,7 @@ help-start-16 = 3. Paspauskite `Space` (Žymėti), tris kartus spustelėkite dė
 help-start-17 = 4. Paspauskite `B` (Dažų kibiras), Medžiagų kortelėje pasirinkite medžiagą, spustelėkite paviršius.
 help-start-18 = 5. `Shift+Z` sutalpina modelį rodinyje; Failas → Išsaugoti įrašo `.vrst` failą.
 help-start-19 = Pagalba dirbant
-help-start-20 = Patarimų kortelė paaiškina aktyvų įrankį; F1 virš modelio atveria šį vadovą ties juo. Baigti modeliai apžiūrai (apstatytas namas, medžiagų galerija) yra aplanke ~/.varstotas/examples: Failas → Atidaryti.
+help-start-20 = Patarimų kortelė paaiškina aktyvų įrankį; F1 virš modelio atveria šį vadovą ties juo. Baigti modeliai apžiūrai (apstatytas namas, medžiagų galerija) yra aplanke { DATA_DIR() }/examples: Failas → Atidaryti.
 ## navigation
 help-navigation-1 = Pelė ir jutiklinis kilimėlis
 help-navigation-2 = Vidurinio mygtuko vilkimas
@@ -3649,7 +3651,7 @@ help-library-6 = Dešinysis spustelėjimas ant plytelės → Perkelti į aplank�
 help-library-7 = perkelti failą į kitą bibliotekos aplanką (mėgstami seka paskui)
 help-library-8 = Vilkti plytelę į rodinį
 help-library-9 = komponentas padedamas ten, kur paleidžiate; medžiaga nudažo paviršių po žymekliu
-help-library-10 = Komponentai rodo jūsų biblioteką (`~/.varstotas/components` arba aplanką, kurį pasirenkate su …), generatorius, pridėtus Pavyzdžius ir atverto dokumento komponentus.
+help-library-10 = Komponentai rodo jūsų biblioteką (`{ DATA_DIR() }/components` arba aplanką, kurį pasirenkate su …), generatorius, pridėtus Pavyzdžius ir atverto dokumento komponentus.
 help-library-11 = Spustelėti plytelę
 help-library-12 = padėti ją: kopija seka žymeklį, spustelėkite, kad nuleistumėte
 help-library-13 = + → Išsaugoti pažymėtą bibliotekoje…
@@ -3662,7 +3664,7 @@ help-library-19 = Internetinė 3D biblioteka
 help-library-20 = Debesies mygtukas Komponentų kortelėje (arba Langas → Internetinė 3D biblioteka) atsisiunčia modelius: Poly Haven, Smithsonian, NASA, Kenney rinkinius, pagal URL arba iš papildinių šaltinių. Atsisiųstas modelis tampa bibliotekos komponentu su savo padėka (Savybės → Šaltinis, Failas → Eksportuoti → Priskyrimai). Filtrai pagal licenciją, formatą ir dydį; mėgstami ir atsisiuntimų istorija.
 help-library-21 = Kiekvienas šaltinis rodo savo sąlygas virš modelių (papildinio eilutė @notice). Modelis, kurio licencija riboja naudojimą (nekomercinė, be išvestinių darbų, dalytis tomis pačiomis sąlygomis, paties tinklalapio licencija, nežinoma), gauna įspėjimą jį padedant ir eksportuojant dokumentą. Pagalba → Licencijos… išvardija Varstotas licenciją, atvirojo kodo komponentus, failų formatus ir internetines bibliotekas su jų sąlygomis.
 ## materials
-help-materials-1 = Medžiagų kortelė rodo modelio medžiagas (Modelyje), jūsų biblioteką (`~/.varstotas/materials` arba aplanką, kurį pasirenkate su …) ir Pavyzdžius; dešiniuoju mygtuku spustelėkite plytelę: Naudoti, Pervadinti…, Išsaugoti bibliotekoje, Rodyti Finder, Eksportuoti…, Ištrinti…. Pasirinkus bibliotekos medžiagą, tik parengiamas Dažų kibiras: medžiaga prisijungia prie modelio (Modelyje) nudažius pirmąjį paviršių. Ištrinti ant plytelės Modelyje pašalina medžiagą iš modelio, jos paviršiai grįžta į numatytąją (Redaguoti → Atšaukti ją grąžina). Medžiagą redaguokite ten: spalva, nepermatomumas, tekstūros vaizdas ir jo dydis, fizinės savybės Realistiniam stiliui (metalas, šiurkštumas, stiklas, spinduliavimas, žemėlapiai, danga, blizgesys).
+help-materials-1 = Medžiagų kortelė rodo modelio medžiagas (Modelyje), jūsų biblioteką (`{ DATA_DIR() }/materials` arba aplanką, kurį pasirenkate su …) ir Pavyzdžius; dešiniuoju mygtuku spustelėkite plytelę: Naudoti, Pervadinti…, Išsaugoti bibliotekoje, Rodyti Finder, Eksportuoti…, Ištrinti…. Pasirinkus bibliotekos medžiagą, tik parengiamas Dažų kibiras: medžiaga prisijungia prie modelio (Modelyje) nudažius pirmąjį paviršių. Ištrinti ant plytelės Modelyje pašalina medžiagą iš modelio, jos paviršiai grįžta į numatytąją (Redaguoti → Atšaukti ją grąžina). Medžiagą redaguokite ten: spalva, nepermatomumas, tekstūros vaizdas ir jo dydis, fizinės savybės Realistiniam stiliui (metalas, šiurkštumas, stiklas, spinduliavimas, žemėlapiai, danga, blizgesys).
 help-materials-2 = Išsaugoti bibliotekoje / Eksportuoti… / + → Importuoti…
 help-materials-3 = dalytis medžiaga tarp dokumentų (`.vrstmat`)
 help-materials-4 = Debesies mygtukas (Medžiagų kortelė)
@@ -3724,7 +3726,7 @@ help-files-10 = Failas → Peržiūros vaizdas
 help-files-11 = paveikslėlis, kurį biblioteka rodo šiam failui
 ## scripts
 help-scripts-1 = Langas → Scenarijų konsolė vykdo Rhai scenarijus modelyje: kurti, keisti, žymėti, matuoti. Failas → Paleisti scenarijų… paleidžia `.rhai` (arba `.py`) failą. Vienas paleidimas yra vienas atšaukimo žingsnis.
-help-scripts-2 = Papildiniai yra scenarijai aplanke `~/.varstotas/plugins`: jie tampa Papildiniai meniu elementais su parametrų ir taškų parinkimo dialogais; jie gali pridėti importuotuvus, eksportuotuvus ir medžiagų / modelių šaltinius.
+help-scripts-2 = Papildiniai yra scenarijai aplanke `{ DATA_DIR() }/plugins`: jie tampa Papildiniai meniu elementais su parametrų ir taškų parinkimo dialogais; jie gali pridėti importuotuvus, eksportuotuvus ir medžiagų / modelių šaltinius.
 help-scripts-3 = Python ir DI agentai gali valdyti Varstotas per vietinį tiltą (Python klientas, MCP serveris).
 help-scripts-4 = Atverti Scenarijų žinyną
 help-scripts-5 = Konsolė ir papildiniai

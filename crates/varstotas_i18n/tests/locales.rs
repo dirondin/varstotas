@@ -50,6 +50,13 @@ fn lookup_platform_fallback_and_plugins() {
 /// Every key-like literal of the sources (`"<area>-…"` with the area of an English key) is
 /// an English key: catches typos and keys forgotten in the .ftl files.
 #[test]
+fn data_dir_is_filled_in() {
+    set_language(Some("en"));
+    set_data_dir("/data/Varstotas");
+    assert_eq!(tr!("library-default-folder-hover"), "Back to /data/Varstotas/components");
+}
+
+#[test]
 fn keys_used_in_the_sources_exist() {
     let en = embedded_keys(BASE);
     let areas: std::collections::BTreeSet<&str> = en.keys().filter_map(|k| k.split('-').next()).collect();

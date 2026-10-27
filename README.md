@@ -43,6 +43,15 @@ everything can be scripted.
 Builds for macOS (`.dmg`, Apple Silicon and Intel), Windows (installer or portable `.zip`) and
 Linux (AppImage or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
 
+## Data folder
+
+Plugins, libraries, templates, your own translations, caches and the bridge for Python scripts
+and AI agents live in one per-user folder: `~/Library/Application Support/Varstotas` on macOS,
+`~/.local/share/varstotas` on Linux (`~/.var/app/io.github.dirondin.Varstotas/data/varstotas`
+in the Flatpak), `%APPDATA%\Varstotas\data` on Windows. Preferences → General shows it.
+Varstotas writes nowhere else unless you choose the place; 0.1.0 used `~/.varstotas`, which is
+moved there on the first start.
+
 ## Building from source
 
 ```bash
@@ -82,16 +91,16 @@ vendor/                  — egui_code_editor with a local fix
 The [examples catalogue](examples/README.md) lists eight ready-to-open models, including furniture,
 a pergola, a staircase and a workshop, with editable construction scripts for six of them.
 Demo scenes, scripts, plugins and optional generators live only in `examples/` in this repository.
-They are not embedded in the application or installed into `~/.varstotas`.
+They are not embedded in the application or installed into `<data folder>`.
 **Help → Examples** opens the repository examples in a browser. Download what you need:
 open `.vrst` demos with File → Open, run scripts with File → Run Script, copy selected plugins
-to `~/.varstotas/plugins/`, and generators to your components library.
+to `<data folder>/plugins/`, and generators to your components library.
 Previously installed files are left untouched. Built-in Draw → Shapes tools use their own
 resources in `crates/varstotas_app/assets/primitives/`.
 
 ## Document templates
 File → New from Template lists the built-in unit presets and `.vrst` files from
-`~/.varstotas/templates/`. Open Templates Folder opens that directory in Finder / Explorer.
+`<data folder>/templates/`. Open Templates Folder opens that directory in Finder / Explorer.
 Preferences → General → Templates folder lets you choose another directory or restore the default.
 A file template creates an untitled, unsaved copy with its model settings; Save prompts for a new
 file and never overwrites the template automatically. Files added to the directory appear the next

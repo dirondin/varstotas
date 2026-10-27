@@ -19,12 +19,12 @@ pub const SUFFIX: &str = "~autosave";
 pub const UNTITLED_FILE: &str = "Untitled.vrst~autosave"; // i18n-ignore
 pub const DEFAULT_MINUTES: u32 = 5;
 
-/// Directory for untitled autosaves: `$VARSTOTAS_AUTOSAVE_DIR`, else the platform app-data dir.
+/// Directory for untitled autosaves: `$VARSTOTAS_AUTOSAVE_DIR`, else the app's data folder.
 pub fn data_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("VARSTOTAS_AUTOSAVE_DIR").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(d));
     }
-    eframe::storage_dir("Varstotas") // i18n-ignore
+    crate::paths::data_dir()
 }
 
 /// Where the autosave of a document lives: next to the file, or in `data_dir` when untitled.

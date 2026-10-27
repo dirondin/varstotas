@@ -71,7 +71,7 @@ translators what its arguments are.
 - A language is a file `locales/<code>.ftl` (ISO 639-1: `ru`, `de`, …) with the keys of
   `locales/en.ftl` in the same sections, and a `language-name` message (its own name:
   `Deutsch`). Keys missing in a translation show in English.
-- Without rebuilding: put `<code>.ftl` into `~/.varstotas/locales/`. It adds a language
+- Without rebuilding: put `<code>.ftl` into `<data folder>/locales/`. It adds a language
   (it appears in Preferences → Interface → Language) or override single messages of a built-in
   one. Syntax errors go to Window → Log.
 - `cargo test -p varstotas_i18n` checks the syntax of every file, that translations hold no keys

@@ -8,7 +8,9 @@
 //!   `.linux`) replaces its value there; inside a pattern `{ PLATFORM() -> [macos] … *[other] … }`
 //!   selects per platform too.
 //! - The locales of the repository are embedded at build time; `.ftl` files in the user's
-//!   folder (`~/.varstotas/locales/<lang>.ftl`) add languages or override single messages.
+//!   folder (`<data folder>/locales/<lang>.ftl`) add languages or override single messages.
+//! - `{ DATA_DIR() }` in a pattern is the app's data folder as the user sees it
+//!   ([`set_data_dir`]).
 //! - Modifier markers in texts are named for the platform: `%COPY%` (Option on macOS, Ctrl
 //!   elsewhere), `%CMD%` (Cmd / Ctrl), `%ALT%` (Option / Alt), `%CMDK%` (`⌘` / `Ctrl+`, a
 //!   shortcut prefix) — see [`platform_keys`].
@@ -134,6 +136,7 @@ fn bundle(lang: &str, user_dir: Option<&Path>, errors: &mut Vec<String>) -> Bund
     // Unicode isolation marks around arguments would show as boxes in the UI.
     b.set_use_isolating(false);
     let _ = b.add_function("PLATFORM", |_, _| FluentValue::from(platform()));
+    let _ = b.add_function("DATA_DIR", |_, _| FluentValue::from(data_dir_text()));
     for (name, text) in sources(lang, user_dir) {
         let res = match FluentResource::try_new(text) {
             Ok(r) => r,
@@ -288,6 +291,21 @@ pub fn missing_keys() -> Vec<String> {
 /// Syntax errors of the loaded `.ftl` files (shown in the log).
 pub fn load_errors() -> Vec<String> {
     state().errors.clone()
+}
+
+static DATA_DIR: Mutex<String> = Mutex::new(String::new());
+
+fn data_dir_text() -> String {
+    DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// The app's data folder as `DATA_DIR()` shows it in texts (e.g. `~/Library/Application
+/// Support/Varstotas`); forgets the texts formatted before.
+pub fn set_data_dir(text: &str) {
+    *DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = text.to_string();
+    let mut s = state();
+    s.cache.clear();
+    s.generation += 1;
 }
 
 /// The folder of the user's own translations (`<dir>/<lang>.ftl`); reloads the language.

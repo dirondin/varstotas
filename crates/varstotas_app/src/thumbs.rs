@@ -1,6 +1,6 @@
 //! Rendered thumbnails of components without a preview picture (the Components card): a
 //! second [`Renderer`] draws each model once — Shaded with Textures, iso view, transparent
-//! background — a few per frame. Library files keep theirs in `~/.varstotas/cache/thumbs`
+//! background — a few per frame. Library files keep theirs in `<data folder>/cache/thumbs`
 //! (named after the file's path and modification time), so they are rendered once.
 
 use crate::document::guarded;
@@ -34,9 +34,9 @@ pub struct Thumbs {
     pub rendered: usize,
 }
 
-/// `~/.varstotas/cache/thumbs`.
+/// `<data folder>/cache/thumbs`.
 pub fn cache_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("cache").join("thumbs"))
+    crate::paths::data_dir().map(|d| d.join("cache").join("thumbs"))
 }
 
 /// Cache file of the thumbnail of library file `path` (changes with the file).

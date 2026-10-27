@@ -348,6 +348,16 @@ impl VarstotasApp {
     }
 
     fn prefs_general(&mut self, ui: &mut Ui) {
+        if let Some(dir) = crate::paths::data_dir() {
+            heading(ui, &tr!("prefs-data-folder"));
+            ui.horizontal(|ui| {
+                ui.monospace(crate::paths::display(&dir));
+                if ui.button(tr!("reveal-in-file-manager")).clicked() {
+                    super::extensions::reveal(&dir);
+                }
+            });
+            note(ui, &tr!("prefs-data-folder-note"));
+        }
         heading(ui, &tr!("prefs-autosave"));
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.prefs.autosave, tr!("prefs-autosave-every"));
@@ -480,7 +490,7 @@ impl VarstotasApp {
     }
 
     fn prefs_libraries(&mut self, ui: &mut Ui) {
-        let home = crate::bridge::home_dir();
+        let home = crate::paths::data_dir();
         heading(ui, &tr!("prefs-components"));
         folder_row(ui, &tr!("prefs-library-folder"), &mut self.prefs.library_dir, home.as_ref().map(|h| h.join("components")), &tr!("prefs-components-folder-tip"));
         if crate::debug_capture::qa_examples_dir().is_some() {

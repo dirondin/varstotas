@@ -81,7 +81,7 @@ shot = m.screenshot(width=320, height=200)
 check("screenshot", os.path.getsize(shot) > 1000 and open(shot, "rb").read(4) == b"\x89PNG")
 
 # Plain HTTP with a bearer token.
-info = json.load(open(os.path.expanduser("~/.varstotas/bridge.json")))
+info = json.load(open(varstotas.bridge_file()))
 req = urllib.request.Request(
     "http://127.0.0.1:%d/rpc" % info["port"],
     data=json.dumps({"id": 7, "method": "info"}).encode(),

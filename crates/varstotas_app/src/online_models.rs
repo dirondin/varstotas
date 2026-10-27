@@ -2,7 +2,7 @@
 //! Poly Haven (CC0 models, glTF with 1K textures), Smithsonian Open Access 3D (CC0, searched
 //! on the server), NASA 3D Resources (GLB files of the NASA GitHub repository); plugins add
 //! more (`@model_source`, see `docs/PLUGINS.md`). A download goes to
-//! `~/.varstotas/downloads/<source>/<id>/`, is imported (glTF / FBX / DAE / OBJ / 3MF / PLY / STL / DXF / `.vrst`, or
+//! `<data folder>/downloads/<source>/<id>/`, is imported (glTF / FBX / DAE / OBJ / 3MF / PLY / STL / DXF / `.vrst`, or
 //! a `@model_import` plugin), wrapped into one component that carries its [`Attribution`]
 //! and saved as `<components library>/<source>/<name>.vrst`.
 //!
@@ -47,7 +47,7 @@ pub enum ModelSource {
     Quaternius,
     /// Import from URL (not in the Source list).
     Web,
-    /// The models marked ☆ (of any source; kept in `~/.varstotas/library_state.json`).
+    /// The models marked ☆ (of any source; kept in `<data folder>/library_state.json`).
     Favourites,
     /// Everything downloaded or imported (newest first), searched locally.
     History,
@@ -555,9 +555,9 @@ fn catalogue_raw(source: &ModelSource, query: &str) -> Result<Vec<ModelAsset>, S
     }
 }
 
-/// `~/.varstotas/downloads`.
+/// `<data folder>/downloads`.
 pub fn downloads_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("downloads"))
+    crate::paths::data_dir().map(|d| d.join("downloads"))
 }
 
 fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {

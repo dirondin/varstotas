@@ -13,8 +13,11 @@ Every function of the Rhai API (docs/SCRIPTING.md) is a method of the model obje
 the same name and arguments; entities have the same properties. A call outside
 `operation()` is one undo step by itself. `m.rhai(code)` runs Rhai code in one call.
 
-The app writes its address and token to ~/.varstotas/bridge.json; scripts started from
-the app (File -> Run Script...) get them in VARSTOTAS_BRIDGE / VARSTOTAS_TOKEN.
+The app writes its address and token to bridge.json in its data folder (macOS:
+~/Library/Application Support/Varstotas, Linux: ~/.local/share/varstotas or, for the Flatpak,
+~/.var/app/io.github.dirondin.Varstotas/data/varstotas, Windows: %APPDATA%\\Varstotas\\data),
+next to the python/ folder it installs this module into; scripts started from the app
+(File -> Run Script...) get them in VARSTOTAS_BRIDGE / VARSTOTAS_TOKEN.
 No dependencies beyond the standard library.
 """
 
@@ -311,19 +314,44 @@ def lang():
     return os.environ.get("VARSTOTAS_UI_LANG") or "en"
 
 
+def data_dirs():
+    """The places of the app's data folder, the likeliest first (see the module's docstring)."""
+    home = os.path.expanduser("~")
+    dirs = [os.environ.get("VARSTOTAS_DATA_DIR"),
+            # this module installed by the app: <data folder>/python/varstotas.py
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+    if os.name == "nt":
+        dirs.append(os.path.join(os.environ.get("APPDATA", ""), "Varstotas", "data"))
+    elif os.uname().sysname == "Darwin":
+        dirs.append(os.path.join(home, "Library", "Application Support", "Varstotas"))
+    else:
+        dirs.append(os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share"), "varstotas"))
+        dirs.append(os.path.join(home, ".var", "app", "io.github.dirondin.Varstotas", "data", "varstotas"))
+    return [d for d in dirs if d]
+
+
+def bridge_file():
+    """The bridge.json of the running app (the first data folder that has one), or None."""
+    for d in data_dirs():
+        path = os.path.join(d, "bridge.json")
+        if os.path.isfile(path):
+            return path
+    return None
+
+
 def connect(host=None, port=None, token=None, timeout=None):
-    """Connect to the running Varstotas (VARSTOTAS_BRIDGE / VARSTOTAS_TOKEN or ~/.varstotas/bridge.json)."""
+    """Connect to the running Varstotas (VARSTOTAS_BRIDGE / VARSTOTAS_TOKEN, else bridge.json)."""
     if port is None and os.environ.get("VARSTOTAS_BRIDGE"):
         h, _, p = os.environ["VARSTOTAS_BRIDGE"].rpartition(":")
         host, port = host or h, int(p)
         token = token or os.environ.get("VARSTOTAS_TOKEN")
     if port is None or token is None:
-        path = os.path.join(os.path.expanduser("~"), ".varstotas", "bridge.json")
+        path = bridge_file()
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(path or "", encoding="utf-8") as f:
                 info = json.load(f)
         except OSError:
-            raise VarstotasError("Varstotas is not running (no %s)" % path) from None
+            raise VarstotasError("Varstotas is not running (no bridge.json in %s)" % ", ".join(data_dirs())) from None
         host, port, token = host or info["host"], port or info["port"], token or info["token"]
     try:
         return Model(host or "127.0.0.1", port, token, timeout)

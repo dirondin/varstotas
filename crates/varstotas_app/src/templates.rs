@@ -65,7 +65,7 @@ impl Template {
 
 /// The default user template directory (no example files are installed).
 pub fn default_dir() -> Option<std::path::PathBuf> {
-    crate::bridge::home_dir().map(|p| p.join("templates"))
+    crate::paths::data_dir().map(|p| p.join("templates"))
 }
 
 pub fn directory(custom: Option<&std::path::Path>) -> Option<std::path::PathBuf> {

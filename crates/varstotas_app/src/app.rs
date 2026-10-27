@@ -94,11 +94,11 @@ pub struct Prefs {
     pub save_backups: bool,
     /// Template for File → New (None until chosen on first start).
     pub template: Option<Template>,
-    /// User document templates (None = ~/.varstotas/templates).
+    /// User document templates (None = <data folder>/templates).
     pub templates_dir: Option<PathBuf>,
     /// Script Console editor text.
     pub console_code: String,
-    /// Components library folder (None = ~/.varstotas/components).
+    /// Components library folder (None = <data folder>/components).
     pub library_dir: Option<PathBuf>,
     /// Components list: the bundled example generators hidden.
     pub hide_examples: bool,
@@ -109,7 +109,7 @@ pub struct Prefs {
     pub library_collapsed: Vec<String>,
     /// Tile size of the Components and Materials lists.
     pub lib_tiles: crate::ui::tray_lib::TileSize,
-    /// Materials library folder (None = ~/.varstotas/materials).
+    /// Materials library folder (None = <data folder>/materials).
     pub mat_library_dir: Option<PathBuf>,
     /// Materials list: the bundled example materials hidden.
     pub hide_mat_examples: bool,
@@ -680,7 +680,7 @@ impl VarstotasApp {
         // last viewport style left behind by a scene or a previous session.
         prefs.face_style = prefs.new_view.face_style;
         prefs.grid.show = prefs.new_view.grid;
-        varstotas_i18n::set_user_dir(crate::bridge::home_dir().map(|d| d.join("locales")));
+        varstotas_i18n::set_user_dir(crate::paths::data_dir().map(|d| d.join("locales")));
         varstotas_i18n::set_language(prefs.language.as_deref());
         for e in varstotas_i18n::load_errors() {
             log::warn!("locales: {e}");

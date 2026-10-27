@@ -27,7 +27,7 @@ for n in $names; do
     mkdir -p $qa_home/.varstotas/plugins/examples
     cp $root/examples/plugins/* $qa_home/.varstotas/plugins/examples/
   fi
-  HOME=$qa_home VARSTOTAS_LANG=en RUST_LOG=info VARSTOTAS_QA_EXAMPLES=$qa_examples VARSTOTAS_SCRIPT=$root/tests/ui/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
+  HOME=$qa_home VARSTOTAS_DATA_DIR=$qa_home/.varstotas VARSTOTAS_LANG=en RUST_LOG=info VARSTOTAS_QA_EXAMPLES=$qa_examples VARSTOTAS_SCRIPT=$root/tests/ui/scripts/$n.txt timeout 300 $root/target/debug/varstotas > $out/$n.log 2>&1
   code=$?
   bad=$(grep -cE 'expect FAIL|panicked' $out/$n.log)
   ok=$(grep -c 'expect ok' $out/$n.log)

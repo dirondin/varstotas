@@ -1,9 +1,11 @@
 """MCP server for Varstotas (stdio): lets an AI agent read and edit the model in the running app.
 
-    claude mcp add varstotas -- python3 ~/.varstotas/python/varstotas_mcp.py
+    claude mcp add varstotas -- python3 "<data folder>/python/varstotas_mcp.py"
 
-The app must be running (it writes ~/.varstotas/bridge.json and installs this file next to
-varstotas.py). Every edit is one undo step in the app; saving over another file, exporting
+(<data folder>: macOS ~/Library/Application Support/Varstotas, Linux ~/.local/share/varstotas,
+Flatpak ~/.var/app/io.github.dirondin.Varstotas/data/varstotas, Windows %APPDATA%\\Varstotas\\data;
+Preferences → General shows it.) The app must be running and its bridge on (it writes
+bridge.json there and installs this file next to varstotas.py). Every edit is one undo step in the app; saving over another file, exporting
 over an existing file, opening a file or starting a new one with unsaved changes asks the
 user in the app first. No dependencies beyond the standard library.
 """

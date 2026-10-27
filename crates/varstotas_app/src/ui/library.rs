@@ -1,6 +1,6 @@
 //! Components: a local library (the side bar card) of `.vrst` files and generators
 //! (`.rhai`, components with parameters — see `ui/generators.rs`), in one list. The library is
-//! `~/.varstotas/components` (or a folder chosen by the user); subfolders are categories, the
+//! `<data folder>/components` (or a folder chosen by the user); subfolders are categories, the
 //! bundled example generators show under "Examples". A click on an item places it as a
 //! component (one definition per document, however often it is placed); "Save Selection"
 //! writes the selection to the library.
@@ -146,9 +146,9 @@ pub enum RenameTarget {
     MatFile(PathBuf),
 }
 
-/// `~/.varstotas/components`.
+/// `<data folder>/components`.
 pub fn default_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("components"))
+    crate::paths::data_dir().map(|d| d.join("components"))
 }
 
 /// Iso projection of the edges into the unit square (y down).

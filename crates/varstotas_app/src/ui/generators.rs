@@ -1,5 +1,5 @@
 //! Generators (track K) in the UI: the Generators list of the Components card (the document's
-//! generators and `~/.varstotas/generators`), placing one, and the parameters of selected
+//! generators and `<data folder>/generators`), placing one, and the parameters of selected
 //! generated components in Properties. See `docs/GENERATORS.md`.
 
 use super::{fmt_len, theme};
@@ -76,9 +76,9 @@ pub const EXAMPLES_FOLDER: &str = "Examples"; // i18n-ignore
 /// The Components list folder of generators found only in the open document.
 pub const DOCUMENT_FOLDER: &str = "Document"; // i18n-ignore
 
-/// `~/.varstotas/generators`, where generators lived before they joined the components.
+/// `<data folder>/generators`, where generators lived before they joined the components.
 fn legacy_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("generators"))
+    crate::paths::data_dir().map(|d| d.join("generators"))
 }
 
 /// Move the user's generators from `old` into the components folder `lib` (a free name when one
@@ -294,7 +294,7 @@ pub(crate) fn formula_rows(ui: &mut Ui, g: &Generator, values: &GenValues, unit:
 }
 
 impl VarstotasApp {
-    /// Rescan the generators of the components folder (moving old `~/.varstotas/generators`
+    /// Rescan the generators of the components folder (moving old `<data folder>/generators`
     /// files there first).
     pub(crate) fn refresh_generators(&mut self) {
         let dir = self.library_dir();

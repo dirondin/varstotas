@@ -55,7 +55,7 @@ fn size_text(bytes: usize) -> String {
 
 /// Where a texture opened for external editing is written.
 fn edit_dir() -> Option<PathBuf> {
-    crate::bridge::home_dir().map(|d| d.join("cache").join("edit"))
+    crate::paths::data_dir().map(|d| d.join("cache").join("edit"))
 }
 
 impl VarstotasApp {

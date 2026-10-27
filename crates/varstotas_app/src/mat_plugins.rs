@@ -127,7 +127,7 @@ pub fn catalogue(src: &Arc<PluginSource>) -> Result<Vec<Asset>, String> {
     parse_catalogue(&Source::Plugin(src.clone()), &v)
 }
 
-/// The folder a plugin downloads `id` into (`~/.varstotas/cache/online/<plugin>/<id>`).
+/// The folder a plugin downloads `id` into (`<data folder>/cache/online/<plugin>/<id>`).
 fn work_dir(p: &Plugin, id: &str) -> Result<PathBuf, String> {
     let safe = |s: &str| s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' }).collect::<String>();
     let stem = p.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();

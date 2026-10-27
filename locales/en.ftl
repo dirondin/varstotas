@@ -1176,7 +1176,7 @@ layout-tb-sheet-of = { $n } of { $total }
 prefs-language = Language
 # { $language } is the name of the system's language.
 prefs-language-system = As the System ({ $language })
-prefs-language-note = Translations of your own: put <code>.ftl into ~/.varstotas/locales/ (see docs/LOCALIZATION.md); it also overrides single texts of a built-in language.
+prefs-language-note = Translations of your own: put <code>.ftl into { DATA_DIR() }/locales/ (see docs/LOCALIZATION.md); it also overrides single texts of a built-in language.
 
 prefs-section-general = General
 prefs-section-drawing = Drawing
@@ -1226,6 +1226,8 @@ prefs-show-in-finder = Show in File Manager
 
 ## General
 
+prefs-data-folder = Data folder
+prefs-data-folder-note = Plugins, libraries, templates, your own translations and the bridge for Python scripts and AI agents (bridge.json, python/) are kept here.
 prefs-autosave = Auto-save
 prefs-autosave-every = Auto-save every
 prefs-minutes = minutes
@@ -1782,7 +1784,7 @@ library-new-generator = New Generator…
 library-new-generator-hover = A component built by a script with parameters (Window → Generator Editor)
 library-choose-folder = Choose Folder…
 library-default-folder = Default Folder
-library-default-folder-hover = Back to ~/.varstotas/components
+library-default-folder-hover = Back to { DATA_DIR() }/components
 library-purge = Purge Unused Components
 library-purge-hover = Remove the components (and group definitions) nothing in the model uses
 library-show-examples = Show Examples
@@ -1946,7 +1948,7 @@ mat-import = Import…
 mat-import-hover = Add material files (.vrstmat, plugin formats) to the document
 mat-choose-folder = Choose Folder…
 mat-default-folder = Default Folder
-mat-default-folder-hover = Back to ~/.varstotas/materials
+mat-default-folder-hover = Back to { DATA_DIR() }/materials
 mat-purge = Purge Unused Materials
 mat-purge-hover = Remove the materials nothing in the model uses
 mat-show-examples-hover = The materials bundled with Varstotas (the Material Gallery demo)
@@ -2258,7 +2260,7 @@ downloads-search-on = Search on:
 # $site is the site, $query the search.
 downloads-search-hover = Open { $site }'s search for «{ $query }» in the browser
 downloads-edit = Edit…
-downloads-edit-hover = Edit the sites (~/.varstotas/sources.toml); the list is read again
+downloads-edit-hover = Edit the sites ({ DATA_DIR() }/sources.toml); the list is read again
 downloads-other = Other Sites
 # $waiting is the number of waiting downloads.
 downloads-other-waiting = Other Sites — waiting for { $waiting } download(s)
@@ -3017,7 +3019,7 @@ gen-new-hint = Start from a template
 gen-open = Open…
 gen-filter = Generator
 gen-save = Save to Library
-gen-save-hint = Write the generator to ~/.varstotas/generators (it shows in the Components tray)
+gen-save-hint = Write the generator to { DATA_DIR() }/generators (it shows in the Components tray)
 gen-apply-hint = Update this generator of the document: all its components are rebuilt (one undo step)
 gen-apply-doc = Apply to Document
 gen-apply-doc-hint = Use this source in the document: its components are rebuilt (one undo step)
@@ -3203,7 +3205,7 @@ console-stop-python = Stop Python
 console-clear = Clear Output
 # $port is a TCP port number
 console-bridge = Python / MCP bridge: 127.0.0.1:{ $port }
-console-bridge-hint = import varstotas; m = varstotas.connect()  — see ~/.varstotas/python
+console-bridge-hint = import varstotas; m = varstotas.connect()  — see { DATA_DIR() }/python
 console-filter-rhai = Rhai script
 
 ## Script Reference window
@@ -3251,7 +3253,7 @@ console-ref-basics-13 = `print(x)` writes to the output; the value of the last e
 console-ref-console-1 = Window → Script Console runs code against the open model. %CMD%+Enter runs, %CMD%+↑ / ↓ goes through earlier runs, Open… / Save… work with `.rhai` files. File → Run Script… runs a file.
 console-ref-console-2 = Completion shows API functions while typing, properties after a dot (by the type on the left), and the signature of the function being called above the cursor. F1 opens this reference on the word at the cursor.
 console-ref-console-3 = Header: dialogs and menu items
-console-ref-console-4 = Lines `// @tag …` at the top turn a script into a plugin: Run first asks the parameters, points and objects. A file in `~/.varstotas/plugins` becomes a Plugins menu item.
+console-ref-console-4 = Lines `// @tag …` at the top turn a script into a plugin: Run first asks the parameters, points and objects. A file in `{ DATA_DIR() }/plugins` becomes a Plugins menu item.
 console-ref-console-6 = Tags
 ## Page: generators
 console-ref-generators-1 = A generator is a component with parameters: a script whose `build(p)` builds the component's content in its own axes (the origin is the insertion point). Each copy has its own values in Properties; copies with equal values share one definition.
@@ -3499,7 +3501,7 @@ help-start-16 = 3. Press `Space` (Select), triple-click the box to select it all
 help-start-17 = 4. Press `B` (Paint Bucket), pick a material in the Materials card, click faces.
 help-start-18 = 5. `Shift+Z` fits the model in the view; File → Save writes a `.vrst` file.
 help-start-19 = Help while working
-help-start-20 = The Tool Guide card explains the active tool; F1 over the model opens this guide on it. Finished models to look at (a furnished house, a material gallery) are in the folder ~/.varstotas/examples: File → Open.
+help-start-20 = The Tool Guide card explains the active tool; F1 over the model opens this guide on it. Finished models to look at (a furnished house, a material gallery) are in the folder { DATA_DIR() }/examples: File → Open.
 ## navigation
 help-navigation-1 = Mouse and trackpad
 help-navigation-2 = Middle button drag
@@ -3624,7 +3626,7 @@ help-library-6 = Right-click a tile → Move to Folder
 help-library-7 = move the file into another folder of the library (favourites follow it)
 help-library-8 = Drag a tile into the viewport
 help-library-9 = a component is placed where you drop it; a material paints the face under the cursor
-help-library-10 = Components lists your library (`~/.varstotas/components`, or a folder you choose with …), the generators, the bundled Examples and the components of the open document.
+help-library-10 = Components lists your library (`{ DATA_DIR() }/components`, or a folder you choose with …), the generators, the bundled Examples and the components of the open document.
 help-library-11 = Click a tile
 help-library-12 = place it: the copy follows the cursor, click to put it down
 help-library-13 = + → Save Selection to Library…
@@ -3637,7 +3639,7 @@ help-library-19 = 3D Online Library
 help-library-20 = The cloud button in the Components card (or Window → 3D Online Library) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Properties → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads.
 help-library-21 = Each source shows its terms above its models (a plugin's @notice line). A model whose licence limits its use (non-commercial, no derivatives, share-alike, a site's own licence, unknown) gets a warning when it is placed and when the document is exported. Help → Licences… lists Varstotas's licence, the open-source components, file formats and the online libraries with their terms.
 ## materials
-help-materials-1 = The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Picking a library material only arms the Paint Bucket: the material joins the model (In Model) with the first face painted. Delete on an In Model tile removes the material from the model, its faces go back to the default (Edit → Undo brings it back). Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen).
+help-materials-1 = The Materials card shows the materials of the model (In Model), your library (`{ DATA_DIR() }/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Picking a library material only arms the Paint Bucket: the material joins the model (In Model) with the first face painted. Delete on an In Model tile removes the material from the model, its faces go back to the default (Edit → Undo brings it back). Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen).
 help-materials-2 = Save to Library / Export… / + → Import…
 help-materials-3 = share a material between documents (`.vrstmat`)
 help-materials-4 = Cloud button (Materials card)
@@ -3699,7 +3701,7 @@ help-files-10 = File → Preview Image
 help-files-11 = the picture the library shows for this file
 ## scripts
 help-scripts-1 = Window → Script Console runs Rhai scripts on the model: build, change, select, measure. File → Run Script… runs a `.rhai` (or `.py`) file. A run is one undo step.
-help-scripts-2 = Plugins are scripts in `~/.varstotas/plugins`: they become items of the Plugins menu, with dialogs for parameters and picking points; they can add importers, exporters and material / model sources.
+help-scripts-2 = Plugins are scripts in `{ DATA_DIR() }/plugins`: they become items of the Plugins menu, with dialogs for parameters and picking points; they can add importers, exporters and material / model sources.
 help-scripts-3 = Python and AI agents can drive Varstotas through the local bridge (Python client, MCP server).
 help-scripts-4 = Open the Script Reference
 help-scripts-5 = Console and plugins
