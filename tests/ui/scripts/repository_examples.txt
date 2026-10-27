@@ -18,4 +18,7 @@ expect model_faces=138
 open ../../examples/demos/small_workshop.vrst
 wait 5
 expect model_faces=144
+open ../../examples/demos/desk_caddy.vrst
+wait 5
+expect model_faces=163
 quit
