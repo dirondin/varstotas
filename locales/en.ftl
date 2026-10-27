@@ -1216,7 +1216,6 @@ prefs-defaults-flash = Preferences → { $section }: defaults
 
 # $path is the folder.
 prefs-folder-default = { $path } (default)
-prefs-file-not-usable = { $path } (not usable)
 prefs-file-found = { $path } (found)
 prefs-choose = Choose…
 prefs-default = Default
@@ -1254,8 +1253,6 @@ prefs-render-note = File → New starts with these; Window → Render changes th
 prefs-programs = Programs
 prefs-oidn = Open Image Denoise library (the render's denoiser)
 prefs-oidn-missing = not found: the built-in filter denoises (install Open Image Denoise: brew install open-image-denoise, or your system's package)
-prefs-image-editor = Image editor (Material Editor → Textures → Edit)
-prefs-image-editor-default = the system's default program for the file
 
 ## Drawing
 
@@ -2079,7 +2076,7 @@ mated-load-tip = Load an image…
 mated-replace-tip = Replace with another image… (the tile size is kept)
 mated-clear-tip = Remove this texture
 mated-export-tip = Save the image as a file…
-mated-edit-tip = Edit in the image editor: saving there updates the material
+mated-edit-tip = Edit in the default image editor for the file: saving there updates the material
 mated-map-set = Load map set from folder…
 mated-map-set-tip = Fill the slots from a folder by file-name suffixes: _color / _albedo / _diff, _normal (OpenGL preferred), _rough, _metal, _ao, _emission
 mated-watching = { $count ->
@@ -4412,8 +4409,7 @@ print-cut-select = Select one whole group/component to cut.
 print-cut-done = Created { $parts } parts, including { $dowels } separate dowels. Arrange them on the bed.
 print-export-extension = Choose .3mf or .stl.
 print-export-done = Exported { $parts } parts to { $path }
-print-slicer-choose = Choose the slicer application or executable.
-print-slicer-opened = The exported file was sent to the slicer.
+print-slicer-opened = The exported file was opened in the default app for it.
 print-min-wall = Minimum wall thickness
 print-two-nozzles = Use two nozzle widths
 print-sample-budget = Maximum wall samples
@@ -4463,10 +4459,8 @@ print-export-scope-note = Export uses the selected scope above and preserves wor
 print-export-materials-note = 3MF includes base colours, names, model description, licence and source credits. PBR textures are not exported. STL contains geometry only.
 print-export-3mf = Export 3MF…
 print-export-stl = Export STL…
-print-slicer = External slicer
-print-slicer-browse = Choose slicer…
-print-slicer-open = Open exported file in slicer
-print-slicer-note = Choose an executable or enter a macOS .app path. The file is passed as one argument; no shell command is used. Changes to the model require a fresh export.
+print-slicer-open = Open in Slicer
+print-slicer-note = Opens the export in the system's default app for .3mf / .stl: make your slicer the default for these files. Changes to the model require a fresh export.
 print-export-missing = The exported file no longer exists. Export it again.
 
 # Printing operation errors

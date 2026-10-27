@@ -111,7 +111,7 @@ time the menu is opened. Existing unsaved work is protected by the usual Save / 
 sampled wall-thickness heatmaps, overhang highlights, a persistent printer profile and bed
 placement. Parts can be cut and capped, divided to fit a printer, and given sockets with
 separate registration dowels. Scoped STL/3MF export preserves millimetres and separate 3MF
-objects, with an optional handoff to a configured slicer. Mutations are undoable and retain
+objects, with a handoff to the slicer set as the default app for `.3mf` / `.stl`. Mutations are undoable and retain
 original scale. See [printing tools and limitations](docs/3D-PRINTING.md).
 
 ## Mesh inspection and imported assets

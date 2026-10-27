@@ -33,6 +33,9 @@ epaint_default_fonts = "0.36"
 egui_code_editor = { version = "0.4.2", default-features = false, features = ["egui", "editor"] }
 toml = "1"
 getrandom = "0.4"
+# Files, folders and links in the system's default program (ShellExecute, open, xdg-open / gio,
+# the OpenURI portal in a Flatpak) instead of a program path the user enters.
+open = "5"
 
 # macOS: scripted runs start as a background app (no activation, no Dock icon); the same
 # winit as eframe's.

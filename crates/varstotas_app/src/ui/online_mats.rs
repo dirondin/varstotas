@@ -102,20 +102,9 @@ impl OnlineWindow {
 
 /// Open `url` in the browser (not in scripted runs).
 pub(crate) fn open_url(url: &str) {
-    if std::env::var_os("VARSTOTAS_SCRIPT").is_some() {
-        log::info!("open {url}");
-        return;
+    if let Err(e) = crate::desktop::open(url) {
+        log::warn!("open {url}: {e}");
     }
-    let mut cmd = if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-    } else if cfg!(windows) {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", ""]);
-        c
-    } else {
-        std::process::Command::new("xdg-open")
-    };
-    let _ = cmd.arg(url).spawn();
 }
 
 impl VarstotasApp {

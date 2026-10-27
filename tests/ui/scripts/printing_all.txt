@@ -1,5 +1,5 @@
 # Full native workflow: analysis, bed, capped split with sockets/dowels, layout and scoped export.
-# Runs in target/ui-tests; tests/ui/run_all.sh writes the stub ./fake-print-slicer there.
+# Runs in target/ui-tests; Open in Slicer hands the export to the default app (recorded only).
 box 0 0 0 20 20 20
 select_all
 action make_group
@@ -52,9 +52,9 @@ wait 10
 action print_export_to models/printing-prepared.3mf
 wait 120
 expect export=true
-action print_slicer ./fake-print-slicer
 action click_spot printing:slicer-open
 wait 10
+expect opened=Some("printing-prepared.3mf")
 screenshot shots/printing-export.bmp
 save models/printing-prepared.vrst
 undo

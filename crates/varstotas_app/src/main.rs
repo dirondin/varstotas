@@ -30,6 +30,7 @@ mod pbr;
 mod shader_help;
 mod shaders;
 mod overlay;
+mod desktop;
 mod paths;
 mod panes;
 mod plugins;

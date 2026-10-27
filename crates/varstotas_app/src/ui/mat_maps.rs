@@ -185,21 +185,8 @@ impl VarstotasApp {
         let st = &mut self.mat_editor.maps;
         st.edits.retain(|e| !(e.material == name && e.slot == slot));
         st.edits.push(ExternalEdit { material: name.to_string(), slot, path: path.clone(), modified });
-        // a scripted run only records the file (another window would cover it)
-        if self.debug.script_active() {
-            log::info!("edit externally {}", path.display());
-            return;
-        }
-        let spawned = match &self.prefs.image_editor_path {
-            Some(prog) if cfg!(target_os = "macos") && prog.extension().is_some_and(|e| e == "app") => {
-                std::process::Command::new("open").arg("-a").arg(prog).arg(&path).spawn()
-            }
-            Some(prog) => std::process::Command::new(prog).arg(&path).spawn(),
-            None if cfg!(target_os = "macos") => std::process::Command::new("open").arg(&path).spawn(),
-            None if cfg!(windows) => std::process::Command::new("cmd").args(["/C", "start", ""]).arg(&path).spawn(),
-            None => std::process::Command::new("xdg-open").arg(&path).spawn(),
-        };
-        match spawned {
+        // the system's default program for the image (desktop::open)
+        match crate::desktop::open(&path) {
             Ok(_) => self.flash(tr!("mated-editing", file = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default())),
             Err(e) => self.flash_error(tr!("mated-cant-open-editor", error = e.to_string())),
         }

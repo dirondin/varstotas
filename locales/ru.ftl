@@ -1226,7 +1226,6 @@ prefs-defaults-flash = Настройки → { $section }: по умолчан�
 
 # $path — папка.
 prefs-folder-default = { $path } (по умолчанию)
-prefs-file-not-usable = { $path } (непригодно)
 prefs-file-found = { $path } (найдено)
 prefs-choose = Выбрать…
 prefs-default = По умолчанию
@@ -1264,8 +1263,6 @@ prefs-render-note = Файл → Новый начинает с этих нас�
 prefs-programs = Программы
 prefs-oidn = Библиотека Open Image Denoise (шумоподавление рендера)
 prefs-oidn-missing = не найдена: шумоподавление выполнит встроенный фильтр (установите Open Image Denoise: brew install open-image-denoise или пакет вашей системы)
-prefs-image-editor = Графический редактор (Редактор материала → Текстуры → Редактировать)
-prefs-image-editor-default = программа по умолчанию для этого файла
 
 ## Рисование
 
@@ -2128,7 +2125,7 @@ mated-load-tip = Загрузить изображение…
 mated-replace-tip = Заменить другим изображением… (размер плитки сохранится)
 mated-clear-tip = Убрать эту текстуру
 mated-export-tip = Сохранить изображение в файл…
-mated-edit-tip = Редактировать в графическом редакторе: сохранение там обновит материал
+mated-edit-tip = Редактировать в графическом редакторе по умолчанию для файла: сохранение там обновит материал
 mated-map-set = Загрузить набор карт из папки…
 mated-map-set-tip = Заполнить слоты из папки по суффиксам имён файлов: _color / _albedo / _diff, _normal (OpenGL предпочтительнее), _rough, _metal, _ao, _emission
 mated-watching = { $count ->
@@ -4509,8 +4506,7 @@ print-cut-select = Для разрезания выберите одну гру�
 print-cut-done = Создано частей: { $parts }, включая отдельные штифты: { $dowels }. Разместите их на столе.
 print-export-extension = Выберите .3mf или .stl.
 print-export-done = Экспортировано частей: { $parts } в { $path }
-print-slicer-choose = Укажите приложение или исполняемый файл слайсера.
-print-slicer-opened = Экспортированный файл передан слайсеру.
+print-slicer-opened = Экспортированный файл открыт в приложении по умолчанию для него.
 print-min-wall = Минимальная толщина стенки
 print-two-nozzles = Два диаметра сопла
 print-sample-budget = Максимум проб толщины
@@ -4560,10 +4556,8 @@ print-export-scope-note = Экспорт использует выбранную
 print-export-materials-note = 3MF включает базовые цвета, имена, описание, лицензию и источники. Текстуры PBR не экспортируются. STL содержит только геометрию.
 print-export-3mf = Экспорт 3MF…
 print-export-stl = Экспорт STL…
-print-slicer = Внешний слайсер
-print-slicer-browse = Выбрать слайсер…
-print-slicer-open = Открыть экспортированный файл в слайсере
-print-slicer-note = Выберите исполняемый файл или укажите путь к .app в macOS. Файл передаётся отдельным аргументом без командной оболочки. После изменений модели повторите экспорт.
+print-slicer-open = Открыть в слайсере
+print-slicer-note = Экспорт открывается в приложении, назначенном в системе для .3mf / .stl: сделайте слайсер приложением по умолчанию для этих файлов. После изменений модели повторите экспорт.
 print-export-missing = Экспортированный файл отсутствует. Повторите экспорт.
 
 # Printing operation errors

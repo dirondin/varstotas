@@ -1,11 +1,11 @@
 //! Remaining print workflow: measured analysis, persistent printer profiles, rigid placement,
-//! capped cuts with dowels, scoped export and argument-safe slicer handoff.
+//! capped cuts with dowels, scoped export and a handoff to the default app for .3mf / .stl (the slicer).
 use super::printing::JobKey;
 use crate::{app::VarstotasApp, document::guarded};
 use egui::{Color32, Context, RichText};
 use serde::{Deserialize, Serialize};
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::mpsc::{self, Receiver},
 };
 use varstotas_i18n::tr;
@@ -39,7 +39,6 @@ pub struct PrintingPrefs {
     pub bed: BedProfile,
     pub analysis: AnalysisOptions,
     pub show_bed: bool,
-    pub slicer: Option<PathBuf>,
 }
 impl Default for PrintingPrefs {
     fn default() -> Self {
@@ -47,7 +46,6 @@ impl Default for PrintingPrefs {
             bed: BedProfile::default(),
             analysis: AnalysisOptions::default(),
             show_bed: true,
-            slicer: None,
         }
     }
 }
@@ -322,13 +320,13 @@ impl VarstotasApp {
             self.printing.error = Some(tr!("print-export-stale"));
             return;
         }
-        let Some(slicer) = self.prefs.printing.slicer.as_deref() else {
-            self.printing.error = Some(tr!("print-slicer-choose"));
+        if !path.is_file() {
+            self.printing.error = Some(tr!("print-export-missing"));
             return;
-        };
-        match launch_slicer(slicer, path) {
-            Ok(_) => self.printing.message = Some(tr!("print-slicer-opened")),
-            Err(e) => self.printing.error = Some(e),
+        }
+        match crate::desktop::open(path) {
+            Ok(()) => self.printing.message = Some(tr!("print-slicer-opened")),
+            Err(e) => self.printing.error = Some(e.to_string()),
         }
     }
     pub(super) fn print_tools_content(&mut self, ui: &mut egui::Ui, ctx: &Context, tab: PrintTab) {
@@ -657,24 +655,6 @@ impl VarstotasApp {
                     }
                 });
                 ui.separator();
-                ui.label(tr!("print-slicer"));
-                ui.add_enabled_ui(!busy, |ui| {
-                    let mut path = self
-                        .prefs
-                        .printing
-                        .slicer
-                        .as_ref()
-                        .map_or(String::new(), |p| p.display().to_string());
-                    if ui.text_edit_singleline(&mut path).changed() {
-                        self.prefs.printing.slicer =
-                            (!path.trim().is_empty()).then(|| PathBuf::from(path.trim()));
-                    }
-                    if ui.button(tr!("print-slicer-browse")).clicked()
-                        && let Some(path) = rfd::FileDialog::new().pick_file()
-                    {
-                        self.prefs.printing.slicer = Some(path);
-                    }
-                });
                 let fresh = self
                     .printing
                     .last_export
@@ -687,7 +667,7 @@ impl VarstotasApp {
                     ui,
                     tr!("print-slicer-open"),
                     "printing:slicer-open",
-                    !busy && fresh && self.prefs.printing.slicer.is_some(),
+                    !busy && fresh,
                 ) {
                     self.open_print_slicer();
                 }
@@ -837,63 +817,5 @@ impl VarstotasApp {
             bed.map_or(0, |r| r.bounds_overlaps),
             self.printing.last_export.is_some()
         )
-    }
-}
-/// No shell, no user-provided command template: the exported path is exactly one argument.
-pub(crate) fn launch_slicer(executable: &Path, file: &Path) -> Result<std::process::Child, String> {
-    if !file.is_file() {
-        return Err(tr!("print-export-missing"));
-    }
-    #[cfg(target_os = "macos")]
-    if executable.extension().is_some_and(|e| e == "app") {
-        return std::process::Command::new("/usr/bin/open")
-            .arg("-a")
-            .arg(executable)
-            .arg("--")
-            .arg(file)
-            .spawn()
-            .map_err(|e| e.to_string());
-    }
-    if !executable.is_file() {
-        return Err(tr!("print-slicer-choose"));
-    }
-    std::process::Command::new(executable)
-        .arg(file)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-    #[test]
-    fn slicer_receives_exactly_one_literal_file_argument() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("varstotas-slicer-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let executable = dir.join("fake slicer");
-        let file = dir.join("деталь ; $(touch INJECTED).3mf");
-        let output = dir.join("received");
-        std::fs::write(&file, b"file").unwrap();
-        // The fixed test script writes next to itself; the model filename is never shell text.
-        std::fs::write(&executable,b"#!/bin/sh\n[ \"$#\" -eq 1 ] || exit 20\nprintf '%s' \"$1\" > \"$(dirname \"$0\")/received\"\n").unwrap();
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(
-            launch_slicer(&executable, &file)
-                .unwrap()
-                .wait()
-                .unwrap()
-                .success()
-        );
-        assert_eq!(
-            std::fs::read_to_string(output).unwrap(),
-            file.to_str().unwrap()
-        );
-        assert!(!dir.join("INJECTED").exists());
-        assert!(launch_slicer(&executable, &dir.join("missing")).is_err());
-        std::fs::remove_dir_all(dir).unwrap();
     }
 }

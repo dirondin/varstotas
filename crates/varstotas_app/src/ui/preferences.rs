@@ -190,27 +190,6 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
 }
 
 /// A program / library row: the one in use (or why there is none), Choose…, Default.
-fn file_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, found: Option<PathBuf>, missing: &str) {
-    ui.label(label);
-    let text = match (&custom, &found) {
-        (Some(c), Some(f)) if c == f => c.display().to_string(),
-        (Some(c), _) => tr!("prefs-file-not-usable", path = c.display().to_string()),
-        (None, Some(f)) => tr!("prefs-file-found", path = f.display().to_string()),
-        (None, None) => missing.to_string(),
-    };
-    ui.add(egui::Label::new(RichText::new(text).small().color(theme::text_dim())).truncate());
-    ui.horizontal(|ui| {
-        if ui.button(tr!("prefs-choose")).clicked()
-            && let Some(f) = rfd::FileDialog::new().pick_file()
-        {
-            *custom = Some(f);
-        }
-        if ui.add_enabled(custom.is_some(), egui::Button::new(tr!("prefs-default"))).clicked() {
-            *custom = None;
-        }
-    });
-}
-
 fn note(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).small().color(theme::text_dim()));
 }
@@ -458,8 +437,6 @@ impl VarstotasApp {
             None => tr!("prefs-oidn-missing"),
         };
         ui.add(egui::Label::new(RichText::new(oidn).small().color(theme::text_dim())).truncate());
-        let editor = self.prefs.image_editor_path.clone();
-        file_row(ui, &tr!("prefs-image-editor"), &mut self.prefs.image_editor_path, editor, &tr!("prefs-image-editor-default"));
     }
 
     fn prefs_drawing(&mut self, ui: &mut Ui) {

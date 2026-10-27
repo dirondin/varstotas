@@ -1222,7 +1222,6 @@ prefs-defaults-flash = Nustatymai → { $section }: numatytieji
 
 # $path is the folder.
 prefs-folder-default = { $path } (numatytasis)
-prefs-file-not-usable = { $path } (netinkamas)
 prefs-file-found = { $path } (rastas)
 prefs-choose = Pasirinkti…
 prefs-default = Numatytasis
@@ -1260,8 +1259,6 @@ prefs-render-note = Failas → Naujas pradedamas su šiais; Langas → Vaizdavim
 prefs-programs = Programos
 prefs-oidn = Open Image Denoise biblioteka (vaizdavimo triukšmo šalinimas)
 prefs-oidn-missing = nerasta: triukšmą šalina integruotas filtras (įdiekite Open Image Denoise: brew install open-image-denoise arba savo sistemos paketą)
-prefs-image-editor = Vaizdų redaktorius (Medžiagos redaktorius → Tekstūros → Redaguoti)
-prefs-image-editor-default = sistemos numatytoji programa šiam failui
 
 ## Drawing
 
@@ -2093,7 +2090,7 @@ mated-load-tip = Įkelti vaizdą…
 mated-replace-tip = Pakeisti kitu vaizdu… (plytelės dydis išlieka)
 mated-clear-tip = Pašalinti šią tekstūrą
 mated-export-tip = Išsaugoti vaizdą faile…
-mated-edit-tip = Redaguoti vaizdų redaktoriuje: išsaugojus ten, medžiaga atnaujinama
+mated-edit-tip = Redaguoti numatytajame failo vaizdų redaktoriuje: išsaugojus ten, medžiaga atnaujinama
 mated-map-set = Įkelti žemėlapių rinkinį iš aplanko…
 mated-map-set-tip = Užpildyti lizdus iš aplanko pagal failų vardų priesagas: _color / _albedo / _diff, _normal (geriau OpenGL), _rough, _metal, _ao, _emission
 mated-watching = { $count ->
@@ -4437,8 +4434,7 @@ print-cut-select = Pjūviui pasirinkite vieną visą grupę arba komponentą.
 print-cut-done = Sukurta dalių: { $parts }, įskaitant atskirus kaiščius: { $dowels }. Išdėstykite jas ant stalo.
 print-export-extension = Pasirinkite .3mf arba .stl.
 print-export-done = Eksportuota dalių: { $parts } į { $path }
-print-slicer-choose = Pasirinkite pjaustyklės programą arba vykdomąjį failą.
-print-slicer-opened = Eksportuotas failas perduotas pjaustyklei.
+print-slicer-opened = Eksportuotas failas atvertas numatytąja jam programa.
 print-min-wall = Mažiausias sienelės storis
 print-two-nozzles = Du purkštuko skersmenys
 print-sample-budget = Didžiausias storio mėginių skaičius
@@ -4488,10 +4484,8 @@ print-export-scope-note = Eksportuojama pasirinkta sritis, išlaikant pasaulio k
 print-export-materials-note = 3MF įtraukia bazines spalvas, pavadinimus, aprašą, licenciją ir šaltinius. PBR tekstūros neeksportuojamos. STL turi tik geometriją.
 print-export-3mf = Eksportuoti 3MF…
 print-export-stl = Eksportuoti STL…
-print-slicer = Išorinė pjaustyklė
-print-slicer-browse = Pasirinkti pjaustyklę…
-print-slicer-open = Atverti eksportuotą failą pjaustyklėje
-print-slicer-note = Pasirinkite vykdomąjį failą arba įveskite macOS .app kelią. Failas perduodamas vienu argumentu, nenaudojant komandų apvalkalo. Pakeitę modelį eksportuokite iš naujo.
+print-slicer-open = Atverti pjaustyklėje
+print-slicer-note = Eksportas atveriamas sistemos numatytąja .3mf / .stl programa: nustatykite pjaustyklę numatytąja šiems failams. Pakeitę modelį eksportuokite iš naujo.
 print-export-missing = Eksportuoto failo nebėra. Eksportuokite iš naujo.
 
 # Printing operation errors

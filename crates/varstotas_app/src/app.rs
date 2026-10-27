@@ -150,8 +150,6 @@ pub struct Prefs {
     pub shortcuts: std::collections::BTreeMap<String, String>,
     /// Render settings of a new document (Preferences → Render).
     pub new_render: varstotas_kernel::RenderSettings,
-    /// Image editor for textures (None = the system's default program for the file).
-    pub image_editor_path: Option<PathBuf>,
     /// Undo steps kept per document.
     pub undo_steps: u32,
 }
@@ -214,7 +212,6 @@ impl Default for Prefs {
             toolbar: Vec::new(),
             shortcuts: Default::default(),
             new_render: Default::default(),
-            image_editor_path: None,
             undo_steps: 100,
         }
     }

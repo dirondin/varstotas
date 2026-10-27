@@ -1222,7 +1222,6 @@ prefs-defaults-flash = Налады → { $section }: па змаўчанні
 
 # $path — папка.
 prefs-folder-default = { $path } (па змаўчанні)
-prefs-file-not-usable = { $path } (не падыходзіць)
 prefs-file-found = { $path } (знойдзена)
 prefs-choose = Выбраць…
 prefs-default = Па змаўчанні
@@ -1260,8 +1259,6 @@ prefs-render-note = Файл → Новы пачынае з іх; Акно → �
 prefs-programs = Праграмы
 prefs-oidn = Бібліятэка Open Image Denoise (шумапрыгнятальнік рэндара)
 prefs-oidn-missing = не знойдзена: шум прыгнятае ўбудаваны фільтр (усталюйце Open Image Denoise: brew install open-image-denoise або пакет вашай сістэмы)
-prefs-image-editor = Графічны рэдактар (Рэдактар матэрыялу → Тэкстуры → Рэдагаваць)
-prefs-image-editor-default = праграма па змаўчанні для гэтага файла
 
 ## Маляванне
 
@@ -2124,7 +2121,7 @@ mated-load-tip = Загрузіць выяву…
 mated-replace-tip = Замяніць іншай выявай… (памер пліткі захаваецца)
 mated-clear-tip = Прыбраць гэту тэкстуру
 mated-export-tip = Захаваць выяву ў файл…
-mated-edit-tip = Рэдагаваць у графічным рэдактары: захаванне там абновіць матэрыял
+mated-edit-tip = Рэдагаваць у графічным рэдактары па змаўчанні для файла: захаванне там абновіць матэрыял
 mated-map-set = Загрузіць набор карт з папкі…
 mated-map-set-tip = Запоўніць слоты з папкі па суфіксах імёнаў файлаў: _color / _albedo / _diff, _normal (лепей OpenGL), _rough, _metal, _ao, _emission
 mated-watching = { $count ->
@@ -4489,8 +4486,7 @@ print-cut-select = Для разразання выберыце адну гру�
 print-cut-done = Створана частак: { $parts }, у тым ліку асобных штыфтоў: { $dowels }. Размясціце іх на стале.
 print-export-extension = Выберыце .3mf ці .stl.
 print-export-done = Экспартавана частак: { $parts } у { $path }
-print-slicer-choose = Укажыце праграму або выканальны файл слайсера.
-print-slicer-opened = Экспартаваны файл перададзены слайсеру.
+print-slicer-opened = Экспартаваны файл адкрыты ў праграме па змаўчанні для яго.
 print-min-wall = Мінімальная таўшчыня сценкі
 print-two-nozzles = Два дыяметры сопла
 print-sample-budget = Максімум проб таўшчыні
@@ -4540,10 +4536,8 @@ print-export-scope-note = Экспарт выкарыстоўвае выбран
 print-export-materials-note = 3MF уключае базавыя колеры, імёны, апісанне, ліцэнзію і крыніцы. Тэкстуры PBR не экспартуюцца. STL змяшчае толькі геаметрыю.
 print-export-3mf = Экспарт 3MF…
 print-export-stl = Экспарт STL…
-print-slicer = Знешні слайсер
-print-slicer-browse = Выбраць слайсер…
-print-slicer-open = Адкрыць экспартаваны файл у слайсеры
-print-slicer-note = Выберыце выканальны файл ці ўкажыце шлях да .app у macOS. Файл перадаецца асобным аргументам без каманднай абалонкі. Пасля змен мадэлі паўтарыце экспарт.
+print-slicer-open = Адкрыць у слайсеры
+print-slicer-note = Экспарт адкрываецца ў праграме, прызначанай у сістэме для .3mf / .stl: зрабіце слайсер праграмай па змаўчанні для гэтых файлаў. Пасля змен мадэлі паўтарыце экспарт.
 print-export-missing = Экспартаваны файл адсутнічае. Паўтарыце экспарт.
 
 # Printing operation errors

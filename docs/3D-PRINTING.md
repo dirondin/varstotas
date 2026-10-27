@@ -95,8 +95,9 @@ modify the native document. The existing File exporters remain available separat
 3MF vertices retain full coordinate precision; capped tessellation preserves collinear contour
 subdivisions to avoid exported T-junctions.
 
-Configure a slicer executable (or a macOS `.app` path), export, then **Open exported file in
-slicer**. The exported path is passed as one literal argument with no shell. Model, selection
+Export, then **Open in Slicer**: the file opens in the system's default app for `.3mf` / `.stl`
+(make the slicer the default for them). Varstotas runs no program path of its own, so the same
+works in a sandbox (Flatpak, through the OpenURI portal). Model, selection
 or analysis/profile changes invalidate the handoff until a fresh export. The slicer is never
 launched automatically. Layer inspection, toolpaths and G-code remain the slicer's job.
 
@@ -121,10 +122,12 @@ and `target/printing-all-build.log`. The local signed debug bundle is `target/Va
 The user's production NASA/Sofa library assets are not rewritten by printing QA.
 
 Final validation: **636 workspace tests passed, 2 ignored**. Eleven extended printing kernel
-cases and the literal slicer-argument regression passed. Clippy completed with the existing
+cases and the literal slicer-argument regression passed (that regression was later retired with
+the configured slicer path). Clippy completed with the existing
 warnings and no new printing warnings. The complete Russian native workflow passed 9 checks;
 automatic bed splitting passed 3 checks. A controlled fake slicer received exactly one file
-argument and was not launched again after Undo invalidated the export. The exported four-object
+argument and was not launched again after Undo invalidated the export (now the harness records
+the file handed to the default app instead). The exported four-object
 3MF was independently parsed as XML: every object's triangle edges were paired, with millimetre
 units. English and Russian screenshots were inspected.
 

@@ -420,26 +420,16 @@ impl VarstotasApp {
     }
 }
 
-/// Show a folder in Finder / Explorer.
 /// The folder [`reveal`] showed last (scripted runs only record it).
 pub(crate) static LAST_REVEALED: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
 
+/// Show a folder in Finder / Explorer / the file manager.
 pub(crate) fn reveal(dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(dir);
     if let Ok(mut l) = LAST_REVEALED.lock() {
         *l = Some(dir.to_path_buf());
     }
-    // A Finder window would cover a scripted run (it stops drawing when covered).
-    if std::env::var_os("VARSTOTAS_SCRIPT").is_some() {
-        log::info!("reveal {}", dir.display());
-        return;
+    if let Err(e) = crate::desktop::open(dir) {
+        log::warn!("reveal {}: {e}", dir.display());
     }
-    let cmd = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(windows) {
-        "explorer"
-    } else {
-        "xdg-open"
-    };
-    let _ = std::process::Command::new(cmd).arg(dir).spawn();
 }
