@@ -63,7 +63,7 @@ impl PerfWindow {
 impl DebugCapture {
     /// A window screenshot (a script's `screenshot` or the capture) is on its way.
     pub fn screenshot_pending(&self) -> bool {
-        (self.requested && !self.force_close) || self.script.as_ref().is_some_and(|s| s.shot.is_some())
+        (self.requested && !self.force_close) || self.script.as_ref().is_some_and(|s| s.shot.is_some() || s.rec.as_ref().is_some_and(|r| r.pending))
     }
 
     pub fn from_env() -> Self {
@@ -157,6 +157,53 @@ fn write_bmp(path: &str, w: usize, h: usize, px: &[egui::Color32]) -> std::io::R
     std::fs::write(path, out)
 }
 
+/// Marks the screenshots taken by `record`, so they are not mistaken for a `screenshot`'s.
+struct RecordTag;
+
+fn is_record_shot(user_data: &egui::UserData) -> bool {
+    user_data.data.as_ref().is_some_and(|d| d.is::<RecordTag>())
+}
+
+/// `record`: every `every`-th frame of the window goes to `dir/frame_NNNNN.bmp`, scaled down
+/// to one pixel per point (frames for README animations).
+#[derive(Clone, Debug)]
+pub struct Recorder {
+    dir: String,
+    every: u32,
+    count: u32,
+    pending: bool,
+    /// Script frame of the pending request.
+    asked: u32,
+}
+
+impl Recorder {
+    fn write(&mut self, img: &egui::ColorImage, ppp: f32) {
+        let f = (ppp.round() as usize).max(1);
+        let (w, h) = (img.size[0] / f, img.size[1] / f);
+        let mut px = Vec::with_capacity(w * h);
+        for y in 0..h {
+            for x in 0..w {
+                let mut sum = [0u32; 3];
+                for dy in 0..f {
+                    for dx in 0..f {
+                        let c = img.pixels[(y * f + dy) * img.size[0] + x * f + dx];
+                        sum[0] += c.r() as u32;
+                        sum[1] += c.g() as u32;
+                        sum[2] += c.b() as u32;
+                    }
+                }
+                let n = (f * f) as u32;
+                px.push(egui::Color32::from_rgb((sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8));
+            }
+        }
+        let path = format!("{}/frame_{:05}.bmp", self.dir, self.count);
+        if let Err(e) = write_bmp(&path, w, h, &px) {
+            log::error!("record: write {path} failed: {e}");
+        }
+        self.count += 1;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Scripted input
 // ---------------------------------------------------------------------------
@@ -208,6 +255,9 @@ pub enum ScriptCmd {
     Undo,
     /// `screenshot <file.bmp>`
     Screenshot(String),
+    /// `record <dir> [every]` — from now on write a frame to `dir/frame_NNNNN.bmp` every
+    /// `every` frames (default 2), the script waiting for each; `record off` stops.
+    Record(Option<(String, u32)>),
     Quit,
     /// `parallel on|off` — Camera > Parallel Projection / Perspective.
     Parallel(bool),
@@ -453,6 +503,11 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "undo" => ScriptCmd::Undo,
         "material" => ScriptCmd::Material(rest.to_string()),
         "screenshot" => ScriptCmd::Screenshot(rest.to_string()),
+        "record" => ScriptCmd::Record(match rest.split_whitespace().collect::<Vec<_>>().as_slice() {
+            ["off"] | [] => None,
+            [dir] => Some((dir.to_string(), 2)),
+            [dir, every, ..] => Some((dir.to_string(), every.parse().unwrap_or(2).max(1))),
+        }),
         "quit" => ScriptCmd::Quit,
         "parallel" | "ortho" => ScriptCmd::Parallel(matches!(rest.to_ascii_lowercase().as_str(), "on" | "1" | "true" | "")),
         "dragpx" if nums.len() >= 4 => ScriptCmd::DragPx(
@@ -533,6 +588,8 @@ pub struct Script {
     pt_wait: bool,
     frame: u32,
     shot: Option<String>,
+    /// Frames being written by `record`.
+    rec: Option<Recorder>,
     /// Viewport size seen last frame and for how many frames it has been unchanged.
     last_vp: Option<egui::Vec2>,
     stable: u32,
@@ -554,6 +611,7 @@ impl Script {
             pt_wait: false,
             frame: 0,
             shot: None,
+            rec: None,
             last_vp: None,
             stable: 0,
         }
@@ -622,10 +680,37 @@ impl VarstotasApp {
                 return;
             }
         }
+        if let Some(rec) = script.rec.as_mut() {
+            let (frame, ppp) = ctx.input(|i| {
+                let img = i.events.iter().find_map(|e| match e {
+                    Event::Screenshot { image, user_data, .. } if is_record_shot(user_data) => Some(image.clone()),
+                    _ => None,
+                });
+                (img, i.pixels_per_point)
+            });
+            if let Some(img) = frame {
+                rec.write(&img, ppp);
+                rec.pending = false;
+            }
+            // a request made while the window was not painted (occluded) never comes back
+            let lost = rec.pending && script.frame.saturating_sub(rec.asked) > 120;
+            if lost {
+                log::warn!("record: frame {} did not arrive, asking again", rec.count);
+            }
+            if lost || (!rec.pending && script.frame % rec.every == 0) {
+                rec.pending = true;
+                rec.asked = script.frame;
+                ctx.send_viewport_cmd(ViewportCommand::Screenshot(egui::UserData::new(RecordTag)));
+            }
+            // the script waits for each frame, so every step shows up in the recording
+            if rec.pending {
+                return;
+            }
+        }
         if let Some(path) = script.shot.clone() {
             let shot = ctx.input(|i| {
                 i.events.iter().find_map(|e| match e {
-                    Event::Screenshot { image, .. } => Some(image.clone()),
+                    Event::Screenshot { image, user_data, .. } if !is_record_shot(user_data) => Some(image.clone()),
                     _ => None,
                 })
             });
@@ -746,6 +831,18 @@ impl VarstotasApp {
                     s.shot = Some(path);
                 }
                 ctx.send_viewport_cmd(ViewportCommand::Screenshot(Default::default()));
+            }
+            ScriptCmd::Record(target) => {
+                let rec = target.map(|(dir, every)| {
+                    if let Err(e) = std::fs::create_dir_all(&dir) {
+                        log::error!("record: cannot create {dir}: {e}");
+                    }
+                    Recorder { dir, every, count: 0, pending: false, asked: 0 }
+                });
+                if let Some(s) = self.debug.script.as_mut() {
+                    // a frame requested before `record off` still arrives: it is dropped
+                    s.rec = rec;
+                }
             }
             ScriptCmd::Quit => {
                 if let Some(s) = self.debug.script.as_mut() {
@@ -2233,6 +2330,14 @@ impl VarstotasApp {
             self.actions.push(Action::SoftenEdges(s));
             return;
         }
+        // `demo <name>`: open examples/demos/<name>.vrst (repository fixtures, as demo_house)
+        if let Some(file) = name.strip_prefix("demo ") {
+            self.doc.dirty = false;
+            if let Some(d) = qa_examples_dir() {
+                self.actions.push(Action::OpenPath(d.join("demos").join(format!("{}.vrst", file.trim()))));
+            }
+            return;
+        }
         let a = match name {
             "make_parametric" => Action::MakeParametric,
             "console" => Action::ToggleConsole,
@@ -2876,7 +2981,7 @@ impl VarstotasApp {
     }
 
     /// `(open source models=N shown=N busy=N sel=key last=…)`.
-    /// Model Info: `(scene faces, triangles, groups, components placed | component defs used /
+    /// Document Info: `(scene faces, triangles, groups, components placed | component defs used /
     /// all, group defs used / all, materials used / all) last purge`.
     fn stats_dump(&self) -> String {
         let s = self.doc.model.statistics();

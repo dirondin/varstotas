@@ -1,15 +1,20 @@
 # Varstotas
 
-A lightweight native 3D modeller in the classic push/pull style, for macOS, Windows and Linux.
-Written in Rust (egui + wgpu). Models are in real units, and everything can be scripted.
+A free, open-source 3D modeller for makers and hobbyists: plan furniture, workshop projects and
+3D prints in real millimetres, then take the dimensions to the workshop or the model to a slicer.
+Classic push/pull modelling, native on macOS, Windows and Linux. Written in Rust (egui + wgpu);
+everything can be scripted.
 
-![Varstotas with the country house demo](docs/images/house.jpg)
+![Drawing a rectangle, pulling it into a box and pushing a pocket into its top](docs/images/push-pull.gif)
 
 ## Features
 
-- **Direct modelling** — lines, arcs, Bézier and freehand curves, Push/Pull, Offset, Follow Me,
+- **Direct modelling** — lines, arcs, Bézier and freehand curves, Push/Pull, Offset, Sweep,
   chamfer and fillet, with inference snapping (endpoints, midpoints, axes, parallel /
   perpendicular) and typed exact values.
+- **Making things** — dimensions on the model; preparing models for a slicer (checks and repair,
+  wall-thickness maps, cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF /
+  DXF; sheets with scaled views; simple physics (drop objects, drape cloth).
 - **Organising** — groups and reusable components, tags, outliner, scenes, section planes,
   dimensions and text, locks, several viewports.
 - **Materials and rendering** — PBR materials with texture maps and a UV editor; a realistic
@@ -19,16 +24,18 @@ Written in Rust (egui + wgpu). Models are in real units, and everything can be s
   Smithsonian, NASA and more), parametric generators (shelves, stairs, railings…).
 - **Scripting and automation** — Rhai console and scripts, plugins that add menu commands and
   importers, a Python client over a local bridge and an MCP server for AI agents.
-- **Making things** — preparing models for a slicer (checks and repair, wall-thickness maps,
-  cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF / DXF; sheets with scaled views;
-  simple physics (drop objects, drape cloth).
 - **Formats** — import glTF / GLB, OBJ, STL, PLY, FBX, DAE, 3MF, DXF; export glTF / GLB, OBJ,
   STL, PLY, DAE, 3MF, PNG.
 - **Languages** — English, Russian, Lithuanian, Belarusian (Preferences → Interface → Language).
 
 <p>
-  <img src="docs/images/gallery.jpg" width="49%" alt="Material gallery in the Realistic style">
-  <img src="docs/images/workshop.jpg" width="49%" alt="Small workshop model">
+  <img src="docs/images/workbench.jpg" width="32%" alt="Workbench demo with its length, depth and height dimensions">
+  <img src="docs/images/dining-set.jpg" width="32%" alt="Dining set demo with the table's dimensions">
+  <img src="docs/images/bookshelf.jpg" width="32%" alt="Bookshelf demo with its dimensions and the shelf spacing">
+</p>
+
+<p align="center">
+  <img src="docs/images/house-orbit.gif" width="640" alt="Orbiting the country house demo in the Realistic style">
 </p>
 
 ## Download
@@ -42,6 +49,7 @@ Builds for macOS (`.dmg`), Windows (installer or portable `.zip`) and Linux (App
 cargo run --release -p varstotas_app     # run
 cargo test --workspace                   # tests
 tests/ui/run_all.sh [name …]             # UI regression scripts (macOS; explicit repository fixtures)
+scripts/readme-media.py                  # README animations and screenshots, the social preview (macOS, ffmpeg, ImageMagick)
 ```
 
 ## Documents
@@ -58,11 +66,11 @@ tests/ui/run_all.sh [name …]             # UI regression scripts (macOS; expli
 
 ## Structure
 ```
-crates/varstotas_kernel  — geometry kernel (sticky geometry, push/pull, offset, follow me, IO)
+crates/varstotas_kernel  — geometry kernel (sticky geometry, push/pull, offset, sweep, IO)
 crates/varstotas_render  — wgpu renderer, camera, path tracer
 crates/varstotas_script  — Rhai scripting API over the kernel
 crates/varstotas_i18n    — localization (Fluent)
-crates/varstotas_app     — application: UI, tools, inference, VCB, plugins
+crates/varstotas_app     — application: UI, tools, inference, Measurements box, plugins
 locales/                 — UI texts, one .ftl file per language
 python/                  — Python client of the local bridge and the MCP server
 examples/                — example plugins, scripts, generators and the demo models (.vrst)
@@ -91,7 +99,7 @@ time the menu is opened. Existing unsaved work is protected by the usual Save / 
 
 ## 3D printing preparation
 
-**Extensions → 3D printing preparation** opens one window with surface checks and conservative repair, intersection detection,
+**Window → Check Model…** opens the 3D printing preparation window with surface checks and conservative repair, intersection detection,
 sampled wall-thickness heatmaps, overhang highlights, a persistent printer profile and bed
 placement. Parts can be cut and capped, divided to fit a printer, and given sockets with
 separate registration dowels. Scoped STL/3MF export preserves millimetres and separate 3MF
@@ -132,7 +140,7 @@ browser cannot provide byte progress unless they report it to the app.
 
 ## Document metadata
 
-Window → Model Info is resizable, with Info (statistics), Meta (text, license and preview)
+Window → Document Info is resizable, with Info (statistics), Meta (text, license and preview)
 and Cleanup (unused resources) tabs. Meta offers multiline text/description and license fields
 (name, URL or full text). Apply makes one undoable change; save the document to persist it. Native documents now
 write format version 4 (authored corner normals and full affine UV placement) and continue
