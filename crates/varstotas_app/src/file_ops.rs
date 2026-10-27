@@ -113,7 +113,7 @@ impl VarstotasApp {
                 self.add_recent(path);
                 self.flash(tr!("app-opened", path = path.display().to_string()));
                 if self.autosave.allowed
-                    && let Some(r) = crate::autosave::find_recovery(Some(path), None)
+                    && let Some(r) = crate::autosave::find_recovery(Some(path), self.autosave.dir.as_deref())
                     && !self.autosave.recoveries.iter().any(|x| x.autosave == r.autosave)
                 {
                     self.autosave.recoveries.insert(0, r);
@@ -154,21 +154,25 @@ impl VarstotasApp {
 
     pub(crate) fn save_to(&mut self, path: &Path) -> bool {
         match guarded(|| {
-            if self.prefs.save_backups {
-                io::save_with_backup(&self.doc.model, path)
-            } else {
-                io::save(&self.doc.model, path)
+            match crate::paths::backup_path(path).filter(|_| self.prefs.save_backups) {
+                Some(backup) => {
+                    if let Some(dir) = backup.parent() {
+                        std::fs::create_dir_all(dir)?;
+                    }
+                    io::save_with_backup(&self.doc.model, path, &backup)
+                }
+                None => io::save(&self.doc.model, path),
             }
         }) {
             Ok(Ok(())) => {
                 self.doc.path = Some(path.to_path_buf());
                 self.doc.dirty = false;
                 // Clean save: drop the autosave we wrote (untitled or old name) and any stale
-                // autosave next to the new file.
+                // autosave of the new file.
                 if let Some(p) = self.autosave.written.take() {
                     self.autosave.worker.delete(p);
                 }
-                if let Some(p) = crate::autosave::path_for(Some(path), None) {
+                if let Some(p) = crate::autosave::path_for(Some(path), self.autosave.dir.as_deref()) {
                     self.autosave.worker.delete(p);
                 }
                 self.autosave.recoveries.retain(|r| r.original.as_deref() != Some(path));

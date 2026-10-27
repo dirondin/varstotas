@@ -304,7 +304,6 @@ impl VarstotasApp {
         match s {
             Section::Render => {
                 p.new_render = d.new_render;
-                p.oidn_path = None;
             }
             Section::General => {
                 p.undo_steps = d.undo_steps;
@@ -453,14 +452,12 @@ impl VarstotasApp {
         note(ui, &tr!("prefs-render-note"));
 
         heading(ui, &tr!("prefs-programs"));
-        let oidn = varstotas_render::oidn_library();
-        file_row(
-            ui,
-            &tr!("prefs-oidn"),
-            &mut self.prefs.oidn_path,
-            oidn,
-            &tr!("prefs-oidn-missing"),
-        );
+        ui.label(tr!("prefs-oidn"));
+        let oidn = match varstotas_render::oidn_library() {
+            Some(f) => tr!("prefs-file-found", path = f.display().to_string()),
+            None => tr!("prefs-oidn-missing"),
+        };
+        ui.add(egui::Label::new(RichText::new(oidn).small().color(theme::text_dim())).truncate());
         let editor = self.prefs.image_editor_path.clone();
         file_row(ui, &tr!("prefs-image-editor"), &mut self.prefs.image_editor_path, editor, &tr!("prefs-image-editor-default"));
     }

@@ -1,5 +1,5 @@
 # Test build of the Flatpak (packaging/flatpak) from this checkout, then Flathub's linter (its
-# findings are reported, not fatal: --filesystem=home needs an exception granted on Flathub).
+# findings are reported, not fatal: the screenshot ones below are expected).
 # Release build runs it for every release tag; by hand: Actions → Flatpak → Run workflow.
 # x86_64 and aarch64, as Flathub builds both; the bundles (varstotas-<arch>.flatpak) are kept as
 # artifacts: flatpak install --user <file>.

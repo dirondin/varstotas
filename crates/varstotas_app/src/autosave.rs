@@ -1,8 +1,9 @@
 //! Autosave and crash recovery (classic).
 //!
-//! Every N minutes, if the document has unsaved changes, a copy is written next to the file as
-//! `<name>.vrst~autosave` (or `Untitled.vrst~autosave` in the app data dir for untitled
-//! documents). The model is cloned on the UI thread; JSON serialization and the file write
+//! Every N minutes, if the document has unsaved changes, a copy is written to the app data
+//! folder: `autosave/<name> (<hash>).vrst~autosave` (`paths::doc_key`), or
+//! `Untitled.vrst~autosave` for untitled documents. Not next to the file: a sandbox gives the
+//! app the document only, not its folder. The model is cloned on the UI thread; JSON serialization and the file write
 //! happen on a background worker that processes writes and deletes strictly in order, so a
 //! late write can never resurrect an autosave that was deleted after a clean save.
 //! On startup (and when opening a file) a newer autosave is offered for recovery.
@@ -27,16 +28,13 @@ pub fn data_dir() -> Option<PathBuf> {
     crate::paths::data_dir()
 }
 
-/// Where the autosave of a document lives: next to the file, or in `data_dir` when untitled.
+/// Where the autosave of a document lives in `data_dir` (`autosave/`, or the untitled one).
 pub fn path_for(doc_path: Option<&Path>, data_dir: Option<&Path>) -> Option<PathBuf> {
-    match doc_path {
-        Some(p) => {
-            let mut name: OsString = p.file_name()?.to_os_string();
-            name.push(SUFFIX);
-            Some(p.with_file_name(name))
-        }
-        None => data_dir.map(|d| d.join(UNTITLED_FILE)),
-    }
+    let dir = data_dir?;
+    Some(match doc_path {
+        Some(p) => dir.join("autosave").join(format!("{}.vrst{SUFFIX}", crate::paths::doc_key(p))), // i18n-ignore
+        None => dir.join(UNTITLED_FILE),
+    })
 }
 
 /// Is an autosave due? `now` / `last` are seconds; `last` is the time of the previous
@@ -271,8 +269,10 @@ mod tests {
 
     #[test]
     fn autosave_paths() {
-        let p = path_for(Some(Path::new("/a/b/house.vrst")), None).unwrap();
-        assert_eq!(p, PathBuf::from("/a/b/house.vrst~autosave"));
+        let p = path_for(Some(Path::new("/a/b/house.vrst")), Some(Path::new("/data"))).unwrap();
+        let key = crate::paths::doc_key(Path::new("/a/b/house.vrst"));
+        assert_eq!(p, PathBuf::from(format!("/data/autosave/{key}.vrst~autosave")));
+        assert_eq!(path_for(Some(Path::new("/a/b/house.vrst")), None), None);
         let u = path_for(None, Some(Path::new("/data"))).unwrap();
         assert_eq!(u, PathBuf::from("/data/Untitled.vrst~autosave"));
         assert_eq!(path_for(None, None), None);
@@ -295,24 +295,25 @@ mod tests {
     fn recovery_requires_newer_autosave() {
         let d = tmp_dir("recovery");
         let file = d.join("house.vrst");
-        let auto = path_for(Some(&file), None).unwrap();
+        let auto = path_for(Some(&file), Some(&d)).unwrap();
+        std::fs::create_dir_all(auto.parent().unwrap()).unwrap();
         // No autosave: nothing to recover.
         std::fs::write(&file, "x").unwrap();
-        assert_eq!(find_recovery(Some(&file), None), None);
+        assert_eq!(find_recovery(Some(&file), Some(&d)), None);
         // Autosave older than the file: ignored.
         std::fs::write(&auto, "y").unwrap();
         let now = SystemTime::now();
         set_mtime(&auto, now - std::time::Duration::from_secs(120));
         set_mtime(&file, now - std::time::Duration::from_secs(60));
-        assert_eq!(find_recovery(Some(&file), None), None);
+        assert_eq!(find_recovery(Some(&file), Some(&d)), None);
         // Autosave newer: offered.
         set_mtime(&auto, now);
-        let r = find_recovery(Some(&file), None).unwrap();
+        let r = find_recovery(Some(&file), Some(&d)).unwrap();
         assert_eq!(r.autosave, auto);
         assert_eq!(r.display_name(), "house.vrst");
         // Original deleted: still offered.
         std::fs::remove_file(&file).unwrap();
-        assert!(find_recovery(Some(&file), None).is_some());
+        assert!(find_recovery(Some(&file), Some(&d)).is_some());
         // Untitled autosave in the data dir.
         assert!(find_recovery(None, Some(&d)).is_none());
         std::fs::write(d.join(UNTITLED_FILE), "z").unwrap();

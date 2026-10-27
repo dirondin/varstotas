@@ -42,7 +42,7 @@ action script box(vec3(500,0,0),50,50,50);
 action console_close
 save models/start_feedback.vrst
 expect model_faces=12
-open models/start_feedback.bak.vrst
+open_backup models/start_feedback.vrst
 wait 5
 expect model_faces=6
 open models/start_feedback.vrst

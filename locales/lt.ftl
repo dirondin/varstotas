@@ -1237,7 +1237,7 @@ prefs-data-folder-note = Čia laikomi papildiniai, bibliotekos, šablonai, jūs�
 prefs-autosave = Automatinis išsaugojimas
 prefs-autosave-every = Automatiškai išsaugoti kas
 prefs-minutes = min.
-prefs-autosave-note = Neišsaugoti pakeitimai įrašomi į <name>.vrst~autosave šalia failo.
+prefs-autosave-note = Neišsaugoti pakeitimai įrašomi į { DATA_DIR() }/autosave, o ne šalia failo.
 prefs-new-document = Naujas dokumentas
 prefs-template-note = Komandos Failas → Naujas šablonas (vienetai ir mastelis); jo rodinys nustatomas skyriuje Rodinys.
 prefs-undo = Atšaukti
@@ -1259,7 +1259,7 @@ prefs-apply-current-doc-tip = Atidarytas dokumentas gauna šiuos nustatymus (At�
 prefs-render-note = Failas → Naujas pradedamas su šiais; Langas → Vaizdavimas keičia atidaryto dokumento nustatymus.
 prefs-programs = Programos
 prefs-oidn = Open Image Denoise biblioteka (vaizdavimo triukšmo šalinimas)
-prefs-oidn-missing = nerasta: triukšmą šalina integruotas filtras (brew install open-image-denoise arba pasirinkite biblioteką)
+prefs-oidn-missing = nerasta: triukšmą šalina integruotas filtras (įdiekite Open Image Denoise: brew install open-image-denoise arba savo sistemos paketą)
 prefs-image-editor = Vaizdų redaktorius (Medžiagos redaktorius → Tekstūros → Redaguoti)
 prefs-image-editor-default = sistemos numatytoji programa šiam failui
 
@@ -3709,7 +3709,7 @@ help-scenes-10 = dalys su pjovimo dydžiais, plotai pagal medžiagą (CSV)
 ## files
 help-files-1 = Dokumentai yra `.vrst` failai (tekstūros ir paveikslėliai išsaugomi viduje). Failas → Naujas iš šablono pasirenka vienetus; Langas → Nustatymai nustato numatytąjį šabloną ir automatinio išsaugojimo intervalą.
 help-files-2 = Langas → Nustatymai turi skiltis kairėje ir paiešką: Bendra (automatinis išsaugojimas, Failas → Naujas šablonas, kiek atšaukimo žingsnių laikoma), Sąsaja (šviesi, tamsi ar sistemos tema, meniu ir skydelių mastelis, įrankių juostos piktogramų dydis), Piešimas (tinklelis, prilipimas ir žingsniai — tie patys jungikliai kaip Prilipimo meniu), Bibliotekos (komponentų ir medžiagų aplankai, Pavyzdžiai, plytelių dydis), Atsisiuntimai (stebimas aplankas), Naršymas (pelė ir jutiklinis kilimėlis), Spartieji klavišai (spustelėkite sparčiąjį klavišą ir paspauskite naujus klavišus; Backspace jį pašalina, ↺ grąžina numatytąjį), Vaizdo kūrimas (naujų dokumentų vaizdo kūrimo nustatymai; kur yra Open Image Denoise biblioteka) ir Rodinys (kaip atrodo naujas dokumentas: stilius, briaunos, ašys, žemė, dangus, tinklelis, šešėliai, projekcija, matymo laukas; Naudoti dabartinį rodinį / Taikyti dabartiniam rodiniui). Pakeitimai taikomi iš karto; Atkurti grąžina skiltį į numatytąsias reikšmes.
-help-files-3 = Automatinis išsaugojimas įrašo neišsaugotus pakeitimus į `<name>.vrst~autosave` šalia failo; po strigties Varstotas pasiūlo juos atkurti.
+help-files-3 = Automatinis išsaugojimas įrašo neišsaugotus pakeitimus į `{ DATA_DIR() }/autosave`; po strigties Varstotas pasiūlo juos atkurti.
 help-files-4 = Importas
 help-files-5 = OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, taškai iš CSV ir formatai, pridėti papildinių; failus taip pat galite numesti ant lango
 help-files-6 = Eksportas
@@ -4297,7 +4297,7 @@ cli-unknown-option = Nežinomas parametras: { $option }
 cli-open-path = Po --open reikia nurodyti dokumento kelią
 
 prefs-save-backups = Saugoti ankstesnės išsaugotos versijos atsarginę kopiją
-prefs-save-backups-note = Išsaugant ankstesnė versija paliekama faile <name>.bak.vrst. Išjungus esamos kopijos nepašalinamos.
+prefs-save-backups-note = Išsaugant ankstesnė versija paliekama { DATA_DIR() }/backups kaip <name> (…).bak.vrst. Išjungus esamos kopijos nepašalinamos.
 
 model-info-metadata = Dokumento metaduomenys
 model-info-metadata-text = Tekstas / aprašymas

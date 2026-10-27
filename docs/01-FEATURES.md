@@ -99,7 +99,7 @@ Status: ⬜ not started · 🟨 in progress · ✅ done.
 | Tangent at vertex (arcs) | cyan | P1 | ✅ |
 | Shift — lock inference; arrows ↑→← ↓ — axis locking | | P0 | ✅ |
 | Guide points / guide lines | | P0 | ✅ |
-| Preferences: a window with sections and search — General, Interface (light / dark / system theme, scale 80–150 %, toolbar icon size), Drawing (grid, snaps, steps), Libraries (folders, tiles), Downloads (watched folder), Shortcuts (remapping hotkeys of commands and tools, reset), Render (render of a new document, the OIDN path), the number of Undo steps, Navigation (orbit and zoom speed, inversion, zoom to cursor or centre, middle button, two-finger gesture), View (view of a new document: style, edges, axes, ground, sky, grid, shadows, projection, FOV); Reset per section; the menu items remain | | P2 | ✅ |
+| Preferences: a window with sections and search — General, Interface (light / dark / system theme, scale 80–150 %, toolbar icon size), Drawing (grid, snaps, steps), Libraries (folders, tiles), Downloads (watched folder), Shortcuts (remapping hotkeys of commands and tools, reset), Render (render of a new document, whether OIDN is found), the number of Undo steps, Navigation (orbit and zoom speed, inversion, zoom to cursor or centre, middle button, two-finger gesture), View (view of a new document: style, edges, axes, ground, sky, grid, shadows, projection, FOV); Reset per section; the menu items remain | | P2 | ✅ |
 | Localization | every UI text from `locales/<lang>.ftl` (Fluent): English, Russian, Lithuanian and Belarusian, Preferences → Interface → Language (as the system), platform variants of texts, plural forms, own translations in `<data folder>/locales/`; plugins localize their headers (`@name.ru`, `@param.ru` …) | P2 | ✅ |
 | Snapping menu (magnet, the Snapping menu after Tools): each snap on/off, a common Shift+S switch, saved in the settings | | P1 | ✅ |
 | Grid (View → Grid): step, major lines, thinning when zooming out; snapping to nodes and lines, directions stop at grid lines | grey dot / square | P1 | ✅ |
@@ -136,7 +136,7 @@ Status: ⬜ not started · 🟨 in progress · ✅ done.
 ## 9. Files and other
 | Function | Prio. | Status |
 |---|---|---|
-| Own `.vrst` format (save/open, autosave) | P0 | ✅ |
+| Own `.vrst` format (save/open, autosave and the previous version's backup in the data folder) | P0 | ✅ |
 | Export OBJ, STL | P0 | ✅ |
 | Import OBJ / STL | P1 | ✅ |
 | Export PNG (view screenshot) | P1 | ✅ |

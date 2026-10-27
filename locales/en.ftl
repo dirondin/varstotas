@@ -1231,7 +1231,7 @@ prefs-data-folder-note = Plugins, libraries, templates, your own translations an
 prefs-autosave = Auto-save
 prefs-autosave-every = Auto-save every
 prefs-minutes = minutes
-prefs-autosave-note = Unsaved changes are written to <name>.vrst~autosave next to the file.
+prefs-autosave-note = Unsaved changes are written to { DATA_DIR() }/autosave, not next to the file.
 prefs-new-document = New document
 prefs-template-note = The template of File → New (units and scale); its view is set in the View section.
 prefs-undo = Undo
@@ -1253,7 +1253,7 @@ prefs-apply-current-doc-tip = The open document gets these settings (Undo puts t
 prefs-render-note = File → New starts with these; Window → Render changes the open document's.
 prefs-programs = Programs
 prefs-oidn = Open Image Denoise library (the render's denoiser)
-prefs-oidn-missing = not found: the built-in filter denoises (brew install open-image-denoise, or choose the library)
+prefs-oidn-missing = not found: the built-in filter denoises (install Open Image Denoise: brew install open-image-denoise, or your system's package)
 prefs-image-editor = Image editor (Material Editor → Textures → Edit)
 prefs-image-editor-default = the system's default program for the file
 
@@ -3684,7 +3684,7 @@ help-scenes-10 = parts with sizes for cutting, areas by material (CSV)
 ## files
 help-files-1 = Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval.
 help-files-2 = Window → Preferences has sections on the left and a search: General (auto-save, the template of File → New, how many undo steps are kept), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back), Render (the render settings of new documents; where the Open Image Denoise library is) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults.
-help-files-3 = Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it.
+help-files-3 = Auto-save writes unsaved changes to `{ DATA_DIR() }/autosave`; after a crash Varstotas offers to recover them.
 help-files-4 = Import
 help-files-5 = OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window
 help-files-6 = Export
@@ -4272,7 +4272,7 @@ cli-unknown-option = Unknown option: { $option }
 cli-open-path = --open requires a document path
 
 prefs-save-backups = Keep a backup of the previous saved version
-prefs-save-backups-note = Explicit saves keep the previous version in <name>.bak.vrst. Turning this off leaves existing backups untouched.
+prefs-save-backups-note = Explicit saves keep the previous version in { DATA_DIR() }/backups as <name> (…).bak.vrst. Turning this off leaves existing backups untouched.
 
 model-info-metadata = Document metadata
 model-info-metadata-text = Text / description

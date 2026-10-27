@@ -14,8 +14,10 @@ finish-args:
   - --device=dri
   # online model and material libraries; the local scripting bridge and MCP server (127.0.0.1)
   - --share=network
-  # documents with their textures and autosaves next to them, plugin, script and library folders
-  - --filesystem=home
+  # the Downloads watcher (Preferences → Downloads) reads new model files there; documents,
+  # folders and textures otherwise come through the file chooser portal, and Varstotas keeps
+  # its own files (autosaves, backups, libraries) in ~/.var/app/<id>/data
+  - --filesystem=xdg-download:ro
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:

@@ -176,12 +176,15 @@ The latest warnings/errors are optional. Copy the report or open a prefilled Git
 your browser; sign in and submit it yourself. Private repositories require access. The app
 stores no GitHub token and does not attach the model or screenshots automatically.
 
-Explicit document saves, including bridge saves, keep one previous version beside the document:
-`model.vrst` → `model.bak.vrst`. **Preferences → General → Keep a backup of the previous saved version**
+Explicit document saves, including bridge saves, keep one previous version in the data folder:
+`model.vrst` → `<data folder>/backups/model (<hash>).bak.vrst`, the hash telling apart same-named
+documents in different folders. **Preferences → General → Keep a backup of the previous saved version**
 is enabled by default; disabling it leaves existing backups untouched. Open the backup with File → Open to recover it, then Save As
 to the desired filename. Saving an unchanged model preserves the last distinct backup.
 If the backup cannot be written, the existing document is left intact
-and saving reports an error. Autosave/recovery remains separate and does not rotate this backup.
+and saving reports an error. Autosaves go to `<data folder>/autosave` and do not rotate this backup.
+Nothing is written next to a document: in a sandbox (Flatpak) the app sees only the file chosen in
+the dialog, not its folder.
 
 ## Release builds
 Artifacts go to `dist/` (not tracked by git).

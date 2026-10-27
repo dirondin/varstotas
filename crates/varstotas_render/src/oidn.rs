@@ -1,10 +1,11 @@
-//! Intel Open Image Denoise, loaded at run time when installed (Homebrew
-//! `open-image-denoise`, the library next to the executable, Preferences → Render, or
-//! `VARSTOTAS_OIDN` = its path).
+//! Intel Open Image Denoise, loaded at run time when installed: the library next to the
+//! executable, Homebrew's `open-image-denoise`, or the system's search path
+//! (`VARSTOTAS_OIDN` = its path, for development). No library from a folder the user picks:
+//! loading one runs its code.
 //! The path tracer's final denoise uses it instead of the built-in à-trous filter.
 
 use std::ffi::{CStr, c_char, c_void};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 type Device = *mut c_void;
@@ -31,7 +32,7 @@ struct Api {
 unsafe impl Send for Api {}
 
 fn candidates() -> Vec<std::path::PathBuf> {
-    let mut v: Vec<PathBuf> = CUSTOM.lock().ok().and_then(|c| c.clone()).into_iter().collect();
+    let mut v = Vec::new();
     if let Some(p) = std::env::var_os("VARSTOTAS_OIDN") {
         v.push(p.into());
     }
@@ -107,31 +108,12 @@ impl Api {
     }
 }
 
-/// The library chosen in Preferences (tried first).
-static CUSTOM: Mutex<Option<PathBuf>> = Mutex::new(None);
 static API: OnceLock<Mutex<Option<Api>>> = OnceLock::new();
 /// The path of the loaded library (read without waiting for a denoise in progress).
 static LOADED: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 fn api() -> &'static Mutex<Option<Api>> {
     API.get_or_init(|| Mutex::new(load()))
-}
-
-/// Use the library at `p` first (None = only the usual places); loads it again when changed.
-pub fn set_library(p: Option<&Path>) {
-    let Ok(mut c) = CUSTOM.lock() else { return };
-    if c.as_deref() == p {
-        return;
-    }
-    *c = p.map(Path::to_path_buf);
-    drop(c);
-    if let Some(m) = API.get()
-        && let Ok(mut a) = m.lock()
-    {
-        // the old device is never released: unloading its library under it is not safe
-        std::mem::forget(a.take());
-        *a = load();
-    }
 }
 
 /// The library in use.

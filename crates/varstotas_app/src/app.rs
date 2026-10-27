@@ -150,8 +150,6 @@ pub struct Prefs {
     pub shortcuts: std::collections::BTreeMap<String, String>,
     /// Render settings of a new document (Preferences → Render).
     pub new_render: varstotas_kernel::RenderSettings,
-    /// Open Image Denoise library chosen by hand (None = found on the system).
-    pub oidn_path: Option<PathBuf>,
     /// Image editor for textures (None = the system's default program for the file).
     pub image_editor_path: Option<PathBuf>,
     /// Undo steps kept per document.
@@ -216,7 +214,6 @@ impl Default for Prefs {
             toolbar: Vec::new(),
             shortcuts: Default::default(),
             new_render: Default::default(),
-            oidn_path: None,
             image_editor_path: None,
             undo_steps: 100,
         }
@@ -2476,7 +2473,6 @@ impl eframe::App for VarstotasApp {
         crate::axes::sync(&self.doc.model);
         crate::nav::publish(&self.prefs.nav);
         crate::keymap::publish(&self.prefs.shortcuts);
-        varstotas_render::oidn_set_library(self.prefs.oidn_path.as_deref());
         self.doc.history.set_limit(self.prefs.undo_steps as usize);
         self.apply_interface(&ctx);
         crate::inference::settings::publish(&self.prefs.snapping);

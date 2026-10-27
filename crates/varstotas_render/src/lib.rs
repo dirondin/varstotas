@@ -523,7 +523,7 @@ pub mod shaders {
 }
 mod bvh;
 mod oidn;
-pub use oidn::{available as oidn_available, library as oidn_library, set_library as oidn_set_library};
+pub use oidn::{available as oidn_available, library as oidn_library};
 mod pathtrace;
 pub use pathtrace::{PtLight, PtLightKind, PtOutput, PtSettings, white_balance};
 mod renderer;

@@ -88,13 +88,14 @@ fn native_save_rejects_invalid_shading_before_overwriting_or_creating_a_backup()
     let dir = std::env::temp_dir().join(format!("varstotas-normal-save-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("model.vrst");
+    let backup = dir.join("model.bak.vrst");
     io::save(&model, &path).unwrap();
     let original = std::fs::read(&path).unwrap();
     model.root_mesh_mut().faces[face].normals.pop();
     assert!(io::save(&model, &path).is_err());
-    assert!(io::save_with_backup(&model, &path).is_err());
+    assert!(io::save_with_backup(&model, &path, &backup).is_err());
     assert_eq!(std::fs::read(&path).unwrap(), original);
-    assert!(!io::backup_path(&path).exists());
+    assert!(!&backup.exists());
     std::fs::remove_dir_all(dir).unwrap();
 }
 

@@ -67,16 +67,10 @@ pub fn save(model: &Model, path: &Path) -> Result<(), IoError> {
     Ok(())
 }
 
-/// One previous explicit save, kept as a normal, reopenable `.vrst` document.
-pub fn backup_path(path: &Path) -> std::path::PathBuf {
-    let mut name = path.file_stem().unwrap_or_default().to_os_string();
-    name.push(".bak.vrst");
-    path.with_file_name(name)
-}
-
-/// Preserve the previous file before replacing it. Backup failure leaves the original intact.
+/// Preserve the previous file as `backup` (a normal, reopenable `.vrst` document; the app keeps
+/// it in its data folder) before replacing it. Backup failure leaves the original intact.
 /// Autosaves and generated fixtures use `save` and do not rotate document backups.
-pub fn save_with_backup(model: &Model, path: &Path) -> Result<(), IoError> {
+pub fn save_with_backup(model: &Model, path: &Path, backup: &Path) -> Result<(), IoError> {
     super::validate_model(model)?;
     let text = to_json(model)?;
     match std::fs::symlink_metadata(path) {
@@ -87,7 +81,7 @@ pub fn save_with_backup(model: &Model, path: &Path) -> Result<(), IoError> {
             let previous = super::read_limited(path, super::MAX_MODEL_BYTES)?;
             // Repeated Save without changes must not discard the last distinct version.
             if previous == text.as_bytes() { return Ok(()); }
-            super::atomic_write(backup_path(path), &previous)?;
+            super::atomic_write(backup, &previous)?;
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(e.into()),

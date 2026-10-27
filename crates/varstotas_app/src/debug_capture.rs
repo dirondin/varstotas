@@ -297,6 +297,8 @@ pub enum ScriptCmd {
     Recover(Option<bool>),
     /// `open <path>` — open a model file (no file dialog, no "save changes?" prompt).
     Open(String),
+    /// `open_backup <path>` — open the backup an explicit save kept of that model (data folder).
+    OpenBackup(String),
     /// `texture <path> [width_mm]` — new material from an image (Materials → + → New from Texture…).
     Texture(String, f64),
     /// `export_png <path> [w h] [transparent] [noaxes] [noguides] [nodims]` — File → Export → 2D Graphic without dialogs
@@ -538,6 +540,7 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
         "autosave" => ScriptCmd::Autosave,
         "save" if !rest.is_empty() => ScriptCmd::SaveTo(rest.to_string()),
         "open" if !rest.is_empty() => ScriptCmd::Open(rest.to_string()),
+        "open_backup" if !rest.is_empty() => ScriptCmd::OpenBackup(rest.to_string()),
         "texture" if !rest.is_empty() => {
             let (path, w) = match rest.rsplit_once(char::is_whitespace) {
                 Some((p, w)) if w.parse::<f64>().is_ok() => (p.trim(), w.parse().unwrap_or(1000.0)),
@@ -937,6 +940,13 @@ impl VarstotasApp {
                 self.doc.dirty = false;
                 self.actions.push(crate::app::Action::OpenPath(p.into()));
             }
+            ScriptCmd::OpenBackup(p) => match crate::paths::backup_path(std::path::Path::new(&p)) {
+                Some(b) => {
+                    self.doc.dirty = false;
+                    self.actions.push(crate::app::Action::OpenPath(b));
+                }
+                None => log::warn!("script: `open_backup` without a data folder"),
+            },
             ScriptCmd::ExportPng(p, size, content) => {
                 let vp = self.viewport.size();
                 let size = size.unwrap_or([vp.x.round() as u32, vp.y.round() as u32]);
