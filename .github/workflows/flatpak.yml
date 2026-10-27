@@ -20,7 +20,7 @@ jobs:
     name: Flatpak
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-26.08
       options: --privileged
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +35,8 @@ jobs:
           manifest-path: flatpak-build/io.github.dirondin.Varstotas.yml
           bundle: varstotas-x86_64.flatpak
           cache-key: flatpak-builder-${{ github.sha }}
+      # appstream-screenshots-not-mirrored-in-ostree and appstream-external-screenshot-url are
+      # expected here: Flathub's own build mirrors the screenshots
       - name: Flathub linter
         continue-on-error: true
         run: |

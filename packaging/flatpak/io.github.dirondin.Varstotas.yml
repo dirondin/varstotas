@@ -2,7 +2,7 @@
 # the source and add cargo-sources.json through scripts/flatpak-manifest.py.
 id: io.github.dirondin.Varstotas
 runtime: org.freedesktop.Platform
-runtime-version: '25.08'
+runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
