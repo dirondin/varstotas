@@ -36,7 +36,7 @@ expect new_render=(1280x720 256spp b6 dn=true match=true)
 raw click 137 120
 wait 5
 expect prefs_win=(true General)
-raw click 280 282
+action click_spot undo_steps
 wait 5
 raw text 10
 raw key Enter

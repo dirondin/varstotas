@@ -6,9 +6,9 @@ wait 10
 # File → Export → Animation (GIF / PNG)… (real mouse)
 raw click 20 -106
 wait 3
-raw click 38 161
+raw click 38 188
 wait 3
-raw click 230 188
+raw click 250 215
 wait 5
 expect anim_win=true None
 screenshot shots/anim_window.bmp

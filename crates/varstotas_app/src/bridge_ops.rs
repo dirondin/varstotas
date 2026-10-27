@@ -561,6 +561,8 @@ impl VarstotasApp {
 
     /// [`Self::run_python_file`] with plugin values (JSON) in `VARSTOTAS_PARAMS`.
     pub(crate) fn run_python_with(&mut self, path: &Path, params: Option<String>) {
+        // absolute: the script runs in its own folder, where a relative path means something else
+        let path = &std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let Some(b) = &self.bridge.server else {
             self.flash_error(varstotas_i18n::tr!("ext-python-no-bridge"));
