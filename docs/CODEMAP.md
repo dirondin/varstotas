@@ -88,7 +88,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 | File | Contents |
 |---|---|
 | `app.rs` | `VarstotasApp`: layout, actions, input routing; `flash` / `flash_error` (red, kept in Window → Log), `placed` (a window's default position, fixed in scripted runs) |
-| `file_ops.rs` | `VarstotasApp` file handling: new (templates) / open / save / export / import, recent files, dirty guard (`Pending`), autosave and recovery |
+| `file_ops.rs` | `VarstotasApp` file handling: new (templates) / open / save / export (`export_into`: formats with sidecars into a picked folder) / import (`import_asking`: missing sidecars → choose the model's folder, `io::take_missing_resources`), recent files, dirty guard (`Pending`), autosave and recovery |
 | `files.rs` | file names from user / web text: `safe_name` (with a fallback: `COMPONENT`, `MATERIAL`, `MODEL`), `safe_rel` (archive paths kept inside), `file_safe` (ASCII cache keys) |
 | `document.rs` | open document: model, history, selection, editing context |
 | `viewport.rs` | 3D view widget: input, renderer, overlays; a `Gpu` (renderer + geometry) per pane, shared tessellation, `rect` = active pane, `view_rect` = all panes (window positions, harness raw origin); `PtJob` (path traced render in pane 0's renderer, save PNG / EXR) |

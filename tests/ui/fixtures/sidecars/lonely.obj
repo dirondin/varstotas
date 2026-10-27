@@ -1,0 +1,7 @@
+# refers to lonely.mtl, which is not here: the import reports it missing
+mtllib lonely.mtl
+v 0 0 0
+v 100 0 0
+v 0 100 0
+usemtl wood
+f 1 2 3

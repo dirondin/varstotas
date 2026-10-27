@@ -194,6 +194,16 @@ impl VarstotasApp {
     }
 
     pub(crate) fn export(&mut self, ext: &str) {
+        let name = format!("{}.{ext}", self.doc.display_name());
+        // With files beside it (OBJ's .mtl, textures) the export goes into a chosen folder: a
+        // sandbox lets the app write only what the dialog picked, a file or a whole folder.
+        if io::export_bundle(&self.doc.model, Path::new(&name)).is_some_and(|f| f.len() > 1) {
+            let Some(dir) = rfd::FileDialog::new().set_title(tr!("app-export-folder", format = ext.to_uppercase())).pick_folder() else {
+                return;
+            };
+            self.export_into(&dir.join(name));
+            return;
+        }
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             .set_file_name(format!("{}.{ext}", self.doc.display_name()))
@@ -205,6 +215,31 @@ impl VarstotasApp {
             path.set_extension(ext);
         }
         self.export_to(&path);
+    }
+
+    /// Export with its sidecar files to `path` in a picked folder: one question for every file
+    /// it would replace, the model file too (no save dialog asked about it).
+    fn export_into(&mut self, path: &Path) {
+        let existing: std::collections::HashSet<PathBuf> = io::export_bundle(&self.doc.model, path)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(p, _)| p)
+            .filter(|p| p.exists())
+            .collect();
+        if !existing.is_empty() {
+            let mut files: Vec<String> = existing.iter().map(|p| p.display().to_string()).collect();
+            files.sort();
+            let yes = rfd::MessageDialog::new()
+                .set_title(tr!("app-export-replace-title"))
+                .set_description(tr!("app-export-replace-all", files = files.join("\n")))
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show()
+                == rfd::MessageDialogResult::Yes;
+            if !yes {
+                return;
+            }
+        }
+        self.export_to_approved(path, Some(&existing));
     }
 
     /// Export the model to `path`; the format follows the extension.
@@ -291,6 +326,14 @@ impl VarstotasApp {
 
     /// Import `path` (format by extension) as one undo step "Import <label>".
     pub(crate) fn import_from(&mut self, path: &std::path::Path, label: &str) {
+        self.import_asking(path, label, true);
+    }
+
+    /// When files next to the model (textures, `.mtl`, `.bin`) could not be read — in a sandbox
+    /// the app sees only the picked file — `ask` offers to choose the model's folder and
+    /// imports again from there, in place of the first try.
+    fn import_asking(&mut self, path: &std::path::Path, label: &str, ask: bool) {
+        io::take_missing_resources();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
         let r = self.doc.try_commit(&tr!("app-undo-import", format = label), |m| match ext.as_str() {
             "obj" => io::import_obj(m, path),
@@ -303,12 +346,55 @@ impl VarstotasApp {
             "csv" => io::import_points_csv(m, path).map(|_| ()),
             _ => io::import_stl(m, path),
         });
+        let missing = io::take_missing_resources();
+        self.import_missing.clone_from(&missing);
+        if !missing.is_empty() {
+            log::warn!("import {}: missing {}", path.display(), missing.join(", "));
+        }
+        if !missing.is_empty() && ask && !self.debug.script_active()
+            && let Some(folder) = self.ask_model_folder(path, &missing)
+        {
+            let Some(name) = path.file_name() else { return };
+            let again = folder.join(name);
+            if !again.is_file() {
+                self.flash_error(tr!("app-import-not-in-folder", file = name.to_string_lossy().to_string(), folder = folder.display().to_string()));
+            } else {
+                if r.is_some() {
+                    self.doc.undo_last_commit();
+                }
+                self.import_asking(&again, label, false);
+                return;
+            }
+        }
         if r.is_some() {
             self.flash(tr!("app-imported", path = path.display().to_string()));
             self.actions.push(Action::ZoomExtents);
         } else if let Some(e) = self.doc.last_error.clone() {
             self.flash_error(e);
         }
+    }
+
+    /// "Files next to the model are missing: choose its folder?" → the folder, or None.
+    fn ask_model_folder(&self, path: &std::path::Path, missing: &[String]) -> Option<PathBuf> {
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let mut files: Vec<&str> = missing.iter().take(6).map(String::as_str).collect();
+        if missing.len() > files.len() {
+            files.push("…");
+        }
+        let yes = rfd::MessageDialog::new()
+            .set_title(tr!("app-import-missing-title"))
+            .set_description(tr!("app-import-missing", file = name, files = files.join("\n")))
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show()
+            == rfd::MessageDialogResult::Yes;
+        if !yes {
+            return None;
+        }
+        let mut dialog = rfd::FileDialog::new();
+        if let Some(dir) = path.parent() {
+            dialog = dialog.set_directory(dir);
+        }
+        dialog.pick_folder()
     }
 
     // ---- autosave ----------------------------------------------------------

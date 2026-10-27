@@ -4253,6 +4253,17 @@ app-export-replace-files =
     Eksportuojant bus pakeisti šie medžiagų arba tekstūrų failai:
     { $files }
     Tęsti?
+app-export-folder = Pasirinkite aplanką { $format } eksportui ir jo failams
+app-export-replace-all =
+    Eksportuojant bus pakeisti šie failai:
+    { $files }
+    Tęsti?
+app-import-missing-title = Trūksta failų šalia modelio
+app-import-missing =
+    { $file } nurodo šalia esančius failus, kurių Varstotas nepavyko perskaityti:
+    { $files }
+    Pasirinkti aplanką, kuriame yra modelis, kad jie būtų įkelti? (Smėlio dėžės programa, pvz., Flatpak, mato tik dialoge pasirinktą failą.)
+app-import-not-in-folder = { $file } nėra aplanke { $folder }
 
 ## Object and tag locking
 cmd-lock = Užrakinti

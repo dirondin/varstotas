@@ -18,7 +18,7 @@ mod threemf;
 mod xml;
 mod zip;
 pub use security::{
-    MAX_MODEL_BYTES, atomic_write, export_bundle, read_limited, resource_path, validate_model,
+    MAX_MODEL_BYTES, atomic_write, export_bundle, read_limited, resource_path, take_missing_resources, validate_model,
     write_bundle, write_bundle_approved,
 };
 

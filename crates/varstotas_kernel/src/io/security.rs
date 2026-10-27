@@ -22,6 +22,18 @@ pub fn read_limited(path: &Path, max: usize) -> std::io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+thread_local! {
+    /// Files next to a model that an import could not find (see [`take_missing_resources`]).
+    static MISSING: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The files next to the model (textures, `.mtl`, `.bin`) the imports on this thread could not
+/// read since the last call. A sandbox shows the app only the file picked in the dialog: the
+/// app then asks for the model's folder.
+pub fn take_missing_resources() -> Vec<String> {
+    MISSING.with(|m| std::mem::take(&mut *m.borrow_mut()))
+}
+
 pub fn resource_path(root: &Path, name: &str) -> std::io::Result<PathBuf> {
     let name = name.replace('\\', "/");
     if name.starts_with('/') || name.contains(':') || name.split('/').any(|s| s == "..") {
@@ -30,7 +42,16 @@ pub fn resource_path(root: &Path, name: &str) -> std::io::Result<PathBuf> {
         ));
     }
     let root = root.canonicalize()?;
-    let path = root.join(name).canonicalize()?;
+    let path = root.join(&name).canonicalize().inspect_err(|e| {
+        if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied) {
+            MISSING.with(|m| {
+                let mut m = m.borrow_mut();
+                if !m.contains(&name) {
+                    m.push(name.clone());
+                }
+            });
+        }
+    })?;
     if !path.starts_with(&root) {
         return Err(std::io::Error::other(
             "External resource escapes the model directory",

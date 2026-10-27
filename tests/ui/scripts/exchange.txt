@@ -42,3 +42,16 @@ wait 5
 expect defs=3 model_faces=12
 expect undo=Some("Import DAE")
 screenshot shots/exchange_dae.bmp
+# OBJ whose .mtl is not beside it: the geometry loads, the missing file is reported (outside a
+# scripted run Varstotas offers to choose the model's folder and imports again from there)
+expect import_missing=[]
+action import_file ../../tests/ui/fixtures/sidecars/lonely.obj
+wait 5
+expect import_missing=["lonely.mtl"]
+expect undo=Some("Import OBJ")
+# OBJ export writes its .mtl beside it
+action export_file models/exchange.obj
+wait 5
+action import_file models/exchange.obj
+wait 5
+expect import_missing=[]

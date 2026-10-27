@@ -4228,6 +4228,17 @@ app-export-replace-files =
     Export will replace these material or texture files:
     { $files }
     Continue?
+app-export-folder = Choose a folder for the { $format } export and its files
+app-export-replace-all =
+    Export will replace these files:
+    { $files }
+    Continue?
+app-import-missing-title = Files next to the model are missing
+app-import-missing =
+    { $file } refers to files next to it that Varstotas could not read:
+    { $files }
+    Choose the folder the model is in to load them? (An app in a sandbox, such as the Flatpak, sees only the file picked in the dialog.)
+app-import-not-in-folder = { $file } is not in { $folder }
 
 ## Object and tag locking
 cmd-lock = Lock

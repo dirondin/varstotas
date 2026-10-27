@@ -168,3 +168,18 @@ fn late_export_collision_requires_its_own_approval() {
     assert_eq!(std::fs::read_to_string(path.with_extension("mtl")).unwrap(), "keep");
     std::fs::remove_dir_all(d).unwrap();
 }
+
+#[test]
+fn missing_sidecar_files_are_reported() {
+    let d = dir("missing");
+    let obj = d.join("chair.obj");
+    std::fs::write(&obj, "mtllib chair.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl wood\nf 1 2 3\n").unwrap();
+    io::take_missing_resources();
+    io::import_obj(&mut Model::new(), &obj).unwrap();
+    assert_eq!(io::take_missing_resources(), vec!["chair.mtl".to_string()]);
+    // found: nothing reported, and the list was emptied by the call above
+    std::fs::write(d.join("chair.mtl"), "newmtl wood\nKd 0.5 0.3 0.1\n").unwrap();
+    io::import_obj(&mut Model::new(), &obj).unwrap();
+    assert!(io::take_missing_resources().is_empty());
+    let _ = std::fs::remove_dir_all(d);
+}

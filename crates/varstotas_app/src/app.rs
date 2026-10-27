@@ -618,6 +618,8 @@ pub struct VarstotasApp {
     pub(crate) ctx_on_axes: bool,
     /// Template chooser shown (first start / File → New from Template…).
     pub(crate) show_templates: bool,
+    /// Files next to the last imported model it could not read (harness).
+    pub(crate) import_missing: Vec<String>,
     pub(crate) show_start: bool,
 }
 
@@ -776,6 +778,7 @@ impl VarstotasApp {
             gen_editor: Default::default(),
             text3d_last: Default::default(),
             show_templates: false,
+            import_missing: Vec::new(),
             show_start,
             autosave: AutosaveState {
                 worker: crate::autosave::Autosaver::new(),

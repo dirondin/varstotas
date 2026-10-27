@@ -4305,6 +4305,17 @@ app-export-replace-files =
     Экспарт заменіць наступныя файлы матэрыялаў або тэкстур:
     { $files }
     Працягнуць?
+app-export-folder = Выберыце папку для экспарту { $format } і яго файлаў
+app-export-replace-all =
+    Экспарт заменіць наступныя файлы:
+    { $files }
+    Працягнуць?
+app-import-missing-title = Не знойдзены файлы побач з мадэллю
+app-import-missing =
+    { $file } спасылаецца на файлы побач з сабой, якія Varstotas не змог прачытаць:
+    { $files }
+    Выбраць папку, у якой ляжыць мадэль, каб загрузіць іх? (Праграма ў пясочніцы, напрыклад Flatpak, бачыць толькі файл, выбраны ў дыялогу.)
+app-import-not-in-folder = { $file } няма ў папцы { $folder }
 
 ## Object and tag locking
 cmd-lock = Заблакіраваць

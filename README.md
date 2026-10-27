@@ -130,6 +130,11 @@ only library thumbnails use sampled edges. Previously imported
 native assets need reimporting from their original files to recover information discarded
 by older builds. Texture Position and Reverse Faces preserve the full affine placement.
 
+Formats with files beside the model (OBJ with its `.mtl` and textures, DAE and FBX textures,
+glTF with a `.bin`): export asks for a folder rather than a file name when there are such files,
+and an import that cannot read them offers to choose the model's folder and imports again from
+there. A sandboxed app (the Flatpak) is given only what the dialog picked, a file or a folder.
+
 ## Tutorial and navigation
 
 **Tutorial** is available on the start screen and in Help. Its ten-step wizard combines a
