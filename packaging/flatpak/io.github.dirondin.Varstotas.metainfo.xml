@@ -40,15 +40,15 @@
   <screenshots>
     <screenshot type="default">
       <caption>A workbench with its dimensions</caption>
-      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.1.0/docs/images/workbench.jpg</image>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.2.0/docs/images/workbench.jpg</image>
     </screenshot>
     <screenshot>
       <caption>A desk caddy to 3D print, with its dimensions</caption>
-      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.1.0/docs/images/desk-caddy.jpg</image>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.2.0/docs/images/desk-caddy.jpg</image>
     </screenshot>
     <screenshot>
       <caption>Realistic materials: wood, metal, glass and light</caption>
-      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.1.0/docs/images/gallery.jpg</image>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/release-0.2.0/docs/images/gallery.jpg</image>
     </screenshot>
   </screenshots>
 
@@ -69,6 +69,9 @@
 
   <!-- every release adds an entry here before it is tagged (Release build checks it) -->
   <releases>
+    <release version="0.2.0" date="2026-10-27">
+      <url type="details">https://github.com/dirondin/varstotas/releases/tag/release-0.2.0</url>
+    </release>
     <release version="0.1.0" date="2026-10-26">
       <url type="details">https://github.com/dirondin/varstotas/releases/tag/release-0.1.0</url>
     </release>

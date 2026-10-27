@@ -3342,7 +3342,7 @@ dependencies = [
 
 [[package]]
 name = "varstotas_app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "egui",
@@ -3374,7 +3374,7 @@ dependencies = [
 
 [[package]]
 name = "varstotas_i18n"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fluent-bundle",
  "fluent-syntax",
@@ -3384,7 +3384,7 @@ dependencies = [
 
 [[package]]
 name = "varstotas_kernel"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "draco-core",
  "flate2",
@@ -3400,7 +3400,7 @@ dependencies = [
 
 [[package]]
 name = "varstotas_physics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glam 0.34.1",
  "rapier3d",
@@ -3409,7 +3409,7 @@ dependencies = [
 
 [[package]]
 name = "varstotas_render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "eframe",
@@ -3425,7 +3425,7 @@ dependencies = [
 
 [[package]]
 name = "varstotas_script"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libc",
  "rhai",
