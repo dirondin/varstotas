@@ -1,9 +1,9 @@
-# Track R batch 4: File → Export → Animation… — a scene tour or an orbit as MP4 (ffmpeg) or PNG frames
+# Track R batch 4: File → Export → Animation… — a scene tour or an orbit as an animated GIF or PNG frames
 box 0 0 0 3000 2000 1000
 view iso
 zoom_extents
 wait 10
-# File → Export → Animation (Video / PNG)… (real mouse)
+# File → Export → Animation (GIF / PNG)… (real mouse)
 raw click 20 -106
 wait 3
 raw click 38 161
@@ -13,14 +13,14 @@ wait 5
 expect anim_win=true None
 screenshot shots/anim_window.bmp
 # an orbit as a PNG sequence (target/ui-tests/anim_orbit/frame_0000N.png)
-action anim source=orbit seconds=1 turns=0.5 fps=6 w=320 h=200 traced=off video=off out=anim_orbit
+action anim source=orbit seconds=1 turns=0.5 fps=6 w=320 h=200 traced=off gif=off out=anim_orbit
 wait 3
 expect anim_win=true Some(Ok("6 frames in anim_orbit"))
 # path traced frames
-action anim source=orbit seconds=1 turns=0.25 fps=3 traced=on spp=4 video=off out=anim_traced
+action anim source=orbit seconds=1 turns=0.25 fps=3 traced=on spp=4 gif=off out=anim_traced
 wait 3
 expect anim_win=true Some(Ok("3 frames in anim_traced"))
-# scenes (added last: the tabs shift the viewport) as an MP4 through ffmpeg
+# scenes (added last: the tabs shift the viewport) as an animated GIF
 action scene_timing_0.5_0.2
 action add_scene
 view top
@@ -31,8 +31,8 @@ view front
 zoom_extents
 wait 10
 action add_scene
-action anim source=scenes fps=10 w=320 h=200 traced=off video=on out=anim_scenes.mp4
+action anim source=scenes fps=10 w=320 h=200 traced=off gif=on out=anim_scenes.gif
 wait 3
-expect anim_win=true Some(Ok("anim_scenes.mp4"))
+expect anim_win=true Some(Ok("anim_scenes.gif"))
 screenshot shots/anim_done.bmp
 quit

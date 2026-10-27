@@ -1170,7 +1170,7 @@ impl VarstotasApp {
                     "h" => w.height = n.map_or(w.height, |x| x as u32),
                     "traced" => w.traced = on,
                     "spp" => w.spp = n.map_or(w.spp, |x| x as u32),
-                    "video" => w.video = on,
+                    "gif" => w.gif = on,
                     "out" => out = Some(std::path::PathBuf::from(v)),
                     _ => log::warn!("script: anim: unknown key {k}"),
                 }

@@ -250,7 +250,7 @@ cmd-import-fbx = FBX…
 cmd-import-ply = PLY…
 cmd-import-csv = Points (CSV)…
 cmd-export-image = 2D Graphic (PNG)…
-cmd-export-animation = Animation (Video / PNG)…
+cmd-export-animation = Animation (GIF / PNG)…
 cmd-export-glb = glTF (GLB)…
 cmd-export-drawing = 2D Drawing (SVG / PDF)…
 cmd-sheets = Sheets (PDF / SVG)…
@@ -1192,7 +1192,7 @@ prefs-section-render = Render
 ## Search words of the sections (besides their names; a translation lists its own)
 
 prefs-words-general = auto-save autosave minutes template new document units undo steps history backup previous version
-prefs-words-render = render image size samples bounces quality denoise programs ffmpeg video animation oidn open image denoise
+prefs-words-render = render image size samples bounces quality denoise programs gif animation oidn open image denoise
 prefs-words-drawing = snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle
 prefs-words-libraries = components materials folder examples in model tiles small large list
 prefs-words-downloads = watch downloads folder browser
@@ -1252,8 +1252,6 @@ prefs-apply-current-doc = Apply to Current Document
 prefs-apply-current-doc-tip = The open document gets these settings (Undo puts them back)
 prefs-render-note = File → New starts with these; Window → Render changes the open document's.
 prefs-programs = Programs
-prefs-ffmpeg = ffmpeg (videos of File → Export → Animation)
-prefs-ffmpeg-missing = not found: install it (brew install ffmpeg) or choose the program
 prefs-oidn = Open Image Denoise library (the render's denoiser)
 prefs-oidn-missing = not found: the built-in filter denoises (brew install open-image-denoise, or choose the library)
 prefs-image-editor = Image editor (Material Editor → Textures → Edit)
@@ -2618,7 +2616,6 @@ anim-error = Animation: { $error }
 anim-saved = Saved { $what }
 anim-render-dropped = the render was dropped
 # $n is the frame count, $dir the folder with the PNG frames.
-anim-no-ffmpeg = ffmpeg not found; the { $n } frames are in { $dir }
 anim-frames-in = { $n } frames in { $dir }
 anim-cancelled = cancelled
 anim-animate = Animate
@@ -2634,12 +2631,11 @@ anim-frames = Frames
 anim-as-view = As the view
 anim-path-traced = Path traced
 anim-output = Output
-anim-video = Video (MP4)
-anim-install-ffmpeg = Install ffmpeg to make videos
+anim-gif = Animated GIF
 anim-png-sequence = PNG sequence
 # $done of $total frames.
 anim-frame-progress = Frame { $done } / { $total }
-anim-encoding = Encoding the video…
+anim-encoding = Writing the GIF…
 anim-export = Export…
 
 ## ======== Unfold ========
@@ -3346,8 +3342,6 @@ licences-yours = Your models are yours. Models and materials downloaded from onl
 
 ## Programs
 
-licence-program-ffmpeg-use = animation video export
-licence-program-ffmpeg-licence = LGPL-2.1+ / GPL — not shipped, run as a separate program
 
 licence-program-oidn-use = AI denoiser of the renderer
 licence-program-oidn-licence = Apache-2.0 — not shipped, loaded from your installation
@@ -3413,9 +3407,9 @@ licence-format-csv-json-what = points import, faces export (plugins)
 licence-format-csv-json-how = own code
 licence-format-csv-json-note = open formats
 
-licence-format-video-what = animation export
-licence-format-video-how = ffmpeg, installed by you and run as a separate program (not shipped)
-licence-format-video-note = ffmpeg is LGPL / GPL; its licence applies to your copy
+licence-format-gif-what = animation export
+licence-format-gif-how = image crate (MIT / Apache-2.0)
+licence-format-gif-note = open format
 
 ## Online libraries tab
 licence-libs-intro = Every downloaded model keeps its source, author and licence; Varstotas warns when a placed or exported model's licence limits its use (non-commercial, no derivatives, share-alike, a site's own licence, unknown).
@@ -3675,7 +3669,7 @@ help-styles-11 = sun shadows; the time and date are in the Shadows card
 help-styles-12 = Rendering
 help-styles-13 = Window → Render renders the view with a path tracer on the GPU: glass, reflections, lights, soft shadows; quality presets, frame size, depth of field, denoising (when Intel OIDN is installed), colour grading; PNG / EXR, or every scene at once.
 help-styles-14 = Lights (point, spot, area) are placed from the Render window; they are selected by clicking their marker and moved and rotated like other objects.
-help-styles-15 = File → Export → 2D Graphic (PNG) saves the view as it is; File → Export → Animation… makes a video or PNG frames of the scenes or a fly-around.
+help-styles-15 = File → Export → 2D Graphic (PNG) saves the view as it is; File → Export → Animation… makes an animated GIF or PNG frames of the scenes or a fly-around.
 ## scenes
 help-scenes-1 = Scenes card
 help-scenes-2 = saved views with their style, visible tags and section; tabs above the viewport switch them
@@ -3689,7 +3683,7 @@ help-scenes-9 = File → Export → Report
 help-scenes-10 = parts with sizes for cutting, areas by material (CSV)
 ## files
 help-files-1 = Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval.
-help-files-2 = Window → Preferences has sections on the left and a search: General (auto-save, the template of File → New, how many undo steps are kept), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back), Render (the render settings of new documents; where ffmpeg and the Open Image Denoise library are) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults.
+help-files-2 = Window → Preferences has sections on the left and a search: General (auto-save, the template of File → New, how many undo steps are kept), Interface (light, dark or system theme, the scale of menus and panels, toolbar icon size), Drawing (grid, snapping and increments — the same switches as the Snapping menu), Libraries (the components and materials folders, Examples, tile size), Downloads (the watched folder), Navigation (mouse and trackpad), Shortcuts (click a shortcut and press the new keys; Backspace removes it, ↺ puts the default back), Render (the render settings of new documents; where the Open Image Denoise library is) and View (how a new document looks: style, edges, axes, ground, sky, grid, shadows, projection, field of view; Use Current View / Apply to Current View). Changes apply at once; Reset puts a section back to the defaults.
 help-files-3 = Auto-save writes unsaved changes to `<name>.vrst~autosave` next to the file; after a crash Varstotas offers to recover it.
 help-files-4 = Import
 help-files-5 = OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, points from CSV, and formats added by plugins; you can also drop files on the window

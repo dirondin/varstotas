@@ -1,6 +1,6 @@
 //! Animation export (File → Export → Animation…): the frames of a scene tour or of an orbit
 //! around the view's target, rendered one per frame (the view's style, or the path tracer with
-//! a sample budget per frame), written as PNG files and encoded to video by ffmpeg.
+//! a sample budget per frame), written as PNG files and joined into an animated GIF.
 
 use crate::nav::CameraAnimation;
 use varstotas_kernel::glam::{DQuat, DVec3};
@@ -83,44 +83,55 @@ pub fn orbit_frames(base: &Camera, seconds: f64, turns: f64, fps: f64) -> Vec<Fr
         .collect()
 }
 
-/// File of frame `i` in `dir` (the pattern ffmpeg reads).
+/// File of frame `i` in `dir`.
 pub fn frame_path(dir: &Path, i: usize) -> PathBuf {
     dir.join(format!("frame_{:05}.png", i + 1))
 }
 
-/// The ffmpeg executable: `custom` (Preferences → Render) when it is a file, else the one
-/// installed (PATH, then the usual Homebrew / system places).
-pub fn ffmpeg(custom: Option<&Path>) -> Option<PathBuf> {
-    if let Some(p) = custom.filter(|p| p.is_file()) {
-        return Some(p.to_path_buf());
-    }
-    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
-    dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map(PathBuf::from));
-    let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
-    dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file())
-}
-
-/// Encode the frames in `dir` into `out` (H.264, even size, yuv420p).
-pub fn encode(ffmpeg: &Path, dir: &Path, fps: f64, out: &Path) -> Result<(), String> {
-    let r = std::process::Command::new(ffmpeg)
-        .args(["-y", "-loglevel", "error", "-framerate"])
-        .arg(format!("{fps}"))
-        .arg("-i")
-        .arg(dir.join("frame_%05d.png"))
-        .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"])
-        .arg(out)
-        .output()
-        .map_err(|e| format!("ffmpeg: {e}"))?;
-    if r.status.success() {
+/// Encode the `count` frames in `dir` into a looping animated GIF `out` at `fps` frames a
+/// second (GIF stores delays in hundredths of a second; colours are reduced to 256 a frame).
+/// A partly written file is removed on failure.
+pub fn encode_gif(dir: &Path, count: usize, fps: f64, out: &Path) -> Result<(), String> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    let write = || -> Result<(), String> {
+        let file = std::fs::File::create(out).map_err(|e| e.to_string())?;
+        let mut enc = GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
+        enc.set_repeat(Repeat::Infinite).map_err(|e| e.to_string())?;
+        let delay = image::Delay::from_numer_denom_ms(1000, fps.round().max(1.0) as u32);
+        for i in 0..count {
+            let frame = image::open(frame_path(dir, i)).map_err(|e| e.to_string())?.to_rgba8();
+            enc.encode_frame(image::Frame::from_parts(frame, 0, 0, delay)).map_err(|e| e.to_string())?;
+        }
         Ok(())
-    } else {
-        Err(format!("ffmpeg: {}", String::from_utf8_lossy(&r.stderr).trim()))
+    };
+    let r = write();
+    if r.is_err() {
+        let _ = std::fs::remove_file(out);
     }
+    r
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frames_become_a_looping_gif() {
+        let dir = std::env::temp_dir().join(format!("varstotas-gif-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..3 {
+            image::RgbaImage::from_pixel(8, 6, image::Rgba([i * 100, 50, 200, 255])).save(frame_path(&dir, i as usize)).unwrap();
+        }
+        let out = dir.join("a.gif");
+        encode_gif(&dir, 3, 10.0, &out).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+        assert!(bytes.starts_with(b"GIF89a") && bytes.windows(11).any(|w| w == b"NETSCAPE2.0"), "a looping GIF");
+        let frames = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(&bytes)).unwrap();
+        assert_eq!(image::AnimationDecoder::into_frames(frames).count(), 3);
+        assert!(encode_gif(&dir, 4, 10.0, &out).is_err(), "a missing frame fails");
+        assert!(!out.exists(), "and leaves no partial file");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn scene(name: &str, x: f64) -> Scene {
         Scene::camera(name, DVec3::new(x, -5000.0, 3000.0), DVec3::new(x, 0.0, 0.0), DVec3::Z, 35.0, false)

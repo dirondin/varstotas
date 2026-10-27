@@ -150,8 +150,6 @@ pub struct Prefs {
     pub shortcuts: std::collections::BTreeMap<String, String>,
     /// Render settings of a new document (Preferences → Render).
     pub new_render: varstotas_kernel::RenderSettings,
-    /// ffmpeg chosen by hand (None = found on the system).
-    pub ffmpeg_path: Option<PathBuf>,
     /// Open Image Denoise library chosen by hand (None = found on the system).
     pub oidn_path: Option<PathBuf>,
     /// Image editor for textures (None = the system's default program for the file).
@@ -218,7 +216,6 @@ impl Default for Prefs {
             toolbar: Vec::new(),
             shortcuts: Default::default(),
             new_render: Default::default(),
-            ffmpeg_path: None,
             oidn_path: None,
             image_editor_path: None,
             undo_steps: 100,

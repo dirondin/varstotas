@@ -63,7 +63,7 @@ impl Section {
     fn words(self) -> &'static str {
         match self {
             Section::General => "auto-save autosave backup previous version minutes template folder directory new document units undo steps history", // i18n-ignore
-            Section::Render => "render image size samples bounces quality denoise programs ffmpeg image editor texture video animation oidn open image denoise", // i18n-ignore
+            Section::Render => "render image size samples bounces quality denoise programs image editor texture gif animation oidn open image denoise", // i18n-ignore
             Section::Drawing => "snapping inference endpoint midpoint edge face axis grid step major increments move rotate scale angle", // i18n-ignore
             Section::Libraries => "components materials folder examples in model tiles small large list", // i18n-ignore
             Section::Downloads => "watch downloads folder browser", // i18n-ignore
@@ -304,7 +304,6 @@ impl VarstotasApp {
         match s {
             Section::Render => {
                 p.new_render = d.new_render;
-                p.ffmpeg_path = None;
                 p.oidn_path = None;
             }
             Section::General => {
@@ -454,8 +453,6 @@ impl VarstotasApp {
         note(ui, &tr!("prefs-render-note"));
 
         heading(ui, &tr!("prefs-programs"));
-        let ffmpeg = crate::animation::ffmpeg(self.prefs.ffmpeg_path.as_deref());
-        file_row(ui, &tr!("prefs-ffmpeg"), &mut self.prefs.ffmpeg_path, ffmpeg, &tr!("prefs-ffmpeg-missing"));
         let oidn = varstotas_render::oidn_library();
         file_row(
             ui,

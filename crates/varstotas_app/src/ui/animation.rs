@@ -1,8 +1,8 @@
-//! File → Export → Animation…: a scene tour or an orbit as a video (ffmpeg) or a PNG
+//! File → Export → Animation…: a scene tour or an orbit as an animated GIF or a PNG
 //! sequence, one frame per app frame — the view's style (`Viewport::export`) or the path tracer
 //! (`Viewport::pt`) with a sample budget per frame.
 
-use crate::animation::{FrameSpec, encode, ffmpeg, frame_path, orbit_frames, scene_frames};
+use crate::animation::{FrameSpec, encode_gif, frame_path, orbit_frames, scene_frames};
 use crate::app::{ExportContent, VarstotasApp};
 use egui::{Context, vec2};
 use varstotas_i18n::tr;
@@ -27,8 +27,8 @@ pub struct AnimWindow {
     /// Path traced frames with this many samples each (else the view's style).
     pub traced: bool,
     pub spp: u32,
-    /// Encode a video (needs ffmpeg), else keep the PNG files.
-    pub video: bool,
+    /// Join the frames into an animated GIF, else keep the PNG files.
+    pub gif: bool,
     pub run: Option<AnimRun>,
     encoding: Option<Receiver<Result<PathBuf, String>>>,
     /// Outcome of the last export, for the window and the harness.
@@ -42,12 +42,13 @@ impl Default for AnimWindow {
             source: AnimSource::Scenes,
             seconds: 8.0,
             turns: 1.0,
-            fps: 30,
-            width: 1280,
-            height: 720,
+            // GIF-sized: big or fast GIFs grow quickly
+            fps: 20,
+            width: 960,
+            height: 540,
             traced: false,
             spp: 16,
-            video: true,
+            gif: true,
             run: None,
             encoding: None,
             last: None,
@@ -59,7 +60,7 @@ pub struct AnimRun {
     frames: Vec<FrameSpec>,
     next: usize,
     dir: PathBuf,
-    video: Option<PathBuf>,
+    gif: Option<PathBuf>,
     fps: f64,
     size: [u32; 2],
     spp: Option<u32>,
@@ -84,7 +85,7 @@ impl AnimWindow {
 }
 
 impl VarstotasApp {
-    /// Start exporting with the window's settings into `out` (the video file, or the folder of
+    /// Start exporting with the window's settings into `out` (the GIF file, or the folder of
     /// the PNG sequence).
     pub(crate) fn start_animation(&mut self, out: PathBuf) {
         let w = &self.anim_window;
@@ -98,7 +99,7 @@ impl VarstotasApp {
             self.flash_error(tr!("anim-no-scenes-flash"));
             return;
         }
-        let (dir, video) = if w.video {
+        let (dir, gif) = if w.gif {
             let dir = std::env::temp_dir().join(format!("varstotas_anim_{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             (dir, Some(out))
@@ -113,7 +114,7 @@ impl VarstotasApp {
         let size = [w.width.clamp(16, 8192), w.height.clamp(16, 8192)];
         let spp = w.traced.then_some(w.spp.max(1));
         self.anim_window.last = None;
-        self.anim_window.run = Some(AnimRun { frames, next: 0, dir, video, fps, size, spp, waiting: None, started: std::time::Instant::now(), orig: self.camera.clone() });
+        self.anim_window.run = Some(AnimRun { frames, next: 0, dir, gif, fps, size, spp, waiting: None, started: std::time::Instant::now(), orig: self.camera.clone() });
     }
 
     /// Advance the export: collect the frame in flight, then queue the next one. Runs before
@@ -204,24 +205,17 @@ impl VarstotasApp {
         // All frames written.
         self.camera = run.orig.clone();
         let n = run.frames.len();
-        match run.video {
-            Some(out) => match ffmpeg(self.prefs.ffmpeg_path.as_deref()) {
-                Some(bin) => {
-                    let (tx, rx) = std::sync::mpsc::channel();
-                    let (dir, fps) = (run.dir.clone(), run.fps);
-                    std::thread::spawn(move || {
-                        let r = encode(&bin, &dir, fps, &out).map(|()| out);
-                        let _ = std::fs::remove_dir_all(&dir);
-                        let _ = tx.send(r);
-                    });
-                    self.anim_window.encoding = Some(rx);
-                }
-                None => {
-                    let msg = tr!("anim-no-ffmpeg", n = n, dir = run.dir.display().to_string());
-                    self.flash_error(msg.clone());
-                    self.anim_window.last = Some(Err(msg));
-                }
-            },
+        match run.gif {
+            Some(out) => {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let (dir, fps) = (run.dir.clone(), run.fps);
+                std::thread::spawn(move || {
+                    let r = encode_gif(&dir, n, fps, &out).map(|()| out);
+                    let _ = std::fs::remove_dir_all(&dir);
+                    let _ = tx.send(r);
+                });
+                self.anim_window.encoding = Some(rx);
+            }
             None => {
                 let msg = tr!("anim-frames-in", n = n, dir = run.dir.display().to_string());
                 log::info!("animation: {msg} ({:.1} s)", run.started.elapsed().as_secs_f64());
@@ -235,7 +229,6 @@ impl VarstotasApp {
         if !self.anim_window.open {
             return;
         }
-        let has_ffmpeg = ffmpeg(self.prefs.ffmpeg_path.as_deref()).is_some();
         let has_scenes = self.doc.model.scenes.iter().any(|s| s.in_animation);
         let mut open = true;
         let mut export = false;
@@ -294,17 +287,12 @@ impl VarstotasApp {
                     ui.end_row();
                     ui.label(tr!("anim-output"));
                     ui.horizontal(|ui| {
-                        ui.add_enabled_ui(has_ffmpeg, |ui| ui.radio_value(&mut w.video, true, tr!("anim-video")))
-                            .response
-                            .on_disabled_hover_text(tr!("anim-install-ffmpeg"));
-                        ui.radio_value(&mut w.video, false, tr!("anim-png-sequence"));
+                        ui.radio_value(&mut w.gif, true, tr!("anim-gif"));
+                        ui.radio_value(&mut w.gif, false, tr!("anim-png-sequence"));
                     });
                     ui.end_row();
                 });
             });
-            if !has_ffmpeg && w.video {
-                w.video = false;
-            }
             if w.source == AnimSource::Scenes && !has_scenes {
                 w.source = AnimSource::Orbit;
             }
@@ -337,8 +325,8 @@ impl VarstotasApp {
             self.anim_window.last = Some(Err(tr!("anim-cancelled")));
         }
         if export {
-            let out = if self.anim_window.video {
-                rfd::FileDialog::new().add_filter("MP4 video", &["mp4"]).set_file_name("Animation.mp4").save_file()
+            let out = if self.anim_window.gif {
+                rfd::FileDialog::new().add_filter("GIF", &["gif"]).set_file_name("Animation.gif").save_file()
             } else {
                 rfd::FileDialog::new().pick_folder()
             };

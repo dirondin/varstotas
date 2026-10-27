@@ -93,7 +93,7 @@ const FORMATS: &[(&str, &str)] = &[
     ("PNG, JPEG, HDR, TGA, BMP", "images"), // i18n-ignore
     ("OpenEXR", "openexr"), // i18n-ignore
     ("CSV, JSON", "csv-json"), // i18n-ignore
-    ("MP4 / video", "video"), // i18n-ignore
+    ("GIF", "gif"), // i18n-ignore
 ];
 
 /// Online libraries: (name, id of its texts). A name of "" is a text (`licence-lib-<id>-name`).
@@ -110,7 +110,6 @@ const LIBRARIES: &[(&str, &str)] = &[
 
 /// External programs used when installed: (name, id of its texts).
 const PROGRAMS: &[(&str, &str)] = &[
-    ("ffmpeg", "ffmpeg"), // i18n-ignore
     ("Open Image Denoise", "oidn"), // i18n-ignore
     ("Python", "python"), // i18n-ignore
 ];

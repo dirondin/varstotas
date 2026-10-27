@@ -254,7 +254,7 @@ cmd-import-fbx = FBX…
 cmd-import-ply = PLY…
 cmd-import-csv = Taškai (CSV)…
 cmd-export-image = 2D grafika (PNG)…
-cmd-export-animation = Animacija (vaizdo įrašas / PNG)…
+cmd-export-animation = Animacija (GIF / PNG)…
 cmd-export-glb = glTF (GLB)…
 cmd-export-drawing = 2D brėžinys (SVG / PDF)…
 cmd-sheets = Lapai (PDF / SVG)…
@@ -1198,7 +1198,7 @@ prefs-section-render = Vaizdavimas
 ## Search words of the sections (besides their names; a translation lists its own)
 
 prefs-words-general = automatinis išsaugojimas minutės šablonas naujas dokumentas vienetai atšaukimo žingsniai istorija atsarginė kopija ankstesnė versija
-prefs-words-render = vaizdavimas paveikslėlis dydis mėginiai atšokimai kokybė triukšmo šalinimas programos ffmpeg vaizdo įrašas animacija oidn open image denoise
+prefs-words-render = vaizdavimas paveikslėlis dydis mėginiai atšokimai kokybė triukšmo šalinimas programos gif animacija oidn open image denoise
 prefs-words-drawing = prisitraukimas nuspėjimas galinis taškas vidurio taškas briauna paviršius ašis tinklelis žingsnis pagrindinis žingsniai perkelti sukti mastelis kampas
 prefs-words-libraries = komponentai medžiagos aplankas pavyzdžiai modelyje plytelės mažos didelės sąrašas
 prefs-words-downloads = stebėti atsisiuntimai aplankas naršyklė
@@ -1258,8 +1258,6 @@ prefs-apply-current-doc = Taikyti dabartiniam dokumentui
 prefs-apply-current-doc-tip = Atidarytas dokumentas gauna šiuos nustatymus (Atšaukti juos grąžina)
 prefs-render-note = Failas → Naujas pradedamas su šiais; Langas → Vaizdavimas keičia atidaryto dokumento nustatymus.
 prefs-programs = Programos
-prefs-ffmpeg = ffmpeg (vaizdo įrašai iš Failas → Eksportuoti → Animacija)
-prefs-ffmpeg-missing = nerasta: įdiekite (brew install ffmpeg) arba pasirinkite programą
 prefs-oidn = Open Image Denoise biblioteka (vaizdavimo triukšmo šalinimas)
 prefs-oidn-missing = nerasta: triukšmą šalina integruotas filtras (brew install open-image-denoise arba pasirinkite biblioteką)
 prefs-image-editor = Vaizdų redaktorius (Medžiagos redaktorius → Tekstūros → Redaguoti)
@@ -2636,7 +2634,6 @@ anim-error = Animacija: { $error }
 anim-saved = Išsaugota { $what }
 anim-render-dropped = atvaizdavimas nutrauktas
 # $n is the frame count, $dir the folder with the PNG frames.
-anim-no-ffmpeg = ffmpeg nerastas; kadrai ({ $n }) yra { $dir }
 anim-frames-in = Kadrų: { $n }, aplanke { $dir }
 anim-cancelled = atšaukta
 anim-animate = Animuoti
@@ -2652,12 +2649,11 @@ anim-frames = Kadrai
 anim-as-view = Kaip rodinyje
 anim-path-traced = Spindulių sekimas
 anim-output = Išvestis
-anim-video = Vaizdo įrašas (MP4)
-anim-install-ffmpeg = Įdiekite ffmpeg vaizdo įrašams kurti
+anim-gif = Animuotas GIF
 anim-png-sequence = PNG seka
 # $done of $total frames.
 anim-frame-progress = Kadras { $done } / { $total }
-anim-encoding = Koduojamas vaizdo įrašas…
+anim-encoding = Rašomas GIF…
 anim-export = Eksportuoti…
 
 ## ======== Išklotinė ========
@@ -3371,8 +3367,6 @@ licences-yours = Jūsų modeliai priklauso jums. Iš internetinių bibliotekų a
 
 ## Programos
 
-licence-program-ffmpeg-use = animacijos vaizdo įrašo eksportas
-licence-program-ffmpeg-licence = LGPL-2.1+ / GPL — nepristatoma, paleidžiama kaip atskira programa
 
 licence-program-oidn-use = vaizdo kūrimo DI triukšmo šalinimas
 licence-program-oidn-licence = Apache-2.0 — nepristatoma, įkeliama iš jūsų diegimo
@@ -3438,9 +3432,9 @@ licence-format-csv-json-what = taškų importas, paviršių eksportas (papildini
 licence-format-csv-json-how = nuosavas kodas
 licence-format-csv-json-note = atvirieji formatai
 
-licence-format-video-what = animacijos eksportas
-licence-format-video-how = ffmpeg, įdiegtas jūsų ir paleidžiamas kaip atskira programa (nepristatomas)
-licence-format-video-note = ffmpeg yra LGPL / GPL; jo licencija taikoma jūsų kopijai
+licence-format-gif-what = animacijos eksportas
+licence-format-gif-how = image crate (MIT / Apache-2.0)
+licence-format-gif-note = atvirasis formatas
 
 ## Internetinių bibliotekų skirtukas
 licence-libs-intro = Kiekvienas atsisiųstas modelis išlaiko savo šaltinį, autorių ir licenciją; Varstotas įspėja, kai padėto ar eksportuojamo modelio licencija riboja jo naudojimą (nekomercinė, be išvestinių darbų, dalytis tomis pačiomis sąlygomis, paties tinklalapio licencija, nežinoma).
@@ -3700,7 +3694,7 @@ help-styles-11 = saulės šešėliai; laikas ir data yra Šešėlių kortelėje
 help-styles-12 = Vaizdo kūrimas
 help-styles-13 = Langas → Vaizdo kūrimas sukuria rodinio vaizdą spindulių sekimu GPU: stiklas, atspindžiai, šviesos, švelnūs šešėliai; kokybės šablonai, kadro dydis, lauko gylis, triukšmo šalinimas (kai įdiegtas Intel OIDN), spalvų korekcija; PNG / EXR arba visos scenos iš karto.
 help-styles-14 = Šviesos (taškinė, prožektoriaus, srities) padedamos iš Vaizdo kūrimo lango; jos pažymimos spustelėjus jų ženklą, perkeliamos ir sukamos kaip kiti objektai.
-help-styles-15 = Failas → Eksportuoti → 2D grafika (PNG) išsaugo rodinį toks, koks jis yra; Failas → Eksportuoti → Animacija… sukuria vaizdo įrašą ar PNG kadrus iš scenų arba apsisukimo aplink.
+help-styles-15 = Failas → Eksportuoti → 2D grafika (PNG) išsaugo rodinį toks, koks jis yra; Failas → Eksportuoti → Animacija… sukuria animuotą GIF ar PNG kadrus iš scenų arba apsisukimo aplink.
 ## scenes
 help-scenes-1 = Scenų kortelė
 help-scenes-2 = išsaugoti rodiniai su savo stiliumi, matomomis žymėmis ir pjūviu; skirtukai virš rodinio juos perjungia
@@ -3714,7 +3708,7 @@ help-scenes-9 = Failas → Eksportuoti → Ataskaita
 help-scenes-10 = dalys su pjovimo dydžiais, plotai pagal medžiagą (CSV)
 ## files
 help-files-1 = Dokumentai yra `.vrst` failai (tekstūros ir paveikslėliai išsaugomi viduje). Failas → Naujas iš šablono pasirenka vienetus; Langas → Nustatymai nustato numatytąjį šabloną ir automatinio išsaugojimo intervalą.
-help-files-2 = Langas → Nustatymai turi skiltis kairėje ir paiešką: Bendra (automatinis išsaugojimas, Failas → Naujas šablonas, kiek atšaukimo žingsnių laikoma), Sąsaja (šviesi, tamsi ar sistemos tema, meniu ir skydelių mastelis, įrankių juostos piktogramų dydis), Piešimas (tinklelis, prilipimas ir žingsniai — tie patys jungikliai kaip Prilipimo meniu), Bibliotekos (komponentų ir medžiagų aplankai, Pavyzdžiai, plytelių dydis), Atsisiuntimai (stebimas aplankas), Naršymas (pelė ir jutiklinis kilimėlis), Spartieji klavišai (spustelėkite sparčiąjį klavišą ir paspauskite naujus klavišus; Backspace jį pašalina, ↺ grąžina numatytąjį), Vaizdo kūrimas (naujų dokumentų vaizdo kūrimo nustatymai; kur yra ffmpeg ir Open Image Denoise biblioteka) ir Rodinys (kaip atrodo naujas dokumentas: stilius, briaunos, ašys, žemė, dangus, tinklelis, šešėliai, projekcija, matymo laukas; Naudoti dabartinį rodinį / Taikyti dabartiniam rodiniui). Pakeitimai taikomi iš karto; Atkurti grąžina skiltį į numatytąsias reikšmes.
+help-files-2 = Langas → Nustatymai turi skiltis kairėje ir paiešką: Bendra (automatinis išsaugojimas, Failas → Naujas šablonas, kiek atšaukimo žingsnių laikoma), Sąsaja (šviesi, tamsi ar sistemos tema, meniu ir skydelių mastelis, įrankių juostos piktogramų dydis), Piešimas (tinklelis, prilipimas ir žingsniai — tie patys jungikliai kaip Prilipimo meniu), Bibliotekos (komponentų ir medžiagų aplankai, Pavyzdžiai, plytelių dydis), Atsisiuntimai (stebimas aplankas), Naršymas (pelė ir jutiklinis kilimėlis), Spartieji klavišai (spustelėkite sparčiąjį klavišą ir paspauskite naujus klavišus; Backspace jį pašalina, ↺ grąžina numatytąjį), Vaizdo kūrimas (naujų dokumentų vaizdo kūrimo nustatymai; kur yra Open Image Denoise biblioteka) ir Rodinys (kaip atrodo naujas dokumentas: stilius, briaunos, ašys, žemė, dangus, tinklelis, šešėliai, projekcija, matymo laukas; Naudoti dabartinį rodinį / Taikyti dabartiniam rodiniui). Pakeitimai taikomi iš karto; Atkurti grąžina skiltį į numatytąsias reikšmes.
 help-files-3 = Automatinis išsaugojimas įrašo neišsaugotus pakeitimus į `<name>.vrst~autosave` šalia failo; po strigties Varstotas pasiūlo juos atkurti.
 help-files-4 = Importas
 help-files-5 = OBJ, STL, DXF, glTF / GLB, 3MF, COLLADA (DAE), FBX, PLY, taškai iš CSV ir formatai, pridėti papildinių; failus taip pat galite numesti ant lango
