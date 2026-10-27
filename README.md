@@ -196,12 +196,17 @@ scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage
 GitHub Actions in `.github/workflows`:
 
 - **CI** (`ci.yml`) — every pull request and push to `master`: `cargo clippy -D warnings` and `cargo test --workspace` on Linux, and the tests on Windows and macOS.
-- **Release** (`release.yml`) — pushing a tag `release-<version>`: unit tests and release builds on macOS, Windows and Linux, then a GitHub release of the tag titled "Varstotas <version>" with all the packages above and `SHA256SUMS.txt`. Its notes are a downloads table (`.github/release-notes.md`) followed by the changes since the previous release. A version with a `-` (`release-0.2.0-rc.1`) makes a pre-release. Running the workflow by hand (Actions → Release → Run workflow) with an existing tag rebuilds and replaces the release's files.
+- **Release build** (`release.yml`) — pushing a tag `release-<version>`: the version check, unit tests in the release profile and release builds on macOS, Windows and Linux. All the packages above and `SHA256SUMS.txt` are kept as the run's `release-files` artifact; nothing is published. To build a tag again, run the workflow by hand from the tag (Actions → Release build → Run workflow → Use workflow from → Tags).
+- **Publish release** (`publish.yml`) — by hand only, run from the tag the same way. It needs a successful Release build of the tag at its current commit and a successful CI run of that commit, takes that build's files as they are (no rebuild), checks the checksums, attaches everything to a draft and then publishes it as "Varstotas <version>". Its notes are a downloads table (`.github/release-notes.md`) followed by the changes since the previous release. A version with a `-` (`release-0.2.0-rc.1`) makes a pre-release. A release that is already published is never changed; with release immutability on (Settings → General → Releases) its files and tag are frozen.
 
 Every CI build is stamped with the run number and commit: `varstotas --version`, About and Report a Problem show `0.1.0 (build 42, 4cc73e5)` (Windows file version `0.1.0.42`, macOS `CFBundleVersion` `42`). Local builds show `dev` instead of a number; `VARSTOTAS_BUILD=<n>` sets one by hand.
 
-The tag must match the workspace version in `Cargo.toml` (the release fails at once otherwise), so a release is: bump `version` under `[workspace.package]`, build once (updates `Cargo.lock`), commit, then
+The tag must match the workspace version in `Cargo.toml` (the build fails at once otherwise), so a release is: bump `version` under `[workspace.package]`, build once (updates `Cargo.lock`), commit, then
 
 ```bash
 git tag release-0.1.0 && git push origin master release-0.1.0
+# once CI and Release build have passed:
+gh workflow run publish.yml --ref release-0.1.0
 ```
+
+Until it is published, a failed build can be fixed by moving the tag to a new commit (`git tag -f`, `git push -f origin <tag>`).

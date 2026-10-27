@@ -1,29 +1,26 @@
-# A release-* tag: unit tests and release builds on macOS, Windows and Linux; the packages
-# (macOS .dmg + .zip, Windows installer + .zip, Linux .AppImage + .tar.gz) and their
-# SHA256SUMS go to a GitHub release of the tag (notes: .github/release-notes.md + the changes).
-# release-1.2.3-rc1 (any version with a "-") makes a pre-release.
-# A tag pushed in the same push that first adds this file does not start it; rebuild such a tag
-# with Actions → Release → Run workflow (or: gh workflow run release.yml -f tag=release-x.y.z).
-name: Release
+# A release-* tag: version check, unit tests and release builds on macOS, Windows and Linux; the
+# packages (macOS .dmg + .zip, Windows installer + .zip, Linux .AppImage + .tar.gz) and their
+# SHA256SUMS.txt are kept as the run's `release-files` artifact. Nothing is published here:
+# Actions → Publish release, run from the tag, publishes exactly these files (publish.yml).
+# A tag pushed in the same push that first adds this file does not start it; build such a tag
+# with Actions → Release build → Run workflow, choosing the tag under "Use workflow from".
+name: Release build
 
 on:
   push:
     tags: ['release-*']
+  # run from a release-* tag ("Use workflow from"), so the run belongs to the tag's commit
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Existing release-* tag to (re)build'
-        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   # no debug info in test builds: smaller target/ (runner disk) and faster links
   CARGO_PROFILE_DEV_DEBUG: 0
-  TAG: ${{ inputs.tag || github.ref_name }}
+  TAG: ${{ github.ref_name }}
 
 jobs:
   check:
@@ -35,6 +32,10 @@ jobs:
           ref: ${{ env.TAG }}
       - name: Version
         run: |
+          if [[ "$GITHUB_REF_TYPE" != tag || "$TAG" != release-* ]]; then
+            echo "::error::Run this workflow from a release-* tag, not $GITHUB_REF_TYPE $TAG"
+            exit 1
+          fi
           cargo_version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           if [[ "${TAG#release-}" != "$cargo_version" ]]; then
             echo "::error::Tag $TAG does not match the workspace version $cargo_version in Cargo.toml (expected release-$cargo_version)"
@@ -94,36 +95,22 @@ jobs:
             dist/*.AppImage
           if-no-files-found: error
 
-  release:
-    name: GitHub release
+  bundle:
+    name: Release files
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-          sparse-checkout: .github
       - uses: actions/download-artifact@v4
         with:
+          pattern: varstotas-*
           path: dist
           merge-multiple: true
-      - name: Checksums and notes
+      - name: Checksums
         run: |
           (cd dist && sha256sum -- * > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
-          VERSION="${TAG#release-}"
-          sed "s/{version}/$VERSION/g" .github/release-notes.md > notes.md
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-      - name: Create or update the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
-          else
-            pre=()
-            [[ "$VERSION" == *-* ]] && pre=(--prerelease)
-            gh release create "$TAG" dist/* --verify-tag --title "Varstotas $VERSION" \
-              --notes-file notes.md --generate-notes "${pre[@]}"
-          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: dist/*
+          if-no-files-found: error

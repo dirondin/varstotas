@@ -1,0 +1,93 @@
+# Publishes a GitHub release from a release-* tag that has already passed Release build (release.yml):
+# run it by hand with Actions → Publish release → Run workflow, choosing the tag under
+# "Use workflow from". It requires a successful Release build and a successful CI run for the tag's
+# commit, takes that build's `release-files` artifact as is (no rebuild), checks SHA256SUMS.txt,
+# creates a draft with all the files and then publishes it. With release immutability enabled
+# (Settings → General → Releases) the published release's files and its tag can no longer change.
+# Notes: .github/release-notes.md + the changes since the previous release.
+# release-1.2.3-rc1 (any version with a "-") makes a pre-release.
+name: Publish release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-${{ github.ref_name }}
+
+jobs:
+  publish:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Tag, earlier runs and the release
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != tag || "$TAG" != release-* ]]; then
+            echo "::error::Run this workflow from a release-* tag (Use workflow from → Tags), not $GITHUB_REF_TYPE $TAG"
+            exit 1
+          fi
+          # the latest successful Release build of this tag at its current commit
+          build="$(gh run list --workflow release.yml --commit "$GITHUB_SHA" --status success --limit 20 \
+            --json databaseId,headBranch --jq "[.[] | select(.headBranch == \"$TAG\")][0].databaseId // empty")"
+          if [[ -z "$build" ]]; then
+            echo "::error::No successful Release build of $TAG at ${GITHUB_SHA::7}: wait for it, or run Actions → Release build from the tag"
+            exit 1
+          fi
+          ci="$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [[ -z "$ci" ]]; then
+            echo "::error::No successful CI run for ${GITHUB_SHA::7} (debug-profile tests and clippy): push the commit to master first"
+            exit 1
+          fi
+          echo "Release build: $GITHUB_SERVER_URL/$GH_REPO/actions/runs/$build"
+          echo "CI: $GITHUB_SERVER_URL/$GH_REPO/actions/runs/$ci"
+          echo "BUILD_RUN=$build" >> "$GITHUB_ENV"
+          # a published release is final; a draft left by an interrupted publish is replaced
+          if draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$draft" != true ]]; then
+              echo "::error::$TAG is already published"
+              exit 1
+            fi
+            gh release delete "$TAG" --yes
+          fi
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: dist
+          run-id: ${{ env.BUILD_RUN }}
+          github-token: ${{ github.token }}
+      - name: Check the files
+        run: |
+          VERSION="${TAG#release-}"
+          cd dist
+          sha256sum -c SHA256SUMS.txt
+          for f in macos-universal.dmg macos-universal.zip windows-x86_64-setup.exe windows-x86_64.zip \
+                   linux-x86_64.AppImage linux-x86_64.tar.gz; do
+            [[ -s "Varstotas-$VERSION-$f" ]] || { echo "::error::Missing Varstotas-$VERSION-$f"; exit 1; }
+          done
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Publish
+        run: |
+          sed "s/{version}/$VERSION/g" .github/release-notes.md > notes.md
+          pre=()
+          [[ "$VERSION" == *-* ]] && pre=(--prerelease)
+          # all files are attached to a draft first: an immutable release cannot get them later
+          gh release create "$TAG" dist/* --draft --verify-tag --title "Varstotas $VERSION" \
+            --notes-file notes.md --generate-notes "${pre[@]}"
+          gh release edit "$TAG" --draft=false
+          url="$(gh release view "$TAG" --json url --jq .url)"
+          immutable="$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq '.immutable // false')"
+          echo "Published $url (immutable: $immutable)"
+          echo "Published [$TAG]($url) from Release build run $BUILD_RUN, immutable: $immutable" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$immutable" != true ]]; then
+            echo "::warning::The release is not immutable: enable release immutability in Settings → General → Releases"
+          fi
