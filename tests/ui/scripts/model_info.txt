@@ -1,4 +1,4 @@
-# Window → Model Info (statistics: scene vs file, libraries; Purge Unused) and Components →
+# Window → Document Info (statistics: scene vs file, libraries; Purge Unused) and Components →
 # In Model → Delete from Document… Real mouse: Make Component, place a copy from the tile,
 # delete the component with its copies (asked), undo, erase the copies and purge.
 box 0 0 0 1000 1000 1000

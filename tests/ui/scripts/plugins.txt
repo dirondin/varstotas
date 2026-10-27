@@ -1,4 +1,4 @@
-# Plugins (Extensions menu entries, parameter dialog typed with the real keyboard, point
+# Plugins (Plugins menu entries, parameter dialog typed with the real keyboard, point
 # picking with real clicks, a Rhai importer, a Python exporter) and the Components library
 # (save the selection, place it twice with real clicks: one definition).
 action components

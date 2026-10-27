@@ -1,4 +1,4 @@
-# QA4B-006: Esc in an Entity Info field reverts the edit and keeps the selection
+# QA4B-006: Esc in a Properties field reverts the edit and keeps the selection
 wait 10
 view top
 parallel on

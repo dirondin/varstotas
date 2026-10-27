@@ -483,7 +483,7 @@ impl VarstotasApp {
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));
 
             let extensions_menu = ui.menu_button(tr!("menu-extensions"), |ui| self.extensions_menu(ui));
-            super::tray_lib::spot("menu:Extensions",extensions_menu.response.rect.center());
+            super::tray_lib::spot("menu:Plugins",extensions_menu.response.rect.center());
 
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);

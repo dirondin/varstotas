@@ -1,6 +1,6 @@
 # Generators — parametric components (track K)
 
-A generator is a component with parameters: a Rhai script with a parameter header. Its `build(p)` function builds the component's content in local axes: the component's origin is the insertion point. Each instance has its own parameter values, edited in Entity Info. Instances with equal values share one component definition.
+A generator is a component with parameters: a Rhai script with a parameter header. Its `build(p)` function builds the component's content in local axes: the component's origin is the insertion point. Each instance has its own parameter values, edited in Properties. Instances with equal values share one component definition.
 
 ## Header
 `// @…` comments at the start of the file, before the first line of code:
@@ -27,9 +27,9 @@ fn build(p) {
 - `@param key:type(range) = value "Label"`:
   - the range is written as `min..max/step`, each part optional: `(..2000)`, `(/10)`;
   - values are clamped to the range and rounded to the step (from `min`, otherwise from 0);
-  - the label is shown in Entity Info; without it the key serves as the label.
+  - the label is shown in Properties; without it the key serves as the label.
 
-| Type | In `p` | Field in Entity Info |
+| Type | In `p` | Field in Properties |
 |---|---|---|
 | `length` (default for numbers) | a number, mm; units can be written in the value: `1.2m` | text with the model's units |
 | `int` | an integer | a counter (drag or type) |
@@ -47,7 +47,7 @@ fn build(p) {
 // @formula first:int = if layout == "landing" { count / 2 } else { count }
 // @check 2 * riser + going >= 550 && 2 * riser + going <= 700 "Uncomfortable step"
 ```
-- `@formula key[:type] = expression "Label"` — a value computed from the parameters. The expression is Rhai; parameters and previous formulas are available by name. The result goes into `p` on a par with the parameters (`p.riser`) and is shown in Entity Info in grey, read-only (the expression is in the hint). The type only sets how the value looks: `length` (default), `int` (rounded to an integer), `number`, `bool`, `angle`, `percent`, `text`. Formula and parameter names must not coincide.
+- `@formula key[:type] = expression "Label"` — a value computed from the parameters. The expression is Rhai; parameters and previous formulas are available by name. The result goes into `p` on a par with the parameters (`p.riser`) and is shown in Properties in grey, read-only (the expression is in the hint). The type only sets how the value looks: `length` (default), `int` (rounded to an integer), `number`, `bool`, `angle`, `percent`, `text`. Formula and parameter names must not coincide.
 - `@check expression "Message"` — a condition on the values. If it is false, the values are not accepted: nothing changes in the document, and the message is shown in the status bar.
 - A quoted string at the end of a header line is the label or message. If the expression itself ends with a string (`finish == "Oak"`), this is recognised by the operator before it.
 - Besides the standard Rhai functions (`floor`, `round`, `abs`, `sqrt`, …) there are `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)` and `ceil(x)`; they are available in scripts too.
@@ -63,11 +63,11 @@ Inside `build` the whole API from `docs/SCRIPTING.md` is available. The script r
   - **Save to Library** — write to the components catalogue: to its own file if the generator was opened from there, otherwise to `<name>.rhai` (someone else's file with the same name is not overwritten);
   - **Apply to Document** — replace the source in the document, its components are rebuilt (one Undo step);
   - **Place** — place a component with the preview's values.
-- **Entity Info.** When generated components are selected, their parameter fields are shown.
+- **Properties.** When generated components are selected, their parameter fields are shown.
   - Every change rebuilds the component and gives one Undo step. A slider and a counter are applied when the mouse is released.
   - If several instances of one generator are selected, the change is applied to all of them, and their other values are not changed.
   - **Reset** returns the default values.
-  - **Make Unique** (Entity Info or right click) copies the instance's generator: "<name> 2" appears in the document (the same script, the `@generator` header renamed, a tile in In Model), and the instance moves to it. Editing the copy's script changes only its instances. The button is available when other instances use the generator too (even with other values).
+  - **Make Unique** (Properties or right click) copies the instance's generator: "<name> 2" appears in the document (the same script, the `@generator` header renamed, a tile in In Model), and the instance moves to it. Editing the copy's script changes only its instances. The button is available when other instances use the generator too (even with other values).
 - **Document generators (In Model).**
   - A generator placed from the library is stored in the document and is always shown as a tile in In Model, separately from the library one. Edit on this tile opens the Generator Editor for the document's copy: **Apply** rebuilds all its instances; if the name in the header is changed, the generator and its components are renamed.
   - Inserting again from the library takes the document's generator with the same script. If the script in the document was edited, the library one arrives next to it as "<name> 2".
@@ -102,14 +102,14 @@ Python: `m.add_generator(open("shelf.rhai").read())`, `g = m.generate("Shelf", v
   - `SIZE_KEYS` — the size keys for Scale.
 - `varstotas_script::generator`: `build` (runs `build(p)` in an empty model), `def_for`, `place`, `set_values`, `scale`, `add`, `rebuild_all`.
 - `varstotas_script::generator::derive` computes formulas and checks (`formula_values` — for display).
-- Application: `ui/generators.rs` (generator tiles in the common list `ui/library.rs`, built-in examples, moving the old folder, placement through `PasteTool`, Entity Info fields `param_field`, formula rows), `ui/gen_editor.rs` (the editor window). Scale — `tools/transform.rs::scale_generated`.
+- Application: `ui/generators.rs` (generator tiles in the common list `ui/library.rs`, built-in examples, moving the old folder, placement through `PasteTool`, Properties fields `param_field`, formula rows), `ui/gen_editor.rs` (the editor window). Scale — `tools/transform.rs::scale_generated`.
 - Harness: `action generator <name>`, `action gen key=value …` (`_` in a value means a space), `action gen_reset`, `action make_unique`; the editor — `action gen_editor [name]`, `action ged key=value …`, `action ged_sub old|new`, `action ged_save`, `action ged_apply`, `action ged_place`, `action ged_close`. In the dump: `gen=` (values and size of the selected), `gens=`, `gen_defs=`, `ged=Name{p=…,f=…}:preview(edges,WxDxH)|err(…):status:hcode_height`.
 
 ## Parameters of ordinary components
 A generator builds a component with a script. A component that already exists (drawn or imported) can get parameters too: for example, an "opening degree" turns a cabinet door.
 
 - **Parts** — groups and components directly inside the component, by name. Unnamed ones get names when parameters are added (the definition name, repeats with a number). A solid model must be split first: open the component and make the door a group.
-- **Window → Component Parameters** (or Entity Info → Edit Parameters…, or Components → Document → right click → Parameters…) for the selected component:
+- **Window → Component Parameters** (or Properties → Edit Parameters…, or Components → Document → right click → Parameters…) for the selected component:
   - **Parameters**: name, label, type (length, angle, number, int, percent, bool, choice, material), range, step, default value — as with `@param`.
   - **Formulas**: `name = expression` — as with `@formula`.
   - **Motions**: a part, a motion, a parameter or formula (or an expression), From / To:
@@ -128,7 +128,7 @@ A generator builds a component with a script. A component that already exists (d
     - the old form `fn update(p, parts)` (`parts[name]` — the extents at rest) still works.
   - The script is stored in the component.
   - Apply applies; Revert cancels the edits in the window; Remove Parameters returns the copies to the "as drawn" look.
-- **Copies.** Each copy has its own values: in Entity Info there are sliders and fields, Reset, Make Unique. Copies with equal values use one *variant* — a definition with the master's content in the required pose. Make Unique gives a copy its own master "<name> 2" with the same parameters: edits inside it go to its master, and the other copies do not change. The master keeps the "as drawn" pose and is not placed itself: a copy placed from the Document tile or pasted gets a variant with the default values.
+- **Copies.** Each copy has its own values: in Properties there are sliders and fields, Reset, Make Unique. Copies with equal values use one *variant* — a definition with the master's content in the required pose. Make Unique gives a copy its own master "<name> 2" with the same parameters: edits inside it go to its master, and the other copies do not change. The master keeps the "as drawn" pose and is not placed itself: a copy placed from the Document tile or pasted gets a variant with the default values.
 - **Edits inside a copy** (double click) go to the master after every step. Poses are removed in the process: a door moved in an open copy reaches the master closed and moved. The other copies are rebuilt in the same undo step. Edits inside a painted part are lost; change its shape with an empty material.
 - **Scenes** remember the values of all copies. Going to a scene changes the numbers smoothly, together with the camera; flags and texts switch in the middle of the transition. The same happens in the File → Export → Animation video.
 - **Library.** Save to Library keeps the component whole: the file holds the master, the parameters and the variant. From the library it is placed into any document with its parameters and saved values. Inserting again uses the same master — by name and identical parameters, whatever the file is called. Copy / Paste between documents works the same way.

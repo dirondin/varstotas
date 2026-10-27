@@ -1,7 +1,7 @@
 //! Lights in the viewport: markers (a sun-like dot, the spot's cone, the area's rectangle),
 //! picking with the Select tool and the aim handle of the selected spot / area light (drag it
 //! onto what the light should shine at). Move / Rotate move and turn a selected light
-//! (`transform::Targets::light`); Entity Info edits it.
+//! (`transform::Targets::light`); Properties edits it.
 
 use super::OverlayView;
 use super::common::px_at;

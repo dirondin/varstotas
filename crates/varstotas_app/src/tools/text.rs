@@ -2,7 +2,7 @@
 //!
 //! Click a point, move to where the text goes and click again. The default text is what was
 //! clicked: a point's coordinates, an edge's length or a face's area. Clicking empty space
-//! places a text without a leader. Edit the text in Entity Info.
+//! places a text without a leader. Edit the text in Properties.
 
 use varstotas_i18n::tr;
 use super::common::*;

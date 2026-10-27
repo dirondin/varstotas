@@ -1,6 +1,6 @@
 //! Generators (track K) in the UI: the Generators list of the Components card (the document's
 //! generators and `~/.varstotas/generators`), placing one, and the parameters of selected
-//! generated components in Entity Info. See `docs/GENERATORS.md`.
+//! generated components in Properties. See `docs/GENERATORS.md`.
 
 use super::{fmt_len, theme};
 use crate::app::{Action, VarstotasApp};
@@ -150,7 +150,7 @@ fn qa_examples() -> Vec<GenItem> {
     items
 }
 
-/// Text of a value in Entity Info.
+/// Text of a value in Properties.
 pub(crate) fn show_value(v: &GenValue, kind: &GenKind, unit: varstotas_kernel::LengthUnit) -> String {
     match (v, kind) {
         (GenValue::Num(x), GenKind::Length) => fmt_len(*x, unit),
@@ -447,7 +447,7 @@ impl VarstotasApp {
         Some((ids, g, values))
     }
 
-    /// Entity Info for selected generated components: a field per parameter (several selected
+    /// Properties for selected generated components: a field per parameter (several selected
     /// are edited together), Reset and Make Unique. False when the selection is not that.
     pub(crate) fn generator_info(&mut self, ui: &mut Ui) -> bool {
         let Some((ids, g, values)) = self.selected_generated() else { return false };

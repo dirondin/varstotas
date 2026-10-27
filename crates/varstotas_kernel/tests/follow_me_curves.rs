@@ -1,4 +1,4 @@
-//! Follow Me along curves (Bezier / smooth splines, circles).
+//! Sweep along curves (Bezier / smooth splines, circles).
 
 mod common;
 use common::*;

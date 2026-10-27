@@ -1,6 +1,6 @@
 //! Help → User Guide: the documentation of the whole application inside it. Topics from the
 //! first steps to files and scripts; the tools are shown from their own texts (`ToolId::
-//! description` / `instructor`, the same as the Instructor card), so the guide follows the
+//! description` / `instructor`, the same as the Tool Guide card), so the guide follows the
 //! tools. A search goes through every topic and tool. F1 over the model opens the topic of
 //! the active tool; the scripting topics link to Help → Script Reference.
 

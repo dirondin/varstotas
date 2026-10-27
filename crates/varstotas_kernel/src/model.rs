@@ -318,7 +318,7 @@ pub struct SceneStyle {
     pub triangles: bool,
 }
 
-/// Model Info → Animation: scene transitions and playback.
+/// Document Info → Animation: scene transitions and playback.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SceneSettings {

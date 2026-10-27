@@ -43,7 +43,7 @@ pub fn sel_op(m: &egui::Modifiers) -> SelOp {
     }
 }
 
-/// Modifier help for the status bar / Instructor (platform wording).
+/// Modifier help for the status bar / Tool Guide (platform wording).
 pub fn sel_mods_help() -> String {
     tr!("tool-select-mods")
 }

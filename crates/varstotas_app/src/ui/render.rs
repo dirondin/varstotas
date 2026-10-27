@@ -331,7 +331,7 @@ impl VarstotasApp {
     }
 }
 
-/// The properties of a light (Render window, Entity Info): label | widgets rows, narrow enough
+/// The properties of a light (Render window, Properties): label | widgets rows, narrow enough
 /// for the tray.
 pub(crate) fn light_editor(ui: &mut egui::Ui, id: &str, l: &mut Light, unit: varstotas_kernel::LengthUnit, camera: &Camera) {
     let small = |ui: &mut egui::Ui, w: egui::DragValue<'_>| ui.add_sized([58.0, 18.0], w);

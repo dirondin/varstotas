@@ -1,9 +1,9 @@
 # Plugins and the component library
 
 ## Plugins
-A plugin is a `.rhai` or `.py` file in the `~/.varstotas/plugins/` folder (subfolders are scanned too, two levels deep). Plugins are loaded at startup; after editing, choose **Extensions → Reload Plugins**. **Open Plugins Folder** is there too.
+A plugin is a `.rhai` or `.py` file in the `~/.varstotas/plugins/` folder (subfolders are scanned too, two levels deep). Plugins are loaded at startup; after editing, choose **Plugins → Reload Plugins**. **Open Plugins Folder** is there too.
 
-Examples are available only in the repository at `examples/plugins/` (Help → Examples). They are not shipped or installed automatically. Copy the plugins you want into `~/.varstotas/plugins/`, then choose Extensions → Reload Plugins:
+Examples are available only in the repository at `examples/plugins/` (Help → Examples). They are not shipped or installed automatically. Copy the plugins you want into `~/.varstotas/plugins/`, then choose Plugins → Reload Plugins:
 - `stairs.rhai` — a staircase: parameters and one point.
 - `beam.rhai` — a beam between two points.
 - `import_points_csv.rhai` — import a contour from CSV ("Points from CSV (plugin)"; the format is built in: File → Import → Points (CSV)).
@@ -27,12 +27,12 @@ A plugin's description is comments at the start of the file (`//` for Rhai, `#` 
 | Tag | Meaning |
 |---|---|
 | `@name` | the name (by default — the file name) |
-| `@menu A/B/C` | the path in the **Extensions** menu (by default — the name) |
+| `@menu A/B/C` | the path in the **Plugins** menu (by default — the name) |
 | `@description` | a hint and the text in the dialog |
 | `@param key = default "Label"` | a parameter the user enters in a dialog before the run. A number by default is a length: it can be entered with units (`1.2m`), and arrives in the script in mm. The type is set explicitly like this: `key:int`, `key:number`, `key:text`, `key:bool`, `key:length`. A quoted string is text, `true` / `false` is a checkbox. The last entered values are remembered until the end of the session. |
 | `@pick N "Prompt"` | before the run the user clicks N points in the model, with snapping. They arrive in the `points` array (world mm). |
 | `@select "Prompt"` | before the run (after the points) the user selects objects by clicking: a face, edge or group of the open context is added to or removed from the selection, Enter — continue, Esc — cancel. The objects arrive in the `objects` array (as script entities, in the same order as in the selection); what was already selected before the run is included too. |
-| `@import csv,txt` | an importer: an item in **File → Import**, the file path arrives in `path`. Such a plugin does not appear in the Extensions menu. |
+| `@import csv,txt` | an importer: an item in **File → Import**, the file path arrives in `path`. Such a plugin does not appear in the Plugins menu. |
 | `@export json` | an exporter: an item in **File → Export**, the path arrives in `path` |
 | `@material_import mat,material` | a material importer: **Materials → Import…** reads these files with the plugin (see below) |
 | `@material_source` | a material source in the **Online Materials** window (see below) |
@@ -76,7 +76,7 @@ path = varstotas.params()["path"]
 Make model changes inside `with m.operation("…")` so that they become one Undo step.
 
 ### Material plugins
-Two kinds of plugins, they are not in the Extensions menu.
+Two kinds of plugins, they are not in the Plugins menu.
 
 **Importer** (`@material_import ext,…`). The plugin's extensions appear in the filter of the **Materials → Library → Import…** dialog ("All materials" and a separate filter for the plugin). The materials from the file are added to the document; the last one becomes current for Paint. Such a plugin's `@param`s take their default values.
 
@@ -139,7 +139,7 @@ Examples in `examples/plugins`: `basket_weave.rhai` (parquet squares of planks w
 ### Model plugins (3D Library)
 The **Window → 3D Library…** window (or the cloud in the top row of the Components card) searches for and downloads ready-made models. Built-in sources: **Poly Haven** (CC0, glTF with 1K textures, real size), **Smithsonian** (CC0, scans of museum objects; search on the server — Enter), **NASA** (GLB from the NASA-3D-Resources repository). What is downloaded is imported, wrapped into one component, put on the ground (bounding box from the origin) and saved to the component library: `<library>/<source>/<name>.vrst`. Download files are in `~/.varstotas/downloads/<source>/<id>/`. Double click — download and place (by a click in the model, like a component from the library), the buttons Download & Place / Download / Place / Download Again / Web Page. The **From URL** field downloads a direct link to a `.glb` / `.gltf` / `.obj` / `.stl` / `.dxf` / `.zip` (library folder "Web"). Models over 100 thousand triangles are marked ⚠. glTF with Draco compression is read (the `draco-core` decoder), meshopt is not.
 
-A component remembers its source: name, author, licence, link (Entity Info → the Source row). **File → Export → Attributions…** saves the list of credits of all downloaded components of the model — needed for CC-BY.
+A component remembers its source: name, author, licence, link (Properties → the Source row). **File → Export → Attributions…** saves the list of credits of all downloaded components of the model — needed for CC-BY.
 
 **Source** (`@model_source`): `fn catalogue(params)` → an array of models, search and categories filter it in the window. With `@model_source search`, instead of it `fn search(query, params)` — called on Enter in the search field, the reply is shown as is. In both cases `fn download(id, dir, params)` → a model specification. Model fields in the catalogue: `id` is required; then `name`, `category`, `keywords` / `tags`, `author`, `license`, `thumb` (a URL or path), `page`, `polycount` (triangles), `size` (`[x, y, z]`, mm), `bytes`. Parameters and the Load / Apply button — as with material sources.
 
@@ -165,7 +165,7 @@ The **Components** section in the Default Tray (enabled by a checkbox in the **W
 
 - **A click on a thumbnail** places the file's content as a component: it follows the cursor, with the corner of its bounding box at the snap point, a click fixes it. There is one definition in the document no matter how many times the component is placed (matched by file name). Esc cancels.
 - **+ → Save Selection to Library…** saves the selection to `<folder>/<name>.vrst` under a new name if that one is already taken. The file's origin is the corner of the bounding box. If a single group or component is selected, its content goes into the file.
-- The **Document** folder shows the components of the open document (unused ones too). Right click: Place, Select Instances, **Parameters…** (the Component Parameters window, see `docs/GENERATORS.md`), **Delete from Document…** — the component is deleted together with all placed copies (if there are copies, it asks; Edit → Undo brings it back). Everything unused is deleted at once by **Purge Unused** (Window → Model Info… or Edit → Purge Unused).
+- The **Document** folder shows the components of the open document (unused ones too). Right click: Place, Select Instances, **Parameters…** (the Component Parameters window, see `docs/GENERATORS.md`), **Delete from Document…** — the component is deleted together with all placed copies (if there are copies, it asks; Edit → Undo brings it back). Everything unused is deleted at once by **Purge Unused** (Window → Document Info… or Edit → Purge Unused).
 - The thumbnail is a wireframe in isometric view, and if the file has a **preview image** — that. Right click on a thumbnail: **Set Preview Image…** (PNG / JPEG / TGA / BMP; reduced to 512 px and written to the file) and **Remove Preview Image**. For the open document the preview is set in **File → Preview Image** (from a file or as a snapshot of the current view). Models from the 3D Library get a preview by themselves — the source's image. A hint above the thumbnail shows the dimensions. Search filters by name. The ⟳ button rereads the folder; changed files are also reread when the section is simply shown.
 
 Parametric components built by a script (`@generator`) are described in `docs/GENERATORS.md`.

@@ -1,5 +1,5 @@
 # Draw → Shapes (track U): Box, Cylinder, Cone, Pyramid, Sphere, Torus with the real mouse and the
-# Measurements box; each is a generated component (sizes in Entity Info), one undo step.
+# Measurements box; each is a generated component (sizes in Properties), one undo step.
 wait 10
 view iso
 tool box
@@ -66,7 +66,7 @@ zoom_extents
 wait 3
 tool select
 screenshot shots/shapes_all.bmp
-# Entity Info: the torus' tube from the parameters
+# Properties: the torus' tube from the parameters
 action gen tube=250
 wait 3
 expect gen=Torus{radius=600,tube=250,segments=24,sides=12}@1700x1700x500

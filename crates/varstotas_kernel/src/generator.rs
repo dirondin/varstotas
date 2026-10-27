@@ -193,7 +193,7 @@ pub struct Generator {
 
 /// `@formula key[:type] = expression "Label"`: a value computed from the parameters (a Rhai
 /// expression over their keys), passed to `build` in `p` like a parameter and shown read-only
-/// in Entity Info. The type only says how it is shown (length by default).
+/// in Properties. The type only says how it is shown (length by default).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GenFormula {
     pub key: String,

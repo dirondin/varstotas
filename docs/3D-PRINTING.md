@@ -1,6 +1,6 @@
 # 3D Printing
 
-Open **Extensions → 3D printing preparation**. This single entry opens the resizable window
+Open **Window → Check Model…**. This single entry opens the resizable 3D printing preparation window
 for the complete planned workflow: **Check, Repair, Analysis, Printer & bed, Split & connectors, Print export**. Commands
 are also available in shortcut/toolbar settings. Tools inspect the common model surface, so
 these operations apply to native geometry and every imported format.

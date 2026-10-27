@@ -1,4 +1,4 @@
-//! Editing tools: Eraser, Paint Bucket, Push/Pull, Offset, Follow Me.
+//! Editing tools: Eraser, Paint Bucket, Push/Pull, Offset, Sweep.
 
 use varstotas_i18n::tr;
 use super::common::*;
@@ -736,7 +736,7 @@ impl OffsetTool {
 }
 
 // ===========================================================================
-// Follow Me
+// Sweep
 // ===========================================================================
 
 #[derive(Default)]

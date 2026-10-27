@@ -1,4 +1,4 @@
-//! The side bar: Entity Info, Materials, Tags, Outliner, Scenes, Instructor.
+//! The side bar: Properties, Materials, Tags, Outliner, Scenes, Tool Guide.
 
 use super::icons::{Icon, paint_icon};
 use varstotas_i18n::tr;
@@ -19,13 +19,13 @@ pub struct TrayState {
     /// Multi-selection summary, cached by (model, selection) version: summing face areas of
     /// a huge selection every frame is too slow.
     sel_summary: Option<((u64, u64), SelSummary)>,
-    /// Entity Info edit buffers: curve (id, radius, segments) and dimension (id, text).
+    /// Properties edit buffers: curve (id, radius, segments) and dimension (id, text).
     curve_edit: Option<(u32, String, String)>,
     dim_text: Option<(varstotas_kernel::DimId, String)>,
     /// Texture position edit buffers of a face: offset x, offset y, angle, scale x, scale y.
     /// Parametric group edit buffers: (instance, size X, Y, Z, gap, copies).
     params_edit: Option<(InstanceId, [String; 5])>,
-    /// Section plane name being edited in Entity Info.
+    /// Section plane name being edited in Properties.
     section_name: Option<(usize, String)>,
     /// Texture size edit buffers of the current material: (material name, width, height).
     tex_size: Option<(String, String, String)>,
@@ -34,7 +34,7 @@ pub struct TrayState {
     /// Material thumbnails by texture bytes pointer.
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
     pub soften: SoftenSettings,
-    /// Generator parameters in Entity Info: length text buffers of the selected instances, and
+    /// Generator parameters in Properties: length text buffers of the selected instances, and
     /// a number being dragged (applied when the drag ends).
     pub gen_text: Option<(Vec<InstanceId>, std::collections::BTreeMap<String, String>)>,
     pub gen_drag: Option<(String, f64)>,
@@ -375,7 +375,7 @@ impl VarstotasApp {
         }
     }
 
-    // ---- Entity Info -------------------------------------------------------
+    // ---- Properties -------------------------------------------------------
 
     fn selection_summary(&mut self) -> SelSummary {
         let key = (self.doc.model_version, self.doc.selection_version);
@@ -718,7 +718,7 @@ impl VarstotasApp {
         }
     }
 
-    /// Entity Info for a group / component: "Make Parametric", or the attributes of a
+    /// Properties for a group / component: "Make Parametric", or the attributes of a
     /// parametric group (size along the base's axes, copies in a row, gap, stretch / scale).
     fn params_info(&mut self, ui: &mut Ui, id: InstanceId) {
         let path = self.doc.active_path.clone();
@@ -898,7 +898,7 @@ impl VarstotasApp {
         (n == mesh.curve_edges(cid).len()).then_some(cid)
     }
 
-    /// Entity Info for a Bezier / smooth / freehand curve: segments per span are editable,
+    /// Properties for a Bezier / smooth / freehand curve: segments per span are editable,
     /// Edit Curve reshapes it.
     fn spline_info(&mut self, ui: &mut Ui, cid: u32) {
         let path = self.doc.active_path.clone();
@@ -957,7 +957,7 @@ impl VarstotasApp {
         }
     }
 
-    /// Entity Info for an arc / circle / polygon: radius and segments are editable.
+    /// Properties for an arc / circle / polygon: radius and segments are editable.
     fn curve_info(&mut self, ui: &mut Ui, cid: u32) {
         let path = self.doc.active_path.clone();
         let unit = self.doc.model.unit;
@@ -1029,7 +1029,7 @@ impl VarstotasApp {
         }
     }
 
-    /// Entity Info for a dimension: length and editable text.
+    /// Properties for a dimension: length and editable text.
     fn dim_info(&mut self, ui: &mut Ui, id: varstotas_kernel::DimId) {
         let path = self.doc.active_path.clone();
         let unit = self.doc.model.unit;
@@ -1066,7 +1066,7 @@ impl VarstotasApp {
         }
     }
 
-    /// Entity Info for a single selected guide line / guide point (world coordinates).
+    /// Properties for a single selected guide line / guide point (world coordinates).
     /// A selected light: its properties (one undo step per edit, as in the Render window).
     fn light_info(&mut self, ui: &mut Ui, i: usize) {
         let Some(mut l) = self.doc.model.lights.get(i).cloned() else { return };
@@ -1500,7 +1500,7 @@ impl VarstotasApp {
         }
     }
 
-    // ---- Instructor ------------------------------------------------------------
+    // ---- Tool Guide ------------------------------------------------------------
 
     fn instructor(&mut self, ui: &mut Ui) {
         let id = self.tool_id();

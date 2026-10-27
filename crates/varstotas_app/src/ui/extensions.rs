@@ -1,4 +1,4 @@
-//! Plugins in the app (see `plugins.rs`): the Extensions menu, File → Import / Export entries,
+//! Plugins in the app (see `plugins.rs`): the Plugins menu, File → Import / Export entries,
 //! the parameter dialog, point picking, object selection and running. Console code with a
 //! plugin header (`@param`, `@pick`, `@select`) goes the same way as the pseudo plugin
 //! [`CONSOLE`]. A Rhai plugin run is one undo step named
@@ -85,7 +85,7 @@ impl VarstotasApp {
         self.plugins.list.iter().position(|p| p.name.eq_ignore_ascii_case(name.trim()))
     }
 
-    /// Extensions menu: plugins by their menu paths, then the folder commands.
+    /// Plugins menu: plugins by their menu paths, then the folder commands.
     pub(crate) fn extensions_menu(&mut self, ui: &mut Ui) {
         let entries: Vec<(usize, Vec<String>)> = self
             .plugins

@@ -9,7 +9,7 @@ wait 20
 expect tags=["QA"] untagged_hidden=false
 screenshot shots/tags_start.bmp
 expect drawn_faces=6
-# fold Entity Info (room below), open the Tags card
+# fold Properties (room below), open the Tags card
 raw click 1137 27
 wait 5
 raw click 1137 501

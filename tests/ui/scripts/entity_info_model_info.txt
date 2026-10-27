@@ -1,4 +1,4 @@
-# Entity Info's header has a Model Info button at its right: it opens (and closes) the window.
+# Properties' header has a Document Info button at its right: it opens (and closes) the window.
 wait 10
 action tray_only Entity Info
 wait 10

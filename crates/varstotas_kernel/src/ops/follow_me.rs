@@ -1,4 +1,4 @@
-//! Follow Me: sweep a profile face along a path of connected edges.
+//! Sweep: move a profile face along a path of connected edges.
 
 use crate::mesh::Mesh;
 use crate::{EdgeId, EntityRef, Face, FaceId, OpError, OpResult, TOL, VertexId};

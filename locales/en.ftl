@@ -204,7 +204,7 @@ menu-shapes = Shapes
 menu-tools = Tools
 menu-solid-tools = Solid Tools
 menu-snapping = Snapping
-menu-extensions = Extensions
+menu-extensions = Plugins
 menu-window = Window
 menu-side-bar = Side Bar
 menu-sheets = Sheets…
@@ -297,7 +297,7 @@ cmd-show-grid = Show Grid
 cmd-side-bar = Side Bar
 cmd-render = Render…
 cmd-work-planes = Work Planes…
-cmd-model-info = Model Info…
+cmd-model-info = Document Info…
 cmd-component-params = Component Parameters…
 cmd-generator-editor = Generator Editor…
 cmd-console = Script Console
@@ -343,7 +343,7 @@ cmd-desc-text-3d = Add text as 3D geometry (a group).
 cmd-desc-zoom-extents = Fit the whole model in the view.
 cmd-desc-snapping = Snapping on / off.
 cmd-desc-show-grid = The grid on the ground on / off.
-cmd-desc-side-bar = The side bar with the cards (Entity Info, Materials …) shown or hidden.
+cmd-desc-side-bar = The side bar with the cards (Properties, Materials …) shown or hidden.
 cmd-desc-render = Path-traced pictures of the model (Window → Render).
 cmd-desc-work-planes = Saved drawing planes.
 cmd-desc-model-info = Statistics of the document, Purge Unused.
@@ -434,7 +434,7 @@ tool-offset = Offset
 tool-chamfer = Chamfer
 tool-fillet = Fillet
 tool-solid-tools = Solid Tools
-tool-follow-me = Follow Me
+tool-follow-me = Sweep
 tool-tape = Tape Measure
 tool-protractor = Protractor
 tool-axes = Axes
@@ -647,7 +647,7 @@ tool-arc-end-tangent = Select the end point (double-click it for the cyan tangen
 tool-arc-end = Select the end point or type the chord length.
 tool-arc-bulge = Move to set the bulge and click, or type a bulge (`500r` for a radius). Type `12s` for segments.
 
-## Eraser, Paint Bucket, Push/Pull, Offset, Follow Me
+## Eraser, Paint Bucket, Push/Pull, Offset, Sweep
 
 tool-undo-hide = Hide
 tool-undo-unsoften = Unsoften
@@ -670,7 +670,7 @@ tool-push-pull-idle = Click a face to push or pull it. Double-click repeats the 
 tool-undo-offset = Offset
 tool-offset-moving = Move inward or outward and click, or type a distance.
 tool-offset-idle = Click a face to offset its edges. Double-click repeats the last offset.
-tool-undo-follow-me = Follow Me
+tool-undo-follow-me = Sweep
 tool-follow-me-profile = Click the profile face (pre-select path edges to sweep immediately).
 tool-follow-me-path = Click or drag along path edges; double-click/Enter to finish. Click a face to sweep around its edge. Esc = cancel.
 
@@ -752,7 +752,7 @@ tool-solid-cut = { $name }: click the solid to cut with the first one (Esc to st
 tool-solid-second = { $name }: click the second solid (Esc to start over).
 tool-undo-text = Text
 tool-text-first = Click a point, edge or face to attach a text, or empty space for a text without a leader.
-tool-text-place = Move to place the text and click. Edit the text in Entity Info.
+tool-text-place = Move to place the text and click. Edit the text in Properties.
 tool-text3d-status = Click to place the 3D text (Esc cancels).
 tool-undo-texture-position = Texture Position
 tool-texture-pick = Click a textured face to position its texture.
@@ -780,7 +780,7 @@ tool-plugin-select = { $prompt } — click to add / remove, Enter to continue, E
 # { $name } is the tool's name.
 tool-not-implemented = { $name } tool is not implemented yet.
 
-## Instructor panel (long help per tool; a line starting with • is a list item)
+## Tool Guide panel (long help per tool; a line starting with • is a list item)
 
 tool-select-instructor =
     Click an entity to select it.
@@ -867,18 +867,18 @@ tool-box-instructor =
     Click the first corner of the base, click the opposite corner, then move up or down and click to set the height.
     • A face under the cursor carries the base; arrows after the first click set its plane.
     • Type `width, depth`, then the height — or `width, depth, height` at once.
-    • The result is a component: change its sizes in Entity Info; Explode it for plain geometry.
+    • The result is a component: change its sizes in Properties; Explode it for plain geometry.
 tool-cylinder-instructor =
     Click the centre of the base, click the radius, then move up or down and click to set the height.
     • Type the radius, then the height — or `radius, height` at once; `32s` sets segments.
-    • The result is a component: change its sizes in Entity Info; Explode it for plain geometry.
+    • The result is a component: change its sizes in Properties; Explode it for plain geometry.
 tool-sphere-instructor =
     Click where the sphere rests, then move and click to set the radius (or type it).
-    • `32s` sets segments. The result is a component: change its sizes in Entity Info.
+    • `32s` sets segments. The result is a component: change its sizes in Properties.
 tool-torus-instructor =
     Click the centre, click the radius (to the middle of the tube), then move and click to set the tube.
     • Type `radius, tube` at once; `32s` sets segments.
-    • The result is a component: change its sizes in Entity Info.
+    • The result is a component: change its sizes in Properties.
 tool-push-pull-instructor =
     Hover a face, click, move to set the distance, click again.
     %COPY% keeps the original face. Double-click repeats the last distance.
@@ -913,7 +913,7 @@ tool-text-instructor =
     Click a point, edge or face, move the text away and click again.
     • Default text: a point's coordinates, an edge's length, a face's area.
     • Click empty space for a text without a leader.
-    • Edit the text in Entity Info; move it with Move or by moving the geometry.
+    • Edit the text in Properties; move it with Move or by moving the geometry.
 tool-section-instructor =
     Click a face to place a section plane on it; it becomes the active cut.
     • The arrows point to the part that stays visible.
@@ -1400,7 +1400,7 @@ template-imperial-desc = Lengths in inches.
 
 ## Cards (titles are ids in the preferences; these are the shown names)
 
-tray-card-entity-info = Entity Info
+tray-card-entity-info = Properties
 tray-card-materials = Materials
 tray-card-material-editor = Material Editor
 tray-card-components = Components
@@ -1410,8 +1410,8 @@ tray-card-scenes = Scenes
 tray-card-shadows = Shadows
 tray-card-environment = Environment
 tray-card-soften-edges = Soften Edges
-tray-card-instructor = Instructor
-tray-card-model-info-tip = Model Info: statistics of the document, Purge Unused
+tray-card-instructor = Tool Guide
+tray-card-model-info-tip = Document Info: statistics of the document, Purge Unused
 tray-cards-all-off = Every card is off: Window → Side Bar
 
 tray-untagged = Untagged
@@ -1450,7 +1450,7 @@ tray-soften-select = Select edges or faces
 # $n is the number of edges.
 tray-soften-edges-count = { $n } edges
 
-## Entity Info
+## Properties
 
 tray-info-invalid-context = Invalid context
 tray-info-no-selection = No Selection
@@ -1541,7 +1541,7 @@ tray-undo-rename-scene = Rename Scene
 ## Parametric group
 
 tray-params-make = Make Parametric
-tray-params-make-hover = Size and copies set in Entity Info
+tray-params-make-hover = Size and copies set in Properties
 tray-params-title = Parameters
 tray-params-length = Length (X)
 tray-params-width = Width (Y)
@@ -1714,7 +1714,7 @@ tray-scenes-transitions = Scene transitions
 tray-scenes-transition = Transition
 tray-scenes-delay = Scene delay
 
-## Instructor
+## Tool Guide
 
 # $key is the shortcut.
 tray-instructor-shortcut = Shortcut: { $key }
@@ -2921,12 +2921,12 @@ sheets-export = Export:
 ## ======== Component parameters ========
 
 rig-title = Component Parameters
-rig-select-hint = Select a component (not a group) and choose Window → Component Parameters, or Edit Parameters… in Entity Info.
+rig-select-hint = Select a component (not a group) and choose Window → Component Parameters, or Edit Parameters… in Properties.
 rig-state-has = — with parameters
 rig-state-none = — no parameters yet: Apply adds them
 rig-no-parts = The component has no parts to move: group its pieces inside it (a door, a drawer…) — open it and use Make Group.
 
-## Entity Info block
+## Properties block
 # $name is the component's name; $n the number of copies
 rig-info-copies = { $name } — { $n } copies
 rig-no-params = No parameters yet
@@ -2955,7 +2955,7 @@ rig-err-same-points = The two points are the same
 
 ## Parameters table
 rig-parameters = Parameters
-rig-parameters-hint = The values each copy has (Entity Info shows them)
+rig-parameters-hint = The values each copy has (Properties shows them)
 rig-col-name = Name
 rig-col-label = Label
 rig-col-type = Type
@@ -3049,7 +3049,7 @@ gen-origin-document = In this document
 gen-tile-error = Error: { $error }
 # $note is the description and origin lines
 gen-tile-tip =
-    Generator — parameters in Entity Info
+    Generator — parameters in Properties
     { $note }
 gen-edit = Edit Generator…
 gen-show-in-finder = Show in File Manager
@@ -3058,7 +3058,7 @@ gen-show-in-finder = Show in File Manager
 gen-delete = Delete…
 gen-error = Generator: { $error }
 
-## Entity Info block
+## Properties block
 # $name is the generator's name; $n the number of components
 gen-info-components = { $name } — { $n } components
 gen-info-generator = Generator: { $name }
@@ -3071,9 +3071,9 @@ gen-make-unique = Make Unique
 gen-mixed = The selected components differ; a change sets them all
 gen-select-generated = Select generated components
 
-## ======== Model Info ========
+## ======== Document Info ========
 
-model-info-title = Model Info
+model-info-title = Document Info
 model-info-scene = In the scene
 model-info-scene-hint = What is drawn: the content of every placed copy counted
 model-info-file = In the file
@@ -3130,7 +3130,7 @@ model-info-purged-materials = { $n } material(s)
 # $parts is a comma-separated list of the three texts above
 model-info-purged = Purged { $parts }
 
-## ======== Extensions and plugins ========
+## ======== Plugins ========
 
 ## Plugin header errors (shown to plugin authors)
 # $label is a parameter label; $value is the text entered
@@ -3160,7 +3160,7 @@ ext-tex-no-pixels = Inline image: give its pixels as "rgb", "rgba" or "grey" (an
 ext-tex-pixel-count = Inline image: { $want } bytes expected, { $got } given
 ext-mat-spec-object = a material spec must be an object
 
-## Extensions menu and plugin dialogs
+## Plugins menu and plugin dialogs
 ext-script-undo = Script
 # $error is the plugin header parser's message
 ext-header-error = header: { $error }
@@ -3251,15 +3251,15 @@ console-ref-basics-13 = `print(x)` writes to the output; the value of the last e
 console-ref-console-1 = Window → Script Console runs code against the open model. %CMD%+Enter runs, %CMD%+↑ / ↓ goes through earlier runs, Open… / Save… work with `.rhai` files. File → Run Script… runs a file.
 console-ref-console-2 = Completion shows API functions while typing, properties after a dot (by the type on the left), and the signature of the function being called above the cursor. F1 opens this reference on the word at the cursor.
 console-ref-console-3 = Header: dialogs and menu items
-console-ref-console-4 = Lines `// @tag …` at the top turn a script into a plugin: Run first asks the parameters, points and objects. A file in `~/.varstotas/plugins` becomes an Extensions menu item.
+console-ref-console-4 = Lines `// @tag …` at the top turn a script into a plugin: Run first asks the parameters, points and objects. A file in `~/.varstotas/plugins` becomes a Plugins menu item.
 console-ref-console-6 = Tags
 ## Page: generators
-console-ref-generators-1 = A generator is a component with parameters: a script whose `build(p)` builds the component's content in its own axes (the origin is the insertion point). Each copy has its own values in Entity Info; copies with equal values share one definition.
+console-ref-generators-1 = A generator is a component with parameters: a script whose `build(p)` builds the component's content in its own axes (the origin is the insertion point). Each copy has its own values in Properties; copies with equal values share one definition.
 console-ref-generators-2 = Window → Generator Editor (or Edit Generator… on a tile): the source on the left, a live preview with parameter fields on the right; Apply updates the document, Save to Library writes the file.
 console-ref-generators-4 = Header
 console-ref-generators-5 = required; the generator's key in the document
 console-ref-generators-6 = a value in `p`; every part of the range is optional
-console-ref-generators-7 = a value computed from the parameters (read-only in Entity Info)
+console-ref-generators-7 = a value computed from the parameters (read-only in Properties)
 console-ref-generators-8 = values for which it is false are refused
 console-ref-generators-9 = Parameter types
 ## Page: component
@@ -3471,25 +3471,25 @@ help-topic-measurements = Measurements box
 help-topic-groups = Groups and components
 help-topic-library = Components library
 help-topic-materials = Materials and textures
-help-topic-organizing = Tags, Outliner, Entity Info
+help-topic-organizing = Tags, Outliner, Properties
 help-topic-construction = Guides, dimensions, sections
 help-topic-styles = Styles and rendering
 help-topic-scenes = Scenes, sheets, drawings
 help-topic-files = Files, import and export
-help-topic-scripts = Scripts and extensions
+help-topic-scripts = Scripts and plugins
 help-topic-shortcuts = Keyboard and mouse
 help-topic-problems = When something goes wrong
 ## start
 help-start-1 = Varstotas is a 3D modeller: you draw edges, closed edges make faces, faces are pushed and pulled into solids. Everything sticks together until you group it.
 help-start-2 = The window
 help-start-3 = Menu bar
-help-start-4 = File, Edit, View, Camera, Draw, Tools, Extensions, Window, Help
+help-start-4 = File, Edit, View, Camera, Draw, Tools, Plugins, Window, Help
 help-start-5 = Toolbar
 help-start-6 = the tools (a tooltip names each one and its key), navigation and Snapping; views and styles are in the viewport's top-right corner
 help-start-7 = Viewport
 help-start-8 = the model; the red, green and blue lines are the axes, the ground is under them
 help-start-9 = Side Bar
-help-start-10 = cards on the right: Entity Info, Materials, Components, Tags, Outliner, Scenes, Shadows, Environment, Soften Edges, Instructor (Window → Side Bar turns cards on and off)
+help-start-10 = cards on the right: Properties, Materials, Components, Tags, Outliner, Scenes, Shadows, Environment, Soften Edges, Tool Guide (Window → Side Bar turns cards on and off)
 help-start-11 = Status bar
 help-start-12 = what the active tool expects, messages and errors, the Log button, the Measurements box
 help-start-13 = A first model
@@ -3499,7 +3499,7 @@ help-start-16 = 3. Press `Space` (Select), triple-click the box to select it all
 help-start-17 = 4. Press `B` (Paint Bucket), pick a material in the Materials card, click faces.
 help-start-18 = 5. `Shift+Z` fits the model in the view; File → Save writes a `.vrst` file.
 help-start-19 = Help while working
-help-start-20 = The Instructor card explains the active tool; F1 over the model opens this guide on it. Finished models to look at (a furnished house, a material gallery) are in the folder ~/.varstotas/examples: File → Open.
+help-start-20 = The Tool Guide card explains the active tool; F1 over the model opens this guide on it. Finished models to look at (a furnished house, a material gallery) are in the folder ~/.varstotas/examples: File → Open.
 ## navigation
 help-navigation-1 = Mouse and trackpad
 help-navigation-2 = Middle button drag
@@ -3537,7 +3537,7 @@ help-selecting-3 = The Outliner card shows the groups and components as a tree: 
 help-drawing-1 = Drawing tools work on the face under the cursor, or on the ground / the active work plane. Closed loops of edges become faces; a line across a face splits it.
 help-drawing-2 = While a tool runs you can type a value at any time (no need to click the Measurements box) and press Enter — see Measurements box.
 ## shapes
-help-shapes-1 = Draw → Shapes builds a whole solid in one operation. The result is a generated component: select it and change its sizes and segments in Entity Info; Explode turns it into plain geometry.
+help-shapes-1 = Draw → Shapes builds a whole solid in one operation. The result is a generated component: select it and change its sizes and segments in Properties; Explode turns it into plain geometry.
 ## modifying
 help-modifying-1 = Move, Rotate and Scale work on the selection, or on what you click when nothing is selected. Moving a vertex, edge or face stretches the geometry around it.
 help-modifying-2 = Copy
@@ -3604,13 +3604,13 @@ help-groups-6 = Double-click
 help-groups-7 = enter a group / component to edit it (the rest dims); Esc or Edit → Close Group leaves
 help-groups-8 = Explode
 help-groups-9 = back to loose geometry
-help-groups-10 = Make Unique (right-click, Entity Info)
+help-groups-10 = Make Unique (right-click, Properties)
 help-groups-11 = a copy of a component gets its own definition ("Box 2"): editing it no longer changes the other copies; a generated one gets a copy of its generator ("Shelf 2" under In Model)
 help-groups-12 = Place from the library again
 help-groups-13 = the copy in the model is reused while it is unchanged; after you edited it the library's original comes in as a new definition ("Chair 2")
 help-groups-14 = Components with parameters
-help-groups-15 = Edit → Make Parametric gives a component sizes X / Y / Z (stretch or scale) and a row of copies in Entity Info.
-help-groups-16 = Window → Component Parameters gives any component parameters: values and formulas that turn, slide, show or paint its parts, an optional script; every copy has its own values (sliders in Entity Info).
+help-groups-15 = Edit → Make Parametric gives a component sizes X / Y / Z (stretch or scale) and a row of copies in Properties.
+help-groups-16 = Window → Component Parameters gives any component parameters: values and formulas that turn, slide, show or paint its parts, an optional script; every copy has its own values (sliders in Properties).
 help-groups-17 = Generators are components built by a script with typed parameters (Window → Generator Editor). The Draw → Shapes solids are generators too.
 help-groups-18 = Component script in the Script Reference
 help-groups-19 = Generators in the Script Reference
@@ -3634,7 +3634,7 @@ help-library-16 = Place, Set Preview from View, Set Preview Image…, Remove Pre
 help-library-17 = Pictures
 help-library-18 = A tile shows the file's picture when it has one, else a rendered thumbnail. Set Preview from View takes the viewport as it is now — frame the component first. A component placed from the library takes the file's picture with it; File → Preview Image sets the picture of the open document.
 help-library-19 = 3D Online Library
-help-library-20 = The cloud button in the Components card (or Window → 3D Online Library) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Entity Info → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads.
+help-library-20 = The cloud button in the Components card (or Window → 3D Online Library) downloads models: Poly Haven, Smithsonian, NASA, Kenney packs, by URL, or from plugin sources. A downloaded model becomes a component in the library with its credit (Properties → Source, File → Export → Attributions). Filters by licence, format and size; favourites and the history of downloads.
 help-library-21 = Each source shows its terms above its models (a plugin's @notice line). A model whose licence limits its use (non-commercial, no derivatives, share-alike, a site's own licence, unknown) gets a warning when it is placed and when the document is exported. Help → Licences… lists Varstotas's licence, the open-source components, file formats and the online libraries with their terms.
 ## materials
 help-materials-1 = The Materials card shows the materials of the model (In Model), your library (`~/.varstotas/materials`, or a folder you choose with …) and Examples; right-click a tile for Use, Rename…, Save to Library, Show in Finder, Export…, Delete…. Picking a library material only arms the Paint Bucket: the material joins the model (In Model) with the first face painted. Delete on an In Model tile removes the material from the model, its faces go back to the default (Edit → Undo brings it back). Edit a material there: colour, opacity, a texture image and its size, physical properties for the Realistic style (metal, roughness, glass, emission, maps, coat, sheen).
@@ -3646,14 +3646,14 @@ help-materials-6 = Shader
 help-materials-7 = a material can have its own WGSL shader with parameters (the shader editor has its own reference)
 help-materials-8 = Faces have a front (white) and a back (grey-blue) side; painting a group paints the faces inside it that have no material of their own.
 ## organizing
-help-organizing-1 = Entity Info
+help-organizing-1 = Properties
 help-organizing-2 = properties of the selection: area, length, volume of solids, tag, material, name, parameters of components and generators
 help-organizing-3 = Tags
 help-organizing-4 = visibility, colour and name of tags (layers); deleting a tag moves its content to Untagged
 help-organizing-5 = Outliner
 help-organizing-6 = the tree of groups and components: Zoom To, Edit, Hide, Explode, Move Out of Group, Delete; drag rows to move objects between groups
 help-organizing-7 = Hide / Unhide All
-help-organizing-8 = Window → Model Info
+help-organizing-8 = Window → Document Info
 help-organizing-9 = statistics of the document (faces, triangles, components, materials, textures …) and Purge Unused
 ## construction
 help-construction-1 = Guides are selected, moved and deleted like geometry; Edit → Delete Guides removes them all, View → Guides hides them. Tools → 3D Text… makes text as geometry.
@@ -3699,7 +3699,7 @@ help-files-10 = File → Preview Image
 help-files-11 = the picture the library shows for this file
 ## scripts
 help-scripts-1 = Window → Script Console runs Rhai scripts on the model: build, change, select, measure. File → Run Script… runs a `.rhai` (or `.py`) file. A run is one undo step.
-help-scripts-2 = Plugins are scripts in `~/.varstotas/plugins`: they become items of the Extensions menu, with dialogs for parameters and picking points; they can add importers, exporters and material / model sources.
+help-scripts-2 = Plugins are scripts in `~/.varstotas/plugins`: they become items of the Plugins menu, with dialogs for parameters and picking points; they can add importers, exporters and material / model sources.
 help-scripts-3 = Python and AI agents can drive Varstotas through the local bridge (Python client, MCP server).
 help-scripts-4 = Open the Script Reference
 help-scripts-5 = Console and plugins
@@ -3711,7 +3711,7 @@ help-problems-1 = Window → Log
 help-problems-2 = every error and warning of the session — scripts, import / export, libraries, downloads; a red counter in the status bar means new errors
 help-problems-3 = Edit → Undo
 help-problems-4 = every operation can be undone; a failed operation changes nothing
-help-problems-5 = Window → Model Info → Purge Unused
+help-problems-5 = Window → Document Info → Purge Unused
 help-problems-6 = remove unused components, materials and tags to make the file smaller
 help-problems-7 = Faces look grey-blue
 help-problems-8 = you see their back: select them, right-click → Reverse Faces or Orient Faces
@@ -3902,7 +3902,7 @@ script-member-to-string = as text
 
 ## Header tags of plugins
 script-tag-name = name in the menu and the dialog title
-script-tag-menu = path under Extensions
+script-tag-menu = path under Plugins
 script-tag-description = tooltip and text of the dialog
 script-tag-param = a value asked in the dialog before the run
 script-tag-pick = N points clicked before the run → points
@@ -4311,10 +4311,10 @@ tutorial-1-title = Look around your model
 tutorial-1-body = Drag with the middle mouse button to orbit; hold Shift to pan. The wheel zooms toward the cursor. Trackpad navigation and speeds can be adjusted in Preferences → Navigation. Camera views and projection are also available in the viewport corner.
 tutorial-1-task = Try orbiting and panning. Switch between Top and Iso in Camera → Standard Views, then use Zoom Extents to frame the model.
 tutorial-2-title = Draw a precise base
-tutorial-2-body = Edges form faces when a closed outline is planar. Rectangle and Circle create a face directly. The Measurements box accepts exact sizes while a tool is active; tooltips and the Instructor explain the current stage.
+tutorial-2-body = Edges form faces when a closed outline is planar. Rectangle and Circle create a face directly. The Measurements box accepts exact sizes while a tool is active; tooltips and the Tool Guide card explain the current stage.
 tutorial-2-task = Activate Rectangle. Click a first corner, move the pointer and type 1400mm,800mm into Measurements, then press Enter. You have a tabletop outline.
 tutorial-3-title = Give it volume
-tutorial-3-body = Push/Pull turns a face into a solid. Draw → Shapes creates a box, cylinder, cone, pyramid, sphere or torus in one operation. These shapes are components with editable generator parameters in Entity Info.
+tutorial-3-body = Push/Pull turns a face into a solid. Draw → Shapes creates a box, cylinder, cone, pyramid, sphere or torus in one operation. These shapes are components with editable generator parameters in Properties.
 tutorial-3-task = Use Push/Pull on the rectangle and enter 40 for its thickness. Try Box nearby: choose the first corner, opposite base corner, then height.
 tutorial-4-title = Let points snap into place
 tutorial-4-body = The cursor identifies endpoints, midpoints, axes and grid points. Coloured inference lines guide the direction. Arrow keys lock axes; Shift locks the current inference. The magnet menu controls individual snap types.
@@ -4323,8 +4323,8 @@ tutorial-5-title = Edit and reuse
 tutorial-5-body = Move, Rotate and Scale reshape a selection; Undo lets you experiment. A group isolates geometry from nearby edges. Components share one definition, so editing one copy updates its siblings.
 tutorial-5-task = Select the tabletop and make a group from Edit. Move it, undo the move, and double-click the group to edit inside. Close the editing context before continuing.
 tutorial-6-title = Keep a model organised
-tutorial-6-body = Outliner shows nested groups and components. Tags control visibility and editing locks. Entity Info exposes the current selection and its parameters. Hidden and locked objects are separate states.
-tutorial-6-task = Give the tabletop a name in Entity Info. Create a tag in Tags, assign it and toggle visibility. Try the lock, then unlock it again before painting.
+tutorial-6-body = Outliner shows nested groups and components. Tags control visibility and editing locks. Properties exposes the current selection and its parameters. Hidden and locked objects are separate states.
+tutorial-6-task = Give the tabletop a name in Properties. Create a tag in Tags, assign it and toggle visibility. Try the lock, then unlock it again before painting.
 tutorial-7-title = Add materials and choose a style
 tutorial-7-body = Paint assigns colours and textures; Texture Position adjusts their placement. Materials Online Library downloads reusable materials. Shaded with Textures is useful while modelling; Monochrome exposes front/back faces, and Realistic uses physical material properties and lighting.
 tutorial-7-task = Choose a material and paint a face. Compare Shaded with Textures, Monochrome and Realistic in the style menu. Try X-Ray to see hidden edges.
@@ -4332,8 +4332,8 @@ tutorial-8-title = Present the result
 tutorial-8-body = Scenes remember views and model display settings. Dimensions annotate the model, section planes reveal the inside, and sheets arrange views on paper. Render creates a finished image; animation can move between scenes.
 tutorial-8-task = Frame an Iso view and add a scene. Make a second scene from Top. Switch between them, then try Dimension or Section on your model.
 tutorial-9-title = Save and share
-tutorial-9-body = Native .vrst files preserve editable geometry, materials, scenes and metadata. Model Info → Meta stores a description, license and preview. Import/export connects to OBJ, STL, GLB and other formats; scripts and plugins extend the tools.
-tutorial-9-task = Save the model. Add a description and license in Model Info → Meta and save again. Explore Help → Examples for downloadable projects, or repeat a step to practise further.
+tutorial-9-body = Native .vrst files preserve editable geometry, materials, scenes and metadata. Document Info → Meta stores a description, license and preview. Import/export connects to OBJ, STL, GLB and other formats; scripts and plugins extend the tools.
+tutorial-9-task = Save the model. Add a description and license in Document Info → Meta and save again. Explore Help → Examples for downloadable projects, or repeat a step to practise further.
 
 app-reversed-faces = Reversed { $count } face(s). Use Monochrome to inspect front/back orientation.
 

@@ -20,9 +20,9 @@ text, support Unicode and multiple lines, and default to empty strings. An empty
 makes no licensing claim. Document metadata does not replace attribution attached to imported
 components or materials.
 
-Window → Model Info → Meta edits these fields and contains the document preview. Apply records one undoable document change; save the
+Window → Document Info → Meta edits these fields and contains the document preview. Apply records one undoable document change; save the
 document to write it to disk. Discard changes restores the current document values. Closing
-Model Info without applying discards the draft. Metadata is also preserved by native autosave,
+Document Info without applying discards the draft. Metadata is also preserved by native autosave,
 backup, Save As and file templates.
 
 Authored normals preserve glTF/GLB smooth shading and hard seams. They survive native IO,

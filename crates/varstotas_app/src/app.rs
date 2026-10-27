@@ -256,7 +256,7 @@ pub enum Action {
     ImportModelPlugin(usize),
     /// Window → 3D Online Library.
     ModelLibrary,
-    /// Window → Model Info.
+    /// Window → Document Info.
     ModelInfo,
     PrintCheck,
     PrintRepair,
@@ -398,13 +398,13 @@ pub enum Action {
     SolidTool(varstotas_kernel::SolidOp),
     /// Edit → Make Parametric: the selected group / component becomes a parametric group.
     MakeParametric,
-    /// Set the attributes of the selected parametric group (Entity Info).
+    /// Set the attributes of the selected parametric group (Properties).
     SetParams(varstotas_kernel::Parametric),
     /// Window → Script Console.
     ToggleConsole,
     /// File → Run Script…
     RunScript,
-    /// Extensions menu: run a plugin (with a file for importers / exporters).
+    /// Plugins menu: run a plugin (with a file for importers / exporters).
     Plugin(usize, Option<PathBuf>),
     PluginImport(usize),
     PluginExport(usize),
@@ -420,7 +420,7 @@ pub enum Action {
     GeneratorEditor,
     GenEditorSave,
     GenEditorApply,
-    /// Entity Info: generator values for the selected generated components (true = reset to
+    /// Properties: generator values for the selected generated components (true = reset to
     /// the defaults first).
     SetGenValues(varstotas_kernel::GenValues, bool),
     /// Values of the selected components with parameters (over the current ones, or reset).
@@ -593,7 +593,7 @@ pub struct VarstotasApp {
     pub(crate) anim_window: crate::ui::animation::AnimWindow,
     pub(crate) online: crate::ui::online_mats::OnlineWindow,
     pub(crate) models: crate::ui::model_library::ModelWindow,
-    /// Window → Model Info.
+    /// Window → Document Info.
     pub(crate) printing: crate::ui::printing::PrintingWindow,
     pub(crate) model_info: crate::ui::model_info::ModelInfoWindow,
     /// Rendered thumbnails of the Components card.

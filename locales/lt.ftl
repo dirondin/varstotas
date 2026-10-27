@@ -208,7 +208,7 @@ menu-shapes = Figūros
 menu-tools = Įrankiai
 menu-solid-tools = Kūnų įrankiai
 menu-snapping = Prisitraukimas
-menu-extensions = Plėtiniai
+menu-extensions = Papildiniai
 menu-window = Langas
 menu-side-bar = Šoninė juosta
 menu-sheets = Lapai…
@@ -301,7 +301,7 @@ cmd-show-grid = Rodyti tinklelį
 cmd-side-bar = Šoninė juosta
 cmd-render = Atvaizdavimas…
 cmd-work-planes = Darbo plokštumos…
-cmd-model-info = Modelio informacija…
+cmd-model-info = Dokumento informacija…
 cmd-component-params = Komponento parametrai…
 cmd-generator-editor = Generatorių redaktorius…
 cmd-console = Scenarijų konsolė
@@ -347,7 +347,7 @@ cmd-desc-text-3d = Pridėti tekstą kaip 3D geometriją (grupę).
 cmd-desc-zoom-extents = Sutalpinti visą modelį rodinyje.
 cmd-desc-snapping = Prisitraukimą įjungti / išjungti.
 cmd-desc-show-grid = Tinklelį ant žemės įjungti / išjungti.
-cmd-desc-side-bar = Šoninę juostą su kortelėmis („Objekto informacija“, „Medžiagos“ …) rodyti arba slėpti.
+cmd-desc-side-bar = Šoninę juostą su kortelėmis („Savybės“, „Medžiagos“ …) rodyti arba slėpti.
 cmd-desc-render = Modelio vaizdai, apskaičiuoti sekant spindulius (Langas → Atvaizdavimas).
 cmd-desc-work-planes = Išsaugotos braižymo plokštumos.
 cmd-desc-model-info = Dokumento statistika, nenaudojamų elementų išvalymas.
@@ -438,7 +438,7 @@ tool-offset = Atitraukti
 tool-chamfer = Nusklembimas
 tool-fillet = Užapvalinimas
 tool-solid-tools = Kūnų įrankiai
-tool-follow-me = Sekti kontūru
+tool-follow-me = Ištempti trajektorija
 tool-tape = Matuoklis
 tool-protractor = Kampainis
 tool-axes = Ašys
@@ -651,7 +651,7 @@ tool-arc-end-tangent = Pasirinkite galinį tašką (dukart spustelėkite jį žy
 tool-arc-end = Pasirinkite galinį tašką arba įveskite stygos ilgį.
 tool-arc-bulge = Judinkite, kad nustatytumėte išlinkį, ir spustelėkite, arba įveskite išlinkį (`500r` spinduliui). Įveskite `12s` segmentams.
 
-## Trintukas, dažų kibiras, stumti/traukti, atitraukti, sekti kontūru
+## Trintukas, dažų kibiras, stumti/traukti, atitraukti, ištempti trajektorija
 
 tool-undo-hide = Slėpti
 tool-undo-unsoften = Pašalinti sušvelninimą
@@ -674,7 +674,7 @@ tool-push-pull-idle = Spustelėkite paviršių, kad jį stumtumėte ar trauktum�
 tool-undo-offset = Atitraukti
 tool-offset-moving = Judinkite į vidų arba į išorę ir spustelėkite, arba įveskite atstumą.
 tool-offset-idle = Spustelėkite paviršių, kad atitrauktumėte jo briaunas. Dvigubas spustelėjimas pakartoja paskutinį atitraukimą.
-tool-undo-follow-me = Sekti kontūru
+tool-undo-follow-me = Ištempti trajektorija
 tool-follow-me-profile = Spustelėkite profilio paviršių (iš anksto pažymėkite kelio briaunas, kad iškart būtų išstumta).
 tool-follow-me-path = Spustelėkite arba tempkite išilgai kelio briaunų; dvigubas spustelėjimas/Enter baigia. Spustelėkite paviršių, kad stumtumėte aplink jo briauną. Esc = atšaukti.
 
@@ -758,7 +758,7 @@ tool-solid-cut = { $name }: spustelėkite kūną, kurį reikia išpjauti pirmuoj
 tool-solid-second = { $name }: spustelėkite antrą kūną (Esc – pradėti iš naujo).
 tool-undo-text = Tekstas
 tool-text-first = Spustelėkite tašką, briauną ar paviršių, kad pritvirtintumėte tekstą, arba tuščią vietą – tekstui be nuorodos.
-tool-text-place = Judinkite, kad padėtumėte tekstą, ir spustelėkite. Redaguokite tekstą kortelėje „Objekto informacija“.
+tool-text-place = Judinkite, kad padėtumėte tekstą, ir spustelėkite. Redaguokite tekstą kortelėje „Savybės“.
 tool-text3d-status = Spustelėkite, kad padėtumėte 3D tekstą (Esc atšaukia).
 tool-undo-texture-position = Tekstūros padėtis
 tool-texture-pick = Spustelėkite paviršių su tekstūra, kad nustatytumėte jos padėtį.
@@ -786,7 +786,7 @@ tool-plugin-select = { $prompt } – spustelėkite, kad pridėtumėte / pašalin
 # { $name } yra įrankio pavadinimas.
 tool-not-implemented = Įrankis „{ $name }“ dar neįgyvendintas.
 
-## Instruktoriaus skydelis (ilga pagalba kiekvienam įrankiui; eilutė, prasidedanti •, yra sąrašo elementas)
+## Patarimų skydelis (ilga pagalba kiekvienam įrankiui; eilutė, prasidedanti •, yra sąrašo elementas)
 
 tool-select-instructor =
     Spustelėkite objektą, kad jį pažymėtumėte.
@@ -873,18 +873,18 @@ tool-box-instructor =
     Spustelėkite pirmą pagrindo kampą, spustelėkite priešingą kampą, tada judinkite aukštyn ar žemyn ir spustelėkite, kad nustatytumėte aukštį.
     • Po žymekliu esantis paviršius laiko pagrindą; po pirmo spustelėjimo rodyklės nustato jo plokštumą.
     • Įveskite `plotis, gylis`, tada aukštį – arba iškart `plotis, gylis, aukštis`.
-    • Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Objekto informacija“; išskaidykite jį, kad gautumėte paprastą geometriją.
+    • Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Savybės“; išskaidykite jį, kad gautumėte paprastą geometriją.
 tool-cylinder-instructor =
     Spustelėkite pagrindo centrą, spustelėkite spindulį, tada judinkite aukštyn ar žemyn ir spustelėkite, kad nustatytumėte aukštį.
     • Įveskite spindulį, tada aukštį – arba iškart `spindulys, aukštis`; `32s` nustato segmentus.
-    • Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Objekto informacija“; išskaidykite jį, kad gautumėte paprastą geometriją.
+    • Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Savybės“; išskaidykite jį, kad gautumėte paprastą geometriją.
 tool-sphere-instructor =
     Spustelėkite ten, kur sfera stovi, tada judinkite ir spustelėkite, kad nustatytumėte spindulį (arba jį įveskite).
-    • `32s` nustato segmentus. Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Objekto informacija“.
+    • `32s` nustato segmentus. Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Savybės“.
 tool-torus-instructor =
     Spustelėkite centrą, spustelėkite spindulį (iki vamzdžio vidurio), tada judinkite ir spustelėkite, kad nustatytumėte vamzdį.
     • Iškart įveskite `spindulys, vamzdis`; `32s` nustato segmentus.
-    • Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Objekto informacija“.
+    • Rezultatas yra komponentas: keiskite jo matmenis kortelėje „Savybės“.
 tool-push-pull-instructor =
     Užveskite ant paviršiaus, spustelėkite, judinkite, kad nustatytumėte atstumą, spustelėkite dar kartą.
     %COPY% palieka pradinį paviršių. Dvigubas spustelėjimas pakartoja paskutinį atstumą.
@@ -919,7 +919,7 @@ tool-text-instructor =
     Spustelėkite tašką, briauną ar paviršių, patraukite tekstą ir spustelėkite dar kartą.
     • Numatytasis tekstas: taško koordinatės, briaunos ilgis, paviršiaus plotas.
     • Spustelėkite tuščią vietą – tekstui be nuorodos.
-    • Redaguokite tekstą kortelėje „Objekto informacija“; perkelkite jį įrankiu „Perkelti“ arba perkeldami geometriją.
+    • Redaguokite tekstą kortelėje „Savybės“; perkelkite jį įrankiu „Perkelti“ arba perkeldami geometriją.
 tool-section-instructor =
     Spustelėkite paviršių, kad ant jo padėtumėte pjūvio plokštumą; ji tampa aktyviu pjūviu.
     • Rodyklės rodo dalį, kuri lieka matoma.
@@ -1406,7 +1406,7 @@ template-imperial-desc = Ilgiai coliais.
 
 ## Cards (titles are ids in the preferences; these are the shown names)
 
-tray-card-entity-info = Objekto informacija
+tray-card-entity-info = Savybės
 tray-card-materials = Medžiagos
 tray-card-material-editor = Medžiagos redaktorius
 tray-card-components = Komponentai
@@ -1416,8 +1416,8 @@ tray-card-scenes = Scenos
 tray-card-shadows = Šešėliai
 tray-card-environment = Aplinka
 tray-card-soften-edges = Glotninti briaunas
-tray-card-instructor = Instruktorius
-tray-card-model-info-tip = Modelio informacija: dokumento statistika, pašalinti nenaudojamus
+tray-card-instructor = Patarimai
+tray-card-model-info-tip = Dokumento informacija: dokumento statistika, pašalinti nenaudojamus
 tray-cards-all-off = Visos kortelės išjungtos: Langas → Šoninė juosta
 
 tray-untagged = Be žymės
@@ -1456,7 +1456,7 @@ tray-soften-select = Pasirinkite briaunas ar paviršius
 # $n is the number of edges.
 tray-soften-edges-count = Briaunų: { $n }
 
-## Entity Info
+## Savybės
 
 tray-info-invalid-context = Netinkamas kontekstas
 tray-info-no-selection = Nieko nepasirinkta
@@ -1553,7 +1553,7 @@ tray-undo-rename-scene = Pervadinti sceną
 ## Parametric group
 
 tray-params-make = Padaryti parametrine
-tray-params-make-hover = Dydis ir kopijos nustatomi Objekto informacijoje
+tray-params-make-hover = Dydis ir kopijos nustatomi Savybėse
 tray-params-title = Parametrai
 tray-params-length = Ilgis (X)
 tray-params-width = Plotis (Y)
@@ -1726,7 +1726,7 @@ tray-scenes-transitions = Scenų perėjimai
 tray-scenes-transition = Perėjimas
 tray-scenes-delay = Scenos trukmė
 
-## Instructor
+## Patarimai
 
 # $key is the shortcut.
 tray-instructor-shortcut = Spartusis klavišas: { $key }
@@ -2945,12 +2945,12 @@ sheets-export = Eksportuoti:
 ## ======== Komponento parametrai ========
 
 rig-title = Komponento parametrai
-rig-select-hint = Pasirinkite komponentą (ne grupę) ir pasirinkite Langas → Komponento parametrai arba Redaguoti parametrus… Objekto informacijoje.
+rig-select-hint = Pasirinkite komponentą (ne grupę) ir pasirinkite Langas → Komponento parametrai arba Redaguoti parametrus… Savybėse.
 rig-state-has = — su parametrais
 rig-state-none = — parametrų dar nėra: Taikyti juos prideda
 rig-no-parts = Komponente nėra judinamų dalių: sugrupuokite jo detales viduje (durys, stalčius…) — atidarykite jį ir naudokite Sukurti grupę.
 
-## Objekto informacijos blokas
+## Savybių blokas
 # $name is the component's name; $n the number of copies
 rig-info-copies = { $name } — kopijų: { $n }
 rig-no-params = Parametrų dar nėra
@@ -2979,7 +2979,7 @@ rig-err-same-points = Abu taškai sutampa
 
 ## Parametrų lentelė
 rig-parameters = Parametrai
-rig-parameters-hint = Reikšmės, kurias turi kiekviena kopija (jas rodo Objekto informacija)
+rig-parameters-hint = Reikšmės, kurias turi kiekviena kopija (jas rodo Savybės)
 rig-col-name = Pavadinimas
 rig-col-label = Etiketė
 rig-col-type = Tipas
@@ -3073,7 +3073,7 @@ gen-origin-document = Šiame dokumente
 gen-tile-error = Klaida: { $error }
 # $note is the description and origin lines
 gen-tile-tip =
-    Generatorius — parametrai Objekto informacijoje
+    Generatorius — parametrai Savybėse
     { $note }
 gen-edit = Redaguoti generatorių…
 gen-show-in-finder = Rodyti failų tvarkyklėje
@@ -3082,7 +3082,7 @@ gen-show-in-finder = Rodyti failų tvarkyklėje
 gen-delete = Ištrinti…
 gen-error = Generatorius: { $error }
 
-## Objekto informacijos blokas
+## Savybių blokas
 # $name is the generator's name; $n the number of components
 gen-info-components = { $name } — komponentų: { $n }
 gen-info-generator = Generatorius: { $name }
@@ -3095,9 +3095,9 @@ gen-make-unique = Padaryti unikalų
 gen-mixed = Pasirinkti komponentai skiriasi; pakeitimas nustato juos visus
 gen-select-generated = Pasirinkite sugeneruotus komponentus
 
-## ======== Modelio informacija ========
+## ======== Dokumento informacija ========
 
-model-info-title = Modelio informacija
+model-info-title = Dokumento informacija
 model-info-scene = Scenoje
 model-info-scene-hint = Kas nubraižyta: skaičiuojamas kiekvienos įdėtos kopijos turinys
 model-info-file = Faile
@@ -3154,7 +3154,7 @@ model-info-purged-materials = medžiagų: { $n }
 # $parts is a comma-separated list of the three texts above
 model-info-purged = Išvalyta: { $parts }
 
-## ======== Plėtiniai ir papildiniai ========
+## ======== Papildiniai ========
 
 ## Papildinio antraštės klaidos (rodomos papildinių autoriams)
 # $label is a parameter label; $value is the text entered
@@ -3184,7 +3184,7 @@ ext-tex-no-pixels = Įterptas vaizdas: pikselius pateikite "rgb", "rgba" arba "g
 ext-tex-pixel-count = Įterptas vaizdas: tikėtasi baitų: { $want }, pateikta: { $got }
 ext-mat-spec-object = medžiagos specifikacija turi būti objektas
 
-## Plėtinių meniu ir papildinių dialogai
+## Papildinių meniu ir dialogai
 ext-script-undo = Scenarijus
 # $error is the plugin header parser's message
 ext-header-error = antraštė: { $error }
@@ -3275,15 +3275,15 @@ console-ref-basics-13 = `print(x)` rašo į išvestį; paskutinės išraiškos r
 console-ref-console-1 = Langas → Scenarijų konsolė vykdo kodą atvertame modelyje. %CMD%+Enter paleidžia, %CMD%+↑ / ↓ naršo ankstesnius paleidimus, Atverti… / Išsaugoti… dirba su `.rhai` failais. Failas → Paleisti scenarijų… paleidžia failą.
 console-ref-console-2 = Užbaigimas renkant rodo API funkcijas, po taško — savybes (pagal kairėje esantį tipą), o virš žymeklio — šaukiamos funkcijos parašą. F1 atveria šį žinyną ties žodžiu prie žymeklio.
 console-ref-console-3 = Antraštė: dialogai ir meniu elementai
-console-ref-console-4 = Eilutės `// @tag …` viršuje paverčia scenarijų papildiniu: Paleisti pirmiausia paklausia parametrų, taškų ir objektų. Failas aplanke `~/.varstotas/plugins` tampa Plėtiniai meniu elementu.
+console-ref-console-4 = Eilutės `// @tag …` viršuje paverčia scenarijų papildiniu: Paleisti pirmiausia paklausia parametrų, taškų ir objektų. Failas aplanke `~/.varstotas/plugins` tampa Papildiniai meniu elementu.
 console-ref-console-6 = Žymės
 ## Puslapis: generatoriai
-console-ref-generators-1 = Generatorius yra komponentas su parametrais: scenarijus, kurio `build(p)` sukuria komponento turinį jo paties ašyse (pradžios taškas yra įterpimo taškas). Kiekviena kopija turi savo reikšmes Objekto informacijoje; kopijos su vienodomis reikšmėmis dalijasi vienu apibrėžimu.
+console-ref-generators-1 = Generatorius yra komponentas su parametrais: scenarijus, kurio `build(p)` sukuria komponento turinį jo paties ašyse (pradžios taškas yra įterpimo taškas). Kiekviena kopija turi savo reikšmes Savybėse; kopijos su vienodomis reikšmėmis dalijasi vienu apibrėžimu.
 console-ref-generators-2 = Langas → Generatorių redaktorius (arba Redaguoti generatorių… ant plytelės): kairėje šaltinis, dešinėje gyvas peržiūros langas su parametrų laukais; Taikyti atnaujina dokumentą, Išsaugoti bibliotekoje įrašo failą.
 console-ref-generators-4 = Antraštė
 console-ref-generators-5 = privaloma; generatoriaus raktas dokumente
 console-ref-generators-6 = `p` reikšmė; kiekviena intervalo dalis neprivaloma
-console-ref-generators-7 = iš parametrų apskaičiuota reikšmė (Objekto informacijoje tik skaitoma)
+console-ref-generators-7 = iš parametrų apskaičiuota reikšmė (Savybėse tik skaitoma)
 console-ref-generators-8 = reikšmės, kurioms ji klaidinga, atmetamos
 console-ref-generators-9 = Parametrų tipai
 ## Puslapis: komponentas
@@ -3496,25 +3496,25 @@ help-topic-measurements = Matmenų laukas
 help-topic-groups = Grupės ir komponentai
 help-topic-library = Komponentų biblioteka
 help-topic-materials = Medžiagos ir tekstūros
-help-topic-organizing = Žymės, struktūra, objekto informacija
+help-topic-organizing = Žymės, struktūra, savybės
 help-topic-construction = Pagalbinės linijos, matmenys, pjūviai
 help-topic-styles = Stiliai ir vaizdo kūrimas
 help-topic-scenes = Scenos, lapai, brėžiniai
 help-topic-files = Failai, importas ir eksportas
-help-topic-scripts = Scenarijai ir plėtiniai
+help-topic-scripts = Scenarijai ir papildiniai
 help-topic-shortcuts = Klaviatūra ir pelė
 help-topic-problems = Kai kas nors negerai
 ## start
 help-start-1 = Varstotas yra 3D modeliavimo programa: braižote briaunas, uždaros briaunos sudaro paviršius, paviršiai stumiami ir traukiami į kietus kūnus. Viskas lipdosi tarpusavyje, kol to nesugrupuojate.
 help-start-2 = Langas
 help-start-3 = Meniu juosta
-help-start-4 = Failas, Redaguoti, Rodinys, Kamera, Piešimas, Įrankiai, Plėtiniai, Langas, Pagalba
+help-start-4 = Failas, Redaguoti, Rodinys, Kamera, Piešimas, Įrankiai, Papildiniai, Langas, Pagalba
 help-start-5 = Įrankių juosta
 help-start-6 = įrankiai (paaiškinimas nurodo kiekvieną ir jo klavišą), naršymas ir Prilipimas; rodiniai ir stiliai yra rodinio viršutiniame dešiniajame kampe
 help-start-7 = Rodinys
 help-start-8 = modelis; raudona, žalia ir mėlyna linijos yra ašys, žemė po jomis
 help-start-9 = Šoninė juosta
-help-start-10 = kortelės dešinėje: Objekto informacija, Medžiagos, Komponentai, Žymės, Struktūra, Scenos, Šešėliai, Aplinka, Švelninti briaunas, Instruktorius (Langas → Šoninė juosta įjungia ir išjungia korteles)
+help-start-10 = kortelės dešinėje: Savybės, Medžiagos, Komponentai, Žymės, Struktūra, Scenos, Šešėliai, Aplinka, Švelninti briaunas, Patarimai (Langas → Šoninė juosta įjungia ir išjungia korteles)
 help-start-11 = Būsenos juosta
 help-start-12 = ko tikisi aktyvus įrankis, pranešimai ir klaidos, Žurnalo mygtukas, Matmenų laukas
 help-start-13 = Pirmasis modelis
@@ -3524,7 +3524,7 @@ help-start-16 = 3. Paspauskite `Space` (Žymėti), tris kartus spustelėkite dė
 help-start-17 = 4. Paspauskite `B` (Dažų kibiras), Medžiagų kortelėje pasirinkite medžiagą, spustelėkite paviršius.
 help-start-18 = 5. `Shift+Z` sutalpina modelį rodinyje; Failas → Išsaugoti įrašo `.vrst` failą.
 help-start-19 = Pagalba dirbant
-help-start-20 = Instruktoriaus kortelė paaiškina aktyvų įrankį; F1 virš modelio atveria šį vadovą ties juo. Baigti modeliai apžiūrai (apstatytas namas, medžiagų galerija) yra aplanke ~/.varstotas/examples: Failas → Atidaryti.
+help-start-20 = Patarimų kortelė paaiškina aktyvų įrankį; F1 virš modelio atveria šį vadovą ties juo. Baigti modeliai apžiūrai (apstatytas namas, medžiagų galerija) yra aplanke ~/.varstotas/examples: Failas → Atidaryti.
 ## navigation
 help-navigation-1 = Pelė ir jutiklinis kilimėlis
 help-navigation-2 = Vidurinio mygtuko vilkimas
@@ -3562,7 +3562,7 @@ help-selecting-3 = Struktūros kortelė rodo grupes ir komponentus kaip medį: s
 help-drawing-1 = Piešimo įrankiai veikia paviršiuje po žymekliu arba ant žemės / aktyvios darbo plokštumos. Uždari briaunų kontūrai tampa paviršiais; linija per paviršių jį padalija.
 help-drawing-2 = Kol įrankis veikia, bet kada galite įvesti reikšmę (nereikia spustelėti Matmenų lauko) ir paspausti Enter — žr. Matmenų laukas.
 ## shapes
-help-shapes-1 = Braižyti → Formos sukuria visą kietą kūną viena operacija. Rezultatas yra sugeneruotas komponentas: pažymėkite jį ir keiskite jo dydžius bei segmentus Objekto informacijoje; Išskaidyti paverčia jį paprasta geometrija.
+help-shapes-1 = Braižyti → Formos sukuria visą kietą kūną viena operacija. Rezultatas yra sugeneruotas komponentas: pažymėkite jį ir keiskite jo dydžius bei segmentus Savybėse; Išskaidyti paverčia jį paprasta geometrija.
 ## modifying
 help-modifying-1 = Perkelti, Sukti ir Keisti mastelį veikia pažymėtą dalyką arba tai, ką spustelėjate, kai nieko nepažymėta. Perkeliant viršūnę, briauną ar paviršių, aplink esanti geometrija ištempiama.
 help-modifying-2 = Kopijavimas
@@ -3629,13 +3629,13 @@ help-groups-6 = Dukart spustelėti
 help-groups-7 = įeiti į grupę / komponentą redaguoti (likusi dalis pritemsta); Esc arba Redaguoti → Uždaryti grupę išeina
 help-groups-8 = Išskaidyti
 help-groups-9 = atgal į laisvą geometriją
-help-groups-10 = Padaryti unikalų (dešinysis spustelėjimas, Objekto informacija)
+help-groups-10 = Padaryti unikalų (dešinysis spustelėjimas, Savybės)
 help-groups-11 = komponento kopija gauna savo apibrėžimą („Dėžė 2“): jos redagavimas nebekeičia kitų kopijų; sugeneruotas gauna savo generatoriaus kopiją („Lentyna 2“ skiltyje Modelyje)
 help-groups-12 = Vėl padėti iš bibliotekos
 help-groups-13 = modelyje esanti kopija naudojama pakartotinai, kol nepakeista; ją suredagavus, bibliotekos originalas ateina kaip naujas apibrėžimas („Kėdė 2“)
 help-groups-14 = Komponentai su parametrais
-help-groups-15 = Redaguoti → Padaryti parametrinį suteikia komponentui dydžius X / Y / Z (tempti ar keisti mastelį) ir kopijų eilę Objekto informacijoje.
-help-groups-16 = Langas → Komponento parametrai suteikia bet kuriam komponentui parametrus: reikšmes ir formules, kurios sukioja, stumdo, rodo ar dažo jo dalis, pasirinktinį scenarijų; kiekviena kopija turi savo reikšmes (slankikliai Objekto informacijoje).
+help-groups-15 = Redaguoti → Padaryti parametrinį suteikia komponentui dydžius X / Y / Z (tempti ar keisti mastelį) ir kopijų eilę Savybėse.
+help-groups-16 = Langas → Komponento parametrai suteikia bet kuriam komponentui parametrus: reikšmes ir formules, kurios sukioja, stumdo, rodo ar dažo jo dalis, pasirinktinį scenarijų; kiekviena kopija turi savo reikšmes (slankikliai Savybėse).
 help-groups-17 = Generatoriai yra komponentai, sukurti scenarijaus su tipizuotais parametrais (Langas → Generatorių redaktorius). Braižyti → Formos kūnai taip pat yra generatoriai.
 help-groups-18 = Komponento scenarijus Scenarijų žinyne
 help-groups-19 = Generatoriai Scenarijų žinyne
@@ -3659,7 +3659,7 @@ help-library-16 = Padėti, Nustatyti peržiūrą iš rodinio, Nustatyti peržiū
 help-library-17 = Paveikslėliai
 help-library-18 = Plytelė rodo failo paveikslėlį, jei jis yra, kitaip — sugeneruotą miniatiūrą. Nustatyti peržiūrą iš rodinio paima rodinį tokį, koks jis dabar — pirmiausia sukadruokite komponentą. Iš bibliotekos padėtas komponentas pasiima failo paveikslėlį su savimi; Failas → Peržiūros vaizdas nustato atverto dokumento paveikslėlį.
 help-library-19 = Internetinė 3D biblioteka
-help-library-20 = Debesies mygtukas Komponentų kortelėje (arba Langas → Internetinė 3D biblioteka) atsisiunčia modelius: Poly Haven, Smithsonian, NASA, Kenney rinkinius, pagal URL arba iš papildinių šaltinių. Atsisiųstas modelis tampa bibliotekos komponentu su savo padėka (Objekto informacija → Šaltinis, Failas → Eksportuoti → Priskyrimai). Filtrai pagal licenciją, formatą ir dydį; mėgstami ir atsisiuntimų istorija.
+help-library-20 = Debesies mygtukas Komponentų kortelėje (arba Langas → Internetinė 3D biblioteka) atsisiunčia modelius: Poly Haven, Smithsonian, NASA, Kenney rinkinius, pagal URL arba iš papildinių šaltinių. Atsisiųstas modelis tampa bibliotekos komponentu su savo padėka (Savybės → Šaltinis, Failas → Eksportuoti → Priskyrimai). Filtrai pagal licenciją, formatą ir dydį; mėgstami ir atsisiuntimų istorija.
 help-library-21 = Kiekvienas šaltinis rodo savo sąlygas virš modelių (papildinio eilutė @notice). Modelis, kurio licencija riboja naudojimą (nekomercinė, be išvestinių darbų, dalytis tomis pačiomis sąlygomis, paties tinklalapio licencija, nežinoma), gauna įspėjimą jį padedant ir eksportuojant dokumentą. Pagalba → Licencijos… išvardija Varstotas licenciją, atvirojo kodo komponentus, failų formatus ir internetines bibliotekas su jų sąlygomis.
 ## materials
 help-materials-1 = Medžiagų kortelė rodo modelio medžiagas (Modelyje), jūsų biblioteką (`~/.varstotas/materials` arba aplanką, kurį pasirenkate su …) ir Pavyzdžius; dešiniuoju mygtuku spustelėkite plytelę: Naudoti, Pervadinti…, Išsaugoti bibliotekoje, Rodyti Finder, Eksportuoti…, Ištrinti…. Pasirinkus bibliotekos medžiagą, tik parengiamas Dažų kibiras: medžiaga prisijungia prie modelio (Modelyje) nudažius pirmąjį paviršių. Ištrinti ant plytelės Modelyje pašalina medžiagą iš modelio, jos paviršiai grįžta į numatytąją (Redaguoti → Atšaukti ją grąžina). Medžiagą redaguokite ten: spalva, nepermatomumas, tekstūros vaizdas ir jo dydis, fizinės savybės Realistiniam stiliui (metalas, šiurkštumas, stiklas, spinduliavimas, žemėlapiai, danga, blizgesys).
@@ -3671,14 +3671,14 @@ help-materials-6 = Šešėliuoklė
 help-materials-7 = medžiaga gali turėti savo WGSL šešėliuoklę su parametrais (šešėliuoklių redaktorius turi savo žinyną)
 help-materials-8 = Paviršiai turi priekinę (baltą) ir galinę (pilkai mėlyną) puses; grupės dažymas nudažo jos viduje esančius paviršius, neturinčius savo medžiagos.
 ## organizing
-help-organizing-1 = Objekto informacija
+help-organizing-1 = Savybės
 help-organizing-2 = pažymėto dalyko savybės: plotas, ilgis, kietųjų kūnų tūris, žymė, medžiaga, pavadinimas, komponentų ir generatorių parametrai
 help-organizing-3 = Žymės
 help-organizing-4 = žymių (sluoksnių) matomumas, spalva ir pavadinimas; ištrynus žymę, jos turinys perkeliamas į Be žymės
 help-organizing-5 = Struktūra
 help-organizing-6 = grupių ir komponentų medis: Priartinti prie, Redaguoti, Paslėpti, Išskaidyti, Iškelti iš grupės, Ištrinti; vilkite eilutes, kad perkeltumėte objektus tarp grupių
 help-organizing-7 = Paslėpti / Rodyti viską
-help-organizing-8 = Langas → Modelio informacija
+help-organizing-8 = Langas → Dokumento informacija
 help-organizing-9 = dokumento statistika (paviršiai, trikampiai, komponentai, medžiagos, tekstūros …) ir Pašalinti nenaudojamus
 ## construction
 help-construction-1 = Pagalbinės linijos žymimos, perkeliamos ir trinamos kaip geometrija; Redaguoti → Ištrinti pagalbines linijas pašalina jas visas, Rodinys → Pagalbinės linijos paslepia. Įrankiai → 3D tekstas… sukuria tekstą kaip geometriją.
@@ -3724,7 +3724,7 @@ help-files-10 = Failas → Peržiūros vaizdas
 help-files-11 = paveikslėlis, kurį biblioteka rodo šiam failui
 ## scripts
 help-scripts-1 = Langas → Scenarijų konsolė vykdo Rhai scenarijus modelyje: kurti, keisti, žymėti, matuoti. Failas → Paleisti scenarijų… paleidžia `.rhai` (arba `.py`) failą. Vienas paleidimas yra vienas atšaukimo žingsnis.
-help-scripts-2 = Papildiniai yra scenarijai aplanke `~/.varstotas/plugins`: jie tampa Plėtiniai meniu elementais su parametrų ir taškų parinkimo dialogais; jie gali pridėti importuotuvus, eksportuotuvus ir medžiagų / modelių šaltinius.
+help-scripts-2 = Papildiniai yra scenarijai aplanke `~/.varstotas/plugins`: jie tampa Papildiniai meniu elementais su parametrų ir taškų parinkimo dialogais; jie gali pridėti importuotuvus, eksportuotuvus ir medžiagų / modelių šaltinius.
 help-scripts-3 = Python ir DI agentai gali valdyti Varstotas per vietinį tiltą (Python klientas, MCP serveris).
 help-scripts-4 = Atverti Scenarijų žinyną
 help-scripts-5 = Konsolė ir papildiniai
@@ -3736,7 +3736,7 @@ help-problems-1 = Langas → Žurnalas
 help-problems-2 = kiekviena seanso klaida ir įspėjimas — scenarijai, importas / eksportas, bibliotekos, atsisiuntimai; raudonas skaitiklis būsenos juostoje reiškia naujas klaidas
 help-problems-3 = Redaguoti → Atšaukti
 help-problems-4 = kiekvieną operaciją galima atšaukti; nepavykusi operacija nieko nekeičia
-help-problems-5 = Langas → Modelio informacija → Pašalinti nenaudojamus
+help-problems-5 = Langas → Dokumento informacija → Pašalinti nenaudojamus
 help-problems-6 = pašalinti nenaudojamus komponentus, medžiagas ir žymes, kad failas būtų mažesnis
 help-problems-7 = Paviršiai atrodo pilkai mėlyni
 help-problems-8 = matote jų galinę pusę: pažymėkite juos, dešinysis spustelėjimas → Apversti paviršius arba Orientuoti paviršius
@@ -3927,7 +3927,7 @@ script-member-to-string = kaip tekstas
 
 ## Įskiepių antraščių žymės
 script-tag-name = pavadinimas meniu ir dialogo lango antraštėje
-script-tag-menu = kelias skiltyje Plėtiniai
+script-tag-menu = kelias skiltyje Papildiniai
 script-tag-description = paaiškinimas ir dialogo lango tekstas
 script-tag-param = reikšmė, klausiama dialogo lange prieš vykdymą
 script-tag-pick = N taškų, spustelėtų prieš vykdymą → points
@@ -4336,10 +4336,10 @@ tutorial-1-title = Apžiūrėkite modelį
 tutorial-1-body = Tempkite viduriniu pelės mygtuku, kad pasuktumėte vaizdą; su Shift — pastumtumėte. Ratukas artina ties žymekliu. Jutiklinio kilimėlio valdymas ir greitis keičiami navigacijos nustatymuose.
 tutorial-1-task = Išbandykite sukimą ir stumdymą. Camera → Standard Views perjunkite Top ir Iso, tada naudokite Zoom Extents.
 tutorial-2-title = Nubrėžkite tikslų pagrindą
-tutorial-2-body = Uždaras plokščias briaunų kontūras sudaro paviršių. Rectangle ir Circle sukuria jį iškart. Measurements laukas priima tikslius matmenis, kol įrankis aktyvus; Instructor paaiškina dabartinį etapą.
+tutorial-2-body = Uždaras plokščias briaunų kontūras sudaro paviršių. Rectangle ir Circle sukuria jį iškart. Measurements laukas priima tikslius matmenis, kol įrankis aktyvus; Patarimai paaiškina dabartinį etapą.
 tutorial-2-task = Įjunkite Rectangle. Nurodykite pirmą kampą, pajudinkite žymeklį, į Measurements įrašykite 1400mm,800mm ir spauskite Enter.
 tutorial-3-title = Suteikite tūrį
-tutorial-3-body = Push/Pull ištempia paviršių. Draw → Shapes viena operacija kuria dėžę, cilindrą, kūgį, piramidę, sferą ar torą. Šie komponentai turi keičiamus generatoriaus parametrus Entity Info.
+tutorial-3-body = Push/Pull ištempia paviršių. Draw → Shapes viena operacija kuria dėžę, cilindrą, kūgį, piramidę, sferą ar torą. Šie komponentai turi keičiamus generatoriaus parametrus Savybės.
 tutorial-3-task = Ištempkite stačiakampį su Push/Pull ir įveskite 40. Šalia išbandykite Box: pirmas kampas, priešingas pagrindo kampas ir aukštis.
 tutorial-4-title = Naudokite pritraukimą
 tutorial-4-body = Žymeklis atpažįsta galus, vidurio taškus, ašis ir tinklelį. Spalvotos linijos padeda išlaikyti kryptį. Rodyklės fiksuoja ašį, Shift — dabartinę kryptį. Magneto meniu valdo pritraukimo rūšis.
@@ -4348,8 +4348,8 @@ tutorial-5-title = Redaguokite ir kartokite
 tutorial-5-body = Move, Rotate ir Scale keičia pažymėtus objektus; Undo leidžia eksperimentuoti. Grupė atskiria geometriją nuo gretimų briaunų. Komponento kopijos dalijasi apibrėžimu, todėl pakeitimai atnaujina visas kopijas.
 tutorial-5-task = Pažymėkite stalviršį ir Edit meniu sukurkite grupę. Perkelkite ją, atšaukite perkėlimą ir dukart spustelėkite, kad redaguotumėte vidų. Baigę išeikite iš grupės.
 tutorial-6-title = Sutvarkykite modelį
-tutorial-6-body = Outliner rodo įdėtas grupes ir komponentus. Žymos valdo matomumą ir redagavimo užraktus. Entity Info pateikia pažymėto objekto parametrus. Paslėpimas ir užrakinimas veikia atskirai.
-tutorial-6-task = Entity Info pavadinkite stalviršį. Tags skiltyje sukurkite ir priskirkite žymą, perjunkite matomumą. Išbandykite užraktą ir prieš dažydami atrakinkite.
+tutorial-6-body = Outliner rodo įdėtas grupes ir komponentus. Žymos valdo matomumą ir redagavimo užraktus. Savybės pateikia pažymėto objekto parametrus. Paslėpimas ir užrakinimas veikia atskirai.
+tutorial-6-task = Savybės pavadinkite stalviršį. Tags skiltyje sukurkite ir priskirkite žymą, perjunkite matomumą. Išbandykite užraktą ir prieš dažydami atrakinkite.
 tutorial-7-title = Medžiagos ir vaizdo stiliai
 tutorial-7-body = Paint priskiria spalvą ir tekstūrą, Texture Position keičia jų padėtį. Online Materials atsiunčia medžiagas. Shaded with Textures tinka modeliuoti, Monochrome skiria paviršių puses, Realistic naudoja fizines savybes ir apšvietimą.
 tutorial-7-task = Nudažykite paviršių. Palyginkite Shaded with Textures, Monochrome ir Realistic stilius. Įjunkite X-Ray paslėptoms briaunoms pamatyti.
@@ -4357,8 +4357,8 @@ tutorial-8-title = Pristatykite rezultatą
 tutorial-8-body = Scenos įsimena vaizdus ir rodymo nustatymus. Matmenys pažymi modelį, pjūviai rodo vidų, lapai išdėsto vaizdus popieriuje. Render kuria galutinį atvaizdą, animacija pereina tarp scenų.
 tutorial-8-task = Pridėkite Iso sceną ir antrą Top sceną. Persijunkite tarp jų, tada išbandykite Dimension arba Section.
 tutorial-9-title = Išsaugokite ir dalykitės
-tutorial-9-body = .vrst išlaiko redaguojamą geometriją, medžiagas, scenas ir metaduomenis. Model Info → Meta saugo aprašymą, licenciją ir peržiūrą. Importas ir eksportas palaiko OBJ, STL, GLB ir kitus formatus; scenarijai ir papildiniai plečia įrankius.
-tutorial-9-task = Išsaugokite modelį. Model Info → Meta įrašykite aprašymą ir licenciją, vėl išsaugokite. Help → Examples rasite pavyzdžius; galite pakartoti bet kurį žingsnį.
+tutorial-9-body = .vrst išlaiko redaguojamą geometriją, medžiagas, scenas ir metaduomenis. Dokumento informacija → Meta saugo aprašymą, licenciją ir peržiūrą. Importas ir eksportas palaiko OBJ, STL, GLB ir kitus formatus; scenarijai ir papildiniai plečia įrankius.
+tutorial-9-task = Išsaugokite modelį. Dokumento informacija → Meta įrašykite aprašymą ir licenciją, vėl išsaugokite. Help → Examples rasite pavyzdžius; galite pakartoti bet kurį žingsnį.
 
 app-reversed-faces = Apversta paviršių: { $count }. Monochrome režimas parodo priekinę ir galinę puses.
 

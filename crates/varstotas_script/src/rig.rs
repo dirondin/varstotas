@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use varstotas_i18n::tr;
 
-/// The rig as a generator (for normalizing values, formulas and Entity Info's fields).
+/// The rig as a generator (for normalizing values, formulas and Properties' fields).
 pub fn generator_of(name: &str, rig: &Rig) -> Generator {
     Generator {
         name: name.to_string(),

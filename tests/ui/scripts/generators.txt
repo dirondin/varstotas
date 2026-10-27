@@ -1,5 +1,5 @@
 # Generators (track K): place from the Components card, equal values share a definition,
-# parameters in Entity Info, Scale changes the size parameters, copy / paste, undo.
+# parameters in Properties, Scale changes the size parameters, copy / paste, undo.
 wait 10
 view iso
 action components
@@ -49,11 +49,11 @@ wait 3
 expect undo=Some("Scale")
 expect gen=Shelf{width=800,depth=300,height=1200,shelves=3,board=18,back=true,finish=Walnut,paint_with=}@800x300x1200
 screenshot shots/gen_scaled.bmp
-# Entity Info: the Back panel off, then Reset with the real mouse
+# Properties: the Back panel off, then Reset with the real mouse
 action gen back=false
 wait 3
 expect back=false,finish=Walnut
-# the Materials card grew (library, Online…): only Entity Info and Components in the tray
+# the Materials card grew (library, Online…): only Properties and Components in the tray
 # (scrolled to Components; Recent above My Library)
 action tray_only Entity Info,Components
 wait 5

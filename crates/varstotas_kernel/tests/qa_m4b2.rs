@@ -149,7 +149,7 @@ fn curve_editable_after_rotated_group_explode() {
     sane(m);
 }
 
-/// Non-uniform scale drops the metadata (documented), so Entity Info can't edit it any more.
+/// Non-uniform scale drops the metadata (documented), so Properties can't edit it any more.
 #[test]
 fn non_uniform_scale_drops_curve_metadata() {
     let mut m = Mesh::new();

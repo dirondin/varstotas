@@ -1,5 +1,5 @@
 //! Parameters of ordinary components (rigs, see `varstotas_kernel::rig`): the values of selected
-//! copies in Entity Info, and Window → Component Parameters — the parameters, formulas, the
+//! copies in Properties, and Window → Component Parameters — the parameters, formulas, the
 //! parts' joints (turn / slide / show / paint, driven by a parameter or an expression) and the
 //! script `update(p)` of a component.
 
@@ -259,7 +259,7 @@ impl VarstotasApp {
         Some((ids, master?, g, values))
     }
 
-    /// Entity Info for selected copies of a component with parameters: a field per parameter,
+    /// Properties for selected copies of a component with parameters: a field per parameter,
     /// the formulas, Reset, Make Unique and Edit Parameters…. False when the selection is not
     /// that.
     pub(crate) fn rig_info(&mut self, ui: &mut Ui) -> bool {

@@ -6,28 +6,28 @@
 ## M1 — Foundation (parallel, 3 streams) ✅
 - **Kernel:** Mesh with sticky geometry (add_line, auto-faces, splitting edges/faces), erase, push_pull, transform_vertices, tessellate, History, save/load, OBJ/STL export, units parser. Tests.
 - **Render:** Camera, Renderer (offscreen MSAA, lit faces, front/back colours, edges, thick/dashed overlays, grid, axes, sky/ground, X-ray, wireframe).
-- **App shell:** window, classic-style layout, camera navigation, toolbar, status bar, VCB widget, file menu, panels (stubs with real model data), hotkeys.
+- **App shell:** window, classic-style layout, camera navigation, toolbar, status bar, Measurements box, file menu, panels (stubs with real model data), hotkeys.
 
 **M1 demo:** open the program, orbit a scene with a test cube, save/open a file.
 
 ## M2 — Drawing (2 streams) ✅
-- **Tools & Inference:** Select (click/double/triple/boxes), Line, Rectangle, Circle, Polygon, Arc, Eraser, Push/Pull, Move, Rotate, Offset, Tape Measure + guides, Paint Bucket. P0 inference engine. VCB for all.
+- **Tools & Inference:** Select (click/double/triple/boxes), Line, Rectangle, Circle, Polygon, Arc, Eraser, Push/Pull, Move, Rotate, Offset, Tape Measure + guides, Paint Bucket. P0 inference engine. Measurements box for all.
 - **Kernel:** offset_face, arcs/curves (edges merged into a curve), groups (make/explode/edit context), materials.
 
 **M2 demo:** draw the house from `00-VISION.md`.
 
 ## M3 — MVP polish ✅
-- Groups edit context, Entity Info, Materials, styles, Zoom Extents, standard views, undo for everything, autosave.
+- Groups edit context, Properties, Materials, styles, Zoom Extents, standard views, undo for everything, autosave.
 - UX QA pass, fixing topology bugs, performance (10k+ faces @ 60 FPS).
 - Release builds: macOS `.app` (universal), Windows `.exe`.
 
 ## M4 — Second wave ✅
-- **Batch 1:** guides as full-fledged objects (selection, Delete, Move/Rotate/copy, Entity Info, Edit → Delete Guides, hide/show), Tape Measure: resizing the model via VCB; Intersect Faces (with model / with selection / with context), Reverse / Orient Faces, Flip Along; Copy / Paste / Paste in Place; PNG export; templates (architectural mm/m, inches).
+- **Batch 1:** guides as full-fledged objects (selection, Delete, Move/Rotate/copy, Properties, Edit → Delete Guides, hide/show), Tape Measure: resizing the model via Measurements box; Intersect Faces (with model / with selection / with context), Reverse / Orient Faces, Flip Along; Copy / Paste / Paste in Place; PNG export; templates (architectural mm/m, inches).
 - **Batch 2:** Arc (centre + 2 points), 3 Point Arc, Pie, the "tangent at vertex" snap; Rotated Rectangle; Axes; Dimensions.
   - Follow-up (together with the batch 2 QA fixes): in the PNG export dialog — a choice of what goes into the image: background/transparency (already there), axes, guides, dimensions.
   - Dimension: at the dimension offset step, snaps are currently disabled — in perspective the line with the text goes anywhere, not into the object's plane. All snaps (axes, points/edges/faces of objects, guides) and direction locking with Shift and the arrows must work during the offset.
 - **Batch 3 ✅:** textures (images, UV, saving in `.vrst`); animation of transitions between scenes.
-- Already done earlier: Components + Outliner, Tags, Scenes, Follow Me, Scale, Protractor, OBJ/STL import.
+- Already done earlier: Components + Outliner, Tags, Scenes, Sweep, Scale, Protractor, OBJ/STL import.
 
 ## M5 — Onward ✅
 - **Batch 1:** Section Planes ✅ (tool, active cut, cut lines and fill, selection/Move/Reverse/Align View, visibility in View, state in scenes); Soften/Smooth edges ✅; camera: Field of View, Position Camera, Look Around, Walk ✅.
@@ -44,7 +44,7 @@
 ## M7 — Extensibility ✅
 - **Batch 1 ✅:** built-in scripting API (Rhai, crate `varstotas_script`) over the kernel; Script Console, File → Run Script…; reference `docs/SCRIPTING.md`.
 - **Batch 2 ✅:** a bridge to the running application (127.0.0.1 + token, JSON line by line or HTTP `POST /rpc`); a dependency-free Python client `varstotas` (the same API as Rhai, `with m.operation()` = one Undo step), running `.py` from File → Run Script…; the MCP server `varstotas_mcp.py` (stdio) with the tools below; confirmation in the application for destructive actions.
-- **Batch 3 ✅:** `.rhai` / `.py` plugins in `~/.varstotas/plugins` with a header made of comments: Extensions menu items, a parameter dialog, picking points in the model (`@pick`), importers and exporters in File → Import / Export (`docs/PLUGINS.md`). Local component library: the Components section in the tray (thumbnails, search, placing by click, one definition per document, Save Selection to Library).
+- **Batch 3 ✅:** `.rhai` / `.py` plugins in `~/.varstotas/plugins` with a header made of comments: Plugins menu items, a parameter dialog, picking points in the model (`@pick`), importers and exporters in File → Import / Export (`docs/PLUGINS.md`). Local component library: the Components section in the tray (thumbnails, search, placing by click, one definition per document, Save Selection to Library).
 - MCP server for AI agents (Claude Code and others): tools over the same API as the scripts — reading the model (entities, sizes, materials, tags), building/editing geometry, selection, camera and a view screenshot, saving/export; transport stdio + local HTTP to the running application; all agent changes go through undo (one operation = one step), confirmation for destructive actions.
 
 ## D — Documentation (decision of 2026-10-15)
@@ -101,11 +101,11 @@ Searching and downloading ready-made models and materials from free sources righ
   - Sources as plugins: `.py` / `.rhai` with `search` / `download` functions modelled on M7, to add your own catalogues and local folders.
 
 ## K — Parametric generator components (owner's request of 2026-10-16)
-Evolving the M6 parametric groups (only size and a row of copies) into full-fledged parametric components: a component is built by a script from parameters, parameters are edited in Entity Info.
+Evolving the M6 parametric groups (only size and a row of copies) into full-fledged parametric components: a component is built by a script from parameters, parameters are edited in Properties.
 - **Batch 1 — mechanism.** ✅ (2026-10-16, see `docs/GENERATORS.md`)
   - A generator is a Rhai script with a parameter header, like the M7 plugins. Parameter types: length, integer, number, yes/no, choice from a list (for example "left / right / up", "inward / outward"), angle, percent, material. For each parameter — a range, a step and a default value. The `build(p)` function builds geometry in the component's local axes.
   - Each instance has its own values. Instances with equal values share one definition. The component is rebuilt when a parameter changes, and each change is one Undo step.
-  - **Entity Info:** fields by type — length with units, a counter, a drop-down, a checkbox, an angle or percent slider. "Reset" and "Make Unique" buttons. Several selected instances are edited together.
+  - **Properties:** fields by type — length with units, a counter, a drop-down, a checkbox, an angle or percent slider. "Reset" and "Make Unique" buttons. Several selected instances are edited together.
   - Scale on such a component changes the width, height and depth parameters instead of stretching the geometry.
   - The generator source is stored in the document: the file opens on another machine. Generators are shown in the Components tray. The same parameters are available from Rhai, Python and MCP.
 - **Batch 2 — more generators and authoring.** ✅ (2026-10-16; windows and doors cut into a wall are not made as an application mechanism — owner's decision)
@@ -136,7 +136,7 @@ A photorealistic picture from the same model: PBR in the viewport, shader effect
 
 ## U — Convenience and finishing touches (owner's request of 2026-10-19)
 Items 2 and 4 agreed with the owner on 2026-10-19.
-1. ✅ **Viewing the document preview.** The preview image of the current document can be set (File → Preview Image) but cannot be viewed. A viewer is needed — for example, a File → Preview Image → Show item and a thumbnail in Model Info.
+1. ✅ **Viewing the document preview.** The preview image of the current document can be set (File → Preview Image) but cannot be viewed. A viewer is needed — for example, a File → Preview Image → Show item and a thumbnail in Document Info.
 2. ✅ **A unified look of the Materials and Components trays.** Both cards are arranged identically: search, Refresh, +, cloud (online library), "…"; sections In Model → My Library (folders) → Examples; the Small / Large / List tile size is shared; identical tile menus. Owner's decisions of 2026-10-19: the document on top, a size switch, the cloud in the top row, plus favourites, recents, folders and drag and drop.
    - ✅ 2a — the shared frame (2026-10-19).
    - ✅ 2b — favourites ☆ and recents, folders from the tray (New Folder, move to a folder, rename a folder) (2026-10-19).
@@ -168,8 +168,8 @@ Items 2 and 4 agreed with the owner on 2026-10-19.
    - ✅ Icons for all File / Edit / Tools / Snapping commands; any command can go on the toolbar via the reserve (2026-10-19).
    - ✅ Deleting library folders (including non-empty ones) with confirmation and a warning (2026-10-19).
    - ✅ Icons in View and Window; Window commands on the toolbar; the reserve by categories (2026-10-19).
-   - ✅ 16b — editing a drawn curve: control points are stored next to the edges (`Mesh::splines`), the Draw → Edit Curve tool (double click on a curve): drag points and handles, add a point by click, delete with Delete, corner ↔ smooth by double click, segments; Entity Info of a curve (2026-10-20).
-   - ✅ Follow Me along curves: sections are no longer inverted (a profile at an angle / wider than the bend), edges along curves are soft (2026-10-20).
+   - ✅ 16b — editing a drawn curve: control points are stored next to the edges (`Mesh::splines`), the Draw → Edit Curve tool (double click on a curve): drag points and handles, add a point by click, delete with Delete, corner ↔ smooth by double click, segments; Properties of a curve (2026-10-20).
+   - ✅ Sweep along curves: sections are no longer inverted (a profile at an angle / wider than the bend), edges along curves are soft (2026-10-20).
    - ✅ A new document opens in the standard Iso view (2026-10-20).
    - ✅ Modifiers in hints by platform: macOS — Option / Cmd / ⌘, Windows — Ctrl / Alt (`keys.rs`) (2026-10-20).
    - ✅ Purge Unused right in Materials / Components: a button next to "In Model" and an item in the "…" menu (2026-10-20).
@@ -178,7 +178,7 @@ Items 2 and 4 agreed with the owner on 2026-10-19.
    - ✅ The name Varstotas: crates, binary, `~/.varstotas`, the `.vrst` / `.vrstmat` format, git history without the old name, author Dirondin (2026-10-20).
    - ✅ App icon: a complete workbench (vertical half wood / half blue schematic), oblique view without axes, sky / ground; `assets/icon.png` from `scripts/make_icon.py`, window / Dock / `.icns` / `.ico` (2026-10-20).
    - ✅ Slice tool: a plane by three points / face / axis cuts the selection or context (edges along the cut, a shared component made unique), Split (copy modifier) — two closed groups (2026-10-20).
-   - ✅ The Model Info button in the top right corner of Entity Info (2026-10-20).
+   - ✅ The Document Info button in the top right corner of Properties (2026-10-20).
    - ✅ Hide in Components / Materials — a crossed-out eye icon instead of the word (2026-10-20).
    - ✅ Localization: crate `varstotas_i18n` (Fluent, `locales/en.ftl` / `ru.ftl` / `lt.ftl` / `be.ftl`), every UI text by key, platform variants, plural forms, Preferences → Interface → Language, user translations in `~/.varstotas/locales/`, localized plugin headers (`@name.ru` …); Russian, Lithuanian and Belarusian translations (2026-10-21).
    - ✅ Make Unique: a component with parameters has its own wizard, unique generated ones, an item in the context menus; re-inserting from the library after a model edit gives the original (2026-10-20).

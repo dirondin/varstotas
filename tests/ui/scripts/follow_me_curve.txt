@@ -1,4 +1,4 @@
-# Follow Me along a smooth curve with the real mouse: the curve leaves its start at ~30°, the
+# Sweep along a smooth curve with the real mouse: the curve leaves its start at ~30°, the
 # profile (a 400 × 300 rectangle, normal locked to red with the Right arrow) stands along the
 # axes; the short tilted end segments used to fold the first sections inside out. The sweep is
 # one closed solid, smooth along the curve.
@@ -34,7 +34,7 @@ tool follow me
 wait 20
 rawp click 0 0 150
 wait 5
-expect undo=Some("Follow Me")
+expect undo=Some("Sweep")
 expect active_mesh F=48 E=142
 zoom_extents
 wait 5

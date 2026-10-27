@@ -1,4 +1,4 @@
-//! Document statistics (Window → Model Info) and cleaning: what the scene shows (every placed
+//! Document statistics (Window → Document Info) and cleaning: what the scene shows (every placed
 //! copy counted) next to what the file stores (each definition once), definitions and
 //! materials nothing in the scene uses, [`Model::purge_unused`],
 //! [`Model::delete_definition`], [`Model::rename_definition`] and [`Model::delete_material`].

@@ -84,7 +84,7 @@ impl Param {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plugin {
     pub name: String,
-    /// Menu path under Extensions (last item = the entry).
+    /// Menu path under Plugins (last item = the entry).
     pub menu: Vec<String>,
     pub description: String,
     pub lang: Lang,
@@ -115,7 +115,7 @@ pub struct Plugin {
 }
 
 impl Plugin {
-    /// A plugin of the Extensions menu (not a file or a material plugin).
+    /// A plugin of the Plugins menu (not a file or a material plugin).
     pub fn in_menu(&self) -> bool {
         self.import.is_empty() && self.export.is_empty() && self.material_import.is_empty() && !self.material_source && self.model_import.is_empty() && self.model_source.is_none() && self.texture_generator.is_none()
     }

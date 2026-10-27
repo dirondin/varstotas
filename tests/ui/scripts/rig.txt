@@ -1,6 +1,6 @@
 # Components with parameters (rigs): a cabinet component with a Door part; Window →
 # Component Parameters (real mouse) adds an Opening parameter turning the door; values in
-# Entity Info, shared variants, scenes animating the value, edits inside a copy written back.
+# Properties, shared variants, scenes animating the value, edits inside a copy written back.
 action script let body = box(vec3(0, 0, 0), 600, 400, 800);\nlet door = box(vec3(0, -20, 0), 600, 20, 800);\ndoor.name = "Door";\nlet c = component([body, door], "Cabinet");\ncopy(c, vec3(1000, 0, 0));
 view iso
 zoom_extents
@@ -39,7 +39,7 @@ raw click 121 476
 wait 10
 expect rig=Some("1 Cabinet [open=0°] joints=1 variants=1") ed=(true Some("Cabinet") p=1 f=0 j=1 None
 screenshot shots/rig_applied.bmp
-# close the window: Entity Info shows the Opening field
+# close the window: Properties shows the Opening field
 raw click 802 57
 wait 5
 screenshot shots/rig_info.bmp

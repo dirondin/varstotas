@@ -5,7 +5,7 @@
 //! [`Mesh::curves`]. [`Mesh::curve_info`] returns that metadata only while the edges still form
 //! the curve it describes (an arc/circle that was cut, stretched or partly erased has none).
 //! [`Mesh::set_curve`] regenerates a curve with a new radius and/or segment count in place
-//! (Entity Info), keeping its faces and the edges attached at arc ends.
+//! (Properties), keeping its faces and the edges attached at arc ends.
 //!
 //! Angles are in radians about `normal`, measured from `xaxis` (`yaxis = normal × xaxis`);
 //! arcs always run counter-clockwise about `normal` from `start_angle` to `end_angle`.
@@ -417,7 +417,7 @@ impl Mesh {
         None
     }
 
-    /// Regenerate curve `cid` with a new `radius` and/or `segments` (Entity Info). The centre,
+    /// Regenerate curve `cid` with a new `radius` and/or `segments` (Properties). The centre,
     /// plane and angles stay; arc ends move with the radius (edges attached there stretch).
     /// Faces bounded by the curve keep their ids and attributes. Returns the curve's edges.
     ///

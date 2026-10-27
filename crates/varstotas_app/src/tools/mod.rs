@@ -357,7 +357,7 @@ impl ToolId {
         })
     }
 
-    /// Longer help shown in the Instructor panel.
+    /// Longer help shown in the Tool Guide panel.
     pub fn instructor(self) -> String {
         self.instructor_text()
     }

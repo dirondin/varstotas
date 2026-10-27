@@ -1,7 +1,7 @@
 //! Draw → Shapes: Box, Cylinder, Cone, Pyramid, Sphere, Torus in one operation. The base is
 //! drawn on a face (or the axes' plane) like Rectangle / Circle, then the height (the torus:
 //! the tube) is set; the result is a component of the bundled generator of that shape
-//! ([`SOURCES`]), so its sizes stay editable in Entity Info.
+//! ([`SOURCES`]), so its sizes stay editable in Properties.
 
 use varstotas_i18n::tr;
 use super::common::*;

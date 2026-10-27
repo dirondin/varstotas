@@ -1,4 +1,4 @@
-# The longer Model Info window scrolls to its existing purge controls.
+# The longer Document Info window scrolls to its existing purge controls.
 wait 10
 action script material("Test", [0.8,0.5,0.2]); let b = box(ORIGIN,100,50,30); paint(b, "Test"); erase(b);
 action console_close

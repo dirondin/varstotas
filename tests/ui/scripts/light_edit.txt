@@ -1,4 +1,4 @@
-# Lights in the scene: pick a light's marker (Select), its properties in Entity Info, Move /
+# Lights in the scene: pick a light's marker (Select), its properties in Properties, Move /
 # Rotate it with the tools (axis lock + VCB), aim it by its handle, Delete, undo.
 box 0 0 0 6000 4000 100
 box 2500 1500 100 1000 1000 1000
@@ -57,7 +57,7 @@ wait 3
 expect lightsel=(0 spot (1000,1000,3000) aim=(0.68,0.34,-0.65)
 expect undo=Some("Aim Light")
 screenshot shots/light_aimed.bmp
-# Entity Info: type a power (real mouse on the field)
+# Properties: type a power (real mouse on the field)
 raw click 1310 284
 wait 2
 raw text 800

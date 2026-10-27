@@ -1,4 +1,4 @@
-# Window menu: Physics, Unfold, 3D Printing (moved from Tools / Extensions) and the Materials
+# Window menu: Physics, Unfold, 3D Printing (moved from Tools / Plugins) and the Materials
 # Online Library open from it.
 box 0 0 0 100 100 100
 view iso

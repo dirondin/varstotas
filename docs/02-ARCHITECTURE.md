@@ -21,7 +21,7 @@ crates/
   varstotas_kernel/   # geometry kernel + document. No GPU, no UI. 100% unit-testable.
   varstotas_render/   # wgpu renderer + Camera. Does not know about the kernel: takes flat buffers.
   varstotas_script/   # Rhai scripting API over the kernel (Script Console, script files, generators, the bridge).
-  varstotas_app/      # binary: window, UI panels, tools, inference, VCB, input, plugins.
+  varstotas_app/      # binary: window, UI panels, tools, inference, Measurements box, input, plugins.
 locales/              # en.ftl (base), ru.ftl, lt.ftl, be.ftl — every UI text, see LOCALIZATION.md.
 python/               # Python client of the local bridge + MCP server, embedded into the app.
 ```
@@ -36,7 +36,7 @@ Dependencies: `app → kernel, render, script`, `script → kernel`; every crate
 - `History` — undo/redo on snapshots of `Model` (a clone). Simple and reliable; optimization — later.
 - `tessellate` — triangulation of faces (with holes) + a list of edges with references to entities for picking.
 - `io` — `.vrst` (JSON), OBJ/STL export, OBJ/STL import.
-- `units` — parser/formatter of VCB lengths (`2500`, `2.5m`, `1'6"`, `300,200`).
+- `units` — parser/formatter of Measurements box lengths (`2500`, `2.5m`, `1'6"`, `300,200`).
 
 ## varstotas_render
 - `Camera` (f64): perspective/ortho, orbit/pan/zoom, `screen_ray`, `world_to_screen`, `zoom_extents`, standard views.
@@ -48,7 +48,7 @@ Dependencies: `app → kernel, render, script`, `script → kernel`; every crate
 - Thick lines — expanded into quads in the vertex shader (wgpu has no line width).
 
 ## varstotas_app
-- `App` (eframe): menu, left toolbar, right tray of panels (Entity Info, Materials, Tags, Outliner, Scenes, Instructor), status bar with the VCB.
+- `App` (eframe): menu, left toolbar, right tray of panels (Properties, Materials, Tags, Outliner, Scenes, Tool Guide), status bar with the Measurements box.
 - `tools/` — trait `Tool` (state machine): `on_mouse_move/down/up`, `on_key`, `on_vcb(input)`, `overlay()`, `status_text()`.
 - `inference/` — the snapping engine: collects candidates (vertices/midpoints/edges/faces/axes/parallels/guides) in screen space, ranks them, returns `InferenceResult { point, kind, constraint_dir, ref_entity }`.
 - `nav` — camera: middle button — orbit, Shift+middle — pan, wheel — zoom to the cursor.
