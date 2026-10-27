@@ -91,10 +91,6 @@ fn main() -> eframe::Result<()> {
     objc2_foundation::NSProcessInfo::processInfo()
         .setProcessName(&objc2_foundation::NSString::from_str(APP_NAME));
     applog::init();
-    let moved = paths::migrate_legacy();
-    if !moved.is_empty() {
-        log::info!("moved from ~/.varstotas to the data folder: {}", moved.join(", ")); // i18n-ignore
-    }
     if let Some(d) = paths::data_dir() {
         varstotas_i18n::set_data_dir(&paths::display(&d));
     }

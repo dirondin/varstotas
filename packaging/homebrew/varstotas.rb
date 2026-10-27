@@ -18,7 +18,6 @@ cask "varstotas" do
   app "Varstotas.app"
 
   zap trash: [
-    "~/.varstotas", # 0.1.0 and earlier
     "~/Library/Application Support/Varstotas",
     "~/Library/Saved Application State/dev.varstotas.app.savedState",
   ]

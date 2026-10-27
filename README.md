@@ -49,8 +49,7 @@ Plugins, libraries, templates, your own translations, caches and the bridge for 
 and AI agents live in one per-user folder: `~/Library/Application Support/Varstotas` on macOS,
 `~/.local/share/varstotas` on Linux (`~/.var/app/io.github.dirondin.Varstotas/data/varstotas`
 in the Flatpak), `%APPDATA%\Varstotas\data` on Windows. Preferences → General shows it.
-Varstotas writes nowhere else unless you choose the place; 0.1.0 used `~/.varstotas`, which is
-moved there on the first start.
+Varstotas writes nowhere else unless you choose the place.
 
 ## Building from source
 
