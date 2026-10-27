@@ -1,0 +1,46 @@
+# Test build of the Flatpak (packaging/flatpak) from this checkout, then Flathub's linter (its
+# findings are reported, not fatal: --filesystem=home needs an exception granted on Flathub).
+# Release build runs it for every release tag; by hand: Actions → Flatpak → Run workflow.
+# The bundle (varstotas-x86_64.flatpak) is kept as an artifact: flatpak install --user <file>.
+name: Flatpak
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # flatpak-builder-tools' cargo/flatpak-cargo-generator.py (pinned commit)
+  GENERATOR_URL: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/9d86d336a39b9af38b86f114b6ce5820fe260f91/cargo/flatpak-cargo-generator.py
+
+jobs:
+  flatpak:
+    name: Flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Manifest and cargo sources
+        run: |
+          python3 -m venv /tmp/generator
+          /tmp/generator/bin/pip install -q 'aiohttp>=3.9.5,<4' 'PyYAML>=6.0.2,<7' 'tomlkit>=0.13.3,<1'
+          curl -sSfL -o /tmp/flatpak-cargo-generator.py "$GENERATOR_URL"
+          GENERATOR=/tmp/flatpak-cargo-generator.py /tmp/generator/bin/python scripts/flatpak-manifest.py flatpak-build --local
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: flatpak-build/io.github.dirondin.Varstotas.yml
+          bundle: varstotas-x86_64.flatpak
+          cache-key: flatpak-builder-${{ github.sha }}
+      - name: Flathub linter
+        continue-on-error: true
+        run: |
+          flatpak install -y --noninteractive flathub org.flatpak.Builder
+          lint() { flatpak run --command=flatpak-builder-lint org.flatpak.Builder "$@"; }
+          status=0
+          lint manifest flatpak-build/io.github.dirondin.Varstotas.yml || status=1
+          lint repo repo || status=1
+          exit $status

@@ -4,7 +4,8 @@
 # commit, takes that build's `release-files` artifact as is (no rebuild), checks SHA256SUMS.txt,
 # creates a draft with all the files and then publishes it. With release immutability enabled
 # (Settings → General → Releases) the published release's files and its tag can no longer change.
-# Notes: .github/release-notes.md + the changes since the previous release.
+# Notes: .github/release-notes.md + the changes since the previous release. Then packages.yml
+# updates the package managers.
 # release-1.2.3-rc1 (any version with a "-") makes a pre-release.
 name: Publish release
 
@@ -22,6 +23,9 @@ jobs:
   publish:
     name: Publish ${{ github.ref_name }}
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.files.outputs.version }}
+      prerelease: ${{ steps.files.outputs.prerelease }}
     env:
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
@@ -66,6 +70,7 @@ jobs:
           run-id: ${{ env.BUILD_RUN }}
           github-token: ${{ github.token }}
       - name: Check the files
+        id: files
         run: |
           VERSION="${TAG#release-}"
           cd dist
@@ -75,6 +80,8 @@ jobs:
             [[ -s "Varstotas-$VERSION-$f" ]] || { echo "::error::Missing Varstotas-$VERSION-$f"; exit 1; }
           done
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([[ "$VERSION" == *-* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Publish
         run: |
           sed "s/{version}/$VERSION/g" .github/release-notes.md > notes.md
@@ -91,3 +98,12 @@ jobs:
           if [[ "$immutable" != true ]]; then
             echo "::warning::The release is not immutable: enable release immutability in Settings → General → Releases"
           fi
+
+  # package managers (winget, Homebrew tap, Scoop bucket, AUR, Flathub), for releases only
+  packages:
+    needs: publish
+    if: needs.publish.outputs.prerelease == 'false'
+    uses: ./.github/workflows/packages.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

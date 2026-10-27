@@ -1,0 +1,31 @@
+# Maintainer: Dirondin <https://github.com/dirondin>
+pkgname=varstotas-bin
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc="3D modelling for makers: furniture, workshop projects and 3D prints, in real units"
+arch=('x86_64')
+url="https://github.com/dirondin/varstotas"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'hicolor-icon-theme' 'libxkbcommon' 'vulkan-icd-loader' 'wayland')
+optdepends=('libx11: X11 sessions'
+            'libxcursor: X11 sessions'
+            'libxi: X11 sessions'
+            'libxrandr: X11 sessions'
+            'xdg-desktop-portal: file dialogs')
+provides=('varstotas')
+conflicts=('varstotas')
+options=('!strip' '!debug')
+source=("https://github.com/dirondin/varstotas/releases/download/release-$pkgver/Varstotas-$pkgver-linux-x86_64.tar.gz")
+sha256sums=('@SHA256_LINUX_TAR@')
+
+package() {
+  cd "Varstotas-$pkgver-linux-x86_64"
+  install -Dm755 varstotas "$pkgdir/usr/bin/varstotas"
+  install -Dm644 varstotas.desktop "$pkgdir/usr/share/applications/varstotas.desktop"
+  install -Dm644 varstotas-mime.xml "$pkgdir/usr/share/mime/packages/varstotas.xml"
+  for s in 64 128 256; do
+    install -Dm644 "icons/varstotas-$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/varstotas.png"
+  done
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 THIRD-PARTY-LICENSES.txt "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-LICENSES.txt"
+}

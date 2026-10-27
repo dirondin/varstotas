@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.dirondin.Varstotas</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Varstotas</name>
+  <summary>3D modelling for makers</summary>
+  <developer id="io.github.dirondin">
+    <name>Dirondin</name>
+  </developer>
+
+  <description>
+    <p>
+      Varstotas is a free, open-source 3D modeller for makers and hobbyists. Plan furniture,
+      workshop projects and 3D prints in real millimetres, then take the dimensions to the
+      workshop or the model to a slicer.
+    </p>
+    <ul>
+      <li>Direct push/pull modelling with inference snapping and typed exact values</li>
+      <li>Dimensions, text, groups, reusable components, tags, scenes and section planes</li>
+      <li>Preparing models for 3D printing: checks and repair, wall thickness, cutting with dowels, STL and 3MF export</li>
+      <li>Unfolding to SVG, PDF and DXF; sheets with scaled views</li>
+      <li>PBR materials, a realistic real-time style and a GPU path tracer</li>
+      <li>Rhai scripting, plugins, parametric generators and a local bridge for Python and AI agents</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.dirondin.Varstotas.desktop</launchable>
+  <provides>
+    <binary>varstotas</binary>
+    <mediatype>application/x-varstotas</mediatype>
+  </provides>
+
+  <url type="homepage">https://github.com/dirondin/varstotas</url>
+  <url type="bugtracker">https://github.com/dirondin/varstotas/issues</url>
+  <url type="vcs-browser">https://github.com/dirondin/varstotas</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>A workbench with its dimensions</caption>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/master/docs/images/workbench.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption>A dining set</caption>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/master/docs/images/dining-set.jpg</image>
+    </screenshot>
+    <screenshot>
+      <caption>A bookshelf with the shelf spacing</caption>
+      <image>https://raw.githubusercontent.com/dirondin/varstotas/master/docs/images/bookshelf.jpg</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1"/>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#e8d9bd</color>
+    <color type="primary" scheme_preference="dark">#5c4426</color>
+  </branding>
+
+  <!-- every release adds an entry here before it is tagged (Release build checks it) -->
+  <releases>
+    <release version="0.1.0" date="2026-10-26">
+      <url type="details">https://github.com/dirondin/varstotas/releases/tag/release-0.1.0</url>
+    </release>
+  </releases>
+</component>

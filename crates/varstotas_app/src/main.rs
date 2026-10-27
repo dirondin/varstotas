@@ -128,8 +128,9 @@ fn main() -> eframe::Result<()> {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_title(APP_NAME)
-            // Wayland / X11: matches varstotas.desktop (taskbar icon and grouping)
-            .with_app_id("varstotas") // i18n-ignore
+            // Wayland / X11: matches varstotas.desktop (taskbar icon and grouping); the Flatpak
+            // build sets its application ID, the name of its .desktop file
+            .with_app_id(option_env!("VARSTOTAS_APP_ID").unwrap_or("varstotas")) // i18n-ignore
             .with_icon(app_icon())
             .with_inner_size([1400.0, 900.0])
             .with_min_inner_size([800.0, 500.0])

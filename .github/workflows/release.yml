@@ -1,4 +1,5 @@
-# A release-* tag: version check, unit tests and release builds on macOS, Windows and Linux; the
+# A release-* tag: version check (Cargo.toml, the Flatpak metainfo's release entry), unit tests,
+# a test Flatpak build (flatpak.yml) and release builds on macOS, Windows and Linux; the
 # packages (macOS .dmg + .zip, Windows installer + .zip, Linux .AppImage + .tar.gz) and their
 # SHA256SUMS.txt are kept as the run's `release-files` artifact. Nothing is published here:
 # Actions → Publish release, run from the tag, publishes exactly these files (publish.yml).
@@ -39,6 +40,12 @@ jobs:
           cargo_version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           if [[ "${TAG#release-}" != "$cargo_version" ]]; then
             echo "::error::Tag $TAG does not match the workspace version $cargo_version in Cargo.toml (expected release-$cargo_version)"
+            exit 1
+          fi
+          # Flathub shows the releases listed in the AppStream metadata
+          metainfo=packaging/flatpak/io.github.dirondin.Varstotas.metainfo.xml
+          if ! grep -q "<release version=\"$cargo_version\"" "$metainfo"; then
+            echo "::error::$metainfo has no <release version=\"$cargo_version\" date=\"YYYY-MM-DD\"> entry"
             exit 1
           fi
           echo "Varstotas $cargo_version"
@@ -94,6 +101,11 @@ jobs:
             dist/*.tar.gz
             dist/*.AppImage
           if-no-files-found: error
+
+  # the Flatpak is built from the tag on Flathub after publishing; this proves that it builds
+  flatpak:
+    needs: check
+    uses: ./.github/workflows/flatpak.yml
 
   bundle:
     name: Release files

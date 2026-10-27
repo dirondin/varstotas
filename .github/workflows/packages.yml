@@ -1,0 +1,202 @@
+# Brings the package managers up to a published release: a pull request to winget-pkgs, the
+# Homebrew tap and the Scoop bucket (dirondin/homebrew-tap, dirondin/scoop-bucket), AUR
+# varstotas-bin, a pull request to flathub/io.github.dirondin.Varstotas.
+# Publish release calls it; by hand (e.g. for a release published before, or after a failure):
+# Actions → Package managers → Run workflow (from master) with the tag.
+# Each job runs only when its secret is set (setup: .claude/notes/DISTRIBUTION.md), and a failure
+# here never touches the release itself.
+name: Package managers
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+    secrets:
+      WINGET_TOKEN:
+        required: false
+      TAP_TOKEN:
+        required: false
+      AUR_SSH_KEY:
+        required: false
+      FLATHUB_TOKEN:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release-* tag'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  release:
+    name: Release ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - id: release
+        run: |
+          info="$(gh release view "$TAG" --json isDraft,isPrerelease --jq '"\(.isDraft) \(.isPrerelease)"')" || {
+            echo "::error::No release $TAG"; exit 1; }
+          if [[ "$info" != "false false" ]]; then
+            echo "::error::$TAG is a draft or a pre-release (draft, pre-release: $info)"
+            exit 1
+          fi
+          commit="$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)"
+          echo "version=${TAG#release-}" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "$TAG: ${TAG#release-} at $commit"
+
+  winget:
+    name: winget
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - if: env.WINGET_TOKEN == ''
+        run: echo "::notice::WINGET_TOKEN is not set, winget is not updated"
+      # winget-releaser only updates a package that is already in winget-pkgs (the first version
+      # is submitted by hand)
+      - id: package
+        if: env.WINGET_TOKEN != ''
+        run: |
+          if gh api repos/microsoft/winget-pkgs/contents/manifests/d/Dirondin/Varstotas --silent 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Dirondin.Varstotas is not in winget-pkgs yet, winget is not updated"
+          fi
+      # opens a pull request to microsoft/winget-pkgs from the token owner's fork
+      - if: steps.package.outputs.exists == 'true'
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: Dirondin.Varstotas
+          version: ${{ needs.release.outputs.version }}
+          release-tag: ${{ inputs.tag }}
+          installers-regex: '-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
+  taps:
+    name: Homebrew tap and Scoop bucket
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - if: env.TAP_TOKEN == ''
+        run: echo "::notice::TAP_TOKEN is not set, the Homebrew tap and the Scoop bucket are not updated"
+      - if: env.TAP_TOKEN != ''
+        uses: actions/checkout@v4
+      - name: Update dirondin/homebrew-tap and dirondin/scoop-bucket
+        if: env.TAP_TOKEN != ''
+        run: |
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir /tmp
+          scripts/package-manifests.py "$VERSION" /tmp/SHA256SUMS.txt /tmp/manifests
+          update() {  # repository, generated file, path in the repository
+            local dir="/tmp/$1"
+            git clone -q "https://x-access-token:$TAP_TOKEN@github.com/dirondin/$1.git" "$dir"
+            mkdir -p "$dir/$(dirname "$3")"
+            cp "$2" "$dir/$3"
+            git -C "$dir" add "$3"
+            if git -C "$dir" diff --cached --quiet; then
+              echo "$1: already at $VERSION"
+            else
+              git -C "$dir" -c user.name="github-actions[bot]" \
+                -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                commit -q -m "varstotas $VERSION"
+              git -C "$dir" push -q
+              echo "$1: varstotas $VERSION"
+            fi
+          }
+          update homebrew-tap /tmp/manifests/homebrew/Casks/varstotas.rb Casks/varstotas.rb
+          update scoop-bucket /tmp/manifests/scoop/varstotas.json bucket/varstotas.json
+
+  aur:
+    name: AUR
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - if: env.AUR_SSH_KEY == ''
+        run: echo "::notice::AUR_SSH_KEY is not set, AUR is not updated"
+      - if: env.AUR_SSH_KEY != ''
+        uses: actions/checkout@v4
+      - name: PKGBUILD
+        if: env.AUR_SSH_KEY != ''
+        run: |
+          gh release download "$TAG" --pattern SHA256SUMS.txt --dir /tmp
+          scripts/package-manifests.py "$VERSION" /tmp/SHA256SUMS.txt aur-out
+      # builds the package from the published .tar.gz (test), writes .SRCINFO and pushes;
+      # the first push creates the AUR package
+      - if: env.AUR_SSH_KEY != ''
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: varstotas-bin
+          pkgbuild: aur-out/aur/PKGBUILD
+          test: true
+          commit_username: dirondin
+          commit_email: dirondin@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_KEY }}
+          commit_message: varstotas ${{ needs.release.outputs.version }}
+
+  flathub:
+    name: Flathub
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      FLATHUB_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+      VERSION: ${{ needs.release.outputs.version }}
+      COMMIT: ${{ needs.release.outputs.commit }}
+      APP: io.github.dirondin.Varstotas
+      # flatpak-builder-tools' cargo/flatpak-cargo-generator.py (the same commit as flatpak.yml)
+      GENERATOR_URL: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/9d86d336a39b9af38b86f114b6ce5820fe260f91/cargo/flatpak-cargo-generator.py
+    steps:
+      - if: env.FLATHUB_TOKEN == ''
+        run: echo "::notice::FLATHUB_TOKEN is not set, no Flathub pull request"
+      # the app's repository appears once the first submission (to flathub/flathub) is merged
+      - id: repository
+        if: env.FLATHUB_TOKEN != ''
+        run: |
+          if gh repo view "flathub/$APP" --json name >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::flathub/$APP does not exist yet, no Flathub pull request"
+          fi
+      # the manifest template and Cargo.lock of the release itself
+      - if: steps.repository.outputs.exists == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.commit }}
+      # Flathub's bot test-builds the pull request; merging it publishes the update
+      - name: Pull request to flathub/${{ env.APP }}
+        if: steps.repository.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+        run: |
+          python3 -m venv /tmp/generator
+          /tmp/generator/bin/pip install -q 'aiohttp>=3.9.5,<4' 'PyYAML>=6.0.2,<7' 'tomlkit>=0.13.3,<1'
+          curl -sSfL -o /tmp/flatpak-cargo-generator.py "$GENERATOR_URL"
+          git clone -q "https://x-access-token:$FLATHUB_TOKEN@github.com/flathub/$APP.git" /tmp/flathub
+          GENERATOR=/tmp/flatpak-cargo-generator.py /tmp/generator/bin/python \
+            scripts/flatpak-manifest.py /tmp/flathub "$VERSION" "$COMMIT"
+          cd /tmp/flathub
+          git switch -q -c "$TAG"
+          git add "$APP.yml" cargo-sources.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Update to $VERSION"
+          git push -q -f origin "$TAG"
+          gh pr create --repo "flathub/$APP" --base master --head "$TAG" --title "Update to $VERSION" \
+            --body "Varstotas $VERSION: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"

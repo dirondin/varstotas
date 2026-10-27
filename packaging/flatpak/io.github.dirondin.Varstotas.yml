@@ -1,0 +1,49 @@
+# Flatpak manifest (Flathub: github.com/flathub/io.github.dirondin.Varstotas). The workflows fill in
+# the source and add cargo-sources.json through scripts/flatpak-manifest.py.
+id: io.github.dirondin.Varstotas
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: varstotas
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # online model and material libraries; the local scripting bridge and MCP server (127.0.0.1)
+  - --share=network
+  # documents with their textures and autosaves next to them, plugin, script and library folders
+  - --filesystem=home
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/varstotas/cargo
+    CARGO_NET_OFFLINE: 'true'
+    # the window's Wayland app ID / X11 class: the name of the .desktop file below
+    VARSTOTAS_APP_ID: io.github.dirondin.Varstotas
+modules:
+  - name: varstotas
+    buildsystem: simple
+    build-commands:
+      - cargo build --release --locked --offline -p varstotas_app
+      - install -Dm755 target/release/varstotas /app/bin/varstotas
+      - |
+        for s in 64 128 256; do
+          python3 scripts/make_icon.py png "icon-$s.png" "$s"
+          install -Dm644 "icon-$s.png" "/app/share/icons/hicolor/${s}x${s}/apps/$FLATPAK_ID.png"
+        done
+      - sed -e "s/^Icon=.*/Icon=$FLATPAK_ID/" -e "s/^StartupWMClass=.*/StartupWMClass=$FLATPAK_ID/"
+        packaging/linux/varstotas.desktop > "$FLATPAK_ID.desktop"
+      - install -Dm644 "$FLATPAK_ID.desktop" -t /app/share/applications
+      - install -Dm644 packaging/linux/varstotas-mime.xml "/app/share/mime/packages/$FLATPAK_ID.xml"
+      - install -Dm644 "packaging/flatpak/$FLATPAK_ID.metainfo.xml" -t /app/share/metainfo
+      - install -Dm644 LICENSE THIRD-PARTY-LICENSES.txt -t "/app/share/licenses/$FLATPAK_ID"
+    sources:
+      # SOURCE (replaced: the release tag for Flathub, this checkout for test builds)
+      - type: git
+        url: https://github.com/dirondin/varstotas.git
+        tag: release-@VERSION@
+        commit: '@COMMIT@'
+      - cargo-sources.json
