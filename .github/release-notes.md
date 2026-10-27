@@ -17,5 +17,7 @@
 
 The builds are not signed with a paid certificate:
 
-- **macOS** — the first time, right-click Varstotas → **Open** → **Open**.
+- **macOS** — the first launch is blocked: open Varstotas once, then **System Settings → Privacy & Security** →
+  **Open Anyway** (macOS 14 and earlier: right-click Varstotas → **Open** → **Open**).
+  Or in Terminal: `xattr -dr com.apple.quarantine /Applications/Varstotas.app`.
 - **Windows** — SmartScreen may warn: **More info** → **Run anyway**.

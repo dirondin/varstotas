@@ -24,7 +24,8 @@ cask "varstotas" do
 
   caveats <<~EOS
     Varstotas is not notarized by Apple, so macOS blocks its first launch.
-    Right-click Varstotas in Applications → Open → Open (once), or run:
+    Open it once, then System Settings → Privacy & Security → Open Anyway
+    (macOS 14 and earlier: right-click Varstotas in Applications → Open → Open), or run:
       xattr -dr com.apple.quarantine /Applications/Varstotas.app
   EOS
 end
