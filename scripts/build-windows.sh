@@ -94,6 +94,11 @@ cargo build --release --locked -p varstotas_app --bin varstotas --target "$TARGE
 
 # 4. Package.
 EXE="$TARGET_DIR/$TARGET/release/varstotas.exe"
+# the C runtime is linked in (.cargo/config.toml): no DLL a clean Windows lacks
+if grep -qai 'vcruntime140' "$EXE"; then
+  echo "error: $EXE needs VCRUNTIME140.dll (the Visual C++ Redistributable); link the CRT statically" >&2
+  exit 1
+fi
 mkdir -p "$DIST"
 rm -f "$ZIP"
 STAGE="$WORK/stage"

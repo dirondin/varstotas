@@ -1,0 +1,4 @@
+# Windows (MSVC): the C runtime linked into varstotas.exe, so it starts on a clean Windows
+# without the Visual C++ Redistributable (VCRUNTIME140.dll); winget validates in such a VM.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
