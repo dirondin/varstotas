@@ -1,4 +1,4 @@
-# Maintainer: Dirondin <https://github.com/dirondin>
+# Maintainer: Michail Palubisak <https://github.com/dirondin>
 pkgname=varstotas-bin
 pkgver=@VERSION@
 pkgrel=1
