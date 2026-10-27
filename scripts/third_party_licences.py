@@ -5,7 +5,7 @@ usage: python3 scripts/third_party_licences.py
 writes crates/varstotas_app/licences/third_party.json (embedded in the app) and
 THIRD-PARTY-LICENSES.txt (copied next to the app by the build scripts).
 
-The crates are those `cargo tree` lists for varstotas_app on the macOS and Windows targets
+The crates are those `cargo tree` lists for varstotas_app on every target that is released (macOS, Windows, Linux)
 (normal and build dependencies). Each crate's licence files (LICENSE*, LICENCE*, COPYING*,
 NOTICE*, UNLICENSE*, and the font licences of epaint_default_fonts) are taken from its
 source; a crate without such files gets the standard text of its licence, with its authors
@@ -18,7 +18,11 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TARGETS = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
+TARGETS = [
+    "aarch64-apple-darwin", "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu",
+]
 NAMES = re.compile(r"^(licen[cs]e|copying|notice|unlicense|ofl|ufl)|license\.txt$|-license\.txt$", re.I)
 
 MIT = """Permission is hereby granted, free of charge, to any person obtaining a copy of this

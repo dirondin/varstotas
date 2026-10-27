@@ -1,6 +1,6 @@
 # Unit tests and lints for pull requests and pushes to master: clippy and tests on Linux, tests on
-# Windows and macOS (paths, line endings, compilers and graphics backends differ there), so
-# platform problems show up here rather than in a release build.
+# Windows and macOS (paths, line endings, compilers and graphics backends differ there) and on
+# Windows and Linux for Arm64, so platform problems show up here rather than in a release build.
 name: CI
 
 on:
@@ -44,11 +44,18 @@ jobs:
         include:
           - name: Windows
             os: windows-latest
+          - name: Windows ARM64
+            os: windows-11-arm
           - name: macOS
             os: macos-latest
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: System packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libwayland-dev libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Tests

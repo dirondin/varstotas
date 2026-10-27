@@ -2,9 +2,9 @@
 """Fills the package manager templates in packaging/ for one release.
 
 Writes into OUT_DIR:
-  scoop/varstotas.json        Scoop bucket manifest (Windows .zip)
+  scoop/varstotas.json        Scoop bucket manifest (Windows .zip, x86_64 and arm64)
   homebrew/Casks/varstotas.rb Homebrew tap cask (macOS .dmg)
-  aur/PKGBUILD                AUR varstotas-bin (Linux .tar.gz)
+  aur/PKGBUILD                AUR varstotas-bin (Linux .tar.gz, x86_64 and aarch64)
 The hashes come from the release's SHA256SUMS.txt.
 usage: scripts/package-manifests.py VERSION SHA256SUMS.txt OUT_DIR
 """
@@ -15,8 +15,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = {  # placeholder → release file (after "Varstotas-<version>-")
     "@SHA256_WINDOWS_ZIP@": "windows-x86_64.zip",
+    "@SHA256_WINDOWS_ARM_ZIP@": "windows-aarch64.zip",
     "@SHA256_MACOS_DMG@": "macos-universal.dmg",
     "@SHA256_LINUX_TAR@": "linux-x86_64.tar.gz",
+    "@SHA256_LINUX_ARM_TAR@": "linux-aarch64.tar.gz",
 }
 TEMPLATES = {  # template in packaging/ → output path
     "scoop/varstotas.json": "scoop/varstotas.json",

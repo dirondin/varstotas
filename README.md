@@ -40,8 +40,8 @@ everything can be scripted.
 
 ## Download
 
-Builds for macOS (`.dmg`), Windows (installer or portable `.zip`) and Linux (AppImage or
-`.tar.gz`) are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
+Builds for macOS (`.dmg`, Apple Silicon and Intel), Windows (installer or portable `.zip`) and
+Linux (AppImage or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
 
 ## Building from source
 
@@ -182,12 +182,12 @@ Artifacts go to `dist/` (not tracked by git).
 scripts/build-macos.sh      # macOS universal (arm64 + x86_64): .dmg + .zip
 scripts/build-macos.sh --debug  # local target/Varstotas.app (correct Dock name and icon)
 scripts/build-windows.sh    # Windows x86_64 portable .zip, cross-built from macOS
-scripts/build-windows.sh --native  # on Windows (MSVC, Git Bash): .zip + installer
+scripts/build-windows.sh --native [--arch aarch64]  # on Windows (MSVC, Git Bash): .zip + installer
 scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage
 ```
 
 - **macOS** — `scripts/build-macos.sh [--no-dmg]`: installs the `x86_64-apple-darwin` target if needed, builds release for both architectures, joins them with `lipo`, assembles `dist/Varstotas.app` (Info.plist: `dev.varstotas.app`, macOS ≥ 11, Retina), builds the icon (`crates/varstotas_app/assets/icon.png`, drawn by `scripts/make_icon.py` → `iconutil` → `.icns`), signs ad-hoc (`codesign -s -`) and packs `Varstotas-<version>-macos-universal.zip` and `.dmg` (with an Applications link). There is no Developer ID signature or notarization — on first launch: right click → "Open".
-- **Windows** — `varstotas.exe` is a GUI-subsystem binary with the icon and version resource embedded (`crates/varstotas_app/build.rs`, `winresource`); Windows 10+, no external DLLs. `Varstotas-<version>-windows-x86_64.zip` is the portable build. With `--native` (MSVC on Windows) the script also builds `Varstotas-<version>-windows-x86_64-setup.exe` with Inno Setup 6 (`packaging/windows/varstotas.iss`; installed with Chocolatey when missing): per-user or all-users install, Start menu entry, optional desktop icon, the `.vrst` file association, uninstaller; English and Russian wizard. Without `--native` it cross-compiles with mingw-w64 (installed via brew) and makes the zip only.
+- **Windows** — `varstotas.exe` is a GUI-subsystem binary with the icon and version resource embedded (`crates/varstotas_app/build.rs`, `winresource`); Windows 10+, no external DLLs. `Varstotas-<version>-windows-<arch>.zip` is the portable build. With `--native` (MSVC on Windows) the script also builds `Varstotas-<version>-windows-<arch>-setup.exe` with Inno Setup 6 (`packaging/windows/varstotas.iss`; installed with Chocolatey when missing): per-user or all-users install, Start menu entry, optional desktop icon, the `.vrst` file association, uninstaller; English and Russian wizard. Without `--native` it cross-compiles with mingw-w64 (installed via brew) and makes the zip only. `--arch aarch64` (native only) builds for Windows on Arm; the installer then allows Arm64 only, while the x86_64 one also installs there under emulation.
 - **Linux** — `scripts/build-linux.sh [--no-appimage]`: needs `pkg-config`, `libwayland-dev` and `libxkbcommon-dev`. `Varstotas-<version>-linux-<arch>.tar.gz` holds the binary, icons, `varstotas.desktop`, the `.vrst` file type (`packaging/linux`) and `install.sh` (into `~/.local`, `--uninstall`; `PREFIX=/usr/local` for everyone). `Varstotas-<version>-linux-<arch>.AppImage` is one runnable file, made with `appimagetool` (downloaded into `target/tools`). X11 and Wayland both work (loaded at run time); release builds are made on Ubuntu 22.04 (glibc 2.35).
 - `VARSTOTAS_VERSION` overrides the version from Cargo in every script.
 - Checking the build without a UI click: `VARSTOTAS_SCREENSHOT=shot.bmp dist/Varstotas.app/Contents/MacOS/varstotas` — captures the window and exits.
@@ -196,7 +196,7 @@ scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage
 GitHub Actions in `.github/workflows`:
 
 - **CI** (`ci.yml`) — every pull request and push to `master`: `cargo clippy -D warnings` and `cargo test --workspace` on Linux, and the tests on Windows and macOS.
-- **Release build** (`release.yml`) — pushing a tag `release-<version>`: the version check (also the release entry in the Flatpak metainfo), unit tests in the release profile, release builds on macOS, Windows and Linux and a test Flatpak build (`flatpak.yml`, also runnable by hand). All the packages above and `SHA256SUMS.txt` are kept as the run's `release-files` artifact; nothing is published. To build a tag again, run the workflow by hand from the tag (Actions → Release build → Run workflow → Use workflow from → Tags).
+- **Release build** (`release.yml`) — pushing a tag `release-<version>`: the version check (also the release entry in the Flatpak metainfo), unit tests in the release profile, release builds on macOS (universal) and on Windows and Linux for x86_64 and Arm64 (GitHub's Arm runners), and test Flatpak builds for both architectures (`flatpak.yml`, also runnable by hand). All the packages above and `SHA256SUMS.txt` are kept as the run's `release-files` artifact; nothing is published. To build a tag again, run the workflow by hand from the tag (Actions → Release build → Run workflow → Use workflow from → Tags).
 - **Publish release** (`publish.yml`) — by hand only, run from the tag the same way. It needs a successful Release build of the tag at its current commit and a successful CI run of that commit, takes that build's files as they are (no rebuild), checks the checksums, attaches everything to a draft and then publishes it as "Varstotas <version>". Its notes are a downloads table (`.github/release-notes.md`) followed by the changes since the previous release. A version with a `-` (`release-0.2.0-rc.1`) makes a pre-release. A release that is already published is never changed; with release immutability on (Settings → General → Releases) its files and tag are frozen.
 - **Package managers** (`packages.yml`) — after publishing (or by hand with a published tag): a pull request to winget-pkgs, the Homebrew tap and Scoop bucket updated, a pull request to the Flathub repository, and AUR `varstotas-bin` pushed (dormant until an AUR key is configured). Templates are in `packaging/` (`scripts/package-manifests.py`, `scripts/flatpak-manifest.py`); each step runs only when its token is configured.
 

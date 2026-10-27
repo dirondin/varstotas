@@ -1,7 +1,8 @@
 # Test build of the Flatpak (packaging/flatpak) from this checkout, then Flathub's linter (its
 # findings are reported, not fatal: --filesystem=home needs an exception granted on Flathub).
 # Release build runs it for every release tag; by hand: Actions → Flatpak → Run workflow.
-# The bundle (varstotas-x86_64.flatpak) is kept as an artifact: flatpak install --user <file>.
+# x86_64 and aarch64, as Flathub builds both; the bundles (varstotas-<arch>.flatpak) are kept as
+# artifacts: flatpak install --user <file>.
 name: Flatpak
 
 on:
@@ -17,8 +18,16 @@ env:
 
 jobs:
   flatpak:
-    name: Flatpak
-    runs-on: ubuntu-latest
+    name: Flatpak (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-latest
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-26.08
       options: --privileged
@@ -33,11 +42,13 @@ jobs:
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: flatpak-build/io.github.dirondin.Varstotas.yml
-          bundle: varstotas-x86_64.flatpak
-          cache-key: flatpak-builder-${{ github.sha }}
+          bundle: varstotas-${{ matrix.arch }}.flatpak
+          arch: ${{ matrix.arch }}
+          cache-key: flatpak-builder-${{ matrix.arch }}-${{ github.sha }}
       # appstream-screenshots-not-mirrored-in-ostree and appstream-external-screenshot-url are
       # expected here: Flathub's own build mirrors the screenshots
       - name: Flathub linter
+        if: matrix.arch == 'x86_64'
         continue-on-error: true
         run: |
           flatpak install -y --noninteractive flathub org.flatpak.Builder

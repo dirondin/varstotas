@@ -1,6 +1,7 @@
 ; Inno Setup script for the Windows installer, built by scripts/build-windows.sh --native:
 ;   ISCC /DAppVersion=0.2.0 /DNumVersion=0.2.0.0 /DSourceDir=<stage> /DIconFile=<ico>
-;        /DOutputDir=<dist> /DOutputBase=Varstotas-0.2.0-windows-x86_64-setup varstotas.iss
+;        /DOutputDir=<dist> /DOutputBase=Varstotas-0.2.0-windows-x86_64-setup
+;        [/DArch=x64compatible|arm64] varstotas.iss
 ; Installs per user (no admin) or for all users (the wizard asks), with a Start menu entry,
 ; an optional desktop icon and the .vrst file association.
 
@@ -9,6 +10,10 @@
 #endif
 #ifndef NumVersion
   #define NumVersion "0.0.0.0"
+#endif
+; x64compatible (x64 Windows, and Windows on Arm through emulation) or arm64
+#ifndef Arch
+  #define Arch "x64compatible"
 #endif
 
 [Setup]
@@ -28,8 +33,8 @@ DefaultGroupName=Varstotas
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed={#Arch}
+ArchitecturesInstallIn64BitMode={#Arch}
 MinVersion=10.0
 LicenseFile={#SourceDir}\LICENSE.txt
 SetupIconFile={#IconFile}

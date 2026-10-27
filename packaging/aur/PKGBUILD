@@ -3,7 +3,7 @@ pkgname=varstotas-bin
 pkgver=@VERSION@
 pkgrel=1
 pkgdesc="3D modelling for makers: furniture, workshop projects and 3D prints, in real units"
-arch=('x86_64')
+arch=('x86_64' 'aarch64')
 url="https://github.com/dirondin/varstotas"
 license=('MIT')
 depends=('gcc-libs' 'glibc' 'hicolor-icon-theme' 'libxkbcommon' 'vulkan-icd-loader' 'wayland')
@@ -15,11 +15,13 @@ optdepends=('libx11: X11 sessions'
 provides=('varstotas')
 conflicts=('varstotas')
 options=('!strip' '!debug')
-source=("https://github.com/dirondin/varstotas/releases/download/release-$pkgver/Varstotas-$pkgver-linux-x86_64.tar.gz")
-sha256sums=('@SHA256_LINUX_TAR@')
+source_x86_64=("https://github.com/dirondin/varstotas/releases/download/release-$pkgver/Varstotas-$pkgver-linux-x86_64.tar.gz")
+source_aarch64=("https://github.com/dirondin/varstotas/releases/download/release-$pkgver/Varstotas-$pkgver-linux-aarch64.tar.gz")
+sha256sums_x86_64=('@SHA256_LINUX_TAR@')
+sha256sums_aarch64=('@SHA256_LINUX_ARM_TAR@')
 
 package() {
-  cd "Varstotas-$pkgver-linux-x86_64"
+  cd "Varstotas-$pkgver-linux-$CARCH"
   install -Dm755 varstotas "$pkgdir/usr/bin/varstotas"
   install -Dm644 varstotas.desktop "$pkgdir/usr/share/applications/varstotas.desktop"
   install -Dm644 varstotas-mime.xml "$pkgdir/usr/share/mime/packages/varstotas.xml"
