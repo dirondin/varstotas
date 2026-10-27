@@ -16,7 +16,7 @@ The examples stay in this repository; the application does not install or downlo
 | [Garden pergola](demos/garden_pergola.vrst) | Posts, footings, beams and repeated rafters | [Rhai](scripts/garden_pergola.rhai) |
 | [Staircase](demos/staircase.vrst) | Parameterized rise/going, timber treads and a landing | [Rhai](scripts/staircase.rhai) |
 | [Small workshop](demos/small_workshop.vrst) | A room corner, window opening, workbench, shelves and storage | [Rhai](scripts/small_workshop.rhai) |
-| [Desk caddy](demos/desk_caddy.vrst) | A 3D print for a 150 mm build volume: pen holes, a tray and a phone slot cut by Solid Tools | [Rhai](scripts/desk_caddy.rhai) |
+| [Desk caddy](demos/desk_caddy.vrst) | A 3D print for a 150 mm build volume: rounded corners and chamfers from a profile, pen holes, a tray and a phone slot cut by Solid Tools | [Rhai](scripts/desk_caddy.rhai) |
 
 All construction scripts use millimetres. Run them in an empty document through **File → Run Script**,
 or paste them into **Window → Script Console**. Change the parameters near the top to explore variants.

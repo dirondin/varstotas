@@ -20,5 +20,5 @@ wait 5
 expect model_faces=144
 open ../../examples/demos/desk_caddy.vrst
 wait 5
-expect model_faces=163
+expect model_faces=319
 quit
