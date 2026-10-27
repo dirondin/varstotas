@@ -45,6 +45,12 @@ jobs:
           bundle: varstotas-${{ matrix.arch }}.flatpak
           arch: ${{ matrix.arch }}
           cache-key: flatpak-builder-${{ matrix.arch }}-${{ github.sha }}
+      # downloads run curl and Python scripts python3, both from the runtime: check they are there
+      - name: Runtime programs
+        run: |
+          flatpak install -y --noninteractive flathub org.freedesktop.Platform//26.08
+          flatpak install -y --noninteractive varstotas-${{ matrix.arch }}.flatpak
+          flatpak run --command=sh io.github.dirondin.Varstotas -c 'curl --version | head -1 && python3 --version'
       # appstream-screenshots-not-mirrored-in-ostree and appstream-external-screenshot-url are
       # expected here: Flathub's own build mirrors the screenshots
       - name: Flathub linter
