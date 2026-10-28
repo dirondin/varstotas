@@ -122,6 +122,7 @@ app-save-failed = Save failed: { $error }
 app-exported-warning = Exported { $path }. { $warning }
 app-exported = Exported { $path }
 app-export-failed = Export failed: { $error }
+app-write-denied-windows = Windows denied access. If the folder is Documents, Pictures or Desktop, Defender's Controlled folder access may be blocking Varstotas: Windows Security → Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access.
 # { $format } is the format name.
 app-undo-import = Import { $format }
 app-imported = Imported { $path }

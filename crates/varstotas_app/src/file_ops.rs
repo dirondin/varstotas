@@ -183,7 +183,7 @@ impl VarstotasApp {
                 true
             }
             Ok(Err(e)) => {
-                self.flash_error(tr!("app-save-failed", error = e.to_string()));
+                self.flash_error(tr!("app-save-failed", error = write_error(e.to_string())));
                 false
             }
             Err(e) => {
@@ -316,7 +316,7 @@ impl VarstotasApp {
                 Some(w) if ext != "txt" => self.flash_error(tr!("app-exported-warning", path = path.display().to_string(), warning = w)),
                 _ => self.flash(tr!("app-exported", path = path.display().to_string())),
             },
-            Ok(Err(e)) => self.flash_error(tr!("app-export-failed", error = e.to_string())),
+            Ok(Err(e)) => self.flash_error(tr!("app-export-failed", error = write_error(e.to_string()))),
             Err(e) => self.flash_error(tr!("app-export-failed", error = e)),
         }
     }
@@ -489,5 +489,15 @@ fn writable_dir(dir: &Path) -> bool {
     match std::fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
         Ok(_) => std::fs::remove_file(&probe).is_ok(),
         Err(_) => false,
+    }
+}
+
+/// A write error, with a hint where Windows refuses the user's own folders: Controlled Folder
+/// Access (Defender ransomware protection) blocks unknown apps in Documents, Pictures, Desktop.
+fn write_error(error: String) -> String {
+    if cfg!(windows) && error.contains("(os error 5)") {
+        format!("{error}\n{}", tr!("app-write-denied-windows"))
+    } else {
+        error
     }
 }

@@ -126,6 +126,7 @@ app-save-failed = Išsaugoti nepavyko: { $error }
 app-exported-warning = Eksportuota: { $path }. { $warning }
 app-exported = Eksportuota: { $path }
 app-export-failed = Eksportuoti nepavyko: { $error }
+app-write-denied-windows = Windows uždraudė prieigą. Jei tai aplankas „Dokumentai“, „Paveikslėliai“ ar „Darbalaukis“, Varstotas gali blokuoti Defender kontroliuojama prieiga prie aplankų: Windows sauga → Apsauga nuo virusų ir grėsmių → Apsauga nuo išpirkos reikalaujančių programų → Leisti programai naudotis kontroliuojama prieiga prie aplankų.
 # { $format } yra formato pavadinimas.
 app-undo-import = Importuoti { $format }
 app-imported = Importuota: { $path }

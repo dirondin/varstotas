@@ -131,6 +131,7 @@ app-save-failed = Не удалось сохранить: { $error }
 app-exported-warning = Экспортирован { $path }. { $warning }
 app-exported = Экспортирован { $path }
 app-export-failed = Не удалось экспортировать: { $error }
+app-write-denied-windows = Windows запретил доступ. Если это «Документы», «Изображения» или «Рабочий стол», Varstotas может блокировать контролируемый доступ к папкам Defender: Безопасность Windows → Защита от вирусов и угроз → Защита от программ-шантажистов → Разрешить работу приложения через контролируемый доступ к папкам.
 # { $format } — название формата.
 app-undo-import = Импорт { $format }
 app-imported = Импортирован { $path }
