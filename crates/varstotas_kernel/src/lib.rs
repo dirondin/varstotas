@@ -25,6 +25,7 @@ use glam::{DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 
 pub mod curves;
+pub mod cutlist;
 pub mod dims;
 pub mod geom;
 mod grid;

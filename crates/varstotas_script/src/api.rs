@@ -22,7 +22,8 @@ pub const NAMES: &[&str] = &[
     "make_parametric", "set_params", "params", "dimension", "note", "enter", "exit", "faces", "edges", "groups", "all",
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
-    "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide",
+    "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
+    "cut_part",
 ];
 
 /// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
@@ -1518,6 +1519,209 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     });
     e.register_fn("materials", || -> R<Array> {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))
+    });
+    register_cut_list(e);
+}
+
+/// The cut list (track W): `cut_list()`, `set_stock(material, stock)`, `cut_settings(map)`,
+/// `cut_part(name, map)`. Lengths are millimetres; unit strings ("2.4 m") are read too.
+fn register_cut_list(e: &mut Engine) {
+    use varstotas_kernel::cutlist::{Issue, PartGrain, PartOptions, Stock, StockKind, plan};
+    fn d(v: f64) -> Dynamic {
+        Dynamic::from((v * 1000.0).round() / 1000.0)
+    }
+    fn grain_name(g: PartGrain) -> &'static str {
+        match g {
+            PartGrain::Length => "length",
+            PartGrain::Width => "width",
+            PartGrain::Any => "any",
+        }
+    }
+    fn stock_of(m: &Map) -> R<Stock> {
+        let get = |k: &str| m.get(k).cloned();
+        let kind = match get("kind").map(|v| v.to_string()).as_deref() {
+            None | Some("sheet") => StockKind::Sheet,
+            Some("board") => StockKind::Board,
+            Some(k) => return err(tr!("script-err-cut-kind", kind = k.to_string())),
+        };
+        let thickness = num(&get("thickness").unwrap_or(Dynamic::from(0.0)))?;
+        let width = num(&get("width").unwrap_or(Dynamic::from(0.0)))?;
+        let mut st = match kind {
+            StockKind::Sheet => Stock::sheet(num(&get("length").unwrap_or(Dynamic::from(0.0)))?, width, thickness, false),
+            StockKind::Board => {
+                let lengths = match get("lengths") {
+                    Some(v) => v.into_array().map_err(|t| tr!("script-err-cut-lengths", t = t.to_string()))?.iter().map(num).collect::<R<Vec<f64>>>()?,
+                    None => vec![num(&get("length").unwrap_or(Dynamic::from(0.0)))?],
+                };
+                Stock::board(width, thickness, &lengths)
+            }
+        };
+        if let Some(g) = get("grain") {
+            st.grain = g.as_bool().unwrap_or(st.grain);
+        } else if kind == StockKind::Sheet {
+            st.grain = false;
+        }
+        if let Some(p) = get("price") {
+            st.price = num(&p)?;
+        }
+        if st.thickness <= 0.0 || st.width <= 0.0 || (st.kind == StockKind::Board && st.board_lengths().is_empty()) || (st.kind == StockKind::Sheet && st.length <= 0.0) {
+            return err(tr!("script-err-cut-size"));
+        }
+        Ok(st)
+    }
+    e.register_fn("cut_list", || -> R<Map> {
+        with(|st| {
+            let p = plan(&st.model);
+            let mut out = Map::new();
+            let parts: Array = p
+                .parts
+                .iter()
+                .map(|x| {
+                    let o = st.model.cut_list.options(&x.name);
+                    let mut m = Map::new();
+                    m.insert("name".into(), Dynamic::from(x.name.clone()));
+                    m.insert("count".into(), Dynamic::from(x.count as i64));
+                    m.insert("length".into(), d(x.size[0]));
+                    m.insert("width".into(), d(x.size[1]));
+                    m.insert("thickness".into(), d(x.size[2]));
+                    m.insert("material".into(), Dynamic::from(x.material_name.clone()));
+                    m.insert("grain".into(), Dynamic::from(grain_name(o.grain).to_string()));
+                    m.insert("exclude".into(), Dynamic::from(o.exclude));
+                    Dynamic::from_map(m)
+                })
+                .collect();
+            let stock: Array = p
+                .plans
+                .iter()
+                .map(|sp| {
+                    let mut m = Map::new();
+                    m.insert("material".into(), Dynamic::from(sp.material_name.clone()));
+                    let board = sp.stock.kind == StockKind::Board;
+                    m.insert("kind".into(), Dynamic::from(if board { "board" } else { "sheet" }.to_string()));
+                    m.insert("thickness".into(), d(sp.stock.thickness));
+                    m.insert("width".into(), d(sp.stock.width));
+                    if !board {
+                        m.insert("length".into(), d(sp.stock.length));
+                    }
+                    m.insert("count".into(), Dynamic::from(sp.layouts.len() as i64));
+                    let buy: Array = sp
+                        .to_buy()
+                        .into_iter()
+                        .map(|(len, n)| {
+                            let mut b = Map::new();
+                            b.insert("length".into(), d(len));
+                            b.insert("count".into(), Dynamic::from(n as i64));
+                            Dynamic::from_map(b)
+                        })
+                        .collect();
+                    m.insert("buy".into(), Dynamic::from_array(buy));
+                    m.insert("waste".into(), Dynamic::from((sp.waste() * 1000.0).round() / 10.0));
+                    m.insert("cost".into(), Dynamic::from((sp.cost() * 100.0).round() / 100.0));
+                    let layouts: Array = sp
+                        .layouts
+                        .iter()
+                        .map(|l| {
+                            let pieces: Array = l
+                                .pieces
+                                .iter()
+                                .map(|pc| {
+                                    let mut q = Map::new();
+                                    q.insert("part".into(), Dynamic::from(p.parts[pc.part].name.clone()));
+                                    q.insert("x".into(), d(pc.x));
+                                    q.insert("y".into(), d(pc.y));
+                                    q.insert("w".into(), d(pc.w));
+                                    q.insert("h".into(), d(pc.h));
+                                    q.insert("rotated".into(), Dynamic::from(pc.rotated));
+                                    Dynamic::from_map(q)
+                                })
+                                .collect();
+                            let mut lm = Map::new();
+                            lm.insert("length".into(), d(l.length));
+                            lm.insert("pieces".into(), Dynamic::from_array(pieces));
+                            Dynamic::from_map(lm)
+                        })
+                        .collect();
+                    m.insert("layouts".into(), Dynamic::from_array(layouts));
+                    Dynamic::from_map(m)
+                })
+                .collect();
+            let issues: Array = p
+                .issues
+                .iter()
+                .map(|is| {
+                    let (part, kind) = match *is {
+                        Issue::NoStock { part } => (part, "no_stock"),
+                        Issue::TooBig { part } => (part, "too_big"),
+                        Issue::Thickness { part, .. } => (part, "thickness"),
+                    };
+                    let mut m = Map::new();
+                    m.insert("part".into(), Dynamic::from(p.parts[part].name.clone()));
+                    m.insert("issue".into(), Dynamic::from(kind.to_string()));
+                    Dynamic::from_map(m)
+                })
+                .collect();
+            out.insert("parts".into(), Dynamic::from_array(parts));
+            out.insert("stock".into(), Dynamic::from_array(stock));
+            out.insert("issues".into(), Dynamic::from_array(issues));
+            out.insert("cost".into(), Dynamic::from((p.cost() * 100.0).round() / 100.0));
+            Ok(out)
+        })
+    });
+    e.register_fn("set_stock", |material: ImmutableString, stock: Dynamic| -> R<()> {
+        let list: Vec<Stock> = if stock.is_unit() {
+            Vec::new()
+        } else if stock.is_array() {
+            stock.into_array().unwrap_or_default().iter().map(|v| v.clone().try_cast::<Map>().ok_or_else(|| tr!("script-err-cut-stock").into()).and_then(|m| stock_of(&m))).collect::<R<_>>()?
+        } else {
+            vec![stock_of(&stock.try_cast::<Map>().ok_or_else(|| Box::<EvalAltResult>::from(tr!("script-err-cut-stock")))?)?]
+        };
+        edit(|st| match st.model.materials.values_mut().find(|m| m.name == material.as_str()) {
+            Some(m) => {
+                m.stock = list;
+                Ok(())
+            }
+            None => err(tr!("script-err-cut-no-material", material = material.to_string())),
+        })
+    });
+    e.register_fn("cut_settings", |m: Map| -> R<()> {
+        edit(|st| {
+            for (k, v) in &m {
+                let v = num(v)?.max(0.0);
+                match k.as_str() {
+                    "kerf" => st.model.cut_list.kerf = v,
+                    "trim" => st.model.cut_list.trim = v,
+                    "min_offcut" => st.model.cut_list.min_offcut = v,
+                    "tolerance" => st.model.cut_list.tolerance = v,
+                    k => return err(tr!("script-err-cut-setting", key = k.to_string())),
+                }
+            }
+            Ok(())
+        })
+    });
+    e.register_fn("cut_part", |name: ImmutableString, m: Map| -> R<()> {
+        edit(|st| {
+            let mut o = st.model.cut_list.options(&name);
+            for (k, v) in &m {
+                match k.as_str() {
+                    "grain" => {
+                        o.grain = match v.to_string().as_str() {
+                            "length" => PartGrain::Length,
+                            "width" => PartGrain::Width,
+                            "any" => PartGrain::Any,
+                            g => return err(tr!("script-err-cut-grain", grain = g.to_string())),
+                        }
+                    }
+                    "exclude" => o.exclude = v.as_bool().map_err(|_| tr!("script-err-cut-exclude"))?,
+                    k => return err(tr!("script-err-cut-setting", key = k.to_string())),
+                }
+            }
+            if o == PartOptions::default() {
+                st.model.cut_list.parts.remove(name.as_str());
+            } else {
+                st.model.cut_list.parts.insert(name.to_string(), o);
+            }
+            Ok(())
+        })
     });
 }
 

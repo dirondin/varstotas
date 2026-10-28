@@ -329,3 +329,45 @@ fn children_by_name_and_object_fields() {
     assert!(r.error.is_none(), "{:?}", r.error);
     assert_eq!(r.output.trim(), "[true, vec3(100, 200, 300), vec3(0, 0, 0), 2, 3, true, false, true]");
 }
+
+#[test]
+fn cut_list_stock_and_options() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"
+        material("Plywood", "#d8b98a");
+        set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 });
+        material("Pine", "#e5cf9e");
+        set_stock("Pine", [#{ kind: "board", width: 95, thickness: 45, lengths: ["2.4 m", 3000], price: 5 }]);
+        for i in 0..3 {
+            let s = box(vec3(0, i * 500, 0), 800, 400, 18);
+            s.name = "Shelf";
+            paint(s, "Plywood");
+        }
+        let r = box(vec3(0, 2000, 0), 1400, 95, 45);
+        r.name = "Rail";
+        paint(r, "Pine");
+        cut_settings(#{ kerf: 4 });
+        cut_part("Rail", #{ grain: "length" });
+        let c = cut_list();
+        for p in c.parts { print(p.name + " " + p.count + " " + p.length + "x" + p.width + "x" + p.thickness + " " + p.material); }
+        for s in c.stock { print(s.material + " " + s.kind + " " + s.count + " " + s.buy[0].length + " " + s.cost); }
+        print(c.issues.len() + " " + c.cost);
+        "##,
+    );
+    assert_eq!(
+        r.output,
+        "Shelf 3 800.0x400.0x18.0 Plywood\nRail 1 1400.0x95.0x45.0 Pine\nPlywood sheet 1 2440.0 60.0\nPine board 1 2400.0 12.0\n0 72.0\n",
+        "{}",
+        r.output
+    );
+    assert_eq!(m.cut_list.kerf, 4.0);
+    assert!(m.cut_list.parts.is_empty(), "the default options are not stored");
+    let ply = m.materials.values().find(|x| x.name == "Plywood").unwrap();
+    assert_eq!(ply.stock.len(), 1);
+    assert!(ply.stock[0].grain);
+    // clearing the stock: the parts report it
+    go(&mut m, r#"set_stock("Plywood", ()); print(cut_list().issues.len());"#);
+    assert!(m.materials.values().find(|x| x.name == "Plywood").unwrap().stock.is_empty());
+}

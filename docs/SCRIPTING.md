@@ -106,6 +106,19 @@ Entity properties: `e.kind` (`"face"`, `"edge"`, `"vertex"`, `"group"`, `"compon
 
 Instead of an entity, a string can be passed anywhere — the name of a child group / component of the current context: `move("Door", vec3(0, 10, 0))`.
 
+## Cut list
+| Function | Result |
+|---|---|
+| `set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })` | what a material is bought as; an array sets several items, `()` clears it. A board: `#{ kind: "board", width: 95, thickness: 45, lengths: [2400, "3 m"], price: 5 }` (the price per metre) |
+| `cut_settings(#{ kerf: 3, trim: 10, min_offcut: 100, tolerance: 0.5 })` | the document's cutting settings (any subset of keys) |
+| `cut_part("Shelf", #{ grain: "length", exclude: false })` | per part name: grain `"length"`, `"width"` or `"any"` (may rotate), exclude from the cut list |
+| `cut_list()` | `#{ parts, stock, issues, cost }`: parts with name, count, length, width, thickness and material; per stock item its material, kind, sizes, `count`, `buy` (`[#{ length, count }]`), `waste` (%), `cost` and `layouts` (pieces with part index, x, y, w, h, rotated) |
+
+The parts are the innermost groups and components that have faces, sized by the bounding box in
+their own axes (length ≥ width ≥ thickness). Sheets are packed with guillotine cuts (what panel
+and track saws make), boards with first fit decreasing over the lengths on sale. The same plan is
+in Window → Cut List, with diagrams and PDF / SVG / CSV export.
+
 ## Example
 ```rhai
 material("Oak", "#C8A064");
@@ -178,6 +191,7 @@ Tools:
 - `model_info`;
 - `run_script` — Rhai code; one Undo step "Agent", an error changes nothing;
 - `screenshot` — a PNG of the current view;
+- `cut_list` — the cut list as data: sheets and boards to buy, waste, cost, issues;
 - `set_view`;
 - `undo`, `redo`;
 - `save`, `export`, `open`, `new_document` — marked as destructive, the application asks the user.

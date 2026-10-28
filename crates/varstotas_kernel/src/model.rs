@@ -204,6 +204,9 @@ pub struct Material {
     /// the defaults (a matte dielectric).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pbr: Option<crate::pbr::Pbr>,
+    /// What the material is bought as, for the cut list (see [`crate::cutlist`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stock: Vec<crate::cutlist::Stock>,
 }
 
 impl Material {
@@ -423,6 +426,9 @@ pub struct Model {
     /// the drawn edges; `None` = the library draws the model. See [`Model::set_preview`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<crate::texture::TextureImage>,
+    /// Cut-list settings (see [`crate::cutlist`]).
+    #[serde(default, skip_serializing_if = "crate::cutlist::CutSettings::is_default")]
+    pub cut_list: crate::cutlist::CutSettings,
 }
 
 /// Result of a model-wide ray pick.
@@ -474,6 +480,7 @@ impl Model {
             active_plane: None,
             generators: Default::default(),
             preview: None,
+            cut_list: Default::default(),
         }
     }
 
@@ -1094,7 +1101,7 @@ impl Model {
     }
 
     pub fn add_material(&mut self, name: &str, color: [f32; 4]) -> MaterialId {
-        self.materials.insert(Material { name: name.to_string(), color, texture: None, image: None, pbr: None })
+        self.materials.insert(Material { name: name.to_string(), color, texture: None, image: None, pbr: None, stock: Vec::new() })
     }
 
     pub fn add_tag(&mut self, name: &str) -> TagId {

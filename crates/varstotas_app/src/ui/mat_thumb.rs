@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn spheres_differ_by_material() {
-        let mut m = Material { name: "a".into(), color: [0.8, 0.2, 0.1, 1.0], texture: None, image: None, pbr: None };
+        let mut m = Material { name: "a".into(), color: [0.8, 0.2, 0.1, 1.0], texture: None, image: None, pbr: None, stock: Vec::new() };
         assert!(!wants_sphere(&m));
         m.pbr = Some(varstotas_kernel::Pbr { metallic: 1.0, roughness: 0.2, ..Default::default() });
         assert!(wants_sphere(&m));

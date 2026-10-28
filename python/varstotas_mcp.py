@@ -46,6 +46,19 @@ TOOLS = [
         "annotations": {"readOnlyHint": True},
     },
     {
+        "name": "cut_list",
+        "description": (
+            "The cut list of the model: parts (leaf groups / components with length, width, thickness, "
+            "material), the sheets and boards to buy per material with waste % and cost, the pieces' "
+            "positions on each, and issues (no stock, too big, thickness). Materials need stock first: "
+            "run_script with set_stock(material, #{kind: \"sheet\", length: 2440, width: 1220, "
+            "thickness: 18, grain: true, price: 60}) or a board #{kind: \"board\", width: 95, "
+            "thickness: 45, lengths: [2400, 3600], price: 5} (price per metre). Millimetres."
+        ),
+        "inputSchema": _obj({}),
+        "annotations": {"readOnlyHint": True},
+    },
+    {
         "name": "run_script",
         "description": (
             "Run Rhai code against the model (see api_reference), e.g. "
@@ -148,6 +161,8 @@ class Server:
             return text(self.bridge("docs"))
         if name == "model_info":
             return text(self.bridge("info"))
+        if name == "cut_list":
+            return text(self.bridge("eval", code="cut_list()", vars={}, label="Cut list").get("value"))
         if name == "run_script":
             r = self.bridge("eval", code=a["code"], vars={}, label=a.get("label") or "Agent")
             out = r.get("output") or ""

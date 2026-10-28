@@ -41,6 +41,7 @@ pub mod toolbar;
 pub mod tray;
 pub mod tray_lib;
 pub mod unfold;
+pub mod cutlist;
 pub mod workplanes;
 
 use crate::document::guarded;

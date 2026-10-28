@@ -138,6 +138,11 @@ impl VarstotasApp {
             .show(ui, |ui| self.material_textures(ui, big));
         super::tray_lib::spot("mated:textures", textures.header_response.rect.center());
         self.pbr_editor(ui);
+        let stock = egui::CollapsingHeader::new(RichText::new(tr!("mated-stock")).strong())
+            .id_salt(("mated_stock", big))
+            .default_open(false)
+            .show(ui, |ui| self.material_stock(ui));
+        super::tray_lib::spot("mated:stock", stock.header_response.rect.center());
     }
 
     /// Swatch, name, usage and actions. False when there is no material to edit.

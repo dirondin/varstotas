@@ -12,7 +12,9 @@ everything can be scripted.
 - **Direct modelling** — lines, arcs, Bézier and freehand curves, Push/Pull, Offset, Sweep,
   chamfer and fillet, with inference snapping (endpoints, midpoints, axes, parallel /
   perpendicular) and typed exact values.
-- **Making things** — dimensions on the model; preparing models for a slicer (checks and repair,
+- **Making things** — a cut list for furniture: stock on materials (sheets and boards with price),
+  cutting diagrams optimized for straight saw cuts, waste, shopping list and cost, PDF / SVG / CSV;
+  dimensions on the model; preparing models for a slicer (checks and repair,
   wall-thickness maps, cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF /
   DXF; sheets with scaled views; simple physics (drop objects, drape cloth).
 - **Organising** — groups and reusable components, tags, outliner, scenes, section planes,

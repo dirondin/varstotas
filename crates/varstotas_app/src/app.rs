@@ -271,6 +271,8 @@ pub enum Action {
     ExportDrawing,
     /// Window → Unfold: the flat pattern window.
     Unfold,
+    /// Window → Cut List.
+    CutList,
     /// Window → Physics: drop the selected groups / components.
     Physics,
     /// Window → Materials Online Library: the online materials window.
@@ -582,6 +584,8 @@ pub struct VarstotasApp {
     pub(crate) text3d_dialog: Option<crate::text3d::Text3dParams>,
     /// Window → Unfold window.
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
+    /// Window → Cut List window.
+    pub(crate) cutlist: crate::ui::cutlist::CutListState,
     /// Window → Physics window and its run.
     pub(crate) physics: crate::ui::physics::PhysicsState,
     /// Window → Sheets window.
@@ -764,6 +768,7 @@ impl VarstotasApp {
             last_vector: None,
             text3d_dialog: None,
             unfold: Default::default(),
+            cutlist: Default::default(),
             physics: Default::default(),
             sheets: Default::default(),
             planes_window: Default::default(),
@@ -1411,6 +1416,7 @@ impl VarstotasApp {
             Action::PreviewRemove => self.set_doc_preview(None),
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
+            Action::CutList => self.cutlist.open = true,
             Action::Physics => self.physics.open = true,
             Action::OnlineMaterials => self.online.open = !self.online.open,
             Action::UvEditor => self.open_uv_editor(),
@@ -2650,6 +2656,7 @@ impl eframe::App for VarstotasApp {
         self.poll_external_edits();
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
+        self.cut_list_window(&ctx);
         self.physics_window(&ctx);
         self.sheets_window(&ctx);
         self.work_planes_window(&ctx);

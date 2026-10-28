@@ -75,6 +75,7 @@ pub enum Cmd {
     FlipBlue,
     Solid(SolidOp),
     Unfold,
+    CutList,
     Physics,
     Text3d,
     ZoomExtents,
@@ -105,13 +106,13 @@ pub enum Cmd {
 
 /// The Window menu below the side bar and its cards, by feature: the model, the online
 /// libraries, its look, making things from it, scripting; `None`: a separator.
-pub const WINDOW_MENU: [Option<Cmd>; 20] = {
+pub const WINDOW_MENU: [Option<Cmd>; 21] = {
     use Cmd::*;
     [
         Some(ModelInfo), Some(ComponentParams), Some(WorkPlanes), None,
         Some(Library3d), Some(MaterialsOnline), None,
         Some(UvEditor), Some(Render), None,
-        Some(Physics), Some(Unfold), Some(Sheets), Some(PrintCheck), None,
+        Some(Physics), Some(Unfold), Some(CutList), Some(Sheets), Some(PrintCheck), None,
         Some(GeneratorEditor), Some(Console), Some(Log), None,
         Some(Preferences),
     ]
@@ -276,6 +277,7 @@ impl Cmd {
             Cmd::FlipBlue => "cmd-flip-blue",
             Cmd::Solid(op) => return op.name(),
             Cmd::Unfold => "cmd-unfold",
+            Cmd::CutList => "cmd-cut-list",
             Cmd::Physics => "cmd-physics",
             Cmd::Text3d => "cmd-text-3d",
             Cmd::ZoomExtents => "cmd-zoom-extents",
@@ -369,6 +371,7 @@ impl Cmd {
             Cmd::FlipBlue => Icon::Flip(2),
             Cmd::Solid(op) => Icon::Solids(SolidOp::ALL.iter().position(|o| *o == op).unwrap_or(0) as u8),
             Cmd::Unfold => Icon::Unfold,
+            Cmd::CutList => Icon::CutList,
             Cmd::Physics => Icon::Physics,
             Cmd::Text3d => Icon::Text3d,
             Cmd::ZoomExtents => Icon::ZoomExtents,
@@ -481,6 +484,7 @@ impl Cmd {
                 SolidOp::Split => "cmd-desc-solid-split",
             }),
             Cmd::Unfold => tr!("cmd-desc-unfold"),
+            Cmd::CutList => tr!("cmd-desc-cut-list"),
             Cmd::Physics => tr!("cmd-desc-physics"),
             Cmd::Text3d => tr!("cmd-desc-text-3d"),
             Cmd::ZoomExtents => tr!("cmd-desc-zoom-extents"),
@@ -576,6 +580,7 @@ impl Cmd {
             Cmd::FlipBlue => Action::FlipAlong(2),
             Cmd::Solid(op) => Action::SolidTool(op),
             Cmd::Unfold => Action::Unfold,
+            Cmd::CutList => Action::CutList,
             Cmd::Physics => Action::Physics,
             Cmd::Text3d => Action::Text3d,
             Cmd::ZoomExtents => Action::ZoomExtents,
@@ -613,6 +618,7 @@ impl Cmd {
             Cmd::SideBar => Some(app.prefs.tray_open),
             Cmd::Card(n) => Some(!app.prefs.tray_hidden.iter().any(|h| h == n)),
             Cmd::Sheets => Some(app.sheets.open),
+            Cmd::CutList => Some(app.cutlist.open),
             Cmd::Render => Some(app.render_window.open),
             Cmd::WorkPlanes => Some(app.planes_window.open),
             Cmd::PrintCheck => Some(app.printing.open && app.printing.advanced_tab.is_none() && !app.printing.repair_tab),

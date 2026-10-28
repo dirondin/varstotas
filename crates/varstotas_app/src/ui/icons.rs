@@ -141,6 +141,8 @@ pub enum Icon {
     /// A solid tool, by its index in `SolidOp::ALL`.
     Solids(u8),
     Unfold,
+    /// Window → Cut List: a sheet with parts laid out on it.
+    CutList,
     /// Window → Physics: a box falling onto a block.
     Physics,
     UvEditor,

@@ -36,6 +36,13 @@ planar origin. For `r = R(-angle) × (q - offset)`, texture coordinates in mm ar
 older placements. Source atlas coordinates are fitted at the actual welded mesh vertices.
 Older files cannot recover discarded UV shear without their original source assets.
 
+Materials optionally store `stock`: what the material is bought as, a list of
+`{ "kind": "sheet" | "board", "thickness", "length", "width", "lengths": [...], "grain", "price" }`
+(mm; a sheet uses length × width, a board its width and the lengths on sale). The model optionally
+stores `cut_list`: `{ "kerf", "trim", "min_offcut", "tolerance", "parts": { "<part name>": { "grain":
+"Length" | "Width" | "Any", "exclude" } } }`. Both are omitted while empty or default, so older
+readers and files are unaffected.
+
 Scenes optionally store the independent `style.triangles` display checkbox (default false).
 
 ## Versions and compatibility

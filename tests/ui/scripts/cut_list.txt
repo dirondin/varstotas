@@ -1,0 +1,28 @@
+# Cut List: a plywood bookcase with pine rails, stock set by script, the window, a part picked
+# from the table, the parts tab, export to PDF / SVG / CSV.
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 }); material("Pine", "#e5cf9e"); set_stock("Pine", #{ kind: "board", width: 95, thickness: 45, lengths: [2400, 3000], price: 5 }); for i in 0..2 { let s = box(vec3(i * 782, 0, 0), 18, 300, 1800); s.name = "Side"; paint(s, "Plywood"); } for i in 0..5 { let s = box(vec3(18, 0, i * 400), 764, 300, 18); s.name = "Shelf"; paint(s, "Plywood"); } let b = box(vec3(0, 300, 0), 800, 18, 1800); b.name = "Back"; paint(b, "Plywood"); for i in 0..3 { let r = box(vec3(0, -200, i * 600), 1100, 95, 45); r.name = "Rail"; paint(r, "Pine"); }
+wait 5
+view iso
+zoom_extents
+wait 5
+action cut_list
+wait 10
+# 4 part rows (Side, Shelf, Back, Rail), 2 stock items, 2 sheets ($120) + 2 boards of 2.4 m at $5/m, no issues
+expect cutlist=(true, 4, 2, 4, 0, "144.00")
+screenshot shots/cut_list_window.bmp
+action cut_list_page 3
+wait 5
+screenshot shots/cut_list_boards.bmp
+action cut_list_pick 2
+wait 5
+action cut_list_tab parts
+wait 5
+screenshot shots/cut_list_parts.bmp
+action export_cut_list cut_list.pdf
+action export_cut_list cut_list.svg
+action export_cut_list cut_list.csv
+wait 3
+action cut_list_tab diagrams
+action cut_list_page 1
+wait 5
+quit

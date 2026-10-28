@@ -383,7 +383,7 @@ pub fn material_from_maps(name: &str, width_mm: f64, maps: Vec<(MapKind, String,
             }
         }
     }
-    Material { name: name.to_string(), color: [color[0], color[1], color[2], 1.0], texture: None, image, pbr: Some(pbr) }
+    Material { name: name.to_string(), color: [color[0], color[1], color[2], 1.0], texture: None, image, pbr: Some(pbr), stock: Vec::new() }
 }
 
 /// Download `asset`'s 1K maps and build its material.

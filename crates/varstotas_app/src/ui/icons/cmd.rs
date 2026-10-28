@@ -10,6 +10,7 @@ const CYAN: Color32 = Color32::from_rgb(0x1F, 0xA9, 0xC4);
 const MAGENTA: Color32 = Color32::from_rgb(0xC8, 0x3C, 0xC0);
 const PURPLE: Color32 = Color32::from_rgb(0x9B, 0x59, 0xD0);
 const BACK: Color32 = Color32::from_rgb(0x9D, 0xB0, 0xC9);
+const WOOD: Color32 = Color32::from_rgb(0xE6, 0xC8, 0x96);
 
 fn rect(pen: &Pen, (x0, y0): (f32, f32), (x1, y1): (f32, f32), fill: Color32, stroke: Stroke) {
     pen.poly_c(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)], fill, stroke);
@@ -343,6 +344,14 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
                 let fill = if i == 1 { BLUE_SOFT } else { FILL };
                 rect(pen, (x, y), (x + 5.0, y + 5.0), fill, pen.thin());
             }
+        }
+        Icon::CutList => {
+            // a sheet with parts laid out on it and the saw's cut line
+            rect(pen, (2.5, 5.0), (21.5, 19.0), FILL, pen.stroke());
+            rect(pen, (2.5, 5.0), (11.0, 13.0), WOOD, pen.thin());
+            rect(pen, (11.8, 5.0), (21.5, 10.0), WOOD, pen.thin());
+            rect(pen, (2.5, 13.8), (8.0, 19.0), WOOD, pen.thin());
+            pen.line_c(&[(11.4, 2.5), (11.4, 21.5)], Stroke::new(W * pen.s, ORANGE));
         }
         Icon::UvEditor => {
             // a checkered tile with an island laid on it: four corners joined by the accent
