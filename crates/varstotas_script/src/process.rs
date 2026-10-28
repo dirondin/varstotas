@@ -10,12 +10,20 @@ use std::time::{Duration, Instant};
 type OutputObserver<'a> = dyn FnMut(usize, &[u8]) + 'a;
 type PrefixState = (Arc<AtomicUsize>, Arc<Mutex<Vec<u8>>>);
 
-/// Starts the child in its own process group (Unix), so [`terminate`] kills its children too.
-pub fn isolate_group(#[cfg_attr(not(unix), allow(unused_variables))] cmd: &mut Command) {
+/// Starts the child in its own process group (Unix), so [`terminate`] kills its children too;
+/// on Windows without a console window (the app is a GUI program: a console child would
+/// otherwise open one, e.g. for every Python plugin call).
+pub fn isolate_group(cmd: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
 }
 

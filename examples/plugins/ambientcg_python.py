@@ -26,7 +26,9 @@ def get(url, out=None):
     cmd = ["curl", "-sSfL", "--max-time", "180", "--user-agent", "Varstotas", url]
     if out:
         cmd += ["-o", out]
-    return subprocess.run(cmd, check=True, capture_output=True).stdout
+    # no console window per download on Windows
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.run(cmd, check=True, capture_output=True, creationflags=flags).stdout
 
 
 args = json.load(sys.stdin)
