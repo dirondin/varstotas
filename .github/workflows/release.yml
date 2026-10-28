@@ -1,5 +1,4 @@
-# A release-* tag: version check (Cargo.toml, the Flatpak metainfo's release entry), unit tests,
-# a test Flatpak build (flatpak.yml) and release builds on macOS (universal) and on Windows and
+# A release-* tag: version check (Cargo.toml), unit tests and release builds on macOS (universal) and on Windows and
 # Linux for x86_64 and aarch64; the packages (macOS .dmg + .zip, Windows installer + .zip,
 # Linux .AppImage + .tar.gz + .deb) and their SHA256SUMS.txt are kept as the run's `release-files` artifact. Nothing is published here:
 # Actions → Publish release, run from the tag, publishes exactly these files (publish.yml).
@@ -42,20 +41,21 @@ jobs:
             echo "::error::Tag $TAG does not match the workspace version $cargo_version in Cargo.toml (expected release-$cargo_version)"
             exit 1
           fi
-          # Flathub shows the releases listed in the AppStream metadata
-          metainfo=packaging/flatpak/io.github.dirondin.Varstotas.metainfo.xml
-          if ! grep -q "<release version=\"$cargo_version\"" "$metainfo"; then
-            echo "::error::$metainfo has no <release version=\"$cargo_version\" date=\"YYYY-MM-DD\"> entry"
-            exit 1
-          fi
-          # screenshots by stable URLs: this release's tag, files that exist in it
-          prefix="https://raw.githubusercontent.com/dirondin/varstotas/$TAG/"
-          while read -r url; do
-            if [[ "$url" != "$prefix"* || ! -f "${url#"$prefix"}" ]]; then
-              echo "::error::$metainfo: screenshot $url is not a file of $TAG (expected $prefix<path>)"
-              exit 1
-            fi
-          done < <(sed -n 's:.*<image>\(.*\)</image>.*:\1:p' "$metainfo")
+          # Flatpak is off (see flatpak.yml), and with it the metainfo checks
+          # # Flathub shows the releases listed in the AppStream metadata
+          # metainfo=packaging/flatpak/io.github.dirondin.Varstotas.metainfo.xml
+          # if ! grep -q "<release version=\"$cargo_version\"" "$metainfo"; then
+          #   echo "::error::$metainfo has no <release version=\"$cargo_version\" date=\"YYYY-MM-DD\"> entry"
+          #   exit 1
+          # fi
+          # # screenshots by stable URLs: this release's tag, files that exist in it
+          # prefix="https://raw.githubusercontent.com/dirondin/varstotas/$TAG/"
+          # while read -r url; do
+          #   if [[ "$url" != "$prefix"* || ! -f "${url#"$prefix"}" ]]; then
+          #     echo "::error::$metainfo: screenshot $url is not a file of $TAG (expected $prefix<path>)"
+          #     exit 1
+          #   fi
+          # done < <(sed -n 's:.*<image>\(.*\)</image>.*:\1:p' "$metainfo")
           echo "Varstotas $cargo_version"
 
   build:
@@ -128,10 +128,10 @@ jobs:
             dist/*.deb
           if-no-files-found: error
 
-  # the Flatpak is built from the tag on Flathub after publishing; this proves that it builds
-  flatpak:
-    needs: check
-    uses: ./.github/workflows/flatpak.yml
+  # Flatpak is off: no Flathub submission (its Generative AI policy) and no bundle in the release
+  # flatpak:
+  #   needs: check
+  #   uses: ./.github/workflows/flatpak.yml
 
   bundle:
     name: Release files
@@ -140,7 +140,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          # only the packages: flatpak.yml uploads its test bundles (varstotas-<arch>.flatpak) to the same run
+          # only the packages
           pattern: package-*
           path: dist
           merge-multiple: true

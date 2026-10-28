@@ -1,6 +1,7 @@
 # Brings the package managers up to a published release: a pull request to winget-pkgs, the
 # Homebrew tap and the Scoop bucket (dirondin/homebrew-tap, dirondin/scoop-bucket), AUR
-# varstotas-bin, a pull request to flathub/io.github.dirondin.Varstotas.
+# varstotas-bin. The Flathub job is commented out: no Flathub submission (its Generative AI
+# policy); it needs scripts/flatpak-manifest.py back from git history.
 # Publish release calls it; by hand (e.g. for a release published before, or after a failure):
 # Actions → Package managers → Run workflow (from master) with the tag.
 # Each job runs only when its secret is set (setup: .claude/notes/DISTRIBUTION.md), and a failure
@@ -19,8 +20,6 @@ on:
       TAP_TOKEN:
         required: false
       AUR_SSH_KEY:
-        required: false
-      FLATHUB_TOKEN:
         required: false
   workflow_dispatch:
     inputs:
@@ -152,51 +151,51 @@ jobs:
           ssh_private_key: ${{ secrets.AUR_SSH_KEY }}
           commit_message: varstotas ${{ needs.release.outputs.version }}
 
-  flathub:
-    name: Flathub
-    needs: release
-    runs-on: ubuntu-latest
-    env:
-      FLATHUB_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
-      VERSION: ${{ needs.release.outputs.version }}
-      COMMIT: ${{ needs.release.outputs.commit }}
-      APP: io.github.dirondin.Varstotas
-      # flatpak-builder-tools' cargo/flatpak-cargo-generator.py (the same commit as flatpak.yml)
-      GENERATOR_URL: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/9d86d336a39b9af38b86f114b6ce5820fe260f91/cargo/flatpak-cargo-generator.py
-    steps:
-      - if: env.FLATHUB_TOKEN == ''
-        run: echo "::notice::FLATHUB_TOKEN is not set, no Flathub pull request"
-      # the app's repository appears once the first submission (to flathub/flathub) is merged
-      - id: repository
-        if: env.FLATHUB_TOKEN != ''
-        run: |
-          if gh repo view "flathub/$APP" --json name >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::flathub/$APP does not exist yet, no Flathub pull request"
-          fi
-      # the manifest template and Cargo.lock of the release itself
-      - if: steps.repository.outputs.exists == 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release.outputs.commit }}
-      # Flathub's bot test-builds the pull request; merging it publishes the update
-      - name: Pull request to flathub/${{ env.APP }}
-        if: steps.repository.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
-        run: |
-          python3 -m venv /tmp/generator
-          /tmp/generator/bin/pip install -q 'aiohttp>=3.9.5,<4' 'PyYAML>=6.0.2,<7' 'tomlkit>=0.13.3,<1'
-          curl -sSfL -o /tmp/flatpak-cargo-generator.py "$GENERATOR_URL"
-          git clone -q "https://x-access-token:$FLATHUB_TOKEN@github.com/flathub/$APP.git" /tmp/flathub
-          GENERATOR=/tmp/flatpak-cargo-generator.py /tmp/generator/bin/python \
-            scripts/flatpak-manifest.py /tmp/flathub "$VERSION" "$COMMIT"
-          cd /tmp/flathub
-          git switch -q -c "$TAG"
-          git add "$APP.yml" cargo-sources.json
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Update to $VERSION"
-          git push -q -f origin "$TAG"
-          gh pr create --repo "flathub/$APP" --base master --head "$TAG" --title "Update to $VERSION" \
-            --body "Varstotas $VERSION: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
+# flathub:
+#   name: Flathub
+#   needs: release
+#   runs-on: ubuntu-latest
+#   env:
+#     FLATHUB_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+#     VERSION: ${{ needs.release.outputs.version }}
+#     COMMIT: ${{ needs.release.outputs.commit }}
+#     APP: io.github.dirondin.Varstotas
+#     # flatpak-builder-tools' cargo/flatpak-cargo-generator.py (the same commit as flatpak.yml)
+#     GENERATOR_URL: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/9d86d336a39b9af38b86f114b6ce5820fe260f91/cargo/flatpak-cargo-generator.py
+#   steps:
+#     - if: env.FLATHUB_TOKEN == ''
+#       run: echo "::notice::FLATHUB_TOKEN is not set, no Flathub pull request"
+#     # the app's repository appears once the first submission (to flathub/flathub) is merged
+#     - id: repository
+#       if: env.FLATHUB_TOKEN != ''
+#       run: |
+#         if gh repo view "flathub/$APP" --json name >/dev/null 2>&1; then
+#           echo "exists=true" >> "$GITHUB_OUTPUT"
+#         else
+#           echo "::notice::flathub/$APP does not exist yet, no Flathub pull request"
+#         fi
+#     # the manifest template and Cargo.lock of the release itself
+#     - if: steps.repository.outputs.exists == 'true'
+#       uses: actions/checkout@v4
+#       with:
+#         ref: ${{ needs.release.outputs.commit }}
+#     # Flathub's bot test-builds the pull request; merging it publishes the update
+#     - name: Pull request to flathub/${{ env.APP }}
+#       if: steps.repository.outputs.exists == 'true'
+#       env:
+#         GH_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+#       run: |
+#         python3 -m venv /tmp/generator
+#         /tmp/generator/bin/pip install -q 'aiohttp>=3.9.5,<4' 'PyYAML>=6.0.2,<7' 'tomlkit>=0.13.3,<1'
+#         curl -sSfL -o /tmp/flatpak-cargo-generator.py "$GENERATOR_URL"
+#         git clone -q "https://x-access-token:$FLATHUB_TOKEN@github.com/flathub/$APP.git" /tmp/flathub
+#         GENERATOR=/tmp/flatpak-cargo-generator.py /tmp/generator/bin/python \
+#           scripts/flatpak-manifest.py /tmp/flathub "$VERSION" "$COMMIT"
+#         cd /tmp/flathub
+#         git switch -q -c "$TAG"
+#         git add "$APP.yml" cargo-sources.json
+#         git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+#           commit -q -m "Update to $VERSION"
+#         git push -q -f origin "$TAG"
+#         gh pr create --repo "flathub/$APP" --base master --head "$TAG" --title "Update to $VERSION" \
+#           --body "Varstotas $VERSION: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"

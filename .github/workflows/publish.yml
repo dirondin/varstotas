@@ -101,7 +101,7 @@ jobs:
             echo "::warning::The release is not immutable: enable release immutability in Settings → General → Releases"
           fi
 
-  # package managers (winget, Homebrew tap, Scoop bucket, AUR, Flathub), for releases only
+  # package managers (winget, Homebrew tap, Scoop bucket, AUR), for releases only
   packages:
     needs: publish
     if: needs.publish.outputs.prerelease == 'false'

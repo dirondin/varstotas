@@ -1,6 +1,7 @@
 # Test build of the Flatpak (packaging/flatpak) from this checkout, then Flathub's linter (its
 # findings are reported, not fatal: the screenshot ones below are expected).
-# Release build runs it for every release tag; by hand: Actions → Flatpak → Run workflow.
+# OFF: no Flathub submission (its Generative AI policy), Release build no longer calls it and the
+# workflow is disabled in GitHub; it needs scripts/flatpak-manifest.py back from git history.
 # x86_64 and aarch64, as Flathub builds both; the bundles (varstotas-<arch>.flatpak) are kept as
 # artifacts: flatpak install --user <file>.
 name: Flatpak
