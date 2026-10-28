@@ -109,7 +109,8 @@ impl FaceTextures {
     fn create_texture(device: &wgpu::Device, side: u32, layers: u32, mips: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some("varstotas face textures"),
-            size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: layers.max(1) },
+            // at least 2 layers: OpenGL takes a 1-layer texture for a plain 2D one, not an array
+            size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: layers.max(2) },
             mip_level_count: mips,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,

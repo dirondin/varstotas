@@ -24,7 +24,8 @@ struct PostU {
 @group(1) @binding(2) var p_gbuf: texture_2d<f32>;
 @group(1) @binding(3) var p_ao: texture_2d<f32>;
 @group(1) @binding(4) var p_bloom: texture_2d<f32>;
-@group(1) @binding(5) var p_depth: texture_depth_multisampled_2d;
+// the depth buffer as unfilterable float: OpenGL (GLSL) cannot textureLoad a depth texture
+@group(1) @binding(5) var p_depth: texture_multisampled_2d<f32>;
 @group(1) @binding(6) var p_samp: sampler;
 @group(1) @binding(7) var<uniform> pu: PostU;
 
@@ -90,7 +91,7 @@ fn gbuf_normal(t: vec4<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_post_depth(in: PostV) -> @location(0) vec4<f32> {
-    let d = textureLoad(p_depth, vec2<i32>(in.pos.xy), 0);
+    let d = textureLoad(p_depth, vec2<i32>(in.pos.xy), 0).x;
     if d <= 0.0 {
         return vec4<f32>(FAR);
     }

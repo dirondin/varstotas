@@ -534,6 +534,16 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 6,
+                    visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1660,7 +1670,7 @@ impl Renderer {
             return false;
         }
         if self.post.is_none() {
-            self.post = Some(post::Post::new(&rs.device, &self.bgl, &self.shader, self.color_format));
+            self.post = Some(post::Post::new(&rs.device, &self.bgl, &self.shader, self.color_format, post::lin_format(&rs.adapter)));
         }
         if self.pipelines_hdr.is_none() {
             self.pipelines_hdr = Some(build_pipelines(&rs.device, &self.shader, &self.layouts, self.color_format, true));
@@ -1906,6 +1916,7 @@ fn globals_bind_group(
             wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&env.view) },
             wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(&env.sampler) },
             wgpu::BindGroupEntry { binding: 5, resource: env.uniform.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&shadow.view) },
         ],
     })
 }

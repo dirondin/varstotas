@@ -77,6 +77,9 @@ fn highlight_edge(c: vec4<f32>, state: u32) -> vec4<f32> {
 @group(0) @binding(0) var<uniform> g: Globals;
 @group(0) @binding(1) var shadow_map: texture_depth_2d;
 @group(0) @binding(2) var shadow_sampler: sampler_comparison;
+// the same shadow map as unfilterable float for the PCSS blocker search (textureLoad): OpenGL
+// (GLSL) cannot textureLoad a depth texture
+@group(0) @binding(6) var shadow_depths: texture_2d<f32>;
 
 // Environment of the Realistic style (see env.rs): equirect panorama with mips + SH irradiance.
 struct EnvU {
@@ -237,7 +240,7 @@ fn shadow_pcss(uv: vec2<f32>, z: f32, p: vec3<f32>) -> f32 {
     var sum = 0.0;
     for (var i = 0; i < 16; i++) {
         let t = clamp(uv + rot * POISSON[i] * search, vec2<f32>(0.0), vec2<f32>(0.9999));
-        let d = textureLoad(shadow_map, vec2<i32>(t * dims), 0);
+        let d = textureLoad(shadow_depths, vec2<i32>(t * dims), 0).x;
         if d < z - 1.5 * texel {
             blockers += 1.0;
             sum += d;

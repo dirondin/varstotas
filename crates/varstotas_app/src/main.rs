@@ -102,6 +102,12 @@ fn main() -> eframe::Result<()> {
         setup.device_descriptor = std::sync::Arc::new(move |adapter| {
             use egui_wgpu::wgpu;
             let mut d = base(adapter);
+            // OpenGL (no Vulkan driver: some VMs, a Flatpak whose Mesa does not drive the GPU):
+            // egui asks for WebGL2's limits, whose 16 KB uniform buffers cannot hold the PBR
+            // material table (32 KB); ask for what the driver has instead.
+            if adapter.get_info().backend == wgpu::Backend::Gl {
+                d.required_limits = adapter.limits();
+            }
             if adapter.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY) && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none() {
                 d.required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
                 let have = adapter.limits();
