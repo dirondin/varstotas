@@ -408,9 +408,32 @@ pub fn parse_kenney(html: &str) -> Vec<ModelAsset> {
         .collect()
 }
 
-/// The pack's zip on its Kenney page.
+/// The pack's zip on its Kenney page (older pages link it directly).
 pub fn kenney_zip(html: &str) -> Option<String> {
     html.split(['"', '\'']).find(|s| s.starts_with("https://kenney.nl/media/") && s.to_lowercase().ends_with(".zip")).map(str::to_string)
+}
+
+/// The download id on a Kenney page (`data-download-id`): the page's script asks
+/// `kenney.nl/download-link/<id>` for a signed, short-lived zip link.
+pub fn kenney_download_id(html: &str) -> Option<String> {
+    let rest = &html[html.find("data-download-id=")? + "data-download-id=".len()..];
+    let quote = rest.chars().next().filter(|c| *c == '\'' || *c == '"')?;
+    let id = rest[1..].split(quote).next()?;
+    (!id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric())).then(|| id.to_string())
+}
+
+/// The zip of a Kenney pack: the page's link, else the signed link for its download id (the
+/// site gives it only with the page as Referer).
+fn kenney_pack_zip(page: &str) -> Result<String, String> {
+    let html = String::from_utf8_lossy(&fetch(page)?).into_owned();
+    if let Some(zip) = kenney_zip(&html) {
+        return Ok(zip);
+    }
+    let id = kenney_download_id(&html).ok_or_else(|| tr!("model-lib-err-no-download"))?;
+    let headers = [("Referer".to_string(), page.to_string())];
+    let link = varstotas_script::network::fetch(&format!("https://kenney.nl/download-link/{id}"), &headers, std::time::Duration::from_secs(60), || false)?;
+    let link: Value = serde_json::from_slice(&link).map_err(|e| e.to_string())?;
+    link.get("url").and_then(Value::as_str).filter(|u| u.starts_with("https://kenney.nl/")).map(str::to_string).ok_or_else(|| tr!("model-lib-err-no-download"))
 }
 
 /// Quaternius' pack list (quaternius.com).
@@ -591,9 +614,7 @@ fn fetch_asset(asset: &ModelAsset, dir: &Path) -> Result<Value, String> {
         }
         ModelSource::Smithsonian | ModelSource::Nasa | ModelSource::Web | ModelSource::Favourites | ModelSource::History => Ok(json!({ "url": asset.file })),
         ModelSource::Kenney => {
-            let html = fetch(&asset.page)?;
-            let zip = kenney_zip(&String::from_utf8_lossy(&html)).ok_or_else(|| tr!("model-lib-err-no-download"))?;
-            Ok(json!({ "url": zip }))
+            Ok(json!({ "url": kenney_pack_zip(&asset.page)? }))
         }
         ModelSource::Quaternius => Err(tr!("model-lib-err-quaternius-browser")),
         ModelSource::Plugin(p) => call(&p.plugin, "download", vec![("id", json!(asset.id)), ("dir", json!(dir.to_string_lossy())), ("params", Value::Object(p.params.clone()))]),
@@ -1139,6 +1160,9 @@ mod tests {
         assert_eq!((a[0].id.as_str(), a[0].name.as_str(), a[0].category.as_str(), a[0].license.as_str()), ("car-kit", "Car Kit", "Blocky Characters", "CC0"));
         assert!(a[0].pack && a[0].thumb.ends_with("preview.png") && a[0].format.contains("GLB"));
         assert_eq!(kenney_zip("<a href=\"https://kenney.nl/media/pages/assets/car-kit/abc/kenney_car-kit.zip\">"), Some("https://kenney.nl/media/pages/assets/car-kit/abc/kenney_car-kit.zip".into()));
+        let page = "<a id='donate-text' href='#' data-download-id='6173736574732f6d696e692d736b617465' onclick='return initiateDownload(this)'>";
+        assert_eq!(kenney_download_id(page), Some("6173736574732f6d696e692d736b617465".into()));
+        assert_eq!(kenney_download_id("data-download-id='../x'"), None);
         let q = r#"<div class="pack"><a href="/packs/ultimatespaceKit.html"><img src="/assets/images/thumbnails/space.jpg"><div class="PackText">Ultimate Space Kit</div></a>
             <div class="viewtag tags">Sci-Fi</div><div class="viewtag tags">Vehicles</div></div>
             <div class="pack"><a href="/packs/ultimatespaceKit.html">dup</a></div>"#;
