@@ -184,6 +184,14 @@ Items 2 and 4 agreed with the owner on 2026-10-19.
    - ✅ Make Unique: a component with parameters has its own wizard, unique generated ones, an item in the context menus; re-inserting from the library after a model edit gives the original (2026-10-20).
    - ✅ Document generators are always in In Model with their own script (Apply rebuilds all instances), Make Unique copies the generator ("Shelf 2") (2026-10-20).
 
+## W — Workshop: from the model to the cuts (owner's decision of 2026-10-28)
+Takes a furniture model to the workshop, which is what should make Varstotas stand out among free modellers. Plan: `docs/WORKSHOP-PLAN.md`.
+- **Batch 1 — stock and the cut-list optimizer.** Materials describe what they are bought as (sheet, board or linear: thickness, size, grain, price). Parts from the parts list are packed onto sheets with guillotine cuts (kerf, trim, grain-aware rotation) and onto boards as 1D cutting stock. Window → Cut List: diagrams, waste, shopping list, cost. Output: PDF / SVG diagrams, CSV, a diagram on a sheet, `cut_list()` in scripts and MCP.
+- **Batch 2 — edge banding, labels and cost.** Banded edges and metres of banding; part numbers on the model and diagrams; printable part labels; hardware in the shopping list and cost.
+- **Batch 3 — joinery.** A Joint tool between two touching parts: screws / confirmat / dowels, groove and rabbet, mortise and tenon, box joint and dovetail, pocket hole. Parametric and editable like a generator; included in the cut list.
+- **Batch 4 — exploded view and assembly instructions.** Exploded view from the joint graph; assembly steps as scenes; an instructions booklet as a PDF through sheets.
+- **Showcase:** a demo project (shelf or wardrobe) with diagrams and instructions, README media, a post to woodworking / DIY communities.
+
 ## Quality (parallel with M4–M7)
 - Topology robustness on large and "dirty" models, precision (f64 up to the renderer).
 - Kernel fuzz tests, benchmarks and clippy/tests in CI, application auto-update.
