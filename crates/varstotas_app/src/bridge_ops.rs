@@ -64,6 +64,8 @@ pub struct BridgeState {
     /// Started on the first Python script, or at once when other clients may connect.
     pub server: Option<Bridge>,
     ctx: Option<egui::Context>,
+    /// The last start failed: Preferences does not retry it every frame (a Python script does).
+    start_failed: bool,
     pub txn: Option<Txn>,
     /// Destructive calls waiting for the user's answer.
     pub confirm: VecDeque<(String, Request, u64, Option<HashSet<PathBuf>>)>,
@@ -145,8 +147,12 @@ impl VarstotasApp {
                 Ok(mut b) => {
                     b.publish(self.prefs.bridge_external);
                     self.bridge.server = Some(b);
+                    self.bridge.start_failed = false;
                 }
-                Err(e) => log::warn!("bridge: cannot listen: {e}"),
+                Err(e) => {
+                    log::warn!("bridge: cannot listen: {e}");
+                    self.bridge.start_failed = true;
+                }
             }
         }
         self.bridge.server.as_ref()
@@ -157,7 +163,7 @@ impl VarstotasApp {
         let on = self.prefs.bridge_external;
         match self.bridge.server.as_mut() {
             Some(b) => b.publish(on),
-            None if on => {
+            None if on && !self.bridge.start_failed => {
                 self.ensure_bridge();
             }
             None => {}
