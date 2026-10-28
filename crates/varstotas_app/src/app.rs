@@ -806,6 +806,9 @@ impl VarstotasApp {
         if let Some((r, model)) = crate::gpu::take_restart() {
             app.take_over(r, model);
         }
+        if let Some(api) = crate::gpu::status().fell_back {
+            app.flash_error(tr!("prefs-gpu-fell-back", api = api.name()));
+        }
         app.start_bridge(&cc.egui_ctx);
         app.load_plugins();
         app.ensure_templates_dir();

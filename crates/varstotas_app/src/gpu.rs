@@ -4,7 +4,8 @@
 //! (`varstotas --probe-gpu <api>`: adapter, device, a shader drawn and read back, with a time
 //! limit) and keeps the first that works, a real GPU before a software one. The result is kept
 //! in `gpu.json` in the data folder until the next version; an API whose start never drew a
-//! frame (the process died on the way) is skipped from then on. Preferences → General picks an
+//! frame (the process died on the way) is skipped from then on, and so is an API picked by
+//! hand whose probe fails (Automatic takes over, with a warning). Preferences → General picks an
 //! API by hand and restarts the app with the document as it is (`restart.vrst`).
 //! `WGPU_BACKEND` overrides all of it; scripted runs and macOS (only Metal) skip it.
 use egui_wgpu::wgpu;
@@ -167,6 +168,12 @@ pub(crate) fn choose() -> Option<wgpu::Backends> {
         if s.auto == Some(dead) {
             s.auto = None;
         }
+    }
+    // an API picked by hand is probed too: one that cannot work falls back to Automatic
+    // before the window, instead of failing the start
+    if s.api != Api::Auto && !s.failed.contains(&s.api) && let Err(e) = run_probe(s.api) {
+        log::warn!("graphics probe {}: {e}", s.api.name());
+        s.failed.push(s.api);
     }
     let mut fell_back = None;
     let api = if s.api != Api::Auto && !s.failed.contains(&s.api) {
