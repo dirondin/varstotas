@@ -298,6 +298,7 @@ impl VarstotasApp {
                 p.undo_steps = d.undo_steps;
                 p.autosave = d.autosave;
                 p.save_backups = d.save_backups;
+                p.backups_beside = d.backups_beside;
                 p.bridge_external = d.bridge_external;
                 p.autosave_minutes = d.autosave_minutes;
                 p.template = d.template;
@@ -404,6 +405,15 @@ impl VarstotasApp {
         note(ui, &tr!("prefs-autosave-note"));
         let r = ui.checkbox(&mut self.prefs.save_backups, tr!("prefs-save-backups"));
         super::tray_lib::spot("prefs:save_backups", r.rect.center());
+        ui.add_enabled_ui(self.prefs.save_backups, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(18.0);
+                let r = ui.radio_value(&mut self.prefs.backups_beside, false, tr!("prefs-backups-data"));
+                super::tray_lib::spot("prefs:backups_data", r.rect.center());
+                let r = ui.radio_value(&mut self.prefs.backups_beside, true, tr!("prefs-backups-beside"));
+                super::tray_lib::spot("prefs:backups_beside", r.rect.center());
+            });
+        });
         note(ui, &tr!("prefs-save-backups-note"));
         heading(ui, &tr!("prefs-new-document"));
         let cur = self.prefs.template.unwrap_or(Template::ArchitecturalMm);

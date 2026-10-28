@@ -92,6 +92,8 @@ pub struct Prefs {
     pub autosave_minutes: u32,
     /// Keep the previous distinct version beside explicitly saved documents.
     pub save_backups: bool,
+    /// Backups next to the document (`house.vrst.bak`) instead of the data folder.
+    pub backups_beside: bool,
     /// Scripts and AI agents outside Varstotas may connect to the bridge (`bridge.json`, MCP).
     pub bridge_external: bool,
     /// The AppImage's offer to add it to the applications menu was declined (see `appimage`).
@@ -189,6 +191,7 @@ impl Default for Prefs {
             recent: Vec::new(),
             autosave: true,
             save_backups: true,
+            backups_beside: false,
             bridge_external: false,
             appimage_menu_declined: false,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,

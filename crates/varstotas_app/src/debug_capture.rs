@@ -943,7 +943,7 @@ impl VarstotasApp {
                 self.doc.dirty = false;
                 self.actions.push(crate::app::Action::OpenPath(p.into()));
             }
-            ScriptCmd::OpenBackup(p) => match crate::paths::backup_path(std::path::Path::new(&p)) {
+            ScriptCmd::OpenBackup(p) => match crate::paths::backup_path(std::path::Path::new(&p), self.prefs.backups_beside) {
                 Some(b) => {
                     self.doc.dirty = false;
                     self.actions.push(crate::app::Action::OpenPath(b));

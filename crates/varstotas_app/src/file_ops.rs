@@ -32,6 +32,7 @@ impl VarstotasApp {
             Pending::Open => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter(tr!("app-filter-model"), &["vrst"])
+                    .add_filter(tr!("app-filter-backup"), &["bak"])
                     .pick_file()
                 {
                     self.open_path(&path);
@@ -107,6 +108,19 @@ impl VarstotasApp {
     pub(crate) fn open_path(&mut self, path: &Path) {
         self.show_start = false;
         self.show_templates = false;
+        // a backup beside its document (`house.vrst.bak`) opens untitled: Save asks where,
+        // instead of writing over the backup
+        if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("bak")) {
+            match guarded(|| io::load(path)) {
+                Ok(Ok(model)) => {
+                    self.replace_document(Document::from_model(model, None));
+                    self.flash(tr!("app-opened-backup", path = path.display().to_string()));
+                }
+                Ok(Err(e)) => self.flash_error(tr!("app-could-not-open", path = path.display().to_string(), error = e.to_string())),
+                Err(e) => self.flash_error(tr!("app-could-not-open", path = path.display().to_string(), error = e)),
+            }
+            return;
+        }
         match guarded(|| io::load(path)) {
             Ok(Ok(model)) => {
                 self.replace_document(Document::from_model(model, Some(path.to_path_buf())));
@@ -154,7 +168,9 @@ impl VarstotasApp {
 
     pub(crate) fn save_to(&mut self, path: &Path) -> bool {
         match guarded(|| {
-            match crate::paths::backup_path(path).filter(|_| self.prefs.save_backups) {
+            // beside the document where its folder can be written, else the data folder
+            let beside = self.prefs.backups_beside && path.parent().is_some_and(|d| writable_dir(if d.as_os_str().is_empty() { Path::new(".") } else { d }));
+            match crate::paths::backup_path(path, beside).filter(|_| self.prefs.save_backups) {
                 Some(backup) => {
                     if let Some(dir) = backup.parent() {
                         std::fs::create_dir_all(dir)?;

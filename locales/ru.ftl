@@ -124,6 +124,7 @@ app-dropped-material = Добавлен материал { $name }: щёлкни
 app-no-scenes = Нет сцен для показа. Добавьте сцены в панели «Сцены».
 # { $path } — путь к файлу.
 app-opened = Открыт { $path }
+app-opened-backup = Резервная копия { $path } открыта как новый документ: при сохранении будет спрошено, куда
 app-could-not-open = Не удалось открыть { $path }: { $error }
 app-saved = Сохранён { $path }
 app-save-failed = Не удалось сохранить: { $error }
@@ -145,6 +146,7 @@ app-could-not-recover = Не удалось восстановить { $name }: 
 app-filter-image = Изображение
 app-filter-script = Скрипт
 app-filter-model = Модель Varstotas
+app-filter-backup = Резервная копия Varstotas (.vrst.bak)
 
 ## ======== Меню ========
 
@@ -4513,7 +4515,9 @@ cli-unknown-option = Неизвестный параметр: { $option }
 cli-open-path = После --open нужно указать путь к документу
 
 prefs-save-backups = Сохранять резервную копию предыдущей версии
-prefs-save-backups-note = При сохранении предыдущая версия остаётся в { DATA_DIR() }/backups как <name> (…).bak.vrst. Отключение не удаляет существующие копии.
+prefs-save-backups-note = При сохранении остаётся предыдущая версия. В папке приложения: { DATA_DIR() }/backups/<name> — <его папка> (…).bak.vrst, так что одноимённые документы из разных папок не перезаписывают копии друг друга. Рядом с документом: <name>.vrst.bak (в папку приложения, если в ту папку писать нельзя). Отключение не удаляет существующие копии.
+prefs-backups-data = В папке приложения
+prefs-backups-beside = Рядом с документом (<name>.vrst.bak)
 
 model-info-metadata = Метаданные документа
 model-info-metadata-text = Текст / описание

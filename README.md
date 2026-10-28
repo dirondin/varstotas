@@ -229,15 +229,21 @@ The latest warnings/errors are optional. Copy the report or open a prefilled Git
 your browser; sign in and submit it yourself. Private repositories require access. The app
 stores no GitHub token and does not attach the model or screenshots automatically.
 
-Explicit document saves, including bridge saves, keep one previous version in the data folder:
-`model.vrst` → `<data folder>/backups/model (<hash>).bak.vrst`, the hash telling apart same-named
-documents in different folders. **Preferences → General → Keep a backup of the previous saved version**
-is enabled by default; disabling it leaves existing backups untouched. Open the backup with File → Open to recover it, then Save As
-to the desired filename. Saving an unchanged model preserves the last distinct backup.
-If the backup cannot be written, the existing document is left intact
-and saving reports an error. Autosaves go to `<data folder>/autosave` and do not rotate this backup.
-Nothing is written next to a document: in a sandbox (Flatpak) the app sees only the file chosen in
-the dialog, not its folder.
+Explicit document saves, including bridge saves, keep one previous version. By default it goes
+to the data folder: `~/projects/kitchen/model.vrst` → `<data folder>/backups/model — kitchen
+(<hash>).bak.vrst`, named by the document's folder and a hash of its full path, so same-named
+documents in different folders never share a backup. **Preferences → General** can keep it next
+to the document instead, as `model.vrst.bak` (where that folder cannot be written, it goes to the
+data folder). **Keep a backup of the previous saved version** is enabled by default; disabling it
+leaves existing backups untouched. To recover, open the backup with File → Open (the "Varstotas
+backup" filter shows `.vrst.bak` files, which open as a new untitled document), then Save As to
+the desired filename. Saving an unchanged model preserves the last distinct backup. If the
+backup cannot be written, the existing document is left intact and saving reports an error.
+Autosaves go to `<data folder>/autosave` and do not rotate this backup.
+
+File → Open Recent and the start screen show each document's folder next to its name (the
+middle folders shortened to `…`), so several `Untitled.vrst` can be told apart; hover for the full
+path.
 
 ## Release builds
 Artifacts go to `dist/` (not tracked by git).

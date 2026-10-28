@@ -67,12 +67,9 @@ impl VarstotasApp {
                     cols[1].label(tr!("start-no-recent"));
                 }
                 for (i, path) in recent.iter().take(6).enumerate() {
-                    let name = path
-                        .file_name()
-                        .unwrap_or(path.as_os_str())
-                        .to_string_lossy();
+                    let label = super::menu::recent_label(&cols[1], path, 26);
                     let r = cols[1]
-                        .add_enabled(path.is_file(), egui::Button::new(name).truncate())
+                        .add_enabled(path.is_file(), egui::Button::new(label).truncate())
                         .on_hover_text(path.display().to_string());
                     super::tray_lib::spot(format!("start:recent:{i}"), r.rect.center());
                     if r.clicked() {

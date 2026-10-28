@@ -119,6 +119,7 @@ app-dropped-material = Дададзены матэрыял { $name }: пстры
 app-no-scenes = Няма сцэн для прайгравання. Дадайце сцэны ў панэлі «Сцэны».
 # { $path } is a file path.
 app-opened = Адкрыта: { $path }
+app-opened-backup = Рэзервовая копія { $path } адкрыта як новы дакумент: пры захаванні будзе спытана, куды
 app-could-not-open = Не атрымалася адкрыць { $path }: { $error }
 app-saved = Захавана: { $path }
 app-save-failed = Не атрымалася захаваць: { $error }
@@ -140,6 +141,7 @@ app-could-not-recover = Не атрымалася аднавіць { $name }: { 
 app-filter-image = Відарыс
 app-filter-script = Скрыпт
 app-filter-model = Мадэль Varstotas
+app-filter-backup = Рэзервовая копія Varstotas (.vrst.bak)
 
 ## ======== Меню ========
 
@@ -4493,7 +4495,9 @@ cli-unknown-option = Невядомы параметр: { $option }
 cli-open-path = Пасля --open трэба ўказаць шлях да дакумента
 
 prefs-save-backups = Захоўваць рэзервовую копію папярэдняй версіі
-prefs-save-backups-note = Пры захаванні папярэдняя версія застаецца ў { DATA_DIR() }/backups як <name> (…).bak.vrst. Адключэнне не выдаляе існуючыя копіі.
+prefs-save-backups-note = Пры захаванні застаецца папярэдняя версія. У тэчцы праграмы: { DATA_DIR() }/backups/<name> — <яго тэчка> (…).bak.vrst, так што аднайменныя дакументы з розных тэчак не перазапісваюць копіі адзін аднаго. Побач з дакументам: <name>.vrst.bak (у тэчку праграмы, калі ў тую тэчку пісаць нельга). Адключэнне не выдаляе існуючыя копіі.
+prefs-backups-data = У тэчцы праграмы
+prefs-backups-beside = Побач з дакументам (<name>.vrst.bak)
 
 model-info-metadata = Метаданыя дакумента
 model-info-metadata-text = Тэкст / апісанне

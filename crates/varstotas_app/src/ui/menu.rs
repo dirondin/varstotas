@@ -249,8 +249,8 @@ impl VarstotasApp {
                 ui.add_enabled_ui(!recent.is_empty(), |ui| {
                     icon_menu(ui, None, &tr!("menu-open-recent"), |ui| {
                         for p in recent {
-                            let name = p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-                            if ui.button(name).on_hover_text(p.display().to_string()).clicked() {
+                            let r = ui.add_enabled(p.is_file(), Button::new(recent_label(ui, &p, 48))).on_hover_text(p.display().to_string());
+                            if r.clicked() {
                                 self.actions.push(Action::OpenPath(p));
                             }
                         }
@@ -624,4 +624,21 @@ impl VarstotasApp {
             });
         });
     }
+}
+
+/// A recent document: its name, then its folder dimmed (`~` for home, the middle folders as `…`
+/// beyond `max` characters), so ten `Untitled.vrst` can be told apart.
+pub(crate) fn recent_label(ui: &egui::Ui, path: &std::path::Path, max: usize) -> egui::text::LayoutJob {
+    use egui::text::{LayoutJob, TextFormat};
+    let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy().into_owned();
+    let dir = path.parent().map(|d| crate::paths::short(d, max)).unwrap_or_default();
+    let style = ui.style();
+    let font = egui::TextStyle::Button.resolve(style);
+    let small = egui::FontId::new(font.size * 0.85, font.family.clone());
+    let mut job = LayoutJob::default();
+    job.append(&name, 0.0, TextFormat { font_id: font, color: style.visuals.text_color(), ..Default::default() });
+    if !dir.is_empty() {
+        job.append(&dir, 10.0, TextFormat { font_id: small, color: style.visuals.weak_text_color(), valign: egui::Align::Center, ..Default::default() });
+    }
+    job
 }

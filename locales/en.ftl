@@ -115,6 +115,7 @@ app-dropped-material = Material { $name } added: click a face to paint it
 app-no-scenes = No scenes to play. Add scenes in the Scenes panel.
 # { $path } is a file path.
 app-opened = Opened { $path }
+app-opened-backup = Opened the backup { $path } as a new document: Save asks where to keep it
 app-could-not-open = Could not open { $path }: { $error }
 app-saved = Saved { $path }
 app-save-failed = Save failed: { $error }
@@ -136,6 +137,7 @@ app-could-not-recover = Could not recover { $name }: { $error }
 app-filter-image = Image
 app-filter-script = Script
 app-filter-model = Varstotas model
+app-filter-backup = Varstotas backup (.vrst.bak)
 
 ## ======== Menus ========
 
@@ -4415,7 +4417,9 @@ cli-unknown-option = Unknown option: { $option }
 cli-open-path = --open requires a document path
 
 prefs-save-backups = Keep a backup of the previous saved version
-prefs-save-backups-note = Explicit saves keep the previous version in { DATA_DIR() }/backups as <name> (…).bak.vrst. Turning this off leaves existing backups untouched.
+prefs-save-backups-note = Explicit saves keep the previous version. In the data folder: { DATA_DIR() }/backups/<name> — <its folder> (…).bak.vrst, so documents of the same name in different folders keep separate backups. Next to the document: <name>.vrst.bak (the data folder where that folder cannot be written). Turning this off leaves existing backups untouched.
+prefs-backups-data = In the app data folder
+prefs-backups-beside = Next to the document (<name>.vrst.bak)
 
 model-info-metadata = Document metadata
 model-info-metadata-text = Text / description

@@ -39,4 +39,21 @@ save models/backup_pref.vrst
 open_backup models/backup_pref.vrst
 wait 5
 expect model_faces=18
+# backups next to the document: backup_pref.vrst.bak, opened untitled (Save asks where)
+open models/backup_pref.vrst
+wait 5
+action preferences
+wait 10
+action click_spot prefs:General
+wait 5
+action click_spot prefs:backups_beside
+raw click 664 54
+wait 5
+action script box(vec3(2000,0,0),50,50,50);
+action console_close
+save models/backup_pref.vrst
+open_backup models/backup_pref.vrst
+wait 5
+expect model_faces=24
+expect document_path=None
 quit

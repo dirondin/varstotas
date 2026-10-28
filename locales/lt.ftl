@@ -119,6 +119,7 @@ app-dropped-material = Pridėta medžiaga { $name }: spustelėkite sieną, kad j
 app-no-scenes = Nėra scenų, kurias būtų galima paleisti. Pridėkite scenų skydelyje „Scenos“.
 # { $path } yra failo kelias.
 app-opened = Atidaryta: { $path }
+app-opened-backup = Atsarginė kopija { $path } atverta kaip naujas dokumentas: išsaugant bus paklausta, kur
 app-could-not-open = Nepavyko atidaryti { $path }: { $error }
 app-saved = Išsaugota: { $path }
 app-save-failed = Išsaugoti nepavyko: { $error }
@@ -140,6 +141,7 @@ app-could-not-recover = Nepavyko atkurti { $name }: { $error }
 app-filter-image = Paveikslėlis
 app-filter-script = Scenarijus
 app-filter-model = Varstotas modelis
+app-filter-backup = Varstotas atsarginė kopija (.vrst.bak)
 
 ## ======== Meniu ========
 
@@ -4441,7 +4443,9 @@ cli-unknown-option = Nežinomas parametras: { $option }
 cli-open-path = Po --open reikia nurodyti dokumento kelią
 
 prefs-save-backups = Saugoti ankstesnės išsaugotos versijos atsarginę kopiją
-prefs-save-backups-note = Išsaugant ankstesnė versija paliekama { DATA_DIR() }/backups kaip <name> (…).bak.vrst. Išjungus esamos kopijos nepašalinamos.
+prefs-save-backups-note = Išsaugant paliekama ankstesnė versija. Duomenų aplanke: { DATA_DIR() }/backups/<name> — <jo aplankas> (…).bak.vrst, todėl to paties pavadinimo dokumentai iš skirtingų aplankų neperrašo vienas kito kopijų. Šalia dokumento: <name>.vrst.bak (į duomenų aplanką, jei į tą aplanką rašyti negalima). Išjungus esamos kopijos nepašalinamos.
+prefs-backups-data = Programos duomenų aplanke
+prefs-backups-beside = Šalia dokumento (<name>.vrst.bak)
 
 model-info-metadata = Dokumento metaduomenys
 model-info-metadata-text = Tekstas / aprašymas
