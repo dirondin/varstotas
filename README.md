@@ -43,6 +43,44 @@ everything can be scripted.
 Builds for macOS (`.dmg`, Apple Silicon and Intel), Windows (installer or portable `.zip`) and
 Linux (AppImage, `.deb` or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
 
+## Installing and running
+
+**macOS** 11+ (Apple Silicon and Intel)
+
+- `.dmg`: open it and drag Varstotas to Applications. Or with Homebrew:
+  `brew install --cask dirondin/tap/varstotas`.
+- The app is not notarized, so macOS blocks the first launch: open Varstotas once, then
+  **System Settings → Privacy & Security → Open Anyway** (macOS 14 and earlier: right-click
+  Varstotas → **Open** → **Open**). Or in Terminal:
+  `xattr -dr com.apple.quarantine /Applications/Varstotas.app`.
+
+**Windows** 10+ (x64) and Windows 11 on Arm
+
+- `…-setup.exe`: the installer asks whether to install for you only or for everyone, and adds a
+  Start menu entry and the `.vrst` file type. Remove it in Settings → Apps.
+- `….zip`: portable; unzip anywhere and run `varstotas.exe`. Or with Scoop:
+  `scoop bucket add dirondin https://github.com/dirondin/scoop-bucket` and then
+  `scoop install dirondin/varstotas`.
+- The builds are not signed, so SmartScreen may warn: **More info → Run anyway**.
+
+**Linux** (x86_64 and aarch64, glibc 2.35+: Ubuntu 22.04, Debian 12, Fedora 36 or newer)
+
+- `.AppImage`: `chmod +x Varstotas-*.AppImage` and run it. On the first start it offers to add
+  itself to the applications menu (Preferences → General adds or removes it later). Without FUSE:
+  `./Varstotas-*.AppImage --appimage-extract-and-run`.
+- `.deb` (Debian, Ubuntu): `sudo apt install ./Varstotas-<version>-linux-<arch>.deb`, then run
+  Varstotas from the menu or `varstotas` in a terminal. `sudo apt remove varstotas` removes it.
+- `.tar.gz`: unpack and run `./varstotas` in place, or `./install.sh` to install into `~/.local`
+  with a menu entry and the `.vrst` file type (`PREFIX=/usr/local sudo ./install.sh` for everyone,
+  `./install.sh --uninstall` to remove).
+- X11 and Wayland both work.
+
+**Graphics.** Varstotas needs Vulkan, DirectX 12, Metal or OpenGL (ES) 3.0+. On the first start
+it tries the graphics APIs one by one and keeps the first that works, so a machine without a
+Vulkan driver falls back to OpenGL by itself. If the window stays black or the 3D view looks
+wrong (some virtual machines), pick another one in **Preferences → General → Graphics API**; on
+Linux, **OpenGL (llvmpipe)** draws in software, slower but correct.
+
 ## Data folder
 
 Plugins, libraries, templates, your own translations, caches and the bridge for Python scripts
