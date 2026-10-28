@@ -158,11 +158,36 @@ fn main() -> eframe::Result<()> {
             b.with_activation_policy(ActivationPolicy::Accessory).with_activate_ignoring_other_apps(false);
         }));
     }
-    eframe::run_native(
+    let result = eframe::run_native(
         APP_NAME,
         options,
         Box::new(move |cc| Ok(Box::new(app::VarstotasApp::new(cc, startup_document)))),
-    )
+    );
+    if let Err(e) = &result
+        && std::env::var_os("VARSTOTAS_SCRIPT").is_none()
+    {
+        start_failed(&e.to_string());
+    }
+    result
+}
+
+/// A start that fails before there is a window (no usable graphics adapter: a virtual machine
+/// without 3D acceleration, Windows Sandbox, a broken driver). The Windows build has no console
+/// and a desktop launcher shows none either, so the reason goes into a message box.
+fn start_failed(error: &str) {
+    log::error!("start failed: {error}");
+    // earlier errors that may explain it (this one is in the log twice already)
+    let mut details = error.to_string();
+    for e in applog::recent(4).iter().filter(|e| !e.text.contains(error)) {
+        details.push('\n');
+        details.push_str(&e.text);
+    }
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title(varstotas_i18n::tr!("app-start-failed-title"))
+        .set_description(varstotas_i18n::tr!("app-start-failed", error = details))
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
 }
 
 /// The window / Dock icon (`assets/icon.png`, drawn by scripts/make_icon.py).

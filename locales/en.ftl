@@ -2839,6 +2839,12 @@ dialog-template-intro = New models start with these units. You can change the de
 dialog-about-tagline = A light, native 3D modeler for drawing and building.
 # $version is the app version
 dialog-about-version = Version { $version }
+app-start-failed-title = Varstotas could not start
+app-start-failed = Varstotas could not open its window:
+
+    { $error }
+
+    The 3D view needs Vulkan, DirectX 12, Metal or OpenGL 3.3. Update the graphics driver; in a virtual machine, turn on 3D acceleration.
 dialog-about-build = Build { $build } · { $commit }
 dialog-about-dev-build = Development build · { $commit }
 dialog-about-licence = Free software under the MIT licence.

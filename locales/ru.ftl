@@ -2915,6 +2915,12 @@ dialog-template-intro = Новые модели начинаются с этих
 dialog-about-tagline = Лёгкий нативный 3D-редактор для рисования и построения.
 # $version — версия приложения
 dialog-about-version = Версия { $version }
+app-start-failed-title = Не удалось запустить Varstotas
+app-start-failed = Varstotas не смог открыть окно:
+
+    { $error }
+
+    Для 3D-вида нужен Vulkan, DirectX 12, Metal или OpenGL 3.3. Обновите драйвер видеокарты; в виртуальной машине включите 3D-ускорение.
 dialog-about-build = Сборка { $build } · { $commit }
 dialog-about-dev-build = Сборка для разработки · { $commit }
 dialog-about-licence = Свободное ПО под лицензией MIT.
