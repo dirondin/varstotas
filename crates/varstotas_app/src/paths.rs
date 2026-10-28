@@ -3,7 +3,8 @@
 //! `$XDG_DATA_HOME/varstotas` or `~/.local/share/varstotas`, `%APPDATA%\Varstotas\data`; inside
 //! the Flatpak `~/.var/app/io.github.dirondin.Varstotas/data/varstotas`). It holds the bridge
 //! file and the Python modules, plugins, libraries, templates, user locales, `cache/`, and the
-//! documents' autosaves (`autosave/`) and backups (`backups/`). Nothing else outside it is
+//! documents' autosaves (`autosave/`) and backups (`backups/`), and the graphics API found to work
+//! (`gpu.json`). Nothing else outside it is
 //! written without the user choosing the place: a sandbox (Flatpak) lets the app see only the
 //! file picked in the dialog, not the folder around it.
 //!

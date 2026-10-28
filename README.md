@@ -176,6 +176,13 @@ open -n target/Varstotas.app --args "/path/to/my model.vrst"  # macOS bundle
 `--help` and `--version` work without initializing the graphical application. File associations
 are not registered yet.
 
+The graphics API is chosen at start: on Windows and Linux each of Vulkan, DirectX 12 (Windows)
+and OpenGL is tried in a separate process, a graphics card before a software renderer, and the
+first that works is kept in `<data folder>/gpu.json` until the next version. An API whose start
+never drew a frame is skipped from then on. **Preferences → General → Graphics API** picks one by
+hand and restarts with the document as it is. The `WGPU_BACKEND` environment variable (`vulkan`,
+`dx12`, `metal`, `gl`) overrides both.
+
 **Help → Report a Problem** previews the message with version, platform and GPU details.
 The latest warnings/errors are optional. Copy the report or open a prefilled GitHub issue in
 your browser; sign in and submit it yourself. Private repositories require access. The app

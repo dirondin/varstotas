@@ -325,6 +325,39 @@ impl VarstotasApp {
         self.flash(tr!("prefs-defaults-flash", section = s.name()));
     }
 
+    /// The graphics API (see gpu.rs): a choice for the next start and a restart button.
+    fn prefs_graphics(&mut self, ui: &mut Ui) {
+        use crate::gpu::Api;
+        let st = crate::gpu::status();
+        heading(ui, &tr!("prefs-gpu"));
+        let label = |a: Api| if a == Api::Auto { tr!("prefs-gpu-auto") } else { a.name().to_string() };
+        if st.managed && Api::available().len() > 1 {
+            let mut choice = st.choice;
+            egui::ComboBox::from_id_salt("prefs_gpu").selected_text(label(choice)).show_ui(ui, |ui| {
+                for a in std::iter::once(Api::Auto).chain(Api::available().iter().copied()) {
+                    ui.selectable_value(&mut choice, a, label(a));
+                }
+            });
+            if choice != st.choice {
+                crate::gpu::set_choice(choice);
+            }
+            if choice != st.running_choice && ui.button(tr!("prefs-gpu-restart")).clicked() {
+                self.restart_for_graphics(ui.ctx());
+            }
+        }
+        if let Some(u) = &st.in_use {
+            ui.label(tr!("prefs-gpu-in-use", api = u.clone()));
+        }
+        if let Some(f) = st.fell_back {
+            ui.colored_label(ui.visuals().warn_fg_color, tr!("prefs-gpu-fell-back", api = f.name()));
+        }
+        if std::env::var_os("WGPU_BACKEND").is_some() {
+            note(ui, &tr!("prefs-gpu-env"));
+        } else if st.managed {
+            note(ui, &tr!("prefs-gpu-note"));
+        }
+    }
+
     fn prefs_general(&mut self, ui: &mut Ui) {
         if let Some(dir) = crate::paths::data_dir() {
             heading(ui, &tr!("prefs-data-folder"));
@@ -336,6 +369,7 @@ impl VarstotasApp {
             });
             note(ui, &tr!("prefs-data-folder-note"));
         }
+        self.prefs_graphics(ui);
         if crate::appimage::running().is_some() {
             heading(ui, &tr!("prefs-appimage-menu"));
             if crate::appimage::installed() {

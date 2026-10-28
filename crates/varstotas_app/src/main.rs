@@ -20,6 +20,7 @@ mod downloads;
 mod download_progress;
 mod file_ops;
 mod files;
+mod gpu;
 mod inference;
 mod keymap;
 mod layout;
@@ -75,6 +76,9 @@ fn build_line() -> String {
 
 fn main() -> eframe::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 2 && args[0] == "--probe-gpu" {
+        gpu::probe_main(&args[1].to_string_lossy());
+    }
     if args.len() == 1 && (args[0] == "--help" || args[0] == "-h") {
         println!("{}", startup::usage());
         return Ok(());
@@ -93,16 +97,15 @@ fn main() -> eframe::Result<()> {
     objc2_foundation::NSProcessInfo::processInfo()
         .setProcessName(&objc2_foundation::NSString::from_str(APP_NAME));
     applog::init();
+    gpu::wait_for_restart();
     if let Some(d) = paths::data_dir() {
         varstotas_i18n::set_data_dir(&paths::display(&d));
     }
     let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
     if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
-        // Windows Sandbox: its virtual GPU takes the whole sandbox down under DirectX 12, while
-        // OpenGL works; WGPU_BACKEND still chooses.
-        if windows_sandbox() && std::env::var_os("WGPU_BACKEND").is_none() {
-            log::info!("Windows Sandbox: using OpenGL");
-            setup.instance_descriptor.backends = egui_wgpu::wgpu::Backends::GL;
+        // the graphics API that works here (see gpu.rs)
+        if let Some(backends) = gpu::choose() {
+            setup.instance_descriptor.backends = backends;
         }
         // Ray queries (hardware / driver ray tracing) for the path tracer, where there are any.
         let base = setup.device_descriptor.clone();
@@ -195,11 +198,6 @@ fn start_failed(error: &str) {
         .set_description(varstotas_i18n::tr!("app-start-failed", error = details))
         .set_buttons(rfd::MessageButtons::Ok)
         .show();
-}
-
-/// Running in Windows Sandbox (its fixed account name).
-fn windows_sandbox() -> bool {
-    cfg!(windows) && std::env::var("USERNAME").is_ok_and(|u| u.eq_ignore_ascii_case("WDAGUtilityAccount"))
 }
 
 /// The window / Dock icon (`assets/icon.png`, drawn by scripts/make_icon.py).

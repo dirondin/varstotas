@@ -548,6 +548,8 @@ pub struct VarstotasApp {
     pub(crate) debug: crate::debug_capture::DebugCapture,
     last_title: String,
     pub(crate) allow_close: bool,
+    /// Closing to restart (Preferences → Graphics API): the new instance has the document.
+    pub(crate) restarting: bool,
     pub(crate) tool_pressed: bool,
     /// Primary button state after the last processed pointer event (see
     /// `handle_viewport_input`).
@@ -741,6 +743,7 @@ impl VarstotasApp {
             debug,
             last_title: String::new(),
             allow_close: false,
+            restarting: false,
             tool_pressed: false,
             primary_held: false,
             last_pointer: None,
@@ -799,6 +802,9 @@ impl VarstotasApp {
         };
         if let Some(path) = startup_document {
             app.open_path(&path);
+        }
+        if let Some((r, model)) = crate::gpu::take_restart() {
+            app.take_over(r, model);
         }
         app.start_bridge(&cc.egui_ctx);
         app.load_plugins();
@@ -2475,6 +2481,7 @@ impl eframe::App for VarstotasApp {
         if self.debug.script_active() {
             pace_script_frame();
         }
+        crate::gpu::frame_drawn(frame);
         let frame_start = std::time::Instant::now();
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
@@ -2692,8 +2699,8 @@ impl eframe::App for VarstotasApp {
     fn on_exit(&mut self) {
         self.stop_bridge();
         // A normal close of a saved/discarded document removes its autosave; a dirty document
-        // (forced close) keeps it for recovery.
-        if !self.doc.dirty
+        // (forced close) keeps it for recovery, unless a restart hands it over.
+        if (!self.doc.dirty || self.restarting)
             && let Some(p) = self.autosave.written.take()
         {
             self.autosave.worker.delete(p);
