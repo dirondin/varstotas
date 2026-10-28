@@ -77,7 +77,8 @@ jobs:
           sha256sum -c SHA256SUMS.txt
           for f in macos-universal.dmg macos-universal.zip \
                    windows-{x86_64,aarch64}-setup.exe windows-{x86_64,aarch64}.zip \
-                   linux-{x86_64,aarch64}.AppImage linux-{x86_64,aarch64}.tar.gz; do
+                   linux-{x86_64,aarch64}.AppImage linux-{x86_64,aarch64}.tar.gz \
+                   linux-{x86_64,aarch64}.deb; do
             [[ -s "Varstotas-$VERSION-$f" ]] || { echo "::error::Missing Varstotas-$VERSION-$f"; exit 1; }
           done
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"

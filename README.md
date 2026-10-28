@@ -41,7 +41,7 @@ everything can be scripted.
 ## Download
 
 Builds for macOS (`.dmg`, Apple Silicon and Intel), Windows (installer or portable `.zip`) and
-Linux (AppImage or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
+Linux (AppImage, `.deb` or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
 
 ## Data folder
 
@@ -199,12 +199,12 @@ scripts/build-macos.sh      # macOS universal (arm64 + x86_64): .dmg + .zip
 scripts/build-macos.sh --debug  # local target/Varstotas.app (correct Dock name and icon)
 scripts/build-windows.sh    # Windows x86_64 portable .zip, cross-built from macOS
 scripts/build-windows.sh --native [--arch aarch64]  # on Windows (MSVC, Git Bash): .zip + installer
-scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage
+scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage + .deb
 ```
 
 - **macOS** — `scripts/build-macos.sh [--no-dmg]`: installs the `x86_64-apple-darwin` target if needed, builds release for both architectures, joins them with `lipo`, assembles `dist/Varstotas.app` (Info.plist: `dev.varstotas.app`, macOS ≥ 11, Retina), builds the icon (`crates/varstotas_app/assets/icon.png`, drawn by `scripts/make_icon.py` → `iconutil` → `.icns`), signs ad-hoc (`codesign -s -`) and packs `Varstotas-<version>-macos-universal.zip` and `.dmg` (with an Applications link). There is no Developer ID signature or notarization — on first launch: System Settings → Privacy & Security → "Open Anyway" (macOS 14 and earlier: right click → "Open").
 - **Windows** — `varstotas.exe` is a GUI-subsystem binary with the icon and version resource embedded (`crates/varstotas_app/build.rs`, `winresource`); Windows 10+, no external DLLs. `Varstotas-<version>-windows-<arch>.zip` is the portable build. With `--native` (MSVC on Windows) the script also builds `Varstotas-<version>-windows-<arch>-setup.exe` with Inno Setup 6 (`packaging/windows/varstotas.iss`; installed with Chocolatey when missing): per-user or all-users install, Start menu entry, optional desktop icon, the `.vrst` file association, uninstaller; English and Russian wizard. Without `--native` it cross-compiles with mingw-w64 (installed via brew) and makes the zip only. `--arch aarch64` (native only) builds for Windows on Arm; the installer then allows Arm64 only, while the x86_64 one also installs there under emulation.
-- **Linux** — `scripts/build-linux.sh [--no-appimage]`: needs `pkg-config`, `libwayland-dev` and `libxkbcommon-dev`. `Varstotas-<version>-linux-<arch>.tar.gz` holds the binary, icons, `varstotas.desktop`, the `.vrst` file type (`packaging/linux`) and `install.sh` (into `~/.local`, `--uninstall`; `PREFIX=/usr/local` for everyone). `Varstotas-<version>-linux-<arch>.AppImage` is one runnable file, made with `appimagetool` (downloaded into `target/tools`). X11 and Wayland both work (loaded at run time); release builds are made on Ubuntu 22.04 (glibc 2.35).
+- **Linux** — `scripts/build-linux.sh [--no-appimage] [--no-deb]`: needs `pkg-config`, `libwayland-dev`, `libxkbcommon-dev` and, for the `.deb`, `dpkg-dev`. `Varstotas-<version>-linux-<arch>.tar.gz` holds the binary, icons, `varstotas.desktop`, the `.vrst` file type (`packaging/linux`) and `install.sh` (into `~/.local`, `--uninstall`; `PREFIX=/usr/local` for everyone). `Varstotas-<version>-linux-<arch>.AppImage` is one runnable file, made with `appimagetool` (downloaded into `target/tools`). `Varstotas-<version>-linux-<arch>.deb` installs the same files under `/usr` (package `varstotas`; its library dependencies come from `dpkg-shlibdeps`, the ones loaded at run time are listed in the script); the release build installs it on the runner and runs `varstotas --version`. X11 and Wayland both work (loaded at run time); release builds are made on Ubuntu 22.04 (glibc 2.35).
 - `VARSTOTAS_VERSION` overrides the version from Cargo in every script.
 - Checking the build without a UI click: `VARSTOTAS_SCREENSHOT=shot.bmp dist/Varstotas.app/Contents/MacOS/varstotas` — captures the window and exits.
 

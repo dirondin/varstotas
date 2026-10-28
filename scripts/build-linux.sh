@@ -3,8 +3,10 @@
 #   Varstotas-<version>-linux-<arch>.tar.gz   the program, icons, .desktop, file type and
 #                                             install.sh (installs into ~/.local)
 #   Varstotas-<version>-linux-<arch>.AppImage one runnable file (appimagetool is downloaded)
+#   Varstotas-<version>-linux-<arch>.deb      Debian / Ubuntu package (dpkg-deb and
+#                                             dpkg-shlibdeps: apt install dpkg-dev)
 #
-# Usage: scripts/build-linux.sh [--no-appimage]
+# Usage: scripts/build-linux.sh [--no-appimage] [--no-deb]
 # Needs pkg-config and the Wayland / xkbcommon headers (Debian / Ubuntu:
 # apt install pkg-config libwayland-dev libxkbcommon-dev); the AppImage needs network access
 # for appimagetool and its runtime.
@@ -16,9 +18,11 @@ cd "$ROOT"
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 
 APPIMAGE=1
+DEB=1
 for arg in "$@"; do
   case "$arg" in
     --no-appimage) APPIMAGE=0 ;;
+    --no-deb) DEB=0 ;;
     *) echo "Unknown option: $arg" >&2; exit 1 ;;
   esac
 done
@@ -100,6 +104,61 @@ APPRUN
   # no FUSE on CI runners and in containers: the tool runs extracted
   APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$ARCH" "$TOOL" --no-appstream "$APPDIR" "$OUT"
   chmod +x "$OUT"
+  echo "==> $OUT"
+fi
+
+# 3. .deb: the same files under /usr. The mime, desktop and icon caches are refreshed by
+# dpkg triggers, so the package has no maintainer scripts.
+if [[ $DEB == 1 ]]; then
+  case "$ARCH" in
+    x86_64) DEB_ARCH=amd64 ;;
+    aarch64) DEB_ARCH=arm64 ;;
+    *) echo "No Debian architecture for $ARCH" >&2; exit 1 ;;
+  esac
+  # the tree in debian/<package>, where dpkg-shlibdeps expects the files it analyses
+  PKG="$WORK/deb/debian/varstotas"
+  install -Dm755 "$STAGE/varstotas" "$PKG/usr/bin/varstotas"
+  install -Dm644 packaging/linux/varstotas.desktop "$PKG/usr/share/applications/varstotas.desktop"
+  install -Dm644 packaging/linux/varstotas-mime.xml "$PKG/usr/share/mime/packages/varstotas.xml"
+  for s in 64 128 256; do
+    install -Dm644 "$ICONS/varstotas-$s.png" "$PKG/usr/share/icons/hicolor/${s}x${s}/apps/varstotas.png"
+  done
+  DOC="$PKG/usr/share/doc/varstotas"
+  mkdir -p "$DOC"
+  { echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+    echo "Upstream-Name: Varstotas"
+    echo "Source: https://github.com/dirondin/varstotas"
+    echo
+    echo "Files: *"
+    echo "License: MIT"
+    sed 's/^$/./; s/^/ /' LICENSE
+  } >"$DOC/copyright"
+  gzip -9n -c THIRD-PARTY-LICENSES.txt >"$DOC/THIRD-PARTY-LICENSES.txt.gz"
+  # linked libraries from dpkg-shlibdeps; the window system, keyboard and GPU libraries are
+  # loaded at run time (dlopen), so they are listed by hand, as in packaging/aur/PKGBUILD
+  printf 'Source: varstotas\n\nPackage: varstotas\nArchitecture: any\n' >"$WORK/deb/debian/control"
+  SHLIBS="$(cd "$WORK/deb" && dpkg-shlibdeps -O debian/varstotas/usr/bin/varstotas | sed -n 's/^shlibs:Depends=//p')"
+  mkdir -p "$PKG/DEBIAN"
+  # Version: a pre-release 0.3.0-rc1 becomes 0.3.0~rc1, which sorts before 0.3.0
+  cat >"$PKG/DEBIAN/control" <<CONTROL
+Package: varstotas
+Version: ${VERSION//-/\~}
+Architecture: $DEB_ARCH
+Maintainer: Michail Palubisak <dirondin@users.noreply.github.com>
+Installed-Size: $(du -sk "$PKG/usr" | cut -f1)
+Depends: $SHLIBS, libxkbcommon0, libwayland-client0, libvulkan1 | libegl1
+Recommends: libwayland-cursor0, libwayland-egl1, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxrandr2, mesa-vulkan-drivers, xdg-desktop-portal
+Section: graphics
+Priority: optional
+Homepage: https://github.com/dirondin/varstotas
+Description: 3D modelling for makers
+ Varstotas is a free, open-source 3D modeller for makers and hobbyists. Plan
+ furniture, workshop projects and 3D prints in real millimetres, then take the
+ dimensions to the workshop or the model to a slicer (STL and 3MF export).
+CONTROL
+  OUT="$DIST/$NAME.deb"
+  rm -f "$OUT"
+  dpkg-deb --root-owner-group -Zxz --build "$PKG" "$OUT"
   echo "==> $OUT"
 fi
 

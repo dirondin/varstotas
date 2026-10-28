@@ -10,8 +10,10 @@
 | | `Varstotas-{version}-windows-aarch64.zip` | |
 | **Linux** (x86_64, glibc 2.35+) | `Varstotas-{version}-linux-x86_64.AppImage` | `chmod +x` and run |
 | | `Varstotas-{version}-linux-x86_64.tar.gz` | unpack, run `./varstotas` or `./install.sh` |
+| | `Varstotas-{version}-linux-x86_64.deb` | Debian 12+, Ubuntu 22.04+: `sudo apt install ./Varstotas-{version}-linux-x86_64.deb` |
 | **Linux** (aarch64, glibc 2.35+) | `Varstotas-{version}-linux-aarch64.AppImage` | the same, for Arm64 |
 | | `Varstotas-{version}-linux-aarch64.tar.gz` | |
+| | `Varstotas-{version}-linux-aarch64.deb` | |
 
 `SHA256SUMS.txt` lists the files' checksums (`shasum -a 256 -c SHA256SUMS.txt`).
 
