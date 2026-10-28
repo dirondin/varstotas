@@ -94,6 +94,8 @@ pub struct Prefs {
     pub save_backups: bool,
     /// Scripts and AI agents outside Varstotas may connect to the bridge (`bridge.json`, MCP).
     pub bridge_external: bool,
+    /// The AppImage's offer to add it to the applications menu was declined (see `appimage`).
+    pub appimage_menu_declined: bool,
     /// Template for File → New (None until chosen on first start).
     pub template: Option<Template>,
     /// User document templates (None = <data folder>/templates).
@@ -186,6 +188,7 @@ impl Default for Prefs {
             autosave: true,
             save_backups: true,
             bridge_external: false,
+            appimage_menu_declined: false,
             autosave_minutes: crate::autosave::DEFAULT_MINUTES,
             template: None,
             templates_dir: None,
@@ -621,6 +624,8 @@ pub struct VarstotasApp {
     /// Files next to the last imported model it could not read (harness).
     pub(crate) import_missing: Vec<String>,
     pub(crate) show_start: bool,
+    /// Offer to add the AppImage to the applications menu (see `appimage`).
+    pub(crate) appimage_offer: bool,
 }
 
 /// Autosave bookkeeping (see [`crate::autosave`]).
@@ -699,6 +704,7 @@ impl VarstotasApp {
         };
         let show_start = prefs.show_start_screen && startup_document.is_none()
             && (!debug.script_active() || std::env::var_os("VARSTOTAS_QA_START_SCREEN").is_some());
+        let appimage_offer = !debug.script_active() && crate::appimage::on_start(prefs.appimage_menu_declined);
         let mut app = Self {
             doc: Document::from_model(template.new_model(), None),
             camera: template.camera(nav::startup_camera()),
@@ -780,6 +786,7 @@ impl VarstotasApp {
             show_templates: false,
             import_missing: Vec::new(),
             show_start,
+            appimage_offer,
             autosave: AutosaveState {
                 worker: crate::autosave::Autosaver::new(),
                 dir: autosave_dir,
@@ -2611,6 +2618,7 @@ impl eframe::App for VarstotasApp {
 
         self.dialogs(&ctx);
         self.start_screen(&ctx);
+        self.appimage_offer(&ctx);
         self.feedback_window(&ctx);
         self.tutorial_window(&ctx);
         self.console_window(&ctx);

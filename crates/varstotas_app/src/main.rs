@@ -5,6 +5,7 @@
 
 mod animation;
 mod app;
+mod appimage;
 mod applog;
 mod autosave;
 mod axes;

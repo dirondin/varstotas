@@ -336,6 +336,17 @@ impl VarstotasApp {
             });
             note(ui, &tr!("prefs-data-folder-note"));
         }
+        if crate::appimage::running().is_some() {
+            heading(ui, &tr!("prefs-appimage-menu"));
+            if crate::appimage::installed() {
+                if ui.button(tr!("prefs-appimage-remove")).clicked() {
+                    self.appimage_menu(false);
+                }
+            } else if ui.button(tr!("prefs-appimage-add")).clicked() {
+                self.appimage_menu(true);
+            }
+            note(ui, &tr!("prefs-appimage-note"));
+        }
         heading(ui, &tr!("prefs-bridge"));
         let r = ui.checkbox(&mut self.prefs.bridge_external, tr!("prefs-bridge-external"));
         super::tray_lib::spot("prefs:bridge_external", r.rect.center());
