@@ -2856,7 +2856,7 @@ app-start-failed = Varstotas could not open its window:
 
     { $error }
 
-    The 3D view needs Vulkan, DirectX 12, Metal or OpenGL 3.3. Update the graphics driver; in a virtual machine, turn on 3D acceleration.
+    The 3D view needs Vulkan, DirectX 12, Metal or OpenGL 3.3. Update the graphics driver; in a virtual machine, turn on 3D acceleration. To try another graphics API, set the environment variable WGPU_BACKEND to gl, vulkan or dx12.
 dialog-about-build = Build { $build } · { $commit }
 dialog-about-dev-build = Development build · { $commit }
 dialog-about-licence = Free software under the MIT licence.

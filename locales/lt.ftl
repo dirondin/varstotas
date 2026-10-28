@@ -2880,7 +2880,7 @@ app-start-failed = Varstotas nepavyko atverti lango:
 
     { $error }
 
-    3D vaizdui reikia Vulkan, DirectX 12, Metal arba OpenGL 3.3. Atnaujinkite vaizdo plokštės tvarkyklę; virtualioje mašinoje įjunkite 3D spartinimą.
+    3D vaizdui reikia Vulkan, DirectX 12, Metal arba OpenGL 3.3. Atnaujinkite vaizdo plokštės tvarkyklę; virtualioje mašinoje įjunkite 3D spartinimą. Norėdami išbandyti kitą grafikos API, nustatykite aplinkos kintamąjį WGPU_BACKEND = gl, vulkan arba dx12.
 dialog-about-build = Kompiliacija { $build } · { $commit }
 dialog-about-dev-build = Kūrėjo kompiliacija · { $commit }
 dialog-about-licence = Laisvoji programinė įranga pagal MIT licenciją.

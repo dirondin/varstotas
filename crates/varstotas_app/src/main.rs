@@ -98,6 +98,12 @@ fn main() -> eframe::Result<()> {
     }
     let mut wgpu_options = egui_wgpu::WgpuConfiguration::default();
     if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
+        // Windows Sandbox: its virtual GPU takes the whole sandbox down under DirectX 12, while
+        // OpenGL works; WGPU_BACKEND still chooses.
+        if windows_sandbox() && std::env::var_os("WGPU_BACKEND").is_none() {
+            log::info!("Windows Sandbox: using OpenGL");
+            setup.instance_descriptor.backends = egui_wgpu::wgpu::Backends::GL;
+        }
         // Ray queries (hardware / driver ray tracing) for the path tracer, where there are any.
         let base = setup.device_descriptor.clone();
         setup.device_descriptor = std::sync::Arc::new(move |adapter| {
@@ -189,6 +195,11 @@ fn start_failed(error: &str) {
         .set_description(varstotas_i18n::tr!("app-start-failed", error = details))
         .set_buttons(rfd::MessageButtons::Ok)
         .show();
+}
+
+/// Running in Windows Sandbox (its fixed account name).
+fn windows_sandbox() -> bool {
+    cfg!(windows) && std::env::var("USERNAME").is_ok_and(|u| u.eq_ignore_ascii_case("WDAGUtilityAccount"))
 }
 
 /// The window / Dock icon (`assets/icon.png`, drawn by scripts/make_icon.py).

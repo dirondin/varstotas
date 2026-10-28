@@ -2932,7 +2932,7 @@ app-start-failed = Varstotas не смог открыть окно:
 
     { $error }
 
-    Для 3D-вида нужен Vulkan, DirectX 12, Metal или OpenGL 3.3. Обновите драйвер видеокарты; в виртуальной машине включите 3D-ускорение.
+    Для 3D-вида нужен Vulkan, DirectX 12, Metal или OpenGL 3.3. Обновите драйвер видеокарты; в виртуальной машине включите 3D-ускорение. Чтобы попробовать другой графический API, задайте переменную окружения WGPU_BACKEND = gl, vulkan или dx12.
 dialog-about-build = Сборка { $build } · { $commit }
 dialog-about-dev-build = Сборка для разработки · { $commit }
 dialog-about-licence = Свободное ПО под лицензией MIT.
