@@ -20,6 +20,9 @@ pub struct LayoutSheet {
     /// Parts tables (rows from `report::model_report`, filled when drawn).
     #[serde(default)]
     pub tables: Vec<SheetTable>,
+    /// Cutting diagrams (pages of the cut list, `cutlist::plan`, drawn when the sheet is).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cut_diagrams: Vec<SheetCutDiagram>,
     /// Title block in the bottom-right corner (`None`: no block).
     #[serde(default)]
     pub title: Option<TitleBlock>,
@@ -27,7 +30,7 @@ pub struct LayoutSheet {
 
 impl LayoutSheet {
     pub fn new(name: impl Into<String>, size: DVec2) -> Self {
-        Self { name: name.into(), size, viewports: Vec::new(), texts: Vec::new(), tables: Vec::new(), title: Some(TitleBlock::default()) }
+        Self { name: name.into(), size, viewports: Vec::new(), texts: Vec::new(), tables: Vec::new(), cut_diagrams: Vec::new(), title: Some(TitleBlock::default()) }
     }
 }
 
@@ -92,6 +95,16 @@ pub struct SheetTable {
     pub at: DVec2,
     /// Text height, mm (rows are twice as tall).
     pub size: f64,
+}
+
+/// One page of the cut list (a sheet, or a row of boards) fitted into a rectangle.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SheetCutDiagram {
+    /// Top-left corner and size on the paper, mm.
+    pub min: DVec2,
+    pub size: DVec2,
+    /// The page of the cut list, from 0, as Window → Cut List numbers them.
+    pub page: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

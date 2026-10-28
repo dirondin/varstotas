@@ -324,6 +324,12 @@ pub fn sheet_drawing(model: &Model, sheet: &LayoutSheet, index: usize, total: us
     for t in &sheet.tables {
         table_drawing(&mut d, model, t);
     }
+    if !sheet.cut_diagrams.is_empty() {
+        let plan = crate::document::guarded(|| varstotas_kernel::cutlist::plan(model)).unwrap_or_default();
+        for c in &sheet.cut_diagrams {
+            crate::ui::cutlist::cut_diagram_on_sheet(model, &plan, c, &mut d);
+        }
+    }
     for t in &sheet.texts {
         let text = if t.text.contains(CREDITS) { t.text.replace(CREDITS, &credits_text(model)) } else { t.text.clone() };
         d.texts.push(Text2 { at: t.at, angle: 0.0, size: t.size, lines: text.lines().map(str::to_string).collect(), left: true });
@@ -499,5 +505,28 @@ mod tests {
         assert_eq!(clip(DVec2::new(-5., 5.), DVec2::new(15., 5.), lo, hi), Some((DVec2::new(0., 5.), DVec2::new(10., 5.))));
         assert_eq!(clip(DVec2::new(-5., -5.), DVec2::new(-1., 20.), lo, hi), None);
         assert_eq!(clip(DVec2::new(2., 2.), DVec2::new(3., 3.), lo, hi), Some((DVec2::new(2., 2.), DVec2::new(3., 3.))));
+    }
+
+    #[test]
+    fn cut_diagram_fits_its_rectangle() {
+        let mut model = boxed();
+        let mat = model.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
+        model.materials[mat].stock.push(varstotas_kernel::cutlist::Stock::sheet(2440.0, 1220.0, 18.0, true));
+        let g = model.add_group_mesh(&[], varstotas_kernel::primitives::Primitive::Box { w: 800.0, d: 400.0, h: 18.0 }.mesh().unwrap(), "Group", varstotas_kernel::glam::DMat4::IDENTITY).unwrap();
+        model.root_mesh_mut().instances[g].material = Some(mat);
+        let mut sheet = LayoutSheet::new("A3", DVec2::new(420.0, 297.0));
+        let c = varstotas_kernel::layout::SheetCutDiagram { min: DVec2::new(30.0, 40.0), size: DVec2::new(200.0, 120.0), page: 0 };
+        sheet.cut_diagrams.push(c.clone());
+        let d = sheet_drawing(&model, &sheet, 0, 1, "");
+        assert!(d.texts.iter().any(|t| t.lines[0].starts_with("Plywood")), "the page title");
+        assert!(d.texts.iter().any(|t| t.lines[0].contains("800")), "the piece label");
+        let inside = |p: DVec2| p.x >= c.min.x - 1e-6 && p.y >= c.min.y - 1e-6 && p.x <= c.min.x + c.size.x + 1e-6 && p.y <= c.min.y + c.size.y + 1e-6;
+        // the sheet's own border and title block lie elsewhere: only the diagram's fills here
+        assert!(!d.fills.is_empty());
+        assert!(d.fills.iter().flatten().all(|p| inside(*p)));
+        // a page that is gone leaves a note
+        sheet.cut_diagrams[0].page = 5;
+        let d = sheet_drawing(&model, &sheet, 0, 1, "");
+        assert!(d.texts.iter().any(|t| t.lines[0] == tr!("cutlist-sheet-no-page")));
     }
 }

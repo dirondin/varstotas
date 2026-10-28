@@ -13,6 +13,8 @@ m = varstotas.connect()
 with m.operation("Bookshelf"):     # one undo step
     m.material("Birch", "#E3C99A")
     m.material("Back", "#B8B2A6")
+    m.set_stock("Birch", {"kind": "sheet", "length": 2440, "width": 1220, "thickness": t, "grain": True, "price": 85})
+    m.set_stock("Back", {"kind": "sheet", "length": 2440, "width": 1220, "thickness": 4, "price": 18})
     parts = []
     for name, origin, size in [
         ("Side L", vec3(0, 0, 0), (t, d, h)),

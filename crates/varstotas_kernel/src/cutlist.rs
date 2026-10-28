@@ -12,8 +12,13 @@
 //! or track saw): free rectangles split after each placement, several part orders and placement
 //! and split rules tried, the plan with the fewest sheets (then the largest offcut) kept. Boards
 //! are 1D cutting stock: first fit decreasing over the longest length, then each board shrunk
-//! to the shortest length on sale that holds its pieces. The kerf is left after every piece
+//! to the cheapest length on sale that holds its pieces. The kerf is left after every piece
 //! except at the stock's edge. Everything is in millimetres.
+//!
+//! A material can carry several stock items. A part takes the nearest thickness; among boards of
+//! that thickness the narrowest that holds the part's width; among sheets of that thickness the
+//! optimizer picks the size: the cheapest that holds the parts (by price, by area while some size
+//! has no price), then the last sheet is cut from a cheaper size when its pieces fit there.
 
 use crate::model::{ContextPath, Model};
 use crate::tessellate::triangulate_face;
@@ -55,16 +60,32 @@ pub struct Stock {
     /// Per sheet, or per metre of board.
     #[serde(default)]
     pub price: f64,
+    /// Boards priced per piece instead of per metre: the price of each of [`Stock::lengths`]
+    /// (a single value is the price of every length).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub piece_prices: Vec<f64>,
 }
 
 impl Stock {
     pub fn sheet(length: f64, width: f64, thickness: f64, grain: bool) -> Self {
-        Self { kind: StockKind::Sheet, thickness, length, width, lengths: Vec::new(), grain, price: 0.0 }
+        Self { kind: StockKind::Sheet, thickness, length, width, lengths: Vec::new(), grain, price: 0.0, piece_prices: Vec::new() }
     }
 
     pub fn board(width: f64, thickness: f64, lengths: &[f64]) -> Self {
         let length = lengths.iter().copied().fold(0.0, f64::max);
-        Self { kind: StockKind::Board, thickness, length, width, lengths: lengths.to_vec(), grain: true, price: 0.0 }
+        Self { kind: StockKind::Board, thickness, length, width, lengths: lengths.to_vec(), grain: true, price: 0.0, piece_prices: Vec::new() }
+    }
+
+    /// The price of one sheet, or of one board of `length`.
+    pub fn cost_of(&self, length: f64) -> f64 {
+        match self.kind {
+            StockKind::Sheet => self.price,
+            StockKind::Board if self.piece_prices.is_empty() => length / 1000.0 * self.price,
+            StockKind::Board => {
+                let i = self.lengths.iter().position(|l| (l - length).abs() < EPS);
+                i.and_then(|i| self.piece_prices.get(i)).or(self.piece_prices.last()).copied().unwrap_or(0.0)
+            }
+        }
     }
 
     /// Board lengths on sale, shortest first (never empty for a board with a length).
@@ -189,12 +210,9 @@ pub struct StockPlan {
 }
 
 impl StockPlan {
-    /// Sheets: the count × price; boards: the metres × price.
+    /// Sheets: the count × price; boards: the metres × price, or the price of each board.
     pub fn cost(&self) -> f64 {
-        match self.stock.kind {
-            StockKind::Sheet => self.layouts.len() as f64 * self.stock.price,
-            StockKind::Board => self.layouts.iter().map(|l| l.length).sum::<f64>() / 1000.0 * self.stock.price,
-        }
+        self.layouts.iter().map(|l| self.stock.cost_of(l.length)).sum()
     }
 
     /// Share of the bought stock that is not in a part (0..1).
@@ -489,6 +507,11 @@ pub type BoardPiece = (usize, f64, f64);
 /// Pieces `(id, length, width)` cut from boards of `lengths` (shortest first); pieces longer than the
 /// longest board are left out. Each layout is `width` wide, its pieces at y = 0 with `h` = width.
 pub fn pack_boards(pieces: &[BoardPiece], lengths: &[f64], width: f64, kerf: f64, min_offcut: f64) -> Vec<Layout> {
+    pack_boards_priced(pieces, lengths, width, kerf, min_offcut, &|l| l)
+}
+
+/// [`pack_boards`] with each board bought at the cheapest length (by `cost`) that holds it.
+pub fn pack_boards_priced(pieces: &[BoardPiece], lengths: &[f64], width: f64, kerf: f64, min_offcut: f64, cost: &dyn Fn(f64) -> f64) -> Vec<Layout> {
     let Some(&longest) = lengths.last() else { return Vec::new() };
     let mut sorted: Vec<BoardPiece> = pieces.iter().copied().filter(|p| p.1 <= longest + EPS).collect();
     sorted.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -511,7 +534,7 @@ pub fn pack_boards(pieces: &[BoardPiece], lengths: &[f64], width: f64, kerf: f64
     boards
         .into_iter()
         .map(|(used, list)| {
-            let length = lengths.iter().copied().find(|l| *l + EPS >= used).unwrap_or(longest);
+            let length = lengths.iter().copied().filter(|l| *l + EPS >= used).min_by(|a, b| cost(*a).total_cmp(&cost(*b)).then(a.total_cmp(b))).unwrap_or(longest);
             let mut x = 0.0;
             let pieces: Vec<Placement> = list
                 .iter()
@@ -533,64 +556,164 @@ pub fn plan(model: &Model) -> CutPlan {
     plan_parts(model, cut_parts(model), &model.cut_list)
 }
 
+/// The stock a part is cut from: the indices of `stocks` (one board, or the sheet sizes of one
+/// thickness for the optimizer to choose from), or `None` without stock.
+fn stock_choice(stocks: &[Stock], p: &CutPart, tolerance: f64) -> Option<Vec<usize>> {
+    let t = stocks.iter().map(|s| s.thickness).min_by(|a, b| (a - p.size[2]).abs().total_cmp(&(b - p.size[2]).abs()))?;
+    let same = |kind: StockKind| stocks.iter().enumerate().filter(move |(_, s)| s.kind == kind && (s.thickness - t).abs() < EPS);
+    let narrowest = same(StockKind::Board).filter(|(_, s)| p.size[1] <= s.width + tolerance + EPS).min_by(|a, b| a.1.width.total_cmp(&b.1.width));
+    if let Some((i, _)) = narrowest {
+        return Some(vec![i]);
+    }
+    let sheets: Vec<usize> = same(StockKind::Sheet).map(|(i, _)| i).collect();
+    if !sheets.is_empty() {
+        return Some(sheets);
+    }
+    // too wide for every board of that thickness: the widest, reported as too big
+    same(StockKind::Board).max_by(|a, b| a.1.width.total_cmp(&b.1.width)).map(|(i, _)| vec![i])
+}
+
+/// Sheets for `members` from the sheet sizes `stocks` (index into the material's stock, size):
+/// the layouts per stock index.
+fn plan_sheets(stocks: &[(usize, &Stock)], members: &[usize], parts: &[CutPart], settings: &CutSettings, issues: &mut Vec<Issue>) -> Vec<(usize, Vec<Layout>)> {
+    let item = |st: &Stock, i: usize| {
+        let p = &parts[i];
+        let grain = settings.options(&p.name).grain;
+        let (w, h) = match grain {
+            PartGrain::Width => (p.size[1], p.size[0]),
+            _ => (p.size[0], p.size[1]),
+        };
+        Item { id: i, w, h, can_rotate: !st.grain || grain == PartGrain::Any }
+    };
+    let usable = |st: &Stock| (st.length - 2.0 * settings.trim, st.width - 2.0 * settings.trim);
+    let fits = |st: &Stock, i: usize| {
+        let (l, w) = usable(st);
+        !too_big_for_sheet(&item(st, i), l, w)
+    };
+    // compared by price, or by area while a size has no price
+    let priced = stocks.iter().all(|(_, s)| s.price > 0.0);
+    let unit = |st: &Stock| if priced { st.price } else { st.length * st.width / 1e6 };
+    let pack = |st: &Stock, ids: &[usize]| {
+        let (l, w) = usable(st);
+        let items: Vec<Item> = ids.iter().map(|&i| item(st, i)).collect();
+        let mut layouts = pack_sheets(&items, l, w, settings.kerf, settings.min_offcut);
+        // back to the whole sheet's coordinates
+        for l in &mut layouts {
+            l.length = st.length;
+            l.width = st.width;
+            for p in &mut l.pieces {
+                p.x += settings.trim;
+                p.y += settings.trim;
+            }
+            for o in &mut l.offcuts {
+                o[0] += settings.trim;
+                o[1] += settings.trim;
+            }
+        }
+        layouts
+    };
+    // one id per piece
+    let mut left: Vec<usize> = Vec::new();
+    for &i in members {
+        if stocks.iter().any(|(_, st)| fits(st, i)) {
+            left.extend(std::iter::repeat_n(i, parts[i].count));
+        } else {
+            issues.push(Issue::TooBig { part: i });
+        }
+    }
+    let mut out: Vec<(usize, Vec<Layout>)> = Vec::new();
+    let mut add = |k: usize, layouts: Vec<Layout>| match out.iter_mut().find(|(j, _)| *j == k) {
+        Some((_, l)) => l.extend(layouts),
+        None => out.push((k, layouts)),
+    };
+    // all the pieces it holds on size `k`, the last sheet from a cheaper size when its pieces fit
+    // there: the layouts per size and the cost
+    let try_size = |k: usize, ids: &[usize]| {
+        let mut layouts = pack(stocks[k].1, ids);
+        let mut cost = layouts.len() as f64 * unit(stocks[k].1);
+        let mut extra = None;
+        if let Some(last) = layouts.last() {
+            let ids: Vec<usize> = last.pieces.iter().map(|p| p.part).collect();
+            let own = unit(stocks[k].1);
+            let cheaper = stocks
+                .iter()
+                .enumerate()
+                .filter(|(j, (_, st))| *j != k && ids.iter().all(|&i| fits(st, i)))
+                .map(|(j, (_, st))| {
+                    let l = pack(st, &ids);
+                    let c = l.len() as f64 * unit(st);
+                    (j, l, c)
+                })
+                .filter(|(_, _, c)| *c + EPS < own)
+                .min_by(|a, b| a.2.total_cmp(&b.2));
+            if let Some((j, l, c)) = cheaper {
+                layouts.pop();
+                cost += c - own;
+                extra = Some((j, l));
+            }
+        }
+        (layouts, extra, cost)
+    };
+    while !left.is_empty() {
+        // the size that holds the most pieces, then the cheapest plan for them
+        let best = (0..stocks.len())
+            .filter_map(|k| {
+                let ids: Vec<usize> = left.iter().copied().filter(|&i| fits(stocks[k].1, i)).collect();
+                if ids.is_empty() {
+                    return None;
+                }
+                let (layouts, extra, cost) = try_size(k, &ids);
+                Some((k, ids, layouts, extra, cost))
+            })
+            .max_by(|a, b| a.1.len().cmp(&b.1.len()).then(b.4.total_cmp(&a.4)));
+        let Some((k, ids, layouts, extra, _)) = best else { break };
+        add(k, layouts);
+        if let Some((j, l)) = extra {
+            add(j, l);
+        }
+        for i in ids {
+            if let Some(at) = left.iter().position(|&x| x == i) {
+                left.swap_remove(at);
+            }
+        }
+    }
+    out.sort_by_key(|(k, _)| *k);
+    out.into_iter().map(|(k, l)| (stocks[k].0, l)).collect()
+}
+
 /// The cut list of `parts` (from [`cut_parts`]).
 pub fn plan_parts(model: &Model, parts: Vec<CutPart>, settings: &CutSettings) -> CutPlan {
     let mut issues = Vec::new();
-    // parts per (material, stock index)
-    let mut groups: BTreeMap<(Option<MaterialId>, usize), Vec<usize>> = BTreeMap::new();
+    // parts per (material, the stock indices to cut them from)
+    let mut groups: BTreeMap<(Option<MaterialId>, Vec<usize>), Vec<usize>> = BTreeMap::new();
     for (i, p) in parts.iter().enumerate() {
         if settings.options(&p.name).exclude {
             continue;
         }
         let stocks = p.material.and_then(|m| model.materials.get(m)).map(|m| m.stock.as_slice()).unwrap_or_default();
-        let Some((si, s)) = stocks.iter().enumerate().min_by(|a, b| (a.1.thickness - p.size[2]).abs().total_cmp(&(b.1.thickness - p.size[2]).abs()))
-        else {
+        let Some(choice) = stock_choice(stocks, p, settings.tolerance) else {
             issues.push(Issue::NoStock { part: i });
             continue;
         };
-        if (s.thickness - p.size[2]).abs() > settings.tolerance + EPS {
-            issues.push(Issue::Thickness { part: i, stock: s.thickness });
+        let t = stocks[choice[0]].thickness;
+        if (t - p.size[2]).abs() > settings.tolerance + EPS {
+            issues.push(Issue::Thickness { part: i, stock: t });
         }
-        groups.entry((p.material, si)).or_default().push(i);
+        groups.entry((p.material, choice)).or_default().push(i);
     }
     let mut plans = Vec::new();
-    for ((material, si), members) in groups {
-        let mat = material.and_then(|m| model.materials.get(m));
-        let Some(stock) = mat.and_then(|m| m.stock.get(si)).cloned() else { continue };
-        let layouts = match stock.kind {
+    for ((material, choice), members) in groups {
+        let Some(mat) = material.and_then(|m| model.materials.get(m)) else { continue };
+        let plan = |si: usize, layouts: Vec<Layout>| StockPlan { material, material_name: mat.name.clone(), stock: mat.stock[si].clone(), layouts };
+        let stock = &mat.stock[choice[0]];
+        match stock.kind {
             StockKind::Sheet => {
-                let len = stock.length - 2.0 * settings.trim;
-                let wid = stock.width - 2.0 * settings.trim;
-                let mut items = Vec::new();
-                for &i in &members {
-                    let p = &parts[i];
-                    let grain = settings.options(&p.name).grain;
-                    let (w, h) = match grain {
-                        PartGrain::Width => (p.size[1], p.size[0]),
-                        _ => (p.size[0], p.size[1]),
-                    };
-                    let item = Item { id: i, w, h, can_rotate: !stock.grain || grain == PartGrain::Any };
-                    if too_big_for_sheet(&item, len, wid) {
-                        issues.push(Issue::TooBig { part: i });
-                        continue;
-                    }
-                    items.extend(std::iter::repeat_n(item, p.count));
-                }
-                let mut layouts = pack_sheets(&items, len, wid, settings.kerf, settings.min_offcut);
-                // back to the whole sheet's coordinates
-                for l in &mut layouts {
-                    l.length = stock.length;
-                    l.width = stock.width;
-                    for p in &mut l.pieces {
-                        p.x += settings.trim;
-                        p.y += settings.trim;
-                    }
-                    for o in &mut l.offcuts {
-                        o[0] += settings.trim;
-                        o[1] += settings.trim;
+                let sizes: Vec<(usize, &Stock)> = choice.iter().map(|&si| (si, &mat.stock[si])).collect();
+                for (si, layouts) in plan_sheets(&sizes, &members, &parts, settings, &mut issues) {
+                    if !layouts.is_empty() {
+                        plans.push(plan(si, layouts));
                     }
                 }
-                layouts
             }
             StockKind::Board => {
                 let lengths = stock.board_lengths();
@@ -604,11 +727,11 @@ pub fn plan_parts(model: &Model, parts: Vec<CutPart>, settings: &CutSettings) ->
                     }
                     pieces.extend(std::iter::repeat_n((i, p.size[0], p.size[1].min(stock.width)), p.count));
                 }
-                pack_boards(&pieces, &lengths, stock.width, settings.kerf, settings.min_offcut)
+                let layouts = pack_boards_priced(&pieces, &lengths, stock.width, settings.kerf, settings.min_offcut, &|l| stock.cost_of(l));
+                if !layouts.is_empty() {
+                    plans.push(plan(choice[0], layouts));
+                }
             }
-        };
-        if !layouts.is_empty() {
-            plans.push(StockPlan { material, material_name: mat.map(|m| m.name.clone()).unwrap_or_default(), stock, layouts });
         }
     }
     CutPlan { parts, plans, issues }
@@ -682,10 +805,7 @@ pub fn plan_csv(model: &Model, plan: &CutPlan) -> String {
         };
         let waste = num((sp.waste() * 1000.0).round() / 10.0);
         for (len, n) in sp.to_buy() {
-            let cost = match st.kind {
-                StockKind::Sheet => n as f64 * st.price,
-                StockKind::Board => n as f64 * len / 1000.0 * st.price,
-            };
+            let cost = n as f64 * st.cost_of(len);
             let _ = writeln!(s, "{},{},{},{},{},{}", csv_field(&sp.material_name), csv_field(&what), num(len / k), n, waste, num(cost));
         }
     }

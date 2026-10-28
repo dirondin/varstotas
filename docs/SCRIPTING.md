@@ -109,13 +109,16 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 ## Cut list
 | Function | Result |
 |---|---|
-| `set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })` | what a material is bought as; an array sets several items, `()` clears it. A board: `#{ kind: "board", width: 95, thickness: 45, lengths: [2400, "3 m"], price: 5 }` (the price per metre) |
+| `set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })` | what a material is bought as; an array sets several items, `()` clears it. A board: `#{ kind: "board", width: 95, thickness: 45, lengths: [2400, "3 m"], price: 5 }` (the price per metre); per piece: `prices: [9, 16]`, one per length, or a single price for every length. Several items: thicknesses, board sections or sheet sizes to choose from |
 | `cut_settings(#{ kerf: 3, trim: 10, min_offcut: 100, tolerance: 0.5 })` | the document's cutting settings (any subset of keys) |
 | `cut_part("Shelf", #{ grain: "length", exclude: false })` | per part name: grain `"length"`, `"width"` or `"any"` (may rotate), exclude from the cut list |
 | `cut_list()` | `#{ parts, stock, issues, cost }`: parts with name, count, length, width, thickness and material; per stock item its material, kind, sizes, `count`, `buy` (`[#{ length, count }]`), `waste` (%), `cost` and `layouts` (pieces with part index, x, y, w, h, rotated) |
 
 The parts are the innermost groups and components that have faces, sized by the bounding box in
-their own axes (length ≥ width ≥ thickness). Sheets are packed with guillotine cuts (what panel
+their own axes (length ≥ width ≥ thickness). A part takes its material's nearest stock thickness;
+of the boards of that thickness the narrowest that holds its width; of several sheet sizes the
+cheapest for the job (by price, by area while a size has none), and the last sheet may come from
+a smaller size. Sheets are packed with guillotine cuts (what panel
 and track saws make), boards with first fit decreasing over the lengths on sale. The same plan is
 in Window → Cut List, with diagrams and PDF / SVG / CSV export.
 

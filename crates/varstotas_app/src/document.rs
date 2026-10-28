@@ -54,6 +54,8 @@ pub struct PaletteMaterial {
     pub image: Option<varstotas_kernel::TextureImage>,
     /// PBR parameters, maps and shader (a library material brings its own).
     pub pbr: Option<varstotas_kernel::Pbr>,
+    /// What it is bought as (cut list); a library material brings its own.
+    pub stock: Vec<varstotas_kernel::cutlist::Stock>,
 }
 
 #[allow(dead_code)] // used by the Paint tool (Tools agent)
@@ -66,12 +68,13 @@ impl PaletteMaterial {
         let id = model.add_material(&self.name, self.color);
         model.materials[id].image = self.image.clone();
         model.materials[id].pbr = self.pbr.clone();
+        model.materials[id].stock = self.stock.clone();
         id
     }
 
     /// A plain colour.
     pub fn color(name: impl Into<String>, color: [f32; 4]) -> Self {
-        Self { name: name.into(), color, image: None, pbr: None }
+        Self { name: name.into(), color, image: None, pbr: None, stock: Vec::new() }
     }
 
     /// The image in texture slot `slot` ("base" or a PBR map name).
@@ -84,7 +87,7 @@ impl PaletteMaterial {
 
     /// The palette entry for a model material.
     pub fn of(m: &varstotas_kernel::Material) -> Self {
-        Self { name: m.name.clone(), color: m.color, image: m.image.clone(), pbr: m.pbr.clone() }
+        Self { name: m.name.clone(), color: m.color, image: m.image.clone(), pbr: m.pbr.clone(), stock: m.stock.clone() }
     }
 }
 

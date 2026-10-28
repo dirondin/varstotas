@@ -10,7 +10,7 @@ use crate::vector_export::{Drawing, Pen};
 use egui::{Color32, Context, Pos2, Rect, RichText, Sense, Stroke, pos2, vec2};
 use varstotas_kernel::glam::DVec2;
 use varstotas_kernel::Model;
-use varstotas_kernel::layout::{LayoutSheet, PAPERS, SheetTable, SheetText, SheetViewport, TitleBlock};
+use varstotas_kernel::layout::{LayoutSheet, PAPERS, SheetCutDiagram, SheetTable, SheetText, SheetViewport, TitleBlock};
 use std::path::Path;
 use std::rc::Rc;
 use varstotas_i18n::tr;
@@ -25,6 +25,8 @@ pub enum SheetItem {
     Viewport(usize),
     Text(usize),
     Table(usize),
+    /// A cutting diagram (a page of the cut list).
+    Cut(usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -61,7 +63,8 @@ fn text_box(t: &SheetText) -> (DVec2, DVec2) {
     (DVec2::new(t.at.x, t.at.y - t.size), DVec2::new(w, h))
 }
 
-/// The topmost item at `p` (mm): texts, tables, then viewports; later above earlier.
+/// The topmost item at `p` (mm): texts, tables, cutting diagrams, then viewports; later above
+/// earlier.
 fn hit(model: &Model, sheet: &LayoutSheet, p: DVec2) -> Option<SheetItem> {
     let within = |a: DVec2, s: DVec2| p.x >= a.x && p.y >= a.y && p.x <= a.x + s.x && p.y <= a.y + s.y;
     for (i, t) in sheet.texts.iter().enumerate().rev() {
@@ -74,6 +77,9 @@ fn hit(model: &Model, sheet: &LayoutSheet, p: DVec2) -> Option<SheetItem> {
         if within(t.at, table_size(model, t)) {
             return Some(SheetItem::Table(i));
         }
+    }
+    if let Some(i) = sheet.cut_diagrams.iter().rposition(|c| within(c.min, c.size)) {
+        return Some(SheetItem::Cut(i));
     }
     sheet.viewports.iter().rposition(|v| v.contains(p)).map(SheetItem::Viewport)
 }
@@ -215,6 +221,7 @@ impl VarstotasApp {
         let (min, size) = match self.sheets.selected? {
             SheetItem::Viewport(v) => sheet.viewports.get(v).map(|vp| (vp.min, vp.size))?,
             SheetItem::Table(t) => sheet.tables.get(t).map(|t| (t.at, table_size(m, t)))?,
+            SheetItem::Cut(c) => sheet.cut_diagrams.get(c).map(|c| (c.min, c.size))?,
             SheetItem::Text(_) => return None,
         };
         let r = |x: f64| x.round() as i64;
@@ -276,6 +283,7 @@ impl VarstotasApp {
         let page = sheet.as_ref().map(|s| self.sheet_page(cur, s));
         let names: Vec<String> = self.doc.model.sheets.iter().map(|s| s.name.clone()).collect();
         let scenes: Vec<(String, bool)> = self.doc.model.scenes.iter().map(|s| (s.name.clone(), s.ortho)).collect();
+        let cut_pages = crate::ui::cutlist::cut_page_titles(&self.cut_plan(), self.doc.model.unit);
         let current_view = self.current_view_scene("View"); // i18n-ignore
         let new_vp = sheet.as_ref().map(|s| self.new_viewport(s));
         let pos = self.viewport.view_rect.min + vec2(20.0, 20.0);
@@ -370,6 +378,9 @@ impl VarstotasApp {
                                 Some(SheetItem::Table(i)) if i < sheet.tables.len() => {
                                     sheet.tables.remove(i);
                                 }
+                                Some(SheetItem::Cut(i)) if i < sheet.cut_diagrams.len() => {
+                                    sheet.cut_diagrams.remove(i);
+                                }
                                 _ => {}
                             }
                         }
@@ -386,6 +397,15 @@ impl VarstotasApp {
                             t.at = DVec2::new(BORDER + 5.0, sheet.size.y - BORDER - 5.0 - h);
                             sheet.tables.push(t);
                             st.selected = Some(SheetItem::Table(sheet.tables.len() - 1));
+                        }
+                        let cut = ui.add_enabled(!cut_pages.is_empty(), egui::Button::new(tr!("sheets-add-cut")));
+                        if cut.on_hover_text(tr!("sheets-add-cut-hint")).on_disabled_hover_text(tr!("sheets-add-cut-none")).clicked() {
+                            // A4 landscape proportions across the drawing area
+                            let w = (sheet.size.x - 2.0 * (BORDER + 5.0)).max(20.0);
+                            let h = (w * 190.0 / 277.0).min(sheet.size.y - 2.0 * (BORDER + 5.0)).max(20.0);
+                            let page = sheet.cut_diagrams.len().min(cut_pages.len() - 1);
+                            sheet.cut_diagrams.push(SheetCutDiagram { min: DVec2::splat(BORDER + 5.0), size: DVec2::new(w, h), page });
+                            st.selected = Some(SheetItem::Cut(sheet.cut_diagrams.len() - 1));
                         }
                     });
                     match st.selected {
@@ -478,6 +498,32 @@ impl VarstotasApp {
                                 ui.add(egui::DragValue::new(&mut t.at.y).speed(0.5).suffix(" mm"));
                             });
                         }
+                        Some(SheetItem::Cut(i)) if i < sheet.cut_diagrams.len() => {
+                            let c = &mut sheet.cut_diagrams[i];
+                            ui.label(RichText::new(tr!("sheets-cut-n", n = i + 1)).strong());
+                            egui::Grid::new("cut_props").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                                ui.label(tr!("sheets-cut-page"));
+                                let shown = cut_pages.get(c.page).cloned().unwrap_or_else(|| tr!("cutlist-sheet-no-page"));
+                                egui::ComboBox::from_id_salt("cut_page").width(240.0).selected_text(shown).show_ui(ui, |ui| {
+                                    for (n, title) in cut_pages.iter().enumerate() {
+                                        ui.selectable_value(&mut c.page, n, format!("{}. {title}", n + 1));
+                                    }
+                                });
+                                ui.end_row();
+                                ui.label(tr!("sheets-position"));
+                                ui.horizontal(|ui| {
+                                    ui.add(egui::DragValue::new(&mut c.min.x).speed(0.5).suffix(" mm"));
+                                    ui.add(egui::DragValue::new(&mut c.min.y).speed(0.5).suffix(" mm"));
+                                });
+                                ui.end_row();
+                                ui.label(tr!("sheets-size"));
+                                ui.horizontal(|ui| {
+                                    ui.add(egui::DragValue::new(&mut c.size.x).range(10.0..=2000.0).speed(0.5).suffix(" mm"));
+                                    ui.add(egui::DragValue::new(&mut c.size.y).range(10.0..=2000.0).speed(0.5).suffix(" mm"));
+                                });
+                                ui.end_row();
+                            });
+                        }
                         _ => {
                             ui.label(RichText::new(tr!("sheets-hint")).color(theme::text_dim()));
                         }
@@ -506,6 +552,7 @@ impl VarstotasApp {
                     if let Some(pp) = at {
                         let handle = match st.selected {
                             Some(SheetItem::Viewport(i)) => sheet.viewports.get(i).filter(|v| sp(v.min + v.size).distance(pp) <= HANDLE).map(|_| i),
+                            Some(SheetItem::Cut(i)) => sheet.cut_diagrams.get(i).filter(|c| sp(c.min + c.size).distance(pp) <= HANDLE).map(|_| i),
                             _ => None,
                         };
                         let item = if handle.is_some() { st.selected } else { hit(model, sheet, mm(pp)) };
@@ -519,6 +566,10 @@ impl VarstotasApp {
                                 }
                                 Some(SheetItem::Text(i)) => Some(Drag { item: SheetItem::Text(i), resize: false, min: sheet.texts[i].at, size: DVec2::ZERO }),
                                 Some(SheetItem::Table(i)) => Some(Drag { item: SheetItem::Table(i), resize: false, min: sheet.tables[i].at, size: DVec2::ZERO }),
+                                Some(SheetItem::Cut(i)) => {
+                                    let c = &sheet.cut_diagrams[i];
+                                    Some(Drag { item: SheetItem::Cut(i), resize: handle.is_some(), min: c.min, size: c.size })
+                                }
                                 None => None,
                             };
                         }
@@ -538,6 +589,14 @@ impl VarstotasApp {
                             }
                             SheetItem::Text(i) if i < sheet.texts.len() => sheet.texts[i].at = snap(d.min + delta),
                             SheetItem::Table(i) if i < sheet.tables.len() => sheet.tables[i].at = snap(d.min + delta),
+                            SheetItem::Cut(i) if i < sheet.cut_diagrams.len() => {
+                                let c = &mut sheet.cut_diagrams[i];
+                                if d.resize {
+                                    c.size = snap(d.size + delta).max(DVec2::splat(10.0));
+                                } else {
+                                    c.min = snap(d.min + delta);
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -552,6 +611,7 @@ impl VarstotasApp {
                             (a, s, false)
                         }),
                         Some(SheetItem::Table(i)) => sheet.tables.get(i).map(|t| (t.at, table_size(model, t), false)),
+                        Some(SheetItem::Cut(i)) => sheet.cut_diagrams.get(i).map(|c| (c.min, c.size, true)),
                         None => None,
                     };
                     if let Some((a, s, handle)) = sel {

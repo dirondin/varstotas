@@ -28,10 +28,11 @@ pub enum Section {
     Shortcuts,
     Toolbar,
     Render,
+    CutList,
 }
 
 impl Section {
-    pub const ALL: [Section; 10] = [
+    pub const ALL: [Section; 11] = [
         Section::General,
         Section::Interface,
         Section::Drawing,
@@ -41,6 +42,7 @@ impl Section {
         Section::Navigation,
         Section::Shortcuts,
         Section::Render,
+        Section::CutList,
         Section::Toolbar,
     ];
 
@@ -56,6 +58,7 @@ impl Section {
             Section::Shortcuts => "prefs-section-shortcuts",
             Section::Toolbar => "prefs-section-toolbar",
             Section::Render => "prefs-section-render",
+            Section::CutList => "prefs-section-cut-list",
         })
     }
 
@@ -71,6 +74,7 @@ impl Section {
             Section::Navigation => "mouse trackpad orbit zoom pan speed invert wheel cursor middle button two fingers gesture pinch twist roll multitouch", // i18n-ignore
             Section::Shortcuts => "keyboard shortcuts hotkeys keys", // i18n-ignore
             Section::Toolbar => "toolbar buttons order reserve separator customize tools", // i18n-ignore
+            Section::CutList => "cut list stock templates sheet board plywood timber price presets", // i18n-ignore
             Section::View => "new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera", // i18n-ignore
         }
     }
@@ -88,6 +92,7 @@ impl Section {
             Section::Shortcuts => "prefs-words-shortcuts",
             Section::Toolbar => "prefs-words-toolbar",
             Section::Render => "prefs-words-render",
+            Section::CutList => "prefs-words-cut-list",
         })
         .to_lowercase()
     }
@@ -243,13 +248,16 @@ impl VarstotasApp {
                         let section = self.prefs_win.section;
                         ui.horizontal(|ui| {
                             ui.heading(section.name());
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let r = ui.button(tr!("prefs-reset")).on_hover_text(tr!("prefs-reset-tip"));
-                                super::tray_lib::spot("prefs_reset", r.rect.center());
-                                if r.clicked() {
-                                    self.reset_prefs_section(section);
-                                }
-                            });
+                            // the cut list section holds only the user's templates: nothing to reset
+                            if section != Section::CutList {
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let r = ui.button(tr!("prefs-reset")).on_hover_text(tr!("prefs-reset-tip"));
+                                    super::tray_lib::spot("prefs_reset", r.rect.center());
+                                    if r.clicked() {
+                                        self.reset_prefs_section(section);
+                                    }
+                                });
+                            }
                         });
                         match section {
                             Section::General => self.prefs_general(ui),
@@ -262,6 +270,7 @@ impl VarstotasApp {
                             Section::Shortcuts => self.prefs_shortcuts(ui),
                             Section::Toolbar => self.prefs_toolbar(ui),
                             Section::Render => self.prefs_render(ui),
+                            Section::CutList => self.prefs_cut_list(ui),
                         }
                     });
                 });
@@ -284,6 +293,7 @@ impl VarstotasApp {
             Section::Render => {
                 p.new_render = d.new_render;
             }
+            Section::CutList => {}
             Section::General => {
                 p.undo_steps = d.undo_steps;
                 p.autosave = d.autosave;

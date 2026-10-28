@@ -19,6 +19,12 @@ What already exists and is reused:
 
 ## Batch 1: stock and the cut-list optimizer
 
+Status (2026-10-29): done except linear stock (mouldings, rods) and offcuts kept as stock. Stock
+on materials (also through My Library), user stock templates in Preferences → Cut List, boards
+priced per metre or per piece, several stock items per material (thicknesses, board sections,
+sheet sizes chosen by cost), Window → Cut List, PDF / SVG / CSV, "+ Cut Diagram" on sheets,
+`cut_list()` in Rhai, Python and MCP; the Bookshelf example carries stock.
+
 **Stock.** A material can describe what it is bought as:
 
 - kind: sheet (plywood, MDF, chipboard), board (sawn timber of a fixed section) or linear

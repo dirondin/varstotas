@@ -244,3 +244,74 @@ fn stock_and_settings_survive_save_and_load() {
     let plain = serde_json::to_string(&Model::default()).unwrap();
     assert!(!plain.contains("cut_list") && !plain.contains("\"stock\""));
 }
+
+#[test]
+fn boards_by_section_and_per_piece_prices() {
+    let mut m = Model::default();
+    let pine = m.add_material("Pine", [0.9, 0.8, 0.6, 1.0]);
+    let mut narrow = Stock::board(95.0, 45.0, &[3000.0, 6000.0]);
+    narrow.piece_prices = vec![9.0, 14.0];
+    let mut wide = Stock::board(145.0, 45.0, &[3000.0]);
+    wide.price = 5.0;
+    m.materials[pine].stock = vec![wide, narrow];
+    board(&mut m, "Rail", 2800.0, 95.0, 45.0, DVec3::ZERO, Some(pine));
+    board(&mut m, "Rail", 2800.0, 95.0, 45.0, DVec3::new(0.0, 200.0, 0.0), Some(pine));
+    board(&mut m, "Wide", 1000.0, 140.0, 45.0, DVec3::new(0.0, 400.0, 0.0), Some(pine));
+    board(&mut m, "Short", 500.0, 60.0, 45.0, DVec3::new(0.0, 600.0, 0.0), Some(pine));
+    let p = plan(&m);
+    assert!(p.issues.is_empty(), "{:?}", p.issues);
+    let of = |w: f64| p.plans.iter().find(|s| s.stock.width == w).unwrap();
+    // both rails on one 6 m board (14 < 2 × 9), the short piece on a 3 m one: the narrowest
+    // section that holds 60 mm
+    assert_eq!(of(95.0).to_buy(), vec![(6000.0, 1), (3000.0, 1)]);
+    assert!((of(95.0).cost() - 23.0).abs() < EPS);
+    // the 140 mm part needs the 145 section, priced per metre
+    assert_eq!(of(145.0).to_buy(), vec![(3000.0, 1)]);
+    assert!((of(145.0).cost() - 15.0).abs() < EPS);
+    assert!(plan_csv(&m, &p).contains("Pine,95 × 45,6000,1,"));
+}
+
+#[test]
+fn sheet_sizes_are_chosen_by_cost() {
+    let mut m = Model::default();
+    let ply = m.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
+    let mut big = Stock::sheet(2440.0, 1220.0, 18.0, false);
+    big.price = 60.0;
+    let mut small = Stock::sheet(1220.0, 610.0, 18.0, false);
+    small.price = 20.0;
+    m.materials[ply].stock = vec![big, small];
+    for i in 0..5 {
+        board(&mut m, "Panel", 1200.0, 600.0, 18.0, DVec3::new(0.0, i as f64 * 700.0, 0.0), Some(ply));
+    }
+    // four panels on a big sheet, the fifth on a small one: 80 (five small ones are 100)
+    let p = plan(&m);
+    assert!(p.issues.is_empty(), "{:?}", p.issues);
+    let count = |w: f64| p.plans.iter().find(|s| s.stock.width == w).map_or(0, |s| s.layouts.len());
+    assert_eq!((count(1220.0), count(610.0)), (1, 1), "{:?}", p.plans);
+    assert!((p.cost() - 80.0).abs() < EPS);
+    for sp in &p.plans {
+        for l in &sp.layouts {
+            check_layout(l, 3.0);
+        }
+    }
+    // a part only the big size holds goes there, the rest still choose
+    board(&mut m, "Top", 2000.0, 1000.0, 18.0, DVec3::new(0.0, 5000.0, 0.0), Some(ply));
+    let p = plan(&m);
+    assert!(p.issues.is_empty(), "{:?}", p.issues);
+    let pieces: usize = p.plans.iter().flat_map(|s| &s.layouts).map(|l| l.pieces.len()).sum();
+    assert_eq!(pieces, 6);
+    assert!(p.plans.iter().any(|s| s.stock.width == 1220.0 && s.layouts.iter().any(|l| l.pieces.iter().any(|x| p.parts[x.part].name == "Top"))));
+}
+
+#[test]
+fn bookshelf_example_has_a_cut_list() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/demos/bookshelf.vrst");
+    let m = varstotas_kernel::io::load(&path).unwrap();
+    let p = plan(&m);
+    assert!(p.issues.is_empty(), "{:?}", p.issues);
+    let names: Vec<&str> = p.plans.iter().map(|s| s.material_name.as_str()).collect();
+    assert_eq!(names, ["Birch", "Back"], "{names:?}");
+    for sp in &p.plans {
+        println!("{} {:?} waste {:.0}% cost {}", sp.material_name, sp.to_buy(), sp.waste() * 100.0, sp.cost());
+    }
+}

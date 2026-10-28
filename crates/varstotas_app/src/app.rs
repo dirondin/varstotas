@@ -156,6 +156,8 @@ pub struct Prefs {
     pub new_render: varstotas_kernel::RenderSettings,
     /// Undo steps kept per document.
     pub undo_steps: u32,
+    /// The user's stock templates for the cut list (Preferences → Cut List).
+    pub stock_presets: Vec<crate::ui::cutlist::StockPreset>,
 }
 
 impl Prefs {
@@ -203,6 +205,7 @@ impl Default for Prefs {
             lib_favourites: Vec::new(),
             lib_recent: Vec::new(),
             mat_favourites: Vec::new(),
+            stock_presets: Vec::new(),
             mat_recent: Vec::new(),
             watch_downloads: false,
             tray_hidden: Vec::new(),
@@ -2143,6 +2146,7 @@ impl VarstotasApp {
             color: crate::textures::average_color(&decoded),
             image: Some(tex),
             pbr: None,
+            stock: Vec::new(),
         };
         let p2 = pm.clone();
         self.doc.commit(&tr!("app-undo-add-material"), |m| {

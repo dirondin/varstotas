@@ -1,4 +1,5 @@
-// Bookshelf: two sides, top, bottom and shelves as named groups; a parametric back panel.
+// Bookshelf: two sides, top, bottom and shelves as named groups; a parametric back panel;
+// stock on the materials, so Window → Cut List lays the parts out on plywood sheets.
 // Run: File → Run Script… (or paste into Window → Script Console). One undo step.
 let w = 800;      // outer width, mm
 let h = 1800;     // height
@@ -8,6 +9,9 @@ let shelves = 4;  // inner shelves
 
 material("Birch", "#E3C99A");
 material("Back", "#B8B2A6");
+// What they are bought as, for Window → Cut List (sheet diagrams, shopping list, cost)
+set_stock("Birch", #{ kind: "sheet", length: 2440, width: 1220, thickness: t, grain: true, price: 85 });
+set_stock("Back", #{ kind: "sheet", length: 2440, width: 1220, thickness: 4, price: 18 });
 
 let parts = [];
 let left = box(vec3(0, 0, 0), t, d, h);

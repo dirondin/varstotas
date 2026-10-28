@@ -1564,6 +1564,13 @@ fn register_cut_list(e: &mut Engine) {
         if let Some(p) = get("price") {
             st.price = num(&p)?;
         }
+        // boards per piece: one price for every length, or one per length
+        if let Some(p) = get("prices").filter(|_| kind == StockKind::Board) {
+            st.piece_prices = match p.clone().into_array() {
+                Ok(a) => a.iter().map(num).collect::<R<Vec<f64>>>()?,
+                Err(_) => vec![num(&p)?],
+            };
+        }
         if st.thickness <= 0.0 || st.width <= 0.0 || (st.kind == StockKind::Board && st.board_lengths().is_empty()) || (st.kind == StockKind::Sheet && st.length <= 0.0) {
             return err(tr!("script-err-cut-size"));
         }
@@ -1602,6 +1609,9 @@ fn register_cut_list(e: &mut Engine) {
                     m.insert("width".into(), d(sp.stock.width));
                     if !board {
                         m.insert("length".into(), d(sp.stock.length));
+                    }
+                    if !sp.stock.piece_prices.is_empty() {
+                        m.insert("prices".into(), Dynamic::from_array(sp.stock.piece_prices.iter().map(|v| d(*v)).collect()));
                     }
                     m.insert("count".into(), Dynamic::from(sp.layouts.len() as i64));
                     let buy: Array = sp

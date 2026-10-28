@@ -259,7 +259,7 @@ pub fn material(p: &Params, name: &str) -> Result<PaletteMaterial, String> {
         }
         [s[0] / n / 255.0, s[1] / n / 255.0, s[2] / n / 255.0, 1.0]
     };
-    Ok(PaletteMaterial { name: name.to_string(), color: avg, image: Some(tex), pbr: None })
+    Ok(PaletteMaterial { name: name.to_string(), color: avg, image: Some(tex), pbr: None, stock: Vec::new() })
 }
 
 fn color_row(ui: &mut egui::Ui, label: String, c: &mut [u8; 3], id: &str) {
