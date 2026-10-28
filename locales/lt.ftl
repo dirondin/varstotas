@@ -4270,7 +4270,7 @@ app-export-replace-files =
     Eksportuojant bus pakeisti šie medžiagų arba tekstūrų failai:
     { $files }
     Tęsti?
-app-export-folder = Pasirinkite aplanką { $format } eksportui ir jo failams
+app-export-folder = Pasirinkite aplanką failui { $file } ir jo failams (medžiagoms, tekstūroms)
 app-export-replace-all =
     Eksportuojant bus pakeisti šie failai:
     { $files }

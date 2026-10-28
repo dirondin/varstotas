@@ -131,8 +131,8 @@ native assets need reimporting from their original files to recover information 
 by older builds. Texture Position and Reverse Faces preserve the full affine placement.
 
 Formats with files beside the model (OBJ with its `.mtl` and textures, DAE and FBX textures,
-glTF with a `.bin`): export asks for a folder rather than a file name when there are such files,
-and an import that cannot read them offers to choose the model's folder and imports again from
+glTF with a `.bin`): export asks for the file name and writes those files next to it; where the
+app may write only the picked file (a sandbox) it also asks for their folder. An import that cannot read them offers to choose the model's folder and imports again from
 there. A sandboxed app (the Flatpak) is given only what the dialog picked, a file or a folder.
 
 ## Tutorial and navigation

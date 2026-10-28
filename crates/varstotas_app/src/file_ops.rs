@@ -194,16 +194,6 @@ impl VarstotasApp {
     }
 
     pub(crate) fn export(&mut self, ext: &str) {
-        let name = format!("{}.{ext}", self.doc.display_name());
-        // With files beside it (OBJ's .mtl, textures) the export goes into a chosen folder: a
-        // sandbox lets the app write only what the dialog picked, a file or a whole folder.
-        if io::export_bundle(&self.doc.model, Path::new(&name)).is_some_and(|f| f.len() > 1) {
-            let Some(dir) = rfd::FileDialog::new().set_title(tr!("app-export-folder", format = ext.to_uppercase())).pick_folder() else {
-                return;
-            };
-            self.export_into(&dir.join(name));
-            return;
-        }
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             .set_file_name(format!("{}.{ext}", self.doc.display_name()))
@@ -213,6 +203,20 @@ impl VarstotasApp {
         };
         if path.extension().is_none() {
             path.set_extension(ext);
+        }
+        // Files beside it (OBJ's .mtl, textures) go next to it where the app may write; a
+        // sandbox (Flatpak portal) lets it write only the file the dialog picked, so there the
+        // folder for them is asked for too, and the export goes into that folder.
+        let sidecars = io::export_bundle(&self.doc.model, &path).is_some_and(|f| f.len() > 1);
+        if sidecars && !path.parent().is_some_and(writable_dir) {
+            let Some(name) = path.file_name().map(|n| n.to_owned()) else { return };
+            let mut dialog = rfd::FileDialog::new().set_title(tr!("app-export-folder", file = name.to_string_lossy().to_string()));
+            if let Some(dir) = path.parent() {
+                dialog = dialog.set_directory(dir);
+            }
+            let Some(dir) = dialog.pick_folder() else { return };
+            self.export_into(&dir.join(name));
+            return;
         }
         self.export_to(&path);
     }
@@ -476,5 +480,14 @@ impl VarstotasApp {
             Some(false) => self.autosave.worker.delete(r.autosave),
             None => {}
         }
+    }
+}
+
+/// The app may create files in `dir` (not so in a sandbox that granted one picked file).
+fn writable_dir(dir: &Path) -> bool {
+    let probe = dir.join(format!(".varstotas-write-test-{}", std::process::id()));
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(_) => std::fs::remove_file(&probe).is_ok(),
+        Err(_) => false,
     }
 }
