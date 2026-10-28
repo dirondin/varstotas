@@ -100,11 +100,22 @@ impl OnlineWindow {
 }
 
 
-/// Open `url` in the browser (not in scripted runs).
+/// Open `url` in the browser (not in scripted runs). Only web addresses: links come from
+/// catalogues, dropped pages and `sources.toml`, and the system would also run a local program
+/// or open a `file:` link it was handed.
 pub(crate) fn open_url(url: &str) {
+    if !is_web_url(url) {
+        log::warn!("open {url}: not an http(s) address");
+        return;
+    }
     if let Err(e) = crate::desktop::open(url) {
         log::warn!("open {url}: {e}");
     }
+}
+
+fn is_web_url(url: &str) -> bool {
+    let lower = url.trim_start().to_ascii_lowercase();
+    lower.starts_with("https://") || lower.starts_with("http://")
 }
 
 impl VarstotasApp {
@@ -466,4 +477,16 @@ pub(crate) fn plugin_params_ui(ui: &mut Ui, salt: &str, params: &[Param], values
         }
     }
     load
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn only_web_addresses_open() {
+        assert!(super::is_web_url("https://polyhaven.com/a/red_brick"));
+        assert!(super::is_web_url("HTTP://example.com"));
+        for bad in ["file:///C:/Windows/System32/calc.exe", "C:\\evil.exe", "/usr/bin/xterm", "javascript:alert(1)", "smb://host/share", ""] {
+            assert!(!super::is_web_url(bad), "{bad}");
+        }
+    }
 }

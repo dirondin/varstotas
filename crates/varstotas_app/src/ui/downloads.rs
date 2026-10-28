@@ -214,8 +214,10 @@ impl VarstotasApp {
                 ui.colored_label(Color32::from_rgb(200, 60, 40), RichText::new(e).small());
             }
             if ui.small_button(tr!("downloads-edit")).on_hover_text(tr!("downloads-edit-hover")).clicked() {
-                if let Some(p) = crate::downloads::sites_path() {
-                    open_url(&p.to_string_lossy());
+                if let Some(p) = crate::downloads::sites_path()
+                    && let Err(e) = crate::desktop::open(&p)
+                {
+                    log::warn!("open {}: {e}", p.display());
                 }
                 self.models.dl.sites = None;
             }
