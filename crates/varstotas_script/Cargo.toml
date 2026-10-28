@@ -12,6 +12,7 @@ rhai = { version = "1.26", default-features = false, features = ["std", "only_i6
 serde = { workspace = true }
 serde_json = { workspace = true }
 slotmap = { workspace = true }
+ureq = { version = "3.5", default-features = false, features = ["rustls", "platform-verifier"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

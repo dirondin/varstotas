@@ -60,7 +60,7 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
     out
 }
 
-/// GET `url` with the system curl (into the file `to`, else the bytes back), with extra
+/// GET `url` (into the file `to`, else the bytes back), with extra
 /// request headers (`#{ "Authorization": "Token …" }`).
 fn fetch(url: &str, to: Option<&str>, headers: &Map) -> Result<Vec<u8>, String> {
     let remaining = with(|st| Ok(st.deadline.saturating_duration_since(Instant::now()))).map_err(|e| e.to_string())?;

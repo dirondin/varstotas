@@ -24,50 +24,35 @@ pub fn observe_progress(observer: Observer) -> ProgressGuard {
     ProgressGuard(OBSERVER.with(|o| o.borrow_mut().replace(observer)))
 }
 
-/// Parse curl's included response headers, skipping redirects and proxy/100 preambles.
-fn body_headers(bytes: &[u8]) -> Option<(usize, Option<u64>)> {
-    let mut offset = 0;
-    loop {
-        let rest = bytes.get(offset..)?;
-        let end = rest.windows(4).position(|w| w == b"\r\n\r\n")? + 4;
-        let header = String::from_utf8_lossy(&rest[..end]);
-        let status = header.lines().next()?;
-        if !status.starts_with("HTTP/") {
-            return None;
-        }
-        let code: u16 = status.split_whitespace().nth(1)?.parse().ok()?;
-        offset += end;
-        if (100..200).contains(&code)
-            || (300..400).contains(&code)
-            || status
-                .to_ascii_lowercase()
-                .contains("connection established")
-        {
-            continue;
-        }
-        let mut total = None;
-        let mut chunked = false;
-        for line in header.lines().skip(1) {
-            if let Some((name, value)) = line.split_once(':') {
-                if name.eq_ignore_ascii_case("content-length") {
-                    total = value.trim().parse().ok();
-                }
-                if name.eq_ignore_ascii_case("transfer-encoding") {
-                    chunked = value.to_ascii_lowercase().contains("chunked");
-                }
-            }
-        }
-        return Some((offset, if chunked { None } else { total }));
-    }
+pub const MAX_DOWNLOAD: usize = 256 * 1024 * 1024;
+
+/// One HTTP client for the whole app: connections (and TLS sessions) to a host are reused, so a
+/// catalogue's thumbnails do not each pay for a new connection. Certificates are checked against
+/// the system's store; proxies come from the usual environment variables (`HTTPS_PROXY`, …).
+fn agent() -> &'static ureq::Agent {
+    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
+    AGENT.get_or_init(|| {
+        use ureq::tls::{RootCerts, TlsConfig};
+        ureq::Agent::config_builder()
+            .user_agent("Varstotas")
+            .timeout_connect(Some(Duration::from_secs(10)))
+            .max_redirects(10)
+            .tls_config(TlsConfig::builder().root_certs(RootCerts::PlatformVerifier).build())
+            .build()
+            .into()
+    })
 }
 
-pub const MAX_DOWNLOAD: usize = 256 * 1024 * 1024;
+/// GET `url` (HTTP(S) only, redirects followed, HTTP errors fail) with extra request headers,
+/// within `timeout`; at most [`MAX_DOWNLOAD`] bytes. `cancelled` is checked while the body
+/// arrives; the worker's progress observer ([`observe_progress`]) sees the body bytes.
 pub fn fetch(
     url: &str,
     headers: &[(String, String)],
     timeout: Duration,
     cancelled: impl Fn() -> bool,
 ) -> Result<Vec<u8>, String> {
+    use std::io::Read;
     if !(url.starts_with("https://") || url.starts_with("http://"))
         || url.chars().any(char::is_control)
     {
@@ -76,77 +61,64 @@ pub fn fetch(
     if timeout.is_zero() {
         return Err("Download deadline exceeded".into());
     }
-    let mut cmd = std::process::Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
-    cmd.args([
-        "-q",
-        "-sSfL",
-        "--proto",
-        "=http,https",
-        "--proto-redir",
-        "=http,https",
-        "--connect-timeout",
-        "10",
-        "--max-time",
-    ])
-    .arg(timeout.as_secs_f64().to_string())
-    .args(["--max-filesize", "268435456", "--user-agent", "Varstotas"]);
+    let mut request = agent().get(url);
     for (k, v) in headers {
         if k.contains(['\r', '\n', ':']) || v.contains(['\r', '\n']) {
             return Err("Invalid HTTP header".into());
         }
-        cmd.arg("-H").arg(format!("{k}: {v}"));
+        request = request.header(k.as_str(), v.as_str());
     }
+    let mut response = request
+        .config()
+        .timeout_global(Some(timeout))
+        .build()
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::StatusCode(code) => format!("HTTP {code}: {url}"),
+            e => format!("{e}: {url}"),
+        })?;
+    let total = response.body().content_length();
     let observer = OBSERVER.with(|o| o.borrow().clone());
-    if observer.is_some() {
-        cmd.args(["--include", "--no-buffer"]);
-    }
-    cmd.arg("--").arg(url);
-    let out = if let Some(observer) = observer {
-        let file = url
-            .split('?')
-            .next()
-            .unwrap_or(url)
-            .rsplit('/')
-            .next()
-            .unwrap_or("download")
-            .to_string();
-        observer(TransferProgress {
-            received: 0,
-            total: None,
-            file: file.clone(),
-        });
-        let mut progress = |count: usize, prefix: &[u8]| {
-            if let Some((offset, total)) = body_headers(prefix) {
-                observer(TransferProgress {
-                    received: count.saturating_sub(offset) as u64,
-                    total,
-                    file: file.clone(),
-                });
-            }
-        };
-        let mut out = crate::process::output_progress(
-            &mut cmd,
-            timeout,
-            MAX_DOWNLOAD + 65536,
-            cancelled,
-            &mut progress,
-        )?;
-        if out.status.success() {
-            let (offset, _) = body_headers(&out.stdout[..out.stdout.len().min(65536)])
-                .ok_or("Invalid or oversized HTTP response headers")?;
-            out.stdout.drain(..offset);
-            if out.stdout.len() > MAX_DOWNLOAD {
-                return Err("Download exceeds size limit".into());
-            }
+    let file = url
+        .split('?')
+        .next()
+        .unwrap_or(url)
+        .rsplit('/')
+        .next()
+        .unwrap_or("download")
+        .to_string();
+    let report = |received: usize| {
+        if let Some(observer) = &observer {
+            observer(TransferProgress {
+                received: received as u64,
+                total,
+                file: file.clone(),
+            });
         }
-        out
-    } else {
-        crate::process::output(&mut cmd, timeout, MAX_DOWNLOAD, cancelled)?
     };
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    report(0);
+    let mut reader = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_DOWNLOAD as u64 + 1)
+        .reader();
+    let mut out = Vec::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        if cancelled() {
+            return Err("Download cancelled".into());
+        }
+        let n = reader.read(&mut buf).map_err(|e| format!("{e}: {url}"))?;
+        if n == 0 {
+            break;
+        }
+        out.extend_from_slice(&buf[..n]);
+        if out.len() > MAX_DOWNLOAD {
+            return Err("Download exceeds size limit".into());
+        }
+        report(out.len());
     }
-    Ok(out.stdout)
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -159,17 +131,7 @@ mod tests {
     };
 
     #[test]
-    fn response_headers_use_final_length_and_ignore_chunked_lengths() {
-        let headers = b"HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 302 Found\r\nContent-Length: 999\r\n\r\nHTTP/2 200 OK\r\nContent-Length: 42\r\n\r\n";
-        assert_eq!(body_headers(headers), Some((headers.len(), Some(42))));
-        let chunked =
-            b"HTTP/1.1 200 OK\r\nContent-Length: 99\r\nTransfer-Encoding: chunked\r\n\r\n";
-        assert_eq!(body_headers(chunked), Some((chunked.len(), None)));
-        assert_eq!(body_headers(b"HTTP/1.1 200 OK\r\nContent-Length:"), None);
-    }
-
-    #[test]
-    fn streaming_progress_does_not_mix_headers_into_the_download() {
+    fn streaming_progress_counts_the_body() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/model.glb", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || {

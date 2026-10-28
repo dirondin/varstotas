@@ -64,7 +64,7 @@ fn explicitly_trusted_local_script_can_use_files() {
 }
 
 #[test]
-fn curl_options_and_local_schemes_are_rejected() {
+fn option_like_and_local_urls_are_rejected() {
     for url in [
         "-K/tmp/config",
         "file:///etc/hosts",

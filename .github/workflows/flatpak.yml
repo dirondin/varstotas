@@ -45,7 +45,8 @@ jobs:
           bundle: varstotas-${{ matrix.arch }}.flatpak
           arch: ${{ matrix.arch }}
           cache-key: flatpak-builder-${{ matrix.arch }}-${{ github.sha }}
-      # downloads run curl and Python scripts python3, both from the runtime: check they are there
+      # Python plugins and scripts run python3 (the example download plugins also curl), both from
+      # the runtime: check they are there
       - name: Runtime programs
         run: |
           flatpak install -y --noninteractive flathub org.freedesktop.Platform//26.08

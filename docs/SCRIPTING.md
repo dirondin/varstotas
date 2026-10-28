@@ -100,7 +100,7 @@ Entities (faces, edges, groups) are "references". After operations that merge or
 | `read_text(path)`, `write_text(path, text)` | read / write a text file |
 | `file_exists(path)`, `list_files(dir, ext)`, `list_dirs(dir)` | whether a file exists; files with an extension (`""` — any, with subfolders, up to 5000); folders inside |
 | `parse_json(text)` | JSON → map / array / numbers / strings |
-| `fetch_text(url)`, `fetch_file(url, path)` | download over the network (system curl): text / to a file |
+| `fetch_text(url)`, `fetch_file(url, path)` | download over the network (HTTP(S)): text / to a file |
 
 Entity properties: `e.kind` (`"face"`, `"edge"`, `"vertex"`, `"group"`, `"component"`, `"parametric"`), `e.valid`, `e.area` (face, mm²), `e.length` (edge), `e.normal` (face), `e.center`, `e.vertices` (points), `e.edges` (edges of a face), `e.faces` (faces of an edge / neighbours of a face), `e.name` (group, can be assigned), `e.definition`, `e.material`, `e.tag`, `e.soft`, `e.hidden` (can be assigned), extents in world coordinates: `e.bounds` (`#{ min, max, size, center }`), `e.size`, `e.min`, `e.max`.
 
@@ -197,7 +197,7 @@ Rhai limits: source 1 MiB, strings 8 MiB, arrays 100,000 elements, maps 10,000 e
 5 million operations, 128 call levels, console output 1 MiB. Trusted runs (a local script run by
 hand, an installed plugin) have no operation limit (the time limit stays) and arrays / blobs up to
 32 Mi elements, enough for a 2048² RGBA texture. Formula engines use smaller limits.
-HTTP(S) downloads disable curl configuration and non-HTTP schemes/redirects, cap output at
+HTTP(S) downloads (the app's own client: system certificates, proxy from `HTTPS_PROXY` / `HTTP_PROXY`) allow no other schemes, also in redirects, cap output at
 256 MiB, and time out within 60 seconds or the remaining script deadline. Material-source
 Python calls have a 60-second limit and 8 MiB stdout; interactive Python scripts have a
 10-minute limit and bounded output. Unix children run in a process group that is terminated

@@ -1,6 +1,6 @@
 //! Online PBR materials: the catalogues of Poly Haven and ambientCG (CC0 photo scans: colour,
 //! normal, roughness, occlusion, metalness maps at their real-world size). Downloads go
-//! through the system `curl` (no HTTP stack in the app) on background threads; catalogues and
+//! through `varstotas_script::network` (one shared HTTP client) on background threads; catalogues and
 //! thumbnails are cached in `<data folder>/cache/online`. A downloaded material becomes a
 //! `.vrstmat` in the materials library (`<library>/Poly Haven/…`, `<library>/ambientCG/…`).
 //! Plugins add more sources (`@material_source`, see `mat_plugins`).
@@ -188,7 +188,7 @@ pub fn embeddable(bytes: Vec<u8>, file: &str) -> Result<(Vec<u8>, String), Strin
 }
 
 thread_local! {
-    /// This thread's cancel flag (a 3D Library download): `fetch` stops curl when it is set.
+    /// This thread's cancel flag (a 3D Library download): `fetch` stops at the next block of the body when it is set.
     static CANCEL: std::cell::RefCell<Option<Arc<std::sync::atomic::AtomicBool>>> = const { std::cell::RefCell::new(None) };
 }
 
@@ -201,7 +201,7 @@ fn cancelled() -> bool {
     CANCEL.with(|c| c.borrow().as_ref().is_some_and(|f| f.load(std::sync::atomic::Ordering::Relaxed)))
 }
 
-/// GET `url` with the system curl (follows redirects; fails on HTTP errors).
+/// GET `url` (follows redirects; fails on HTTP errors).
 pub fn fetch(url: &str) -> Result<Vec<u8>, String> {
     varstotas_script::network::fetch(url, &[], Duration::from_secs(60), cancelled)
 }

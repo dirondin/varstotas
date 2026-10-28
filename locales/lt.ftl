@@ -3843,7 +3843,7 @@ script-fn-file-exists = Failas ar aplankas egzistuoja.
 script-fn-list-files = Failai aplanke dir (ir poaplankiuose) su plėtiniu ("" = bet kuriuo), surikiuoti.
 script-fn-list-dirs = Aplanko dir aplankai, surikiuoti.
 script-fn-parse-json = JSON tekstas → žemėlapiai, masyvai, skaičiai, eilutės.
-script-fn-fetch-text = Atsisiųsti tinklalapį / API atsakymą kaip tekstą (sistemos curl); headers: #{ "{" } "X-Auth-Token": key { "}" }.
+script-fn-fetch-text = Atsisiųsti tinklalapį / API atsakymą kaip tekstą (HTTP(S)); headers: #{ "{" } "X-Auth-Token": key { "}" }.
 script-fn-fetch-file = Atsisiųsti url į failą path.
 script-fn-url-encode = Užkoduoti tekstą procentais URL adresui (paieškos užklausai).
 script-fn-print = Rašyti į konsolės žurnalą.

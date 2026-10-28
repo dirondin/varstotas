@@ -3895,7 +3895,7 @@ script-fn-file-exists = Файл або папка існуе.
 script-fn-list-files = Файлы ў dir (з падпапкамі) з пашырэннем ("" = любое), адсартаваныя.
 script-fn-list-dirs = Папкі ў dir, адсартаваныя.
 script-fn-parse-json = Тэкст JSON → табліцы, масівы, лікі, радкі.
-script-fn-fetch-text = Спампаваць вэб-старонку / адказ API як тэкст (сістэмны curl); headers: #{ "{" } "X-Auth-Token": key { "}" }.
+script-fn-fetch-text = Спампаваць вэб-старонку / адказ API як тэкст (HTTP(S)); headers: #{ "{" } "X-Auth-Token": key { "}" }.
 script-fn-fetch-file = Спампаваць url у файл path.
 script-fn-url-encode = Закадзіраваць тэкст працэнтамі для URL (пошукавы запыт).
 script-fn-print = Вывесці ў журнал кансолі.

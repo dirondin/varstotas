@@ -278,7 +278,7 @@ impl VarstotasApp {
         }
     }
 
-    /// Stop downloading `key` (curl is stopped; a plugin's own download finishes unseen).
+    /// Stop downloading `key` (the download stops; a plugin's own download finishes unseen).
     pub(crate) fn models_cancel(&mut self, key: &str) {
         if let Some(flag) = self.models.downloading.remove(key) {
             self.models.work.progress.remove(key);

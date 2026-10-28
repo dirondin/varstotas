@@ -3818,7 +3818,7 @@ script-fn-file-exists = A file or folder is there.
 script-fn-list-files = Files under dir (subfolders too) with the extension ("" = any), sorted.
 script-fn-list-dirs = The folders in dir, sorted.
 script-fn-parse-json = JSON text → maps, arrays, numbers, strings.
-script-fn-fetch-text = Download a web page / API answer as text (system curl); headers: #{ "{" } "X-Auth-Token": key { "}" }.
+script-fn-fetch-text = Download a web page / API answer as text (HTTP(S)); headers: #{ "{" } "X-Auth-Token": key { "}" }.
 script-fn-fetch-file = Download url into the file path.
 script-fn-url-encode = Percent-encode text for a URL (a search query).
 script-fn-print = Write to the console log.
