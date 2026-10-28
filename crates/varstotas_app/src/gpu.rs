@@ -24,6 +24,10 @@ pub(crate) enum Api {
     Dx12,
     Metal,
     Gl,
+    /// OpenGL drawn by Mesa's software renderer (llvmpipe): for a virtual GPU that draws wrong
+    /// without an error (virgl over ANGLE in UTM). Linux.
+    #[serde(rename = "gl-software")]
+    GlSoftware,
 }
 
 impl Api {
@@ -34,7 +38,7 @@ impl Api {
         } else if cfg!(target_os = "macos") {
             &[Api::Metal]
         } else {
-            &[Api::Vulkan, Api::Gl]
+            &[Api::Vulkan, Api::Gl, Api::GlSoftware]
         }
     }
 
@@ -44,7 +48,8 @@ impl Api {
             Api::Vulkan => "Vulkan",
             Api::Dx12 => "DirectX 12",
             Api::Metal => "Metal",
-            Api::Gl => "OpenGL",
+            Api::Gl => "OpenGL / OpenGL ES",
+            Api::GlSoftware => "OpenGL (llvmpipe)",
         }
     }
 
@@ -55,11 +60,21 @@ impl Api {
             Api::Dx12 => "dx12",
             Api::Metal => "metal",
             Api::Gl => "gl",
+            Api::GlSoftware => "gl-software",
         }
     }
 
     fn from_arg(s: &str) -> Option<Api> {
-        [Api::Vulkan, Api::Dx12, Api::Metal, Api::Gl].into_iter().find(|a| a.arg() == s)
+        [Api::Vulkan, Api::Dx12, Api::Metal, Api::Gl, Api::GlSoftware].into_iter().find(|a| a.arg() == s)
+    }
+
+    /// For Preferences and messages.
+    pub(crate) fn label(self) -> String {
+        match self {
+            Api::Auto => varstotas_i18n::tr!("prefs-gpu-auto"),
+            Api::GlSoftware => varstotas_i18n::tr!("prefs-gpu-gl-software"),
+            a => a.name().to_string(),
+        }
     }
 
     fn backends(self) -> wgpu::Backends {
@@ -68,7 +83,7 @@ impl Api {
             Api::Vulkan => wgpu::Backends::VULKAN,
             Api::Dx12 => wgpu::Backends::DX12,
             Api::Metal => wgpu::Backends::METAL,
-            Api::Gl => wgpu::Backends::GL,
+            Api::Gl | Api::GlSoftware => wgpu::Backends::GL,
         }
     }
 
@@ -192,6 +207,11 @@ pub(crate) fn choose() -> Option<wgpu::Backends> {
     *started().lock().unwrap() = Started { managed: true, choice: s.api, saved: s.api, fell_back, ..Started::default() };
     let api = api?;
     log::info!("graphics: {}", api.name());
+    if api == Api::GlSoftware {
+        // SAFETY: before the window and wgpu; the threads running now (log, restart wait) do
+        // not read the environment.
+        unsafe { std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1") };
+    }
     Some(api.backends())
 }
 
@@ -221,6 +241,9 @@ fn run_probe(api: Api) -> Result<String, String> {
     const LIMIT: Duration = Duration::from_secs(20);
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut cmd = std::process::Command::new(exe);
+    if api == Api::GlSoftware {
+        cmd.env("LIBGL_ALWAYS_SOFTWARE", "1");
+    }
     cmd.args(["--probe-gpu", api.arg()])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -407,7 +430,9 @@ pub(crate) fn frame_drawn(frame: &eframe::Frame) {
     let info = frame.wgpu_render_state().map(|rs| rs.adapter.get_info());
     let mut st = started().lock().unwrap();
     if let Some(info) = &info {
-        st.in_use = Some(format!("{} · {}", Api::of(info.backend).map_or("?", Api::name), info.name));
+        let driver = info.driver_info.trim();
+        let api = Api::of(info.backend).map_or("?", Api::name);
+        st.in_use = Some(if driver.is_empty() { format!("{api} · {}", info.name) } else { format!("{api} · {} ({driver})", info.name) });
         log::info!("graphics in use: {:?} {} ({} {})", info.backend, info.name, info.driver, info.driver_info);
     }
     if st.managed {
@@ -562,7 +587,7 @@ mod tests {
 
     #[test]
     fn api_names_round_trip() {
-        for &a in &[Api::Vulkan, Api::Dx12, Api::Metal, Api::Gl] {
+        for &a in &[Api::Vulkan, Api::Dx12, Api::Metal, Api::Gl, Api::GlSoftware] {
             assert_eq!(Api::from_arg(a.arg()), Some(a));
         }
         assert_eq!(Api::from_arg("auto"), None);

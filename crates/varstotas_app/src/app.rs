@@ -807,7 +807,7 @@ impl VarstotasApp {
             app.take_over(r, model);
         }
         if let Some(api) = crate::gpu::status().fell_back {
-            app.flash_error(tr!("prefs-gpu-fell-back", api = api.name()));
+            app.flash_error(tr!("prefs-gpu-fell-back", api = api.label()));
         }
         app.start_bridge(&cc.egui_ctx);
         app.load_plugins();

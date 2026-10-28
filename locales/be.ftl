@@ -1246,6 +1246,7 @@ prefs-undo-steps = крокаў адмены на дакумент
 prefs-undo-note = Кожны крок захоўвае копію мадэлі: вялікія мадэлі з вялікай колькасцю крокаў патрабуюць больш памяці.
 prefs-gpu = Графічны API
 prefs-gpu-auto = Аўтаматычна
+prefs-gpu-gl-software = OpenGL, праграмны (llvmpipe): павольна, для віртуальнага GPU, які малюе няправільна
 prefs-gpu-restart = Перазапусціць
 prefs-gpu-in-use = Выкарыстоўваецца: { $api }
 prefs-gpu-fell-back = { $api } тут не працуе; іншы API абраны аўтаматычна.

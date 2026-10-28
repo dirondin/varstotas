@@ -180,7 +180,8 @@ The graphics API is chosen at start: on Windows and Linux each of Vulkan, Direct
 and OpenGL is tried in a separate process, a graphics card before a software renderer, and the
 first that works is kept in `<data folder>/gpu.json` until the next version. An API whose start
 never drew a frame is skipped from then on. **Preferences → General → Graphics API** picks one by
-hand and restarts with the document as it is. The `WGPU_BACKEND` environment variable (`vulkan`,
+hand and restarts with the document as it is; on Linux it also offers OpenGL drawn in software
+(llvmpipe, `LIBGL_ALWAYS_SOFTWARE`), slow but right where a virtual GPU draws wrong (virgl in UTM). The `WGPU_BACKEND` environment variable (`vulkan`,
 `dx12`, `metal`, `gl`) overrides both.
 
 **Help → Report a Problem** previews the message with version, platform and GPU details.

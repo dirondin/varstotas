@@ -1246,6 +1246,7 @@ prefs-undo-steps = atšaukimo žingsnių kiekvienam dokumentui
 prefs-undo-note = Kiekvienas žingsnis saugo modelio kopiją: dideli modeliai su daug žingsnių užima daugiau atminties.
 prefs-gpu = Grafikos API
 prefs-gpu-auto = Automatiškai
+prefs-gpu-gl-software = OpenGL, programinis (llvmpipe): lėta, virtualiai GPU, kuri piešia neteisingai
 prefs-gpu-restart = Paleisti iš naujo
 prefs-gpu-in-use = Naudojama: { $api }
 prefs-gpu-fell-back = { $api } čia neveikia; automatiškai pasirinkta kita API.

@@ -330,7 +330,7 @@ impl VarstotasApp {
         use crate::gpu::Api;
         let st = crate::gpu::status();
         heading(ui, &tr!("prefs-gpu"));
-        let label = |a: Api| if a == Api::Auto { tr!("prefs-gpu-auto") } else { a.name().to_string() };
+        let label = Api::label;
         if st.managed && Api::available().len() > 1 {
             let mut choice = st.choice;
             egui::ComboBox::from_id_salt("prefs_gpu").selected_text(label(choice)).show_ui(ui, |ui| {
@@ -349,7 +349,7 @@ impl VarstotasApp {
             ui.label(tr!("prefs-gpu-in-use", api = u.clone()));
         }
         if let Some(f) = st.fell_back {
-            ui.colored_label(ui.visuals().warn_fg_color, tr!("prefs-gpu-fell-back", api = f.name()));
+            ui.colored_label(ui.visuals().warn_fg_color, tr!("prefs-gpu-fell-back", api = f.label()));
         }
         if std::env::var_os("WGPU_BACKEND").is_some() {
             note(ui, &tr!("prefs-gpu-env"));
