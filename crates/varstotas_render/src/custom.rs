@@ -158,3 +158,34 @@ mod tests {
         assert!(check(&missing).unwrap().contains("fn surface"));
     }
 }
+
+/// The OpenGL fallback (no Vulkan driver: some VMs, a Flatpak whose Mesa does not drive the GPU)
+/// translates every entry point to GLSL ES 3.10 the way wgpu does (one entry point, unused parts
+/// dropped); features GLSL ES lacks (`@interpolate(linear)`, depth `textureLoad`) fail there.
+/// The GL backend (naga's GLSL writer) is not built on Apple platforms.
+#[cfg(all(test, not(target_vendor = "apple")))]
+mod gles_tests {
+    use super::{compose, naga};
+
+    #[test]
+    fn every_entry_point_translates_to_glsl_es() {
+        let (src, _) = compose(&[]);
+        let module = naga::front::wgsl::parse_str(&src).expect("parse");
+        let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+            .validate(&module)
+            .expect("validate");
+        let options = naga::back::glsl::Options::default(); // GLSL ES 3.10
+        let mut failed = Vec::new();
+        for ep in &module.entry_points {
+            let (m, i) = naga::back::pipeline_constants::process_overrides(&module, &info, Some((ep.stage, &ep.name)), &Default::default())
+                .expect("overrides");
+            let pipeline = naga::back::glsl::PipelineOptions { shader_stage: ep.stage, entry_point: ep.name.clone(), multiview: None };
+            let mut out = String::new();
+            let r = naga::back::glsl::Writer::new(&mut out, &m, &i, &options, &pipeline, Default::default()).and_then(|mut w| w.write());
+            if let Err(e) = r {
+                failed.push(format!("{}: {e}", ep.name));
+            }
+        }
+        assert!(failed.is_empty(), "{failed:#?}");
+    }
+}

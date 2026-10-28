@@ -762,7 +762,9 @@ struct ThickIn {
 struct ThickOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) color: vec4<f32>,
-    @location(1) @interpolate(linear) along: f32,
+    // the dash coordinate, linear on screen: (along · w, w) interpolated with perspective and
+    // divided per fragment (OpenGL ES before 3.2 has no `noperspective`, i.e. `linear`)
+    @location(1) along: vec2<f32>,
     @location(2) @interpolate(flat) dash: f32,
     @location(3) clip: f32,
 };
@@ -897,7 +899,7 @@ fn thick_vertex(vi: u32, v: ThickIn, state: u32, phase0: f32, clipped: bool) -> 
     let off = (n * side * hw + d * ext) / half_vp * base.w;
     o.pos = bias_clip(vec4<f32>(base.xy + off, base.z, base.w));
     o.color = highlight_edge(thick_color(v.color, v.width), hl_state(state));
-    o.along = (phase + end * len + ext) / g.viewport.z + phase0; // in points
+    o.along = vec2<f32>((phase + end * len + ext) / g.viewport.z + phase0, 1.0) * o.pos.w; // in points
     o.dash = v.dash;
     o.clip = 1.0;
     if clipped {
@@ -911,14 +913,15 @@ fn fs_thick(in: ThickOut) -> @location(0) vec4<f32> {
     if in.clip < 0.0 {
         discard;
     }
+    let along = in.along.x / in.along.y;
     if in.dash > 0.0 {
         // dashed: 60% on
-        if fract(in.along / in.dash) > 0.6 {
+        if fract(along / in.dash) > 0.6 {
             discard;
         }
     } else if in.dash < 0.0 {
         // dotted: 40% on
-        if fract(in.along / -in.dash) > 0.4 {
+        if fract(along / -in.dash) > 0.4 {
             discard;
         }
     }
