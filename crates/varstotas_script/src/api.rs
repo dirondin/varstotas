@@ -1600,6 +1600,7 @@ fn register_cut_list(e: &mut Engine) {
                     m.insert("material".into(), Dynamic::from(x.material_name.clone()));
                     m.insert("grain".into(), Dynamic::from(grain_name(o.grain).to_string()));
                     m.insert("exclude".into(), Dynamic::from(o.exclude));
+                    m.insert("bands".into(), Dynamic::from_array(o.bands.iter().map(|b| Dynamic::from(*b)).collect()));
                     Dynamic::from_map(m)
                 })
                 .collect();
@@ -1687,6 +1688,19 @@ fn register_cut_list(e: &mut Engine) {
             out.insert("parts".into(), Dynamic::from_array(parts));
             out.insert("stock".into(), Dynamic::from_array(stock));
             out.insert("issues".into(), Dynamic::from_array(issues));
+            let banding: Array = p
+                .banding
+                .iter()
+                .map(|b| {
+                    let mut m = Map::new();
+                    m.insert("width".into(), d(b.width));
+                    m.insert("thickness".into(), d(b.thickness));
+                    m.insert("length".into(), d(b.length));
+                    m.insert("cost".into(), Dynamic::from((b.cost() * 100.0).round() / 100.0));
+                    Dynamic::from_map(m)
+                })
+                .collect();
+            out.insert("banding".into(), Dynamic::from_array(banding));
             out.insert("cost".into(), Dynamic::from((p.cost() * 100.0).round() / 100.0));
             Ok(out)
         })
@@ -1710,8 +1724,14 @@ fn register_cut_list(e: &mut Engine) {
     e.register_fn("cut_settings", |m: Map| -> R<()> {
         edit(|st| {
             for (k, v) in &m {
+                if k.as_str() == "band_subtract" {
+                    st.model.cut_list.band_subtract = v.as_bool().map_err(|_| tr!("script-err-cut-subtract"))?;
+                    continue;
+                }
                 let v = num(v)?.max(0.0);
                 match k.as_str() {
+                    "band" => st.model.cut_list.band = v,
+                    "band_price" => st.model.cut_list.band_price = v,
                     "kerf" => st.model.cut_list.kerf = v,
                     "trim" => st.model.cut_list.trim = v,
                     "min_offcut" => st.model.cut_list.min_offcut = v,
@@ -1736,6 +1756,10 @@ fn register_cut_list(e: &mut Engine) {
                         }
                     }
                     "exclude" => o.exclude = v.as_bool().map_err(|_| tr!("script-err-cut-exclude"))?,
+                    "bands" => {
+                        let list: Vec<bool> = v.clone().into_array().unwrap_or_default().iter().map(|b| b.as_bool()).collect::<Result<_, _>>().map_err(|_| tr!("script-err-cut-bands"))?;
+                        o.bands = list.try_into().map_err(|_| tr!("script-err-cut-bands"))?;
+                    }
                     k => return err(tr!("script-err-cut-setting", key = k.to_string())),
                 }
             }

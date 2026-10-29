@@ -42,8 +42,9 @@ Materials optionally store `stock`: what the material is bought as, a list of
 profile `name` cut to length like a board, its width × thickness only a limit, 0 = any; `price` is per
 sheet or per metre of board, `piece_prices` when present prices boards per piece, one per length).
 Offcuts kept for later projects live in the app's preferences, not in documents. The model optionally
-stores `cut_list`: `{ "kerf", "trim", "min_offcut", "tolerance", "parts": { "<part name>": { "grain":
-"Length" | "Width" | "Any", "exclude" } } }`. A sheet (track D) optionally stores `cut_diagrams`:
+stores `cut_list`: `{ "kerf", "trim", "min_offcut", "tolerance", "band", "band_subtract", "band_price",
+"parts": { "<part name>": { "grain": "Length" | "Width" | "Any", "exclude", "bands": [long, long, short,
+short] } } }` (`band` is the edge band thickness, default 1 mm; `bands` the banded edges, omitted when none). A sheet (track D) optionally stores `cut_diagrams`:
 `[{ "min", "size", "page" }]`, a page of the cut list fitted into that rectangle. Both are omitted while empty or default, so older
 readers and files are unaffected.
 

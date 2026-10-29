@@ -157,7 +157,7 @@ pub(crate) fn cut_diagram_on_sheet(model: &Model, plan: &CutPlan, c: &SheetCutDi
         rect_lines(d, c.min, c.min + c.size, Pen::Hidden);
         return;
     };
-    let (src, _) = page_drawing(plan, page, pages.len(), c.page + 1, model.unit, None);
+    let (src, _) = page_drawing(plan, &model.cut_list, page, pages.len(), c.page + 1, model.unit, None);
     // the page's margins are not drawn: fit its content box (A4 less the margins)
     let content = PAGE - DVec2::splat(2.0 * MARGIN);
     let k = (c.size.x / content.x).min(c.size.y / content.y);
@@ -169,7 +169,7 @@ pub(crate) fn cut_diagram_on_sheet(model: &Model, plan: &CutPlan, c: &SheetCutDi
 }
 
 /// The diagram of a page and where its pieces are.
-fn page_drawing(plan: &CutPlan, page: &Page, total: usize, n: usize, unit: LengthUnit, footer: Option<&str>) -> (Drawing, Vec<Hit>) {
+fn page_drawing(plan: &CutPlan, settings: &CutSettings, page: &Page, total: usize, n: usize, unit: LengthUnit, footer: Option<&str>) -> (Drawing, Vec<Hit>) {
     let sp = &plan.plans[page.plan];
     let mut d = Drawing { size: PAGE, ..Default::default() };
     let mut hits = Vec::new();
@@ -208,6 +208,23 @@ fn page_drawing(plan: &CutPlan, page: &Page, total: usize, n: usize, unit: Lengt
             rect_lines(&mut d, a, b, Pen::Edge);
             hits.push(Hit { min: a, max: b, part: p.part });
             let (w, h) = (b.x - a.x, b.y - a.y);
+            // banded edges: a heavy line just inside the piece; the long edges run along x
+            // unless the part is turned
+            if let Some(name) = plan.parts.get(p.part).map(|x| &x.name) {
+                let bands = settings.options(name).bands;
+                let i = 0.6_f64.min(w / 4.0).min(h / 4.0);
+                let (lo, hi) = (a + DVec2::splat(i), b - DVec2::splat(i));
+                let bottom = (DVec2::new(lo.x, hi.y), hi);
+                let top = (lo, DVec2::new(hi.x, lo.y));
+                let left = (lo, DVec2::new(lo.x, hi.y));
+                let right = (DVec2::new(hi.x, lo.y), hi);
+                let sides = if p.rotated { [left, right, bottom, top] } else { [bottom, top, left, right] };
+                for (e, on) in sides.into_iter().zip(bands) {
+                    if on {
+                        d.lines.push((e.0, e.1, Pen::Section));
+                    }
+                }
+            }
             let size = (h * 0.28).min(3.2).min(w / 6.0);
             if size >= 1.0 {
                 let c = (a + b) * 0.5;
@@ -283,7 +300,8 @@ impl VarstotasApp {
         let pages = pages(&plan);
         let unit = self.doc.model.unit;
         let name = self.doc.display_name();
-        pages.iter().enumerate().map(|(i, p)| page_drawing(&plan, p, pages.len(), i + 1, unit, Some(&name))).collect()
+        let settings = &self.doc.model.cut_list;
+        pages.iter().enumerate().map(|(i, p)| page_drawing(&plan, settings, p, pages.len(), i + 1, unit, Some(&name))).collect()
     }
 
     /// Write the cut list to `path`: PDF (a page per diagram), SVG (the pages one under
@@ -340,6 +358,14 @@ impl VarstotasApp {
         (self.cutlist.open, p.parts.len(), p.plans.len(), p.plans.iter().map(|s| s.layouts.len()).sum(), p.issues.len(), format!("{:.2}", p.cost()))
     }
 
+    /// `([(part, banded edges)], banding mm)` for UI test scripts.
+    pub(crate) fn cut_bands_dump(&self) -> (Vec<(String, [bool; 4])>, i64) {
+        let c = &self.doc.model.cut_list;
+        let parts = c.parts.iter().filter(|(_, o)| o.bands.iter().any(|&b| b)).map(|(n, o)| (n.clone(), o.bands)).collect();
+        let total = model_plan(&self.doc.model).banding.iter().map(|b| b.length).sum::<f64>();
+        (parts, total.round() as i64)
+    }
+
     /// Select the copies of part `i` (those in the same group as its first copy).
     pub(crate) fn select_cut_part(&mut self, i: usize) {
         let plan = self.cut_plan();
@@ -384,6 +410,24 @@ impl VarstotasApp {
                 ui.add_space(8.0);
             }
         });
+        ui.horizontal(|ui| {
+            ui.label(tr!("cutlist-band"));
+            let mut shown = s.band / k;
+            let r = ui.add(egui::DragValue::new(&mut shown).range(0.0..=10.0 / k).speed(0.05 / k).max_decimals(3).suffix(format!(" {}", unit.suffix())));
+            if r.on_hover_text(tr!("cutlist-band-tip")).changed() {
+                s.band = shown * k;
+                changed = true;
+            }
+            ui.add_space(8.0);
+            ui.label(tr!("cutlist-band-price"));
+            if ui.add(egui::DragValue::new(&mut s.band_price).range(0.0..=1000.0).speed(0.05).max_decimals(2)).changed() {
+                changed = true;
+            }
+            ui.add_space(8.0);
+            if ui.checkbox(&mut s.band_subtract, tr!("cutlist-band-subtract")).on_hover_text(tr!("cutlist-band-subtract-tip")).changed() {
+                changed = true;
+            }
+        });
         if changed {
             self.cutlist.draft = Some(s);
         }
@@ -414,7 +458,14 @@ impl VarstotasApp {
             }
             ui.label(line);
         }
-        if plan.plans.len() > 1 && plan.cost() > 0.0 {
+        for b in &plan.banding {
+            let mut line = tr!("cutlist-banding", thickness = varstotas_kernel::units::format_length(b.thickness, unit), width = varstotas_kernel::units::format_length(b.width, unit), metres = format!("{:.2}", b.length / 1000.0));
+            if b.cost() > 0.0 {
+                line.push_str(&tr!("cutlist-cost", cost = format!("{:.2}", b.cost())));
+            }
+            ui.label(line);
+        }
+        if plan.plans.len() + plan.banding.len() > 1 && plan.cost() > 0.0 {
             ui.label(RichText::new(tr!("cutlist-total", cost = format!("{:.2}", plan.cost()))).strong());
         }
         let mut keep = false;
@@ -458,7 +509,7 @@ impl VarstotasApp {
         let mut select = None;
         egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
             egui::Grid::new("cutlist_parts").num_columns(7).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-                for h in ["cutlist-col-part", "cutlist-col-count", "cutlist-col-size", "cutlist-col-material", "cutlist-col-grain", "cutlist-col-exclude"] {
+                for h in ["cutlist-col-part", "cutlist-col-count", "cutlist-col-size", "cutlist-col-material", "cutlist-col-grain", "cutlist-col-bands", "cutlist-col-exclude"] {
                     ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
                 }
                 ui.end_row();
@@ -468,7 +519,11 @@ impl VarstotasApp {
                         select = Some(i);
                     }
                     ui.label(p.count.to_string());
-                    ui.label(format!("{} × {} × {}", dim(p.size[0], unit), dim(p.size[1], unit), dim(p.size[2], unit)));
+                    let r = ui.label(format!("{} × {} × {}", dim(p.size[0], unit), dim(p.size[1], unit), dim(p.size[2], unit)));
+                    let cut = self.doc.model.cut_list.cut_size(&p.name, p.size);
+                    if cut != p.size {
+                        r.on_hover_text(tr!("cutlist-cut-size", length = dim(cut[0], unit), width = dim(cut[1], unit)));
+                    }
                     ui.label(if p.material_name.is_empty() { tr!("cutlist-no-material") } else { p.material_name.clone() });
                     let mut g = o.grain;
                     egui::ComboBox::from_id_salt(("cutlist_grain", i)).selected_text(grain_name(g)).show_ui(ui, |ui| {
@@ -476,10 +531,12 @@ impl VarstotasApp {
                             ui.selectable_value(&mut g, v, grain_name(v));
                         }
                     });
+                    let mut bands = o.bands;
+                    band_edges(ui, &mut bands, i);
                     let mut ex = o.exclude;
                     ui.checkbox(&mut ex, "");
-                    if g != o.grain || ex != o.exclude {
-                        set = Some((p.name.clone(), PartOptions { grain: g, exclude: ex }));
+                    if g != o.grain || ex != o.exclude || bands != o.bands {
+                        set = Some((p.name.clone(), PartOptions { grain: g, exclude: ex, bands }));
                     }
                     ui.end_row();
                 }
@@ -530,6 +587,9 @@ impl VarstotasApp {
                     Pen::Hidden => painter.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.0, Color32::from_gray(140)), 4.0, 3.0)),
                     Pen::Profile => {
                         painter.line_segment([a, b], Stroke::new(1.6, Color32::BLACK));
+                    }
+                    Pen::Section => {
+                        painter.line_segment([a, b], Stroke::new(2.5, BAND_COLOR));
                     }
                     _ => {
                         painter.line_segment([a, b], Stroke::new(1.0, Color32::from_gray(40)));
@@ -918,6 +978,48 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
         }
     });
     changed
+}
+
+/// Banded edges in the preview and the parts table.
+const BAND_COLOR: Color32 = Color32::from_rgb(0xB0, 0x4A, 0x1E);
+
+/// The banded edges of part row `row`: a small rectangle (the part, its length across) whose
+/// sides toggle on a click; the long edges are the bottom and top, the short ones the sides.
+fn band_edges(ui: &mut Ui, bands: &mut [bool; 4], row: usize) {
+    let (rect, resp) = ui.allocate_exact_size(vec2(44.0, 22.0), Sense::click());
+    let r = rect.shrink2(vec2(6.0, 5.0));
+    let sides = [
+        [r.left_bottom(), r.right_bottom()],
+        [r.left_top(), r.right_top()],
+        [r.left_top(), r.left_bottom()],
+        [r.right_top(), r.right_bottom()],
+    ];
+    for (e, s) in sides.iter().enumerate() {
+        super::tray_lib::spot(format!("cutlist:band:{row}:{e}"), s[0].lerp(s[1], 0.5));
+    }
+    // the side nearest the pointer
+    let near = resp.hover_pos().map(|p| {
+        let d = p - r.center();
+        if d.x.abs() / r.width() > d.y.abs() / r.height() { if d.x < 0.0 { 2 } else { 3 } } else if d.y > 0.0 { 0 } else { 1 }
+    });
+    let painter = ui.painter();
+    painter.rect_filled(r, 0.0, theme::border());
+    for (e, s) in sides.iter().enumerate() {
+        let stroke = if bands[e] {
+            Stroke::new(3.0, BAND_COLOR)
+        } else if near == Some(e) {
+            Stroke::new(2.0, theme::ACCENT)
+        } else {
+            Stroke::new(1.0, theme::text_dim())
+        };
+        painter.line_segment(*s, stroke);
+    }
+    if let Some(e) = near
+        && resp.clicked()
+    {
+        bands[e] = !bands[e];
+    }
+    resp.on_hover_text(tr!("cutlist-bands-tip"));
 }
 
 fn grain_name(g: PartGrain) -> String {

@@ -1,0 +1,28 @@
+# Edge banding in the Cut List: band edges of a part by clicking the sides of its little
+# rectangle in the Parts tab; the banding is summed and drawn on the diagrams.
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 }); for i in 0..2 { let s = box(vec3(i * 782, 0, 0), 18, 300, 1800); s.name = "Side"; paint(s, "Plywood"); } for i in 0..5 { let s = box(vec3(18, 0, i * 400), 764, 300, 18); s.name = "Shelf"; paint(s, "Plywood"); } cut_settings(#{ band_price: 0.5 });
+action console_close
+wait 5
+action cut_list
+wait 10
+action cut_list_tab parts
+wait 5
+# Shelf (row 2): both long edges; Side (row 1): the front long edge
+action click_spot cutlist:band:1:0
+wait 5
+action click_spot cutlist:band:1:1
+wait 5
+action click_spot cutlist:band:0:1
+wait 5
+expect bands=([("Shelf", [true, true, false, false]), ("Side", [false, true, false, false])], 11240)
+# one 2440 sheet at 60 and 11.24 m of banding at 0.5
+expect cutlist=(true, 2, 1, 1, 0, "65.62")
+screenshot shots/cut_list_banding_parts.bmp
+# cut smaller by the band: 1 mm off each banded edge
+action script cut_settings(#{ band_subtract: true }); print(cut_list().stock[0].layouts[0].pieces.filter(|p| p.part == "Shelf")[0].h);
+wait 5
+expect script=Some((true, "298.0
+action cut_list_tab diagrams
+wait 5
+screenshot shots/cut_list_banding_diagram.bmp
+quit

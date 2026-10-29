@@ -110,9 +110,9 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 | Function | Result |
 |---|---|
 | `set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })` | what a material is bought as; an array sets several items, `()` clears it. A board: `#{ kind: "board", width: 95, thickness: 45, lengths: [2400, "3 m"], price: 5 }` (the price per metre); per piece: `prices: [9, 16]`, one per length, or a single price for every length. Linear stock (mouldings, rods): `#{ kind: "linear", name: "Ø 20 rod", width: 20, thickness: 20, lengths: [1000, 2000], price: 3 }`, the section optional (any). Several items: thicknesses, board sections or sheet sizes to choose from |
-| `cut_settings(#{ kerf: 3, trim: 10, min_offcut: 100, tolerance: 0.5 })` | the document's cutting settings (any subset of keys) |
-| `cut_part("Shelf", #{ grain: "length", exclude: false })` | per part name: grain `"length"`, `"width"` or `"any"` (may rotate), exclude from the cut list |
-| `cut_list()` | `#{ parts, stock, issues, cost }`: parts with name, count, length, width, thickness and material; per stock item its material, kind, sizes, `count`, `buy` (`[#{ length, count }]`), `waste` (%), `cost` and `layouts` (pieces with part index, x, y, w, h, rotated) |
+| `cut_settings(#{ kerf: 3, trim: 10, min_offcut: 100, tolerance: 0.5, band: 1, band_price: 0.5, band_subtract: false })` | the document's cutting settings (any subset of keys); `band` is the edge band thickness, `band_subtract` cuts banded parts smaller by it |
+| `cut_part("Shelf", #{ grain: "length", exclude: false, bands: [true, false, false, false] })` | per part name: grain `"length"`, `"width"` or `"any"` (may rotate), exclude from the cut list, edge-banded edges (the two long edges, then the two short ones) |
+| `cut_list()` | `#{ parts, stock, banding, issues, cost }`: parts with name, count, length, width, thickness, material and `bands`; `banding` per part thickness (`#{ width, thickness, length, cost }`); per stock item its material, kind, sizes, `count`, `buy` (`[#{ length, count }]`), `waste` (%), `cost` and `layouts` (pieces with part index, x, y, w, h, rotated) |
 
 The parts are the innermost groups and components that have faces, sized by the bounding box in
 their own axes (length ≥ width ≥ thickness). A part takes its material's nearest stock thickness;

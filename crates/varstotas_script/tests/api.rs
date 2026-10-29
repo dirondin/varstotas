@@ -373,6 +373,10 @@ fn cut_list_stock_and_options() {
     // linear stock: a named profile, no section given
     let r = go(&mut m, r##"set_stock("Pine", #{ kind: "linear", name: "Rail profile", lengths: [2000], price: 4 }); let s = cut_list().stock.filter(|x| x.kind == "linear")[0]; print(s.name + " " + s.buy[0].length + " " + s.cost + " " + cut_list().issues.len());"##);
     assert_eq!(r.output, "Rail profile 2000.0 8.0 0\n", "{}", r.output);
+    // edge banding: both long edges of the three shelves, 1.5 at 0.5 a metre
+    let r = go(&mut m, r##"cut_settings(#{ band: 1.5, band_price: 0.5, band_subtract: true }); cut_part("Shelf", #{ bands: [true, true, false, false] }); let b = cut_list().banding[0]; print(b.width + " " + b.thickness + " " + b.length + " " + b.cost + " " + cut_list().parts[0].bands[1]);"##);
+    assert_eq!(r.output, "18.0 1.5 4800.0 2.4 true\n", "{}", r.output);
+    assert!(m.cut_list.band_subtract && m.cut_list.parts["Shelf"].bands == [true, true, false, false]);
     // clearing the stock: the parts report it
     go(&mut m, r#"set_stock("Plywood", ()); print(cut_list().issues.len());"#);
     assert!(m.materials.values().find(|x| x.name == "Plywood").unwrap().stock.is_empty());

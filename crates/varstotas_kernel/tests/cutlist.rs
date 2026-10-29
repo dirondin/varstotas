@@ -218,12 +218,12 @@ fn plan_uses_stock_settings_and_reports_issues() {
     let csv = plan_csv(&m, &p);
     assert!(csv.starts_with("Part,Count,Length (mm)"), "{csv}");
     assert!(csv.contains("Shelf,4,1000,400,18,Plywood,length,"));
-    assert!(csv.contains("Huge,1,3000,400,18,Plywood,length,larger than the stock"));
-    assert!(csv.contains("Bought,1,500,400,18,Plywood,length,excluded"));
+    assert!(csv.contains("Huge,1,3000,400,18,Plywood,length,,larger than the stock"));
+    assert!(csv.contains("Bought,1,500,400,18,Plywood,length,,excluded"));
     assert!(csv.contains("Pine,95 × 45,3600,1,"), "{csv}");
 
     // turning allowed per part: grain Any on a grained sheet
-    m.cut_list.parts.insert("Shelf".into(), PartOptions { grain: PartGrain::Any, exclude: false });
+    m.cut_list.parts.insert("Shelf".into(), PartOptions { grain: PartGrain::Any, ..Default::default() });
     let p2 = plan(&m);
     assert_eq!(p2.plans.iter().find(|s| s.stock.kind == StockKind::Sheet).unwrap().layouts.len(), 1);
     assert!(plan_csv(&m, &p2).contains("Shelf,4,1000,400,18,Plywood,any,"));
@@ -235,7 +235,7 @@ fn stock_and_settings_survive_save_and_load() {
     let ply = m.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
     m.materials[ply].stock.push(Stock::sheet(2440.0, 1220.0, 18.0, true));
     m.cut_list.kerf = 2.5;
-    m.cut_list.parts.insert("Door".into(), PartOptions { grain: PartGrain::Width, exclude: false });
+    m.cut_list.parts.insert("Door".into(), PartOptions { grain: PartGrain::Width, ..Default::default() });
     let json = serde_json::to_string(&m).unwrap();
     let back: Model = serde_json::from_str(&json).unwrap();
     assert_eq!(back.materials[ply].stock, m.materials[ply].stock);
@@ -392,4 +392,51 @@ fn offcuts_are_used_first_and_kept() {
     // planned again with what is left, the shelf comes from the second 800 × 400
     let p2 = plan_with(&m, &inv);
     assert!(p2.plans.iter().any(|s| s.offcut.is_some_and(|i| inv[i].stock.length == 800.0)));
+}
+
+#[test]
+fn edge_banding_is_summed_and_optionally_cut_off() {
+    let mut m = Model::default();
+    let ply = m.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
+    m.materials[ply].stock.push(Stock::sheet(2440.0, 1220.0, 18.0, true));
+    board(&mut m, "Side", 800.0, 400.0, 18.0, DVec3::ZERO, Some(ply));
+    board(&mut m, "Side", 800.0, 400.0, 18.0, DVec3::new(0.0, 500.0, 0.0), Some(ply));
+    board(&mut m, "Back", 600.0, 300.0, 6.0, DVec3::new(0.0, 1000.0, 0.0), Some(ply));
+    // both long edges and one short one of each side: 2 × (800 + 800 + 400)
+    m.cut_list.parts.insert("Side".into(), PartOptions { bands: [true, true, true, false], ..Default::default() });
+    m.cut_list.band_price = 2.0;
+    let p = plan(&m);
+    assert_eq!(p.banding.len(), 1);
+    assert!((p.banding[0].length - 4000.0).abs() < EPS && p.banding[0].width == 18.0, "{:?}", p.banding);
+    assert!((p.banding[0].cost() - 8.0).abs() < EPS);
+    assert!((p.cost() - p.plans.iter().map(|s| s.cost()).sum::<f64>() - 8.0).abs() < EPS);
+    // finished size on the pieces until the band is subtracted
+    let side = p.parts.iter().position(|x| x.name == "Side").unwrap();
+    let piece = |p: &varstotas_kernel::cutlist::CutPlan| *p.plans.iter().flat_map(|s| &s.layouts).flat_map(|l| &l.pieces).find(|x| x.part == side).unwrap();
+    let pc = piece(&p);
+    assert!((pc.w.max(pc.h) - 800.0).abs() < EPS && (pc.w.min(pc.h) - 400.0).abs() < EPS);
+    m.cut_list.band = 2.0;
+    m.cut_list.band_subtract = true;
+    let p = plan(&m);
+    let pc = piece(&p);
+    assert!((pc.w.max(pc.h) - 798.0).abs() < EPS && (pc.w.min(pc.h) - 396.0).abs() < EPS, "{pc:?}");
+    assert_eq!(p.parts[side].size, [800.0, 400.0, 18.0]);
+    let csv = plan_csv(&m, &p);
+    assert!(csv.contains("Side,2,800,400,18,Plywood,length,L1 L2 W1,cut 798 × 396"), "{csv}");
+    assert!(csv.contains("Edge banding,18 × 2,4000,1,,8"), "{csv}");
+    // survives save and load
+    let back: Model = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+    assert_eq!(back.cut_list, m.cut_list);
+}
+
+#[test]
+fn rotated_says_how_the_part_lies() {
+    // grain across: the part's width runs along the sheet's grain (its length)
+    let mut m = Model::default();
+    let ply = m.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
+    m.materials[ply].stock.push(Stock::sheet(2440.0, 1220.0, 18.0, true));
+    board(&mut m, "Door", 1000.0, 500.0, 18.0, DVec3::ZERO, Some(ply));
+    m.cut_list.parts.insert("Door".into(), PartOptions { grain: PartGrain::Width, ..Default::default() });
+    let pc = plan(&m).plans[0].layouts[0].pieces[0];
+    assert!(pc.rotated && (pc.w - 500.0).abs() < EPS, "{pc:?}");
 }

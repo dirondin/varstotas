@@ -50,7 +50,7 @@ TOOLS = [
         "description": (
             "The cut list of the model: parts (leaf groups / components with length, width, thickness, "
             "material), the sheets and boards to buy per material with waste % and cost, the pieces' "
-            "positions on each, and issues (no stock, too big, thickness). Materials need stock first: "
+            "positions on each, edge banding by part thickness, and issues (no stock, too big, thickness). Materials need stock first: "
             "run_script with set_stock(material, #{kind: \"sheet\", length: 2440, width: 1220, "
             "thickness: 18, grain: true, price: 60}) or a board #{kind: \"board\", width: 95, "
             "thickness: 45, lengths: [2400, 3600], price: 5} (price per metre), or linear stock "
