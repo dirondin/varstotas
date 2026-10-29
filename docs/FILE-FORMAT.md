@@ -53,6 +53,11 @@ stores `joints`: `[{ "kind": "Dowels" | "Screws" | "PocketHole" | "Housing" | "M
 "clearance", "angle", "pin", "flip" }]` (`a` and `b` are
 instance paths, `b` the part whose end meets `a`; sizes in mm), and `joint_bases`: `[[def id, mesh]]`,
 the joined parts' geometry from before any joint, which the joints are cut into again on every change.
+The model optionally stores `assembly`: `{ "steps": [{ "parts": [instance path], "note" }], "explode",
+"step", "moved": [[instance path, [x, y, z]]], "hid": [instance path] }` (`explode` the exploded view's
+distance in mm, `step` the step shown from 0; `moved` and `hid` record what the view did to the
+instances' transforms and `hidden` flags so it can be undone), and a scene optionally stores
+`assembly`: `{ "explode", "step" }`, the view it restores.
 All are omitted while empty or default, so older readers and files are unaffected.
 
 Scenes optionally store the independent `style.triangles` display checkbox (default false).

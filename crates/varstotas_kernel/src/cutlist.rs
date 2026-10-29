@@ -492,10 +492,14 @@ fn face_material(model: &Model, def: DefId) -> Option<MaterialId> {
 }
 
 /// The parts of the visible model: leaf groups and components, equal ones counted together.
+/// Parts hidden only for the assembly step shown count.
 pub fn cut_parts(model: &Model) -> Vec<CutPart> {
     fn walk(model: &Model, def: DefId, path: &mut ContextPath, inherited: Option<MaterialId>, out: &mut Vec<CutPart>) {
         let Some(d) = model.defs.get(def) else { return };
-        for (id, inst) in d.mesh.instances.iter().filter(|(_, i)| !i.hidden) {
+        for (id, inst) in d.mesh.instances.iter() {
+            if inst.hidden && !model.assembly.hid.iter().any(|h| h.split_last().is_some_and(|(&i, p)| i == id && p == &path[..])) {
+                continue;
+            }
             let Some(cd) = model.defs.get(inst.def) else { continue };
             let mat = inst.material.or(inherited);
             path.push(id);
@@ -563,7 +567,7 @@ fn face_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> V
     let Some((_, holes)) = drilled.iter().find(|(p, _)| p == path) else { return Vec::new() };
     let Some((&id, parent)) = path.split_last() else { return Vec::new() };
     let Some(inst) = model.mesh_at(parent).and_then(|m| m.instances.get(id)) else { return Vec::new() };
-    let to_local = model.transform_at(path).inverse();
+    let to_local = model.assembled_transform(path).inverse();
     let k = axis_scales(&inst.transform);
     let (lo, hi) = bounds(model, inst.def, DMat4::IDENTITY);
     let s = k * (hi - lo);

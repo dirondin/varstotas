@@ -16,7 +16,7 @@ use varstotas_render::Camera;
 use std::fmt::Write as _;
 
 /// What goes into the drawing.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VectorOptions {
     /// `Some(n)`: scale 1:n (parallel projection only); `None`: fit to an A4 page.
     pub scale: Option<f64>,
@@ -25,11 +25,13 @@ pub struct VectorOptions {
     pub hidden: bool,
     pub dims: bool,
     pub sections: bool,
+    /// Parts (instance paths) drawn faint: the edges inside them, thin and grey.
+    pub faint: Vec<varstotas_kernel::ContextPath>,
 }
 
 impl Default for VectorOptions {
     fn default() -> Self {
-        Self { scale: None, profiles: true, hidden: false, dims: true, sections: true }
+        Self { scale: None, profiles: true, hidden: false, dims: true, sections: true, faint: Vec::new() }
     }
 }
 
@@ -40,6 +42,8 @@ pub enum Pen {
     Hidden,
     Section,
     Dim,
+    /// Parts in the background (earlier assembly steps): thin grey.
+    Faint,
     /// Unfold folds: mountain (dash-dot) and valley (dashed).
     Mountain,
     Valley,
@@ -54,6 +58,7 @@ impl Pen {
             Pen::Hidden => 0.18,
             Pen::Section => 0.7,
             Pen::Dim => 0.18,
+            Pen::Faint => 0.15,
             Pen::Mountain | Pen::Valley => 0.25,
         }
     }
@@ -61,6 +66,7 @@ impl Pen {
     pub(crate) fn rgb(self) -> [f64; 3] {
         match self {
             Pen::Hidden => [0.45; 3],
+            Pen::Faint => [0.62; 3],
             Pen::Mountain => [0.8, 0.0, 0.0],
             Pen::Valley => [0.0, 0.3, 0.75],
             _ => [0.0; 3],
@@ -76,7 +82,7 @@ impl Pen {
         }
     }
     /// Drawing order.
-    const ORDER: [Pen; 7] = [Pen::Hidden, Pen::Edge, Pen::Mountain, Pen::Valley, Pen::Section, Pen::Profile, Pen::Dim];
+    const ORDER: [Pen; 8] = [Pen::Faint, Pen::Hidden, Pen::Edge, Pen::Mountain, Pen::Valley, Pen::Section, Pen::Profile, Pen::Dim];
 }
 
 #[derive(Clone, Debug)]
@@ -223,7 +229,8 @@ pub fn view_lines(model: &Model, cam: &Camera, vp: DVec2, opts: &VectorOptions) 
         if e.soft && !profile {
             continue;
         }
-        add(e.a, e.b, if profile { Pen::Profile } else { Pen::Edge }, &mut strokes);
+        let faint = opts.faint.iter().any(|p| e.owner_path.len() >= p.len() && e.owner_path[..p.len()] == p[..]);
+        add(e.a, e.b, if faint { Pen::Faint } else if profile { Pen::Profile } else { Pen::Edge }, &mut strokes);
     }
     let mut fills_scr: Vec<Vec<DVec2>> = Vec::new();
     if opts.sections

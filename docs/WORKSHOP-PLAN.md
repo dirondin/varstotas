@@ -122,6 +122,18 @@ appears on the diagrams as hole positions.
 
 ## Batch 4: exploded view and assembly instructions
 
+Status (2026-10-29): done. Window → Assembly: a slider explodes the model, each part moving away
+from the parts it touches (a part held on both sides slides out along a free axis, to the front
+by default), all lifted so nothing goes below the floor. Suggest steps orders the parts from the
+contact graph: the lowest part touching another is the base, then the lowest part touching what
+is placed, with its copies. Steps are reordered, split and joined by hand and carry a note;
+clicking a step shows it (later steps hidden, its parts selected). The view (explode, step) is
+document state that a scene keeps; Scenes from steps makes a scene per step. Instructions… writes
+an A4 PDF booklet: a cover with the exploded model, the parts and hardware list, then a page per
+step with the earlier parts drawn faint, the parts added and the joint hardware for that step.
+The cut list and joints always work from the assembled model. Not done: a Rhai / Python API for
+steps, arrows on the pictures.
+
 - Exploded view. Parts move apart along the joint directions from the contact graph. The
   distance is set by a slider, and the view can be captured in a scene.
 - Assembly steps. The order is suggested from the joints (the base first, then parts that join

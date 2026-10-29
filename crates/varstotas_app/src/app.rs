@@ -286,6 +286,7 @@ pub enum Action {
     /// Window → Cut List.
     CutList,
     Joinery,
+    Assembly,
     /// Window → Physics: drop the selected groups / components.
     Physics,
     /// Window → Materials Online Library: the online materials window.
@@ -600,6 +601,7 @@ pub struct VarstotasApp {
     /// Window → Cut List window.
     pub(crate) cutlist: crate::ui::cutlist::CutListState,
     pub(crate) joinery: crate::ui::joinery::JoineryState,
+    pub(crate) assembly: crate::ui::assembly::AssemblyState,
     /// Window → Physics window and its run.
     pub(crate) physics: crate::ui::physics::PhysicsState,
     /// Window → Sheets window.
@@ -784,6 +786,7 @@ impl VarstotasApp {
             unfold: Default::default(),
             cutlist: Default::default(),
             joinery: Default::default(),
+            assembly: Default::default(),
             physics: Default::default(),
             sheets: Default::default(),
             planes_window: Default::default(),
@@ -1429,10 +1432,11 @@ impl VarstotasApp {
             Action::RigEditor => self.open_rig_editor(),
             Action::PurgeUnused => self.purge_unused(true, true),
             Action::PreviewRemove => self.set_doc_preview(None),
-            Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
+            Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts.clone()),
             Action::Unfold => self.unfold.open = true,
             Action::CutList => self.cutlist.open = true,
             Action::Joinery => self.joinery.open = true,
+            Action::Assembly => self.assembly.open = true,
             Action::Physics => self.physics.open = true,
             Action::OnlineMaterials => self.online.open = !self.online.open,
             Action::UvEditor => self.open_uv_editor(),
@@ -2207,6 +2211,8 @@ impl VarstotasApp {
         s.environment = Some(self.doc.model.environment);
         let rigs = self.doc.model.rig_instances();
         s.rigs = (!rigs.is_empty()).then_some(rigs);
+        let a = &self.doc.model.assembly;
+        s.assembly = (!a.steps.is_empty() || a.explode > 0.0).then(|| a.view());
         s
     }
 
@@ -2274,6 +2280,9 @@ impl VarstotasApp {
             && e != self.doc.model.environment
         {
             self.doc.mutate_untracked(|m| m.environment = e);
+        }
+        if let Some(v) = s.assembly {
+            self.set_assembly_view(v);
         }
         let to = self.scene_camera(&s);
         let set = self.doc.model.scene_settings;
@@ -2677,6 +2686,7 @@ impl eframe::App for VarstotasApp {
         self.sync_offcuts();
         self.cut_list_window(&ctx);
         self.joinery_window(&ctx);
+        self.assembly_window(&ctx);
         self.physics_window(&ctx);
         self.sheets_window(&ctx);
         self.work_planes_window(&ctx);

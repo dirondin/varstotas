@@ -353,6 +353,14 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             rect(pen, (2.5, 13.8), (8.0, 19.0), WOOD, pen.thin());
             pen.line_c(&[(11.4, 2.5), (11.4, 21.5)], Stroke::new(W * pen.s, ORANGE));
         }
+        Icon::Assembly => {
+            // a cabinet taken apart: two sides out, the top lifted, a dashed line of travel
+            rect(pen, (2.5, 8.0), (6.5, 21.5), WOOD, pen.stroke());
+            rect(pen, (17.5, 8.0), (21.5, 21.5), WOOD, pen.stroke());
+            rect(pen, (5.0, 2.5), (19.0, 5.5), WOOD, pen.stroke());
+            rect(pen, (9.0, 13.0), (15.0, 15.5), WOOD, pen.stroke());
+            pen.line_c(&[(12.0, 6.5), (12.0, 11.5)], Stroke::new(W * pen.s, ORANGE));
+        }
         Icon::Joinery => {
             // a side standing up, a shelf meeting it, the dowels across the joint
             rect(pen, (3.0, 2.5), (9.0, 21.5), WOOD, pen.stroke());

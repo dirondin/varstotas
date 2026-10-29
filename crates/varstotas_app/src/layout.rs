@@ -104,7 +104,7 @@ pub fn viewport_drawing(model: &Model, vp: &SheetViewport) -> Drawing {
     let m = model.with_scene_state(scene);
     let cam = scene_camera(scene);
     let px = (vp.size * PX_PER_MM).max(DVec2::splat(8.0));
-    let opts = VectorOptions { scale: None, profiles: vp.profiles, hidden: vp.hidden, dims: vp.dims, sections: vp.sections };
+    let opts = VectorOptions { scale: None, profiles: vp.profiles, hidden: vp.hidden, dims: vp.dims, sections: vp.sections, ..Default::default() };
     let lines = view_lines(&m, &cam, px, &opts);
     let (lo, hi) = (vp.min, vp.min + vp.size);
     let centre = vp.min + vp.size * 0.5;

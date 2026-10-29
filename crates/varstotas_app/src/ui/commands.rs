@@ -77,6 +77,7 @@ pub enum Cmd {
     Unfold,
     CutList,
     Joinery,
+    Assembly,
     Physics,
     Text3d,
     ZoomExtents,
@@ -107,13 +108,13 @@ pub enum Cmd {
 
 /// The Window menu below the side bar and its cards, by feature: the model, the online
 /// libraries, its look, making things from it, scripting; `None`: a separator.
-pub const WINDOW_MENU: [Option<Cmd>; 22] = {
+pub const WINDOW_MENU: [Option<Cmd>; 23] = {
     use Cmd::*;
     [
         Some(ModelInfo), Some(ComponentParams), Some(WorkPlanes), None,
         Some(Library3d), Some(MaterialsOnline), None,
         Some(UvEditor), Some(Render), None,
-        Some(Physics), Some(Unfold), Some(CutList), Some(Joinery), Some(Sheets), Some(PrintCheck), None,
+        Some(Physics), Some(Unfold), Some(CutList), Some(Joinery), Some(Assembly), Some(Sheets), Some(PrintCheck), None,
         Some(GeneratorEditor), Some(Console), Some(Log), None,
         Some(Preferences),
     ]
@@ -280,6 +281,7 @@ impl Cmd {
             Cmd::Unfold => "cmd-unfold",
             Cmd::CutList => "cmd-cut-list",
             Cmd::Joinery => "cmd-joinery",
+            Cmd::Assembly => "cmd-assembly",
             Cmd::Physics => "cmd-physics",
             Cmd::Text3d => "cmd-text-3d",
             Cmd::ZoomExtents => "cmd-zoom-extents",
@@ -375,6 +377,7 @@ impl Cmd {
             Cmd::Unfold => Icon::Unfold,
             Cmd::CutList => Icon::CutList,
             Cmd::Joinery => Icon::Joinery,
+            Cmd::Assembly => Icon::Assembly,
             Cmd::Physics => Icon::Physics,
             Cmd::Text3d => Icon::Text3d,
             Cmd::ZoomExtents => Icon::ZoomExtents,
@@ -489,6 +492,7 @@ impl Cmd {
             Cmd::Unfold => tr!("cmd-desc-unfold"),
             Cmd::CutList => tr!("cmd-desc-cut-list"),
             Cmd::Joinery => tr!("cmd-desc-joinery"),
+            Cmd::Assembly => tr!("cmd-desc-assembly"),
             Cmd::Physics => tr!("cmd-desc-physics"),
             Cmd::Text3d => tr!("cmd-desc-text-3d"),
             Cmd::ZoomExtents => tr!("cmd-desc-zoom-extents"),
@@ -586,6 +590,7 @@ impl Cmd {
             Cmd::Unfold => Action::Unfold,
             Cmd::CutList => Action::CutList,
             Cmd::Joinery => Action::Joinery,
+            Cmd::Assembly => Action::Assembly,
             Cmd::Physics => Action::Physics,
             Cmd::Text3d => Action::Text3d,
             Cmd::ZoomExtents => Action::ZoomExtents,
@@ -625,6 +630,7 @@ impl Cmd {
             Cmd::Sheets => Some(app.sheets.open),
             Cmd::CutList => Some(app.cutlist.open),
             Cmd::Joinery => Some(app.joinery.open),
+            Cmd::Assembly => Some(app.assembly.open),
             Cmd::Render => Some(app.render_window.open),
             Cmd::WorkPlanes => Some(app.planes_window.open),
             Cmd::PrintCheck => Some(app.printing.open && app.printing.advanced_tab.is_none() && !app.printing.repair_tab),

@@ -143,6 +143,11 @@ impl Model {
         if let Some(sec) = &s.sections {
             m.apply_scene_sections(sec);
         }
+        if let Some(a) = s.assembly
+            && a != m.assembly.view()
+        {
+            m.set_assembly_view(a);
+        }
         m
     }
 }

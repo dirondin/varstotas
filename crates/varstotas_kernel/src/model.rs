@@ -298,6 +298,9 @@ pub struct Scene {
     /// Values of the components with parameters in this scene (`None`: left as they are).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rigs: Option<Vec<crate::rig::SceneRig>>,
+    /// The exploded view and assembly step shown (`None`: left as they are).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assembly: Option<crate::assembly::SceneAssembly>,
 }
 
 fn yes() -> bool {
@@ -342,7 +345,7 @@ impl Default for SceneSettings {
 impl Scene {
     /// A camera-only scene (no saved style or tags), included in the animation.
     pub fn camera(name: impl Into<String>, eye: DVec3, target: DVec3, up: DVec3, fov_y_deg: f64, ortho: bool) -> Self {
-        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, environment: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true, rigs: None }
+        Self { name: name.into(), eye, target, up, fov_y_deg, ortho, style: None, hidden_tags: None, environment: None, untagged_hidden: None, sections: None, shadows: None, in_animation: true, rigs: None, assembly: None }
     }
 }
 
@@ -435,6 +438,9 @@ pub struct Model {
     /// The geometry of joined parts from before any joint, by definition.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub joint_bases: Vec<(DefId, Mesh)>,
+    /// Assembly steps and the exploded / step view shown.
+    #[serde(default, skip_serializing_if = "crate::assembly::Assembly::is_empty")]
+    pub assembly: crate::assembly::Assembly,
 }
 
 /// Result of a model-wide ray pick.
@@ -489,6 +495,7 @@ impl Model {
             cut_list: Default::default(),
             joints: Vec::new(),
             joint_bases: Vec::new(),
+            assembly: Default::default(),
         }
     }
 

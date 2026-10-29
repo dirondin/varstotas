@@ -270,7 +270,7 @@ impl VarstotasApp {
             }
         }
 
-        if let Some(mut o) = self.vector_dialog {
+        if let Some(mut o) = self.vector_dialog.clone() {
             let ortho = self.camera.ortho;
             let mut choice: Option<&str> = None;
             let resp = Modal::new(Id::new("export_drawing")).show(ctx, |ui| {

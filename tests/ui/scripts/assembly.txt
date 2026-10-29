@@ -1,0 +1,23 @@
+# Assembly: a cabinet's steps suggested from the parts that touch, the exploded view, a step
+# shown, scenes from the steps and the instructions booklet.
+action script let b = box(vec3(0, 0, 0), 600, 300, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 18), 18, 300, 700); l.name = "Side"; let r = box(vec3(582, 0, 18), 18, 300, 700); r.name = "Side"; let t = box(vec3(0, 0, 718), 600, 300, 18); t.name = "Top"; let s = box(vec3(18, 0, 350), 564, 300, 18); s.name = "Shelf"; joint(l, s, "dowels"); joint(r, s, "dowels");
+action console_close
+wait 5
+action assembly
+wait 5
+action click_spot assembly:suggest
+wait 10
+expect assembly=(4, 0, None, [["1 × Bottom (1)"], ["2 × Side (2)"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
+action assembly_explode 150
+view iso
+zoom_extents
+wait 10
+screenshot shots/assembly_exploded.bmp
+action click_spot assembly:step:2
+wait 10
+expect assembly=(4, 150, Some(2), [["1 × Bottom (1)"], ["2 × Side (2)"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
+screenshot shots/assembly_step.bmp
+action export_assembly shots/assembly.pdf
+action assembly_scenes
+wait 5
+quit

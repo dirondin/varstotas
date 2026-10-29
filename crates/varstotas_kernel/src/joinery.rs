@@ -164,8 +164,10 @@ fn hexahedron(p: impl Fn(usize, usize, usize) -> DVec3) -> Option<Mesh> {
 }
 
 fn world_bounds(model: &Model, path: &[crate::InstanceId]) -> Option<(DVec3, DVec3)> {
+    // as assembled: the exploded view's offsets taken off
     let (&id, parent) = path.split_last()?;
-    model.instance_world_bounds(parent, id).map(|b| (b.min, b.max))
+    let off = model.assembly_offset(path);
+    model.instance_world_bounds(parent, id).map(|b| (b.min - off, b.max - off))
 }
 
 /// Where parts `a` and `b` touch: the largest rectangle where a face of one's bounding box lies
@@ -586,7 +588,7 @@ impl Model {
         let (from_a, from_b, to_b) = j.cuts(&c)?;
         let mut out = Vec::new();
         for (path, d, ops) in [(&j.a, da, vec![(&from_a, false)]), (&j.b, db, vec![(&to_b, true), (&from_b, false)])] {
-            let xf = self.transform_at(path);
+            let xf = self.assembled_transform(path);
             let mut mesh = self.defs[d].mesh.clone();
             if !mesh.is_solid() {
                 return Err(OpError::Invalid(tr!("joint-err-not-solid", name = self.defs[d].name.clone())));

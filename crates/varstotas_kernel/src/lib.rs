@@ -33,6 +33,7 @@ pub mod guides;
 pub mod history;
 pub mod io;
 pub mod joinery;
+pub mod assembly;
 pub mod layout;
 pub mod locking;
 pub mod mesh;

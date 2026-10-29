@@ -43,6 +43,7 @@ pub mod tray_lib;
 pub mod unfold;
 pub mod cutlist;
 pub mod joinery;
+pub mod assembly;
 pub mod workplanes;
 
 use crate::document::guarded;
