@@ -37,9 +37,11 @@ older placements. Source atlas coordinates are fitted at the actual welded mesh 
 Older files cannot recover discarded UV shear without their original source assets.
 
 Materials optionally store `stock`: what the material is bought as, a list of
-`{ "kind": "sheet" | "board", "thickness", "length", "width", "lengths": [...], "grain", "price", "piece_prices": [...] }`
-(mm; a sheet uses length × width, a board its width and the lengths on sale; `price` is per
-sheet or per metre of board, `piece_prices` when present prices boards per piece, one per length). The model optionally
+`{ "kind": "sheet" | "board" | "linear", "name", "thickness", "length", "width", "lengths": [...], "grain", "price", "piece_prices": [...] }`
+(mm; a sheet uses length × width, a board its width and the lengths on sale; linear stock is a
+profile `name` cut to length like a board, its width × thickness only a limit, 0 = any; `price` is per
+sheet or per metre of board, `piece_prices` when present prices boards per piece, one per length).
+Offcuts kept for later projects live in the app's preferences, not in documents. The model optionally
 stores `cut_list`: `{ "kerf", "trim", "min_offcut", "tolerance", "parts": { "<part name>": { "grain":
 "Length" | "Width" | "Any", "exclude" } } }`. A sheet (track D) optionally stores `cut_diagrams`:
 `[{ "min", "size", "page" }]`, a page of the cut list fitted into that rectangle. Both are omitted while empty or default, so older

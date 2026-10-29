@@ -19,11 +19,13 @@ What already exists and is reused:
 
 ## Batch 1: stock and the cut-list optimizer
 
-Status (2026-10-29): done except linear stock (mouldings, rods) and offcuts kept as stock. Stock
-on materials (also through My Library), user stock templates in Preferences → Cut List, boards
-priced per metre or per piece, several stock items per material (thicknesses, board sections,
-sheet sizes chosen by cost), Window → Cut List, PDF / SVG / CSV, "+ Cut Diagram" on sheets,
-`cut_list()` in Rhai, Python and MCP; the Bookshelf example carries stock.
+Status (2026-10-29): done. Stock on materials (also through My Library): sheets, boards and
+linear stock (a named profile, its section only a limit), user stock templates in Preferences →
+Cut List, boards priced per metre or per piece, several stock items per material (thicknesses,
+board sections, sheet sizes chosen by cost), offcuts kept across projects (Cut List → Keep
+offcuts, listed in Preferences → Cut List, cut from first), Window → Cut List, PDF / SVG / CSV,
+"+ Cut Diagram" on sheets, `cut_list()` in Rhai, Python and MCP; the Bookshelf example carries
+stock; README media.
 
 **Stock.** A material can describe what it is bought as:
 
@@ -52,8 +54,9 @@ outline appears on the diagram. Per part: exclude from the cut list, count multi
     fewest sheets, then the largest offcut;
 - boards and linear stock: 1D cutting stock (first fit decreasing, then improvement) over the
   lengths on sale, with the kerf;
-- offcuts: leftover rectangles above a minimum size are listed. Later they can be kept as stock
-  for the next project.
+- offcuts: leftover rectangles above a minimum size are listed. "Keep offcuts" stores them in
+  the user's offcuts (with the project they came from) and takes out the ones the plan used;
+  other projects cut from them first, the smallest first, matched by material name and stock.
 
 **Window → Cut List:**
 

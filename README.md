@@ -12,8 +12,8 @@ everything can be scripted.
 - **Direct modelling** — lines, arcs, Bézier and freehand curves, Push/Pull, Offset, Sweep,
   chamfer and fillet, with inference snapping (endpoints, midpoints, axes, parallel /
   perpendicular) and typed exact values.
-- **Making things** — a cut list for furniture: stock on materials (sheets and boards with price),
-  cutting diagrams optimized for straight saw cuts, waste, shopping list and cost, PDF / SVG / CSV;
+- **Making things** — a cut list for furniture: stock on materials (sheets, boards and mouldings with
+  price), offcuts kept for the next project, cutting diagrams optimized for straight saw cuts, waste, shopping list and cost, PDF / SVG / CSV;
   dimensions on the model; preparing models for a slicer (checks and repair,
   wall-thickness maps, cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF /
   DXF; sheets with scaled views; simple physics (drop objects, drape cloth).
@@ -34,6 +34,11 @@ everything can be scripted.
   <img src="docs/images/workbench.jpg" width="32%" alt="Workbench demo with its length, depth and height dimensions">
   <img src="docs/images/desk-caddy.jpg" width="32%" alt="Desk caddy for a 3D printer with its length, depth and height dimensions">
   <img src="docs/images/gallery.jpg" width="32%" alt="Material gallery demo in the Realistic style: wood, metal, glass, brick and glowing materials">
+</p>
+
+<p>
+  <img src="docs/images/cut-list.gif" width="60%" alt="The Bookshelf demo, then Window → Cut List: plywood sheets and the back panel laid out with saw kerf, offcuts, waste and cost">
+  <img src="docs/images/cut-diagram.png" width="36%" alt="A cutting diagram of the Bookshelf: eight numbered parts on a 2440 × 1220 birch sheet with the offcuts sized">
 </p>
 
 <p align="center">

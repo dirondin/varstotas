@@ -1,7 +1,7 @@
 //! Cut list: parts from the model, guillotine sheet packing, boards, settings, CSV.
 
 use varstotas_kernel::cutlist::{
-    Issue, Item, Layout, PartGrain, PartOptions, Placement, Stock, StockKind, cut_parts, pack_boards, pack_sheets, plan, plan_csv,
+    Issue, Item, Layout, Offcut, PartGrain, PartOptions, Placement, Stock, StockKind, cut_parts, pack_boards, pack_sheets, plan, plan_csv, plan_with,
 };
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::primitives::Primitive;
@@ -314,4 +314,82 @@ fn bookshelf_example_has_a_cut_list() {
     for sp in &p.plans {
         println!("{} {:?} waste {:.0}% cost {}", sp.material_name, sp.to_buy(), sp.waste() * 100.0, sp.cost());
     }
+}
+
+#[test]
+fn linear_stock_by_profile() {
+    let mut m = Model::new();
+    let oak = m.add_material("Oak", [0.7, 0.5, 0.3, 1.0]);
+    // a round rod (no section given) and a skirting profile 70 × 15
+    m.materials[oak].stock = vec![Stock::linear("Skirting 70", 70.0, 15.0, &[2500.0]), Stock::linear("Rod", 0.0, 0.0, &[1000.0, 2000.0])];
+    m.materials[oak].stock[1].price = 10.0;
+    for i in 0..3 {
+        board(&mut m, "Skirting", 1200.0, 70.0, 15.0, DVec3::new(0.0, i as f64 * 200.0, 0.0), Some(oak));
+    }
+    for i in 0..2 {
+        board(&mut m, "Dowel", 600.0, 20.0, 20.0, DVec3::new(0.0, 1000.0 + i as f64 * 100.0, 0.0), Some(oak));
+    }
+    board(&mut m, "Long", 3000.0, 20.0, 20.0, DVec3::new(0.0, 2000.0, 0.0), Some(oak));
+    let p = plan(&m);
+    let idx = |name: &str| p.parts.iter().position(|x| x.name == name).unwrap();
+    // no thickness warnings for linear stock, the long one is too long
+    assert_eq!(p.issues, vec![Issue::TooBig { part: idx("Long") }]);
+    let skirting = p.plans.iter().find(|s| s.stock.name == "Skirting 70").unwrap();
+    assert_eq!(skirting.stock.kind, StockKind::Linear);
+    // 1200 + 3 + 1200 on one 2500, the third on another
+    assert_eq!(skirting.to_buy(), vec![(2500.0, 2)]);
+    let rod = p.plans.iter().find(|s| s.stock.name == "Rod").unwrap();
+    // 600 + 3 + 600 = 1203: one 2000 rod, as wide as the part
+    assert_eq!(rod.to_buy(), vec![(2000.0, 1)]);
+    assert_eq!(rod.layouts[0].width, 20.0);
+    assert!((rod.cost() - 20.0).abs() < EPS);
+    assert!(plan_csv(&m, &p).contains("Oak,Rod,2000,1,"));
+}
+
+#[test]
+fn offcuts_are_used_first_and_kept() {
+    let mut m = Model::new();
+    let ply = m.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
+    let pine = m.add_material("Pine", [0.9, 0.8, 0.6, 1.0]);
+    let mut sheet = Stock::sheet(2440.0, 1220.0, 18.0, true);
+    sheet.price = 60.0;
+    m.materials[ply].stock = vec![sheet.clone()];
+    let mut rail = Stock::board(95.0, 45.0, &[2400.0]);
+    rail.price = 5.0;
+    m.materials[pine].stock = vec![rail.clone()];
+    board(&mut m, "Shelf", 700.0, 300.0, 18.0, DVec3::ZERO, Some(ply));
+    board(&mut m, "Side", 2000.0, 1000.0, 18.0, DVec3::new(0.0, 500.0, 0.0), Some(ply));
+    board(&mut m, "Rail", 900.0, 95.0, 45.0, DVec3::new(0.0, 2000.0, 0.0), Some(pine));
+
+    let off = |material: &str, st: Stock, count| Offcut { material: material.into(), stock: Stock { price: 0.0, ..st }, count, source: String::new() };
+    let mut inv = vec![
+        // too small for anything, a thinner one, then the one that takes the shelf
+        off("Plywood", Stock::sheet(500.0, 200.0, 18.0, true), 1),
+        off("Plywood", Stock::sheet(800.0, 400.0, 12.0, true), 1),
+        off("Plywood", Stock::sheet(800.0, 400.0, 18.0, true), 2),
+        off("Pine", Stock::board(95.0, 45.0, &[1000.0]), 1),
+    ];
+    let p = plan_with(&m, &inv);
+    assert!(p.issues.is_empty(), "{:?}", p.issues);
+    let from_offcut: Vec<_> = p.plans.iter().filter_map(|s| s.offcut.map(|i| (i, s.layouts.len(), s.layouts[0].pieces.len()))).collect();
+    assert_eq!(from_offcut, vec![(2, 1, 1), (3, 1, 1)], "the shelf and the rail from offcuts");
+    // only the side is bought: one sheet, no boards
+    assert_eq!(p.cost(), 60.0);
+    assert!(p.plans.iter().all(|s| s.offcut.is_some() || s.stock.kind == StockKind::Sheet));
+    assert!(plan_csv(&m, &p).contains("Pine,95 × 45 (offcut),1000,1,"));
+
+    // after cutting: one 800 × 400 offcut used, the rail offcut gone, the leftovers kept
+    let left = p.leftovers();
+    assert!(left.iter().all(|o| o.stock.price == 0.0 && o.count >= 1));
+    p.keep_offcuts(&mut inv, "Shelf.vrst");
+    assert!(inv.iter().any(|o| o.source == "Shelf.vrst"));
+    assert_eq!(inv.iter().find(|o| o.stock.length == 800.0 && o.stock.thickness == 18.0).map(|o| o.count), Some(1));
+    assert!(!inv.iter().any(|o| o.material == "Pine" && o.stock.length == 1000.0));
+    // the side's sheet leaves 440 × 1220 and 2000 × 217 (min 100), the shelf's offcut 97 × 400 is too narrow
+    assert!(inv.iter().any(|o| o.material == "Plywood" && o.stock.length == 437.0 && o.stock.width == 1220.0), "{inv:?}");
+    // the rail offcut 1000 - 900 - 3 = 97 is under the minimum
+    assert!(!inv.iter().any(|o| o.material == "Pine"));
+    // planned again with what is left, the shelf comes from the second 800 × 400
+    let p2 = plan_with(&m, &inv);
+    assert!(p2.plans.iter().any(|s| s.offcut.is_some_and(|i| inv[i].stock.length == 800.0)));
 }

@@ -92,7 +92,7 @@ pub const FNS: &[FnDoc] = &[
     f("units", &["units()"], "script-fn-units"),
     f("materials", &["materials()"], "script-fn-materials"),
     f("cut_list", &["cut_list()"], "script-fn-cut-list"),
-    f("set_stock", &["set_stock(material, #{ kind: \"sheet\", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })", "set_stock(material, #{ kind: \"board\", width: 95, thickness: 45, lengths: [3000, 6000], prices: [9, 16] })", "set_stock(material, [stock, …])", "set_stock(material, ())"], "script-fn-set-stock"),
+    f("set_stock", &["set_stock(material, #{ kind: \"sheet\", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })", "set_stock(material, #{ kind: \"board\", width: 95, thickness: 45, lengths: [3000, 6000], prices: [9, 16] })", "set_stock(material, #{ kind: \"linear\", name: \"Ø 20 rod\", width: 20, thickness: 20, lengths: [1000, 2000], price: 3 })", "set_stock(material, [stock, …])", "set_stock(material, ())"], "script-fn-set-stock"),
     f("cut_settings", &["cut_settings(#{ kerf: 3, trim: 10, min_offcut: 100 })"], "script-fn-cut-settings"),
     f("cut_part", &["cut_part(name, #{ grain: \"any\", exclude: false })"], "script-fn-cut-part"),
     f("all_faces", &["all_faces()"], "script-fn-all-faces"),

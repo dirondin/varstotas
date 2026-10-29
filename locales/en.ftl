@@ -1207,13 +1207,20 @@ prefs-words-shortcuts = keyboard shortcuts hotkeys keys
 prefs-words-toolbar = toolbar buttons order reserve separator customize tools
 prefs-words-view = new document style shaded textures monochrome hidden line wireframe realistic edges profiles axes ground sky grid shadows perspective parallel projection fov field of view camera
 prefs-section-cut-list = Cut List
-prefs-words-cut-list = cut list stock templates sheet board plywood timber price presets
+prefs-words-cut-list = cut list stock templates sheet board plywood timber price presets offcuts leftovers linear moulding rod
 prefs-cut-presets = Stock templates
 prefs-cut-presets-note = Your sheets and boards, offered in Material Editor → Stock → + Add stock. Add one here or save a material's stock with ☆.
 prefs-cut-none = No templates yet.
 prefs-cut-remove = Remove this template
 prefs-cut-add-sheet = + Sheet
 prefs-cut-add-board = + Board
+prefs-cut-add-linear = + Linear
+prefs-cut-offcuts = My offcuts
+prefs-cut-offcuts-note = Leftovers kept with Cut List → Keep offcuts. The cut list takes parts from them first, matched by material name and stock.
+prefs-cut-offcuts-none = No offcuts yet.
+prefs-cut-use-offcuts = Use them in the cut list
+prefs-cut-offcut-remove = Remove this offcut
+prefs-cut-offcuts-clear = Remove all
 
 ## Window
 
@@ -2108,12 +2115,17 @@ mated-stock-not-in-model = Paint something with this material to set what it is 
 mated-stock-kind = Bought as
 mated-stock-sheet = Sheet
 mated-stock-board = Board
+mated-stock-linear = Linear
 mated-stock-remove = Remove this stock
 mated-stock-thickness = Thickness
 mated-stock-size = Size
 mated-stock-grain = Grain along the length
 mated-stock-width = Width
 mated-stock-lengths = Lengths on sale
+mated-stock-profile = Profile
+mated-stock-profile-hint = e.g. Ø 20 rod
+mated-stock-section = Section
+mated-stock-section-tip = The largest part section it holds, either way round; 0 = any.
 mated-stock-price-sheet = Price per sheet
 mated-stock-price = Price
 mated-stock-per-metre = per metre
@@ -2124,7 +2136,7 @@ mated-stock-saved = Saved to the stock templates: { $name }
 mated-stock-my-presets = My templates
 mated-stock-edit-presets = Edit templates…
 mated-stock-add = + Add stock
-mated-stock-note = Parts of this material are cut from the stock of the nearest thickness: boards of the narrowest section that holds them, sheets of the size that comes cheapest (Window → Cut List).
+mated-stock-note = Parts of this material are cut from linear stock whose section holds them, else from the stock of the nearest thickness: boards of the narrowest section that holds them, sheets of the size that comes cheapest (Window → Cut List).
 mated-stock-preset-ply-18 = Plywood 2440 × 1220 × 18
 mated-stock-preset-ply-12 = Plywood 2440 × 1220 × 12
 mated-stock-preset-birch-18 = Birch plywood 1525 × 1525 × 18
@@ -2133,6 +2145,8 @@ mated-stock-preset-chipboard-16 = Chipboard 2750 × 1830 × 16
 mated-stock-preset-hdf-3 = Hardboard 2440 × 1220 × 3
 mated-stock-preset-pine-95x45 = Pine 95 × 45, 2.4–6 m
 mated-stock-preset-board-145x20 = Board 145 × 20, 2–3 m
+mated-stock-preset-rod-20 = Round rod Ø 20, 1–2 m
+mated-stock-preset-skirting-70 = Skirting 70 × 15, 2.5 m
 mated-undo-stock = Material stock
 mated-slot-base = Base texture
 mated-slot-empty = Empty
@@ -2720,11 +2734,17 @@ cutlist-no-stock-at-all = No part has stock yet: set what its material is bought
 cutlist-no-material = no material
 cutlist-stock-sheet = { $material } { $length } × { $width } × { $thickness }
 cutlist-stock-board = { $material } { $width } × { $thickness }
+cutlist-stock-linear = { $material } { $profile }
+cutlist-stock-offcut = { $stock } (offcut)
 cutlist-buy-sheets = { $n ->
     [one] { $n } sheet
    *[other] { $n } sheets
 }
 cutlist-buy-boards = { $n } × { $length }
+cutlist-offcuts-used = { $n ->
+    [one] { $n } offcut of yours
+   *[other] { $n } offcuts of yours
+}
 cutlist-waste = , waste { $percent }%
 cutlist-cost = , cost { $cost }
 cutlist-total = Total cost: { $cost }
@@ -2747,10 +2767,17 @@ cutlist-grain-any = any (may turn)
 cutlist-parts-note = Parts are the groups and components with nothing inside; equal ones (same name, size and material) share a row. Options apply to every part with that name.
 cutlist-page-sheet = { $stock }: sheet { $n } of { $total }
 cutlist-page-boards = { $stock }: boards { $from }–{ $to } of { $total }
+cutlist-page-lengths = { $stock }: lengths { $from }–{ $to } of { $total }
 cutlist-sheet-no-page = This cut list page no longer exists
 cutlist-board-label = { $n }: { $length }
 cutlist-footer = { $doc } · cut list · page { $n } of { $total }
 cutlist-page-of = Page { $n } of { $total }
+cutlist-use-offcuts = Use my offcuts ({ $n })
+cutlist-use-offcuts-tip = Parts are cut from your offcuts (Preferences → Cut List) before anything is bought, the smallest first. Offcuts left by this document are not used in it.
+cutlist-keep = Keep offcuts
+cutlist-keep-tip = When the cut is done: the offcuts this plan uses leave your offcuts, and its leftovers (at least the minimum offcut size) join them for later projects.
+cutlist-keep-done = Kept. The plan stays as it was cut until the model changes.
+cutlist-kept = Offcuts kept: { $kept } new, { $used } used.
 cutlist-export = Export:
 cutlist-exported = Cut list saved: { $path }
 cutlist-export-failed = Could not save the cut list: { $error }
@@ -3931,7 +3958,7 @@ script-fn-length = Parse a length with units ("1.2m") → mm.
 script-fn-units = The model's length unit.
 script-fn-materials = Material names.
 script-fn-cut-list = The cut list: parts (name, count, length, width, thickness, material, grain, exclude), stock (material, kind, sizes, count, buy, waste %, cost, layouts with pieces), issues and the total cost.
-script-fn-set-stock = Set what a material is bought as: a sheet (length, width, thickness, grain, price per sheet) or a board (width, thickness, lengths on sale, price per metre, or prices: per piece, one per length); a list for several thicknesses, sections or sheet sizes, () for none.
+script-fn-set-stock = Set what a material is bought as: a sheet (length, width, thickness, grain, price per sheet) or a board (width, thickness, lengths on sale, price per metre, or prices: per piece, one per length) or linear stock (kind "linear": name, an optional section width × thickness, lengths and prices as for a board); a list for several thicknesses, sections or sheet sizes, () for none.
 script-fn-cut-settings = Cut-list settings: kerf, edge trim, the smallest offcut kept, the thickness tolerance.
 script-fn-cut-part = Options of the parts named so: grain ("length", "width" or "any") and exclude.
 script-fn-all-faces = Every face, nested groups included.

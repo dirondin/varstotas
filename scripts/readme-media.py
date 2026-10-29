@@ -3,15 +3,17 @@
 
 Drives a debug build with UI scripts (`record` writes window frames), then encodes with
 ffmpeg / ImageMagick:
-  docs/images/push-pull.gif, house-orbit.gif, gallery.jpg, workbench.jpg, desk-caddy.jpg
+  docs/images/push-pull.gif, house-orbit.gif, gallery.jpg, workbench.jpg, desk-caddy.jpg,
+  cut-list.gif, cut-diagram.png
   .github/social-preview.png
 Needs macOS (like tests/ui), ffmpeg, ImageMagick 7 and curl. The app window must stay uncovered.
-usage: scripts/readme-media.py
+usage: scripts/readme-media.py [cutlist]   (cutlist: only the cut-list media)
 """
 import glob
 import os
 import shutil
 import subprocess
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "target", "readme-media")
@@ -82,9 +84,32 @@ def gif(src_pattern, dst, vf, palettegen, paletteuse):
         "-loop", "0", os.path.join(IMAGES, dst))
 
 
+def cut_list_media():
+    """The Bookshelf demo, then Window → Cut List and its diagrams page by page (a GIF); the first
+    sheet's diagram as a still."""
+    rec = frames("cutlist")
+    lines = ["action demo bookshelf", "wait 300", "action console_close", "wait 10", f"record {rec} 2", "wait 100",
+             "action cut_list", "wait 260", "action cut_list_page 2", "wait 250", "record off",
+             "action cut_list_page 1", "wait 20", f"record {frames('cutlist_still')} 2", "wait 1", "record off", "quit"]
+    app_script("cutlist", lines)
+    gif(os.path.join(rec, "frame_%05d.bmp"), "cut-list.gif", "fps=25,scale=960:-1:flags=lanczos",
+        "max_colors=128:stats_mode=diff", "dither=bayer:bayer_scale=5:diff_mode=rectangle")
+    # the Cut List window on its first sheet, trimmed to the window
+    run("magick", os.path.join(OUT, "frames_cutlist_still", "frame_00000.bmp"), "-crop", CUT_WINDOW, "+repage", "-strip",
+        "PNG24:" + os.path.join(IMAGES, "cut-diagram.png"))
+
+
+# the Cut List window in a recorded frame: width x height + left + top
+CUT_WINDOW = "656x716+39+161"
+
+
 def main():
     os.makedirs(os.path.join(OUT, "home"), exist_ok=True)
     run("cargo", "build", "-q", "-p", "varstotas_app", "--manifest-path", os.path.join(ROOT, "Cargo.toml"))
+    if sys.argv[1:] == ["cutlist"]:
+        cut_list_media()
+        return
+    cut_list_media()
 
     app_script("pushpull", pushpull_script())
     gif(os.path.join(OUT, "frames_pushpull", "frame_%05d.bmp"), "push-pull.gif", "fps=25,scale=960:-1:flags=lanczos",

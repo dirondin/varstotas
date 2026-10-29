@@ -160,6 +160,10 @@ pub struct Prefs {
     pub undo_steps: u32,
     /// The user's stock templates for the cut list (Preferences → Cut List).
     pub stock_presets: Vec<crate::ui::cutlist::StockPreset>,
+    /// Offcuts kept from earlier projects (Cut List → Keep offcuts, Preferences → Cut List).
+    pub offcuts: Vec<varstotas_kernel::cutlist::Offcut>,
+    /// The cut list is planned with [`Prefs::offcuts`] first.
+    pub use_offcuts: bool,
 }
 
 impl Prefs {
@@ -209,6 +213,8 @@ impl Default for Prefs {
             lib_recent: Vec::new(),
             mat_favourites: Vec::new(),
             stock_presets: Vec::new(),
+            offcuts: Vec::new(),
+            use_offcuts: true,
             mat_recent: Vec::new(),
             watch_downloads: false,
             tray_hidden: Vec::new(),
@@ -2663,6 +2669,7 @@ impl eframe::App for VarstotasApp {
         self.poll_external_edits();
         self.plugin_dialog(&ctx);
         self.unfold_window(&ctx);
+        self.sync_offcuts();
         self.cut_list_window(&ctx);
         self.physics_window(&ctx);
         self.sheets_window(&ctx);

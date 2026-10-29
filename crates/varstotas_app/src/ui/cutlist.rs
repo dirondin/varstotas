@@ -12,7 +12,7 @@ use egui::{Color32, Context, RichText, Sense, Stroke, Ui, pos2, vec2};
 use std::path::Path;
 use std::rc::Rc;
 use varstotas_i18n::tr;
-use varstotas_kernel::cutlist::{CutPlan, CutSettings, Issue, PartGrain, PartOptions, Stock, StockKind, StockPlan, plan, plan_csv};
+use varstotas_kernel::cutlist::{CutPlan, CutSettings, Issue, Offcut, PartGrain, PartOptions, Stock, StockKind, StockPlan, plan_csv, plan_with};
 use varstotas_kernel::glam::DVec2;
 use varstotas_kernel::layout::SheetCutDiagram;
 use varstotas_kernel::{EntityRef, LengthUnit, MaterialId, Model};
@@ -36,12 +36,29 @@ pub struct CutListState {
     pub tab: Tab,
     /// Page shown in the preview.
     pub page: usize,
-    cache: Option<(u64, Rc<CutPlan>)>,
+    /// The plan and what it was made from: (model version, offcuts revision).
+    cache: Option<((u64, u64), Rc<CutPlan>)>,
+    /// Offcuts were kept at this model version: the plan shown stays as it was cut.
+    kept: Option<u64>,
     /// Settings being dragged (committed when the pointer is released).
     draft: Option<CutSettings>,
     /// Stock being edited in the Material Editor (committed when the pointer is released or a
     /// text field loses focus).
     pub(crate) stock_draft: Option<(MaterialId, Vec<Stock>)>,
+}
+
+/// The offcuts the cut list plans with: `Prefs::offcuts`, those of other projects while "Use my
+/// offcuts" is on (the rest with no count, so the indices stay), and a revision for caches.
+static OFFCUTS: std::sync::Mutex<(u64, Vec<Offcut>)> = std::sync::Mutex::new((0, Vec::new()));
+
+fn offcuts_rev() -> u64 {
+    OFFCUTS.lock().map(|o| o.0).unwrap_or(0)
+}
+
+/// The cut list of `model`, offcuts on hand first.
+pub(crate) fn model_plan(model: &Model) -> CutPlan {
+    let offcuts = OFFCUTS.lock().map(|o| o.1.clone()).unwrap_or_default();
+    guarded(|| plan_with(model, &offcuts)).unwrap_or_default()
 }
 
 /// A diagram page: one sheet, or several boards of one stock item.
@@ -71,10 +88,12 @@ pub(crate) fn dim(mm: f64, unit: LengthUnit) -> String {
 fn stock_title(sp: &StockPlan, unit: LengthUnit) -> String {
     let st = &sp.stock;
     let name = if sp.material_name.is_empty() { tr!("cutlist-no-material") } else { sp.material_name.clone() };
-    match st.kind {
+    let title = match st.kind {
         StockKind::Sheet => tr!("cutlist-stock-sheet", material = name, length = dim(st.length, unit), width = dim(st.width, unit), thickness = dim(st.thickness, unit)),
         StockKind::Board => tr!("cutlist-stock-board", material = name, width = dim(st.width, unit), thickness = dim(st.thickness, unit)),
-    }
+        StockKind::Linear => tr!("cutlist-stock-linear", material = name, profile = stock_label(st, unit)),
+    };
+    if sp.offcut.is_some() { tr!("cutlist-stock-offcut", stock = title) } else { title }
 }
 
 fn pages(plan: &CutPlan) -> Vec<Page> {
@@ -82,7 +101,7 @@ fn pages(plan: &CutPlan) -> Vec<Page> {
     for (pi, sp) in plan.plans.iter().enumerate() {
         match sp.stock.kind {
             StockKind::Sheet => out.extend((0..sp.layouts.len()).map(|i| Page { plan: pi, layouts: i..i + 1 })),
-            StockKind::Board => {
+            StockKind::Board | StockKind::Linear => {
                 // boards one under another at a common scale, as many as fit the page
                 let (_, row) = board_scale(sp);
                 let per = (((PAGE.y - 2.0 * MARGIN - HEADER) / row).floor() as usize).max(1);
@@ -102,7 +121,8 @@ fn pages(plan: &CutPlan) -> Vec<Page> {
 fn board_scale(sp: &StockPlan) -> (f64, f64) {
     let longest = sp.layouts.iter().map(|l| l.length).fold(1.0, f64::max);
     let k = (PAGE.x - 2.0 * MARGIN) / longest;
-    (k, sp.stock.width * k + 9.0)
+    let width = sp.layouts.iter().map(|l| l.width).fold(0.0, f64::max);
+    (k, width * k + 9.0)
 }
 
 fn rect_lines(d: &mut Drawing, a: DVec2, b: DVec2, pen: Pen) {
@@ -119,6 +139,7 @@ fn page_title(plan: &CutPlan, page: &Page, unit: LengthUnit) -> String {
     match sp.stock.kind {
         StockKind::Sheet => tr!("cutlist-page-sheet", stock = stock_title(sp, unit), n = page.layouts.start + 1, total = sp.layouts.len()),
         StockKind::Board => tr!("cutlist-page-boards", stock = stock_title(sp, unit), from = page.layouts.start + 1, to = page.layouts.end, total = sp.layouts.len()),
+        StockKind::Linear => tr!("cutlist-page-lengths", stock = stock_title(sp, unit), from = page.layouts.start + 1, to = page.layouts.end, total = sp.layouts.len()),
     }
 }
 
@@ -168,12 +189,12 @@ fn page_drawing(plan: &CutPlan, page: &Page, total: usize, n: usize, unit: Lengt
             let l = &sp.layouts[page.layouts.start];
             (((PAGE.x - 2.0 * MARGIN) / l.length).min(area_h / l.width), 0.0)
         }
-        StockKind::Board => board_scale(sp),
+        StockKind::Board | StockKind::Linear => board_scale(sp),
     };
     for (row_i, li) in page.layouts.clone().enumerate() {
         let l = &sp.layouts[li];
         let o = DVec2::new(MARGIN, MARGIN + HEADER + row_i as f64 * row);
-        let o = if sp.stock.kind == StockKind::Board {
+        let o = if sp.stock.is_lengths() {
             text(&mut d, o + DVec2::new(0.0, 3.0), 2.5, tr!("cutlist-board-label", n = li + 1, length = dim(l.length, unit)), true);
             o + DVec2::new(0.0, 4.5)
         } else {
@@ -212,14 +233,49 @@ fn page_drawing(plan: &CutPlan, page: &Page, total: usize, n: usize, unit: Lengt
 impl VarstotasApp {
     /// The cut list of the model, cached until it changes.
     pub(crate) fn cut_plan(&mut self) -> Rc<CutPlan> {
-        if let Some((v, p)) = &self.cutlist.cache
-            && *v == self.doc.model_version
+        let key = (self.doc.model_version, offcuts_rev());
+        if let Some((k, p)) = &self.cutlist.cache
+            && (*k == key || (k.0 == key.0 && self.cutlist.kept == Some(key.0)))
         {
             return p.clone();
         }
-        let p = Rc::new(guarded(|| plan(&self.doc.model)).unwrap_or_default());
-        self.cutlist.cache = Some((self.doc.model_version, p.clone()));
+        self.cutlist.kept = None;
+        let p = Rc::new(model_plan(&self.doc.model));
+        self.cutlist.cache = Some((key, p.clone()));
         p
+    }
+
+    /// Keep the offcuts the cut list plans with in step with the preferences and the document.
+    pub(crate) fn sync_offcuts(&self) {
+        let own = self.doc.path.as_ref().map(|p| p.display().to_string());
+        let want: Vec<Offcut> = self
+            .prefs
+            .offcuts
+            .iter()
+            .map(|o| {
+                let usable = self.prefs.use_offcuts && own.as_deref() != Some(o.source.as_str());
+                Offcut { count: if usable { o.count } else { 0 }, ..o.clone() }
+            })
+            .collect();
+        if let Ok(mut g) = OFFCUTS.lock()
+            && g.1 != want
+        {
+            g.0 += 1;
+            g.1 = want;
+        }
+    }
+
+    /// The cut is done: the offcuts the plan used leave the user's offcuts and its leftovers
+    /// join them. The plan shown stays as it was until the model changes.
+    pub(crate) fn keep_offcuts(&mut self) {
+        self.sync_offcuts();
+        let plan = self.cut_plan();
+        let used: usize = plan.plans.iter().filter(|s| s.offcut.is_some()).map(|s| s.layouts.len()).sum();
+        let kept: usize = plan.leftovers().iter().map(|o| o.count).sum();
+        let source = self.doc.path.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+        plan.keep_offcuts(&mut self.prefs.offcuts, &source);
+        self.cutlist.kept = Some(self.doc.model_version);
+        self.flash(tr!("cutlist-kept", kept = kept, used = used));
     }
 
     fn cut_drawings(&mut self) -> Vec<(Drawing, Vec<Hit>)> {
@@ -278,8 +334,8 @@ impl VarstotasApp {
     /// `(open, parts, stock items, sheets and boards, issues, cost)` for UI test scripts.
     pub(crate) fn cutlist_dump(&self) -> (bool, usize, usize, usize, usize, String) {
         let p = match &self.cutlist.cache {
-            Some((v, p)) if *v == self.doc.model_version => p.clone(),
-            _ => Rc::new(guarded(|| plan(&self.doc.model)).unwrap_or_default()),
+            Some((k, p)) if k.0 == self.doc.model_version && (k.1 == offcuts_rev() || self.cutlist.kept == Some(k.0)) => p.clone(),
+            _ => Rc::new(model_plan(&self.doc.model)),
         };
         (self.cutlist.open, p.parts.len(), p.plans.len(), p.plans.iter().map(|s| s.layouts.len()).sum(), p.issues.len(), format!("{:.2}", p.cost()))
     }
@@ -347,8 +403,9 @@ impl VarstotasApp {
         }
         for sp in &plan.plans {
             let buy: Vec<String> = match sp.stock.kind {
+                _ if sp.offcut.is_some() => vec![tr!("cutlist-offcuts-used", n = sp.layouts.len())],
                 StockKind::Sheet => vec![tr!("cutlist-buy-sheets", n = sp.layouts.len())],
-                StockKind::Board => sp.to_buy().into_iter().map(|(len, n)| tr!("cutlist-buy-boards", n = n, length = dim(len, unit))).collect(),
+                StockKind::Board | StockKind::Linear => sp.to_buy().into_iter().map(|(len, n)| tr!("cutlist-buy-boards", n = n, length = dim(len, unit))).collect(),
             };
             let mut line = format!("{}: {}", stock_title(sp, unit), buy.join(", "));
             line.push_str(&tr!("cutlist-waste", percent = format!("{:.0}", sp.waste() * 100.0)));
@@ -359,6 +416,22 @@ impl VarstotasApp {
         }
         if plan.plans.len() > 1 && plan.cost() > 0.0 {
             ui.label(RichText::new(tr!("cutlist-total", cost = format!("{:.2}", plan.cost()))).strong());
+        }
+        let mut keep = false;
+        ui.horizontal(|ui| {
+            let on_hand: usize = self.prefs.offcuts.iter().map(|o| o.count).sum();
+            if on_hand > 0 {
+                ui.checkbox(&mut self.prefs.use_offcuts, tr!("cutlist-use-offcuts", n = on_hand)).on_hover_text(tr!("cutlist-use-offcuts-tip"));
+            }
+            let kept = self.cutlist.kept == Some(self.doc.model_version);
+            let r = ui.add_enabled(!plan.plans.is_empty() && !kept, egui::Button::new(tr!("cutlist-keep")));
+            super::tray_lib::spot("cutlist:keep", r.rect.center());
+            if r.on_hover_text(tr!("cutlist-keep-tip")).on_disabled_hover_text(varstotas_i18n::tr(if kept { "cutlist-keep-done" } else { "cutlist-keep-tip" })).clicked() {
+                keep = true;
+            }
+        });
+        if keep {
+            self.keep_offcuts();
         }
         for is in &plan.issues {
             let (part, msg) = match *is {
@@ -464,8 +537,9 @@ impl VarstotasApp {
                 }
             }
             for t in &d.texts {
-                // larger than on paper: the preview is a fraction of the page's size
-                let px = ((t.size * k * 1.5) as f32).max(9.0);
+                // larger than on paper (the preview is a fraction of the page's size); labels centred
+                // in pieces and offcuts are sized on paper to fit them, so their floor is lower
+                let px = ((t.size * k * 1.5) as f32).max(if t.left { 9.0 } else { 7.0 });
                 let galley = painter.layout_no_wrap(t.lines.join(" "), egui::FontId::proportional(px), Color32::from_gray(40));
                 let size = galley.size();
                 let along = if t.left { 0.0 } else { size.x * 0.5 };
@@ -556,7 +630,7 @@ impl VarstotasApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(stock_label(st, unit)).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("✕").on_hover_text(tr!("mated-stock-remove")).clicked() {
+                        if ui.small_button("×").on_hover_text(tr!("mated-stock-remove")).clicked() {
                             remove = Some(i);
                         }
                         if ui.small_button("☆").on_hover_text(tr!("mated-stock-save-preset")).clicked() {
@@ -631,7 +705,7 @@ impl VarstotasApp {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut p.name).desired_width(240.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("✕").on_hover_text(tr!("prefs-cut-remove")).clicked() {
+                        if ui.small_button("×").on_hover_text(tr!("prefs-cut-remove")).clicked() {
                             remove = Some(i);
                         }
                     });
@@ -651,7 +725,40 @@ impl VarstotasApp {
                 let st = Stock::board(95.0, 45.0, &[3000.0]);
                 self.prefs.stock_presets.push(StockPreset { name: stock_label(&st, unit), stock: st });
             }
+            if ui.button(tr!("prefs-cut-add-linear")).clicked() {
+                let st = Stock::linear("Ø 20", 20.0, 20.0, &[2000.0]);
+                self.prefs.stock_presets.push(StockPreset { name: stock_label(&st, unit), stock: st });
+            }
         });
+        // offcuts kept from earlier projects
+        ui.add_space(12.0);
+        ui.label(RichText::new(tr!("prefs-cut-offcuts")).strong());
+        ui.label(RichText::new(tr!("prefs-cut-offcuts-note")).small().color(theme::text_dim()));
+        ui.add_space(4.0);
+        if self.prefs.offcuts.is_empty() {
+            ui.label(RichText::new(tr!("prefs-cut-offcuts-none")).color(theme::text_dim()));
+            return;
+        }
+        ui.checkbox(&mut self.prefs.use_offcuts, tr!("prefs-cut-use-offcuts"));
+        let mut remove = None;
+        egui::Grid::new("prefs_offcuts").num_columns(4).spacing([10.0, 4.0]).striped(true).show(ui, |ui| {
+            for (i, o) in self.prefs.offcuts.iter_mut().enumerate() {
+                ui.label(offcut_label(o, unit));
+                ui.add(egui::DragValue::new(&mut o.count).range(1..=999).prefix("× "));
+                let from = std::path::Path::new(&o.source).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                ui.label(RichText::new(from).small().color(theme::text_dim())).on_hover_text(&o.source);
+                if ui.small_button("×").on_hover_text(tr!("prefs-cut-offcut-remove")).clicked() {
+                    remove = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+        if let Some(i) = remove {
+            self.prefs.offcuts.remove(i);
+        }
+        if ui.button(tr!("prefs-cut-offcuts-clear")).clicked() {
+            self.prefs.offcuts.clear();
+        }
     }
 }
 
@@ -662,12 +769,24 @@ pub struct StockPreset {
     pub stock: Stock,
 }
 
-/// "2440 × 1220 × 18" for a sheet, "95 × 45" for a board.
+/// "2440 × 1220 × 18" for a sheet, "95 × 45" for a board, the profile of linear stock.
 fn stock_label(st: &Stock, unit: LengthUnit) -> String {
     match st.kind {
         StockKind::Sheet => format!("{} × {} × {}", dim(st.length, unit), dim(st.width, unit), dim(st.thickness, unit)),
-        StockKind::Board => format!("{} × {}", dim(st.width, unit), dim(st.thickness, unit)),
+        StockKind::Linear if !st.name.is_empty() => st.name.clone(),
+        StockKind::Linear if st.width <= 0.0 || st.thickness <= 0.0 => tr!("mated-stock-linear"),
+        _ => format!("{} × {}", dim(st.width, unit), dim(st.thickness, unit)),
     }
+}
+
+/// An offcut in a list: "Plywood 800 × 400 × 18", or a board's length × section.
+fn offcut_label(o: &Offcut, unit: LengthUnit) -> String {
+    let st = &o.stock;
+    let what = match st.kind {
+        StockKind::Sheet => stock_label(st, unit),
+        _ => format!("{} · {}", dim(st.length, unit), stock_label(st, unit)),
+    };
+    format!("{} {what}", o.material)
 }
 
 /// A comma-separated list edited as text (kept in temp data while typing), parsed on Enter or
@@ -701,17 +820,32 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
             let before = st.kind;
             ui.selectable_value(&mut st.kind, StockKind::Sheet, tr!("mated-stock-sheet"));
             ui.selectable_value(&mut st.kind, StockKind::Board, tr!("mated-stock-board"));
+            ui.selectable_value(&mut st.kind, StockKind::Linear, tr!("mated-stock-linear"));
             if st.kind != before {
-                if st.kind == StockKind::Board && st.lengths.is_empty() {
+                if st.is_lengths() && st.lengths.is_empty() {
                     st.lengths = vec![st.length.max(1000.0)];
                 }
                 changed = true;
             }
         });
         ui.end_row();
-        ui.label(tr!("mated-stock-thickness"));
-        len(ui, &mut st.thickness, &mut changed);
-        ui.end_row();
+        if st.kind == StockKind::Linear {
+            ui.label(tr!("mated-stock-profile"));
+            changed |= ui.add(egui::TextEdit::singleline(&mut st.name).desired_width(180.0).hint_text(tr!("mated-stock-profile-hint"))).changed();
+            ui.end_row();
+            ui.label(tr!("mated-stock-section"));
+            ui.horizontal(|ui| {
+                len(ui, &mut st.width, &mut changed);
+                ui.label("×");
+                len(ui, &mut st.thickness, &mut changed);
+                ui.label(RichText::new("ⓘ").color(theme::text_dim())).on_hover_text(tr!("mated-stock-section-tip"));
+            });
+            ui.end_row();
+        } else {
+            ui.label(tr!("mated-stock-thickness"));
+            len(ui, &mut st.thickness, &mut changed);
+            ui.end_row();
+        }
         match st.kind {
             StockKind::Sheet => {
                 ui.label(tr!("mated-stock-size"));
@@ -728,10 +862,12 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
                 changed |= ui.add(egui::DragValue::new(&mut st.price).range(0.0..=1e7).speed(0.1).max_decimals(2)).changed();
                 ui.end_row();
             }
-            StockKind::Board => {
-                ui.label(tr!("mated-stock-width"));
-                len(ui, &mut st.width, &mut changed);
-                ui.end_row();
+            StockKind::Board | StockKind::Linear => {
+                if st.kind == StockKind::Board {
+                    ui.label(tr!("mated-stock-width"));
+                    len(ui, &mut st.width, &mut changed);
+                    ui.end_row();
+                }
                 ui.label(tr!("mated-stock-lengths"));
                 let shown = st.board_lengths().iter().map(|v| dim(*v, unit)).collect::<Vec<_>>().join(", ");
                 list_edit(ui, egui::Id::new((salt, "lengths")), shown, |s| {
@@ -803,5 +939,7 @@ fn stock_presets() -> Vec<(&'static str, Stock)> {
         ("mated-stock-preset-hdf-3", Stock::sheet(2440.0, 1220.0, 3.0, false)),
         ("mated-stock-preset-pine-95x45", Stock::board(95.0, 45.0, &[2400.0, 3000.0, 3600.0, 4200.0, 4800.0, 6000.0])),
         ("mated-stock-preset-board-145x20", Stock::board(145.0, 20.0, &[2000.0, 2500.0, 3000.0])),
+        ("mated-stock-preset-rod-20", Stock::linear("Ø 20", 20.0, 20.0, &[1000.0, 2000.0])),
+        ("mated-stock-preset-skirting-70", Stock::linear("70 × 15", 70.0, 15.0, &[2500.0])),
     ]
 }

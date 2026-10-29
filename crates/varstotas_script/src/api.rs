@@ -1542,20 +1542,24 @@ fn register_cut_list(e: &mut Engine) {
         let kind = match get("kind").map(|v| v.to_string()).as_deref() {
             None | Some("sheet") => StockKind::Sheet,
             Some("board") => StockKind::Board,
+            Some("linear") => StockKind::Linear,
             Some(k) => return err(tr!("script-err-cut-kind", kind = k.to_string())),
         };
         let thickness = num(&get("thickness").unwrap_or(Dynamic::from(0.0)))?;
         let width = num(&get("width").unwrap_or(Dynamic::from(0.0)))?;
         let mut st = match kind {
             StockKind::Sheet => Stock::sheet(num(&get("length").unwrap_or(Dynamic::from(0.0)))?, width, thickness, false),
-            StockKind::Board => {
+            StockKind::Board | StockKind::Linear => {
                 let lengths = match get("lengths") {
                     Some(v) => v.into_array().map_err(|t| tr!("script-err-cut-lengths", t = t.to_string()))?.iter().map(num).collect::<R<Vec<f64>>>()?,
                     None => vec![num(&get("length").unwrap_or(Dynamic::from(0.0)))?],
                 };
-                Stock::board(width, thickness, &lengths)
+                Stock { kind, ..Stock::board(width, thickness, &lengths) }
             }
         };
+        if let Some(n) = get("name") {
+            st.name = n.to_string();
+        }
         if let Some(g) = get("grain") {
             st.grain = g.as_bool().unwrap_or(st.grain);
         } else if kind == StockKind::Sheet {
@@ -1565,13 +1569,15 @@ fn register_cut_list(e: &mut Engine) {
             st.price = num(&p)?;
         }
         // boards per piece: one price for every length, or one per length
-        if let Some(p) = get("prices").filter(|_| kind == StockKind::Board) {
+        if let Some(p) = get("prices").filter(|_| kind != StockKind::Sheet) {
             st.piece_prices = match p.clone().into_array() {
                 Ok(a) => a.iter().map(num).collect::<R<Vec<f64>>>()?,
                 Err(_) => vec![num(&p)?],
             };
         }
-        if st.thickness <= 0.0 || st.width <= 0.0 || (st.kind == StockKind::Board && st.board_lengths().is_empty()) || (st.kind == StockKind::Sheet && st.length <= 0.0) {
+        // linear stock may leave its section out (any section)
+        let section_ok = st.kind == StockKind::Linear || (st.thickness > 0.0 && st.width > 0.0);
+        if !section_ok || st.thickness < 0.0 || st.width < 0.0 || (st.is_lengths() && st.board_lengths().is_empty()) || (st.kind == StockKind::Sheet && st.length <= 0.0) {
             return err(tr!("script-err-cut-size"));
         }
         Ok(st)
@@ -1603,8 +1609,16 @@ fn register_cut_list(e: &mut Engine) {
                 .map(|sp| {
                     let mut m = Map::new();
                     m.insert("material".into(), Dynamic::from(sp.material_name.clone()));
-                    let board = sp.stock.kind == StockKind::Board;
-                    m.insert("kind".into(), Dynamic::from(if board { "board" } else { "sheet" }.to_string()));
+                    let board = sp.stock.is_lengths();
+                    let kind = match sp.stock.kind {
+                        StockKind::Sheet => "sheet",
+                        StockKind::Board => "board",
+                        StockKind::Linear => "linear",
+                    };
+                    m.insert("kind".into(), Dynamic::from(kind.to_string()));
+                    if !sp.stock.name.is_empty() {
+                        m.insert("name".into(), Dynamic::from(sp.stock.name.clone()));
+                    }
                     m.insert("thickness".into(), d(sp.stock.thickness));
                     m.insert("width".into(), d(sp.stock.width));
                     if !board {

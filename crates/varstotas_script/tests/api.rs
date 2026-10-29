@@ -370,6 +370,9 @@ fn cut_list_stock_and_options() {
     // boards per piece: a 3 m board at 9 holds the 1400 mm rail
     let r = go(&mut m, r##"set_stock("Pine", #{ kind: "board", width: 95, thickness: 45, lengths: [3000, 6000], prices: [9, 16] }); let s = cut_list().stock.filter(|x| x.kind == "board")[0]; print(s.buy[0].length + " " + s.cost + " " + s.prices.len());"##);
     assert_eq!(r.output, "3000.0 9.0 2\n", "{}", r.output);
+    // linear stock: a named profile, no section given
+    let r = go(&mut m, r##"set_stock("Pine", #{ kind: "linear", name: "Rail profile", lengths: [2000], price: 4 }); let s = cut_list().stock.filter(|x| x.kind == "linear")[0]; print(s.name + " " + s.buy[0].length + " " + s.cost + " " + cut_list().issues.len());"##);
+    assert_eq!(r.output, "Rail profile 2000.0 8.0 0\n", "{}", r.output);
     // clearing the stock: the parts report it
     go(&mut m, r#"set_stock("Plywood", ()); print(cut_list().issues.len());"#);
     assert!(m.materials.values().find(|x| x.name == "Plywood").unwrap().stock.is_empty());

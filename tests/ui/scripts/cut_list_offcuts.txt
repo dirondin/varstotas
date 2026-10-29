@@ -1,0 +1,40 @@
+# Offcuts across projects: Keep offcuts after a cut, then a new document cuts a shelf from one
+# of them instead of buying a sheet; linear stock (a named rod) on the boards page.
+action offcuts_clear
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 }); let s = box(ORIGIN, 2000, 1000, 18); s.name = "Top"; paint(s, "Plywood");
+action console_close
+wait 5
+action cut_list
+wait 10
+expect cutlist=(true, 1, 1, 1, 0, "60.00")
+# 2440 × 1220 less the 2000 × 1000 top: 437 × 1220 and 2000 × 217
+action cut_list_keep
+wait 5
+expect offcuts=[("Plywood", 437, 1220, 1), ("Plywood", 2003, 217, 1)]
+# the plan shown stays as it was cut
+expect cutlist=(true, 1, 1, 1, 0, "60.00")
+screenshot shots/cut_list_kept.bmp
+action preferences
+wait 10
+action click_spot prefs:Cut List
+wait 5
+screenshot shots/cut_list_offcuts_prefs.bmp
+action preferences_close
+wait 3
+select_all
+action delete
+wait 5
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 }); let s = box(ORIGIN, 400, 300, 18); s.name = "Shelf"; paint(s, "Plywood"); material("Oak", "#b08850"); set_stock("Oak", #{ kind: "linear", name: "Ø 20 rod", width: 20, thickness: 20, lengths: [1000, 2000], prices: [3, 5] }); for i in 0..3 { let r = cylinder(vec3(0, 600 + i * 100, 0), 10, 700); r.name = "Dowel"; paint(r, "Oak"); }
+action console_close
+wait 5
+action cut_list
+wait 10
+# the shelf from the 437 × 1220 offcut (nothing bought), the dowels from 1 m + 2 m rods
+expect cutlist=(true, 2, 2, 3, 0, "8.00")
+screenshot shots/cut_list_offcut_used.bmp
+action cut_list_page 2
+wait 5
+screenshot shots/cut_list_linear.bmp
+action offcuts_clear
+wait 3
+quit

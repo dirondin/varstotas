@@ -325,7 +325,7 @@ pub fn sheet_drawing(model: &Model, sheet: &LayoutSheet, index: usize, total: us
         table_drawing(&mut d, model, t);
     }
     if !sheet.cut_diagrams.is_empty() {
-        let plan = crate::document::guarded(|| varstotas_kernel::cutlist::plan(model)).unwrap_or_default();
+        let plan = crate::ui::cutlist::model_plan(model);
         for c in &sheet.cut_diagrams {
             crate::ui::cutlist::cut_diagram_on_sheet(model, &plan, c, &mut d);
         }

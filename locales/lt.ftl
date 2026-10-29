@@ -1213,13 +1213,20 @@ prefs-words-shortcuts = klaviatūra spartieji klavišai karštieji klavišai kla
 prefs-words-toolbar = įrankių juosta mygtukai tvarka atsarga skirtukas pritaikyti įrankiai
 prefs-words-view = naujas dokumentas stilius šešėliuotas tekstūros vienspalvis paslėptos linijos karkasas realistinis briaunos kontūrai ašys žemė dangus tinklelis šešėliai perspektyva lygiagreti projekcija fov matymo laukas kamera
 prefs-section-cut-list = Pjovimo planas
-prefs-words-cut-list = pjovimo planas ruošiniai šablonai lakštas lenta tašas fanera mediena kaina
+prefs-words-cut-list = pjovimo planas ruošiniai šablonai lakštas lenta tašas fanera mediena kaina atraižos likučiai profilis grindjuostė strypas
 prefs-cut-presets = Ruošinių šablonai
 prefs-cut-presets-note = Jūsų lakštai ir lentos – siūlomi Medžiagos rengyklėje → Ruošiniai → + Pridėti ruošinį. Pridėkite čia arba išsaugokite medžiagos ruošinį mygtuku ☆.
 prefs-cut-none = Šablonų dar nėra.
 prefs-cut-remove = Pašalinti šabloną
 prefs-cut-add-sheet = + Lakštas
 prefs-cut-add-board = + Lenta
+prefs-cut-add-linear = + Profilis
+prefs-cut-offcuts = Mano atraižos
+prefs-cut-offcuts-note = Likučiai, išsaugoti mygtuku Pjovimo planas → Išsaugoti atraižas. Pjovimo planas pirmiausia ima detales iš jų – pagal medžiagos pavadinimą ir ruošinį.
+prefs-cut-offcuts-none = Atraižų dar nėra.
+prefs-cut-use-offcuts = Naudoti pjovimo plane
+prefs-cut-offcut-remove = Pašalinti šią atraižą
+prefs-cut-offcuts-clear = Pašalinti visas
 
 ## Window
 
@@ -2122,12 +2129,17 @@ mated-stock-not-in-model = Nudažykite ką nors šia medžiaga, kad nurodytumėt
 mated-stock-kind = Perkama kaip
 mated-stock-sheet = Lakštas
 mated-stock-board = Lenta
+mated-stock-linear = Profilis
 mated-stock-remove = Pašalinti šį ruošinį
 mated-stock-thickness = Storis
 mated-stock-size = Dydis
 mated-stock-grain = Pluoštas išilgai
 mated-stock-width = Plotis
 mated-stock-lengths = Parduodami ilgiai
+mated-stock-profile = Profilis
+mated-stock-profile-hint = pvz. Ø 20 strypas
+mated-stock-section = Skerspjūvis
+mated-stock-section-tip = Didžiausias detalės skerspjūvis, kurį jis talpina (bet kuria kryptimi); 0 – bet koks.
 mated-stock-price-sheet = Lakšto kaina
 mated-stock-price = Kaina
 mated-stock-per-metre = už metrą
@@ -2138,7 +2150,7 @@ mated-stock-saved = Išsaugota ruošinių šablonuose: { $name }
 mated-stock-my-presets = Mano šablonai
 mated-stock-edit-presets = Keisti šablonus…
 mated-stock-add = + Pridėti ruošinį
-mated-stock-note = Šios medžiagos detalės pjaunamos iš artimiausio storio ruošinio: iš siauriausio tinkamo skerspjūvio lentų, iš pigiausiai išeinančio formato lakštų (Langas → Pjovimo planas).
+mated-stock-note = Šios medžiagos detalės pjaunamos iš profilio, kurio skerspjūvis jas talpina, kitaip iš artimiausio storio ruošinio: iš siauriausio tinkamo skerspjūvio lentų, iš pigiausiai išeinančio formato lakštų (Langas → Pjovimo planas).
 mated-stock-preset-ply-18 = Fanera 2440 × 1220 × 18
 mated-stock-preset-ply-12 = Fanera 2440 × 1220 × 12
 mated-stock-preset-birch-18 = Beržo fanera 1525 × 1525 × 18
@@ -2147,6 +2159,8 @@ mated-stock-preset-chipboard-16 = Laminuota MDP 2750 × 1830 × 16
 mated-stock-preset-hdf-3 = HDF 2440 × 1220 × 3
 mated-stock-preset-pine-95x45 = Pušis 95 × 45, 2,4–6 m
 mated-stock-preset-board-145x20 = Lenta 145 × 20, 2–3 m
+mated-stock-preset-rod-20 = Apvalus strypas Ø 20, 1–2 m
+mated-stock-preset-skirting-70 = Grindjuostė 70 × 15, 2,5 m
 mated-undo-stock = Medžiagos ruošiniai
 mated-slot-base = Pagrindinė tekstūra
 mated-slot-empty = Tuščia
@@ -2738,12 +2752,19 @@ cutlist-no-stock-at-all = Nė viena detalė neturi ruošinio: medžiagų redakto
 cutlist-no-material = be medžiagos
 cutlist-stock-sheet = { $material } { $length } × { $width } × { $thickness }
 cutlist-stock-board = { $material } { $width } × { $thickness }
+cutlist-stock-linear = { $material } { $profile }
+cutlist-stock-offcut = { $stock } (atraiža)
 cutlist-buy-sheets = { $n ->
     [one] { $n } lakštas
     [few] { $n } lakštai
    *[other] { $n } lakštų
 }
 cutlist-buy-boards = { $n } × { $length }
+cutlist-offcuts-used = { $n ->
+    [one] { $n } jūsų atraiža
+    [few] { $n } jūsų atraižos
+   *[other] { $n } jūsų atraižų
+}
 cutlist-waste = , atliekos { $percent }%
 cutlist-cost = , kaina { $cost }
 cutlist-total = Iš viso: { $cost }
@@ -2766,10 +2787,17 @@ cutlist-grain-any = bet kaip (galima pasukti)
 cutlist-parts-note = Detalės yra grupės ir komponentai, kurių viduje nieko nėra; vienodos (pavadinimas, dydis ir medžiaga) rodomos vienoje eilutėje. Nustatymai taikomi visoms detalėms su tuo pavadinimu.
 cutlist-page-sheet = { $stock }: lakštas { $n } iš { $total }
 cutlist-page-boards = { $stock }: lentos { $from }–{ $to } iš { $total }
+cutlist-page-lengths = { $stock }: ruošiniai { $from }–{ $to } iš { $total }
 cutlist-sheet-no-page = Šio pjovimo plano puslapio nebėra
 cutlist-board-label = { $n }: { $length }
 cutlist-footer = { $doc } · pjovimo planas · { $n } psl. iš { $total }
 cutlist-page-of = { $n } psl. iš { $total }
+cutlist-use-offcuts = Naudoti mano atraižas ({ $n })
+cutlist-use-offcuts-tip = Detalės pirmiausia pjaunamos iš jūsų atraižų (Nuostatos → Pjovimo planas), pradedant mažiausiomis, ir tik tada iš perkamų ruošinių. Šio dokumento atraižos jame nenaudojamos.
+cutlist-keep = Išsaugoti atraižas
+cutlist-keep-tip = Kai supjaustyta: panaudotos atraižos išimamos iš jūsų atraižų, o šio plano likučiai (ne mažesni už mažiausią atraižą) pridedami kitiems projektams.
+cutlist-keep-done = Išsaugota. Planas lieka toks, koks buvo supjaustytas, kol modelis nepasikeis.
+cutlist-kept = Atraižos išsaugotos: naujų { $kept }, panaudota { $used }.
 cutlist-export = Eksportuoti:
 cutlist-exported = Pjovimo planas išsaugotas: { $path }
 cutlist-export-failed = Nepavyko išsaugoti pjovimo plano: { $error }
@@ -3957,7 +3985,7 @@ script-fn-length = Perskaityti ilgį su vienetais ("1.2m") → mm.
 script-fn-units = Modelio ilgio vienetas.
 script-fn-materials = Medžiagų pavadinimai.
 script-fn-cut-list = Pjovimo planas: detalės (name, count, length, width, thickness, material, grain, exclude), ruošiniai (material, kind, dydžiai, count, buy, atliekos %, cost, layouts su detalėmis), problemos ir bendra kaina.
-script-fn-set-stock = Nurodyti, kokia forma perkama medžiaga: lakštas (length, width, thickness, grain, lakšto kaina) arba lenta (width, thickness, parduodami lengths, metro kaina arba prices – už vienetą, po vieną kiekvienam ilgiui); sąrašas keliems storiams, skerspjūviams ar lakšto formatams, () – be ruošinių.
+script-fn-set-stock = Nurodyti, kokia forma perkama medžiaga: lakštas (length, width, thickness, grain, lakšto kaina) arba lenta (width, thickness, parduodami lengths, metro kaina arba prices – už vienetą, po vieną kiekvienam ilgiui) arba profilis (kind "linear": name, nebūtinas skerspjūvis width × thickness, lengths ir kainos kaip lentos); sąrašas keliems storiams, skerspjūviams ar lakšto formatams, () – be ruošinių.
 script-fn-cut-settings = Pjovimo plano nustatymai: pjūvio plotis, kraštų apipjovimas, mažiausias saugomas likutis, storio leistinas nuokrypis.
 script-fn-cut-part = Detalių su šiuo pavadinimu nustatymai: grain ("length", "width" arba "any") ir exclude.
 script-fn-all-faces = Visi paviršiai, įskaitant įdėtąsias grupes.

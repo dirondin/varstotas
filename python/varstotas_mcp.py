@@ -53,7 +53,9 @@ TOOLS = [
             "positions on each, and issues (no stock, too big, thickness). Materials need stock first: "
             "run_script with set_stock(material, #{kind: \"sheet\", length: 2440, width: 1220, "
             "thickness: 18, grain: true, price: 60}) or a board #{kind: \"board\", width: 95, "
-            "thickness: 45, lengths: [2400, 3600], price: 5} (price per metre). Millimetres."
+            "thickness: 45, lengths: [2400, 3600], price: 5} (price per metre), or linear stock "
+            "#{kind: \"linear\", name: \"Ø 20 rod\", width: 20, thickness: 20, lengths: [1000, 2000], price: 3}. "
+            "Millimetres."
         ),
         "inputSchema": _obj({}),
         "annotations": {"readOnlyHint": True},

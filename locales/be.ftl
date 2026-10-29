@@ -1213,13 +1213,20 @@ prefs-words-shortcuts = клавіятура спалучэнні гарачыя
 prefs-words-toolbar = панэль інструментаў кнопкі парадак рэзерв раздзяляльнік наладзіць інструменты
 prefs-words-view = новы дакумент стыль са зліўкай тэкстуры манахром схаваныя лініі каркас рэалістычны рэбры контуры восі зямля неба сетка цені перспектыва паралельная праекцыя кут агляду камера
 prefs-section-cut-list = Раскрой
-prefs-words-cut-list = раскрой нарыхтоўкі шаблоны ліст дошка брус фанера піламатэрыял цана
+prefs-words-cut-list = раскрой нарыхтоўкі шаблоны ліст дошка брус фанера піламатэрыял цана абрэзкі рэшткі пагонаж плінтус круг профіль
 prefs-cut-presets = Шаблоны нарыхтовак
 prefs-cut-presets-note = Вашы лісты і дошкі — з'яўляюцца ў Рэдактары матэрыялу → Нарыхтоўкі → + Дадаць нарыхтоўку. Дадайце тут або захавайце нарыхтоўку матэрыялу кнопкай ☆.
 prefs-cut-none = Шаблонаў пакуль няма.
 prefs-cut-remove = Выдаліць шаблон
 prefs-cut-add-sheet = + Ліст
 prefs-cut-add-board = + Дошка
+prefs-cut-add-linear = + Пагонаж
+prefs-cut-offcuts = Мае абрэзкі
+prefs-cut-offcuts-note = Рэшткі, захаваныя кнопкай Раскрой → Захаваць абрэзкі. Раскрой спачатку бярэ дэталі з іх — па назве матэрыялу і нарыхтоўцы.
+prefs-cut-offcuts-none = Абрэзкаў пакуль няма.
+prefs-cut-use-offcuts = Выкарыстоўваць у раскроі
+prefs-cut-offcut-remove = Выдаліць гэты абрэзак
+prefs-cut-offcuts-clear = Выдаліць усе
 
 ## Акно
 
@@ -2153,12 +2160,17 @@ mated-stock-not-in-model = Пафарбуйце што-небудзь гэтым
 mated-stock-kind = Купляецца як
 mated-stock-sheet = Ліст
 mated-stock-board = Дошка
+mated-stock-linear = Пагонаж
 mated-stock-remove = Выдаліць гэту нарыхтоўку
 mated-stock-thickness = Таўшчыня
 mated-stock-size = Памер
 mated-stock-grain = Валокны ўздоўж даўжыні
 mated-stock-width = Шырыня
 mated-stock-lengths = Даўжыні ў продажы
+mated-stock-profile = Профіль
+mated-stock-profile-hint = напр. Круг Ø 20
+mated-stock-section = Сячэнне
+mated-stock-section-tip = Найбольшае сячэнне дэталі, якое з яго выходзіць (у любы бок); 0 — любое.
 mated-stock-price-sheet = Цана за ліст
 mated-stock-price = Цана
 mated-stock-per-metre = за метр
@@ -2169,7 +2181,7 @@ mated-stock-saved = Захавана ў шаблоны нарыхтовак: { $
 mated-stock-my-presets = Мае шаблоны
 mated-stock-edit-presets = Змяніць шаблоны…
 mated-stock-add = + Дадаць нарыхтоўку
-mated-stock-note = Дэталі з гэтага матэрыялу раскройваюцца з нарыхтоўкі бліжэйшай таўшчыні: з дошак самага вузкага сячэння, у якое яны змяшчаюцца, з лістоў таго фармату, што выходзіць танней (Акно → Раскрой).
+mated-stock-note = Дэталі з гэтага матэрыялу раскройваюцца з пагонажу, у сячэнне якога яны змяшчаюцца, інакш з нарыхтоўкі бліжэйшай таўшчыні: з дошак самага вузкага сячэння, у якое яны змяшчаюцца, з лістоў таго фармату, што выходзіць танней (Акно → Раскрой).
 mated-stock-preset-ply-18 = Фанера 2440 × 1220 × 18
 mated-stock-preset-ply-12 = Фанера 2440 × 1220 × 12
 mated-stock-preset-birch-18 = Бярозавая фанера 1525 × 1525 × 18
@@ -2178,6 +2190,8 @@ mated-stock-preset-chipboard-16 = ЛДСП 2750 × 1830 × 16
 mated-stock-preset-hdf-3 = ХДФ 2440 × 1220 × 3
 mated-stock-preset-pine-95x45 = Хвоя 95 × 45, 2,4–6 м
 mated-stock-preset-board-145x20 = Дошка 145 × 20, 2–3 м
+mated-stock-preset-rod-20 = Круг Ø 20, 1–2 м
+mated-stock-preset-skirting-70 = Плінтус 70 × 15, 2,5 м
 mated-undo-stock = Нарыхтоўкі матэрыялу
 mated-slot-base = Асноўная тэкстура
 mated-slot-empty = Пуста
@@ -2779,12 +2793,19 @@ cutlist-no-stock-at-all = Ні ў адной дэталі няма нарыхт�
 cutlist-no-material = без матэрыялу
 cutlist-stock-sheet = { $material } { $length } × { $width } × { $thickness }
 cutlist-stock-board = { $material } { $width } × { $thickness }
+cutlist-stock-linear = { $material } { $profile }
+cutlist-stock-offcut = { $stock } (абрэзак)
 cutlist-buy-sheets = { $n ->
     [one] { $n } ліст
     [few] { $n } лісты
    *[other] { $n } лістоў
 }
 cutlist-buy-boards = { $n } × { $length }
+cutlist-offcuts-used = { $n ->
+    [one] { $n } ваш абрэзак
+    [few] { $n } вашыя абрэзкі
+   *[other] { $n } вашых абрэзкаў
+}
 cutlist-waste = , адходы { $percent }%
 cutlist-cost = , кошт { $cost }
 cutlist-total = Разам: { $cost }
@@ -2807,10 +2828,17 @@ cutlist-grain-any = любое (можна павярнуць)
 cutlist-parts-note = Дэталі — гэта групы і кампаненты, унутры якіх нічога няма; аднолькавыя (імя, памер і матэрыял) ідуць адным радком. Налады дзейнічаюць на ўсе дэталі з гэтым імем.
 cutlist-page-sheet = { $stock }: ліст { $n } з { $total }
 cutlist-page-boards = { $stock }: дошкі { $from }–{ $to } з { $total }
+cutlist-page-lengths = { $stock }: хлысты { $from }–{ $to } з { $total }
 cutlist-sheet-no-page = Гэтай старонкі раскрою больш няма
 cutlist-board-label = { $n }: { $length }
 cutlist-footer = { $doc } · раскрой · старонка { $n } з { $total }
 cutlist-page-of = Старонка { $n } з { $total }
+cutlist-use-offcuts = Браць мае абрэзкі ({ $n })
+cutlist-use-offcuts-tip = Дэталі спачатку раскройваюцца з вашых абрэзкаў (Налады → Раскрой), пачынаючы з самых маленькіх, і толькі потым з купленых нарыхтовак. Абрэзкі, што засталіся ад гэтага дакумента, у ім не выкарыстоўваюцца.
+cutlist-keep = Захаваць абрэзкі
+cutlist-keep-tip = Калі раскрой выкананы: выкарыстаныя абрэзкі прыбіраюцца з вашых, а рэшткі гэтага раскрою (не меншыя за мінімальны памер) дадаюцца да іх для наступных праектаў.
+cutlist-keep-done = Захавана. План застаецца такім, як раскроілі, пакуль мадэль не зменіцца.
+cutlist-kept = Абрэзкі захаваны: новых { $kept }, выкарыстана { $used }.
 cutlist-export = Экспарт:
 cutlist-exported = Раскрой захаваны: { $path }
 cutlist-export-failed = Не ўдалося захаваць раскрой: { $error }
@@ -4009,7 +4037,7 @@ script-fn-length = Разабраць даўжыню з адзінкамі ("1.2
 script-fn-units = Адзінка даўжыні мадэлі.
 script-fn-materials = Назвы матэрыялаў.
 script-fn-cut-list = Раскрой: дэталі (name, count, length, width, thickness, material, grain, exclude), нарыхтоўкі (material, kind, памеры, count, buy, адходы ў %, cost, layouts з дэталямі), праблемы і агульны кошт.
-script-fn-set-stock = Пазначыць, у якім выглядзе купляецца матэрыял: ліст (length, width, thickness, grain, цана за ліст) або дошка (width, thickness, lengths у продажы, цана за метр або prices — за штуку, па адной на даўжыню); спіс для некалькіх таўшчынь, сячэнняў або фарматаў ліста, () — без нарыхтовак.
+script-fn-set-stock = Пазначыць, у якім выглядзе купляецца матэрыял: ліст (length, width, thickness, grain, цана за ліст) або дошка (width, thickness, lengths у продажы, цана за метр або prices — за штуку, па адной на даўжыню) або пагонаж (kind "linear": name, неабавязковае сячэнне width × thickness, lengths і цэны як у дошкі); спіс для некалькіх таўшчынь, сячэнняў або фарматаў ліста, () — без нарыхтовак.
 script-fn-cut-settings = Налады раскрою: прапіл, абрэзка кромак, найменшая рэшта, якая захоўваецца, допуск па таўшчыні.
 script-fn-cut-part = Налады дэталей з гэтым імем: grain ("length", "width" або "any") і exclude.
 script-fn-all-faces = Усе грані, уключаючы ўкладзеныя групы.
