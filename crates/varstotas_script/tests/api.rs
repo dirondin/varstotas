@@ -155,8 +155,9 @@ fn circle_face_and_follow_me() {
 fn example_bookshelf_runs() {
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/bookshelf.rhai"));
-    assert_eq!(r.output, "Bookshelf 800 x 300 x 1800, 9 parts\n");
+    assert_eq!(r.output, "Bookshelf 800 x 300 x 1800, 9 parts, 12 joints\n");
     assert_eq!(m.root_mesh().instances.len(), 1);
+    assert_eq!(m.assembly.steps.len(), 4);
     let s = size(&m);
     assert!((s - DVec3::new(800.0, 304.0, 1800.0)).length() < 1e-6, "{s}");
 }

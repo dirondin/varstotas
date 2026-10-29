@@ -36,7 +36,27 @@ with m.operation("Bookshelf"):     # one undo step
     m.paint(back, "Back")
     shelf = m.group(parts + [back])
     shelf.name = "Bookshelf"
+
+    # Joinery: the top and bottom in rabbets cut into the sides, the shelves on dowels
+    side_l, side_r = m.child(shelf, "Side L"), m.child(shelf, "Side R")
+    names = ["Bottom", "Top"] + ["Shelf %d" % i for i in range(1, shelves + 1)]
+    for n in names:
+        kind = "housing" if n in ("Bottom", "Top") else "dowels"
+        m.joint(side_l, m.child(shelf, n), kind)
+        m.joint(side_r, m.child(shelf, n), kind)
+    # What else to buy: the dowels priced by name, glue and the back's nails by hand
+    m.cut_part("Dowel Ø8 × 40", {"price": 0.05})
+    m.cut_hardware([{"name": "Wood glue 250 ml", "count": 1, "price": 6},
+                    {"name": "Nail 1.6 × 25", "count": 30, "price": 0.02}])
+    # Assembly steps (Window -> Assembly): the case is built lying on its left side
+    m.set_assembly_steps([
+        {"parts": side_l, "note": "Lay the left side on a flat surface, inside up."},
+        {"parts": [m.child(shelf, n) for n in names],
+         "note": "Glue the rabbets and the dowels, then set the bottom, the top and the shelves into the left side."},
+        {"parts": side_r, "note": "Put the right side on, the dowels in their holes, and tap it down evenly. Clamp until the glue sets."},
+        {"parts": m.child(shelf, "Back"), "note": "Check the diagonals are equal, then nail or screw the back on."},
+    ])
     m.select(shelf)
 
 size = m.bounds(shelf)["size"]
-print("Bookshelf %g x %g x %g, %d parts" % (size.x, size.y, size.z, len(m.entities(shelf))))
+print("Bookshelf %g x %g x %g, %d parts, %d joints" % (size.x, size.y, size.z, len(m.entities(shelf)), len(m.joints())))

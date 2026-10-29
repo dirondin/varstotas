@@ -123,7 +123,7 @@ appears on the diagrams as hole positions.
 ## Batch 4: exploded view and assembly instructions
 
 Status (2026-10-29): done. Window → Assembly: a slider explodes the model, each part moving away
-from the parts it touches (a part held on both sides slides out along a free axis, to the front
+from the parts it touches (with steps: from the parts of earlier steps, the base staying) (a part held on both sides slides out along a free axis, to the front
 by default), all lifted so nothing goes below the floor. Suggest steps orders the parts from the
 contact graph: the lowest part touching another is the base, then the lowest part touching what
 is placed, with its copies. Steps are reordered, split and joined by hand and carry a note;
@@ -145,6 +145,12 @@ The cut list and joints always work from the assembled model. Rhai / Python: `su
   then one step per page with its picture, the parts used and the hardware counts.
 
 ## Showcase (after batch 1, again after batch 4)
+
+Status (2026-10-29): the Bookshelf demo has joints (top and bottom in rabbets, shelves on dowels),
+priced hardware and four assembly steps with notes (Rhai and Python); README media
+`assembly.gif` and `assembly-booklet.png` from `scripts/readme-media.py assembly`. With steps the
+exploded view follows them: the base stays, each part leaves the earlier parts it touches and
+stands out from where they went. Left: the post.
 
 - A demo project: a bookshelf or a wardrobe from 18 mm plywood, with cut diagrams, the shopping
   list and, later, the instructions booklet. It joins the Examples.

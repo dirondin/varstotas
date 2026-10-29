@@ -1,5 +1,7 @@
 // Bookshelf: two sides, top, bottom and shelves as named groups; a parametric back panel;
-// stock on the materials, so Window → Cut List lays the parts out on plywood sheets.
+// stock on the materials, so Window → Cut List lays the parts out on plywood sheets; joints
+// (top and bottom in rabbets, shelves on dowels) and assembly steps, so Window → Assembly
+// explodes it and writes the instructions booklet.
 // Run: File → Run Script… (or paste into Window → Script Console). One undo step.
 let w = 800;      // outer width, mm
 let h = 1800;     // height
@@ -39,5 +41,34 @@ paint(back, "Back");
 let all_parts = parts + [back];
 let shelf = group(all_parts);
 shelf.name = "Bookshelf";
+
+// Joinery (Window → Joinery): the top and bottom sit in rabbets cut into the sides, the shelves
+// on dowels; the dowels go into the cut list's hardware
+let side_l = child(shelf, "Side L");
+let side_r = child(shelf, "Side R");
+let names = ["Bottom", "Top"];
+for i in 1..=shelves {
+    names.push("Shelf " + i);
+}
+for n in names {
+    let kind = if n == "Bottom" || n == "Top" { "housing" } else { "dowels" };
+    joint(side_l, child(shelf, n), kind);
+    joint(side_r, child(shelf, n), kind);
+}
+// What else to buy: the dowels are priced by name, glue and the back's nails added by hand
+cut_part("Dowel Ø8 × 40", #{ price: 0.05 });
+cut_hardware([#{ name: "Wood glue 250 ml", count: 1, price: 6 }, #{ name: "Nail 1.6 × 25", count: 30, price: 0.02 }]);
+
+// Assembly steps (Window → Assembly): the case is built lying on its left side
+let boards = [];
+for n in names {
+    boards.push(child(shelf, n));
+}
+set_assembly_steps([
+    #{ parts: side_l, note: "Lay the left side on a flat surface, inside up." },
+    #{ parts: boards, note: "Glue the rabbets and the dowels, then set the bottom, the top and the shelves into the left side." },
+    #{ parts: side_r, note: "Put the right side on, the dowels in their holes, and tap it down evenly. Clamp until the glue sets." },
+    #{ parts: child(shelf, "Back"), note: "Check the diagonals are equal, then nail or screw the back on." },
+]);
 select(shelf);
-print("Bookshelf " + w + " x " + d + " x " + h + ", " + (shelves + 5) + " parts");
+print("Bookshelf " + w + " x " + d + " x " + h + ", " + (shelves + 5) + " parts, " + joints().len() + " joints");

@@ -28,10 +28,10 @@ expect model_faces=0
 # a script file: the example bookshelf (one undo step, selected)
 action run_script ../../examples/scripts/bookshelf.rhai
 wait 5
-expect script=Some((true, "Bookshelf 800 x 300 x 1800, 9 parts"))
+expect script=Some((true, "Bookshelf 800 x 300 x 1800, 9 parts, 12 joints"))
 expect undo=Some("Script bookshelf.rhai")
 expect I=1
-expect defs=11 model_faces=54
+expect defs=11 model_faces=878
 action console
 view iso
 zoom_extents

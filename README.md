@@ -14,6 +14,9 @@ everything can be scripted.
   perpendicular) and typed exact values.
 - **Making things** — a cut list for furniture: stock on materials (sheets, boards and mouldings with
   price), offcuts kept for the next project, cutting diagrams optimized for straight saw cuts, waste, shopping list and cost, PDF / SVG / CSV;
+  edge banding, part labels and hardware; joinery cut into the parts (dowels, screws, pocket holes,
+  housings, mortise and tenon, box joints, dovetails); an exploded view, assembly steps and an
+  instructions booklet (PDF);
   dimensions on the model; preparing models for a slicer (checks and repair,
   wall-thickness maps, cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF /
   DXF; sheets with scaled views; simple physics (drop objects, drape cloth).
@@ -38,7 +41,12 @@ everything can be scripted.
 
 <p>
   <img src="docs/images/cut-list.gif" width="60%" alt="The Bookshelf demo, then Window → Cut List: plywood sheets and the back panel laid out with saw kerf, offcuts, waste and cost">
-  <img src="docs/images/cut-diagram.png" width="36%" alt="A cutting diagram of the Bookshelf: eight numbered parts on a 2440 × 1220 birch sheet with the offcuts sized">
+  <img src="docs/images/cut-diagram.png" width="36%" alt="A cutting diagram of the Bookshelf: eight numbered parts on a 2440 × 1220 birch sheet, the dowel holes marked and the offcuts sized">
+</p>
+
+<p>
+  <img src="docs/images/assembly.gif" width="64%" alt="The Bookshelf demo in Window → Assembly: the slider explodes it, then the steps show the left side, the shelves set into it, the right side and the back">
+  <img src="docs/images/assembly-booklet.png" width="30%" alt="A page of the Bookshelf's instructions booklet: step 2 of 4 with arrows, the parts to add, 12 dowels and a note">
 </p>
 
 <p align="center">

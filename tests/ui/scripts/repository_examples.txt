@@ -2,7 +2,7 @@
 wait 5
 open ../../examples/demos/bookshelf.vrst
 wait 5
-expect model_faces=54
+expect model_faces=878
 open ../../examples/demos/workbench.vrst
 wait 5
 expect model_faces=54

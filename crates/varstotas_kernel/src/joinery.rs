@@ -557,6 +557,17 @@ impl Model {
         }
     }
 
+    /// The model with its parts as they were before any joint was cut (tenons and rabbets make
+    /// bounding boxes overlap, so parts no longer seem to touch); borrowed when there are none.
+    pub fn unjoined(&self) -> std::borrow::Cow<'_, Model> {
+        if self.joint_bases.is_empty() {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut m = self.clone();
+        m.restore_joint_bases();
+        std::borrow::Cow::Owned(m)
+    }
+
     fn restore_joint_bases(&mut self) {
         for (d, m) in &self.joint_bases {
             if let Some(def) = self.defs.get_mut(*d) {

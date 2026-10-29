@@ -39,16 +39,24 @@ fn steps_follow_the_contacts() {
 #[test]
 fn exploded_and_step_views_come_back() {
     let (mut m, [bottom, left, right, top, shelf]) = cabinet();
-    m.assembly.steps = suggest_steps(&m);
     let before: Vec<DVec3> = [bottom, left, right, top, shelf].iter().map(|&i| at(&m, i)).collect();
     m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
-    // sides apart, bottom down, top up, the shelf out to the front; all lifted by 100 so
+    // without steps: sides apart, bottom down, top up, the shelf out to the front; all lifted by 100 so
     // that the bottom stays on the floor
     assert_eq!(at(&m, left) - before[1], DVec3::new(-100.0, 0.0, 100.0));
     assert_eq!(at(&m, right) - before[2], DVec3::new(100.0, 0.0, 100.0));
     assert_eq!(at(&m, bottom) - before[0], DVec3::ZERO);
     assert_eq!(at(&m, top) - before[3], DVec3::new(0.0, 0.0, 200.0));
     assert_eq!(at(&m, shelf) - before[4], DVec3::new(0.0, -100.0, 100.0));
+    // with steps, in their order: the bottom stays, the sides go up off it, the shelf out to
+    // the front from between them, the top above them
+    m.assembly.steps = suggest_steps(&m);
+    m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
+    assert_eq!(at(&m, bottom) - before[0], DVec3::ZERO);
+    assert_eq!(at(&m, left) - before[1], DVec3::new(0.0, 0.0, 100.0));
+    assert_eq!(at(&m, right) - before[2], DVec3::new(0.0, 0.0, 100.0));
+    assert_eq!(at(&m, shelf) - before[4], DVec3::new(0.0, -100.0, 100.0));
+    assert_eq!(at(&m, top) - before[3], DVec3::new(0.0, 0.0, 200.0));
     // the cut list and joints still see the assembled cabinet
     assert_eq!(varstotas_kernel::cutlist::cut_parts(&m).len(), 4);
     let i = m.add_wood_joint(WoodJointKind::Dowels, vec![left], vec![shelf]).unwrap();

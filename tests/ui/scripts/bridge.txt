@@ -5,7 +5,7 @@
 expect bridge_open=None
 action run_script ../../examples/scripts/bookshelf.py
 wait 5
-expect script=Some((true, "Bookshelf 800 x 304 x 1800, 9 parts"))
+expect script=Some((true, "Bookshelf 800 x 304 x 1800, 9 parts, 12 joints"))
 expect undo=Some("Bookshelf")
 expect I=1
 expect defs=11

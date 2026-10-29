@@ -98,6 +98,7 @@ fn touching(model: &Model, paths: &[ContextPath]) -> Vec<Vec<usize>> {
 /// placed with the other copies of its part that touch it too; parts touching nothing last,
 /// lowest first.
 pub fn suggest_steps(model: &Model) -> Vec<Step> {
+    let model = &*model.unjoined();
     let parts = parts(model);
     let paths: Vec<ContextPath> = parts.iter().map(|p| p.0.clone()).collect();
     let low: Vec<f64> = paths.iter().map(|p| bounds(model, p).map_or(0.0, |b| b.0.z)).collect();
@@ -125,65 +126,122 @@ pub fn suggest_steps(model: &Model) -> Vec<Step> {
     steps
 }
 
-/// The way each part leaves the assembled model in the exploded view (unit vectors, world):
-/// away from the parts it touches (a side away from the shelf, the top and bottom away from
-/// the sides); a part held on opposite sides (a shelf between two sides) slides out along a
-/// free axis, away from the middle (a back panel backwards) or else to the front.
-pub fn explode_dirs(model: &Model) -> Vec<(ContextPath, DVec3)> {
+/// Which parts touch which, with the axis and the side of the plane the first one lies on.
+type Contacts = Vec<(usize, usize, usize, f64)>;
+
+/// The exploded view's layout: the parts, their boxes, the contacts, the step of each part
+/// (`None`: no steps, or a part left out of them).
+struct Layout {
+    paths: Vec<ContextPath>,
+    boxes: Vec<Option<(DVec3, DVec3)>>,
+    contacts: Contacts,
+    step: Vec<Option<usize>>,
+}
+
+fn layout(model: &Model) -> Layout {
+    let model = &*model.unjoined();
     let paths: Vec<ContextPath> = parts(model).into_iter().map(|p| p.0).collect();
-    let boxes: Vec<Option<(DVec3, DVec3)>> = paths.iter().map(|p| bounds(model, p)).collect();
-    let (lo, hi) = boxes.iter().flatten().fold((DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)), |(a, b), (l, h)| (a.min(*l), b.max(*h)));
-    let centre = (lo + hi) * 0.5;
-    let mut dirs = vec![DVec3::ZERO; paths.len()];
-    let mut blocked = vec![DVec3::ZERO; paths.len()];
+    let boxes = paths.iter().map(|p| bounds(model, p)).collect();
+    let mut contacts = Vec::new();
     for i in 0..paths.len() {
         for j in i + 1..paths.len() {
             if let Some(c) = crate::joinery::contact(model, &paths[i], &paths[j]) {
-                // `i` lies on the side `into_a` of the plane, `j` on the other
-                dirs[i][c.axis] += c.into_a;
-                dirs[j][c.axis] -= c.into_a;
-                blocked[i][c.axis] = 1.0;
-                blocked[j][c.axis] = 1.0;
+                contacts.push((i, j, c.axis, c.into_a));
             }
         }
     }
-    let mut out = Vec::new();
-    for (k, path) in paths.iter().enumerate() {
-        let mid = boxes[k].map_or(centre, |(l, h)| (l + h) * 0.5);
-        let mut dir = dirs[k];
-        if dir.length() < 0.5 {
-            // off-centre along a free axis: towards that side (not for a shelf a little low)
-            let off = mid - centre;
-            let away = DVec3::from_array(std::array::from_fn(|a| if blocked[k][a] == 0.0 && off[a].abs() > 0.15 * (hi - lo)[a] { off[a] } else { 0.0 }));
-            dir = if away.length() > 1e-6 {
-                away
-            } else if blocked[k].y == 0.0 {
-                DVec3::NEG_Y
-            } else if blocked[k] == DVec3::ONE {
-                mid - centre
-            } else {
-                DVec3::ONE - blocked[k]
-            };
-        }
-        out.push((path.clone(), dir.normalize_or_zero()));
+    let step = paths.iter().map(|p| model.assembly.step_of(p)).collect();
+    Layout { paths, boxes, contacts, step }
+}
+
+impl Layout {
+    /// The parts `k` touches that `earlier` keeps, each with the way away from it.
+    fn away(&self, k: usize, earlier: impl Fn(usize) -> bool) -> Vec<(usize, DVec3)> {
+        self.contacts
+            .iter()
+            .filter_map(|&(i, j, axis, into_a)| {
+                let (other, sign) = if i == k { (j, into_a) } else if j == k { (i, -into_a) } else { return None };
+                earlier(other).then(|| (other, DVec3::from_array(std::array::from_fn(|a| if a == axis { sign } else { 0.0 }))))
+            })
+            .collect()
     }
-    out
+
+    /// Away from the parts in `from`; held on opposite sides, out along a free axis: away from
+    /// the middle when well off it (a back panel backwards), else to the front.
+    fn dir(&self, k: usize, from: &[(usize, DVec3)]) -> DVec3 {
+        let dir: DVec3 = from.iter().map(|f| f.1).sum();
+        if dir.length() >= 0.5 {
+            return dir.normalize();
+        }
+        let blocked = from.iter().fold(DVec3::ZERO, |b, f| b.max(f.1.abs()));
+        let (lo, hi) = self.boxes.iter().flatten().fold((DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)), |(a, b), (l, h)| (a.min(*l), b.max(*h)));
+        let centre = (lo + hi) * 0.5;
+        let mid = self.boxes[k].map_or(centre, |(l, h)| (l + h) * 0.5);
+        let off = mid - centre;
+        let away = DVec3::from_array(std::array::from_fn(|a| if blocked[a] == 0.0 && off[a].abs() > 0.15 * (hi - lo)[a] { off[a] } else { 0.0 }));
+        let d = if away.length() > 1e-6 {
+            away
+        } else if blocked.y == 0.0 {
+            DVec3::NEG_Y
+        } else if blocked == DVec3::ONE {
+            off
+        } else {
+            DVec3::ONE - blocked
+        };
+        d.normalize_or_zero()
+    }
+
+    /// Each part's way out (unit) and the earlier parts it follows (with steps).
+    fn plan(&self) -> Vec<(DVec3, Vec<usize>)> {
+        (0..self.paths.len())
+            .map(|k| match self.step[k] {
+                // the base stays; a later part leaves the parts of earlier steps it touches
+                Some(0) => (DVec3::ZERO, Vec::new()),
+                Some(s) => {
+                    let from = self.away(k, |o| self.step[o].is_some_and(|t| t < s));
+                    let follow = from.iter().map(|f| f.0).collect();
+                    (if from.is_empty() { self.dir(k, &self.away(k, |_| true)) } else { self.dir(k, &from) }, follow)
+                }
+                None => (self.dir(k, &self.away(k, |_| true)), Vec::new()),
+            })
+            .collect()
+    }
+}
+
+/// The way each part leaves the assembled model in the exploded view (unit vectors, world).
+/// Without steps: away from the parts it touches (a side away from the shelf, the top and
+/// bottom away from the sides); a part held on opposite sides (a shelf between two sides)
+/// slides out along a free axis, away from the middle (a back panel backwards) or else to the
+/// front. With steps: the base stays, and a part leaves the parts of earlier steps it touches.
+pub fn explode_dirs(model: &Model) -> Vec<(ContextPath, DVec3)> {
+    let l = layout(model);
+    let plan = l.plan();
+    l.paths.into_iter().zip(plan).map(|(p, (d, _))| (p, d)).collect()
 }
 
 /// The exploded view's offsets for `distance` (world, mm), from the assembled model: each part
-/// `distance` along [`explode_dirs`], all then lifted so that nothing goes below the model's
-/// bottom (the floor it stands on).
+/// `distance` along [`explode_dirs`], with steps on top of where the earlier parts it touches
+/// went (so each step stands further out); all then lifted so that nothing goes below the
+/// model's bottom (the floor it stands on).
 pub fn explode_offsets(model: &Model, distance: f64) -> Vec<(ContextPath, DVec3)> {
-    let mut out: Vec<(ContextPath, DVec3)> = explode_dirs(model).into_iter().map(|(p, d)| (p, d * distance)).collect();
-    let boxes: Vec<Option<(DVec3, DVec3)>> = out.iter().map(|(p, _)| bounds(model, p)).collect();
-    let floor = boxes.iter().flatten().map(|b| b.0.z).fold(f64::INFINITY, f64::min);
-    let low = boxes.iter().zip(&out).filter_map(|(b, (_, o))| b.map(|b| b.0.z + o.z)).fold(f64::INFINITY, f64::min);
+    let l = layout(model);
+    let plan = l.plan();
+    let mut off = vec![DVec3::ZERO; l.paths.len()];
+    let mut order: Vec<usize> = (0..l.paths.len()).collect();
+    order.sort_by_key(|&k| l.step[k].unwrap_or(usize::MAX));
+    for k in order {
+        let (dir, follow) = &plan[k];
+        let base = if follow.is_empty() { DVec3::ZERO } else { follow.iter().map(|&j| off[j]).sum::<DVec3>() / follow.len() as f64 };
+        off[k] = base + *dir * distance;
+    }
+    let floor = l.boxes.iter().flatten().map(|b| b.0.z).fold(f64::INFINITY, f64::min);
+    let low = l.boxes.iter().zip(&off).filter_map(|(b, o)| b.map(|b| b.0.z + o.z)).fold(f64::INFINITY, f64::min);
     if low < floor {
-        for (_, o) in &mut out {
+        for o in &mut off {
             o.z += floor - low;
         }
     }
-    out
+    l.paths.into_iter().zip(off).collect()
 }
 
 impl Model {

@@ -4,10 +4,11 @@
 Drives a debug build with UI scripts (`record` writes window frames), then encodes with
 ffmpeg / ImageMagick:
   docs/images/push-pull.gif, house-orbit.gif, gallery.jpg, workbench.jpg, desk-caddy.jpg,
-  cut-list.gif, cut-diagram.png
+  cut-list.gif, cut-diagram.png, assembly.gif, assembly-booklet.png
   .github/social-preview.png
-Needs macOS (like tests/ui), ffmpeg, ImageMagick 7 and curl. The app window must stay uncovered.
-usage: scripts/readme-media.py [cutlist]   (cutlist: only the cut-list media)
+Needs macOS (like tests/ui), ffmpeg, ImageMagick 7, poppler (pdftoppm) and curl.
+The app window must stay uncovered.
+usage: scripts/readme-media.py [cutlist|assembly]   (only the cut-list or the assembly media)
 """
 import glob
 import os
@@ -99,6 +100,32 @@ def cut_list_media():
         "PNG24:" + os.path.join(IMAGES, "cut-diagram.png"))
 
 
+def assembly_media():
+    """The Bookshelf demo in Window → Assembly: exploded by the slider, then step by step (a GIF);
+    a page of its instructions booklet as a still."""
+    rec = frames("assembly")
+    booklet = os.path.join(OUT, "assembly.pdf")
+    lines = ["action demo bookshelf", "wait 300", "action console_close", "wait 10", "action assembly", "wait 10",
+             # framed for the model exploded, then shown assembled
+             # (left of the Assembly window)
+             "action assembly_explode 300", "view iso", "zoom_extents", "wait 10", "panpx -260 0", "wait 5",
+             "zoompx 0.9 300 450", "wait 20", "action assembly_explode 0", "wait 20",
+             f"record {rec} 2", "wait 50"]
+    for i in range(1, 31):
+        lines += [f"action assembly_explode {i * 10}", "wait 2"]
+    lines.append("wait 50")
+    for k in range(1, 5):
+        lines += [f"action assembly_step {k}", "wait 70"]
+    lines += ["action assembly_step 0", "wait 60", "record off", f"action export_assembly {booklet}", "wait 10", "quit"]
+    app_script("assembly", lines)
+    gif(os.path.join(rec, "frame_%05d.bmp"), "assembly.gif", "fps=25,scale=960:-1:flags=lanczos",
+        "max_colors=128:stats_mode=diff", "dither=bayer:bayer_scale=5:diff_mode=rectangle")
+    # step 2 of the booklet (page 4: after the cover, the parts and step 1)
+    page = os.path.join(OUT, "assembly_page")
+    run("pdftoppm", "-r", "110", "-f", "4", "-l", "4", "-singlefile", "-png", booklet, page)
+    run("magick", page + ".png", "-strip", "PNG8:" + os.path.join(IMAGES, "assembly-booklet.png"))
+
+
 # the Cut List window in a recorded frame: width x height + left + top
 CUT_WINDOW = "656x716+39+161"
 
@@ -109,7 +136,11 @@ def main():
     if sys.argv[1:] == ["cutlist"]:
         cut_list_media()
         return
+    if sys.argv[1:] == ["assembly"]:
+        assembly_media()
+        return
     cut_list_media()
+    assembly_media()
 
     app_script("pushpull", pushpull_script())
     gif(os.path.join(OUT, "frames_pushpull", "frame_%05d.bmp"), "push-pull.gif", "fps=25,scale=960:-1:flags=lanczos",
