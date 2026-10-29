@@ -630,7 +630,7 @@ impl VarstotasApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(stock_label(st, unit)).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("×").on_hover_text(tr!("mated-stock-remove")).clicked() {
+                        if super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("mated-stock-remove")).clicked() {
                             remove = Some(i);
                         }
                         if ui.small_button("☆").on_hover_text(tr!("mated-stock-save-preset")).clicked() {
@@ -705,7 +705,7 @@ impl VarstotasApp {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut p.name).desired_width(240.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("×").on_hover_text(tr!("prefs-cut-remove")).clicked() {
+                        if super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("prefs-cut-remove")).clicked() {
                             remove = Some(i);
                         }
                     });
@@ -747,7 +747,7 @@ impl VarstotasApp {
                 ui.add(egui::DragValue::new(&mut o.count).range(1..=999).prefix("× "));
                 let from = std::path::Path::new(&o.source).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 ui.label(RichText::new(from).small().color(theme::text_dim())).on_hover_text(&o.source);
-                if ui.small_button("×").on_hover_text(tr!("prefs-cut-offcut-remove")).clicked() {
+                if super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("prefs-cut-offcut-remove")).clicked() {
                     remove = Some(i);
                 }
                 ui.end_row();
