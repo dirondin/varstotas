@@ -95,7 +95,7 @@ Entities (faces, edges, groups) are "references". After operations that merge or
 | `selection()`, `select(x)`, `select(())` | selection (in the run context) |
 | `bounds(x)` | `#{ min, max, size, center }` in world coordinates |
 | `model_bounds()` | the model's extents |
-| `units()`, `materials()` | the model units, material names |
+| `units()`, `materials()` | the model units, material names; `units("in")` sets the units the model is shown in: `"mm"`, `"cm"`, `"m"`, `"in"`, `"ft"` (coordinates stay millimetres) |
 | `all_faces()` | all faces of the model, including nested groups (for exporters) |
 | `read_text(path)`, `write_text(path, text)` | read / write a text file |
 | `file_exists(path)`, `list_files(dir, ext)`, `list_dirs(dir)` | whether a file exists; files with an extension (`""` — any, with subfolders, up to 5000); folders inside |

@@ -1,0 +1,13 @@
+# The Cut List of a model in inches: a 4 × 8 ft plywood sheet and 1×4 lumber set from scripts
+# with inch and foot strings; sizes in inches, boards in feet, banding in feet at a price per foot.
+action script units("in"); material("Ply", "#d8b98a"); material("Pine", "#c9a46a"); set_stock("Ply", #{ kind: "sheet", length: "8 ft", width: "4 ft", thickness: "3/4 in", grain: true, price: 55 }); set_stock("Pine", #{ kind: "board", name: "1×4", width: "3 1/2 in", thickness: "3/4 in", lengths: ["6 ft", "8 ft"], price: 3 }); for i in 0..2 { let s = box(vec3(i * 571.5, 0, 0), 19.05, 304.8, 762); s.name = "Side"; paint(s, "Ply"); } for i in 0..3 { let s = box(vec3(19.05, 0, i * 371.475), 552.45, 304.8, 19.05); s.name = "Shelf"; paint(s, "Ply"); } for i in 0..2 { let r = box(vec3(0, -19.05, i * 673.1), 590.55, 19.05, 88.9); r.name = "Rail"; paint(r, "Pine"); } cut_part("Shelf", #{ bands: [true, false, false, false] }); cut_settings(#{ band_price: 0.3 }); let c = cut_list(); print(c.stock.len() + " " + c.stock[1].width + " " + c.stock[1].buy[0].length);
+expect script=Some((true, "2 88.9 1828.8
+action console_close
+wait 5
+action cut_list
+wait 10
+screenshot shots/cut_list_imperial.bmp
+action cut_list_tab parts
+wait 5
+screenshot shots/cut_list_imperial_parts.bmp
+quit

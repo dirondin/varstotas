@@ -89,7 +89,7 @@ pub const FNS: &[FnDoc] = &[
     f("bounds", &["bounds(x)"], "script-fn-bounds"),
     f("model_bounds", &["model_bounds()"], "script-fn-model-bounds"),
     f("length", &["length(text)"], "script-fn-length"),
-    f("units", &["units()"], "script-fn-units"),
+    f("units", &["units()", "units(\"in\")"], "script-fn-units"),
     f("materials", &["materials()"], "script-fn-materials"),
     f("cut_list", &["cut_list()"], "script-fn-cut-list"),
     f("set_stock", &["set_stock(material, #{ kind: \"sheet\", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 })", "set_stock(material, #{ kind: \"board\", width: 95, thickness: 45, lengths: [3000, 6000], prices: [9, 16] })", "set_stock(material, #{ kind: \"linear\", name: \"Ø 20 rod\", width: 20, thickness: 20, lengths: [1000, 2000], price: 3 })", "set_stock(material, [stock, …])", "set_stock(material, ())"], "script-fn-set-stock"),

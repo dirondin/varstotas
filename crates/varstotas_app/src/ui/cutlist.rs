@@ -578,8 +578,11 @@ impl VarstotasApp {
                 changed = true;
             }
             ui.add_space(8.0);
-            ui.label(tr!("cutlist-band-price"));
-            if ui.add(egui::DragValue::new(&mut s.band_price).range(0.0..=1000.0).speed(0.05).max_decimals(2)).changed() {
+            ui.label(if imperial(unit) { tr!("cutlist-band-price-ft") } else { tr!("cutlist-band-price") });
+            let f = per_length(unit);
+            let mut price = s.band_price * f;
+            if ui.add(egui::DragValue::new(&mut price).range(0.0..=1000.0).speed(0.05).max_decimals(2)).changed() {
+                s.band_price = price / f;
                 changed = true;
             }
             ui.add_space(8.0);
@@ -618,7 +621,12 @@ impl VarstotasApp {
             ui.label(line);
         }
         for b in &plan.banding {
-            let mut line = tr!("cutlist-banding", thickness = varstotas_kernel::units::format_length(b.thickness, unit), width = varstotas_kernel::units::format_length(b.width, unit), metres = format!("{:.2}", b.length / 1000.0));
+            let (thickness, width) = (varstotas_kernel::units::format_length(b.thickness, unit), varstotas_kernel::units::format_length(b.width, unit));
+            let mut line = if imperial(unit) {
+                tr!("cutlist-banding-ft", thickness = thickness, width = width, feet = format!("{:.1}", b.length / 304.8))
+            } else {
+                tr!("cutlist-banding", thickness = thickness, width = width, metres = format!("{:.2}", b.length / 1000.0))
+            };
             if b.cost() > 0.0 {
                 line.push_str(&tr!("cutlist-cost", cost = format!("{:.2}", b.cost())));
             }
@@ -964,11 +972,22 @@ impl VarstotasApp {
         }
         let mut edit = false;
         ui.menu_button(tr!("mated-stock-add"), |ui| {
-            for (key, st) in stock_presets() {
-                if ui.button(varstotas_i18n::tr(key)).clicked() {
-                    list.push(st);
-                    changed = true;
-                    ui.close();
+            // the sizes of the model's units first
+            let mut groups = [(tr!("mated-stock-presets-metric"), stock_presets()), (tr!("mated-stock-presets-us"), us_stock_presets())];
+            if imperial(unit) {
+                groups.swap(0, 1);
+            }
+            for (k, (title, presets)) in groups.into_iter().enumerate() {
+                if k == 1 {
+                    ui.separator();
+                }
+                ui.label(RichText::new(title).small().color(theme::text_dim()));
+                for (key, st) in presets {
+                    if ui.button(varstotas_i18n::tr(key)).clicked() {
+                        list.push(st);
+                        changed = true;
+                        ui.close();
+                    }
                 }
             }
             ui.separator();
@@ -1087,6 +1106,8 @@ fn stock_label(st: &Stock, unit: LengthUnit) -> String {
         StockKind::Sheet => format!("{} × {} × {}", dim(st.length, unit), dim(st.width, unit), dim(st.thickness, unit)),
         StockKind::Linear if !st.name.is_empty() => st.name.clone(),
         StockKind::Linear if st.width <= 0.0 || st.thickness <= 0.0 => tr!("mated-stock-linear"),
+        // nominal lumber: "2×4 (3 1/2" × 1 1/2")"
+        StockKind::Board if !st.name.is_empty() => format!("{} ({} × {})", st.name, dim(st.width, unit), dim(st.thickness, unit)),
         _ => format!("{} × {}", dim(st.width, unit), dim(st.thickness, unit)),
     }
 }
@@ -1196,7 +1217,8 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
                 ui.label(tr!("mated-stock-price"));
                 ui.horizontal(|ui| {
                     let per_piece = !st.piece_prices.is_empty();
-                    if ui.selectable_label(!per_piece, tr!("mated-stock-per-metre")).clicked() && per_piece {
+                    let per = if imperial(unit) { tr!("mated-stock-per-foot") } else { tr!("mated-stock-per-metre") };
+                    if ui.selectable_label(!per_piece, per).clicked() && per_piece {
                         st.piece_prices.clear();
                         changed = true;
                     }
@@ -1209,7 +1231,13 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
                 ui.end_row();
                 ui.label("");
                 if st.piece_prices.is_empty() {
-                    changed |= ui.add(egui::DragValue::new(&mut st.price).range(0.0..=1e7).speed(0.1).max_decimals(2)).changed();
+                    // kept per metre, shown per foot in inch-based units
+                    let f = per_length(unit);
+                    let mut shown = st.price * f;
+                    if ui.add(egui::DragValue::new(&mut shown).range(0.0..=1e7).speed(0.1).max_decimals(2)).changed() {
+                        st.price = shown / f;
+                        changed = true;
+                    }
                 } else {
                     let shown = st.piece_prices.iter().map(|v| format!("{v}")).collect::<Vec<_>>().join(", ");
                     ui.horizontal(|ui| {
@@ -1280,6 +1308,37 @@ fn grain_name(g: PartGrain) -> String {
         PartGrain::Width => "cutlist-grain-width",
         PartGrain::Any => "cutlist-grain-any",
     })
+}
+
+/// Inch-based units: lumber in feet, prices per foot.
+pub(crate) fn imperial(unit: LengthUnit) -> bool {
+    matches!(unit, LengthUnit::Inch | LengthUnit::Foot)
+}
+
+/// A price per metre as shown: per foot in inch-based units.
+fn per_length(unit: LengthUnit) -> f64 {
+    if imperial(unit) { 0.3048 } else { 1.0 }
+}
+
+/// Common stock in the US: 4 × 8 ft sheets, dimensional lumber (nominal names, actual sizes),
+/// dowel rod.
+fn us_stock_presets() -> Vec<(&'static str, Stock)> {
+    const IN: f64 = 25.4;
+    const FT: f64 = 304.8;
+    let lumber = |name: &str, w: f64, t: f64, feet: &[f64]| Stock { name: name.into(), ..Stock::board(w * IN, t * IN, &feet.iter().map(|f| f * FT).collect::<Vec<_>>()) };
+    vec![
+        ("mated-stock-preset-us-ply-34", Stock::sheet(8.0 * FT, 4.0 * FT, 0.75 * IN, true)),
+        ("mated-stock-preset-us-ply-12", Stock::sheet(8.0 * FT, 4.0 * FT, 0.5 * IN, true)),
+        ("mated-stock-preset-us-ply-14", Stock::sheet(8.0 * FT, 4.0 * FT, 0.25 * IN, true)),
+        ("mated-stock-preset-us-baltic-34", Stock::sheet(5.0 * FT, 5.0 * FT, 0.75 * IN, true)),
+        ("mated-stock-preset-us-mdf-34", Stock::sheet(8.0 * FT, 4.0 * FT, 0.75 * IN, false)),
+        ("mated-stock-preset-us-2x4", lumber("2×4", 3.5, 1.5, &[8.0, 10.0, 12.0])),
+        ("mated-stock-preset-us-2x6", lumber("2×6", 5.5, 1.5, &[8.0, 10.0, 12.0])),
+        ("mated-stock-preset-us-1x4", lumber("1×4", 3.5, 0.75, &[6.0, 8.0])),
+        ("mated-stock-preset-us-1x6", lumber("1×6", 5.5, 0.75, &[6.0, 8.0])),
+        ("mated-stock-preset-us-1x12", lumber("1×12", 11.25, 0.75, &[6.0, 8.0])),
+        ("mated-stock-preset-us-dowel-34", Stock::linear("¾ in dowel", 0.75 * IN, 0.75 * IN, &[3.0 * FT, 4.0 * FT])),
+    ]
 }
 
 /// Common stock, metric sizes.

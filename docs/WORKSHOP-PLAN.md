@@ -162,6 +162,10 @@ stands out from where they went. Left: the post.
 
 - True nesting of non-rectangular parts (CNC) vs bounding rectangles only. Rectangles in batch 1.
 - Non-guillotine packing as an option for CNC routers.
-- Stock units in inches and imperial board sizes (4 × 8 ft) for US users. At least the presets.
+- Stock units in inches and imperial board sizes (4 × 8 ft) for US users. Done (2026-10-29): in a
+  model in inches or feet the Cut List shows sizes in inches, board lengths and banding in feet,
+  prices per foot (stored per metre); "+ Add stock" offers US presets (4 × 8 ply, MDF, Baltic
+  birch 5 × 5, nominal 2×4 / 1×6 lumber named "2×4" with actual sections); `units("in")` in
+  scripts. Batch 1's metric presets stay.
 - Whether a joint is a document object of its own (like a generator) or an attribute of the
   part pair. Decided in batch 3: a document object, `Model::joints`.

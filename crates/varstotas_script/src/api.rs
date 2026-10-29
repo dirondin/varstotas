@@ -1439,6 +1439,21 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     e.register_fn("model_bounds", || -> R<Dynamic> { with(|st| Ok(bounds_map(st.model.bounds()))) });
     e.register_fn("length", |s: ImmutableString| -> R<f64> { num(&Dynamic::from(s)) });
     e.register_fn("units", || -> R<String> { with(|st| Ok(format!("{:?}", st.model.unit).to_lowercase())) });
+    e.register_fn("units", |u: ImmutableString| -> R<()> {
+        use varstotas_kernel::LengthUnit::*;
+        let unit = match u.trim().to_ascii_lowercase().as_str() {
+            "mm" | "millimeter" | "millimetre" => Millimeter,
+            "cm" | "centimeter" | "centimetre" => Centimeter,
+            "m" | "meter" | "metre" => Meter,
+            "in" | "inch" | "\"" => Inch,
+            "ft" | "foot" | "feet" | "'" => Foot,
+            _ => return err(tr!("script-err-unit", unit = u.to_string())),
+        };
+        edit(|st| {
+            st.model.unit = unit;
+            Ok(())
+        })
+    });
     e.register_fn("all_faces", || -> R<Array> {
         fn walk(st: &State, path: &ContextPath, out: &mut Array, depth: usize) -> R<()> {
             let m = mesh(st, path)?;
