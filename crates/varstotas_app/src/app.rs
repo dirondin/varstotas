@@ -2587,8 +2587,9 @@ impl eframe::App for VarstotasApp {
                 self.step_player(dt as f64);
                 ctx.request_repaint();
             }
-            let (mut o3, o2) = self.tool_overlays();
+            let (mut o3, mut o2) = self.tool_overlays();
             self.printing_overlay(&mut o3);
+            self.cut_numbers_overlay(&mut o2);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())

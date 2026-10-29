@@ -2792,6 +2792,12 @@ cutlist-banding = Edge banding { $thickness } for { $width } parts: { $metres } 
 cutlist-col-bands = Banding
 cutlist-bands-tip = Click an edge to band it: the long edges are at the bottom and top, the short ones at the sides.
 cutlist-cut-size = Cut at { $length } × { $width } (less the edge band)
+cutlist-numbers = Numbers on the model
+cutlist-numbers-tip = Show each part's number on the model while the Cut List is open.
+cutlist-labels = Labels…
+cutlist-labels-tip = A PDF of part labels, one per piece: number, name, size, material, banded edges and grain. A4, 3 × 8 labels of 70 × 37 mm.
+cutlist-label-copy = { $name } ({ $n }/{ $total })
+cutlist-label-cut = cut { $length } × { $width }
 
 unfold-title = Unfold
 unfold-selection = Selection

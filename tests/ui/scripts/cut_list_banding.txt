@@ -25,4 +25,13 @@ expect script=Some((true, "298.0
 action cut_list_tab diagrams
 wait 5
 screenshot shots/cut_list_banding_diagram.bmp
+# part numbers on the model while the window is open; labels as a PDF
+action script cut_part("Side", #{ grain: "any" });
+view iso
+zoom_extents
+panpx 300 0
+wait 10
+screenshot shots/cut_list_numbers.bmp
+action export_cut_labels cut_list_labels.pdf
+wait 5
 quit

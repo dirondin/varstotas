@@ -2853,6 +2853,12 @@ cutlist-banding = Кромка { $thickness } для дэталей { $width }: 
 cutlist-col-bands = Кромка
 cutlist-bands-tip = Пстрыкніце кромку, каб абліцаваць яе: доўгія кромкі знізу і зверху, кароткія па баках.
 cutlist-cut-size = Рэз { $length } × { $width } (без кромкі)
+cutlist-numbers = Нумары на мадэлі
+cutlist-numbers-tip = Паказваць нумар кожнай дэталі на мадэлі, пакуль адкрыты раскрой.
+cutlist-labels = Этыкеткі…
+cutlist-labels-tip = PDF з этыкеткамі, па адной на кожную дэталь: нумар, імя, памер, матэрыял, абліцаваныя кромкі і кірунак валокнаў. A4, 3 × 8 этыкетак 70 × 37 мм.
+cutlist-label-copy = { $name } ({ $n }/{ $total })
+cutlist-label-cut = рэз { $length } × { $width }
 
 unfold-title = Разгортка
 unfold-selection = Вылучэнне

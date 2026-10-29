@@ -2864,6 +2864,12 @@ cutlist-banding = Кромка { $thickness } для деталей { $width }: 
 cutlist-col-bands = Кромка
 cutlist-bands-tip = Щёлкните кромку, чтобы облицевать её: длинные кромки снизу и сверху, короткие по бокам.
 cutlist-cut-size = Рез { $length } × { $width } (за вычетом кромки)
+cutlist-numbers = Номера на модели
+cutlist-numbers-tip = Показывать номер каждой детали на модели, пока открыт раскрой.
+cutlist-labels = Этикетки…
+cutlist-labels-tip = PDF с этикетками, по одной на каждую деталь: номер, имя, размер, материал, облицованные кромки и направление волокон. A4, 3 × 8 этикеток 70 × 37 мм.
+cutlist-label-copy = { $name } ({ $n }/{ $total })
+cutlist-label-cut = рез { $length } × { $width }
 
 unfold-title = Развёртка
 unfold-selection = Выделение

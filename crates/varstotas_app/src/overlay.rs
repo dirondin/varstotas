@@ -30,6 +30,8 @@ pub enum Marker2d {
     CursorTooltip { text: String },
     /// Text label anchored at a world point (e.g. dimension readout).
     Label { at: DVec3, text: String },
+    /// A round badge centred on a world point (cut-list part numbers).
+    Badge { at: DVec3, text: String },
     /// Screen-space rectangle (selection window). Dashed = crossing selection.
     ScreenRect { min: Pos2, max: Pos2, dashed: bool, color: Color32 },
     /// Screen-space line.
@@ -74,6 +76,11 @@ impl OverlayPainter<'_> {
                 Marker2d::Label { at, text } => {
                     if let Some(p) = self.to_screen(*at) {
                         tooltip(self.painter, p + vec2(6.0, -22.0), text);
+                    }
+                }
+                Marker2d::Badge { at, text } => {
+                    if let Some(p) = self.to_screen(*at) {
+                        badge(self.painter, p, text);
                     }
                 }
                 Marker2d::ScreenRect { min, max, dashed, color } => {
@@ -231,6 +238,15 @@ pub fn tooltip(painter: &Painter, at: Pos2, text: &str) {
         egui::StrokeKind::Middle,
     );
     painter.galley(r.min + vec2(5.0, 3.0), galley, Color32::BLACK);
+}
+
+/// A number in a dark rounded badge centred on `at`.
+pub fn badge(painter: &Painter, at: Pos2, text: &str) {
+    let galley = painter.layout_no_wrap(text.to_string(), FontId::proportional(12.0), Color32::WHITE);
+    let size = galley.size();
+    let r = Rect::from_center_size(at, vec2((size.x + 10.0).max(size.y + 6.0), size.y + 6.0));
+    painter.rect(r, r.height() * 0.5, Color32::from_rgb(0x8A, 0x3A, 0x18), Stroke::new(1.0, Color32::WHITE), egui::StrokeKind::Middle);
+    painter.galley(at - size * 0.5, galley, Color32::WHITE);
 }
 
 /// Text helper used by the viewport HUD.

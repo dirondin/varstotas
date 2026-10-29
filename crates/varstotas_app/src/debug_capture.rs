@@ -1517,8 +1517,12 @@ impl VarstotasApp {
             self.export_unfold(std::path::Path::new(path.trim()));
             return;
         }
-        // Cut list: `export_cut_list <path>` (pdf / svg / csv), `cut_list_tab parts|diagrams`,
+        // Cut list: `export_cut_list <path>` (pdf / svg / csv), `export_cut_labels <path>` (PDF), `cut_list_tab parts|diagrams`,
         // `cut_list_page N` (from 1), `cut_list_pick N`: select part N (from 1) as a click does.
+        if let Some(path) = name.strip_prefix("export_cut_labels ") {
+            self.export_cut_labels(std::path::Path::new(path.trim()));
+            return;
+        }
         if let Some(path) = name.strip_prefix("export_cut_list ") {
             self.export_cut_list(std::path::Path::new(path.trim()));
             return;

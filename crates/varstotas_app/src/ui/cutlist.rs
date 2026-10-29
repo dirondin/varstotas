@@ -13,7 +13,7 @@ use std::path::Path;
 use std::rc::Rc;
 use varstotas_i18n::tr;
 use varstotas_kernel::cutlist::{CutPlan, CutSettings, Issue, Offcut, PartGrain, PartOptions, Stock, StockKind, StockPlan, plan_csv, plan_with};
-use varstotas_kernel::glam::DVec2;
+use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::layout::SheetCutDiagram;
 use varstotas_kernel::{EntityRef, LengthUnit, MaterialId, Model};
 
@@ -40,6 +40,10 @@ pub struct CutListState {
     cache: Option<((u64, u64), Rc<CutPlan>)>,
     /// Offcuts were kept at this model version: the plan shown stays as it was cut.
     kept: Option<u64>,
+    /// The part numbers are not shown on the model.
+    pub hide_numbers: bool,
+    /// Where the part numbers go on the model, at this model version and plan.
+    numbers: Option<(u64, Vec<(DVec3, usize)>)>,
     /// Settings being dragged (committed when the pointer is released).
     draft: Option<CutSettings>,
     /// Stock being edited in the Material Editor (committed when the pointer is released or a
@@ -247,6 +251,84 @@ fn page_drawing(plan: &CutPlan, settings: &CutSettings, page: &Page, total: usiz
     (d, hits)
 }
 
+/// Label sheet: A4 portrait, 3 × 8 labels of 70 × 37 mm (the common 24-up sheet).
+const LABEL_PAGE: DVec2 = DVec2::new(210.0, 297.0);
+const LABEL: DVec2 = DVec2::new(70.0, 37.0);
+const LABEL_COLS: usize = 3;
+const LABEL_ROWS: usize = 8;
+
+/// `s` cut to about `width` mm at text `size`.
+fn fit_text(s: &str, size: f64, width: f64) -> String {
+    let max = (width / (size * 0.55)).floor() as usize;
+    if s.chars().count() <= max { s.to_string() } else { format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>()) }
+}
+
+/// One label per piece to cut (left-out parts have none): its number, name and copy, size,
+/// material and, on the right, the part's outline with its banded edges and the grain.
+fn label_pages(plan: &CutPlan, settings: &CutSettings, unit: LengthUnit, doc: &str) -> Vec<Drawing> {
+    let mut pages: Vec<Drawing> = Vec::new();
+    let per = LABEL_COLS * LABEL_ROWS;
+    let top = (LABEL_PAGE.y - LABEL.y * LABEL_ROWS as f64) * 0.5;
+    let mut n = 0;
+    for (i, p) in plan.parts.iter().enumerate() {
+        let o = settings.options(&p.name);
+        if o.exclude {
+            continue;
+        }
+        for copy in 0..p.count {
+            if n % per == 0 {
+                pages.push(Drawing { size: LABEL_PAGE, ..Default::default() });
+            }
+            let Some(d) = pages.last_mut() else { break };
+            let slot = n % per;
+            n += 1;
+            let at = DVec2::new((slot % LABEL_COLS) as f64 * LABEL.x, top + (slot / LABEL_COLS) as f64 * LABEL.y);
+            rect_lines(d, at, at + LABEL, Pen::Hidden);
+            let x = at.x + 4.0;
+            let number = (i + 1).to_string();
+            text(d, DVec2::new(x, at.y + 10.0), 7.0, number.clone(), true);
+            let nx = x + number.chars().count() as f64 * 4.0 + 2.0;
+            let title = if p.count > 1 { tr!("cutlist-label-copy", name = p.name.clone(), n = copy + 1, total = p.count) } else { p.name.clone() };
+            text(d, DVec2::new(nx, at.y + 9.0), 3.4, fit_text(&title, 3.4, at.x + 42.0 - nx), true);
+            text(d, DVec2::new(x, at.y + 18.0), 3.2, format!("{} × {} × {}", dim(p.size[0], unit), dim(p.size[1], unit), dim(p.size[2], unit)), true);
+            let cut = settings.cut_size(&p.name, p.size);
+            if cut != p.size {
+                text(d, DVec2::new(x, at.y + 23.0), 2.5, tr!("cutlist-label-cut", length = dim(cut[0], unit), width = dim(cut[1], unit)), true);
+            }
+            let material = if p.material_name.is_empty() { tr!("cutlist-no-material") } else { p.material_name.clone() };
+            text(d, DVec2::new(x, at.y + 28.0), 2.6, fit_text(&material, 2.6, 38.0), true);
+            text(d, DVec2::new(x, at.y + LABEL.y - 3.5), 2.0, fit_text(doc, 2.0, 38.0), true);
+            // the part to scale in a 20 × 14 box, length across
+            let k = (20.0 / p.size[0].max(1.0)).min(14.0 / p.size[1].max(1.0));
+            let (w, h) = ((p.size[0] * k).max(3.0), (p.size[1] * k).max(3.0));
+            let c = DVec2::new(at.x + LABEL.x - 15.0, at.y + LABEL.y * 0.5);
+            let (a, b) = (c - DVec2::new(w, h) * 0.5, c + DVec2::new(w, h) * 0.5);
+            rect_lines(d, a, b, Pen::Edge);
+            let i = 0.7;
+            let (lo, hi) = (a + DVec2::splat(i), b - DVec2::splat(i));
+            let sides = [(DVec2::new(lo.x, hi.y), hi), (lo, DVec2::new(hi.x, lo.y)), (lo, DVec2::new(lo.x, hi.y)), (DVec2::new(hi.x, lo.y), hi)];
+            for (e, on) in sides.into_iter().zip(o.bands) {
+                if on {
+                    d.lines.push((e.0, e.1, Pen::Section));
+                }
+            }
+            // the grain: an arrow along the length or across it
+            let dir = match o.grain {
+                PartGrain::Length => Some(DVec2::X * (w * 0.35)),
+                PartGrain::Width => Some(DVec2::Y * (h * 0.35)),
+                PartGrain::Any => None,
+            };
+            if let Some(v) = dir {
+                let (s0, s1) = (c - v, c + v);
+                let head = v.normalize() * 1.5;
+                let side = DVec2::new(-head.y, head.x);
+                d.lines.extend([(s0, s1, Pen::Edge), (s1, s1 - head + side * 0.6, Pen::Edge), (s1, s1 - head - side * 0.6, Pen::Edge)]);
+            }
+        }
+    }
+    pages
+}
+
 impl VarstotasApp {
     /// The cut list of the model, cached until it changes.
     pub(crate) fn cut_plan(&mut self) -> Rc<CutPlan> {
@@ -334,6 +416,31 @@ impl VarstotasApp {
         }
     }
 
+    /// Write a PDF of part labels (A4, 24 per page) to `path`.
+    pub(crate) fn export_cut_labels(&mut self, path: &Path) {
+        let plan = self.cut_plan();
+        let pages = label_pages(&plan, &self.doc.model.cut_list, self.doc.model.unit, &self.doc.display_name());
+        match varstotas_kernel::io::atomic_write(path, crate::vector_export::to_pdf_pages(&pages)) {
+            Ok(()) => self.flash(tr!("cutlist-exported", path = path.display().to_string())),
+            Err(e) => self.flash_error(tr!("cutlist-export-failed", error = e.to_string())),
+        }
+    }
+
+    fn cut_labels_save(&mut self) {
+        let Some(mut path) = rfd::FileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            // i18n-ignore-next
+            .set_file_name(format!("{} labels.pdf", self.doc.display_name()))
+            .save_file()
+        else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("pdf");
+        }
+        self.export_cut_labels(&path);
+    }
+
     fn cut_list_save(&mut self, ext: &str) {
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
@@ -364,6 +471,32 @@ impl VarstotasApp {
         let parts = c.parts.iter().filter(|(_, o)| o.bands.iter().any(|&b| b)).map(|(n, o)| (n.clone(), o.bands)).collect();
         let total = model_plan(&self.doc.model).banding.iter().map(|b| b.length).sum::<f64>();
         (parts, total.round() as i64)
+    }
+
+    /// Part numbers on the model while the Cut List is open: one badge at the centre of each
+    /// copy of a part (not of left-out ones).
+    pub(crate) fn cut_numbers_overlay(&mut self, out: &mut Vec<crate::overlay::Marker2d>) {
+        if !self.cutlist.open || self.cutlist.hide_numbers {
+            return;
+        }
+        let v = self.doc.model_version;
+        if self.cutlist.numbers.as_ref().is_none_or(|n| n.0 != v) {
+            let plan = self.cut_plan();
+            let m = &self.doc.model;
+            let mut at = Vec::new();
+            for (i, p) in plan.parts.iter().enumerate().filter(|(_, p)| !m.cut_list.options(&p.name).exclude) {
+                for path in &p.paths {
+                    let Some((&id, parent)) = path.split_last() else { continue };
+                    if let Some(b) = m.instance_world_bounds(parent, id) {
+                        at.push(((b.min + b.max) * 0.5, i));
+                    }
+                }
+            }
+            self.cutlist.numbers = Some((v, at));
+        }
+        if let Some((_, at)) = &self.cutlist.numbers {
+            out.extend(at.iter().map(|(p, i)| crate::overlay::Marker2d::Badge { at: *p, text: (i + 1).to_string() }));
+        }
     }
 
     /// Select the copies of part `i` (those in the same group as its first copy).
@@ -473,6 +606,10 @@ impl VarstotasApp {
             let on_hand: usize = self.prefs.offcuts.iter().map(|o| o.count).sum();
             if on_hand > 0 {
                 ui.checkbox(&mut self.prefs.use_offcuts, tr!("cutlist-use-offcuts", n = on_hand)).on_hover_text(tr!("cutlist-use-offcuts-tip"));
+            }
+            let mut show = !self.cutlist.hide_numbers;
+            if ui.checkbox(&mut show, tr!("cutlist-numbers")).on_hover_text(tr!("cutlist-numbers-tip")).changed() {
+                self.cutlist.hide_numbers = !show;
             }
             let kept = self.cutlist.kept == Some(self.doc.model_version);
             let r = ui.add_enabled(!plan.plans.is_empty() && !kept, egui::Button::new(tr!("cutlist-keep")));
@@ -634,6 +771,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(40.0, 40.0);
         let mut open = true;
         let mut save: Option<&str> = None;
+        let mut labels = false;
         let win = self.placed(egui::Window::new(tr!("cutlist-title")).id(egui::Id::new("cutlist_window")).open(&mut open).collapsible(false).resizable(false), pos);
         win.show(ctx, |ui| {
             ui.set_width(640.0);
@@ -653,6 +791,10 @@ impl VarstotasApp {
             ui.add_space(6.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_enabled_ui(!plan.parts.is_empty(), |ui| {
+                    let r = ui.button(RichText::new(tr!("cutlist-labels")).strong());
+                    if r.on_hover_text(tr!("cutlist-labels-tip")).clicked() {
+                        labels = true;
+                    }
                     for (ext, need_plans) in [("csv", false), ("svg", true), ("pdf", true)] {
                         let on = !need_plans || !plan.plans.is_empty();
                         if ui.add_enabled(on, egui::Button::new(RichText::new(format!("{}…", ext.to_uppercase())).strong())).clicked() {
@@ -668,6 +810,9 @@ impl VarstotasApp {
         }
         if let Some(ext) = save {
             self.cut_list_save(ext);
+        }
+        if labels {
+            self.cut_labels_save();
         }
     }
 

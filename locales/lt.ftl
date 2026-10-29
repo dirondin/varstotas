@@ -2812,6 +2812,12 @@ cutlist-banding = Briaunų juosta { $thickness } { $width } detalėms: { $metres
 cutlist-col-bands = Juosta
 cutlist-bands-tip = Spustelėkite briauną, kad ją apklijuotumėte: ilgosios briaunos apačioje ir viršuje, trumposios šonuose.
 cutlist-cut-size = Pjauti { $length } × { $width } (be juostos)
+cutlist-numbers = Numeriai modelyje
+cutlist-numbers-tip = Rodyti kiekvienos detalės numerį modelyje, kol atidarytas pjovimo planas.
+cutlist-labels = Etiketės…
+cutlist-labels-tip = Detalių etikečių PDF, po vieną kiekvienai detalei: numeris, pavadinimas, dydis, medžiaga, apklijuotos briaunos ir pluošto kryptis. A4, 3 × 8 etiketės po 70 × 37 mm.
+cutlist-label-copy = { $name } ({ $n }/{ $total })
+cutlist-label-cut = pjauti { $length } × { $width }
 
 unfold-title = Išklotinė
 unfold-selection = Pasirinkimas

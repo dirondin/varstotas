@@ -80,7 +80,8 @@ Clicking a part on a diagram selects it in the model, and the other way round.
 
 Status (2026-10-29): edge banding done (per-part edges clicked in Cut List → Parts, drawn on the
 diagrams, metres and cost per part thickness, optionally subtracted from the cut size; CSV, Rhai,
-Python). Labels and hardware to do.
+Python). Part numbers on the model while the Cut List is open, and a labels PDF (A4, 3 × 8 of
+70 × 37 mm, one per piece). Hardware to do.
 
 - Edge banding per part edge (which of the four edges, band thickness), shown on diagrams and
   summed into metres of banding to buy. Banding thickness optionally subtracted from the cut
