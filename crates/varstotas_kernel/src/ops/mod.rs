@@ -6,7 +6,7 @@ mod intersect;
 mod offset;
 mod push_pull;
 mod slice;
-mod solid;
+pub(crate) mod solid;
 mod transform;
 
 pub use chamfer::{ChamferKind, ChamferResult};

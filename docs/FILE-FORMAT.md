@@ -47,8 +47,12 @@ stores `cut_list`: `{ "kerf", "trim", "min_offcut", "tolerance", "band", "band_s
 short], "hardware", "price" } }, "extras": [{ "name", "count", "price" }] }` (`band` is the edge band
 thickness, default 1 mm; `bands` the banded edges, omitted when none; `hardware` parts are bought at
 `price` each rather than cut; `extras` is hardware listed by hand). A sheet (track D) optionally stores `cut_diagrams`:
-`[{ "min", "size", "page" }]`, a page of the cut list fitted into that rectangle. Both are omitted while empty or default, so older
-readers and files are unaffected.
+`[{ "min", "size", "page" }]`, a page of the cut list fitted into that rectangle. The model optionally
+stores `joints`: `[{ "kind": "Dowels" | "Screws" | "Housing" | "MortiseTenon", "a", "b", "count",
+"diameter", "depth", "depth_b", "thickness", "shoulder", "through", "clearance" }]` (`a` and `b` are
+instance paths, `b` the part whose end meets `a`; sizes in mm), and `joint_bases`: `[[def id, mesh]]`,
+the joined parts' geometry from before any joint, which the joints are cut into again on every change.
+All are omitted while empty or default, so older readers and files are unaffected.
 
 Scenes optionally store the independent `style.triangles` display checkbox (default false).
 

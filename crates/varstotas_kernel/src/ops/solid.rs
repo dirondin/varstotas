@@ -320,6 +320,26 @@ fn boolean(a: (&Mesh, &DMat4, Option<MaterialId>), b: (&Mesh, &DMat4, Option<Mat
     r
 }
 
+/// `mesh` placed by `xf` with the solid `tool` placed by `txf` added (`add`) or taken away, back
+/// in the mesh's own frame; `None` when the result is empty or `xf` cannot be inverted.
+pub(crate) fn mesh_boolean(mesh: &Mesh, xf: &DMat4, tool: &Mesh, txf: &DMat4, add: bool) -> Option<Mesh> {
+    let mut r = boolean((mesh, xf, None), (tool, txf, None), if add { Bool::Union } else { Bool::Minus });
+    let inv = xf.inverse();
+    if r.faces.is_empty() || !inv.is_finite() {
+        return None;
+    }
+    let ids: Vec<VertexId> = r.vertices.keys().collect();
+    for v in ids {
+        let p = inv.transform_point3(r.vertices[v].pos);
+        r.v_set_pos(v, p);
+    }
+    for f in r.faces.values_mut() {
+        f.normal = inv.transform_vector3(f.normal).normalize_or(f.normal);
+    }
+    r.rebuild_caches();
+    Some(r)
+}
+
 impl Model {
     /// Solid `inst` of the context `path`: its mesh, transform and material.
     fn solid_of(&self, path: &[InstanceId], inst: InstanceId) -> OpResult<(Mesh, DMat4, Instance)> {

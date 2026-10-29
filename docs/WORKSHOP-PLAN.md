@@ -95,6 +95,15 @@ hand in the Hardware tab, and the total cost covers stock, banding and hardware.
 
 ## Batch 3: joinery
 
+Status (2026-10-29): first part done. Window → Joinery: select two groups or components that
+touch, pick dowels, screws, a housing (dado or rabbet) or a mortise and tenon (blind or through)
+and add the joint; its sizes default from the boards and are edited in the list, the parts can be
+swapped, and deleting the joint gives the parts their shape back. The joint is a document object
+(`Model::joints`); the parts' geometry from before any joint is kept (`joint_bases`) and every
+change cuts all the joints again. Joined copies of a component are made unique. Dowels and screws
+go into the cut list's hardware, priced by name in the Hardware tab. Left: box joint, dovetail,
+pocket hole, hole positions on the diagrams, a Rhai / Python API.
+
 A Joint tool: pick two parts that touch, or an edge between them, then choose a joint:
 
 - butt joints: screws, confirmat or dowels (holes drilled in both parts);
@@ -133,4 +142,4 @@ appears on the diagrams as hole positions.
 - Non-guillotine packing as an option for CNC routers.
 - Stock units in inches and imperial board sizes (4 × 8 ft) for US users. At least the presets.
 - Whether a joint is a document object of its own (like a generator) or an attribute of the
-  part pair. To be decided in batch 3.
+  part pair. Decided in batch 3: a document object, `Model::joints`.

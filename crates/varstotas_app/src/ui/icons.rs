@@ -143,6 +143,8 @@ pub enum Icon {
     Unfold,
     /// Window → Cut List: a sheet with parts laid out on it.
     CutList,
+    /// Window → Joinery: a shelf held in a side by dowels.
+    Joinery,
     /// Window → Physics: a box falling onto a block.
     Physics,
     UvEditor,

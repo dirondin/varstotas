@@ -1041,6 +1041,16 @@ pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSetting
             plans.push(plan(choice[0], layouts));
         }
     }
+    // dowels and screws of the joints, priced by name like hardware parts
+    for j in &model.joints {
+        let c = crate::joinery::contact(model, &j.a, &j.b);
+        if let Some((name, count)) = j.hardware(c.as_ref()) {
+            match hardware.iter_mut().find(|h| h.name == name && h.extra.is_none()) {
+                Some(h) => h.count += count,
+                None => hardware.push(HardwareRow { price: settings.options(&name).price, name, count, extra: None }),
+            }
+        }
+    }
     hardware.extend(settings.extras.iter().enumerate().map(|(i, e)| HardwareRow { name: e.name.clone(), count: e.count, price: e.price, extra: Some(i) }));
     CutPlan { parts: finished, plans, issues, banding, hardware }
 }

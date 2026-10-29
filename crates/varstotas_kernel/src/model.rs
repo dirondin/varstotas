@@ -429,6 +429,12 @@ pub struct Model {
     /// Cut-list settings (see [`crate::cutlist`]).
     #[serde(default, skip_serializing_if = "crate::cutlist::CutSettings::is_default")]
     pub cut_list: crate::cutlist::CutSettings,
+    /// Joints between parts (see [`crate::joinery`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joints: Vec<crate::joinery::WoodJoint>,
+    /// The geometry of joined parts from before any joint, by definition.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joint_bases: Vec<(DefId, Mesh)>,
 }
 
 /// Result of a model-wide ray pick.
@@ -481,6 +487,8 @@ impl Model {
             generators: Default::default(),
             preview: None,
             cut_list: Default::default(),
+            joints: Vec::new(),
+            joint_bases: Vec::new(),
         }
     }
 
@@ -1172,6 +1180,9 @@ impl Model {
     pub fn rebuild_caches(&mut self) {
         for d in self.defs.values_mut() {
             d.mesh.rebuild_caches();
+        }
+        for (_, m) in &mut self.joint_bases {
+            m.rebuild_caches();
         }
     }
 }

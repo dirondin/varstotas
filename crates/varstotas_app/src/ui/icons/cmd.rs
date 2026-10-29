@@ -353,6 +353,14 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             rect(pen, (2.5, 13.8), (8.0, 19.0), WOOD, pen.thin());
             pen.line_c(&[(11.4, 2.5), (11.4, 21.5)], Stroke::new(W * pen.s, ORANGE));
         }
+        Icon::Joinery => {
+            // a side standing up, a shelf meeting it, the dowels across the joint
+            rect(pen, (3.0, 2.5), (9.0, 21.5), WOOD, pen.stroke());
+            rect(pen, (9.0, 10.0), (21.5, 15.0), WOOD, pen.stroke());
+            for y in [11.4, 13.6] {
+                pen.line_c(&[(5.5, y), (13.5, y)], Stroke::new(W * pen.s, ORANGE));
+            }
+        }
         Icon::UvEditor => {
             // a checkered tile with an island laid on it: four corners joined by the accent
             rect(pen, (3.0, 3.0), (21.0, 21.0), FILL, pen.thin());

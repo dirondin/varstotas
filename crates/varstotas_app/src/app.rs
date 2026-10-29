@@ -285,6 +285,7 @@ pub enum Action {
     Unfold,
     /// Window → Cut List.
     CutList,
+    Joinery,
     /// Window → Physics: drop the selected groups / components.
     Physics,
     /// Window → Materials Online Library: the online materials window.
@@ -598,6 +599,7 @@ pub struct VarstotasApp {
     pub(crate) unfold: crate::ui::unfold::UnfoldState,
     /// Window → Cut List window.
     pub(crate) cutlist: crate::ui::cutlist::CutListState,
+    pub(crate) joinery: crate::ui::joinery::JoineryState,
     /// Window → Physics window and its run.
     pub(crate) physics: crate::ui::physics::PhysicsState,
     /// Window → Sheets window.
@@ -781,6 +783,7 @@ impl VarstotasApp {
             text3d_dialog: None,
             unfold: Default::default(),
             cutlist: Default::default(),
+            joinery: Default::default(),
             physics: Default::default(),
             sheets: Default::default(),
             planes_window: Default::default(),
@@ -1429,6 +1432,7 @@ impl VarstotasApp {
             Action::ExportDrawing => self.vector_dialog = Some(self.vector_opts),
             Action::Unfold => self.unfold.open = true,
             Action::CutList => self.cutlist.open = true,
+            Action::Joinery => self.joinery.open = true,
             Action::Physics => self.physics.open = true,
             Action::OnlineMaterials => self.online.open = !self.online.open,
             Action::UvEditor => self.open_uv_editor(),
@@ -2672,6 +2676,7 @@ impl eframe::App for VarstotasApp {
         self.unfold_window(&ctx);
         self.sync_offcuts();
         self.cut_list_window(&ctx);
+        self.joinery_window(&ctx);
         self.physics_window(&ctx);
         self.sheets_window(&ctx);
         self.work_planes_window(&ctx);

@@ -1,0 +1,28 @@
+# Joinery: a shelf meeting a cabinet side. Both selected, Add joint makes dowels sized for the
+# boards (in the cut list's hardware); swap and delete by the list's buttons; a housing next.
+action script let s = box(vec3(0, 0, 0), 18, 300, 800); s.name = "Side"; let h = box(vec3(18, 0, 400), 500, 300, 18); h.name = "Shelf";
+action console_close
+wait 5
+action joinery
+select_all
+wait 10
+action click_spot joinery:add
+wait 10
+expect joints=[("Dowels", "Shelf", "Side", "3 × Dowel Ø8 × 40")]
+expect hardware=[("Dowel Ø8 × 40", 3, "0.00")]
+zoom_extents
+wait 5
+screenshot shots/joinery_dowels.bmp
+action click_spot joinery:swap:0
+wait 10
+expect joints=[("Dowels", "Side", "Shelf", "3 × Dowel Ø8 × 40")]
+action click_spot joinery:remove:0
+wait 10
+expect joints=[]
+select_all
+action joint_kind housing
+action add_joint
+wait 10
+expect joints=[("Housing", "Shelf", "Side", "")]
+screenshot shots/joinery_housing.bmp
+quit
