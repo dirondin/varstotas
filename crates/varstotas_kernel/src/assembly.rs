@@ -125,12 +125,11 @@ pub fn suggest_steps(model: &Model) -> Vec<Step> {
     steps
 }
 
-/// The exploded view's offsets for `distance` (world, mm), from the assembled model: each part
-/// moves away from the parts it touches (a side away from the shelf, the top and bottom away
-/// from the sides); a part held on opposite sides (a shelf between two sides) slides out along
-/// a free axis, away from the middle (a back panel backwards) or else to the front. All is
-/// then lifted so that nothing goes below the model's bottom (the floor it stands on).
-pub fn explode_offsets(model: &Model, distance: f64) -> Vec<(ContextPath, DVec3)> {
+/// The way each part leaves the assembled model in the exploded view (unit vectors, world):
+/// away from the parts it touches (a side away from the shelf, the top and bottom away from
+/// the sides); a part held on opposite sides (a shelf between two sides) slides out along a
+/// free axis, away from the middle (a back panel backwards) or else to the front.
+pub fn explode_dirs(model: &Model) -> Vec<(ContextPath, DVec3)> {
     let paths: Vec<ContextPath> = parts(model).into_iter().map(|p| p.0).collect();
     let boxes: Vec<Option<(DVec3, DVec3)>> = paths.iter().map(|p| bounds(model, p)).collect();
     let (lo, hi) = boxes.iter().flatten().fold((DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)), |(a, b), (l, h)| (a.min(*l), b.max(*h)));
@@ -166,12 +165,22 @@ pub fn explode_offsets(model: &Model, distance: f64) -> Vec<(ContextPath, DVec3)
                 DVec3::ONE - blocked[k]
             };
         }
-        out.push((path.clone(), dir.normalize_or_zero() * distance));
+        out.push((path.clone(), dir.normalize_or_zero()));
     }
+    out
+}
+
+/// The exploded view's offsets for `distance` (world, mm), from the assembled model: each part
+/// `distance` along [`explode_dirs`], all then lifted so that nothing goes below the model's
+/// bottom (the floor it stands on).
+pub fn explode_offsets(model: &Model, distance: f64) -> Vec<(ContextPath, DVec3)> {
+    let mut out: Vec<(ContextPath, DVec3)> = explode_dirs(model).into_iter().map(|(p, d)| (p, d * distance)).collect();
+    let boxes: Vec<Option<(DVec3, DVec3)>> = out.iter().map(|(p, _)| bounds(model, p)).collect();
+    let floor = boxes.iter().flatten().map(|b| b.0.z).fold(f64::INFINITY, f64::min);
     let low = boxes.iter().zip(&out).filter_map(|(b, (_, o))| b.map(|b| b.0.z + o.z)).fold(f64::INFINITY, f64::min);
-    if low < lo.z {
+    if low < floor {
         for (_, o) in &mut out {
-            o.z += lo.z - low;
+            o.z += floor - low;
         }
     }
     out

@@ -41,7 +41,7 @@ expect bridge_confirm=1
 action bridge_confirm deny
 wait 5
 expect bridge_confirm=0
-expect bridge checks: 33 ok
+expect bridge checks: 38 ok
 expect undo=Some("Agent")
 expect defs=3 model_faces=32
 screenshot shots/bridge_check.bmp

@@ -112,8 +112,9 @@ TOOLS = [
     },
     {
         "name": "export",
-        "description": "Export the model; the format follows the extension: stl, obj, dxf, glb, 3mf, dae (COLLADA, images next to it), ply, csv (parts list), svg/pdf (2D drawing of the view), png (image). Overwriting a file asks the user.",
-        "inputSchema": _obj({"path": {"type": "string", "description": "Absolute path"}}, ["path"]),
+        "description": "Export the model; the format follows the extension: stl, obj, dxf, glb, 3mf, dae (COLLADA, images next to it), ply, csv (parts list), svg/pdf (2D drawing of the view), png (image). With `what` a workshop document instead: cut_list (pdf/svg/csv: cutting diagrams, parts, costs), labels (pdf: part labels), assembly (pdf: the assembly instructions booklet; set the steps first with suggest_steps() in run_script). Overwriting a file asks the user.",
+        "inputSchema": _obj({"path": {"type": "string", "description": "Absolute path"},
+                             "what": {"type": "string", "enum": ["model", "cut_list", "labels", "assembly"], "description": "What to export (default model)"}}, ["path"]),
         "annotations": {"destructiveHint": True},
     },
     {
@@ -181,7 +182,7 @@ class Server:
         if name in ("undo", "redo"):
             return text(self.bridge(name) or "nothing to %s" % name)
         if name in ("save", "export", "open"):
-            return text(self.bridge(name, **{k: v for k, v in a.items() if k == "path"}))
+            return text(self.bridge(name, **{k: v for k, v in a.items() if k == "path" or (k == "what" and name == "export")}))
         if name == "new_document":
             return text(self.bridge("new"))
         raise varstotas.VarstotasError("unknown tool %s" % name)

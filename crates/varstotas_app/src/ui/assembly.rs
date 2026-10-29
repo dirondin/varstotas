@@ -13,7 +13,7 @@ use std::path::Path;
 use varstotas_i18n::tr;
 use varstotas_kernel::assembly::{SceneAssembly, Step, suggest_steps};
 use varstotas_kernel::cutlist::CutPlan;
-use varstotas_kernel::glam::DVec2;
+use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{ContextPath, EntityRef, Model};
 use varstotas_render::Camera;
 
@@ -92,6 +92,36 @@ pub(crate) fn step_hardware(model: &Model, step: usize) -> Vec<String> {
     by.into_iter().map(|(name, n)| format!("{n} × {name}")).collect()
 }
 
+/// Arrows for a step's picture (screen points, tail and head): for each part it adds, from
+/// outside it, on the side it moved out to in the exploded view, to its face, the way it goes in.
+fn arrows(m: &Model, step: &Step, dirs: &[(ContextPath, DVec3)], gap: f64, cam: &Camera, px: DVec2) -> Vec<(DVec2, DVec2)> {
+    let mut out = Vec::new();
+    for path in &step.parts {
+        let Some((_, dir)) = dirs.iter().find(|(p, _)| p == path) else { continue };
+        let Some((&id, parent)) = path.split_last() else { continue };
+        let Some(b) = m.instance_world_bounds(parent, id) else { continue };
+        let face = (b.max - b.min).abs().dot(dir.abs()) * 0.5;
+        let c = (b.min + b.max) * 0.5;
+        let at = |k: f64| cam.world_to_screen(c + *dir * (face + gap * k), px);
+        if let (Some(tail), Some(head)) = (at(0.6), at(0.1)) {
+            out.push((tail, head));
+        }
+    }
+    out
+}
+
+fn draw_arrow(d: &mut Drawing, tail: DVec2, head: DVec2) {
+    let len = (head - tail).length();
+    if len < 6.0 {
+        return;
+    }
+    let u = (head - tail) / len;
+    let side = DVec2::new(-u.y, u.x);
+    d.lines.push((tail, head, Pen::Profile));
+    d.lines.push((head, head - u * 3.0 + side * 1.3, Pen::Profile));
+    d.lines.push((head, head - u * 3.0 - side * 1.3, Pen::Profile));
+}
+
 /// The booklet: a cover, the parts and hardware, a page per step. Pictures are drawn with
 /// `cam`, every step framed alike (by the whole model exploded as now).
 pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &str) -> Vec<Drawing> {
@@ -104,13 +134,27 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
     all.set_assembly_view(SceneAssembly { explode: view.explode, step: None });
     let whole = view_lines(&all, cam, px, &opts);
     // screen → paper, fitted to the whole model in `rect`
-    let fit_map = |lines: &crate::vector_export::ViewLines, (min, size): (DVec2, DVec2)| -> Option<(DVec2, f64)> {
+    let fit_map = |lines: &crate::vector_export::ViewLines, (min, size): (DVec2, DVec2), extra: &[DVec2]| -> Option<(DVec2, f64)> {
         let (lo, hi) = lines.bounds()?;
+        let (lo, hi) = extra.iter().fold((lo, hi), |(l, h), p| (l.min(*p), h.max(*p)));
         let ext = (hi - lo).max(DVec2::splat(1e-6));
         let k = (size.x / ext.x).min(size.y / ext.y);
         Some((min + size * 0.5 - (lo + hi) * 0.5 * k, k))
     };
-    let map = fit_map(&whole, rect);
+    // the steps' arrows (only with the model exploded), framed with the model
+    let dirs = varstotas_kernel::assembly::explode_dirs(model);
+    let step_arrows: Vec<Vec<(DVec2, DVec2)>> = (0..a.steps.len())
+        .map(|k| {
+            if view.explode <= 0.0 {
+                return Vec::new();
+            }
+            let mut m = model.clone();
+            m.set_assembly_view(SceneAssembly { explode: view.explode, step: Some(k) });
+            arrows(&m, &a.steps[k], &dirs, view.explode, cam, px)
+        })
+        .collect();
+    let ends: Vec<DVec2> = step_arrows.iter().flatten().flat_map(|&(t, h)| [t, h]).collect();
+    let map = fit_map(&whole, rect, &ends);
     let picture = |d: Drawing, lines: &crate::vector_export::ViewLines, map: Option<(DVec2, f64)>| match map {
         Some((off, k)) => lines.on_paper(d, move |p| off + p * k),
         None => d,
@@ -123,7 +167,7 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
     text(&mut d, DVec2::new(PAGE.x * 0.5, 28.0), 9.0, fit(doc, 9.0, PAGE.x - 2.0 * MARGIN), false);
     text(&mut d, DVec2::new(PAGE.x * 0.5, 40.0), 5.0, tr!("assembly-booklet-title"), false);
     let cover = (DVec2::new(MARGIN, 55.0), DVec2::new(PAGE.x - 2.0 * MARGIN, 190.0));
-    let mut d = picture(d, &whole, fit_map(&whole, cover));
+    let mut d = picture(d, &whole, fit_map(&whole, cover, &[]));
     let count: usize = plan.parts.iter().map(|p| p.count).sum();
     text(&mut d, DVec2::new(PAGE.x * 0.5, 262.0), 4.0, tr!("assembly-booklet-summary", steps = a.steps.len(), parts = count), false);
     pages.push(d);
@@ -161,7 +205,7 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
     }
     pages.push(d);
 
-    // a page per step
+    // a page per step, arrows showing where its parts go
     let n = a.steps.len();
     for (k, step) in a.steps.iter().enumerate() {
         let mut m = model.clone();
@@ -171,6 +215,11 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
         let mut d = blank();
         text(&mut d, DVec2::new(MARGIN, 22.0), 7.0, tr!("assembly-booklet-step", n = k + 1, total = n), true);
         let mut d = picture(d, &lines, map);
+        if let Some((off, scale)) = map {
+            for &(t, h) in &step_arrows[k] {
+                draw_arrow(&mut d, off + t * scale, off + h * scale);
+            }
+        }
         let mut y = rect.0.y + rect.1.y + 12.0;
         let block = |d: &mut Drawing, head: String, items: Vec<String>, y: &mut f64| {
             if items.is_empty() {

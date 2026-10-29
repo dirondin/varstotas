@@ -276,9 +276,11 @@ class Model:
         """Save the document (to `path`, or its current file). Overwriting another file asks the user."""
         return self.request("save", **({"path": os.path.abspath(path)} if path else {}))
 
-    def export(self, path):
-        """Export by extension: stl, obj, dxf, glb, 3mf, dae, ply, csv, svg, pdf, png."""
-        return self.request("export", path=os.path.abspath(path))
+    def export(self, path, what="model"):
+        """Export by extension: stl, obj, dxf, glb, 3mf, dae, ply, csv, svg, pdf, png. `what` picks a
+        workshop document instead of the model: "cut_list" (pdf, svg, csv), "labels" (pdf, part
+        labels) or "assembly" (pdf, the assembly instructions)."""
+        return self.request("export", path=os.path.abspath(path), what=what)
 
     def open(self, path):
         """Open a .vrst file (asks the user when the current document has changes)."""

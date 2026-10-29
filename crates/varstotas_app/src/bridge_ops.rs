@@ -463,6 +463,32 @@ impl VarstotasApp {
             "export" => {
                 let Some(path) = s("path").map(PathBuf::from) else { return done(Err("missing path".into()));
                 };
+                // the workshop documents: the cut list (pdf / svg / csv), its labels, the
+                // assembly instructions (pdf)
+                if let Some(what) = s("what").filter(|w| *w != "model") {
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+                    let formats: &[&str] = match what {
+                        "cut_list" => &["pdf", "svg", "csv"],
+                        "labels" | "assembly" => &["pdf"],
+                        _ => return done(Err(format!("unknown export {what}: model, cut_list, labels or assembly"))),
+                    };
+                    if !formats.contains(&ext.as_str()) {
+                        return done(Err(format!("{what} exports as .{}", formats.join(", ."))));
+                    }
+                    if !confirmed && path.exists() {
+                        return Reply::Confirm(format!("Overwrite existing export files\n{}", path.display()), Some(HashSet::from([path])));
+                    }
+                    self.flash = None;
+                    match what {
+                        "cut_list" => self.export_cut_list(&path),
+                        "labels" => self.export_cut_labels(&path),
+                        _ => self.export_assembly(&path),
+                    }
+                    return match &self.flash {
+                        Some((_, _, false)) => done(Ok(json!(path.to_string_lossy()))),
+                        _ => done(Err(self.flash_text("export failed"))),
+                    };
+                }
                 let files = varstotas_kernel::io::export_bundle(&self.doc.model, &path);
                 let collisions: Vec<_> = files
                     .as_ref()

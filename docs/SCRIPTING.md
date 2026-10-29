@@ -147,7 +147,8 @@ in Window → Cut List, with diagrams and PDF / SVG / CSV export.
 
 The exploded view moves each part away from the parts it touches and lifts the whole so nothing
 goes below the floor. Joints and the cut list keep working from the assembled model while it is
-exploded. Window → Assembly does the same and writes the instructions booklet (PDF).
+exploded. Window → Assembly does the same and writes the instructions booklet (PDF); from
+Python, `m.export(path, what="assembly")`.
 
 ## Example
 ```rhai
@@ -189,7 +190,7 @@ print(m.bounds(m.groups())["size"])   # vec3(1200, 800, 30)
 - A Rhai map arrives as a `dict`, `()` as `None`. A Varstotas error raises `varstotas.VarstotasError`.
 - A call outside `operation()` is a separate Undo step, "Python".
 - `m.rhai(code, **vars)` runs Rhai code in a single call; keyword arguments become variables. This is faster for big loops.
-- Application: `m.info()` (document summary), `m.undo()` / `m.redo()`, `m.view("iso" | "top" | … | "zoom_extents")`, `m.camera(eye=…, target=…, parallel=True)`, `m.screenshot(path=None, width=…, height=…)` (path to a PNG), `m.save(path=None)`, `m.export(path)` (format by extension: stl, obj, dxf, glb, 3mf, csv, svg, pdf, png), `m.open(path)`, `m.new()`.
+- Application: `m.info()` (document summary), `m.undo()` / `m.redo()`, `m.view("iso" | "top" | … | "zoom_extents")`, `m.camera(eye=…, target=…, parallel=True)`, `m.screenshot(path=None, width=…, height=…)` (path to a PNG), `m.save(path=None)`, `m.export(path)` (format by extension: stl, obj, dxf, glb, 3mf, csv, svg, pdf, png; `m.export(path, what="cut_list")` the cut list as pdf / svg / csv, `what="labels"` the part labels, `what="assembly"` the assembly instructions, both pdf), `m.open(path)`, `m.new()`.
 - Before destructive actions the application shows an "External script" dialog, and a refusal raises an error. These are: saving over another existing file, exporting over a file (including OBJ/DAE materials and textures), replacing a screenshot, and also opening a file or a new document when there are unsaved changes.
 
 Example — `examples/scripts/bookshelf.py`.

@@ -123,6 +123,19 @@ with tempfile.TemporaryDirectory(prefix="varstotas-security-") as folder:
     except varstotas.VarstotasError as e:
         check("sidecar overwrite denied", "declined" in str(e) and open(mtl).read() == "keep sidecar" and not os.path.exists(obj))
 
+# The workshop documents: assembly instructions, the cut list, its labels.
+docs_dir = tempfile.mkdtemp(prefix="varstotas-docs-")
+check("assembly steps", m.suggest_steps() == 1)
+booklet = m.export(os.path.join(docs_dir, "steps.pdf"), what="assembly")
+check("export assembly", open(booklet, "rb").read(5) == b"%PDF-")
+csv = m.export(os.path.join(docs_dir, "cut.csv"), what="cut_list")
+check("export cut list", "Top" in open(csv, encoding="utf-8").read())
+try:
+    m.export(os.path.join(docs_dir, "steps.svg"), what="assembly")
+    check("export format refused", False)
+except varstotas.VarstotasError as e:
+    check("export format refused", ".pdf" in str(e))
+
 # The MCP server over stdio.
 mcp = os.path.join(os.path.dirname(varstotas.__file__), "varstotas_mcp.py")
 p = subprocess.Popen([sys.executable, mcp], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -147,6 +160,9 @@ r = rpc(5, "tools/call", {"name": "screenshot", "arguments": {"width": 200, "hei
 check("mcp screenshot", r["result"]["content"][0]["type"] == "image" and len(r["result"]["content"][0]["data"]) > 1000)
 r = rpc(6, "tools/call", {"name": "api_reference", "arguments": {}})
 check("mcp docs", "pushpull" in r["result"]["content"][0]["text"])
+labels = os.path.join(docs_dir, "labels.pdf")
+r = rpc(7, "tools/call", {"name": "export", "arguments": {"path": labels, "what": "labels"}})
+check("mcp export labels", not r["result"]["isError"] and open(labels, "rb").read(5) == b"%PDF-")
 p.stdin.close()
 p.wait()
 check("agent step", m.info()["undo"] == "Agent" and len(m.groups()) == 2)
