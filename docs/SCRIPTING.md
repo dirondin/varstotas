@@ -137,6 +137,18 @@ a smaller size. Sheets are packed with guillotine cuts (what panel
 and track saws make), boards with first fit decreasing over the lengths on sale. The same plan is
 in Window → Cut List, with diagrams and PDF / SVG / CSV export.
 
+## Assembly
+| Function | Result |
+|---|---|
+| `suggest_steps()` | sets the assembly steps from the parts that touch: the lowest part touching another first, then the lowest part touching what is placed, with its copies. Returns the number of steps |
+| `assembly_steps()` | the steps: `#{ parts, note }`, `parts` the groups and components the step adds |
+| `set_assembly_steps([bottom, [left, right], #{ parts: "Top", note: "Glue the dowels" }])` | sets the steps; each is a part, a name, an array of parts or a map with `parts` and `note`. A part may be in one step only |
+| `assembly_view(150)` | explodes the model by 150 mm (0: assembled); `assembly_view(150, 2)` also shows step 2 (from 0; -1 for all), the later steps' parts hidden; `assembly_view()` is `#{ explode, step }` |
+
+The exploded view moves each part away from the parts it touches and lifts the whole so nothing
+goes below the floor. Joints and the cut list keep working from the assembled model while it is
+exploded. Window → Assembly does the same and writes the instructions booklet (PDF).
+
 ## Example
 ```rhai
 material("Oak", "#C8A064");

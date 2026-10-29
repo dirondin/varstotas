@@ -24,7 +24,8 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
-    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint",
+    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "suggest_steps", "assembly_steps",
+    "set_assembly_steps", "assembly_view",
 ];
 
 /// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
@@ -1523,6 +1524,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     });
     register_cut_list(e);
     register_joinery(e);
+    register_assembly(e);
 }
 
 /// The cut list (track W): `cut_list()`, `set_stock(material, stock)`, `cut_settings(map)`,
@@ -1893,6 +1895,95 @@ fn register_joinery(e: &mut Engine) {
             Ok(())
         })
     });
+}
+
+fn step_map(step: &varstotas_kernel::assembly::Step) -> Dynamic {
+    let mut m = Map::new();
+    let parts: Array = step.parts.iter().filter_map(|p| p.split_last().map(|(&id, parent)| dyn_ent(&parent.to_vec(), EntityRef::Instance(id)))).collect();
+    m.insert("parts".into(), parts.into());
+    m.insert("note".into(), step.note.clone().into());
+    m.into()
+}
+
+/// A step from a script: parts (a part, its name, an array of them) or `#{ parts, note }`.
+fn step_from(d: &Dynamic) -> R<(Vec<Entity>, String)> {
+    match d.clone().try_cast::<Map>() {
+        Some(m) => {
+            if let Some(k) = m.keys().find(|k| !matches!(k.as_str(), "parts" | "note")) {
+                return err(tr!("script-err-assembly-step-key", key = k.to_string()));
+            }
+            Ok((ents(&m.get("parts").cloned().unwrap_or(Dynamic::UNIT))?, m.get("note").map(|n| n.to_string()).unwrap_or_default()))
+        }
+        None => Ok((ents(d)?, String::new())),
+    }
+}
+
+fn register_assembly(e: &mut Engine) {
+    use varstotas_kernel::assembly::SceneAssembly;
+    // steps change with the model assembled, and the view shown is put back after
+    fn steps_set(st: &mut State, steps: Vec<varstotas_kernel::assembly::Step>) {
+        let v = st.model.assembly.view();
+        st.model.assemble();
+        st.model.assembly.steps = steps;
+        st.model.set_assembly_view(v);
+    }
+    e.register_fn("suggest_steps", || -> R<i64> {
+        edit(|st| {
+            // the contacts are found in the assembled model whatever the view
+            steps_set(st, varstotas_kernel::assembly::suggest_steps(&st.model));
+            Ok(st.model.assembly.steps.len() as i64)
+        })
+    });
+    e.register_fn("assembly_steps", || -> R<Array> { with(|st| Ok(st.model.assembly.steps.iter().map(step_map).collect())) });
+    e.register_fn("set_assembly_steps", |a: Array| -> R<()> {
+        let given = a.iter().map(step_from).collect::<R<Vec<_>>>()?;
+        edit(|st| {
+            let mut steps = Vec::new();
+            for (es, note) in given {
+                let parts = es
+                    .iter()
+                    .map(|e| {
+                        let mut p = e.path.clone();
+                        p.push(inst_id(st, e)?);
+                        Ok(p)
+                    })
+                    .collect::<R<Vec<ContextPath>>>()?;
+                let step = varstotas_kernel::assembly::Step { parts, note };
+                if let Some(p) = step.parts.iter().find(|p| steps.iter().any(|s: &varstotas_kernel::assembly::Step| s.parts.contains(p)) || step.parts.iter().filter(|q| q == p).count() > 1) {
+                    let name = p.split_last().map(|(&id, parent)| kind(st, &Entity { path: parent.to_vec(), r: EntityRef::Instance(id) })).unwrap_or_default();
+                    return err(tr!("script-err-assembly-part-twice", e = name));
+                }
+                steps.push(step);
+            }
+            steps_set(st, steps);
+            Ok(())
+        })
+    });
+    e.register_fn("assembly_view", || -> R<Map> {
+        with(|st| {
+            let v = st.model.assembly.view();
+            let mut m = Map::new();
+            m.insert("explode".into(), v.explode.into());
+            m.insert("step".into(), v.step.map_or(Dynamic::UNIT, |s| (s as i64).into()));
+            Ok(m)
+        })
+    });
+    let view = |explode: f64, step: i64| -> R<()> {
+        edit(|st| {
+            let n = st.model.assembly.steps.len();
+            let step = match usize::try_from(step) {
+                Ok(s) if s < n => Some(s),
+                Err(_) => None,
+                _ => return err(tr!("script-err-assembly-step-index", index = step.to_string(), count = n.to_string())),
+            };
+            st.model.set_assembly_view(SceneAssembly { explode: explode.max(0.0), step });
+            Ok(())
+        })
+    };
+    e.register_fn("assembly_view", move |explode: f64| -> R<()> { view(explode, -1) });
+    e.register_fn("assembly_view", move |explode: i64| -> R<()> { view(explode as f64, -1) });
+    e.register_fn("assembly_view", move |explode: f64, step: i64| -> R<()> { view(explode, step) });
+    e.register_fn("assembly_view", move |explode: i64, step: i64| -> R<()> { view(explode as f64, step) });
 }
 
 fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {

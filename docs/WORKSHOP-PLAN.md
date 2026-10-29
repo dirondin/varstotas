@@ -131,8 +131,8 @@ clicking a step shows it (later steps hidden, its parts selected). The view (exp
 document state that a scene keeps; Scenes from steps makes a scene per step. Instructions… writes
 an A4 PDF booklet: a cover with the exploded model, the parts and hardware list, then a page per
 step with the earlier parts drawn faint, the parts added and the joint hardware for that step.
-The cut list and joints always work from the assembled model. Not done: a Rhai / Python API for
-steps, arrows on the pictures.
+The cut list and joints always work from the assembled model. Rhai / Python: `suggest_steps`,
+`assembly_steps`, `set_assembly_steps`, `assembly_view`. Not done: arrows on the pictures.
 
 - Exploded view. Parts move apart along the joint directions from the contact graph. The
   distance is set by a slider, and the view can be captured in a scene.
