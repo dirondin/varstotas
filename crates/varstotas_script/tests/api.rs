@@ -384,3 +384,21 @@ fn cut_list_stock_and_options() {
     go(&mut m, r#"set_stock("Plywood", ()); print(cut_list().issues.len());"#);
     assert!(m.materials.values().find(|x| x.name == "Plywood").unwrap().stock.is_empty());
 }
+
+#[test]
+fn joinery() {
+    let mut m = Model::new();
+    let r = go(
+        &mut m,
+        r##"let s = box(vec3(0, 0, 0), 18, 300, 800); s.name = "Side"; let h = box(vec3(18, 0, 400), 500, 300, 18); h.name = "Shelf";
+        let i = joint("Side", "Shelf", "dowels", #{ count: 4 }); let j = joints()[i]; print(j.kind + " " + j.count + " " + j.diameter + " " + j.b.name + " " + j.hardware);
+        set_joint(i, #{ kind: "housing" }); print(joints()[0].kind + " " + joints()[0].depth);
+        set_joint(0, #{ depth: 9 }); print(joints()[0].depth);"##,
+    );
+    assert_eq!(r.output, "dowels 4 8.0 Shelf 4 × Dowel Ø8 × 40\nhousing 6.0\n9.0\n", "{}", r.output);
+    assert_eq!(m.joints.len(), 1);
+    let r = run(&mut m, &ScriptCtx::default(), r#"joint("Side", "Shelf", "rivets")"#);
+    assert!(r.error.is_some_and(|e| e.contains("rivets")));
+    go(&mut m, "remove_joint(0);");
+    assert!(m.joints.is_empty());
+}

@@ -113,7 +113,21 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 | `cut_settings(#{ kerf: 3, trim: 10, min_offcut: 100, tolerance: 0.5, band: 1, band_price: 0.5, band_subtract: false })` | the document's cutting settings (any subset of keys); `band` is the edge band thickness, `band_subtract` cuts banded parts smaller by it |
 | `cut_part("Shelf", #{ grain: "length", exclude: false, bands: [true, false, false, false] })` | per part name: grain `"length"`, `"width"` or `"any"` (may rotate), exclude from the cut list, edge-banded edges (the two long edges, then the two short ones); `#{ hardware: true, price: 2.5 }` buys the parts so named instead of cutting them (a group marked so is one part) |
 | `cut_hardware([#{ name: "Screw 4 × 16", count: 24, price: 0.05 }])` | hardware not in the model, listed by hand (replaces the list) |
-| `cut_list()` | `#{ parts, stock, banding, hardware, issues, cost }`: parts with name, count, length, width, thickness, material, `bands` and `hardware`; `banding` per part thickness (`#{ width, thickness, length, cost }`); `hardware` (`#{ name, count, price, cost, in_model }`); per stock item its material, kind, sizes, `count`, `buy` (`[#{ length, count }]`), `waste` (%), `cost` and `layouts` (pieces with part index, x, y, w, h, rotated) |
+| `cut_list()` | `#{ parts, stock, banding, hardware, issues, cost }`: parts with name, count, length, width, thickness, material, `bands`, `hardware` and `holes` (the joints' holes in the part's face, `#{ x, y, diameter }` along its length and width); `banding` per part thickness (`#{ width, thickness, length, cost }`); `hardware` (`#{ name, count, price, cost, in_model }`); per stock item its material, kind, sizes, `count`, `buy` (`[#{ length, count }]`), `waste` (%), `cost` and `layouts` (pieces with part index, x, y, w, h, rotated) |
+
+## Joinery
+| Function | Result |
+|---|---|
+| `joint("Side", "Shelf", "dowels")` | joins two touching groups or components, cut into both; kinds `"dowels"`, `"screws"`, `"pocket"` (pocket holes), `"housing"` (dado / rabbet), `"tenon"` (mortise and tenon), `"box"` (box joint), `"dovetail"`. The sizes suit the parts; a map sets some: `joint(side, top, "dovetail", #{ count: 5, pin: 8, angle: 9.5 })`. Returns the joint's index |
+| `joints()` | the joints: `#{ kind, a, b, count, diameter, depth, depth_b, thickness, shoulder, clearance, angle, pin, through, flip, hardware }`; `a` is the part joined into, `b` the one whose end meets it; `hardware` e.g. `"3 × Dowel Ø8 × 40"` |
+| `set_joint(i, #{ depth: 9 })` | changes joint `i`'s sizes; `kind` in the map turns it into another kind with sizes that suit it |
+| `remove_joint(i)` | deletes joint `i`; its parts get their shape back |
+
+Keys (mm): `count` (dowels, screws, pocket holes; fingers of a box joint on `b`; dovetail tails),
+`diameter`, `depth` (into `a`), `depth_b` (into `b`), `thickness` and `shoulder` (tenon),
+`clearance` (gap around tenons, fingers, tails, in housings), `angle` (dovetail slope, degrees),
+`pin` (dovetail pins at their narrow end), `through` (tenon), `flip` (pocket holes from `b`'s other
+face). Box joints and dovetails join a corner: `a`'s end flush with `b`'s outer face.
 
 The parts are the innermost groups and components that have faces, sized by the bounding box in
 their own axes (length ≥ width ≥ thickness). A part takes its material's nearest stock thickness;

@@ -1,0 +1,17 @@
+# Pocket holes: a shelf screwed to a side from pockets in its underside.
+action script let s = box(vec3(0, 0, 0), 18, 300, 400); s.name = "Side"; let h = box(vec3(18, 0, 150), 400, 300, 18); h.name = "Shelf";
+action console_close
+wait 5
+action joinery
+select_all
+action joint_kind pocket
+action add_joint
+wait 10
+expect joints=[("PocketHole", "Shelf", "Side", "3 × Pocket screw Ø4 × 25")]
+expect hardware=[("Pocket screw Ø4 × 25", 3, "0.00")]
+action joinery_close
+view bottom
+zoom_extents
+wait 10
+screenshot shots/joinery_pocket.bmp
+quit

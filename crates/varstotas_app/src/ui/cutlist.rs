@@ -135,6 +135,15 @@ fn rect_lines(d: &mut Drawing, a: DVec2, b: DVec2, pen: Pen) {
     d.lines.extend([(a, c, pen), (c, b, pen), (b, e, pen), (e, a, pen)]);
 }
 
+/// A drilled hole: a circle (radius on paper, never too small to see) with a centre cross.
+fn hole(d: &mut Drawing, c: DVec2, r: f64) {
+    let r = r.max(0.5);
+    let p = |i: usize| c + DVec2::from_angle(i as f64 * std::f64::consts::TAU / 16.0) * r;
+    d.lines.extend((0..16).map(|i| (p(i), p(i + 1), Pen::Edge)));
+    let x = DVec2::new(r * 0.6, 0.0);
+    d.lines.extend([(c - x, c + x, Pen::Hidden), (c - x.perp(), c + x.perp(), Pen::Hidden)]);
+}
+
 fn text(d: &mut Drawing, at: DVec2, size: f64, s: String, left: bool) {
     d.texts.push(Text2 { at, angle: 0.0, size, lines: vec![s], left });
 }
@@ -230,6 +239,14 @@ fn page_drawing(plan: &CutPlan, settings: &CutSettings, page: &Page, total: usiz
                     }
                 }
             }
+            // the joints' holes in the part's face, scaled from its finished size to the piece
+            if let Some(part) = plan.parts.get(p.part) {
+                let (len, wid) = (part.size[0].max(1e-9), part.size[1].max(1e-9));
+                for h in &part.holes {
+                    let (x, y) = if p.rotated { (p.x + h[1] * p.w / wid, p.y + h[0] * p.h / len) } else { (p.x + h[0] * p.w / len, p.y + h[1] * p.h / wid) };
+                    hole(&mut d, at(x, y), h[2] / 2.0 * k);
+                }
+            }
             let size = (h * 0.28).min(3.2).min(w / 6.0);
             if size >= 1.0 {
                 let c = (a + b) * 0.5;
@@ -312,6 +329,9 @@ fn label_pages(plan: &CutPlan, settings: &CutSettings, unit: LengthUnit, doc: &s
                 if on {
                     d.lines.push((e.0, e.1, Pen::Section));
                 }
+            }
+            for h in &p.holes {
+                hole(d, DVec2::new(a.x + h[0] * k, b.y - h[1] * k), h[2] / 2.0 * k);
             }
             // the grain: an arrow along the length or across it
             let dir = match o.grain {

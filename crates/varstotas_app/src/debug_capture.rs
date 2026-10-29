@@ -1527,15 +1527,22 @@ impl VarstotasApp {
             self.export_cut_list(std::path::Path::new(path.trim()));
             return;
         }
-        // Joinery: `joint_kind dowels|screws|housing|tenon` (the kind a new joint gets), `add_joint`.
+        // Joinery: `joint_kind dowels|screws|pocket|housing|tenon|box|dovetail` (the kind a new joint gets), `add_joint`, `joinery_close`.
         if let Some(k) = name.strip_prefix("joint_kind ") {
             use varstotas_kernel::joinery::WoodJointKind as K;
             self.joinery.kind = match k.trim() {
                 "screws" => K::Screws,
                 "housing" => K::Housing,
                 "tenon" => K::MortiseTenon,
+                "box" => K::BoxJoint,
+                "dovetail" => K::Dovetail,
+                "pocket" => K::PocketHole,
                 _ => K::Dowels,
             };
+            return;
+        }
+        if name == "joinery_close" {
+            self.joinery.open = false;
             return;
         }
         if name == "add_joint" {

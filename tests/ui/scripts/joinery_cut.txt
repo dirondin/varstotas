@@ -1,0 +1,14 @@
+# Joint holes on the cutting diagrams: dowels into a side's face are drawn on its piece.
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 1220, width: 610, thickness: 18, grain: false, price: 30 }); let s = box(vec3(0, 0, 0), 18, 300, 800); s.name = "Side"; paint(s, "Plywood"); let h = box(vec3(18, 0, 400), 500, 300, 18); h.name = "Shelf"; paint(h, "Plywood");
+action console_close
+wait 5
+action joint_kind dowels
+select_all
+action add_joint
+wait 10
+expect joints=[("Dowels", "Shelf", "Side", "3 × Dowel Ø8 × 40")]
+action cut_list
+wait 10
+expect cutlist=(true, 2, 1, 1, 0, "30.00")
+screenshot shots/joinery_cut.bmp
+quit

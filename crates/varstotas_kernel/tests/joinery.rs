@@ -75,6 +75,12 @@ fn joints_cut_both_parts_and_come_off_again() {
     assert!(volume(&m, side) < vs - 3.0 * 500.0 && volume(&m, side) > vs - 3.0 * 700.0, "{}", volume(&m, side));
     assert!(volume(&m, shelf) < vh - 3.0 * 1300.0, "{}", volume(&m, shelf));
     assert_eq!(m.joints[i].hardware(None), Some(("Dowel Ø8 × 40".to_string(), 3)));
+    // on the cut list: three holes in the side's face (length up, width across), none on the
+    // shelf, whose holes are in its end
+    let parts = varstotas_kernel::cutlist::cut_parts(&m);
+    let holes = |n: &str| parts.iter().find(|p| p.name == n).unwrap().holes.clone();
+    assert_eq!(holes("Side"), vec![[409.0, 32.0, 8.0], [409.0, 150.0, 8.0], [409.0, 268.0, 8.0]]);
+    assert!(holes("Shelf").is_empty());
 
     // saved and loaded: still rebuilds
     let mut back = varstotas_kernel::io::from_json(&varstotas_kernel::io::to_json(&m).unwrap()).unwrap();
@@ -105,4 +111,65 @@ fn screws_and_parts_that_do_not_touch() {
     let far = board(&mut m, "Far", DVec3::new(18.0, 300.0, 800.0), DVec3::new(1000.0, 0.0, 0.0));
     assert!(m.add_wood_joint(WoodJointKind::Dowels, vec![far], vec![shelf]).is_err());
     assert_eq!(m.joints.len(), 1);
+}
+
+/// A side and a top meeting at the corner: the side's end flush with the top's upper face.
+fn corner() -> (Model, InstanceId, InstanceId) {
+    let mut m = Model::new();
+    let side = board(&mut m, "Side", DVec3::new(18.0, 300.0, 800.0), DVec3::ZERO);
+    let top = board(&mut m, "Top", DVec3::new(500.0, 300.0, 18.0), DVec3::new(18.0, 0.0, 782.0));
+    (m, side, top)
+}
+
+#[test]
+fn box_joints_and_dovetails_at_a_corner() {
+    let (mut m, side, top) = corner();
+    let (vs, vt) = (volume(&m, side), volume(&m, top));
+    // nine fingers about as wide as the boards are thick, right through the side
+    let i = m.add_wood_joint(WoodJointKind::BoxJoint, vec![side], vec![top]).unwrap();
+    assert_eq!(m.joints[i].count, 9);
+    let fingers = 9.0 * (300.0 / 17.0) * 18.0 * 18.0;
+    assert!((volume(&m, top) - (vt + fingers)).abs() < 1e-3, "{}", volume(&m, top));
+    assert!((volume(&m, side) - (vs - fingers)).abs() < 1.0, "{}", volume(&m, side));
+    assert_eq!(m.joints[i].hardware(None), None);
+
+    // dovetails: six tails 1:8 between 6 mm pins
+    m.set_wood_joint_kind(i, WoodJointKind::Dovetail).unwrap();
+    let j = m.joints[i].clone();
+    assert_eq!((j.count, j.pin), (6, 6.0));
+    let wide = (300.0 - 7.0 * 6.0) / 6.0;
+    let narrow = wide - 2.0 * 18.0 * 7.1f64.to_radians().tan();
+    let tails = 6.0 * (wide + narrow) / 2.0 * 18.0 * 18.0;
+    assert!((volume(&m, top) - (vt + tails)).abs() < 1e-3, "{}", volume(&m, top));
+    assert!((volume(&m, side) - (vs - tails)).abs() < 1.0, "{}", volume(&m, side));
+    // too many tails for the pins: refused
+    let mut bad = j.clone();
+    bad.count = 30;
+    assert!(m.set_wood_joint(i, bad).is_err());
+    m.remove_wood_joint(i);
+    assert!((volume(&m, side) - vs).abs() < 1e-6 && (volume(&m, top) - vt).abs() < 1e-6);
+}
+
+#[test]
+fn pocket_holes() {
+    let (mut m, side, shelf) = cabinet();
+    let (vs, vh) = (volume(&m, side), volume(&m, shelf));
+    let i = m.add_wood_joint(WoodJointKind::PocketHole, vec![side], vec![shelf]).unwrap();
+    let j = m.joints[i].clone();
+    assert_eq!((j.count, j.diameter, j.depth), (3, 4.0, 11.0));
+    assert_eq!(j.hardware(None), Some(("Pocket screw Ø4 × 25".to_string(), 3)));
+    // pockets in the shelf, pilot holes in the side, none of them through the side
+    assert!(volume(&m, shelf) < vh - 3.0 * 1000.0, "{}", volume(&m, shelf));
+    assert!(volume(&m, side) < vs && volume(&m, side) > vs - 3.0 * 200.0, "{}", volume(&m, side));
+    // the pockets show on the shelf's face, the pilot holes in the side's
+    let parts = varstotas_kernel::cutlist::cut_parts(&m);
+    let shelf_holes = &parts.iter().find(|p| p.name == "Shelf").unwrap().holes;
+    assert_eq!(shelf_holes.len(), 3);
+    assert!(shelf_holes.iter().all(|h| h[2] == 9.5 && (h[0] - 33.6).abs() < 0.1), "{shelf_holes:?}");
+    assert_eq!(parts.iter().find(|p| p.name == "Side").unwrap().holes.len(), 3);
+    // from the other face too
+    let mut f = j.clone();
+    f.flip = true;
+    m.set_wood_joint(i, f).unwrap();
+    assert!(volume(&m, shelf) < vh - 3.0 * 1000.0);
 }

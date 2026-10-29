@@ -95,14 +95,16 @@ hand in the Hardware tab, and the total cost covers stock, banding and hardware.
 
 ## Batch 3: joinery
 
-Status (2026-10-29): first part done. Window → Joinery: select two groups or components that
-touch, pick dowels, screws, a housing (dado or rabbet) or a mortise and tenon (blind or through)
-and add the joint; its sizes default from the boards and are edited in the list, the parts can be
+Status (2026-10-29): done. Window → Joinery: select two groups or components that touch, pick
+dowels, screws, pocket holes, a housing (dado or rabbet), a mortise and tenon (blind or through),
+a box joint or a through dovetail, and add the joint; its sizes default from the boards and are edited in the list, the parts can be
 swapped, and deleting the joint gives the parts their shape back. The joint is a document object
 (`Model::joints`); the parts' geometry from before any joint is kept (`joint_bases`) and every
 change cuts all the joints again. Joined copies of a component are made unique. Dowels and screws
-go into the cut list's hardware, priced by name in the Hardware tab. Left: box joint, dovetail,
-pocket hole, hole positions on the diagrams, a Rhai / Python API.
+go into the cut list's hardware, priced by name in the Hardware tab. Holes drilled into a part's
+face are drawn on its piece in the cutting diagrams and on its label. Rhai / Python: `joint`,
+`joints`, `set_joint`, `remove_joint`, and `holes` on `cut_list()` parts. Not done: half-blind
+dovetails, confirmat screws, parts that are not boxes along the world axes.
 
 A Joint tool: pick two parts that touch, or an edge between them, then choose a joint:
 

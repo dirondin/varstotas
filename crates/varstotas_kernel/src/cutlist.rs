@@ -276,6 +276,10 @@ pub struct CutPart {
     pub count: usize,
     /// Instance chain of every copy, for selecting them in the model.
     pub paths: Vec<ContextPath>,
+    /// Holes of the joints drilled into the part's face (not its edges or ends), on its first
+    /// copy that has any: (along the length, along the width, diameter), mm from the corner of
+    /// its bounding box.
+    pub holes: Vec<[f64; 3]>,
 }
 
 /// A piece on a sheet or board, `x` along the stock's length.
@@ -512,6 +516,7 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
                     size,
                     count: 1,
                     paths: vec![path.clone()],
+                    holes: Vec::new(),
                 };
                 match out.iter_mut().find(|p| p.name == part.name && p.material == part.material && p.size == part.size) {
                     Some(p) => {
@@ -526,7 +531,53 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
     }
     let mut out = Vec::new();
     walk(model, model.root, &mut Vec::new(), None, &mut out);
+    if !model.joints.is_empty() {
+        let drilled = joint_holes(model);
+        for p in &mut out {
+            p.holes = p.paths.iter().map(|path| face_holes(model, path, &drilled)).find(|h| !h.is_empty()).unwrap_or_default();
+        }
+    }
     out
+}
+
+type Drilled = Vec<(ContextPath, Vec<crate::joinery::Hole>)>;
+
+/// Every joint's holes by part, in world space.
+fn joint_holes(model: &Model) -> Drilled {
+    let mut out: Drilled = Vec::new();
+    for j in &model.joints {
+        let Some(c) = crate::joinery::contact(model, &j.a, &j.b) else { continue };
+        let (a, b) = j.holes(&c);
+        for (path, h) in [(&j.a, a), (&j.b, b)] {
+            match out.iter_mut().find(|(p, _)| p == path) {
+                Some(e) => e.1.extend(h),
+                None => out.push((path.clone(), h)),
+            }
+        }
+    }
+    out
+}
+
+/// The holes in the face of the part at `path`, in its length × width frame.
+fn face_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> Vec<[f64; 3]> {
+    let Some((_, holes)) = drilled.iter().find(|(p, _)| p == path) else { return Vec::new() };
+    let Some((&id, parent)) = path.split_last() else { return Vec::new() };
+    let Some(inst) = model.mesh_at(parent).and_then(|m| m.instances.get(id)) else { return Vec::new() };
+    let to_local = model.transform_at(path).inverse();
+    let k = axis_scales(&inst.transform);
+    let (lo, hi) = bounds(model, inst.def, DMat4::IDENTITY);
+    let s = k * (hi - lo);
+    // the part's axes by size, as `cut_parts` sorts them: length, width, thickness
+    let mut ax = [0, 1, 2];
+    ax.sort_by(|&x, &y| s[y].total_cmp(&s[x]));
+    holes
+        .iter()
+        .filter_map(|&(at, dir, d)| {
+            let p = k * (to_local.transform_point3(at) - lo);
+            let dir = (k * to_local.transform_vector3(dir)).normalize_or_zero();
+            (dir[ax[2]].abs() > 0.7).then_some([p[ax[0]], p[ax[1]], d])
+        })
+        .collect()
 }
 
 /// A rectangle to pack: `w` along the sheet's length when it cannot turn.

@@ -1,0 +1,30 @@
+# Joinery at a corner: a side and a top flush at its end, joined by dovetails, then a box joint.
+action script let s = box(vec3(0, 0, 0), 18, 300, 400); s.name = "Side"; let t = box(vec3(18, 0, 382), 400, 300, 18); t.name = "Top";
+action console_close
+wait 5
+action joinery
+select_all
+action joint_kind dovetail
+action add_joint
+wait 10
+expect joints=[("Dovetail", "Top", "Side", "")]
+action joinery_close
+view top
+zoom_extents
+wait 10
+screenshot shots/joinery_dovetail.bmp
+action joinery
+wait 5
+action click_spot joinery:remove:0
+wait 5
+action joinery_close
+select_all
+action joint_kind box
+action add_joint
+wait 10
+expect joints=[("BoxJoint", "Top", "Side", "")]
+view top
+zoom_extents
+wait 10
+screenshot shots/joinery_box.bmp
+quit

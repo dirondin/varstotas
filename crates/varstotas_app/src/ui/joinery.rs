@@ -24,6 +24,9 @@ pub(crate) fn kind_name(k: WoodJointKind) -> String {
         WoodJointKind::Screws => "joinery-kind-screws",
         WoodJointKind::Housing => "joinery-kind-housing",
         WoodJointKind::MortiseTenon => "joinery-kind-mortise-tenon",
+        WoodJointKind::BoxJoint => "joinery-kind-box",
+        WoodJointKind::Dovetail => "joinery-kind-dovetail",
+        WoodJointKind::PocketHole => "joinery-kind-pocket",
     })
 }
 
@@ -186,8 +189,28 @@ impl VarstotasApp {
                             ui.checkbox(&mut j.through, tr!("joinery-through"));
                             mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
                         }
+                        WoodJointKind::BoxJoint => {
+                            ui.label(tr!("joinery-fingers"));
+                            ui.add(egui::DragValue::new(&mut j.count).range(1..=64).speed(0.05));
+                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
+                        }
+                        WoodJointKind::Dovetail => {
+                            ui.label(tr!("joinery-tails"));
+                            ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
+                            mm(ui, &tr!("joinery-pin"), &mut j.pin, 200.0);
+                            ui.label(tr!("joinery-angle"));
+                            ui.add(egui::DragValue::new(&mut j.angle).range(0.5..=30.0).speed(0.1).max_decimals(1).suffix("°"));
+                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
+                        }
+                        WoodJointKind::PocketHole => {
+                            ui.label(tr!("joinery-count"));
+                            ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, 10.0);
+                            mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, 200.0);
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip")).on_hover_text(tr!("joinery-flip-tip"));
+                        }
                     });
-                    if let Some((name, n)) = j.hardware(None).filter(|_| j.kind == WoodJointKind::Dowels) {
+                    if let Some((name, n)) = j.hardware(None).filter(|_| j.kind != WoodJointKind::Screws) {
                         ui.label(RichText::new(format!("{n} × {name}")).small().color(theme::text_dim()));
                     }
                 });

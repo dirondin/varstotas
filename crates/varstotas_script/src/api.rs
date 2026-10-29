@@ -2,6 +2,7 @@
 
 use crate::{Entity, STATE, State};
 use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
+use varstotas_kernel::joinery::{WoodJoint, WoodJointKind};
 use varstotas_kernel::model::Definition;
 use varstotas_kernel::primitives::Primitive;
 use varstotas_kernel::tessellate::triangulate_face;
@@ -23,7 +24,7 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
-    "cut_part", "cut_hardware",
+    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint",
 ];
 
 /// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
@@ -1521,6 +1522,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
         with(|st| Ok(st.model.materials.values().map(|m| Dynamic::from(m.name.clone())).collect()))
     });
     register_cut_list(e);
+    register_joinery(e);
 }
 
 /// The cut list (track W): `cut_list()`, `set_stock(material, stock)`, `cut_settings(map)`,
@@ -1602,6 +1604,14 @@ fn register_cut_list(e: &mut Engine) {
                     m.insert("exclude".into(), Dynamic::from(o.exclude));
                     m.insert("bands".into(), Dynamic::from_array(o.bands.iter().map(|b| Dynamic::from(*b)).collect()));
                     m.insert("hardware".into(), Dynamic::from(o.hardware));
+                    let holes = x.holes.iter().map(|h| {
+                        let mut hm = Map::new();
+                        hm.insert("x".into(), d(h[0]));
+                        hm.insert("y".into(), d(h[1]));
+                        hm.insert("diameter".into(), d(h[2]));
+                        Dynamic::from_map(hm)
+                    });
+                    m.insert("holes".into(), Dynamic::from_array(holes.collect()));
                     Dynamic::from_map(m)
                 })
                 .collect();
@@ -1804,6 +1814,109 @@ fn register_cut_list(e: &mut Engine) {
             Ok(())
         })
     });
+}
+
+const JOINT_KINDS: [(&str, WoodJointKind); 7] = [
+    ("dowels", WoodJointKind::Dowels),
+    ("screws", WoodJointKind::Screws),
+    ("pocket", WoodJointKind::PocketHole),
+    ("housing", WoodJointKind::Housing),
+    ("tenon", WoodJointKind::MortiseTenon),
+    ("box", WoodJointKind::BoxJoint),
+    ("dovetail", WoodJointKind::Dovetail),
+];
+
+fn joint_kind(s: &str) -> R<WoodJointKind> {
+    JOINT_KINDS.iter().find(|(n, _)| *n == s).map(|(_, k)| *k).ok_or_else(|| tr!("script-err-joint-kind", kind = s.to_string()).into())
+}
+
+/// Set a joint's sizes from a map (any subset of its keys).
+fn joint_params(j: &mut WoodJoint, m: &Map) -> R<()> {
+    for (k, v) in m {
+        match k.as_str() {
+            "kind" => j.kind = joint_kind(&v.to_string())?,
+            "count" => j.count = num(v)?.max(0.0).round() as usize,
+            "diameter" => j.diameter = num(v)?,
+            "depth" => j.depth = num(v)?,
+            "depth_b" => j.depth_b = num(v)?,
+            "thickness" => j.thickness = num(v)?,
+            "shoulder" => j.shoulder = num(v)?,
+            "clearance" => j.clearance = num(v)?,
+            "angle" => j.angle = num(v)?,
+            "pin" => j.pin = num(v)?,
+            "through" => j.through = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "through"))?,
+            "flip" => j.flip = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "flip"))?,
+            k => return err(tr!("script-err-joint-key", key = k.to_string())),
+        }
+    }
+    Ok(())
+}
+
+fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
+    let mut m = Map::new();
+    let kind = JOINT_KINDS.iter().find(|(_, k)| *k == j.kind).map_or("", |(n, _)| *n);
+    m.insert("kind".into(), kind.into());
+    for (key, path) in [("a", &j.a), ("b", &j.b)] {
+        let e = path.split_last().map_or(Dynamic::UNIT, |(&id, parent)| dyn_ent(&parent.to_vec(), EntityRef::Instance(id)));
+        m.insert(key.into(), e);
+    }
+    m.insert("count".into(), (j.count as i64).into());
+    for (k, v) in [("diameter", j.diameter), ("depth", j.depth), ("depth_b", j.depth_b), ("thickness", j.thickness), ("shoulder", j.shoulder), ("clearance", j.clearance), ("angle", j.angle), ("pin", j.pin)] {
+        m.insert(k.into(), v.into());
+    }
+    m.insert("through".into(), j.through.into());
+    m.insert("flip".into(), j.flip.into());
+    let hw = j.hardware(varstotas_kernel::joinery::contact(&st.model, &j.a, &j.b).as_ref());
+    m.insert("hardware".into(), hw.map_or(Dynamic::UNIT, |(n, c)| format!("{c} × {n}").into()));
+    m.into()
+}
+
+fn register_joinery(e: &mut Engine) {
+    e.register_fn("joint", |a: Dynamic, b: Dynamic, kind: ImmutableString| -> R<i64> { add_joint(&a, &b, &kind, &Map::new()) });
+    e.register_fn("joint", |a: Dynamic, b: Dynamic, kind: ImmutableString, m: Map| -> R<i64> { add_joint(&a, &b, &kind, &m) });
+    e.register_fn("joints", || -> R<Array> { with(|st| Ok(st.model.joints.iter().map(|j| joint_map(st, j)).collect())) });
+    e.register_fn("set_joint", |i: i64, m: Map| -> R<()> {
+        edit(|st| {
+            let i = usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()))?;
+            if let Some(k) = m.get("kind") {
+                op(st.model.set_wood_joint_kind(i, joint_kind(&k.to_string())?))?;
+            }
+            let mut j = st.model.joints[i].clone();
+            joint_params(&mut j, &m)?;
+            op(st.model.set_wood_joint(i, j))
+        })
+    });
+    e.register_fn("remove_joint", |i: i64| -> R<()> {
+        edit(|st| {
+            let i = usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()))?;
+            st.model.remove_wood_joint(i);
+            Ok(())
+        })
+    });
+}
+
+fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {
+    let (a, b) = (one(a)?, one(b)?);
+    let kind = joint_kind(kind)?;
+    edit(|st| {
+        let path = |e: &Entity| -> R<ContextPath> {
+            let mut p = e.path.clone();
+            p.push(inst_id(st, e)?);
+            Ok(p)
+        };
+        let (pa, pb) = (path(&a)?, path(&b)?);
+        let i = op(st.model.add_wood_joint(kind, pa, pb))?;
+        if !m.is_empty() {
+            let mut j = st.model.joints[i].clone();
+            joint_params(&mut j, m)?;
+            j.kind = kind;
+            if let Err(e) = st.model.set_wood_joint(i, j) {
+                st.model.remove_wood_joint(i);
+                return op(Err(e));
+            }
+        }
+        Ok(i as i64)
+    })
 }
 
 /// Value noise in 0..1 at `x, y` (lattice cells of 1); with `period > 0` it repeats every
