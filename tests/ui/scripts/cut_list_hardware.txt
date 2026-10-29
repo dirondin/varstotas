@@ -1,0 +1,16 @@
+# Hardware in the Cut List: a hinge group marked as hardware (its leaves are one part, bought
+# not cut), priced; items not in the model added by hand in the Hardware tab.
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 }); let s = box(vec3(0, 0, 0), 800, 400, 18); s.name = "Top"; paint(s, "Plywood"); for x in [0, 200] { let a = box(vec3(x, 500, 0), 30, 2, 60); let b = box(vec3(x + 30, 500, 0), 30, 2, 60); let h = group([a, b]); h.name = "Hinge"; } cut_part("Hinge", #{ hardware: true, price: 2.5 });
+action console_close
+wait 5
+action cut_list
+wait 10
+action cut_list_tab hardware
+wait 5
+action click_spot cutlist:hardware-add
+wait 10
+expect hardware=[("Hinge", 2, "5.00"), ("Screws", 1, "0.00")]
+# a sheet at 60 and two hinges at 2.5
+expect cutlist=(true, 2, 1, 1, 0, "65.00")
+screenshot shots/cut_list_hardware.bmp
+quit

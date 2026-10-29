@@ -78,10 +78,12 @@ Clicking a part on a diagram selects it in the model, and the other way round.
 
 ## Batch 2: edge banding, labels and cost
 
-Status (2026-10-29): edge banding done (per-part edges clicked in Cut List → Parts, drawn on the
+Status (2026-10-29): done. Edge banding (per-part edges clicked in Cut List → Parts, drawn on the
 diagrams, metres and cost per part thickness, optionally subtracted from the cut size; CSV, Rhai,
 Python). Part numbers on the model while the Cut List is open, and a labels PDF (A4, 3 × 8 of
-70 × 37 mm, one per piece). Hardware to do.
+70 × 37 mm, one per piece). Hardware: parts set to "hardware" (Parts tab or the model's right-click
+menu; a group so marked is one part) are priced per piece, items not in the model are listed by
+hand in the Hardware tab, and the total cost covers stock, banding and hardware.
 
 - Edge banding per part edge (which of the four edges, band thickness), shown on diagrams and
   summed into metres of banding to buy. Banding thickness optionally subtracted from the cut

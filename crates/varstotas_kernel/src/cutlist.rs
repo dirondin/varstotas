@@ -28,7 +28,9 @@
 //!
 //! Parts can be edge-banded on any of their four edges ([`PartOptions::bands`]): the banding is
 //! summed per part thickness into [`CutPlan::banding`], and with
-//! [`CutSettings::band_subtract`] the parts are cut smaller by the band.
+//! [`CutSettings::band_subtract`] the parts are cut smaller by the band. Parts marked as
+//! hardware ([`PartOptions::hardware`]) are bought rather than cut: they join the hand-listed
+//! [`CutSettings::extras`] in [`CutPlan::hardware`], priced per piece.
 
 use crate::model::{ContextPath, Model};
 use crate::tessellate::triangulate_face;
@@ -171,6 +173,27 @@ pub struct PartOptions {
     /// Edge-banded edges: the two long edges (along the length), then the two short ones.
     #[serde(default, skip_serializing_if = "no_bands")]
     pub bands: [bool; 4],
+    /// Bought, not cut (hinges, slides, handles): listed with the hardware. A group or component
+    /// marked so is one part even with groups inside.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hardware: bool,
+    /// Hardware: the price of one.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub price: f64,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+/// Hardware that is not in the model (screws, dowels, glue), listed by hand.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Extra {
+    pub name: String,
+    pub count: usize,
+    /// The price of one.
+    #[serde(default)]
+    pub price: f64,
 }
 
 fn no_bands(b: &[bool; 4]) -> bool {
@@ -206,6 +229,9 @@ pub struct CutSettings {
     /// Edge band price per metre.
     #[serde(default)]
     pub band_price: f64,
+    /// Hardware listed by hand.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extras: Vec<Extra>,
 }
 
 fn default_band() -> f64 {
@@ -214,7 +240,7 @@ fn default_band() -> f64 {
 
 impl Default for CutSettings {
     fn default() -> Self {
-        Self { kerf: 3.0, trim: 0.0, min_offcut: 100.0, tolerance: 0.5, parts: BTreeMap::new(), band: default_band(), band_subtract: false, band_price: 0.0 }
+        Self { kerf: 3.0, trim: 0.0, min_offcut: 100.0, tolerance: 0.5, parts: BTreeMap::new(), band: default_band(), band_subtract: false, band_price: 0.0, extras: Vec::new() }
     }
 }
 
@@ -350,6 +376,22 @@ impl Banding {
     }
 }
 
+/// A line of the hardware to buy: parts marked as hardware (by name), then the extras.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HardwareRow {
+    pub name: String,
+    pub count: usize,
+    pub price: f64,
+    /// Index into [`CutSettings::extras`]; `None` for hardware in the model.
+    pub extra: Option<usize>,
+}
+
+impl HardwareRow {
+    pub fn cost(&self) -> f64 {
+        self.count as f64 * self.price
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CutPlan {
     /// Every part row, excluded ones too (see [`CutSettings::parts`]).
@@ -358,12 +400,13 @@ pub struct CutPlan {
     pub issues: Vec<Issue>,
     /// Edge banding by part thickness, the thinnest first.
     pub banding: Vec<Banding>,
+    pub hardware: Vec<HardwareRow>,
 }
 
 impl CutPlan {
-    /// Stock and edge banding.
+    /// Stock, edge banding and hardware.
     pub fn cost(&self) -> f64 {
-        self.plans.iter().map(StockPlan::cost).sum::<f64>() + self.banding.iter().map(Banding::cost).sum::<f64>()
+        self.plans.iter().map(StockPlan::cost).sum::<f64>() + self.banding.iter().map(Banding::cost).sum::<f64>() + self.hardware.iter().map(HardwareRow::cost).sum::<f64>()
     }
 
     /// What is left over after cutting: the offcuts of every sheet and board, equal ones
@@ -452,9 +495,11 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
             let Some(cd) = model.defs.get(inst.def) else { continue };
             let mat = inst.material.or(inherited);
             path.push(id);
-            if cd.mesh.instances.values().any(|i| !i.hidden) {
+            let name = if inst.name.is_empty() { &cd.name } else { &inst.name };
+            let hardware = model.cut_list.parts.get(name).is_some_and(|o| o.hardware);
+            if !hardware && cd.mesh.instances.values().any(|i| !i.hidden) {
                 walk(model, inst.def, path, mat, out);
-            } else if !cd.mesh.faces.is_empty() {
+            } else if hardware || !cd.mesh.faces.is_empty() {
                 let (lo, hi) = bounds(model, inst.def, DMat4::IDENTITY);
                 let s = axis_scales(&inst.transform) * (hi - lo).max(DVec3::ZERO);
                 let mut size = [s.x, s.y, s.z].map(|v| (v * 1e3).round() / 1e3);
@@ -891,7 +936,7 @@ pub fn plan_parts(model: &Model, parts: Vec<CutPart>, settings: &CutSettings) ->
 pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSettings, offcuts: &[Offcut]) -> CutPlan {
     let mut issues = Vec::new();
     let mut banding: Vec<Banding> = Vec::new();
-    for p in parts.iter().filter(|p| !settings.options(&p.name).exclude) {
+    for p in parts.iter().filter(|p| !settings.options(&p.name).exclude && !settings.options(&p.name).hardware) {
         let length = settings.options(&p.name).band_length(p.size) * p.count as f64;
         if length <= 0.0 {
             continue;
@@ -907,8 +952,17 @@ pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSetting
     let parts: Vec<CutPart> = finished.iter().map(|p| CutPart { size: settings.cut_size(&p.name, p.size), ..p.clone() }).collect();
     // parts per (material, the stock indices to cut them from)
     let mut groups: BTreeMap<(Option<MaterialId>, Vec<usize>), Vec<usize>> = BTreeMap::new();
+    let mut hardware: Vec<HardwareRow> = Vec::new();
     for (i, p) in parts.iter().enumerate() {
-        if settings.options(&p.name).exclude {
+        let o = settings.options(&p.name);
+        if o.exclude {
+            continue;
+        }
+        if o.hardware {
+            match hardware.iter_mut().find(|h| h.name == p.name) {
+                Some(h) => h.count += p.count,
+                None => hardware.push(HardwareRow { name: p.name.clone(), count: p.count, price: o.price, extra: None }),
+            }
             continue;
         }
         let stocks = p.material.and_then(|m| model.materials.get(m)).map(|m| m.stock.as_slice()).unwrap_or_default();
@@ -987,7 +1041,8 @@ pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSetting
             plans.push(plan(choice[0], layouts));
         }
     }
-    CutPlan { parts: finished, plans, issues, banding }
+    hardware.extend(settings.extras.iter().enumerate().map(|(i, e)| HardwareRow { name: e.name.clone(), count: e.count, price: e.price, extra: Some(i) }));
+    CutPlan { parts: finished, plans, issues, banding, hardware }
 }
 
 fn csv_field(s: &str) -> String {
@@ -1013,6 +1068,9 @@ pub fn plan_csv(model: &Model, plan: &CutPlan) -> String {
         let note = if o.exclude {
             // i18n-ignore-next
             "excluded".to_string()
+        } else if o.hardware {
+            // i18n-ignore-next
+            "hardware".to_string()
         } else {
             // i18n-ignore-next
             let cut = (cut != p.size).then(|| format!("cut {} × {}", num(cut[0] / k), num(cut[1] / k)));
@@ -1076,6 +1134,10 @@ pub fn plan_csv(model: &Model, plan: &CutPlan) -> String {
     for b in &plan.banding {
         // i18n-ignore-next
         let _ = writeln!(s, "Edge banding,{} × {},{},1,,{}", num(b.width / k), num(b.thickness / k), num(b.length / k), num(b.cost()));
+    }
+    for h in &plan.hardware {
+        // i18n-ignore-next
+        let _ = writeln!(s, "Hardware,{},,{},,{}", csv_field(&h.name), h.count, num(h.cost()));
     }
     s
 }

@@ -150,6 +150,7 @@ impl VarstotasApp {
                 self.cmd_item(ui, Cmd::MakeUnique);
             }
         }
+        self.hardware_item(ui);
         ui.separator();
         if let Some(i) = self.doc.section_sel {
             let on = self.doc.model.sections.get(i).is_some_and(|s| s.active);
@@ -191,6 +192,34 @@ impl VarstotasApp {
         if !self.doc.active_path.is_empty() {
             ui.separator();
             self.cmd_item(ui, Cmd::CloseGroup);
+        }
+    }
+
+    /// One group or component selected: whether the cut list buys it as hardware (by its name,
+    /// so for every part named so) instead of cutting it.
+    fn hardware_item(&mut self, ui: &mut Ui) {
+        let [EntityRef::Instance(id)] = self.doc.selection[..] else { return };
+        let model = &self.doc.model;
+        let Some(inst) = model.mesh_at(&self.doc.active_path).and_then(|m| m.instances.get(id)) else { return };
+        let name = if inst.name.is_empty() { model.defs.get(inst.def).map(|d| d.name.clone()).unwrap_or_default() } else { inst.name.clone() };
+        if name.is_empty() {
+            return;
+        }
+        let mut o = model.cut_list.options(&name);
+        let r = ui.add(Button::new(tr!("menu-cut-hardware")).selected(o.hardware)).on_hover_text(tr!("menu-cut-hardware-tip", name = name.clone()));
+        if r.clicked() {
+            o.hardware = !o.hardware;
+            if o.hardware {
+                o.exclude = false;
+            }
+            self.doc.commit(&tr!("cutlist-undo-part"), move |m| {
+                if o == Default::default() {
+                    m.cut_list.parts.remove(&name);
+                } else {
+                    m.cut_list.parts.insert(name, o);
+                }
+            });
+            ui.close();
         }
     }
 

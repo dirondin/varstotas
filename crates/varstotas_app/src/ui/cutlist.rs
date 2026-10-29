@@ -12,7 +12,7 @@ use egui::{Color32, Context, RichText, Sense, Stroke, Ui, pos2, vec2};
 use std::path::Path;
 use std::rc::Rc;
 use varstotas_i18n::tr;
-use varstotas_kernel::cutlist::{CutPlan, CutSettings, Issue, Offcut, PartGrain, PartOptions, Stock, StockKind, StockPlan, plan_csv, plan_with};
+use varstotas_kernel::cutlist::{CutPlan, CutSettings, Extra, Issue, Offcut, PartGrain, PartOptions, Stock, StockKind, StockPlan, plan_csv, plan_with};
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::layout::SheetCutDiagram;
 use varstotas_kernel::{EntityRef, LengthUnit, MaterialId, Model};
@@ -28,6 +28,7 @@ pub enum Tab {
     #[default]
     Diagrams,
     Parts,
+    Hardware,
 }
 
 #[derive(Default)]
@@ -272,7 +273,7 @@ fn label_pages(plan: &CutPlan, settings: &CutSettings, unit: LengthUnit, doc: &s
     let mut n = 0;
     for (i, p) in plan.parts.iter().enumerate() {
         let o = settings.options(&p.name);
-        if o.exclude {
+        if o.exclude || o.hardware {
             continue;
         }
         for copy in 0..p.count {
@@ -473,6 +474,11 @@ impl VarstotasApp {
         (parts, total.round() as i64)
     }
 
+    /// `[(item, count, cost)]` of the hardware for UI test scripts.
+    pub(crate) fn cut_hardware_dump(&self) -> Vec<(String, usize, String)> {
+        model_plan(&self.doc.model).hardware.iter().map(|h| (h.name.clone(), h.count, format!("{:.2}", h.cost()))).collect()
+    }
+
     /// Part numbers on the model while the Cut List is open: one badge at the centre of each
     /// copy of a part (not of left-out ones).
     pub(crate) fn cut_numbers_overlay(&mut self, out: &mut Vec<crate::overlay::Marker2d>) {
@@ -484,7 +490,7 @@ impl VarstotasApp {
             let plan = self.cut_plan();
             let m = &self.doc.model;
             let mut at = Vec::new();
-            for (i, p) in plan.parts.iter().enumerate().filter(|(_, p)| !m.cut_list.options(&p.name).exclude) {
+            for (i, p) in plan.parts.iter().enumerate().filter(|(_, p)| !m.cut_list.options(&p.name).exclude && !m.cut_list.options(&p.name).hardware) {
                 for path in &p.paths {
                     let Some((&id, parent)) = path.split_last() else { continue };
                     if let Some(b) = m.instance_world_bounds(parent, id) {
@@ -598,7 +604,16 @@ impl VarstotasApp {
             }
             ui.label(line);
         }
-        if plan.plans.len() + plan.banding.len() > 1 && plan.cost() > 0.0 {
+        if !plan.hardware.is_empty() {
+            let n: usize = plan.hardware.iter().map(|h| h.count).sum();
+            let cost: f64 = plan.hardware.iter().map(|h| h.cost()).sum();
+            let mut line = tr!("cutlist-hardware-line", n = n);
+            if cost > 0.0 {
+                line.push_str(&tr!("cutlist-cost", cost = format!("{:.2}", cost)));
+            }
+            ui.label(line);
+        }
+        if plan.plans.len() + plan.banding.len() + usize::from(!plan.hardware.is_empty()) > 1 && plan.cost() > 0.0 {
             ui.label(RichText::new(tr!("cutlist-total", cost = format!("{:.2}", plan.cost()))).strong());
         }
         let mut keep = false;
@@ -646,7 +661,7 @@ impl VarstotasApp {
         let mut select = None;
         egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
             egui::Grid::new("cutlist_parts").num_columns(7).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
-                for h in ["cutlist-col-part", "cutlist-col-count", "cutlist-col-size", "cutlist-col-material", "cutlist-col-grain", "cutlist-col-bands", "cutlist-col-exclude"] {
+                for h in ["cutlist-col-part", "cutlist-col-count", "cutlist-col-size", "cutlist-col-material", "cutlist-col-grain", "cutlist-col-bands", "cutlist-col-use"] {
                     ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
                 }
                 ui.end_row();
@@ -670,10 +685,17 @@ impl VarstotasApp {
                     });
                     let mut bands = o.bands;
                     band_edges(ui, &mut bands, i);
-                    let mut ex = o.exclude;
-                    ui.checkbox(&mut ex, "");
-                    if g != o.grain || ex != o.exclude || bands != o.bands {
-                        set = Some((p.name.clone(), PartOptions { grain: g, exclude: ex, bands }));
+                    // cut, bought as hardware or left out
+                    let use_of = |o: &PartOptions| if o.exclude { 2 } else if o.hardware { 1 } else { 0 };
+                    let mut u = use_of(&o);
+                    let names = ["cutlist-use-cut", "cutlist-use-hardware", "cutlist-use-out"];
+                    egui::ComboBox::from_id_salt(("cutlist_use", i)).selected_text(varstotas_i18n::tr(names[u])).show_ui(ui, |ui| {
+                        for (k, n) in names.iter().enumerate() {
+                            ui.selectable_value(&mut u, k, varstotas_i18n::tr(n));
+                        }
+                    });
+                    if g != o.grain || u != use_of(&o) || bands != o.bands {
+                        set = Some((p.name.clone(), PartOptions { grain: g, exclude: u == 2, hardware: u == 1, bands, ..o.clone() }));
                     }
                     ui.end_row();
                 }
@@ -682,6 +704,69 @@ impl VarstotasApp {
         ui.label(RichText::new(tr!("cutlist-parts-note")).small().color(theme::text_dim()));
         if let Some((name, o)) = set {
             self.set_part_options(&name, o);
+        }
+        if let Some(i) = select {
+            self.select_cut_part(i);
+        }
+    }
+
+    /// The hardware to buy: parts marked as hardware (their price set here) and items listed
+    /// by hand. Edits go through the settings draft, committed when the pointer is released.
+    fn cut_hardware_ui(&mut self, ui: &mut Ui, plan: &CutPlan) {
+        let mut s = self.cutlist.draft.clone().unwrap_or_else(|| self.doc.model.cut_list.clone());
+        let before = s.clone();
+        let mut select = None;
+        egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
+            egui::Grid::new("cutlist_hardware").num_columns(5).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+                for h in ["cutlist-col-item", "cutlist-col-count", "cutlist-col-price", "cutlist-col-cost"] {
+                    ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
+                }
+                ui.end_row();
+                let mut remove = None;
+                for h in &plan.hardware {
+                    match h.extra {
+                        None => {
+                            let r = ui.add(egui::Label::new(&h.name).sense(Sense::click())).on_hover_text(tr!("cutlist-click-select"));
+                            if r.clicked() {
+                                select = plan.parts.iter().position(|p| p.name == h.name);
+                            }
+                            ui.label(h.count.to_string());
+                            let mut o = s.options(&h.name);
+                            if ui.add(egui::DragValue::new(&mut o.price).range(0.0..=100000.0).speed(0.05).max_decimals(2)).changed() {
+                                s.parts.insert(h.name.clone(), o);
+                            }
+                        }
+                        Some(k) => {
+                            let Some(e) = s.extras.get_mut(k) else { continue };
+                            ui.add_sized([180.0, 20.0], egui::TextEdit::singleline(&mut e.name));
+                            let mut n = e.count as f64;
+                            if ui.add(egui::DragValue::new(&mut n).range(0.0..=100000.0).speed(0.2).max_decimals(0)).changed() {
+                                e.count = n.round() as usize;
+                            }
+                            ui.add(egui::DragValue::new(&mut e.price).range(0.0..=100000.0).speed(0.05).max_decimals(2));
+                        }
+                    }
+                    ui.label(format!("{:.2}", h.cost()));
+                    if let Some(k) = h.extra
+                        && super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("cutlist-hardware-remove")).clicked()
+                    {
+                        remove = Some(k);
+                    }
+                    ui.end_row();
+                }
+                if let Some(k) = remove {
+                    s.extras.remove(k);
+                }
+            });
+        });
+        let r = ui.button(tr!("cutlist-hardware-add"));
+        super::tray_lib::spot("cutlist:hardware-add", r.rect.center());
+        if r.clicked() {
+            s.extras.push(Extra { name: tr!("cutlist-hardware-new"), count: 1, price: 0.0 });
+        }
+        ui.label(RichText::new(tr!("cutlist-hardware-note")).small().color(theme::text_dim()));
+        if s != before {
+            self.cutlist.draft = Some(s);
         }
         if let Some(i) = select {
             self.select_cut_part(i);
@@ -782,11 +867,13 @@ impl VarstotasApp {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.cutlist.tab, Tab::Diagrams, tr!("cutlist-tab-diagrams"));
                 ui.selectable_value(&mut self.cutlist.tab, Tab::Parts, tr!("cutlist-tab-parts", n = plan.parts.len()));
+                ui.selectable_value(&mut self.cutlist.tab, Tab::Hardware, tr!("cutlist-tab-hardware", n = plan.hardware.len()));
             });
             ui.separator();
             match self.cutlist.tab {
                 Tab::Diagrams => self.cut_diagrams_ui(ui),
                 Tab::Parts => self.cut_parts_ui(ui, &plan),
+                Tab::Hardware => self.cut_hardware_ui(ui, &plan),
             }
             ui.add_space(6.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

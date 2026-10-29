@@ -1,7 +1,7 @@
 //! Cut list: parts from the model, guillotine sheet packing, boards, settings, CSV.
 
 use varstotas_kernel::cutlist::{
-    Issue, Item, Layout, Offcut, PartGrain, PartOptions, Placement, Stock, StockKind, cut_parts, pack_boards, pack_sheets, plan, plan_csv, plan_with,
+    Extra, Issue, Item, Layout, Offcut, PartGrain, PartOptions, Placement, Stock, StockKind, cut_parts, pack_boards, pack_sheets, plan, plan_csv, plan_with,
 };
 use varstotas_kernel::glam::{DMat4, DVec3};
 use varstotas_kernel::primitives::Primitive;
@@ -439,4 +439,39 @@ fn rotated_says_how_the_part_lies() {
     m.cut_list.parts.insert("Door".into(), PartOptions { grain: PartGrain::Width, ..Default::default() });
     let pc = plan(&m).plans[0].layouts[0].pieces[0];
     assert!(pc.rotated && (pc.w - 500.0).abs() < EPS, "{pc:?}");
+}
+
+#[test]
+fn hardware_is_bought_not_cut() {
+    let mut m = Model::default();
+    let ply = m.add_material("Plywood", [0.8, 0.7, 0.5, 1.0]);
+    m.materials[ply].stock.push(Stock::sheet(2440.0, 1220.0, 18.0, true));
+    board(&mut m, "Side", 800.0, 400.0, 18.0, DVec3::ZERO, Some(ply));
+    // a hinge of two leaves in a group: one part once marked as hardware
+    let leaf = |m: &mut Model, at: DVec3| {
+        let mesh = Primitive::Box { w: 30.0, d: 2.0, h: 60.0 }.mesh().unwrap();
+        m.add_group_mesh(&[], mesh, "Group", DMat4::from_translation(at)).unwrap()
+    };
+    for x in [0.0, 100.0] {
+        let a = leaf(&mut m, DVec3::new(x, 0.0, 0.0));
+        let b = leaf(&mut m, DVec3::new(x + 30.0, 0.0, 0.0));
+        let g = m.make_group(&[], &[varstotas_kernel::EntityRef::Instance(a), varstotas_kernel::EntityRef::Instance(b)]).unwrap();
+        m.root_mesh_mut().instances[g].name = "Hinge".into();
+    }
+    assert!(cut_parts(&m).iter().all(|p| p.name != "Hinge"), "a plain group of leaves is not a part");
+    m.cut_list.parts.insert("Hinge".into(), PartOptions { hardware: true, price: 2.5, ..Default::default() });
+    m.cut_list.extras.push(Extra { name: "Screw 4 × 16".into(), count: 16, price: 0.05 });
+    let p = plan(&m);
+    let hinge = p.parts.iter().find(|x| x.name == "Hinge").expect("the hinge is one part");
+    assert_eq!(hinge.count, 2);
+    assert!(p.issues.is_empty(), "hardware has no stock and needs none: {:?}", p.issues);
+    assert_eq!(p.hardware.len(), 2);
+    assert_eq!((p.hardware[0].name.as_str(), p.hardware[0].count, p.hardware[0].extra), ("Hinge", 2, None));
+    assert!((p.hardware[1].cost() - 0.8).abs() < EPS && p.hardware[1].extra == Some(0));
+    let sheets: f64 = p.plans.iter().map(|s| s.cost()).sum();
+    assert!((p.cost() - sheets - 5.8).abs() < EPS);
+    let csv = plan_csv(&m, &p);
+    assert!(csv.contains("Hinge,2,") && csv.contains(",hardware\n") && csv.contains("Hardware,Screw 4 × 16,,16,,0.8"), "{csv}");
+    let back: Model = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+    assert_eq!(back.cut_list, m.cut_list);
 }

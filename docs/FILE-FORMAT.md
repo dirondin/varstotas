@@ -44,7 +44,9 @@ sheet or per metre of board, `piece_prices` when present prices boards per piece
 Offcuts kept for later projects live in the app's preferences, not in documents. The model optionally
 stores `cut_list`: `{ "kerf", "trim", "min_offcut", "tolerance", "band", "band_subtract", "band_price",
 "parts": { "<part name>": { "grain": "Length" | "Width" | "Any", "exclude", "bands": [long, long, short,
-short] } } }` (`band` is the edge band thickness, default 1 mm; `bands` the banded edges, omitted when none). A sheet (track D) optionally stores `cut_diagrams`:
+short], "hardware", "price" } }, "extras": [{ "name", "count", "price" }] }` (`band` is the edge band
+thickness, default 1 mm; `bands` the banded edges, omitted when none; `hardware` parts are bought at
+`price` each rather than cut; `extras` is hardware listed by hand). A sheet (track D) optionally stores `cut_diagrams`:
 `[{ "min", "size", "page" }]`, a page of the cut list fitted into that rectangle. Both are omitted while empty or default, so older
 readers and files are unaffected.
 

@@ -23,7 +23,7 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
-    "cut_part",
+    "cut_part", "cut_hardware",
 ];
 
 /// Files under `dir` (subfolders too, at most 5000) ending with `.ext` (any file for ""),
@@ -1526,7 +1526,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
 /// The cut list (track W): `cut_list()`, `set_stock(material, stock)`, `cut_settings(map)`,
 /// `cut_part(name, map)`. Lengths are millimetres; unit strings ("2.4 m") are read too.
 fn register_cut_list(e: &mut Engine) {
-    use varstotas_kernel::cutlist::{Issue, PartGrain, PartOptions, Stock, StockKind, plan};
+    use varstotas_kernel::cutlist::{Extra, Issue, PartGrain, PartOptions, Stock, StockKind, plan};
     fn d(v: f64) -> Dynamic {
         Dynamic::from((v * 1000.0).round() / 1000.0)
     }
@@ -1601,6 +1601,7 @@ fn register_cut_list(e: &mut Engine) {
                     m.insert("grain".into(), Dynamic::from(grain_name(o.grain).to_string()));
                     m.insert("exclude".into(), Dynamic::from(o.exclude));
                     m.insert("bands".into(), Dynamic::from_array(o.bands.iter().map(|b| Dynamic::from(*b)).collect()));
+                    m.insert("hardware".into(), Dynamic::from(o.hardware));
                     Dynamic::from_map(m)
                 })
                 .collect();
@@ -1701,6 +1702,20 @@ fn register_cut_list(e: &mut Engine) {
                 })
                 .collect();
             out.insert("banding".into(), Dynamic::from_array(banding));
+            let hardware: Array = p
+                .hardware
+                .iter()
+                .map(|h| {
+                    let mut m = Map::new();
+                    m.insert("name".into(), Dynamic::from(h.name.clone()));
+                    m.insert("count".into(), Dynamic::from(h.count as i64));
+                    m.insert("price".into(), d(h.price));
+                    m.insert("cost".into(), Dynamic::from((h.cost() * 100.0).round() / 100.0));
+                    m.insert("in_model".into(), Dynamic::from(h.extra.is_none()));
+                    Dynamic::from_map(m)
+                })
+                .collect();
+            out.insert("hardware".into(), Dynamic::from_array(hardware));
             out.insert("cost".into(), Dynamic::from((p.cost() * 100.0).round() / 100.0));
             Ok(out)
         })
@@ -1742,6 +1757,22 @@ fn register_cut_list(e: &mut Engine) {
             Ok(())
         })
     });
+    e.register_fn("cut_hardware", |list: Array| -> R<()> {
+        let extras = list
+            .iter()
+            .map(|v| {
+                let m = v.clone().try_cast::<Map>().ok_or_else(|| Box::<EvalAltResult>::from(tr!("script-err-cut-extra")))?;
+                let name = m.get("name").map(|v| v.to_string()).filter(|n| !n.is_empty()).ok_or_else(|| Box::<EvalAltResult>::from(tr!("script-err-cut-extra")))?;
+                let count = m.get("count").map(num).transpose()?.unwrap_or(1.0).max(0.0).round() as usize;
+                let price = m.get("price").map(num).transpose()?.unwrap_or(0.0).max(0.0);
+                Ok(Extra { name, count, price })
+            })
+            .collect::<R<Vec<_>>>()?;
+        edit(|st| {
+            st.model.cut_list.extras = extras;
+            Ok(())
+        })
+    });
     e.register_fn("cut_part", |name: ImmutableString, m: Map| -> R<()> {
         edit(|st| {
             let mut o = st.model.cut_list.options(&name);
@@ -1756,6 +1787,8 @@ fn register_cut_list(e: &mut Engine) {
                         }
                     }
                     "exclude" => o.exclude = v.as_bool().map_err(|_| tr!("script-err-cut-exclude"))?,
+                    "hardware" => o.hardware = v.as_bool().map_err(|_| tr!("script-err-cut-hardware"))?,
+                    "price" => o.price = num(v)?.max(0.0),
                     "bands" => {
                         let list: Vec<bool> = v.clone().into_array().unwrap_or_default().iter().map(|b| b.as_bool()).collect::<Result<_, _>>().map_err(|_| tr!("script-err-cut-bands"))?;
                         o.bands = list.try_into().map_err(|_| tr!("script-err-cut-bands"))?;

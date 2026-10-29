@@ -377,6 +377,9 @@ fn cut_list_stock_and_options() {
     let r = go(&mut m, r##"cut_settings(#{ band: 1.5, band_price: 0.5, band_subtract: true }); cut_part("Shelf", #{ bands: [true, true, false, false] }); let b = cut_list().banding[0]; print(b.width + " " + b.thickness + " " + b.length + " " + b.cost + " " + cut_list().parts[0].bands[1]);"##);
     assert_eq!(r.output, "18.0 1.5 4800.0 2.4 true\n", "{}", r.output);
     assert!(m.cut_list.band_subtract && m.cut_list.parts["Shelf"].bands == [true, true, false, false]);
+    // hardware: the rail bought, not cut, and screws listed by hand
+    let r = go(&mut m, r##"cut_part("Rail", #{ hardware: true, price: 7 }); cut_hardware([#{ name: "Screw", count: 20, price: 0.1 }]); let c = cut_list(); for h in c.hardware { print(h.name + " " + h.count + " " + h.cost + " " + h.in_model); }"##);
+    assert_eq!(r.output, "Rail 1 7.0 true\nScrew 20 2.0 false\n", "{}", r.output);
     // clearing the stock: the parts report it
     go(&mut m, r#"set_stock("Plywood", ()); print(cut_list().issues.len());"#);
     assert!(m.materials.values().find(|x| x.name == "Plywood").unwrap().stock.is_empty());
