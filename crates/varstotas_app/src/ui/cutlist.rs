@@ -352,7 +352,7 @@ impl VarstotasApp {
             };
             let mut line = format!("{}: {}", stock_title(sp, unit), buy.join(", "));
             line.push_str(&tr!("cutlist-waste", percent = format!("{:.0}", sp.waste() * 100.0)));
-            if sp.stock.price > 0.0 {
+            if sp.cost() > 0.0 {
                 line.push_str(&tr!("cutlist-cost", cost = format!("{:.2}", sp.cost())));
             }
             ui.label(line);
@@ -425,15 +425,23 @@ impl VarstotasApp {
         let drawings = self.cut_drawings();
         let s = &mut self.cutlist;
         s.page = s.page.min(drawings.len().saturating_sub(1));
-        let (rect, resp) = ui.allocate_exact_size(vec2(640.0, 452.0), Sense::click());
+        // the page's content (not its empty margins), as wide as the window allows
+        let bounds = drawings.get(s.page).map(|(d, _)| {
+            let pts = d.lines.iter().flat_map(|(a, b, _)| [*a, *b]).chain(d.texts.iter().map(|t| t.at - DVec2::new(0.0, t.size)));
+            pts.fold((DVec2::splat(f64::MAX), DVec2::splat(f64::MIN)), |(lo, hi), p| (lo.min(p), hi.max(p)))
+        });
+        let (lo, hi) = bounds.filter(|(lo, hi)| hi.x > lo.x && hi.y > lo.y).unwrap_or((DVec2::ZERO, PAGE));
+        let (lo, hi) = (lo - DVec2::splat(3.0), hi + DVec2::splat(3.0));
+        let k = ((640.0 - 16.0) / (hi.x - lo.x)).min((452.0 - 16.0) / (hi.y - lo.y));
+        let height = ((hi.y - lo.y) * k + 16.0).max(200.0) as f32;
+        let (rect, resp) = ui.allocate_exact_size(vec2(640.0, height), Sense::click());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 4.0, theme::border());
         let mut clicked = None;
         if let Some((d, hits)) = drawings.get(s.page) {
-            let k = ((rect.width() as f64 - 16.0) / d.size.x).min((rect.height() as f64 - 16.0) / d.size.y);
-            let o = rect.center() - vec2((d.size.x * k) as f32, (d.size.y * k) as f32) * 0.5;
-            let sp = |p: DVec2| pos2(o.x + (p.x * k) as f32, o.y + (p.y * k) as f32);
-            painter.rect_filled(egui::Rect::from_min_max(sp(DVec2::ZERO), sp(d.size)), 0.0, Color32::WHITE);
+            let o = rect.center() - vec2(((hi.x - lo.x) * k) as f32, ((hi.y - lo.y) * k) as f32) * 0.5;
+            let sp = |p: DVec2| pos2(o.x + ((p.x - lo.x) * k) as f32, o.y + ((p.y - lo.y) * k) as f32);
+            painter.rect_filled(egui::Rect::from_min_max(sp(lo), sp(hi)), 0.0, Color32::WHITE);
             let hover = resp.hover_pos();
             for h in hits {
                 let r = egui::Rect::from_min_max(sp(h.min), sp(h.max));
@@ -456,10 +464,8 @@ impl VarstotasApp {
                 }
             }
             for t in &d.texts {
-                let px = (t.size * k) as f32;
-                if px < 6.0 {
-                    continue;
-                }
+                // larger than on paper: the preview is a fraction of the page's size
+                let px = ((t.size * k * 1.5) as f32).max(9.0);
                 let galley = painter.layout_no_wrap(t.lines.join(" "), egui::FontId::proportional(px), Color32::from_gray(40));
                 let size = galley.size();
                 let along = if t.left { 0.0 } else { size.x * 0.5 };

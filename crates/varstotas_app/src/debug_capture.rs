@@ -672,6 +672,12 @@ impl VarstotasApp {
         let Some(script) = self.debug.script.as_mut() else { return };
         ctx.request_repaint();
         script.frame += 1;
+        // Above other windows: macOS does not draw a covered window, so a screenshot asked for
+        // then never arrives (the run hangs while the user works in other apps).
+        if script.frame == 1 {
+            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
         // Let the window and renderer settle: the viewport size must be stable for a while
         // before the first command (world → screen mapping depends on it).
         let vp = self.viewport.size();
@@ -1000,6 +1006,7 @@ impl VarstotasApp {
         use crate::app::Action;
         use varstotas_kernel::IntersectScope;
         if name == "console_close" { self.console.open = false; return; }
+        if name == "preferences_close" { self.prefs_win.open = false; return; }
         if let Some(value) = name.strip_prefix("xray ") {
             self.prefs.xray = value.trim() == "on";
             return;
@@ -1562,6 +1569,15 @@ impl VarstotasApp {
             self.edit_sheet("Add Viewport", |s| s.viewports.push(vp));
             return;
         }
+        // `sheet_cut x y w h page`: a cut-list page in a rectangle on the current sheet.
+        if let Some(args) = name.strip_prefix("sheet_cut ") {
+            let n: Vec<f64> = args.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+            if let [x, y, w, h, page] = n[..] {
+                let c = varstotas_kernel::layout::SheetCutDiagram { min: DVec2::new(x, y), size: DVec2::new(w, h), page: page as usize };
+                self.edit_sheet("Add Cut Diagram", |s| s.cut_diagrams.push(c));
+            }
+            return;
+        }
         if let Some(args) = name.strip_prefix("sheet_text ") {
             let mut it = args.splitn(4, ' ');
             let n: Vec<f64> = it.by_ref().take(3).filter_map(|t| t.parse().ok()).collect();
@@ -1983,6 +1999,14 @@ impl VarstotasApp {
         if let Some(n) = name.strip_prefix("mat_save ") {
             match self.doc.model.materials.iter().find(|(_, m)| m.name == n.trim()) {
                 Some((id, _)) => self.save_material_to_library(id),
+                None => log::warn!("script: no model material {n}"),
+            }
+            return;
+        }
+        // `mat_current <model material>`: make a material of the model the current one.
+        if let Some(n) = name.strip_prefix("mat_current ") {
+            match self.doc.model.materials.iter().map(|(_, m)| m).find(|m| m.name == n.trim()) {
+                Some(m) => self.doc.current_material = Some(crate::document::PaletteMaterial::of(m)),
                 None => log::warn!("script: no model material {n}"),
             }
             return;

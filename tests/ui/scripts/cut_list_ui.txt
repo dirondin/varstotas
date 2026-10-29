@@ -1,0 +1,35 @@
+# Cut list around the window: the stock of a material in the Material Editor, Preferences →
+# Cut List (stock templates), a cut-list page placed on a sheet with "+ Cut Diagram".
+action script material("Plywood", "#d8b98a"); set_stock("Plywood", #{ kind: "sheet", length: 2440, width: 1220, thickness: 18, grain: true, price: 60 }); material("Pine", "#e5cf9e"); set_stock("Pine", #{ kind: "board", width: 95, thickness: 45, lengths: [2400, 3000], prices: [12, 14] }); for i in 0..2 { let s = box(vec3(i * 782, 0, 0), 18, 300, 1800); s.name = "Side"; paint(s, "Plywood"); } for i in 0..5 { let s = box(vec3(18, 0, i * 400), 764, 300, 18); s.name = "Shelf"; paint(s, "Plywood"); } for i in 0..3 { let r = box(vec3(0, -200, i * 600), 1100, 95, 45); r.name = "Rail"; paint(r, "Pine"); }
+action console_close
+wait 5
+view iso
+zoom_extents
+wait 5
+# Pine bought per piece: 2 boards of 2.4 m at 12
+action cut_list
+wait 10
+expect cutlist=(true, 3, 2, 3, 0, "84.00")
+# the stock of Pine in the Material Editor card
+action tray_only Material Editor
+action mat_current Pine
+wait 5
+action click_spot mated:stock
+wait 5
+screenshot shots/cut_list_stock.bmp
+# Preferences → Cut List
+action preferences
+wait 10
+action click_spot prefs:Cut List
+wait 5
+expect prefs_win=(true CutList)
+screenshot shots/cut_list_prefs.bmp
+action preferences_close
+# a sheet with a cut diagram
+action sheet_add a3
+wait 5
+action sheet_cut 20 20 250 180 0
+wait 5
+expect sheets=Some((1, 1, 0, 0,
+screenshot shots/cut_list_sheet.bmp
+quit
