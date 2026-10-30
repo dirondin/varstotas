@@ -24,7 +24,7 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
-    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "suggest_steps", "assembly_steps",
+    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "suggest_steps", "assembly_steps",
     "set_assembly_steps", "assembly_view",
 ];
 
@@ -1833,7 +1833,7 @@ fn register_cut_list(e: &mut Engine) {
     });
 }
 
-const JOINT_KINDS: [(&str, WoodJointKind); 7] = [
+const JOINT_KINDS: [(&str, WoodJointKind); 17] = [
     ("dowels", WoodJointKind::Dowels),
     ("screws", WoodJointKind::Screws),
     ("pocket", WoodJointKind::PocketHole),
@@ -1841,7 +1841,21 @@ const JOINT_KINDS: [(&str, WoodJointKind); 7] = [
     ("tenon", WoodJointKind::MortiseTenon),
     ("box", WoodJointKind::BoxJoint),
     ("dovetail", WoodJointKind::Dovetail),
+    ("confirmat", WoodJointKind::Confirmat),
+    ("cam_lock", WoodJointKind::CamLock),
+    ("shelf_pins", WoodJointKind::ShelfPins),
+    ("hinge", WoodJointKind::Hinge),
+    ("slide", WoodJointKind::Slide),
+    ("table_top", WoodJointKind::TableTop),
+    ("nails", WoodJointKind::Nails),
+    ("handle", WoodJointKind::Handle),
+    ("knob", WoodJointKind::Knob),
+    ("leg", WoodJointKind::Leg),
 ];
+
+fn kind_name_of(k: WoodJointKind) -> String {
+    JOINT_KINDS.iter().find(|(_, x)| *x == k).map_or("", |(n, _)| *n).to_string()
+}
 
 fn joint_kind(s: &str) -> R<WoodJointKind> {
     JOINT_KINDS.iter().find(|(n, _)| *n == s).map(|(_, k)| *k).ok_or_else(|| tr!("script-err-joint-kind", kind = s.to_string()).into())
@@ -1866,6 +1880,9 @@ fn joint_params(j: &mut WoodJoint, m: &Map) -> R<()> {
             "margin" => j.margin = num(v)?,
             "pitch" => j.pitch = num(v)?,
             "offset" => j.offset = num(v)?,
+            "size" => j.size = num(v)?,
+            "inset" => j.inset = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "inset"))?,
+            "rows" => j.rows = num(v)?.max(0.0).round() as usize,
             "at" => {
                 j.at = v.clone().into_array().map_err(|_| tr!("script-err-joint-at"))?.iter().map(num).collect::<R<Vec<f64>>>()?;
                 j.count = j.at.len().max(1);
@@ -1890,11 +1907,13 @@ fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
     }
     m.insert("through".into(), j.through.into());
     m.insert("flip".into(), j.flip.into());
-    for (k, v) in [("margin", j.margin), ("pitch", j.pitch), ("offset", j.offset)] {
+    for (k, v) in [("margin", j.margin), ("pitch", j.pitch), ("offset", j.offset), ("size", j.size)] {
         m.insert(k.into(), v.into());
     }
+    m.insert("inset".into(), j.inset.into());
+    m.insert("rows".into(), (j.rows as i64).into());
     m.insert("at".into(), j.at.iter().map(|v| Dynamic::from(*v)).collect::<Array>().into());
-    let c = varstotas_kernel::joinery::contact(&st.model.unjoined(), &j.a, &j.b);
+    let c = varstotas_kernel::joinery::joint_contact(&st.model.unjoined(), j);
     let pos: Array = c.as_ref().map(|c| j.positions(c)).unwrap_or_default().into_iter().map(Dynamic::from).collect();
     m.insert("positions".into(), pos.into());
     let hw = j.hardware(c.as_ref());
@@ -1905,6 +1924,9 @@ fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
 fn register_joinery(e: &mut Engine) {
     e.register_fn("joint", |a: Dynamic, b: Dynamic, kind: ImmutableString| -> R<i64> { add_joint(&a, &b, &kind, &Map::new()) });
     e.register_fn("joint", |a: Dynamic, b: Dynamic, kind: ImmutableString, m: Map| -> R<i64> { add_joint(&a, &b, &kind, &m) });
+    // a fitting on one part: a handle, a knob, legs
+    e.register_fn("joint", |a: Dynamic, kind: ImmutableString| -> R<i64> { add_joint(&a, &Dynamic::UNIT, &kind, &Map::new()) });
+    e.register_fn("joint", |a: Dynamic, kind: ImmutableString, m: Map| -> R<i64> { add_joint(&a, &Dynamic::UNIT, &kind, &m) });
     e.register_fn("joints", || -> R<Array> { with(|st| Ok(st.model.joints.iter().map(|j| joint_map(st, j)).collect())) });
     e.register_fn("set_joint", |i: i64, m: Map| -> R<()> {
         edit(|st| {
@@ -1917,6 +1939,8 @@ fn register_joinery(e: &mut Engine) {
             op(st.model.set_wood_joint(i, j))
         })
     });
+    e.register_fn("drawer", |l: Dynamic, r: Dynamic| -> R<Array> { add_drawer(&l, &r, &Map::new()) });
+    e.register_fn("drawer", |l: Dynamic, r: Dynamic, m: Map| -> R<Array> { add_drawer(&l, &r, &m) });
     e.register_fn("remove_joint", |i: i64| -> R<()> {
         edit(|st| {
             let i = usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()))?;
@@ -2015,16 +2039,60 @@ fn register_assembly(e: &mut Engine) {
     e.register_fn("assembly_view", move |explode: i64, step: i64| -> R<()> { view(explode as f64, step) });
 }
 
-fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {
-    let (a, b) = (one(a)?, one(b)?);
-    let kind = joint_kind(kind)?;
+/// A drawer between two parts: `#{ z, height, wall, bottom, front: "inset" | "overlay" | "none",
+/// front_thickness }`; its parts.
+fn add_drawer(l: &Dynamic, r: &Dynamic, m: &Map) -> R<Array> {
+    use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
+    let (l, r) = (one(l)?, one(r)?);
     edit(|st| {
         let path = |e: &Entity| -> R<ContextPath> {
             let mut p = e.path.clone();
             p.push(inst_id(st, e)?);
             Ok(p)
         };
-        let (pa, pb) = (path(&a)?, path(&b)?);
+        let (pl, pr) = (path(&l)?, path(&r)?);
+        let mut spec = DrawerSpec { z: st.model.drawer_z(&pl, &pr).unwrap_or(0.0), ..Default::default() };
+        for (k, v) in m {
+            match k.as_str() {
+                "z" => spec.z = num(v)?,
+                "height" => spec.height = num(v)?,
+                "wall" => spec.wall = num(v)?,
+                "bottom" => spec.bottom = num(v)?,
+                "front_thickness" => spec.front_thickness = num(v)?,
+                "front" => {
+                    spec.front = match v.to_string().as_str() {
+                        "inset" => DrawerFront::Inset,
+                        "overlay" => DrawerFront::Overlay,
+                        "none" => DrawerFront::None,
+                        f => return err(tr!("script-err-drawer-front", front = f.to_string())),
+                    }
+                }
+                k => return err(tr!("script-err-drawer-key", key = k.to_string())),
+            }
+        }
+        let parts = op(st.model.add_drawer(&pl, &pr, spec))?;
+        Ok(parts.into_iter().map(|id| dyn_ent(&l.path, EntityRef::Instance(id))).collect())
+    })
+}
+
+fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {
+    let kind = joint_kind(kind)?;
+    let a = one(a)?;
+    let b = if b.is_unit() { None } else { Some(one(b)?) };
+    if kind.single() != b.is_none() {
+        return err(tr!(if kind.single() { "script-err-joint-one-part" } else { "script-err-joint-two-parts" }, kind = kind_name_of(kind)));
+    }
+    edit(|st| {
+        let path = |e: &Entity| -> R<ContextPath> {
+            let mut p = e.path.clone();
+            p.push(inst_id(st, e)?);
+            Ok(p)
+        };
+        let pa = path(&a)?;
+        let pb = match &b {
+            Some(b) => path(b)?,
+            None => Vec::new(),
+        };
         let i = op(st.model.add_wood_joint(kind, pa, pb))?;
         if !m.is_empty() {
             let mut j = st.model.joints[i].clone();

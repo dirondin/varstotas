@@ -254,6 +254,8 @@ const WORKSHOP: &[B] = &[
     B::Row("help-workshop-2", "help-workshop-3"),
     B::Row("help-workshop-4", "help-workshop-5"),
     B::Row("help-workshop-13", "help-workshop-14"),
+    B::Row("help-workshop-15", "help-workshop-16"),
+    B::Row("help-workshop-17", "help-workshop-18"),
     B::Row("help-workshop-6", "help-workshop-7"),
     B::Row("help-workshop-8", "help-workshop-9"),
     B::Row("help-workshop-10", "help-workshop-11"),

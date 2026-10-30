@@ -235,3 +235,92 @@ fn layouts_along_and_across_the_joint() {
         assert_eq!(pos(&m), vec![20.0, 200.0]);
     }
 }
+
+#[test]
+fn furniture_fittings() {
+    use WoodJointKind as K;
+    let hw = |m: &Model, i: usize| {
+        let c = varstotas_kernel::joinery::joint_contact(m, &m.joints[i]);
+        m.joints[i].hardware(c.as_ref()).unwrap()
+    };
+    let bodies = |m: &Model, i: usize| m.fasteners.iter().filter(|f| f.joint == i).count();
+    // confirmats and cam locks between the side and the shelf
+    let (mut m, side, shelf) = cabinet();
+    let (vs, vh) = (volume(&m, side), volume(&m, shelf));
+    let i = m.add_wood_joint(K::Confirmat, vec![side], vec![shelf]).unwrap();
+    assert_eq!(hw(&m, i), ("Confirmat Ø7 × 50".into(), 3));
+    assert!(volume(&m, side) < vs && volume(&m, shelf) < vh);
+    m.set_wood_joint_kind(i, K::CamLock).unwrap();
+    assert_eq!((hw(&m, i).0.as_str(), bodies(&m, i)), ("Cam lock Ø15 with bolt", 6), "a bolt and a cam each");
+    // shelf pins: two under the shelf, two rows above and below; the shelf is not cut
+    m.set_wood_joint_kind(i, K::ShelfPins).unwrap();
+    let mut j = m.joints[i].clone();
+    j.rows = 2;
+    m.set_wood_joint(i, j).unwrap();
+    let c = m.joint_contacts[i].unwrap();
+    let (a, b) = m.joints[i].holes(&c);
+    assert_eq!((a.len(), b.len(), bodies(&m, i)), (10, 0, 2));
+    assert_eq!(a[0].0.z, 400.0 - 2.5, "just under the shelf");
+    assert_eq!(volume(&m, shelf), vh);
+    // an overlay door on the side's front edge: two cups in the door, 22.5 from its edge
+    let door = board(&mut m, "Door", DVec3::new(600.0, 18.0, 800.0), DVec3::new(0.0, -18.0, 0.0));
+    let vd = volume(&m, door);
+    let h = m.add_wood_joint(K::Hinge, vec![side], vec![door]).unwrap();
+    assert_eq!(m.joints[h].a, vec![door], "the door's face is the larger");
+    assert_eq!(hw(&m, h), ("Cup hinge Ø35, overlay".into(), 2));
+    let c = m.joint_contacts[h].unwrap();
+    assert_eq!(m.joints[h].holes(&c).0[0].0.x, 22.5);
+    assert!(volume(&m, door) < vd);
+    // a handle on the door's front, the longest that fits; legs under the shelf
+    let k = m.add_wood_joint(K::Handle, vec![door], vec![]).unwrap();
+    assert_eq!((hw(&m, k), m.joints[k].b.len()), (("Handle, centres 192".into(), 1), 0));
+    assert_eq!(m.joint_contacts[k].unwrap().at, -18.0, "on the front face");
+    let l = m.add_wood_joint(K::Leg, vec![shelf], vec![]).unwrap();
+    assert_eq!((hw(&m, l), bodies(&m, l)), (("Leg, height 100".into(), 4), 4));
+    assert!(m.add_wood_joint(K::Knob, vec![], vec![]).is_err());
+    // a back panel nailed onto the side's back edge: nothing cut
+    let back = board(&mut m, "Back", DVec3::new(600.0, 6.0, 800.0), DVec3::new(0.0, 300.0, 0.0));
+    let vb = volume(&m, back);
+    let n = m.add_wood_joint(K::Nails, vec![side], vec![back]).unwrap();
+    assert_eq!(hw(&m, n), ("Nail 1.6 × 25".into(), 9));
+    assert_eq!(volume(&m, back), vb);
+    // a top on figure 8 fasteners recessed into the side's top edge
+    let top = board(&mut m, "Top", DVec3::new(600.0, 300.0, 18.0), DVec3::new(0.0, 0.0, 800.0));
+    let t = m.add_wood_joint(K::TableTop, vec![side], vec![top]).unwrap();
+    assert_eq!(hw(&m, t).0, "Table-top fastener (figure 8)");
+    // a ball-bearing slide: 12.7 mm between the sides, the longest that fits
+    let (mut m, side, _) = cabinet();
+    let drawer = board(&mut m, "Drawer side", DVec3::new(12.0, 450.0, 150.0), DVec3::new(18.0 + 12.7, 0.0, 100.0));
+    let s = m.add_wood_joint(K::Slide, vec![side], vec![drawer]).unwrap();
+    assert_eq!(hw(&m, s), ("Ball-bearing slide 300".into(), 1));
+    assert_eq!(bodies(&m, s), 2);
+    m.root_mesh_mut().instances[drawer].transform = DMat4::from_translation(DVec3::new(38.0, 0.0, 100.0));
+    assert!(m.add_wood_joint(K::Slide, vec![side], vec![drawer]).is_err_and(|e| e.to_string().contains("12.7")));
+}
+
+#[test]
+fn a_drawer_for_an_opening() {
+    use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
+    let mut m = Model::new();
+    let l = board(&mut m, "Left", DVec3::new(18.0, 500.0, 700.0), DVec3::ZERO);
+    let r = board(&mut m, "Right", DVec3::new(18.0, 500.0, 700.0), DVec3::new(518.0, 0.0, 0.0));
+    let z = m.drawer_z(&[l], &[r]).unwrap();
+    let parts = m.add_drawer(&[l], &[r], DrawerSpec { z, ..Default::default() }).unwrap();
+    assert_eq!(parts.len(), 6, "sides, box front and back, bottom, front");
+    let size = |m: &Model, id| {
+        let b = m.instance_world_bounds(&[], id).unwrap();
+        (b.min, b.max - b.min)
+    };
+    // 12.7 mm each side, 450 slides behind an 18 mm inset front
+    let (min, s) = size(&m, parts[0]);
+    assert!((min.x - 30.7).abs() < 1e-9 && (s.y - 450.0).abs() < 1e-9 && (min.y - 18.0).abs() < 1e-9, "{min} {s}");
+    let names: Vec<String> = m.joints.iter().map(|j| format!("{:?}", j.kind)).collect();
+    assert_eq!(names, ["Slide", "Slide", "Dowels", "Dowels", "Nails", "Dowels", "Dowels", "Nails", "Screws", "Handle"]);
+    let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
+    assert!(hw.contains(&"2 × Ball-bearing slide 450".to_string()), "{hw:?}");
+    // an overlay front stands in front of the carcass; no room: refused, nothing added
+    let mut m2 = m.clone();
+    let p2 = m2.add_drawer(&[l], &[r], DrawerSpec { z: 400.0, front: DrawerFront::Overlay, ..Default::default() }).unwrap();
+    assert_eq!(size(&m2, p2[5]).0.y, -18.0);
+    assert!(m.add_drawer(&[l], &[r], DrawerSpec { z: 650.0, ..Default::default() }).is_err());
+}

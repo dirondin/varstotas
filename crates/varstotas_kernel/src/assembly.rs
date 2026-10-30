@@ -312,6 +312,10 @@ impl Model {
     /// The hardware joint `i` adds at its step: the step of the later of its two parts.
     pub fn joint_step(&self, i: usize) -> Option<usize> {
         let j = self.joints.get(i)?;
-        Some(self.assembly.step_of(&j.a)?.max(self.assembly.step_of(&j.b)?))
+        let a = self.assembly.step_of(&j.a)?;
+        if j.b.is_empty() {
+            return Some(a);
+        }
+        Some(a.max(self.assembly.step_of(&j.b)?))
     }
 }

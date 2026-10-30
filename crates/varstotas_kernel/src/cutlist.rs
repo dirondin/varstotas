@@ -550,7 +550,7 @@ type Drilled = Vec<(ContextPath, Vec<crate::joinery::Hole>)>;
 fn joint_holes(model: &Model) -> Drilled {
     let mut out: Drilled = Vec::new();
     for j in &model.joints {
-        let Some(c) = crate::joinery::contact(model, &j.a, &j.b) else { continue };
+        let Some(c) = crate::joinery::joint_contact(model, j) else { continue };
         let (a, b) = j.holes(&c);
         for (path, h) in [(&j.a, a), (&j.b, b)] {
             match out.iter_mut().find(|(p, _)| p == path) {
@@ -1098,7 +1098,7 @@ pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSetting
     }
     // dowels and screws of the joints, priced by name like hardware parts
     for j in &model.joints {
-        let c = crate::joinery::contact(model, &j.a, &j.b);
+        let c = crate::joinery::joint_contact(model, j);
         if let Some((name, count)) = j.hardware(c.as_ref()) {
             match hardware.iter_mut().find(|h| h.name == name && h.extra.is_none()) {
                 Some(h) => h.count += count,

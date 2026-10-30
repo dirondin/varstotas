@@ -119,9 +119,11 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 | Function | Result |
 |---|---|
 | `joint("Side", "Shelf", "dowels")` | joins two touching groups or components, cut into both; kinds `"dowels"`, `"screws"`, `"pocket"` (pocket holes), `"housing"` (dado / rabbet), `"tenon"` (mortise and tenon), `"box"` (box joint), `"dovetail"`. The sizes suit the parts; a map sets some: `joint(side, top, "dovetail", #{ count: 5, pin: 8, angle: 9.5 })`. Returns the joint's index |
-| `joints()` | the joints: `#{ kind, a, b, count, diameter, depth, depth_b, thickness, shoulder, clearance, angle, pin, through, flip, margin, pitch, at, offset, positions, hardware }`; `positions` are where the fasteners are, from the joint's start; `a` is the part joined into, `b` the one whose end meets it; `hardware` e.g. `"3 × Dowel Ø8 × 40"` |
+| `joints()` | the joints: `#{ kind, a, b, count, diameter, depth, depth_b, thickness, shoulder, clearance, angle, pin, through, flip, margin, pitch, at, offset, size, inset, rows, positions, hardware }` (`b` is `()` for a fitting on one part); `positions` are where the fasteners are, from the joint's start; `a` is the part joined into, `b` the one whose end meets it; `hardware` e.g. `"3 × Dowel Ø8 × 40"` |
 | `set_joint(i, #{ depth: 9 })` | changes joint `i`'s sizes; `kind` in the map turns it into another kind with sizes that suit it |
+| `joint(door, "handle", #{ size: 128 })` | a fitting on one part: `"handle"`, `"knob"` (on its front face, min y; `flip`: the back) or `"leg"` (four under it) |
 | `remove_joint(i)` | deletes joint `i`; its parts get their shape back |
+| `drawer("Left", "Right", #{ z: 150, height: 160, front: "overlay" })` | a drawer for the opening between two parts facing each other: its box on the longest standard slides that fit, 12.7 mm each side, dowels, a nailed bottom, a `front` (`"inset"`, `"overlay"`, `"none"`) screwed on with a handle. Keys `z` (the box's underside; default the opening's bottom + 30), `height`, `wall`, `bottom`, `front_thickness`. Returns its parts |
 
 Keys (mm): `count` (dowels, screws, pocket holes; fingers of a box joint on `b`; dovetail tails),
 `diameter`, `depth` (into `a`), `depth_b` (into `b`), `thickness` and `shoulder` (tenon),
@@ -129,7 +131,18 @@ Keys (mm): `count` (dowels, screws, pocket holes; fingers of a box joint on `b`;
 `pin` (dovetail pins at their narrow end), `through` (tenon), `flip` (pocket holes from `b`'s other
 face). Box joints and dovetails join a corner: `a`'s end flush with `b`'s outer face.
 
-Dowels, screws and pocket holes are laid out along the joint, from its start (the end with the
+Furniture hardware kinds: `"confirmat"` (`size`: the screw's length), `"cam_lock"` (minifix:
+`diameter` of the cam, `size` from `a`'s face to its centre, `flip` puts it in `b`'s other face),
+`"shelf_pins"` (under `b`, `flip`: over it; `rows` of holes 32 mm apart above and below),
+`"hinge"` (cup hinges, `diameter` 35 and cup `depth`; overlay: the door is `a`, the side's edge
+on its back; `inset: true`: the door is `b`, between the sides; the count follows the door's
+height), `"slide"` (ball-bearing, the parts 12.7 mm apart; `size` 0: the longest standard length
+that fits; `flip`: the front at the other end), `"table_top"` (figure 8 fasteners in the edge of
+an apron `b`, `flip`: the other side), `"nails"` (through a back panel `a`; `size`: the length),
+`"handle"` (`size`: centres), `"knob"`, `"leg"` (`size`: height, `diameter`, `margin` from the
+edges).
+
+Dowels, screws, pocket holes and the fittings along a joint are laid out along it, from its start (the end with the
 lower coordinate): evenly between `margin` from both ends (0: a quarter of the joint, at most
 32 mm), from `margin` every `pitch` (`set_joint(0, #{ margin: 37, pitch: 32 })`, the 32 mm system),
 or at the distances in `at` (`#{ at: [40, 150, 260] }`, which sets `count`; an empty array goes

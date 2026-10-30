@@ -407,6 +407,16 @@ fn joinery() {
     assert_eq!(r.output, "[37.0, 69.0, 101.0]\n[20.0, 200.0] 2 2.0\n", "{}", r.output);
     let r = run(&mut m, &ScriptCtx::default(), r#"set_joint(0, #{ at: [20, 299] })"#);
     assert!(r.error.is_some());
+    // fittings: between two parts, and on one part
+    let r = go(
+        &mut m,
+        r##"set_joint(0, #{ kind: "cam_lock" }); print(joints()[0].hardware);
+        let l = joint("Shelf", "leg", #{ size: 120 }); let j = joints()[l]; print(j.kind + " " + j.size + " " + type_of(j.b) + " " + j.hardware);
+        remove_joint(l);"##,
+    );
+    assert_eq!(r.output, "3 × Cam lock Ø15 with bolt\nleg 120.0 () 4 × Leg, height 120\n", "{}", r.output);
+    let r = run(&mut m, &ScriptCtx::default(), r#"joint("Shelf", "dowels")"#);
+    assert!(r.error.is_some_and(|e| e.contains("joint(a, b")));
     let r = run(&mut m, &ScriptCtx::default(), r#"joint("Side", "Shelf", "rivets")"#);
     assert!(r.error.is_some_and(|e| e.contains("rivets")));
     go(&mut m, "remove_joint(0);");

@@ -186,7 +186,10 @@ and pocket screws. View → Show → Fasteners; User Guide → Workshop.
   or takes a typed distance; Delete removes a point.
 - The Joinery window shows lengths in the model's units.
 
-**D. Furniture hardware.** New joint kinds that cut their own holes, price themselves in the cut
+**D. Furniture hardware.** Status (2026-10-30): done. Joinery's kind list has a Furniture
+hardware group; Joinery → Drawer; Rhai kinds `confirmat`, `cam_lock`, `shelf_pins`, `hinge`,
+`slide`, `table_top`, `nails`, `handle`, `knob`, `leg` and `drawer(left, right)`. Gas struts are left
+for later. New joint kinds that cut their own holes, price themselves in the cut
 list and show their bodies:
 - confirmat screws and cam locks (minifix);
 - shelf pins (32 mm rows on the side);

@@ -81,7 +81,7 @@ pub(crate) fn step_hardware(model: &Model, step: usize) -> Vec<String> {
         if model.joint_step(i) != Some(step) {
             continue;
         }
-        let c = varstotas_kernel::joinery::contact(model, &j.a, &j.b);
+        let c = varstotas_kernel::joinery::joint_contact(model, j);
         if let Some((name, n)) = j.hardware(c.as_ref()) {
             match by.iter_mut().find(|(k, _)| *k == name) {
                 Some(e) => e.1 += n,

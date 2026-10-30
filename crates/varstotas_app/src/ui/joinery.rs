@@ -8,6 +8,7 @@ use crate::app::VarstotasApp;
 use crate::ui::theme;
 use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
+use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
 use varstotas_kernel::joinery::{Contact, WoodJoint, WoodJointKind};
 use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
 
@@ -20,6 +21,10 @@ pub struct JoineryState {
     draft: Option<(usize, WoodJoint)>,
     /// The joint picked in the list (highlighted on the model).
     pub selected: Option<usize>,
+    /// A new drawer's height and front; its height from the floor (`None`: the opening's
+    /// bottom, a little up).
+    drawer: Option<DrawerSpec>,
+    drawer_z: Option<f64>,
 }
 
 const JOINT_LINE: egui::Color32 = egui::Color32::from_rgb(0xE0, 0x7A, 0x10);
@@ -34,7 +39,30 @@ pub(crate) fn kind_name(k: WoodJointKind) -> String {
         WoodJointKind::BoxJoint => "joinery-kind-box",
         WoodJointKind::Dovetail => "joinery-kind-dovetail",
         WoodJointKind::PocketHole => "joinery-kind-pocket",
+        WoodJointKind::Confirmat => "joinery-kind-confirmat",
+        WoodJointKind::CamLock => "joinery-kind-cam-lock",
+        WoodJointKind::ShelfPins => "joinery-kind-shelf-pins",
+        WoodJointKind::Hinge => "joinery-kind-hinge",
+        WoodJointKind::Slide => "joinery-kind-slide",
+        WoodJointKind::Handle => "joinery-kind-handle",
+        WoodJointKind::Knob => "joinery-kind-knob",
+        WoodJointKind::Leg => "joinery-kind-leg",
+        WoodJointKind::TableTop => "joinery-kind-table-top",
+        WoodJointKind::Nails => "joinery-kind-nails",
     })
+}
+
+/// The kinds in a combo box, wood joints then fittings under their headings; `only` keeps
+/// the kinds on one part or on two.
+fn kind_combo(ui: &mut Ui, id: &str, k: &mut WoodJointKind, only: Option<bool>) {
+    egui::ComboBox::from_id_salt(id).selected_text(kind_name(*k)).height(520.0).show_ui(ui, |ui| {
+        for fitting in [false, true] {
+            ui.label(RichText::new(tr!(if fitting { "joinery-group-fittings" } else { "joinery-group-joints" })).small().color(theme::text_dim()));
+            for x in WoodJointKind::ALL.into_iter().filter(|x| x.fitting() == fitting && only.is_none_or(|o| x.single() == o)) {
+                ui.selectable_value(k, x, kind_name(x));
+            }
+        }
+    });
 }
 
 /// A part's name: its instance name, else its definition's.
@@ -55,11 +83,6 @@ fn len(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, min: f64, max: f
 
 fn mm(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, max: f64) -> bool {
     len(ui, label, v, unit, 0.5, max).changed()
-}
-
-/// Kinds whose fasteners are laid out along the joint.
-pub(crate) fn spaced(k: WoodJointKind) -> bool {
-    matches!(k, WoodJointKind::Dowels | WoodJointKind::Screws | WoodJointKind::PocketHole)
 }
 
 /// How a joint's fasteners are laid out: evenly, from the ends with a pitch, at distances.
@@ -125,10 +148,12 @@ fn layout_ui(ui: &mut Ui, j: &mut WoodJoint, c: Option<Contact>, unit: LengthUni
 }
 
 impl VarstotasApp {
-    /// The two selected groups or components, as paths from the root.
+    /// The selected groups or components as paths from the root: two, or one for a fitting on
+    /// one part (the second path empty).
     fn joint_selection(&self) -> Option<(Vec<InstanceId>, Vec<InstanceId>)> {
         let ids: Vec<InstanceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None }).collect();
-        if ids.len() != 2 || self.doc.selection.len() != 2 {
+        let want = if self.joinery.kind.single() { 1 } else { 2 };
+        if ids.len() != want || self.doc.selection.len() != want {
             return None;
         }
         let path = |id| {
@@ -136,13 +161,13 @@ impl VarstotasApp {
             p.push(id);
             p
         };
-        Some((path(ids[0]), path(ids[1])))
+        Some((path(ids[0]), ids.get(1).map(|&id| path(id)).unwrap_or_default()))
     }
 
-    /// Join the two selected parts with a joint of the chosen kind.
+    /// Join the selected parts with a joint of the chosen kind.
     pub(crate) fn add_joint(&mut self) {
         let Some((p, q)) = self.joint_selection() else {
-            self.flash_error(tr!("joint-err-two-parts"));
+            self.flash_error(tr!(if self.joinery.kind.single() { "joint-err-one-part" } else { "joint-err-two-parts" }));
             return;
         };
         let kind = self.joinery.kind;
@@ -152,7 +177,12 @@ impl VarstotasApp {
     /// The joints for the debug dump: (kind, b, a, hardware).
     pub(crate) fn joints_dump(&self) -> Vec<(String, String, String, String)> {
         let m = &self.doc.model;
-        m.joints.iter().map(|j| (format!("{:?}", j.kind), part_name(m, &j.b), part_name(m, &j.a), j.hardware(None).map(|(n, c)| format!("{c} × {n}")).unwrap_or_default())).collect()
+        let name = |p: &[InstanceId]| if p.is_empty() { String::new() } else { part_name(m, p) };
+        m.joints
+            .iter()
+            .enumerate()
+            .map(|(i, j)| (format!("{:?}", j.kind), name(&j.b), name(&j.a), j.hardware(m.joint_contacts.get(i).copied().flatten().as_ref()).map(|(n, c)| format!("{c} × {n}")).unwrap_or_default()))
+            .collect()
     }
 
     /// The joints on the model while the window is open: each contact outlined with its number,
@@ -208,7 +238,12 @@ impl VarstotasApp {
     }
 
     fn select_joint_parts(&mut self, j: &WoodJoint) {
-        let (Some((&a, pa)), Some((&b, pb))) = (j.a.split_last(), j.b.split_last()) else { return };
+        let Some((&a, pa)) = j.a.split_last() else { return };
+        let Some((&b, pb)) = j.b.split_last() else {
+            self.doc.set_active_path(pa.to_vec());
+            self.doc.set_selection(vec![EntityRef::Instance(a)]);
+            return;
+        };
         self.doc.set_active_path(pa.to_vec());
         self.doc.set_selection(if pa == pb { vec![EntityRef::Instance(a), EntityRef::Instance(b)] } else { vec![EntityRef::Instance(a)] });
     }
@@ -235,22 +270,67 @@ impl VarstotasApp {
         let sel = self.joint_selection();
         ui.horizontal(|ui| {
             ui.label(tr!("joinery-kind"));
-            egui::ComboBox::from_id_salt("joinery_new_kind").selected_text(kind_name(self.joinery.kind)).show_ui(ui, |ui| {
-                for k in WoodJointKind::ALL {
-                    ui.selectable_value(&mut self.joinery.kind, k, kind_name(k));
-                }
-            });
+            kind_combo(ui, "joinery_new_kind", &mut self.joinery.kind, None);
+            let single = self.joinery.kind.single();
+            let need = if single { tr!("joinery-pick-one") } else { tr!("joint-err-two-parts") };
             let r = ui.add_enabled(sel.is_some(), egui::Button::new(RichText::new(tr!("joinery-add")).strong()));
             super::tray_lib::spot("joinery:add", r.rect.center());
-            if r.on_hover_text(tr!("joinery-add-tip")).on_disabled_hover_text(tr!("joint-err-two-parts")).clicked() {
+            if r.on_hover_text(tr!("joinery-add-tip")).on_disabled_hover_text(need.clone()).clicked() {
                 self.add_joint();
             }
         });
         let hint = match &sel {
+            Some((p, q)) if q.is_empty() => tr!("joinery-selected-one", a = part_name(&self.doc.model, p)),
             Some((p, q)) => tr!("joinery-selected", a = part_name(&self.doc.model, p), b = part_name(&self.doc.model, q)),
+            None if self.joinery.kind.single() => tr!("joinery-pick-one"),
             None => tr!("joint-err-two-parts"),
         };
         ui.label(RichText::new(hint).small().color(theme::text_dim()));
+        self.drawer_ui(ui);
+    }
+
+    /// A drawer for the opening between the two selected parts (shown only for such a pair).
+    fn drawer_ui(&mut self, ui: &mut Ui) {
+        let unit = self.doc.model.unit;
+        let ids: Vec<InstanceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None }).collect();
+        let pair = (ids.len() == 2).then(|| {
+            let path = |id| {
+                let mut p = self.doc.active_path.clone();
+                p.push(id);
+                p
+            };
+            (path(ids[0]), path(ids[1]))
+        });
+        // only for two parts with an opening between them
+        let Some(auto) = pair.as_ref().and_then(|(l, r)| self.doc.model.drawer_z(l, r)) else { return };
+        let mut spec = self.joinery.drawer.unwrap_or_default();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(tr!("joinery-drawer")).strong());
+            len(ui, &tr!("joinery-height"), &mut spec.height, unit, 40.0, 2000.0);
+            let mut z = self.joinery.drawer_z.unwrap_or(auto);
+            if len(ui, &tr!("joinery-drawer-z"), &mut z, unit, 0.0, 10_000.0).changed() {
+                self.joinery.drawer_z = Some(z);
+            }
+            ui.label(tr!("joinery-drawer-front"));
+            let fronts = [(DrawerFront::Inset, "joinery-drawer-front-inset"), (DrawerFront::Overlay, "joinery-drawer-front-overlay"), (DrawerFront::None, "joinery-drawer-front-none")];
+            let name = |f: DrawerFront| fronts.iter().find(|x| x.0 == f).map(|x| varstotas_i18n::tr(x.1)).unwrap_or_default();
+            egui::ComboBox::from_id_salt("drawer_front").selected_text(name(spec.front)).show_ui(ui, |ui| {
+                for (f, _) in fronts {
+                    ui.selectable_value(&mut spec.front, f, name(f));
+                }
+            });
+            let r = ui.button(tr!("joinery-drawer-add"));
+            super::tray_lib::spot("joinery:drawer", r.rect.center());
+            if r.on_hover_text(tr!("joinery-drawer-tip")).clicked()
+                && let Some((l, r)) = pair.clone()
+            {
+                let spec = DrawerSpec { z: z.max(0.0), ..spec };
+                if self.doc.try_commit(&tr!("joinery-drawer-undo"), move |m| m.add_drawer(&l, &r, spec)).is_some() {
+                    self.joinery.drawer_z = None;
+                }
+            }
+        });
+        self.joinery.drawer = Some(spec);
     }
 
     fn joinery_list_ui(&mut self, ui: &mut Ui) {
@@ -274,7 +354,11 @@ impl VarstotasApp {
                 let picked = self.joinery.selected == Some(i);
                 ui.push_id(("joint", i), |ui| {
                     ui.horizontal(|ui| {
-                        let name = format!("{}. {} → {}", i + 1, part_name(&self.doc.model, &j.b), part_name(&self.doc.model, &j.a));
+                        let name = if j.kind.single() {
+                            format!("{}. {}", i + 1, part_name(&self.doc.model, &j.a))
+                        } else {
+                            format!("{}. {} → {}", i + 1, part_name(&self.doc.model, &j.b), part_name(&self.doc.model, &j.a))
+                        };
                         let text = if picked { RichText::new(name).strong().color(JOINT_PICKED) } else { RichText::new(name).strong() };
                         let r = ui.link(text);
                         super::tray_lib::spot(format!("joinery:pick:{i}"), r.rect.center());
@@ -287,17 +371,15 @@ impl VarstotasApp {
                             if r.clicked() {
                                 remove = Some(i);
                             }
-                            let r = ui.small_button("⇄").on_hover_text(tr!("joinery-swap-tip"));
-                            super::tray_lib::spot(format!("joinery:swap:{i}"), r.rect.center());
-                            if r.clicked() {
-                                swap = Some(i);
+                            if !j.kind.single() {
+                                let r = ui.small_button("⇄").on_hover_text(tr!("joinery-swap-tip"));
+                                super::tray_lib::spot(format!("joinery:swap:{i}"), r.rect.center());
+                                if r.clicked() {
+                                    swap = Some(i);
+                                }
                             }
                             let mut k = j.kind;
-                            egui::ComboBox::from_id_salt("kind").selected_text(kind_name(k)).show_ui(ui, |ui| {
-                                for x in WoodJointKind::ALL {
-                                    ui.selectable_value(&mut k, x, kind_name(x));
-                                }
-                            });
+                            kind_combo(ui, "kind", &mut k, Some(j.kind.single()));
                             if k != j.kind {
                                 kind = Some((i, k));
                             }
@@ -343,9 +425,51 @@ impl VarstotasApp {
                             mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
                             ui.checkbox(&mut j.flip, tr!("joinery-flip")).on_hover_text(tr!("joinery-flip-tip"));
                         }
+                        WoodJointKind::Confirmat | WoodJointKind::Nails => {
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
+                            mm(ui, &tr!("joinery-length"), &mut j.size, unit, 200.0);
+                        }
+                        WoodJointKind::CamLock => {
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 40.0);
+                            mm(ui, &tr!("joinery-to-cam"), &mut j.size, unit, 100.0);
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip-cam"));
+                        }
+                        WoodJointKind::ShelfPins => {
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
+                            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 50.0);
+                            ui.label(tr!("joinery-rows")).on_hover_text(tr!("joinery-rows-tip"));
+                            ui.add(egui::DragValue::new(&mut j.rows).range(0..=40).speed(0.05));
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip-pins"));
+                        }
+                        WoodJointKind::Hinge => {
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 60.0);
+                            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 30.0);
+                            ui.checkbox(&mut j.inset, tr!("joinery-inset")).on_hover_text(tr!("joinery-inset-tip"));
+                        }
+                        WoodJointKind::Slide => {
+                            len(ui, &tr!("joinery-length"), &mut j.size, unit, 0.0, 2000.0).on_hover_text(tr!("joinery-length-auto-tip"));
+                            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip-front"));
+                        }
+                        WoodJointKind::Handle => {
+                            mm(ui, &tr!("joinery-centres"), &mut j.size, unit, 1000.0);
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip-back"));
+                        }
+                        WoodJointKind::Knob => {
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 100.0);
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip-back"));
+                        }
+                        WoodJointKind::Leg => {
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 300.0);
+                            mm(ui, &tr!("joinery-height"), &mut j.size, unit, 2000.0);
+                            len(ui, &tr!("joinery-margin"), &mut j.margin, unit, 0.0, 1000.0);
+                        }
+                        WoodJointKind::TableTop => {
+                            ui.checkbox(&mut j.flip, tr!("joinery-flip-side"));
+                        }
                     });
-                    if spaced(j.kind) {
-                        let c = self.doc.model.joint_contacts.get(i).copied().flatten();
+                    let c = self.doc.model.joint_contacts.get(i).copied().flatten();
+                    if j.kind.spaced() {
                         layout_ui(ui, &mut j, c, unit);
                         let r = ui.small_button(tr!("joinery-points")).on_hover_text(tr!("joinery-points-tip"));
                         super::tray_lib::spot(format!("joinery:points:{i}"), r.rect.center());
@@ -353,7 +477,7 @@ impl VarstotasApp {
                             points = Some(i);
                         }
                     }
-                    if let Some((name, n)) = j.hardware(None).filter(|_| j.kind != WoodJointKind::Screws) {
+                    if let Some((name, n)) = j.hardware(c.as_ref()) {
                         ui.label(RichText::new(format!("{n} × {name}")).small().color(theme::text_dim()));
                     }
                 });

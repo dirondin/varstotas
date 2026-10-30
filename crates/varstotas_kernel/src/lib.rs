@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 pub mod curves;
 pub mod cutlist;
 pub mod dims;
+pub mod drawer;
 pub mod geom;
 mod grid;
 pub mod guides;

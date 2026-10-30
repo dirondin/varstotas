@@ -15,6 +15,22 @@
 //! - dovetail (through): tails on `b`'s end widening into `a`, pins left in `a`;
 //! - pocket hole: a screw from a pocket in `b`'s face, at 15° through `b`'s end into `a`.
 //!
+//! Furniture fittings (batch 5, D) are joints too: they drill their own holes, price themselves
+//! in the cut list and show their bodies.
+//!
+//! - confirmat: a stepped hole through `a` into `b`'s end, a 7 mm screw;
+//! - cam lock (minifix): a bolt screwed into `a`'s face, through a hole in `b`'s end to a
+//!   15 mm cam in `b`'s face;
+//! - shelf pins: 5 mm holes in `a` just under `b`, optionally rows 32 mm apart above and below;
+//! - cup hinge: a 35 mm cup in the door, a plate on the side; overlay (the door is `a`, the
+//!   side's front edge on its back) or inset (the door is `b`, between the sides);
+//! - ball-bearing slide: between a cabinet side `a` and a drawer side `b` 12.7 mm apart, the
+//!   longest standard length that fits;
+//! - handle, knob, legs: on one part (`b` empty), on its front face (min y; `flip`: the back)
+//!   or under it;
+//! - table-top fastener (figure 8): recessed into an apron's edge `b`, screwed to the top `a`;
+//! - nails: through a back panel `a` into the carcass edge `b`.
+//!
 //! Box joints and dovetails are corner joints: `a`'s end lies flush with `b`'s outer face, so
 //! the sockets cut in `a` are open at its end.
 //!
@@ -23,7 +39,7 @@
 //! in order ([`Model::rebuild_wood_joints`]), and a part left in no joint gets its geometry
 //! back. Hand edits of a joined part are lost on the next rebuild.
 
-use crate::fasteners::{Anchor, Fastener, STEEL, Solid, WOOD};
+use crate::fasteners::{Anchor, BRASS, DARK, Fastener, STEEL, Solid, WOOD, ZINC};
 use crate::model::{ContextPath, Model};
 use crate::ops::solid::mesh_boolean;
 use crate::primitives::Primitive;
@@ -43,10 +59,20 @@ pub enum WoodJointKind {
     BoxJoint,
     Dovetail,
     PocketHole,
+    Confirmat,
+    CamLock,
+    ShelfPins,
+    Hinge,
+    Slide,
+    Handle,
+    Knob,
+    Leg,
+    TableTop,
+    Nails,
 }
 
 impl WoodJointKind {
-    pub const ALL: [WoodJointKind; 7] = [
+    pub const ALL: [WoodJointKind; 17] = [
         WoodJointKind::Dowels,
         WoodJointKind::Screws,
         WoodJointKind::PocketHole,
@@ -54,7 +80,32 @@ impl WoodJointKind {
         WoodJointKind::MortiseTenon,
         WoodJointKind::BoxJoint,
         WoodJointKind::Dovetail,
+        WoodJointKind::Confirmat,
+        WoodJointKind::CamLock,
+        WoodJointKind::ShelfPins,
+        WoodJointKind::Hinge,
+        WoodJointKind::Slide,
+        WoodJointKind::TableTop,
+        WoodJointKind::Nails,
+        WoodJointKind::Handle,
+        WoodJointKind::Knob,
+        WoodJointKind::Leg,
     ];
+
+    /// On one part (`b` empty): handles, knobs, legs.
+    pub fn single(self) -> bool {
+        matches!(self, WoodJointKind::Handle | WoodJointKind::Knob | WoodJointKind::Leg)
+    }
+
+    /// Furniture hardware rather than a wood joint.
+    pub fn fitting(self) -> bool {
+        WoodJointKind::ALL.iter().position(|k| *k == self).is_some_and(|i| i >= 7)
+    }
+
+    /// Its fasteners are laid out along the joint (count, margin, pitch, distances).
+    pub fn spaced(self) -> bool {
+        !matches!(self, WoodJointKind::Housing | WoodJointKind::MortiseTenon | WoodJointKind::BoxJoint | WoodJointKind::Dovetail | WoodJointKind::Slide | WoodJointKind::Leg)
+    }
 }
 
 /// A joint between two parts (mm).
@@ -101,6 +152,13 @@ pub struct WoodJoint {
     pub at: Vec<f64>,
     /// Fasteners this far off the joint's middle, across it.
     pub offset: f64,
+    /// Confirmat and nail length, cam lock bolt (`a`'s face to the cam's centre), handle
+    /// centres, slide length (0: the longest that fits), leg height.
+    pub size: f64,
+    /// Cup hinge on an inset door (`b`); else an overlay door (`a`).
+    pub inset: bool,
+    /// Shelf pins: rows of holes 32 mm apart above and below the shelf's.
+    pub rows: usize,
 }
 
 /// A drilled hole: where it starts, its direction, its diameter.
@@ -127,6 +185,8 @@ pub struct Contact {
     /// `a`'s bounding box.
     pub a_min: DVec3,
     pub a_max: DVec3,
+    /// How far apart the faces are (slides; 0 where they touch).
+    pub gap: f64,
 }
 
 impl Contact {
@@ -192,6 +252,11 @@ fn world_bounds(model: &Model, path: &[crate::InstanceId]) -> Option<(DVec3, DVe
 /// Where parts `a` and `b` touch: the largest rectangle where a face of one's bounding box lies
 /// on a face of the other's.
 pub fn contact(model: &Model, a: &[crate::InstanceId], b: &[crate::InstanceId]) -> Option<Contact> {
+    contact_within(model, a, b, 0.0)
+}
+
+/// Like [`contact`], the faces up to `gap` apart (the plane on `a`'s face).
+pub fn contact_within(model: &Model, a: &[crate::InstanceId], b: &[crate::InstanceId], gap: f64) -> Option<Contact> {
     let (a0, a1) = world_bounds(model, a)?;
     let (b0, b1) = world_bounds(model, b)?;
     let mut best: Option<(f64, Contact)> = None;
@@ -203,13 +268,14 @@ pub fn contact(model: &Model, a: &[crate::InstanceId], b: &[crate::InstanceId]) 
         }
         for (at, into_a) in [(a0[axis], 1.0), (a1[axis], -1.0)] {
             let b_face = if into_a > 0.0 { b1[axis] } else { b0[axis] };
-            if (b_face - at).abs() > TOUCH {
+            let apart = (at - b_face) * into_a;
+            if apart < -TOUCH || apart > gap + TOUCH {
                 continue;
             }
             let (mut lo, mut hi) = (lo, hi);
             (lo[axis], hi[axis]) = (at, at);
             let (along, across) = if hi[u] - lo[u] >= hi[v] - lo[v] { (u, v) } else { (v, u) };
-            let c = Contact { axis, at, into_a, lo, hi, along, across, a_size: a1[axis] - a0[axis], b_size: b1[axis] - b0[axis], a_min: a0, a_max: a1 };
+            let c = Contact { axis, at, into_a, lo, hi, along, across, a_size: a1[axis] - a0[axis], b_size: b1[axis] - b0[axis], a_min: a0, a_max: a1, gap: apart.max(0.0) };
             let area = c.length() * c.width();
             if best.as_ref().is_none_or(|(x, _)| area > *x) {
                 best = Some((area, c));
@@ -237,9 +303,58 @@ fn screw(head: DVec3, dir: DVec3, len: f64, d: f64) -> Vec<Solid> {
     ]
 }
 
-/// Where joint `j`'s parts touch.
+/// A face of part `a` as a contact (fittings on one part): its front face (the thinnest
+/// axis, the lower side; `back`: the upper), or for legs its underside.
+fn face_contact(model: &Model, a: &[crate::InstanceId], leg: bool, back: bool) -> Option<Contact> {
+    let (a0, a1) = world_bounds(model, a)?;
+    let s = a1 - a0;
+    let axis = if leg { 2 } else { (0..3).min_by(|&i, &k| s[i].total_cmp(&s[k])).unwrap_or(1) };
+    let (at, into_a) = if back && !leg { (a1[axis], -1.0) } else { (a0[axis], 1.0) };
+    let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+    let (mut lo, mut hi) = (a0, a1);
+    (lo[axis], hi[axis]) = (at, at);
+    let (along, across) = if s[u] >= s[v] { (u, v) } else { (v, u) };
+    Some(Contact { axis, at, into_a, lo, hi, along, across, a_size: s[axis], b_size: 0.0, a_min: a0, a_max: a1, gap: 0.0 })
+}
+
+/// Slides are found between faces this far apart.
+const SLIDE_GAP_MAX: f64 = 30.0;
+/// The gap a ball-bearing slide takes, with what is tolerated.
+pub const SLIDE_GAP: f64 = 12.7;
+const SLIDE_GAP_TOL: f64 = 0.8;
+/// Ball-bearing slide lengths on sale.
+pub const SLIDE_LENGTHS: [f64; 9] = [250.0, 300.0, 350.0, 400.0, 450.0, 500.0, 550.0, 600.0, 650.0];
+/// Cup hinges: the cup's centre from the door's edge.
+const CUP_FROM_EDGE: f64 = 22.5;
+
+/// Where joint `j`'s parts touch (fittings on one part: the face they go on).
 pub fn joint_contact(model: &Model, j: &WoodJoint) -> Option<Contact> {
-    contact(model, &j.a, &j.b)
+    kind_contact(model, j.kind, &j.a, &j.b, j.flip)
+}
+
+fn kind_contact(model: &Model, kind: WoodJointKind, a: &[crate::InstanceId], b: &[crate::InstanceId], flip: bool) -> Option<Contact> {
+    match kind {
+        k if k.single() => face_contact(model, a, k == WoodJointKind::Leg, flip),
+        WoodJointKind::Slide => contact_within(model, a, b, SLIDE_GAP_MAX),
+        _ => contact(model, a, b),
+    }
+}
+
+/// A box solid between two corners.
+fn block(p: DVec3, q: DVec3) -> Solid {
+    Solid::Block { min: p.min(q), max: p.max(q) }
+}
+
+/// Unit vector along axis `k`, times `s`.
+fn unit(k: usize, s: f64) -> DVec3 {
+    let mut v = DVec3::ZERO;
+    v[k] = s;
+    v
+}
+
+/// Rounded up to 5 mm.
+fn ceil5(v: f64) -> f64 {
+    (v / 5.0).ceil() * 5.0
 }
 
 /// A size in mm without trailing zeros.
@@ -287,6 +402,57 @@ impl WoodJoint {
                 j.depth = snap((c.a_size * 0.6).min(25.0));
                 j.count = if len < 100.0 { 1 } else { ((len / 200.0).round() as usize + 1).clamp(2, 8) };
             }
+            WoodJointKind::Confirmat => {
+                j.diameter = 7.0;
+                j.size = if c.a_size + 30.0 <= 50.0 { 50.0 } else { ceil5(c.a_size + 30.0) };
+            }
+            WoodJointKind::CamLock => {
+                j.diameter = 15.0;
+                j.size = 34.0;
+            }
+            WoodJointKind::ShelfPins => {
+                j.diameter = 5.0;
+                j.depth = 10.0;
+                j.count = 2;
+                j.margin = 37.0_f64.min(len / 4.0);
+            }
+            WoodJointKind::Hinge => {
+                j.diameter = 35.0;
+                j.depth = 12.5;
+                j.count = match len {
+                    l if l <= 900.0 => 2,
+                    l if l <= 1600.0 => 3,
+                    l if l <= 2000.0 => 4,
+                    _ => 5,
+                };
+                j.margin = 100.0_f64.min(len / 5.0);
+            }
+            WoodJointKind::Slide => j.count = 1,
+            WoodJointKind::Handle => {
+                j.count = 1;
+                j.diameter = 12.0;
+                j.size = [192.0, 160.0, 128.0, 96.0, 64.0].into_iter().find(|s| s + 60.0 <= len).unwrap_or(32.0);
+            }
+            WoodJointKind::Knob => {
+                j.count = 1;
+                j.diameter = 30.0;
+            }
+            WoodJointKind::Leg => {
+                j.count = 4;
+                j.diameter = 40.0;
+                j.size = 100.0;
+                j.margin = 50.0_f64.min(t / 4.0).max(20.0);
+            }
+            WoodJointKind::TableTop => {
+                j.diameter = 19.0;
+                j.count = ((len / 300.0).round() as usize + 1).clamp(2, 12);
+            }
+            WoodJointKind::Nails => {
+                j.diameter = 1.6;
+                j.size = ceil5(c.a_size + 15.0).max(20.0);
+                j.count = ((len / 100.0).round() as usize + 1).clamp(2, 40);
+                j.margin = 30.0_f64.min(len / 4.0);
+            }
         }
         j
     }
@@ -303,8 +469,113 @@ impl WoodJoint {
             WoodJointKind::PocketHole => {
                 Some((tr!("joint-hw-pocket-screw", diameter = d, length = num(((POCKET_KEEP + self.depth) / 5.0).ceil() * 5.0)), self.fastener_count()))
             }
+            WoodJointKind::Confirmat => Some((tr!("joint-hw-confirmat", diameter = d, length = num(self.size)), self.fastener_count())),
+            WoodJointKind::CamLock => Some((tr!("joint-hw-cam-lock", diameter = d), self.fastener_count())),
+            WoodJointKind::ShelfPins => Some((tr!("joint-hw-shelf-pin", diameter = d), self.fastener_count())),
+            WoodJointKind::Hinge => Some((if self.inset { tr!("joint-hw-hinge-inset", diameter = d) } else { tr!("joint-hw-hinge-overlay", diameter = d) }, self.fastener_count())),
+            WoodJointKind::Slide => Some((tr!("joint-hw-slide", length = num(c.and_then(|c| self.slide_length(c)).unwrap_or(self.size))), 1)),
+            WoodJointKind::Handle => Some((tr!("joint-hw-handle", length = num(self.size)), self.fastener_count())),
+            WoodJointKind::Knob => Some((tr!("joint-hw-knob", diameter = d), self.fastener_count())),
+            WoodJointKind::Leg => Some((tr!("joint-hw-leg", length = num(self.size)), 4)),
+            WoodJointKind::TableTop => Some((tr!("joint-hw-table-top"), self.fastener_count())),
+            WoodJointKind::Nails => Some((tr!("joint-hw-nail", diameter = d, length = num(self.size)), self.fastener_count())),
             _ => None,
         }
+    }
+
+    /// The slide's length: its own, else the longest on sale that fits along the joint.
+    pub fn slide_length(&self, c: &Contact) -> Option<f64> {
+        if self.size > 0.0 {
+            return (self.size <= c.length() + 1e-6).then_some(self.size);
+        }
+        SLIDE_LENGTHS.iter().rev().copied().find(|l| *l <= c.length() + 1e-6)
+    }
+
+    /// The door of a cup hinge is `a` (overlay) or `b` (inset).
+    fn door_is_a(&self) -> bool {
+        !self.inset
+    }
+
+    /// A cup hinge's cup at `s` along the joint: its centre on the door's back face and the
+    /// way into the door. Overlay: the door's back on the plane, the cup in from the door's
+    /// edge by the side; inset: in from the door's edge on the side, from its back face (the
+    /// side the carcass goes on).
+    fn hinge_cup(&self, c: &Contact, s: f64) -> (DVec3, DVec3) {
+        let mut p = self.point(c, s);
+        let n = c.normal();
+        if self.door_is_a() {
+            let (edge, inward) = self.door_edge(c);
+            p[c.across] = edge + inward * CUP_FROM_EDGE + self.offset;
+            (p, n)
+        } else {
+            let (back, sb) = self.door_back(c);
+            p[c.across] = back;
+            (p - n * CUP_FROM_EDGE, unit(c.across, -sb))
+        }
+    }
+
+    /// Overlay door: its edge by the side (across) and the way into the door from there.
+    fn door_edge(&self, c: &Contact) -> (f64, f64) {
+        let m = (c.lo[c.across] + c.hi[c.across]) * 0.5;
+        if (m - c.a_min[c.across]).abs() <= (c.a_max[c.across] - m).abs() { (c.a_min[c.across], 1.0) } else { (c.a_max[c.across], -1.0) }
+    }
+
+    /// Inset door: its back face (across) and the way back from it, where the side goes on.
+    fn door_back(&self, c: &Contact) -> (f64, f64) {
+        if c.a_max[c.across] - c.hi[c.across] >= c.lo[c.across] - c.a_min[c.across] { (c.hi[c.across], 1.0) } else { (c.lo[c.across], -1.0) }
+    }
+
+    /// A cam lock's cam: its centre on `b`'s face and the way into `b`.
+    fn cam(&self, c: &Contact, s: f64) -> (DVec3, DVec3) {
+        let mut p = self.point(c, s) - c.normal() * self.size;
+        let (face, dir) = if self.flip { (c.hi[c.across], -1.0) } else { (c.lo[c.across], 1.0) };
+        p[c.across] = face;
+        (p, unit(c.across, dir))
+    }
+
+    /// Shelf pin holes: under the shelf (`flip`: over it), with the rows above and below that
+    /// lie on `a`; the first `fastener_count` are the pins'.
+    fn pin_holes(&self, c: &Contact) -> Vec<DVec3> {
+        let r = self.diameter / 2.0;
+        let (lo, hi) = (c.a_min[c.across] + r, c.a_max[c.across] - r);
+        let y = if self.flip { c.hi[c.across] + r } else { c.lo[c.across] - r };
+        let mut out: Vec<DVec3> = self.spots(c).into_iter().map(|s| {
+            let mut p = self.point(c, s);
+            p[c.across] = y;
+            p
+        }).collect();
+        let pins = out.clone();
+        for k in 1..=self.rows {
+            for d in [-32.0 * k as f64, 32.0 * k as f64] {
+                if (lo..=hi).contains(&(y + d)) {
+                    out.extend(pins.iter().map(|p| *p + unit(c.across, d)));
+                }
+            }
+        }
+        out
+    }
+
+    /// Legs: in from the corners of the underside by `margin`.
+    fn leg_points(&self, c: &Contact) -> Vec<DVec3> {
+        let m = self.margin;
+        let mut out = Vec::new();
+        for u in [c.lo[c.along] + m, c.hi[c.along] - m] {
+            for v in [c.lo[c.across] + m, c.hi[c.across] - m] {
+                let mut p = c.lo;
+                (p[c.along], p[c.across]) = (u, v);
+                out.push(p);
+            }
+        }
+        out
+    }
+
+    /// A handle's two screw points about `e`, or a knob's one.
+    fn handle_points(&self, c: &Contact, e: DVec3) -> Vec<DVec3> {
+        if self.kind == WoodJointKind::Knob {
+            return vec![e];
+        }
+        let u = unit(c.along, self.size / 2.0);
+        vec![e - u, e + u]
     }
 
     /// The holes drilled into `a` and into `b`: where each starts on the part's surface, its
@@ -334,8 +605,28 @@ impl WoodJoint {
                     b.push((entry, m, (2.0 * self.diameter + 1.5).max(9.5)));
                     a.push((e, dir, self.diameter * 0.7));
                 }
-                _ => return (a, b),
+                WoodJointKind::Confirmat => {
+                    a.push((e, n, self.diameter));
+                    b.push((e, -n, 5.0));
+                }
+                WoodJointKind::CamLock => {
+                    a.push((e, n, 5.0));
+                    b.push((e, -n, 8.0));
+                    let (p, dir) = self.cam(c, s);
+                    b.push((p, dir, self.diameter));
+                }
+                WoodJointKind::Hinge => {
+                    let (p, dir) = self.hinge_cup(c, s);
+                    if self.door_is_a() { &mut a } else { &mut b }.push((p, dir, self.diameter));
+                }
+                WoodJointKind::Handle | WoodJointKind::Knob => a.extend(self.handle_points(c, e).into_iter().map(|p| (p, n, 5.0))),
+                _ => break,
             }
+        }
+        match self.kind {
+            WoodJointKind::ShelfPins => a.extend(self.pin_holes(c).into_iter().map(|p| (p, n, self.diameter))),
+            WoodJointKind::Leg => a.extend(self.leg_points(c).into_iter().map(|p| (p, n, 8.0))),
+            _ => {}
         }
         (a, b)
     }
@@ -383,8 +674,122 @@ impl WoodJoint {
                     solids.push(Solid::Round { at: from + dir * (len - d), dir, len: d, r0: d / 2.0, r1: 0.0 });
                     out.push(body(Anchor::B, -dir, 0.6, STEEL, solids));
                 }
-                _ => return out,
+                WoodJointKind::Confirmat => {
+                    // a countersunk head on a's far face, the shank through a into b
+                    let (head, r) = (e + n * c.a_size, self.diameter / 2.0);
+                    let solids = vec![
+                        Solid::Round { at: head, dir: -n, len: 3.0, r0: r + 1.5, r1: r },
+                        Solid::Round { at: head - n * 3.0, dir: -n, len: (self.size - 7.0).max(1.0), r0: r, r1: r },
+                        Solid::Round { at: head - n * (self.size - 4.0), dir: -n, len: 4.0, r0: r, r1: 0.0 },
+                    ];
+                    out.push(body(Anchor::A, n, 0.6, STEEL, solids));
+                }
+                WoodJointKind::CamLock => {
+                    // the bolt screwed into a, its head where the cam takes it
+                    let solids = vec![
+                        Solid::Round { at: e + n * 11.0, dir: -n, len: 11.0, r0: 2.5, r1: 2.5 },
+                        Solid::Round { at: e, dir: -n, len: (self.size - 4.0).max(1.0), r0: 3.0, r1: 3.0 },
+                        Solid::Round { at: e - n * (self.size - 4.0), dir: -n, len: 4.0, r0: 3.5, r1: 3.5 },
+                    ];
+                    out.push(body(Anchor::A, n, 0.0, STEEL, solids));
+                    let (p, dir) = self.cam(c, s);
+                    let r = self.diameter / 2.0 - 0.3;
+                    out.push(body(Anchor::B, -dir, 0.6, ZINC, vec![Solid::Round { at: p + dir * 0.5, dir, len: 12.0, r0: r, r1: r }]));
+                }
+                WoodJointKind::Hinge => {
+                    let (p, dir) = self.hinge_cup(c, s);
+                    let r = self.diameter / 2.0;
+                    let cup = Solid::Round { at: p, dir, len: self.depth, r0: r, r1: r };
+                    // the arm from the cup to the plate on the side, the plate on the side's face
+                    let along = |p: DVec3, h: f64| (p - unit(c.along, h), p + unit(c.along, h));
+                    let (arm, plate) = if self.door_is_a() {
+                        let (_, inward) = self.door_edge(c);
+                        let mut q = p;
+                        q[c.across] = if inward > 0.0 { c.hi[c.across] } else { c.lo[c.across] };
+                        let ((q0, q1), (r0, r1)) = (along(q, 9.0), along(q, 18.0));
+                        let w = |k: f64| unit(c.across, inward * k);
+                        (block(q0 + w(3.0), q1 + w(15.0) - n * 60.0), block(r0 - n * 20.0, r1 + w(3.0) - n * 60.0))
+                    } else {
+                        let (_, sb) = self.door_back(c);
+                        let w = |k: f64| unit(c.across, sb * k);
+                        let ((q0, mut q1), (mut r0, mut r1)) = (along(p, 9.0), along(p, 18.0));
+                        q1[c.axis] = c.at;
+                        (r0[c.axis], r1[c.axis]) = (c.at, c.at);
+                        (block(q0 + w(3.0), q1 + w(25.0) - n * 3.0), block(r0 + w(20.0), r1 + w(60.0) - n * 3.0))
+                    };
+                    let (door, side) = if self.door_is_a() { (Anchor::A, Anchor::B) } else { (Anchor::B, Anchor::A) };
+                    out.push(body(door, DVec3::ZERO, 0.0, STEEL, vec![cup, arm]));
+                    out.push(body(side, DVec3::ZERO, 0.0, STEEL, vec![plate]));
+                }
+                WoodJointKind::Handle | WoodJointKind::Knob => {
+                    // standing off the face, out of a
+                    let mut solids = Vec::new();
+                    for p in self.handle_points(c, e) {
+                        let stem = if self.kind == WoodJointKind::Knob { 18.0 } else { 28.0 };
+                        solids.push(Solid::Round { at: p, dir: -n, len: stem, r0: 4.5, r1: 4.5 });
+                    }
+                    if self.kind == WoodJointKind::Knob {
+                        let r = self.diameter / 2.0;
+                        solids.push(Solid::Round { at: e - n * 18.0, dir: -n, len: 14.0, r0: r * 0.6, r1: r });
+                        solids.push(Solid::Round { at: e - n * 32.0, dir: -n, len: 3.0, r0: r, r1: r * 0.7 });
+                    } else {
+                        let r = self.diameter / 2.0;
+                        let u = unit(c.along, 1.0);
+                        let half = self.size / 2.0 + 15.0;
+                        solids.push(Solid::Round { at: e - n * (28.0 + r) - u * half, dir: u, len: 2.0 * half, r0: r, r1: r });
+                    }
+                    out.push(body(Anchor::A, -n, 0.0, if self.kind == WoodJointKind::Knob { BRASS } else { STEEL }, solids));
+                }
+                WoodJointKind::TableTop => {
+                    // two lobes flush with the apron's edge, one in it and one under the top
+                    let m = unit(c.across, if self.flip { -1.0 } else { 1.0 });
+                    let r = self.diameter / 2.0;
+                    let solids = [e, e + m * (r * 1.7)].map(|p| Solid::Round { at: p - n * 3.0, dir: n, len: 3.0, r0: r, r1: r }).to_vec();
+                    out.push(body(Anchor::B, DVec3::ZERO, 0.0, STEEL, solids));
+                }
+                WoodJointKind::Nails => {
+                    let (head, r) = (e + n * c.a_size, self.diameter / 2.0);
+                    let solids = vec![
+                        Solid::Round { at: head, dir: -n, len: 0.8, r0: r * 2.2, r1: r * 2.2 },
+                        Solid::Round { at: head - n * 0.8, dir: -n, len: (self.size - 2.8).max(0.5), r0: r, r1: r },
+                        Solid::Round { at: head - n * (self.size - 2.0), dir: -n, len: 2.0, r0: r, r1: 0.0 },
+                    ];
+                    out.push(body(Anchor::A, n, 0.6, STEEL, solids));
+                }
+                WoodJointKind::ShelfPins => {
+                    let p = self.pin_holes(c)[out.len()];
+                    let r = self.diameter / 2.0 * 0.95;
+                    let solids = vec![
+                        Solid::Round { at: p + n * self.depth, dir: -n, len: self.depth + 12.0, r0: r, r1: r },
+                        Solid::Round { at: p - n * 2.0, dir: -n, len: 1.5, r0: r * 1.8, r1: r * 1.8 },
+                    ];
+                    out.push(body(Anchor::A, DVec3::ZERO, 0.0, BRASS, solids));
+                }
+                _ => break,
             }
+        }
+        match self.kind {
+            WoodJointKind::Slide => {
+                if let Some(len) = self.slide_length(c) {
+                    // the cabinet member on a, the drawer member on b, the front flush
+                    let h = 45.0_f64.min(c.width());
+                    let f = if self.flip { c.hi[c.along] - len } else { c.lo[c.along] };
+                    let mut p = self.point(c, f);
+                    p[c.along] = f;
+                    let (w, g) = (unit(c.across, h / 2.0), c.gap);
+                    let u = unit(c.along, len);
+                    out.push(body(Anchor::A, DVec3::ZERO, 0.0, ZINC, vec![block(p - w, p + w + u - n * (g / 2.0))]));
+                    let w = unit(c.across, h / 2.0 - 4.0);
+                    out.push(body(Anchor::B, DVec3::ZERO, 0.0, STEEL, vec![block(p - w - n * (g / 2.0), p + w + u - n * g)]));
+                }
+            }
+            WoodJointKind::Leg => {
+                let r = self.diameter / 2.0;
+                for p in self.leg_points(c) {
+                    out.push(body(Anchor::A, -n, 0.0, DARK, vec![Solid::Round { at: p, dir: -n, len: self.size, r0: r, r1: r * 0.75 }]));
+                }
+            }
+            _ => {}
         }
         out
     }
@@ -599,6 +1004,94 @@ impl WoodJoint {
                     from_a.push(drill(-OVER, self.depth, self.diameter * 0.35)?);
                 }
             }
+            WoodJointKind::Confirmat => {
+                let into_b = self.size - c.a_size;
+                if self.diameter <= 0.0 || into_b < 10.0 || self.fastener_count() == 0 || !self.spots_fit(c, self.diameter / 2.0) {
+                    return Err(bad());
+                }
+                for s in self.spots(c) {
+                    from_a.push(cyl(point(s) - n * OVER, c.a_size + 2.0 * OVER, (self.diameter + 0.5) / 2.0)?);
+                    from_b.push(cyl(point(s) - n * into_b, into_b + OVER, 2.5)?);
+                }
+            }
+            WoodJointKind::CamLock => {
+                if self.diameter <= 0.0 || c.width() < 16.0 || self.size < self.diameter || c.b_size < self.size + self.diameter / 2.0 + 3.0 || self.fastener_count() == 0 || !self.spots_fit(c, self.diameter / 2.0) {
+                    return Err(bad());
+                }
+                for s in self.spots(c) {
+                    from_a.push(cyl(point(s) - n * OVER, 11.0 + OVER, 2.5)?);
+                    from_b.push(cyl_to(point(s) + n * OVER, -n, self.size + OVER, 4.0)?);
+                    let (p, dir) = self.cam(c, s);
+                    from_b.push(cyl_to(p - dir * OVER, dir, 13.0 + OVER, self.diameter / 2.0)?);
+                }
+            }
+            WoodJointKind::ShelfPins => {
+                let holes = self.pin_holes(c);
+                let r = self.diameter / 2.0;
+                let inside = |p: &DVec3| (c.a_min[c.across] + r - 1e-6..=c.a_max[c.across] - r + 1e-6).contains(&p[c.across]);
+                if r <= 0.0 || self.depth <= 0.0 || self.depth >= c.a_size || self.fastener_count() == 0 || !self.spots_fit(c, 0.0) || !holes.iter().all(inside) {
+                    return Err(bad());
+                }
+                for p in holes {
+                    from_a.push(cyl(p - n * OVER, self.depth + OVER, r)?);
+                }
+            }
+            WoodJointKind::Hinge => {
+                let door = if self.door_is_a() { c.a_size } else { c.width() };
+                let r = self.diameter / 2.0;
+                if r <= 0.0 || self.depth <= 0.0 || door < self.depth + 3.0 || self.fastener_count() == 0 || !self.spots_fit(c, 0.0) || self.spots(c).iter().any(|&s| s - r < c.lo[c.along] || s + r > c.hi[c.along]) {
+                    return Err(bad());
+                }
+                for s in self.spots(c) {
+                    let (p, dir) = self.hinge_cup(c, s);
+                    let cup = cyl_to(p - dir * OVER, dir, self.depth + OVER, r)?;
+                    if self.door_is_a() { &mut from_a } else { &mut from_b }.push(cup);
+                }
+            }
+            WoodJointKind::Slide => {
+                if (c.gap - SLIDE_GAP).abs() > SLIDE_GAP_TOL {
+                    return Err(OpError::Invalid(tr!("joint-err-slide-gap", gap = num(SLIDE_GAP), now = num(c.gap))));
+                }
+                if self.slide_length(c).is_none() {
+                    return Err(OpError::Invalid(tr!("joint-err-slide-length")));
+                }
+            }
+            WoodJointKind::Handle | WoodJointKind::Knob => {
+                if self.fastener_count() == 0 || !self.spots_fit(c, self.diameter / 2.0) || (self.kind == WoodJointKind::Handle && (self.size < 16.0 || self.spots(c).iter().any(|&s| s - self.size / 2.0 - 15.0 < c.lo[c.along] || s + self.size / 2.0 + 15.0 > c.hi[c.along]))) {
+                    return Err(bad());
+                }
+                for s in self.spots(c) {
+                    for p in self.handle_points(c, point(s)) {
+                        from_a.push(cyl(p - n * OVER, c.a_size + 2.0 * OVER, 2.5)?);
+                    }
+                }
+            }
+            WoodJointKind::Leg => {
+                let r = self.diameter / 2.0;
+                if r <= 0.0 || self.size <= 0.0 || c.a_size <= 12.0 || self.margin < r || 2.0 * self.margin >= c.length().min(c.width()) {
+                    return Err(bad());
+                }
+                for p in self.leg_points(c) {
+                    from_a.push(cyl(p - n * OVER, 10.0 + OVER, 4.0)?);
+                }
+            }
+            WoodJointKind::TableTop => {
+                let r = self.diameter / 2.0;
+                if r <= 0.0 || c.width() < 16.0 || self.fastener_count() == 0 || !self.spots_fit(c, 0.0) || self.spots(c).iter().any(|&s| s - r < c.lo[c.along] || s + r > c.hi[c.along]) {
+                    return Err(bad());
+                }
+                let m = unit(c.across, if self.flip { -1.0 } else { 1.0 });
+                for s in self.spots(c) {
+                    for p in [point(s), point(s) + m * (r * 1.7)] {
+                        from_b.push(cyl_to(p + n * OVER, -n, 3.0 + OVER, r + 0.5)?);
+                    }
+                }
+            }
+            WoodJointKind::Nails => {
+                if self.diameter <= 0.0 || self.size < c.a_size + 5.0 || self.fastener_count() == 0 || !self.spots_fit(c, self.diameter / 2.0) {
+                    return Err(bad());
+                }
+            }
         }
         Ok((from_a, from_b, to_b))
     }
@@ -612,13 +1105,30 @@ impl Model {
     }
 
     /// Join parts `p` and `q` (instance paths) with a joint of `kind` sized for them; the one
-    /// whose touching face is smaller becomes `b`. Returns the joint's index.
+    /// whose touching face is smaller becomes `b`. A fitting on one part (`kind.single()`)
+    /// takes `p` only. Returns the joint's index.
     pub fn add_wood_joint(&mut self, kind: WoodJointKind, p: ContextPath, q: ContextPath) -> OpResult<usize> {
+        if kind.single() {
+            if self.part_def(&p).is_none() {
+                return Err(OpError::Invalid(tr!("joint-err-one-part")));
+            }
+            self.restore_joint_bases();
+            if let Some((&id, parent)) = p.split_last()
+                && let Err(e) = self.make_unique(parent, id)
+            {
+                self.rebuild_wood_joints();
+                return Err(e);
+            }
+            let c = face_contact(self, &p, kind == WoodJointKind::Leg, false);
+            self.rebuild_wood_joints();
+            let c = c.ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
+            return self.push_wood_joint(WoodJoint::new(kind, p, Vec::new(), &c));
+        }
         if p == q || self.part_def(&p).is_none() || self.part_def(&q).is_none() {
             return Err(OpError::Invalid(tr!("joint-err-two-parts")));
         }
         self.restore_joint_bases();
-        let c = contact(self, &p, &q).ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")));
+        let c = kind_contact(self, kind, &p, &q, false).ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")));
         let c = match c {
             Ok(c) => c,
             Err(e) => {
@@ -627,14 +1137,20 @@ impl Model {
             }
         };
         let (a, b) = if face_area(self, &q, c.axis) <= face_area(self, &p, c.axis) { (p, q) } else { (q, p) };
-        let c = contact(self, &a, &b).unwrap_or(c);
+        let c = kind_contact(self, kind, &a, &b, false).unwrap_or(c);
         // a copy of a component would cut every copy: the joined ones get their own
         for path in [&a, &b] {
             if let Some((&id, parent)) = path.split_last() {
                 self.make_unique(parent, id)?;
             }
         }
-        self.joints.push(WoodJoint::new(kind, a, b, &c));
+        self.rebuild_wood_joints();
+        self.push_wood_joint(WoodJoint::new(kind, a, b, &c))
+    }
+
+    /// Add joint `j` and cut everything again; taken back if it cannot be cut.
+    pub(crate) fn push_wood_joint(&mut self, j: WoodJoint) -> OpResult<usize> {
+        self.joints.push(j);
         let errors = self.rebuild_wood_joints();
         let i = self.joints.len() - 1;
         if let Some((_, e)) = errors.into_iter().find(|(k, _)| *k == i) {
@@ -660,8 +1176,11 @@ impl Model {
     /// Make joint `i` a joint of `kind`, with the sizes [`WoodJoint::new`] picks for it.
     pub fn set_wood_joint_kind(&mut self, i: usize, kind: WoodJointKind) -> OpResult<()> {
         let old = self.joints.get(i).cloned().ok_or(OpError::NotFound)?;
+        if kind.single() != old.kind.single() {
+            return Err(OpError::Invalid(tr!(if kind.single() { "joint-err-one-part" } else { "joint-err-two-parts" })));
+        }
         self.restore_joint_bases();
-        let c = contact(self, &old.a, &old.b);
+        let c = kind_contact(self, kind, &old.a, &old.b, old.flip && kind.single());
         self.rebuild_wood_joints();
         let c = c.ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")))?;
         self.set_wood_joint(i, WoodJoint::new(kind, old.a, old.b, &c))
@@ -713,11 +1232,14 @@ impl Model {
 
     fn cut_wood_joint(&mut self, j: &WoodJoint) -> OpResult<()> {
         let missing = || OpError::Invalid(tr!("joint-err-missing"));
-        let (da, db) = (self.part_def(&j.a).ok_or_else(missing)?, self.part_def(&j.b).ok_or_else(missing)?);
-        let c = contact(self, &j.a, &j.b).ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")))?;
+        let da = self.part_def(&j.a).ok_or_else(missing)?;
+        let db = if j.kind.single() { None } else { Some(self.part_def(&j.b).ok_or_else(missing)?) };
+        let c = joint_contact(self, j).ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")))?;
         let (from_a, from_b, to_b) = j.cuts(&c)?;
         let mut out = Vec::new();
-        for (path, d, ops) in [(&j.a, da, vec![(&from_a, false)]), (&j.b, db, vec![(&to_b, true), (&from_b, false)])] {
+        for (path, d, ops) in [(&j.a, Some(da), vec![(&from_a, false)]), (&j.b, db, vec![(&to_b, true), (&from_b, false)])] {
+            // fittings that drill nothing into a part leave it as it is
+            let Some(d) = d.filter(|_| ops.iter().any(|(t, _)| !t.is_empty())) else { continue };
             let xf = self.assembled_transform(path);
             let mut mesh = self.defs[d].mesh.clone();
             if !mesh.is_solid() {
