@@ -762,29 +762,11 @@ impl Renderer {
                 bytemuck::cast_slice(&sc.opaque_idx),
             );
         }
-        // Each triangle sorts by its face's (area-weighted) centroid, so a face's triangles
-        // stay together in the blend order: sorted one by one, a face's slivers fall partly
-        // in front of a face behind it and partly behind, showing its triangulation in X-ray.
         g.centroids.clear();
-        let chunks = tris.as_chunks::<3>().0;
-        let mut start = 0;
-        while start < chunks.len() {
-            let mut end = start + 1;
-            while end < chunks.len() && g.tri_groups[end] == g.tri_groups[start] {
-                end += 1;
-            }
-            let (mut sum, mut area, mut mean) = (glam::Vec3::ZERO, 0.0, glam::Vec3::ZERO);
-            for t in &chunks[start..end] {
-                let [a, b, c] = t.map(|v| glam::Vec3::from(v.pos));
-                let w = (b - a).cross(c - a).length();
-                sum += (a + b + c) * w;
-                area += w;
-                mean += a + b + c;
-            }
-            let c = if area > 0.0 { sum / (3.0 * area) } else { mean / (3 * (end - start)) as f32 };
-            g.centroids.extend(std::iter::repeat_n(c.to_array(), end - start));
-            start = end;
-        }
+        g.centroids.extend(tris.as_chunks::<3>().0.iter().map(|t| {
+            let c = (glam::Vec3::from(t[0].pos) + glam::Vec3::from(t[1].pos) + glam::Vec3::from(t[2].pos)) / 3.0;
+            c.to_array()
+        }));
         g.bounds = tris.iter().map(|v| glam::Vec3::from(v.pos)).filter(|p| p.is_finite()).fold(None, |b, p| {
             Some(b.map_or((p, p), |(lo, hi): (glam::Vec3, glam::Vec3)| (lo.min(p), hi.max(p))))
         });
@@ -962,11 +944,23 @@ impl Renderer {
         }
         let cents = &g.centroids;
         let c = |t: u32| glam::Vec3::from(cents[t as usize]) - eye;
+        // A face's triangles all sort by its farthest one, so they stay together (sorted one by
+        // one, a face's slivers fall partly in front of a face behind it and partly behind,
+        // showing its triangulation), and a small body on a big face (a handle, a screw) comes
+        // after it rather than under it and the faces around.
+        let depth = |t: u32| if camera.ortho { c(t).dot(f) } else { c(t).length_squared() };
+        let groups = &g.tri_groups;
         s.keys.clear();
-        if camera.ortho {
-            s.keys.extend(s.tris.iter().map(|&t| !depth_key(c(t).dot(f))));
-        } else {
-            s.keys.extend(s.tris.iter().map(|&t| !depth_key(c(t).length_squared())));
+        let mut start = 0;
+        while start < s.tris.len() {
+            let group = groups[s.tris[start] as usize];
+            let mut end = start + 1;
+            while end < s.tris.len() && s.tris[end] == s.tris[end - 1] + 1 && groups[s.tris[end] as usize] == group {
+                end += 1;
+            }
+            let far = s.tris[start..end].iter().map(|&t| depth(t)).fold(f32::MIN, f32::max);
+            s.keys.extend(std::iter::repeat_n(!depth_key(far), end - start));
+            start = end;
         }
         radix_sort_pairs(&mut s.keys, &mut s.tris, &mut s.tmp_keys, &mut s.tmp_tris);
         s.indices.clear();
