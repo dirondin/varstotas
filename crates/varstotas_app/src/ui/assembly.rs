@@ -71,7 +71,10 @@ pub(crate) fn step_parts(model: &Model, plan: &CutPlan, step: &Step) -> Vec<Stri
     by.into_iter()
         .map(|(i, n)| {
             let part = &cut[i];
-            let no = plan.parts.iter().position(|p| p.name == part.name && p.material == part.material).map(|k| format!(" ({})", k + 1)).unwrap_or_default();
+            // its row: the same name, material and size (equal names can differ in size)
+            let same = |p: &&varstotas_kernel::cutlist::CutPart| p.name == part.name && p.material == part.material;
+            let row = plan.parts.iter().position(|p| same(&p) && p.size == part.size).or_else(|| plan.parts.iter().position(|p| same(&p)));
+            let no = row.map(|k| format!(" ({})", k + 1)).unwrap_or_default();
             format!("{n} × {}{no}", part.name)
         })
         .collect()
@@ -172,6 +175,40 @@ fn hull(mut pts: Vec<DVec2>) -> Vec<DVec2> {
     h
 }
 
+/// The side of a step's fastener close-up (mm).
+const CLOSE_UP: f64 = 60.0;
+
+/// Segment `p`–`q` within the box `lo`–`hi` (Liang–Barsky), if any of it is.
+fn clip(p: DVec2, q: DVec2, lo: DVec2, hi: DVec2) -> Option<(DVec2, DVec2)> {
+    let d = q - p;
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for (dp, a, b) in [(d.x, p.x - lo.x, hi.x - p.x), (d.y, p.y - lo.y, hi.y - p.y)] {
+        for (num, den) in [(a, -dp), (b, dp)] {
+            if den.abs() < 1e-12 {
+                if num < 0.0 {
+                    return None;
+                }
+            } else {
+                let t = num / den;
+                if den < 0.0 {
+                    t0 = t0.max(t);
+                } else {
+                    t1 = t1.min(t);
+                }
+            }
+        }
+    }
+    (t0 < t1).then(|| (p + d * t0, p + d * t1))
+}
+
+/// A document's name as a title: a file name's underscores as spaces, its first letter capital
+/// ("chest_of_drawers" → "Chest of drawers").
+fn title(doc: &str) -> String {
+    let t = doc.replace('_', " ");
+    let mut c = t.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+}
+
 fn draw_arrow(d: &mut Drawing, tail: DVec2, head: DVec2) {
     let len = (head - tail).length();
     if len < 6.0 {
@@ -227,7 +264,7 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
 
     // cover: the model as now (exploded or not), larger
     let mut d = blank();
-    text(&mut d, DVec2::new(PAGE.x * 0.5, 28.0), 9.0, fit(doc, 9.0, PAGE.x - 2.0 * MARGIN), false);
+    text(&mut d, DVec2::new(PAGE.x * 0.5, 28.0), 9.0, fit(&title(doc), 9.0, PAGE.x - 2.0 * MARGIN), false);
     text(&mut d, DVec2::new(PAGE.x * 0.5, 40.0), 5.0, tr!("assembly-booklet-title"), false);
     let cover = (DVec2::new(MARGIN, 55.0), DVec2::new(PAGE.x - 2.0 * MARGIN, 190.0));
     let mut d = picture(d, &whole, fit_map(&whole, cover, &[]));
@@ -290,6 +327,43 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
             }
         }
         let mut y = rect.0.y + rect.1.y + 12.0;
+        // a close-up of the step's first fastener, at the lower right, the text beside it; none
+        // for hardware large enough to see (legs, slides)
+        let extent = |o: &Outline| o.iter().fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(l, h), p| (l.min(*p), h.max(*p)));
+        let small = step_fasteners[k].first().filter(|o| {
+            let (lo, hi) = extent(o);
+            (hi - lo).max_element() < px.x * 0.04
+        });
+        let close = small.zip(map).map(|(o, (off, scale))| {
+            let (lo, hi) = extent(o);
+            let c = (lo + hi) * 0.5;
+            let half = ((hi - lo).max_element() * 2.5).max(px.x * 0.03);
+            let at = DVec2::new(PAGE.x - MARGIN - CLOSE_UP, y - 4.0);
+            let to = |p: DVec2| at + (p - c + DVec2::splat(half)) * (CLOSE_UP / (2.0 * half));
+            let (w0, w1) = (c - DVec2::splat(half), c + DVec2::splat(half));
+            for &(p, q, pen) in &lines.strokes {
+                if let Some((p, q)) = clip(p, q, w0, w1) {
+                    d.lines.push((to(p), to(q), pen));
+                }
+            }
+            for o in &step_fasteners[k] {
+                for (i, &p) in o.iter().enumerate() {
+                    if let Some((p, q)) = clip(p, o[(i + 1) % o.len()], w0, w1) {
+                        d.lines.push((to(p), to(q), Pen::Profile));
+                    }
+                }
+            }
+            // its frame, and where it is on the picture
+            let frame = |d: &mut Drawing, a: DVec2, b: DVec2| {
+                let corners = [a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)];
+                for i in 0..4 {
+                    d.lines.push((corners[i], corners[(i + 1) % 4], Pen::Edge));
+                }
+            };
+            frame(&mut d, at, at + DVec2::splat(CLOSE_UP));
+            frame(&mut d, off + w0 * scale, off + w1 * scale);
+        });
+        let width = PAGE.x - 2.0 * MARGIN - if close.is_some() { CLOSE_UP + 6.0 } else { 0.0 };
         let block = |d: &mut Drawing, head: String, items: Vec<String>, y: &mut f64| {
             if items.is_empty() {
                 return;
@@ -297,14 +371,14 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
             text(d, DVec2::new(MARGIN, *y), 4.0, head, true);
             *y += 6.0;
             for it in items {
-                text(d, DVec2::new(MARGIN + 4.0, *y), 3.6, fit(&it, 3.6, PAGE.x - 2.0 * MARGIN - 4.0), true);
+                text(d, DVec2::new(MARGIN + 4.0, *y), 3.6, fit(&it, 3.6, width - 4.0), true);
                 *y += 5.0;
             }
             *y += 2.0;
         };
         block(&mut d, tr!("assembly-booklet-add"), step_parts(model, plan, step), &mut y);
         block(&mut d, tr!("assembly-booklet-hardware"), step_hardware(model, k), &mut y);
-        for l in wrap(&step.note, 90) {
+        for l in wrap(&step.note, if close.is_some() { 60 } else { 90 }) {
             if y > PAGE.y - 18.0 {
                 break;
             }

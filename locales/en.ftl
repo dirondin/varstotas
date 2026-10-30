@@ -4085,7 +4085,7 @@ help-workshop-9 = the exploded view slider and the assembly steps: suggested fro
 help-workshop-19 = Assembly → Fastener steps
 help-workshop-20 = dowels, shelf pins and cam bolts go into a part before the next part comes onto them, so the suggested steps put them in a step of their own, shown in italics by its hardware; ⊕ on a step splits out the fasteners its parts come onto, ⤒ joins such a step back. A step shown in the view shows its fasteners in their holes, and its booklet page outlines them with arrows.
 help-workshop-10 = Assembly → Instructions…
-help-workshop-11 = an A4 PDF booklet: a cover with the exploded model, the parts and hardware list, then a page per step with arrows showing how its parts go in. Scenes from steps makes a scene per step.
+help-workshop-11 = an A4 PDF booklet: a cover with the exploded model, the parts and hardware list, then a page per step with arrows showing how its parts go in. Scenes from steps makes a scene per step. A step with small hardware (dowels, pins, screws, cams) shows a close-up of one of them beside its text, framed on the picture too.
 help-workshop-12 = Scripts: cut_list, joint, assembly
 ## files
 help-files-1 = Documents are `.vrst` files (textures and pictures are saved inside). File → New from Template picks the units; Window → Preferences sets the default template and the auto-save interval.

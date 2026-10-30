@@ -4109,7 +4109,7 @@ help-workshop-9 = išskleisto vaizdo slankiklis ir surinkimo žingsniai: siūlom
 help-workshop-19 = Surinkimas → Tvirtinimo žingsniai
 help-workshop-20 = kaiščiai, lentynų laikikliai ir ekscentrikų varžtai įstatomi į detalę prieš uždedant kitą, todėl siūlomi žingsniai juos iškelia į atskirą žingsnį (kursyvu, pagal tvirtinimo detales); ⊕ prie žingsnio iškelia tvirtinimo detales, ant kurių uždedamos jo detalės, ⤒ tokį žingsnį sujungia atgal. Rodomas žingsnis rodo savo tvirtinimo detales angose, o jo puslapis lankstinuke jas apveda ir rodo rodykles.
 help-workshop-10 = Surinkimas → Instrukcija…
-help-workshop-11 = A4 PDF knygelė: viršelis su išskleistu modeliu, detalių ir furnitūros sąrašas, po to po puslapį kiekvienam žingsniui su rodyklėmis, rodančiomis, kaip įeina jo detalės. „Scenos iš žingsnių“ sukuria po sceną kiekvienam žingsniui.
+help-workshop-11 = A4 PDF knygelė: viršelis su išskleistu modeliu, detalių ir furnitūros sąrašas, po to po puslapį kiekvienam žingsniui su rodyklėmis, rodančiomis, kaip įeina jo detalės. „Scenos iš žingsnių“ sukuria po sceną kiekvienam žingsniui. Žingsnyje su smulkia furnitūra (kaiščiais, laikikliais, varžtais, ekscentrikais) šalia teksto rodomas vieno iš jų stambus planas, apvestas rėmeliu ir paveikslėlyje.
 help-workshop-12 = Scenarijai: cut_list, joint, assembly
 ## files
 help-files-1 = Dokumentai yra `.vrst` failai (tekstūros ir paveikslėliai išsaugomi viduje). Failas → Naujas iš šablono pasirenka vienetus; Langas → Nustatymai nustato numatytąjį šabloną ir automatinio išsaugojimo intervalą.
