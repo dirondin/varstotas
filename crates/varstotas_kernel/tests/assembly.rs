@@ -75,3 +75,34 @@ fn exploded_and_step_views_come_back() {
     }
     assert!(m.assembly.moved.is_empty() && m.assembly.hid.is_empty());
 }
+
+#[test]
+fn fasteners_get_steps_of_their_own() {
+    let (mut m, [bottom, left, right, top, shelf]) = cabinet();
+    let screws = m.add_wood_joint(WoodJointKind::Screws, vec![bottom], vec![left]).unwrap();
+    let l = m.add_wood_joint(WoodJointKind::Dowels, vec![left], vec![shelf]).unwrap();
+    let r = m.add_wood_joint(WoodJointKind::Dowels, vec![right], vec![shelf]).unwrap();
+    m.assembly.steps = suggest_steps(&m);
+    let parts: Vec<Vec<InstanceId>> = m.assembly.steps.iter().map(|s| s.parts.iter().map(|p| p[0]).collect()).collect();
+    // the dowels go into the sides in a step before the shelf comes onto them; screws go in
+    // with their later part
+    assert_eq!(parts, vec![vec![bottom], vec![left, right], vec![], vec![shelf], vec![top]]);
+    assert_eq!(m.assembly.steps[2].joints, vec![l, r]);
+    assert_eq!((m.fastener_step(l), m.fastener_step(r), m.fastener_step(screws)), (Some(2), Some(2), Some(1)));
+    // shown from their step on, in the sides
+    let shown = |m: &Model, j: usize| m.fasteners.iter().filter(|f| f.joint == j).all(|f| m.fastener_transform(f).is_some());
+    m.set_assembly_view(SceneAssembly { explode: 0.0, step: Some(1) });
+    assert!(!shown(&m, l) && shown(&m, screws));
+    m.set_assembly_view(SceneAssembly { explode: 0.0, step: Some(2) });
+    assert!(shown(&m, l) && shown(&m, r) && m.root_mesh().instances[shelf].hidden);
+    let f = m.fasteners.iter().find(|f| f.joint == l).unwrap();
+    assert_eq!(m.fastener_anchor(f).unwrap().0, &vec![left]);
+    m.assemble();
+    // saved with the steps; a joint deleted is renumbered, the step goes with its last joint
+    let json = serde_json::to_string(&m.assembly).unwrap();
+    assert!(json.contains("\"joints\":[1,2]"));
+    m.remove_wood_joint(l);
+    assert_eq!(m.assembly.steps[2].joints, vec![r - 1]);
+    m.remove_wood_joint(r - 1);
+    assert_eq!(m.assembly.steps.len(), 4);
+}

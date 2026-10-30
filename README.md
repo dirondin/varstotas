@@ -15,7 +15,9 @@ everything can be scripted.
 - **Making things** — a cut list for furniture: stock on materials (sheets, boards and mouldings with
   price), offcuts kept for the next project, cutting diagrams optimized for straight saw cuts, waste, shopping list and cost, PDF / SVG / CSV;
   edge banding, part labels and hardware; joinery cut into the parts (dowels, screws, pocket holes,
-  housings, mortise and tenon, box joints, dovetails); an exploded view, assembly steps and an
+  housings, mortise and tenon, box joints, dovetails) with the fasteners drawn in place; furniture
+  hardware (confirmats, cam locks, shelf pins, hinges, slides, handles, legs) and drawers on
+  slides; an exploded view, assembly steps (fasteners in steps of their own) and an
   instructions booklet (PDF);
   dimensions on the model; preparing models for a slicer (checks and repair,
   wall-thickness maps, cutting with dowels, bed layout, STL / 3MF export); unfolding to SVG / PDF /
@@ -45,8 +47,8 @@ everything can be scripted.
 </p>
 
 <p>
-  <img src="docs/images/assembly.gif" width="64%" alt="The Bookshelf demo in Window → Assembly: the slider explodes it, then the steps show the left side, the shelves set into it, the right side and the back">
-  <img src="docs/images/assembly-booklet.png" width="30%" alt="A page of the Bookshelf's instructions booklet: step 2 of 4 with arrows, the parts to add, 12 dowels and a note">
+  <img src="docs/images/assembly.gif" width="64%" alt="The Bookshelf demo in Window → Assembly: the slider explodes it, then the steps show the left side, its dowels, the shelves set onto them, the dowels in their right ends, the right side and the back">
+  <img src="docs/images/assembly-booklet.png" width="30%" alt="A page of the Bookshelf's instructions booklet: step 2 of 6, the dowels going into the left side with arrows, 12 dowels and a note">
 </p>
 
 <p align="center">

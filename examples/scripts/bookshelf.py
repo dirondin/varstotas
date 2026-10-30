@@ -40,19 +40,26 @@ with m.operation("Bookshelf"):     # one undo step
     # Joinery: the top and bottom in rabbets cut into the sides, the shelves on dowels
     side_l, side_r = m.child(shelf, "Side L"), m.child(shelf, "Side R")
     names = ["Bottom", "Top"] + ["Shelf %d" % i for i in range(1, shelves + 1)]
+    dowels_l, dowels_r = [], []  # the dowel joints of each side, for the fastener steps
     for n in names:
         kind = "housing" if n in ("Bottom", "Top") else "dowels"
-        m.joint(side_l, m.child(shelf, n), kind)
-        m.joint(side_r, m.child(shelf, n), kind)
+        l = m.joint(side_l, m.child(shelf, n), kind)
+        r = m.joint(side_r, m.child(shelf, n), kind)
+        if kind == "dowels":
+            dowels_l.append(l)
+            dowels_r.append(r)
     # What else to buy: the dowels priced by name, glue and the back's nails by hand
     m.cut_part("Dowel Ø8 × 40", {"price": 0.05})
     m.cut_hardware([{"name": "Wood glue 250 ml", "count": 1, "price": 6},
                     {"name": "Nail 1.6 × 25", "count": 30, "price": 0.02}])
-    # Assembly steps (Window -> Assembly): the case is built lying on its left side
+    # Assembly steps (Window -> Assembly): the case is built lying on its left side; the dowels
+    # go in at steps of their own, before the parts that come onto them
     m.set_assembly_steps([
         {"parts": side_l, "note": "Lay the left side on a flat surface, inside up."},
+        {"joints": dowels_l, "note": "Glue the dowels into the left side's holes."},
         {"parts": [m.child(shelf, n) for n in names],
-         "note": "Glue the rabbets and the dowels, then set the bottom, the top and the shelves into the left side."},
+         "note": "Glue the rabbets, then set the bottom, the top and the shelves into the left side, onto the dowels."},
+        {"joints": dowels_r, "note": "Glue the dowels into the shelves' right ends."},
         {"parts": side_r, "note": "Put the right side on, the dowels in their holes, and tap it down evenly. Clamp until the glue sets."},
         {"parts": m.child(shelf, "Back"), "note": "Check the diagonals are equal, then nail or screw the back on."},
     ])

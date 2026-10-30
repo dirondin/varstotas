@@ -5,7 +5,9 @@
 //! where a face of one's bounding box lies on a face of another's ([`crate::joinery::contact`]);
 //! that contact graph suggests the steps ([`suggest_steps`]): the base first (the lowest part
 //! touching another, the one touching most of those), then, step by step, the lowest part touching what is
-//! already placed, with its copies.
+//! already placed, with its copies. Dowels, shelf pins and cam bolts go into a part before the
+//! next one comes onto them, so they get a fastener step of their own ([`Step::joints`],
+//! [`with_fastener_steps`]).
 //!
 //! The view ([`Model::set_assembly_view`]) is document state: the exploded view moves parts
 //! apart (each away from the parts it touches, [`explode_offsets`]), and a step shown hides the
@@ -17,11 +19,17 @@ use crate::InstanceId;
 use glam::{DMat4, DVec3};
 use serde::{Deserialize, Serialize};
 
-/// One assembly step: the parts it adds (instance paths) and a note for the instructions.
+/// One assembly step: the parts it adds (instance paths), the joints whose fasteners go in at
+/// it (a fastener step: dowels into the earlier part before the later one comes onto them;
+/// other joints' fasteners go in with the later of their parts) and a note for the
+/// instructions.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Step {
     pub parts: Vec<ContextPath>,
+    /// Indices into [`Model::joints`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub joints: Vec<usize>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub note: String,
 }
@@ -58,6 +66,42 @@ impl Assembly {
     pub fn step_of(&self, path: &[InstanceId]) -> Option<usize> {
         self.steps.iter().position(|s| s.parts.iter().any(|p| p == path))
     }
+
+    /// The step joint `i`'s fasteners are given to, if any.
+    pub fn joint_given(&self, i: usize) -> Option<usize> {
+        self.steps.iter().position(|s| s.joints.contains(&i))
+    }
+}
+
+/// The joints whose fasteners could go in at a step of their own before step `k` of `steps`:
+/// those that go in first (dowels, shelf pins, cam lock bolts) between a part of step `k` and
+/// a part of an earlier step, not given to a step already.
+pub fn fasteners_first(model: &Model, steps: &[Step], k: usize) -> Vec<usize> {
+    let at = |p: &ContextPath| steps.iter().position(|s| s.parts.contains(p));
+    model
+        .joints
+        .iter()
+        .enumerate()
+        .filter(|(i, j)| {
+            j.kind.goes_in_first()
+                && !steps.iter().any(|s| s.joints.contains(i))
+                && matches!((at(&j.a), at(&j.b)), (Some(x), Some(y)) if x.max(y) == k && x.min(y) < k)
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// `steps` with a fastener step ([`fasteners_first`]) before each step that has some.
+pub fn with_fastener_steps(model: &Model, steps: Vec<Step>) -> Vec<Step> {
+    let mut out = Vec::new();
+    for (k, s) in steps.iter().enumerate() {
+        let first = fasteners_first(model, &steps, k);
+        if !first.is_empty() {
+            out.push(Step { joints: first, ..Default::default() });
+        }
+        out.push(s.clone());
+    }
+    out
 }
 
 /// The assembly view a scene keeps.
@@ -96,7 +140,7 @@ fn touching(model: &Model, paths: &[ContextPath]) -> Vec<Vec<usize>> {
 
 /// The steps the contact graph suggests: the base, then the lowest part touching what is
 /// placed with the other copies of its part that touch it too; parts touching nothing last,
-/// lowest first.
+/// lowest first. Fasteners that go in first get steps of their own ([`with_fastener_steps`]).
 pub fn suggest_steps(model: &Model) -> Vec<Step> {
     let model = &*model.unjoined();
     let parts = parts(model);
@@ -111,7 +155,7 @@ pub fn suggest_steps(model: &Model) -> Vec<Step> {
     let base = (if joined.is_empty() { 0..n } else { 0..0 }).chain(joined).min_by(|&a, &b| low[a].total_cmp(&low[b]).then(adj[b].len().cmp(&adj[a].len())));
     if let Some(b) = base {
         placed[b] = true;
-        steps.push(Step { parts: vec![paths[b].clone()], note: String::new() });
+        steps.push(Step { parts: vec![paths[b].clone()], ..Default::default() });
     }
     while placed.iter().any(|p| !p) {
         let near: Vec<usize> = (0..n).filter(|&i| !placed[i] && adj[i].iter().any(|&j| placed[j])).collect();
@@ -121,9 +165,9 @@ pub fn suggest_steps(model: &Model) -> Vec<Step> {
         for &i in &group {
             placed[i] = true;
         }
-        steps.push(Step { parts: group.iter().map(|&i| paths[i].clone()).collect(), note: String::new() });
+        steps.push(Step { parts: group.iter().map(|&i| paths[i].clone()).collect(), ..Default::default() });
     }
-    steps
+    with_fastener_steps(model, steps)
 }
 
 /// Which parts touch which, with the axis and the side of the plane the first one lies on.
@@ -309,7 +353,7 @@ impl Model {
         self.assembly.step = step;
     }
 
-    /// The hardware joint `i` adds at its step: the step of the later of its two parts.
+    /// The step joint `i` is made at: the step of the later of its two parts.
     pub fn joint_step(&self, i: usize) -> Option<usize> {
         let j = self.joints.get(i)?;
         let a = self.assembly.step_of(&j.a)?;

@@ -50,23 +50,33 @@ let names = ["Bottom", "Top"];
 for i in 1..=shelves {
     names.push("Shelf " + i);
 }
+// the dowel joints of each side, for the assembly's fastener steps
+let dowels_l = [];
+let dowels_r = [];
 for n in names {
     let kind = if n == "Bottom" || n == "Top" { "housing" } else { "dowels" };
-    joint(side_l, child(shelf, n), kind);
-    joint(side_r, child(shelf, n), kind);
+    let l = joint(side_l, child(shelf, n), kind);
+    let r = joint(side_r, child(shelf, n), kind);
+    if kind == "dowels" {
+        dowels_l.push(l);
+        dowels_r.push(r);
+    }
 }
 // What else to buy: the dowels are priced by name, glue and the back's nails added by hand
 cut_part("Dowel Ø8 × 40", #{ price: 0.05 });
 cut_hardware([#{ name: "Wood glue 250 ml", count: 1, price: 6 }, #{ name: "Nail 1.6 × 25", count: 30, price: 0.02 }]);
 
-// Assembly steps (Window → Assembly): the case is built lying on its left side
+// Assembly steps (Window → Assembly): the case is built lying on its left side; the dowels go
+// in at steps of their own, before the parts that come onto them
 let boards = [];
 for n in names {
     boards.push(child(shelf, n));
 }
 set_assembly_steps([
     #{ parts: side_l, note: "Lay the left side on a flat surface, inside up." },
-    #{ parts: boards, note: "Glue the rabbets and the dowels, then set the bottom, the top and the shelves into the left side." },
+    #{ joints: dowels_l, note: "Glue the dowels into the left side's holes." },
+    #{ parts: boards, note: "Glue the rabbets, then set the bottom, the top and the shelves into the left side, onto the dowels." },
+    #{ joints: dowels_r, note: "Glue the dowels into the shelves' right ends." },
     #{ parts: side_r, note: "Put the right side on, the dowels in their holes, and tap it down evenly. Clamp until the glue sets." },
     #{ parts: child(shelf, "Back"), note: "Check the diagonals are equal, then nail or screw the back on." },
 ]);

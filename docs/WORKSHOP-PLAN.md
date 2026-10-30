@@ -205,6 +205,11 @@ The Drawer generator builds a drawer box for an opening, leaving room for the sl
 side"). Suggest steps adds such a step before a part goes on over dowels, shelf pins or cam
 bolts, and a step can split its fasteners out by hand. A step shown in the view and on its booklet
 page shows the fasteners of that step and of the earlier ones, with arrows into their holes.
+Done (2026-10-30): `Step::joints` gives joints to a step (saved, renumbered when a joint goes);
+suggested steps get a fastener step before a part that comes onto dowels, shelf pins or cam
+bolts already in an earlier part; ⊕ in Window → Assembly splits one out, ⤒ joins it back; the
+view shows a step's fasteners from it on, the booklet outlines each step's fasteners with arrows
+along their axes and lists them; Rhai steps take `joints`.
 
 ## Open questions
 

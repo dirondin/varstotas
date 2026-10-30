@@ -1,5 +1,6 @@
 # Assembly: a cabinet's steps suggested from the parts that touch, the exploded view, a step
-# shown, scenes from the steps and the instructions booklet.
+# shown, scenes from the steps and the instructions booklet. The shelf's dowels go into the sides
+# in a fastener step of their own; ⊕ splits such a step out of steps set by hand.
 action script let b = box(vec3(0, 0, 0), 600, 300, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 18), 18, 300, 700); l.name = "Side"; let r = box(vec3(582, 0, 18), 18, 300, 700); r.name = "Side"; let t = box(vec3(0, 0, 718), 600, 300, 18); t.name = "Top"; let s = box(vec3(18, 0, 350), 564, 300, 18); s.name = "Shelf"; joint(l, s, "dowels"); joint(r, s, "dowels");
 action console_close
 wait 5
@@ -7,7 +8,7 @@ action assembly
 wait 5
 action click_spot assembly:suggest
 wait 10
-expect assembly=(4, 0, None, [["1 × Bottom (1)"], ["2 × Side (2)"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
+expect assembly=(5, 0, None, [["1 × Bottom (1)"], ["2 × Side (2)"], ["6 × Dowel Ø8 × 40"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
 action assembly_explode 150
 view iso
 zoom_extents
@@ -15,9 +16,20 @@ wait 10
 screenshot shots/assembly_exploded.bmp
 action click_spot assembly:step:2
 wait 10
-expect assembly=(4, 150, Some(2), [["1 × Bottom (1)"], ["2 × Side (2)"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
+expect assembly=(5, 150, Some(2), [["1 × Bottom (1)"], ["2 × Side (2)"], ["6 × Dowel Ø8 × 40"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
+expect fasteners=(6, 6,
+screenshot shots/assembly_fastener_step.bmp
+action click_spot assembly:step:3
+wait 10
+expect assembly=(5, 150, Some(3),
 screenshot shots/assembly_step.bmp
 action export_assembly shots/assembly.pdf
 action assembly_scenes
 wait 5
+# steps set by hand, the dowels split out with ⊕ on the shelf's step
+action script set_assembly_steps(["Bottom", groups().filter(|g| g.name == "Side"), "Shelf", "Top"]);
+wait 5
+action click_spot assembly:fasteners:2
+wait 10
+expect assembly=(5, 150, None, [["1 × Bottom (1)"], ["2 × Side (2)"], ["6 × Dowel Ø8 × 40"], ["1 × Shelf (4)"], ["1 × Top (3)"]])
 quit

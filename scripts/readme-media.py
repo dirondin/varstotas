@@ -114,13 +114,14 @@ def assembly_media():
     for i in range(1, 31):
         lines += [f"action assembly_explode {i * 10}", "wait 2"]
     lines.append("wait 50")
-    for k in range(1, 5):
+    for k in range(1, 7):
         lines += [f"action assembly_step {k}", "wait 70"]
     lines += ["action assembly_step 0", "wait 60", "record off", f"action export_assembly {booklet}", "wait 10", "quit"]
     app_script("assembly", lines)
     gif(os.path.join(rec, "frame_%05d.bmp"), "assembly.gif", "fps=25,scale=960:-1:flags=lanczos",
         "max_colors=128:stats_mode=diff", "dither=bayer:bayer_scale=5:diff_mode=rectangle")
-    # step 2 of the booklet (page 4: after the cover, the parts and step 1)
+    # step 2 of the booklet, the dowels going into the left side (page 4: after the cover, the
+    # parts and step 1)
     page = os.path.join(OUT, "assembly_page")
     run("pdftoppm", "-r", "110", "-f", "4", "-l", "4", "-singlefile", "-png", booklet, page)
     run("magick", page + ".png", "-strip", "PNG8:" + os.path.join(IMAGES, "assembly-booklet.png"))

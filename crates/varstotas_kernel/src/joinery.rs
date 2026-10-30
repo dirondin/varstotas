@@ -97,6 +97,12 @@ impl WoodJointKind {
         matches!(self, WoodJointKind::Handle | WoodJointKind::Knob | WoodJointKind::Leg)
     }
 
+    /// Its fasteners go into the earlier part first, in a step of their own, and the later
+    /// part comes onto them: dowels, shelf pins, cam lock bolts.
+    pub fn goes_in_first(self) -> bool {
+        matches!(self, WoodJointKind::Dowels | WoodJointKind::ShelfPins | WoodJointKind::CamLock)
+    }
+
     /// Furniture hardware rather than a wood joint.
     pub fn fitting(self) -> bool {
         WoodJointKind::ALL.iter().position(|k| *k == self).is_some_and(|i| i >= 7)
@@ -1186,10 +1192,16 @@ impl Model {
         self.set_wood_joint(i, WoodJoint::new(kind, old.a, old.b, &c))
     }
 
-    /// Delete joint `i`; parts left in no joint get their geometry back.
+    /// Delete joint `i`; parts left in no joint get their geometry back, assembly steps forget
+    /// it (a fastener step left empty goes).
     pub fn remove_wood_joint(&mut self, i: usize) {
         if i < self.joints.len() {
             self.joints.remove(i);
+            for s in &mut self.assembly.steps {
+                s.joints.retain(|&j| j != i);
+                s.joints.iter_mut().filter(|j| **j > i).for_each(|j| *j -= 1);
+            }
+            self.assembly.steps.retain(|s| !s.parts.is_empty() || !s.joints.is_empty());
             self.rebuild_wood_joints();
         }
     }

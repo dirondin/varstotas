@@ -160,9 +160,9 @@ in Window → Cut List, with diagrams and PDF / SVG / CSV export.
 ## Assembly
 | Function | Result |
 |---|---|
-| `suggest_steps()` | sets the assembly steps from the parts that touch: the lowest part touching another first, then the lowest part touching what is placed, with its copies. Returns the number of steps |
-| `assembly_steps()` | the steps: `#{ parts, note }`, `parts` the groups and components the step adds |
-| `set_assembly_steps([bottom, [left, right], #{ parts: "Top", note: "Glue the dowels" }])` | sets the steps; each is a part, a name, an array of parts or a map with `parts` and `note`. A part may be in one step only |
+| `suggest_steps()` | sets the assembly steps from the parts that touch: the lowest part touching another first, then the lowest part touching what is placed, with its copies; dowels, shelf pins and cam lock bolts get a fastener step of their own before the part that comes onto them. Returns the number of steps |
+| `assembly_steps()` | the steps: `#{ parts, joints, note }`, `parts` the groups and components the step adds, `joints` the indices of the joints whose fasteners go in at it (a fastener step has joints and no parts) |
+| `set_assembly_steps([bottom, [left, right], #{ parts: "Top", note: "Glue the dowels" }])` | sets the steps; each is a part, a name, an array of parts or a map with `parts`, `joints` and `note` (`#{ joints: [0, 1], note: "Dowels into the bottom" }`: a fastener step). A part may be in one step only; a joint not given to a step has its fasteners go in with the later of its parts |
 | `assembly_view(150)` | explodes the model by 150 mm (0: assembled); `assembly_view(150, 2)` also shows step 2 (from 0; -1 for all), the later steps' parts hidden; `assembly_view()` is `#{ explode, step }` |
 
 The exploded view moves each part away from the parts it touches; with steps, the base stays

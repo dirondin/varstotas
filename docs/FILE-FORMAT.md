@@ -56,9 +56,9 @@ stores `joints`: `[{ "kind": "Dowels" | "Screws" | "PocketHole" | "Housing" | "M
 legs on one part; sizes in mm; fasteners lie `margin` from the
 joint's ends and `pitch` apart, or at the distances `at` from its start, `offset` off its middle), and `joint_bases`: `[[def id, mesh]]`,
 the joined parts' geometry from before any joint, which the joints are cut into again on every change.
-The model optionally stores `assembly`: `{ "steps": [{ "parts": [instance path], "note" }], "explode",
-"step", "moved": [[instance path, [x, y, z]]], "hid": [instance path] }` (`explode` the exploded view's
-distance in mm, `step` the step shown from 0; `moved` and `hid` record what the view did to the
+The model optionally stores `assembly`: `{ "steps": [{ "parts": [instance path], "joints": [joint index], "note" }], "explode",
+"step", "moved": [[instance path, [x, y, z]]], "hid": [instance path] }` (`joints` the joints whose fasteners go in
+at that step, a fastener step having no parts; `explode` the exploded view's distance in mm, `step` the step shown from 0; `moved` and `hid` record what the view did to the
 instances' transforms and `hidden` flags so it can be undone), and a scene optionally stores
 `assembly`: `{ "explode", "step" }`, the view it restores. `fasteners_hidden: true` turns off
 View → Show → Fasteners; the fastener bodies themselves are not stored, they are placed again from

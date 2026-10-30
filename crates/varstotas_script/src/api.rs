@@ -1954,20 +1954,34 @@ fn step_map(step: &varstotas_kernel::assembly::Step) -> Dynamic {
     let mut m = Map::new();
     let parts: Array = step.parts.iter().filter_map(|p| p.split_last().map(|(&id, parent)| dyn_ent(&parent.to_vec(), EntityRef::Instance(id)))).collect();
     m.insert("parts".into(), parts.into());
+    let joints: Array = step.joints.iter().map(|&i| Dynamic::from(i as i64)).collect();
+    m.insert("joints".into(), joints.into());
     m.insert("note".into(), step.note.clone().into());
     m.into()
 }
 
-/// A step from a script: parts (a part, its name, an array of them) or `#{ parts, note }`.
-fn step_from(d: &Dynamic) -> R<(Vec<Entity>, String)> {
+/// A step from a script: parts (a part, its name, an array of them) or
+/// `#{ parts, joints, note }` (joints: the indices of those whose fasteners go in at it).
+fn step_from(d: &Dynamic) -> R<(Vec<Entity>, Vec<i64>, String)> {
     match d.clone().try_cast::<Map>() {
         Some(m) => {
-            if let Some(k) = m.keys().find(|k| !matches!(k.as_str(), "parts" | "note")) {
+            if let Some(k) = m.keys().find(|k| !matches!(k.as_str(), "parts" | "joints" | "note")) {
                 return err(tr!("script-err-assembly-step-key", key = k.to_string()));
             }
-            Ok((ents(&m.get("parts").cloned().unwrap_or(Dynamic::UNIT))?, m.get("note").map(|n| n.to_string()).unwrap_or_default()))
+            let parts = match m.get("parts") {
+                Some(p) => ents(p)?,
+                None => Vec::new(),
+            };
+            let joints = match m.get("joints") {
+                Some(j) => match j.clone().try_cast::<Array>() {
+                    Some(a) => a.iter().map(|x| x.as_int().map_err(|_| tr!("script-err-joint-index", index = x.to_string()).into())).collect::<R<Vec<i64>>>()?,
+                    None => vec![j.as_int().map_err(|_| tr!("script-err-joint-index", index = j.to_string()))?],
+                },
+                None => Vec::new(),
+            };
+            Ok((parts, joints, m.get("note").map(|n| n.to_string()).unwrap_or_default()))
         }
-        None => Ok((ents(d)?, String::new())),
+        None => Ok((ents(d)?, Vec::new(), String::new())),
     }
 }
 
@@ -1992,7 +2006,7 @@ fn register_assembly(e: &mut Engine) {
         let given = a.iter().map(step_from).collect::<R<Vec<_>>>()?;
         edit(|st| {
             let mut steps = Vec::new();
-            for (es, note) in given {
+            for (es, joints, note) in given {
                 let parts = es
                     .iter()
                     .map(|e| {
@@ -2001,7 +2015,11 @@ fn register_assembly(e: &mut Engine) {
                         Ok(p)
                     })
                     .collect::<R<Vec<ContextPath>>>()?;
-                let step = varstotas_kernel::assembly::Step { parts, note };
+                let joints = joints
+                    .into_iter()
+                    .map(|i| usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()).into()))
+                    .collect::<R<Vec<usize>>>()?;
+                let step = varstotas_kernel::assembly::Step { parts, joints, note };
                 if let Some(p) = step.parts.iter().find(|p| steps.iter().any(|s: &varstotas_kernel::assembly::Step| s.parts.contains(p)) || step.parts.iter().filter(|q| q == p).count() > 1) {
                     let name = p.split_last().map(|(&id, parent)| kind(st, &Entity { path: parent.to_vec(), r: EntityRef::Instance(id) })).unwrap_or_default();
                     return err(tr!("script-err-assembly-part-twice", e = name));

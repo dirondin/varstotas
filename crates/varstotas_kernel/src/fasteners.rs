@@ -188,9 +188,9 @@ impl Model {
         Some(self.transform_at(path) * local * pull)
     }
 
-    /// The step joint `i`'s fasteners go in at.
+    /// The step joint `i`'s fasteners go in at: the fastener step given them, else the joint's.
     pub fn fastener_step(&self, i: usize) -> Option<usize> {
-        self.joint_step(i)
+        self.assembly.joint_given(i).or_else(|| self.joint_step(i))
     }
 
     /// Every instance on `path` is shown.

@@ -3,7 +3,10 @@
 //! the contact graph and edited here: moved up or down, joined, split, given a note. Clicking a
 //! step shows it (later parts hidden, its own selected); "Scenes from steps" keeps one scene per
 //! step; the booklet (PDF, A4 portrait) has a cover, the parts and hardware, then a page per
-//! step drawn from the current view with the earlier parts grey.
+//! step drawn from the current view with the earlier parts grey. A fastener step (no parts, the
+//! joints whose dowels, shelf pins or cam bolts go in before the next part) is suggested or split
+//! out here ("Fasteners first"); each step's page outlines its fasteners with arrows into their
+//! holes.
 
 use crate::app::VarstotasApp;
 use crate::ui::theme;
@@ -11,7 +14,7 @@ use crate::vector_export::{Drawing, Pen, Text2, VectorOptions, view_lines};
 use egui::{Context, RichText, Ui, vec2};
 use std::path::Path;
 use varstotas_i18n::tr;
-use varstotas_kernel::assembly::{SceneAssembly, Step, suggest_steps};
+use varstotas_kernel::assembly::{SceneAssembly, Step, fasteners_first, suggest_steps};
 use varstotas_kernel::cutlist::CutPlan;
 use varstotas_kernel::glam::{DVec2, DVec3};
 use varstotas_kernel::{ContextPath, EntityRef, Model};
@@ -74,11 +77,11 @@ pub(crate) fn step_parts(model: &Model, plan: &CutPlan, step: &Step) -> Vec<Stri
         .collect()
 }
 
-/// The hardware a step uses: the joints whose later part it adds.
+/// The hardware a step uses: the joints given to it, and those whose later part it adds.
 pub(crate) fn step_hardware(model: &Model, step: usize) -> Vec<String> {
     let mut by: Vec<(String, usize)> = Vec::new();
     for (i, j) in model.joints.iter().enumerate() {
-        if model.joint_step(i) != Some(step) {
+        if model.fastener_step(i) != Some(step) {
             continue;
         }
         let c = varstotas_kernel::joinery::joint_contact(model, j);
@@ -108,6 +111,65 @@ fn arrows(m: &Model, step: &Step, dirs: &[(ContextPath, DVec3)], gap: f64, cam: 
         }
     }
     out
+}
+
+/// A step's fasteners on its picture (screen points): each body's outline, and an arrow along
+/// each round one, from outside its outer end towards the part it goes into.
+type Outline = Vec<DVec2>;
+type Arrow = (DVec2, DVec2);
+fn fastener_lines(m: &Model, step: usize, cam: &Camera, px: DVec2) -> (Vec<Outline>, Vec<Arrow>) {
+    let (mut outlines, mut arrows) = (Vec::new(), Vec::new());
+    for f in &m.fasteners {
+        if m.fastener_step(f.joint) != Some(step) {
+            continue;
+        }
+        let Some(t) = m.fastener_transform(f) else { continue };
+        for s in &f.solids {
+            let pts: Vec<DVec2> = s.points().into_iter().filter_map(|p| cam.world_to_screen(t.transform_point3(p), px)).collect();
+            outlines.push(hull(pts));
+        }
+        let Some(&varstotas_kernel::fasteners::Solid::Round { at, dir, len, .. }) = f.solids.first() else { continue };
+        let centre = m.fastener_anchor(f).and_then(|(path, _)| path.split_last().and_then(|(&id, parent)| m.instance_world_bounds(parent, id))).map(|b| (b.min + b.max) * 0.5);
+        let (e0, e1) = (t.transform_point3(at), t.transform_point3(at + dir * len));
+        let (inner, outer) = match centre {
+            Some(c) if e1.distance(c) < e0.distance(c) => (e1, e0),
+            _ => (e0, e1),
+        };
+        let u = (outer - inner).normalize_or_zero();
+        // at least a few percent of the picture long, however short the axis looks from here
+        let reach = (len * 2.0).max(80.0);
+        if let (Some(tail), Some(head)) = (cam.world_to_screen(outer + u * reach, px), cam.world_to_screen(outer + u * reach * 0.15, px)) {
+            let along = tail - head;
+            let min = px.x * 0.05;
+            if along.length() > 1e-3 {
+                arrows.push((head + along.normalize() * along.length().max(min), head));
+            }
+        }
+    }
+    (outlines, arrows)
+}
+
+/// The convex hull of `pts`, counter-clockwise.
+fn hull(mut pts: Vec<DVec2>) -> Vec<DVec2> {
+    pts.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    pts.dedup();
+    if pts.len() < 3 {
+        return pts;
+    }
+    let cross = |o: DVec2, a: DVec2, b: DVec2| (a - o).perp_dot(b - o);
+    let mut h: Vec<DVec2> = Vec::new();
+    for pass in 0..2 {
+        let start = h.len();
+        let it: Box<dyn Iterator<Item = &DVec2>> = if pass == 0 { Box::new(pts.iter()) } else { Box::new(pts.iter().rev()) };
+        for &p in it {
+            while h.len() >= start + 2 && cross(h[h.len() - 2], h[h.len() - 1], p) <= 0.0 {
+                h.pop();
+            }
+            h.push(p);
+        }
+        h.pop();
+    }
+    h
 }
 
 fn draw_arrow(d: &mut Drawing, tail: DVec2, head: DVec2) {
@@ -141,18 +203,19 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
         let k = (size.x / ext.x).min(size.y / ext.y);
         Some((min + size * 0.5 - (lo + hi) * 0.5 * k, k))
     };
-    // the steps' arrows (only with the model exploded), framed with the model
+    // the steps' arrows (the parts' only with the model exploded) and fasteners, framed with
+    // the model
     let dirs = varstotas_kernel::assembly::explode_dirs(model);
-    let step_arrows: Vec<Vec<(DVec2, DVec2)>> = (0..a.steps.len())
+    let (step_arrows, step_fasteners): (Vec<Vec<Arrow>>, Vec<Vec<Outline>>) = (0..a.steps.len())
         .map(|k| {
-            if view.explode <= 0.0 {
-                return Vec::new();
-            }
             let mut m = model.clone();
             m.set_assembly_view(SceneAssembly { explode: view.explode, step: Some(k) });
-            arrows(&m, &a.steps[k], &dirs, view.explode, cam, px)
+            let mut out = if view.explode > 0.0 { arrows(&m, &a.steps[k], &dirs, view.explode, cam, px) } else { Vec::new() };
+            let (outlines, more) = fastener_lines(&m, k, cam, px);
+            out.extend(more);
+            (out, outlines)
         })
-        .collect();
+        .unzip();
     let ends: Vec<DVec2> = step_arrows.iter().flatten().flat_map(|&(t, h)| [t, h]).collect();
     let map = fit_map(&whole, rect, &ends);
     let picture = |d: Drawing, lines: &crate::vector_export::ViewLines, map: Option<(DVec2, f64)>| match map {
@@ -216,6 +279,12 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
         text(&mut d, DVec2::new(MARGIN, 22.0), 7.0, tr!("assembly-booklet-step", n = k + 1, total = n), true);
         let mut d = picture(d, &lines, map);
         if let Some((off, scale)) = map {
+            for o in &step_fasteners[k] {
+                for (i, &p) in o.iter().enumerate() {
+                    let q = o[(i + 1) % o.len()];
+                    d.lines.push((off + p * scale, off + q * scale, Pen::Profile));
+                }
+            }
             for &(t, h) in &step_arrows[k] {
                 draw_arrow(&mut d, off + t * scale, off + h * scale);
             }
@@ -259,7 +328,7 @@ impl VarstotasApp {
             return;
         }
         self.doc.mutate_untracked(|m| m.set_assembly_view(v));
-        if let Some(s) = v.step.and_then(|s| self.doc.model.assembly.steps.get(s)) {
+        if let Some(s) = v.step.and_then(|s| self.doc.model.assembly.steps.get(s)).filter(|s| !s.parts.is_empty()) {
             let parent = s.parts.first().map(|p| p[..p.len() - 1].to_vec()).unwrap_or_default();
             let sel: Vec<EntityRef> = s.parts.iter().filter(|p| p[..p.len() - 1] == parent[..]).filter_map(|p| p.last().map(|&id| EntityRef::Instance(id))).collect();
             self.doc.set_active_path(parent);
@@ -299,7 +368,9 @@ impl VarstotasApp {
     pub(crate) fn assembly_dump(&self) -> (usize, i64, Option<usize>, Vec<Vec<String>>) {
         let a = &self.doc.model.assembly;
         let plan = crate::ui::cutlist::model_plan(&self.doc.model);
-        (a.steps.len(), a.explode.round() as i64, a.step, a.steps.iter().map(|s| step_parts(&self.doc.model, &plan, s)).collect())
+        // a fastener step by its hardware
+        let what = |(k, s): (usize, &Step)| if s.parts.is_empty() { step_hardware(&self.doc.model, k) } else { step_parts(&self.doc.model, &plan, s) };
+        (a.steps.len(), a.explode.round() as i64, a.step, a.steps.iter().enumerate().map(what).collect())
     }
 
     /// Write the instructions booklet to `path`.
@@ -399,19 +470,33 @@ impl VarstotasApp {
                         if r.on_hover_text(tr!("assembly-step-tip")).clicked() {
                             show = Some(Some(k));
                         }
-                        ui.label(fit(&step_parts(&self.doc.model, &plan, step).join(", "), 9.0, 220.0));
+                        // a fastener step by its hardware, in italics
+                        let what = if step.parts.is_empty() { step_hardware(&self.doc.model, k) } else { step_parts(&self.doc.model, &plan, step) };
+                        let what = RichText::new(fit(&what.join(", "), 9.0, 220.0));
+                        ui.label(if step.parts.is_empty() { what.italics() } else { what });
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let mut steps = a.steps.clone();
+                            let first = fasteners_first(&self.doc.model, &a.steps, k);
+                            if !first.is_empty() && !step.parts.is_empty() {
+                                let r = ui.small_button("⊕");
+                                super::tray_lib::spot(format!("assembly:fasteners:{k}"), r.rect.center());
+                                if r.on_hover_text(tr!("assembly-fasteners-first-tip")).clicked() {
+                                    steps.insert(k, Step { joints: first, ..Default::default() });
+                                    edit = Some((tr!("assembly-undo-steps"), steps.clone()));
+                                }
+                            }
                             if step.parts.len() > 1 && ui.small_button("÷").on_hover_text(tr!("assembly-split-tip")).clicked() {
                                 let parts = steps[k].parts.clone();
-                                steps.splice(k..=k, parts.into_iter().map(|p| Step { parts: vec![p], note: String::new() }));
+                                steps.splice(k..=k, parts.into_iter().map(|p| Step { parts: vec![p], ..Default::default() }));
                                 if let Some(s) = steps.get_mut(k) {
                                     s.note = step.note.clone();
+                                    s.joints = step.joints.clone();
                                 }
                                 edit = Some((tr!("assembly-undo-steps"), steps));
                             } else if k > 0 && ui.small_button("⤒").on_hover_text(tr!("assembly-join-tip")).clicked() {
                                 let s = steps.remove(k);
                                 steps[k - 1].parts.extend(s.parts);
+                                steps[k - 1].joints.extend(s.joints);
                                 if !s.note.is_empty() {
                                     let n = &mut steps[k - 1].note;
                                     *n = if n.is_empty() { s.note } else { format!("{n} {}", s.note) };

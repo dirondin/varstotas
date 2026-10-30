@@ -441,4 +441,15 @@ fn assembly() {
     assert!(r.error.as_ref().is_some_and(|e| e.contains("more than one")), "{:?}", r.error);
     let r = run(&mut m, &ScriptCtx::default(), "assembly_view(0, 5)");
     assert!(r.error.is_some_and(|e| e.contains("no step 5")));
+    // dowels between the sides and the top get a fastener step of their own, given by script too
+    let r = run(
+        &mut m,
+        &ScriptCtx::default(),
+        r#"let p = groups().filter(|g| g.name == "Side"); joint(p[0], "Top", "dowels"); joint(p[1], "Top", "dowels"); print(suggest_steps()); print(assembly_steps()[2].joints);
+        set_assembly_steps(["Bottom", "Side", #{ joints: [1], note: "Dowels" }, "Top"]); print(assembly_steps()[2].parts.len() + " " + assembly_steps()[2].joints[0]);"#,
+    );
+    assert_eq!(r.output, "4\n[0, 1]\n0 1\n", "{:?} {:?}", r.output, r.error);
+    assert_eq!(m.fastener_step(1), Some(2));
+    let r = run(&mut m, &ScriptCtx::default(), "set_assembly_steps([#{ joints: [7] }])");
+    assert!(r.error.is_some_and(|e| e.contains("no joint 7")));
 }
