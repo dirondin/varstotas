@@ -1,0 +1,77 @@
+# The workshop's newer controls with the real mouse and keys: two sides picked by clicks in the
+# view (Shift adds), three drawers on undermount push-to-open slides from the Drawer row's
+# fields, undone with Cmd+Z; an inset door, a nailed back, a plinth under everything selected
+# with Cmd+A; a joint picked in the list with its fasteners shown; X-ray from the view menu;
+# visible edges banded from the Cut List.
+action script let b = box(vec3(18, 0, 100), 564, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 100), 18, 450, 800); l.name = "Left"; let r = box(vec3(582, 0, 100), 18, 450, 800); r.name = "Right"; let t = box(vec3(18, 0, 882), 564, 450, 18); t.name = "Top"; material("White", "#ECEAE4"); set_stock("White", #{ kind: "sheet", length: 2800, width: 2070, thickness: 18, price: 70 }); paint([b, l, r, t], "White");
+action console_close
+view iso
+zoom_extents
+wait 10
+rawp click 9 0 500
+wait 5
+raw mods shift
+rawp click 600 225 500
+raw mods none
+wait 5
+expect I=2
+action joinery
+wait 10
+action drag_spot joinery:drawer_count 40 0
+wait 5
+action click_spot drawer_slide
+wait 5
+action click_spot drawer_slide:2
+wait 5
+action click_spot joinery:drawer_push
+wait 5
+action click_spot joinery:drawer
+wait 15
+expect ("Undermount slide 400, push to open", 6,
+screenshot shots/workshop_real_drawers.bmp
+raw mods cmd
+raw key Z
+raw mods none
+wait 10
+expect joints=[]
+action click_spot joinery:door_front
+wait 5
+action click_spot joinery:door_front:1
+wait 5
+action click_spot joinery:doors
+wait 10
+expect ("Hinge", "Door", "Left", "2 × Cup hinge Ø35, inset")
+action click_spot joinery:back_groove
+wait 5
+action click_spot joinery:back
+wait 10
+expect ("Nail 1.6 × 20",
+raw mods cmd
+raw key A
+raw mods none
+wait 5
+action click_spot joinery:plinth
+wait 10
+expect ("Confirmat", "Plinth front", "Plinth side", "2 × Confirmat Ø7 × 50")
+action click_spot joinery:pick:0
+wait 5
+action click_spot joinery:hardware
+wait 10
+screenshot shots/workshop_real_hardware.bmp
+action click_spot hud:style
+wait 5
+action click_spot hud:xray
+wait 5
+raw key Escape
+wait 5
+expect Shaded true)
+screenshot shots/workshop_real_xray.bmp
+action cut_list
+wait 10
+action cut_list_tab parts
+wait 5
+action click_spot cutlist:band_visible
+wait 10
+expect bands=([("Bottom", [true, false, false, false])
+screenshot shots/workshop_real_bands.bmp
+quit

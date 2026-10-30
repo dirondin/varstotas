@@ -44,11 +44,14 @@ fn slide_combo(ui: &mut Ui, id: &str, kind: &mut SlideKind) -> egui::Response {
     let mut r = egui::ComboBox::from_id_salt(id)
         .selected_text(name(*kind))
         .show_ui(ui, |ui| {
-            for (k, _) in SLIDES {
-                changed |= ui.selectable_value(kind, k, name(k)).changed();
+            for (i, (k, _)) in SLIDES.into_iter().enumerate() {
+                let r = ui.selectable_value(kind, k, name(k));
+                super::tray_lib::spot(format!("{id}:{i}"), r.rect.center());
+                changed |= r.changed();
             }
         })
         .response;
+    super::tray_lib::spot(id, r.rect.center());
     if changed {
         r.mark_changed();
     }
@@ -372,7 +375,8 @@ impl VarstotasApp {
             let count = &mut self.joinery.drawer_count;
             *count = (*count).max(1);
             ui.label(tr!("joinery-drawer-count")).on_hover_text(tr!("joinery-drawer-count-tip"));
-            ui.add(egui::DragValue::new(count).range(1..=12).speed(0.05));
+            let c = ui.add(egui::DragValue::new(count).range(1..=12).speed(0.05));
+            super::tray_lib::spot("joinery:drawer_count", c.rect.center());
             let count = *count;
             let mut z = self.joinery.drawer_z.unwrap_or(auto);
             if count == 1 {
@@ -384,13 +388,17 @@ impl VarstotasApp {
             ui.label(tr!("joinery-drawer-front"));
             let fronts = [(DrawerFront::Inset, "joinery-drawer-front-inset"), (DrawerFront::Overlay, "joinery-drawer-front-overlay"), (DrawerFront::None, "joinery-drawer-front-none")];
             let name = |f: DrawerFront| fronts.iter().find(|x| x.0 == f).map(|x| varstotas_i18n::tr(x.1)).unwrap_or_default();
-            egui::ComboBox::from_id_salt("drawer_front").selected_text(name(spec.front)).show_ui(ui, |ui| {
-                for (f, _) in fronts {
-                    ui.selectable_value(&mut spec.front, f, name(f));
+            let c = egui::ComboBox::from_id_salt("drawer_front").selected_text(name(spec.front)).show_ui(ui, |ui| {
+                for (i, (f, _)) in fronts.into_iter().enumerate() {
+                    let r = ui.selectable_value(&mut spec.front, f, name(f));
+                    super::tray_lib::spot(format!("joinery:drawer_front:{i}"), r.rect.center());
                 }
             });
+            super::tray_lib::spot("joinery:drawer_front", c.response.rect.center());
             slide_combo(ui, "drawer_slide", &mut spec.slide);
-            ui.checkbox(&mut spec.push, tr!("joinery-push")).on_hover_text(tr!("joinery-push-tip"));
+            let c = ui.checkbox(&mut spec.push, tr!("joinery-push"));
+            super::tray_lib::spot("joinery:drawer_push", c.rect.center());
+            c.on_hover_text(tr!("joinery-push-tip"));
             let r = ui.button(tr!("joinery-drawer-add"));
             super::tray_lib::spot("joinery:drawer", r.rect.center());
             if r.on_hover_text(tr!("joinery-drawer-tip")).clicked()
@@ -431,12 +439,16 @@ impl VarstotasApp {
             c.on_hover_text(tr!("joinery-doors-count-tip"));
             ui.label(tr!("joinery-drawer-front"));
             let name = |inset: bool| tr!(if inset { "joinery-drawer-front-inset" } else { "joinery-drawer-front-overlay" });
-            egui::ComboBox::from_id_salt("door_front").selected_text(name(spec.inset)).show_ui(ui, |ui| {
-                for inset in [false, true] {
-                    ui.selectable_value(&mut spec.inset, inset, name(inset));
+            let c = egui::ComboBox::from_id_salt("door_front").selected_text(name(spec.inset)).show_ui(ui, |ui| {
+                for (i, inset) in [false, true].into_iter().enumerate() {
+                    let r = ui.selectable_value(&mut spec.inset, inset, name(inset));
+                    super::tray_lib::spot(format!("joinery:door_front:{i}"), r.rect.center());
                 }
             });
-            ui.checkbox(&mut spec.push, tr!("joinery-door-push")).on_hover_text(tr!("joinery-door-push-tip"));
+            super::tray_lib::spot("joinery:door_front", c.response.rect.center());
+            let c = ui.checkbox(&mut spec.push, tr!("joinery-door-push"));
+            super::tray_lib::spot("joinery:door_push", c.rect.center());
+            c.on_hover_text(tr!("joinery-door-push-tip"));
             let b = ui.button(tr!("joinery-doors-add"));
             super::tray_lib::spot("joinery:doors", b.rect.center());
             if b.on_hover_text(tr!("joinery-doors-tip")).clicked() {
@@ -464,7 +476,9 @@ impl VarstotasApp {
         let mut spec = self.joinery.back.unwrap_or_default();
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(tr!("joinery-back")).strong());
-            ui.checkbox(&mut spec.groove, tr!("joinery-back-groove")).on_hover_text(tr!("joinery-back-groove-tip"));
+            let c = ui.checkbox(&mut spec.groove, tr!("joinery-back-groove"));
+            super::tray_lib::spot("joinery:back_groove", c.rect.center());
+            c.on_hover_text(tr!("joinery-back-groove-tip"));
             let b = ui.button(tr!("joinery-back-add"));
             super::tray_lib::spot("joinery:back", b.rect.center());
             if b.on_hover_text(tr!("joinery-back-tip")).clicked() {

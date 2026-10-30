@@ -70,6 +70,7 @@ fn pill(ui: &mut Ui, icon: Icon, name: &str, content: impl FnOnce(&mut Ui)) -> R
     // menu, the choices close it themselves (`ui.close()`)
     let config = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
     let (r, _) = egui::containers::menu::MenuButton::from_button(b).config(config).ui(ui, content);
+    super::tray_lib::spot(format!("hud:{name}"), r.rect.center());
     // the custom atom comes first: right after the button's padding
     let pad = ui.spacing().button_padding.x;
     let rect = Rect::from_center_size(egui::pos2(r.rect.left() + pad + ICON / 2.0, r.rect.center().y), vec2(ICON, ICON));
@@ -202,7 +203,9 @@ impl VarstotasApp {
             }
             ui.separator();
             // switches: a click toggles, the menu stays open
-            if item(ui, Icon::StyleXRay, &tr!("view-xray"), self.prefs.xray, None).clicked() {
+            let r = item(ui, Icon::StyleXRay, &tr!("view-xray"), self.prefs.xray, None);
+            super::tray_lib::spot("hud:xray", r.rect.center());
+            if r.clicked() {
                 self.prefs.xray = !self.prefs.xray;
             }
             let edges = *self.prefs.edges_mut();
