@@ -158,6 +158,50 @@ stands out from where they went. Left: the post.
   and a still of a cutting diagram.
 - A post with the demo for woodworking / DIY communities and Show HN.
 
+## Batch 5: joints you can see, hardware and fastener steps
+
+Owner's decision of 2026-10-30, in the order A, B, D, C. The aim is that a joint shows what it
+does. Until now its cuts hid inside the touching faces, and its dowels and screws existed only as
+holes and as a row in the shopping list.
+
+**A. Fasteners as bodies, joints on the model.** Status (2026-10-30): done for dowels, screws
+and pocket screws. View → Show → Fasteners; User Guide → Workshop.
+- Every joint places the bodies of its fasteners: dowels, screws, pocket screws, and later the
+  fittings of D. They are generated from the joint's sizes (`Model::fasteners`). They are not
+  parts: they are not in the cut list, cannot be edited and are not saved.
+- They are drawn with the model (View → Show → Fasteners) in their own colours (wood, steel).
+- In the exploded view each one stays with the part it goes into first. Dowels stick out of it;
+  screws are pulled out along their axis.
+- While Window → Joinery is open, every joint's contact is outlined on the model with its number.
+  The joint picked in the list is highlighted with its fastener positions.
+
+**B. Sizes and positions.**
+- Fasteners are laid out along the joint in one of these ways:
+  - evenly (as before);
+  - from the ends with a margin and a pitch (32 mm system);
+  - at a list of distances.
+- Across the joint they can be off-centre.
+- The Joint Points tool drags the positions along the joint with the mouse (whole millimetres)
+  or takes a typed distance; Delete removes a point.
+- The Joinery window shows lengths in the model's units.
+
+**D. Furniture hardware.** New joint kinds that cut their own holes, price themselves in the cut
+list and show their bodies:
+- confirmat screws and cam locks (minifix);
+- shelf pins (32 mm rows on the side);
+- concealed cup hinges (35 mm, overlay or inset doors, the count from the door height);
+- ball-bearing drawer slides (the standard length that fits, between parts 12.7 mm apart);
+- handles and knobs, and legs: on one part;
+- table-top fasteners;
+- nails for back panels.
+
+The Drawer generator builds a drawer box for an opening, leaving room for the slides.
+
+**C. Fastener steps.** A step can put in fasteners without new parts ("insert the dowels into the
+side"). Suggest steps adds such a step before a part goes on over dowels, shelf pins or cam
+bolts, and a step can split its fasteners out by hand. A step shown in the view and on its booklet
+page shows the fasteners of that step and of the earlier ones, with arrows into their holes.
+
 ## Open questions
 
 - True nesting of non-rectangular parts (CNC) vs bounding rectangles only. Rectangles in batch 1.

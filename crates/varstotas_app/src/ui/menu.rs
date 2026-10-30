@@ -385,6 +385,10 @@ impl VarstotasApp {
                 if icon_check(ui, &mut guides, Icon::Guides, &tr!("menu-guides")).clicked() {
                     self.actions.push(Action::ToggleGuides);
                 }
+                let mut fasteners = !self.doc.model.fasteners_hidden;
+                if icon_check(ui, &mut fasteners, Icon::Joinery, &tr!("menu-fasteners")).on_hover_text(tr!("menu-fasteners-hint")).clicked() {
+                    self.actions.push(Action::ToggleFasteners);
+                }
                 icon_check(ui, &mut self.prefs.show_axes, Icon::Axes, &tr!("menu-axes"));
                 icon_check(ui, &mut self.prefs.show_ground, Icon::Ground, &tr!("menu-ground"));
                 icon_check(ui, &mut self.prefs.show_sky, Icon::Sky, &tr!("menu-sky")).on_hover_text(tr!("menu-sky-hint"));

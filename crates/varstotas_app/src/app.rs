@@ -352,6 +352,7 @@ pub enum Action {
     DeleteGuides,
     /// View → Guides (show / hide).
     ToggleGuides,
+    ToggleFasteners,
     /// Snapping → Snapping on/off (Shift+S).
     ToggleSnapping,
     /// One inference on / off (a toolbar button).
@@ -1723,6 +1724,10 @@ impl VarstotasApp {
                 self.prefs.grid.show = !self.prefs.grid.show;
                 crate::inference::settings::publish_grid(&self.prefs.grid);
             }
+            Action::ToggleFasteners => {
+                let hidden = !self.doc.model.fasteners_hidden;
+                self.doc.mutate_untracked(|m| m.fasteners_hidden = hidden);
+            }
             Action::ToggleGuides => {
                 let hidden = !self.doc.model.guides_hidden;
                 self.doc.mutate_untracked(|m| m.guides_hidden = hidden);
@@ -2603,6 +2608,7 @@ impl eframe::App for VarstotasApp {
             let (mut o3, mut o2) = self.tool_overlays();
             self.printing_overlay(&mut o3);
             self.cut_numbers_overlay(&mut o2);
+            self.joints_overlay(&mut o3, &mut o2);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())

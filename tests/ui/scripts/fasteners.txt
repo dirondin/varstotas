@@ -1,0 +1,30 @@
+# Fasteners: a cabinet joined with dowels, screws and pocket screws shows their bodies; the
+# Joinery window outlines the joints and the picked one's fastener positions; the exploded view
+# keeps the dowels in the sides and pulls the screws out; View → Show → Fasteners hides them.
+action script let b = box(vec3(0, 0, 0), 600, 300, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 18), 18, 300, 700); l.name = "Side"; let r = box(vec3(582, 0, 18), 18, 300, 700); r.name = "Side"; let t = box(vec3(0, 0, 718), 600, 300, 18); t.name = "Top"; let s = box(vec3(18, 0, 350), 564, 300, 18); s.name = "Shelf"; joint(l, s, "dowels"); joint(r, s, "dowels"); joint(b, l, "screws"); joint(b, r, "screws"); joint(t, l, "pocket"); joint(t, r, "pocket");
+action console_close
+wait 5
+expect fasteners=(18, 18, ["6 × Dowel Ø8 × 40", "6 × Screw Ø4 × 50", "6 × Pocket screw Ø4 × 25"])
+action joinery
+action joint_pick 1
+view iso
+zoom_extents
+wait 10
+screenshot shots/fasteners_joints.bmp
+action joinery_close
+action assembly
+action click_spot assembly:suggest
+wait 5
+action assembly_explode 150
+zoom_extents
+wait 10
+screenshot shots/fasteners_exploded.bmp
+action assembly_step 2
+wait 5
+expect fasteners=(18, 6, ["6 × Screw Ø4 × 50"])
+action assembly_step 0
+action assembly_explode 0
+action toggle_fasteners
+wait 5
+expect fasteners=(18, 0, [])
+quit

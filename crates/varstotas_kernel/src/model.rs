@@ -441,6 +441,15 @@ pub struct Model {
     /// Assembly steps and the exploded / step view shown.
     #[serde(default, skip_serializing_if = "crate::assembly::Assembly::is_empty")]
     pub assembly: crate::assembly::Assembly,
+    /// View > Show > Fasteners off: the joints' fastener bodies are not drawn.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fasteners_hidden: bool,
+    /// The joints' fastener bodies ([`Model::refresh_fasteners`]); not saved.
+    #[serde(skip)]
+    pub fasteners: Vec<crate::fasteners::Fastener>,
+    /// Where each joint's parts touch, as assembled; not saved.
+    #[serde(skip)]
+    pub joint_contacts: Vec<Option<crate::joinery::Contact>>,
 }
 
 /// Result of a model-wide ray pick.
@@ -496,6 +505,9 @@ impl Model {
             joints: Vec::new(),
             joint_bases: Vec::new(),
             assembly: Default::default(),
+            fasteners_hidden: false,
+            fasteners: Vec::new(),
+            joint_contacts: Vec::new(),
         }
     }
 
@@ -1190,6 +1202,9 @@ impl Model {
         }
         for (_, m) in &mut self.joint_bases {
             m.rebuild_caches();
+        }
+        if !self.joints.is_empty() {
+            self.refresh_fasteners();
         }
     }
 }

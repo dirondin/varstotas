@@ -223,7 +223,7 @@ impl VarstotasApp {
 
     /// What the Show drop-down switches: icon, name, on. The first four are the view's own,
     /// the rest the model's (every view).
-    pub(crate) fn hud_show_items(&self) -> [(Icon, String, bool); 9] {
+    pub(crate) fn hud_show_items(&self) -> [(Icon, String, bool); 10] {
         let m = &self.doc.model;
         let d = m.section_display;
         [
@@ -236,6 +236,7 @@ impl VarstotasApp {
             (Icon::Section, tr!("view-show-section-planes"), d.planes),
             (Icon::SectionCut, tr!("view-show-section-cuts"), d.cuts),
             (Icon::SectionFill, tr!("view-show-section-fill"), d.fill),
+            (Icon::Joinery, tr!("view-show-fasteners"), !m.fasteners_hidden),
         ]
     }
 
@@ -249,7 +250,7 @@ impl VarstotasApp {
                     ui.separator();
                     ui.label(egui::RichText::new(tr!("view-show-model-header")).small().weak());
                 }
-                if k == 6 {
+                if k == 6 || k == 9 {
                     ui.separator();
                 }
                 if item(ui, icon, &name, on, None).clicked() {
@@ -260,6 +261,7 @@ impl VarstotasApp {
                         3 => self.actions.push(Action::ToggleGrid),
                         4 => self.actions.push(Action::ToggleGuides),
                         5 => self.actions.push(Action::ToggleShadows),
+                        9 => self.actions.push(Action::ToggleFasteners),
                         _ => self.actions.push(Action::ToggleSectionDisplay(k as u8 - 6)),
                     }
                 }

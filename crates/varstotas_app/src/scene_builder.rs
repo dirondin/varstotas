@@ -76,6 +76,7 @@ pub fn tessellate_model(model: &Model) -> Tessellation {
     guarded(|| {
         let mut out = Tessellation::default();
         tess_rec(model, model.root, DMat4::IDENTITY, &mut Vec::new(), None, &mut out, 0);
+        out.faces.extend(model.fastener_faces());
         out
     })
     .or_else(|e| {
@@ -133,6 +134,7 @@ fn tess_rec(
             inherited,
             uv,
             normals,
+            color: None,
         }
     };
     let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(16);
@@ -268,8 +270,9 @@ pub fn build_from(model: &Model, tess: &Tessellation, p: &BuildParams) -> SceneG
         geo.tex.reserve(n_verts);
     }
     for (fi, f) in tess.faces.iter().enumerate() {
-        let front = mat_color(f.front.or(f.inherited)).unwrap_or(FRONT_DEFAULT);
-        let back = mat_color(f.back.or(f.inherited)).unwrap_or(BACK_DEFAULT);
+        let own = f.color.filter(|_| !mono);
+        let front = own.or_else(|| mat_color(f.front.or(f.inherited))).unwrap_or(FRONT_DEFAULT);
+        let back = own.or_else(|| mat_color(f.back.or(f.inherited))).unwrap_or(BACK_DEFAULT);
         if with_tex {
             let (fm, bm) = (f.front.or(f.inherited), f.back.or(f.inherited));
             let lay = [layer_of(fm), layer_of(bm)];

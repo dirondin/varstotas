@@ -23,6 +23,7 @@
 //! in order ([`Model::rebuild_wood_joints`]), and a part left in no joint gets its geometry
 //! back. Hand edits of a joined part are lost on the next rebuild.
 
+use crate::fasteners::{Anchor, Fastener, STEEL, Solid, WOOD};
 use crate::model::{ContextPath, Model};
 use crate::ops::solid::mesh_boolean;
 use crate::primitives::Primitive;
@@ -118,6 +119,13 @@ pub struct Contact {
 }
 
 impl Contact {
+    /// Unit vector across the plane, into `a`.
+    pub fn normal(&self) -> DVec3 {
+        let mut n = DVec3::ZERO;
+        n[self.axis] = self.into_a;
+        n
+    }
+
     pub fn length(&self) -> f64 {
         self.hi[self.along] - self.lo[self.along]
     }
@@ -206,6 +214,21 @@ fn face_area(model: &Model, p: &[crate::InstanceId], axis: usize) -> f64 {
         let s = hi - lo;
         s[(axis + 1) % 3] * s[(axis + 2) % 3]
     })
+}
+
+/// A countersunk screw: its head at `head`, going `dir` for `len` (head included).
+fn screw(head: DVec3, dir: DVec3, len: f64, d: f64) -> Vec<Solid> {
+    let h = d * 0.5;
+    vec![
+        Solid::Round { at: head, dir, len: h, r0: d, r1: d / 2.0 },
+        Solid::Round { at: head + dir * h, dir, len: (len - h - d).max(0.5), r0: d / 2.0, r1: d / 2.0 },
+        Solid::Round { at: head + dir * (len - d), dir, len: d, r0: d / 2.0, r1: 0.0 },
+    ]
+}
+
+/// Where joint `j`'s parts touch.
+pub fn joint_contact(model: &Model, j: &WoodJoint) -> Option<Contact> {
+    contact(model, &j.a, &j.b)
 }
 
 /// A size in mm without trailing zeros.
@@ -310,6 +333,77 @@ impl WoodJoint {
             }
         }
         (a, b)
+    }
+
+    /// The bodies of its fasteners, in world space as assembled (their joint and parts' frames
+    /// are filled in by [`Model::refresh_fasteners`]).
+    pub fn bodies(&self, c: &Contact) -> Vec<Fastener> {
+        let n = c.normal();
+        let name = self.hardware(Some(c)).map(|h| h.0).unwrap_or_default();
+        let body = |anchor, out: DVec3, pull, color, solids| Fastener {
+            joint: 0,
+            anchor,
+            local_a: DMat4::IDENTITY,
+            local_b: DMat4::IDENTITY,
+            out,
+            pull,
+            color,
+            solids,
+            name: name.clone(),
+        };
+        let mut out = Vec::new();
+        for s in self.spots(c) {
+            let e = self.point(c, s);
+            match self.kind {
+                WoodJointKind::Dowels => {
+                    // a little short of both hole bottoms
+                    let r = self.diameter / 2.0 * 0.97;
+                    let len = (self.depth + self.depth_b - 2.0).max(1.0);
+                    out.push(body(Anchor::Earlier, n, 0.0, WOOD, vec![Solid::Round { at: e - n * (self.depth_b - 1.0), dir: n, len, r0: r, r1: r }]));
+                }
+                WoodJointKind::Screws => {
+                    // from a's far face through a into b, countersunk
+                    let d = self.diameter;
+                    let head = e + n * c.a_size;
+                    let len = ((c.a_size + self.depth_b) / 5.0).ceil() * 5.0;
+                    out.push(body(Anchor::A, n, 0.6, STEEL, screw(head, -n, len, d)));
+                }
+                WoodJointKind::PocketHole => {
+                    let (dir, _) = self.pocket_dir(c);
+                    let from = e - dir * POCKET_KEEP;
+                    let len = ((POCKET_KEEP + self.depth) / 5.0).ceil() * 5.0;
+                    let d = self.diameter;
+                    let mut solids = vec![Solid::Round { at: from - dir * 2.5, dir, len: 2.5, r0: d * 1.1, r1: d * 1.1 }];
+                    solids.push(Solid::Round { at: from, dir, len: len - d, r0: d / 2.0, r1: d / 2.0 });
+                    solids.push(Solid::Round { at: from + dir * (len - d), dir, len: d, r0: d / 2.0, r1: 0.0 });
+                    out.push(body(Anchor::B, -dir, 0.6, STEEL, solids));
+                }
+                _ => return out,
+            }
+        }
+        out
+    }
+
+    /// A pocket screw's direction (from `b`'s face towards its end and on into `a`) and the
+    /// way across the joint it leans.
+    fn pocket_dir(&self, c: &Contact) -> (DVec3, DVec3) {
+        let (sin, cos) = POCKET_ANGLE.to_radians().sin_cos();
+        let mut m = DVec3::ZERO;
+        m[c.across] = if self.flip { -1.0 } else { 1.0 };
+        (c.normal() * cos + m * sin, m)
+    }
+
+    /// Where its fasteners go on the contact (world, as assembled).
+    pub fn points(&self, c: &Contact) -> Vec<DVec3> {
+        self.spots(c).into_iter().map(|s| self.point(c, s)).collect()
+    }
+
+    /// The point on the contact at `s` along the joint, across it in the middle.
+    fn point(&self, c: &Contact, s: f64) -> DVec3 {
+        let mut p = c.lo;
+        p[c.along] = s;
+        p[c.across] = (c.lo[c.across] + c.hi[c.across]) * 0.5;
+        p
     }
 
     /// Where dowels and screws go along the joint.
@@ -589,6 +683,7 @@ impl Model {
         }
         let used: Vec<DefId> = self.joints.iter().flat_map(|j| [self.part_def(&j.a), self.part_def(&j.b)]).flatten().collect();
         self.joint_bases.retain(|(d, _)| used.contains(d) && self.defs.contains_key(*d));
+        self.refresh_fasteners();
         errors
     }
 

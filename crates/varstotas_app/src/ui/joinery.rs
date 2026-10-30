@@ -1,6 +1,8 @@
 //! Window → Joinery (track W): joints between parts that touch (`varstotas_kernel::joinery`).
 //! Select two groups or components, pick a kind and add a joint; the list below edits its
 //! sizes, swaps its parts or deletes it. A click on a joint's name selects its two parts.
+//! While the window is open the joints are outlined on the model with their numbers, the one
+//! picked in the list highlighted with its fastener positions.
 
 use crate::app::VarstotasApp;
 use crate::ui::theme;
@@ -16,7 +18,12 @@ pub struct JoineryState {
     pub kind: WoodJointKind,
     /// A joint being dragged (committed when the pointer is released).
     draft: Option<(usize, WoodJoint)>,
+    /// The joint picked in the list (highlighted on the model).
+    pub selected: Option<usize>,
 }
+
+const JOINT_LINE: egui::Color32 = egui::Color32::from_rgb(0xE0, 0x7A, 0x10);
+const JOINT_PICKED: egui::Color32 = egui::Color32::from_rgb(0x00, 0x50, 0xFF);
 
 pub(crate) fn kind_name(k: WoodJointKind) -> String {
     varstotas_i18n::tr(match k {
@@ -74,6 +81,52 @@ impl VarstotasApp {
     pub(crate) fn joints_dump(&self) -> Vec<(String, String, String, String)> {
         let m = &self.doc.model;
         m.joints.iter().map(|j| (format!("{:?}", j.kind), part_name(m, &j.b), part_name(m, &j.a), j.hardware(None).map(|(n, c)| format!("{c} × {n}")).unwrap_or_default())).collect()
+    }
+
+    /// The joints on the model while the window is open: each contact outlined with its number,
+    /// the picked one in blue with its fastener positions.
+    pub(crate) fn joints_overlay(&self, o3: &mut varstotas_render::Overlay3d, o2: &mut Vec<crate::overlay::Marker2d>) {
+        if !self.joinery.open {
+            return;
+        }
+        let m = &self.doc.model;
+        for (i, (j, c)) in m.joints.iter().zip(&m.joint_contacts).enumerate() {
+            let Some(c) = c else { continue };
+            // with part a, wherever the exploded view put it
+            let off = m.assembly_offset(&j.a);
+            let picked = self.joinery.selected == Some(i);
+            let (color, width) = if picked { (JOINT_PICKED, 3.0) } else { (JOINT_LINE, 1.5) };
+            let corner = |u: bool, v: bool| {
+                let mut p = c.lo;
+                p[c.along] = if u { c.hi[c.along] } else { c.lo[c.along] };
+                p[c.across] = if v { c.hi[c.across] } else { c.lo[c.across] };
+                p + off
+            };
+            let ring = [corner(false, false), corner(true, false), corner(true, true), corner(false, true)];
+            for k in 0..4 {
+                crate::inference::push_line(o3, ring[k], ring[(k + 1) % 4], color, width, !picked, true);
+            }
+            o2.push(crate::overlay::Marker2d::Badge { at: (c.lo + c.hi) * 0.5 + off, text: (i + 1).to_string() });
+            if picked {
+                for p in j.points(c) {
+                    o2.push(crate::overlay::Marker2d::Point { at: p + off, shape: crate::overlay::MarkerShape::Dot, color: JOINT_PICKED });
+                }
+            }
+        }
+    }
+
+    /// The fasteners for the debug dump: (bodies, bodies shown, their names with counts).
+    pub(crate) fn fasteners_dump(&self) -> (usize, usize, Vec<String>) {
+        let m = &self.doc.model;
+        let shown: Vec<&varstotas_kernel::fasteners::Fastener> = m.fasteners.iter().filter(|f| m.fastener_transform(f).is_some()).collect();
+        let mut names: Vec<(String, usize)> = Vec::new();
+        for f in &shown {
+            match names.iter_mut().find(|n| n.0 == f.name) {
+                Some(n) => n.1 += 1,
+                None => names.push((f.name.clone(), 1)),
+            }
+        }
+        (m.fasteners.len(), shown.len(), names.into_iter().map(|(n, c)| format!("{c} × {n}")).collect())
     }
 
     fn select_joint_parts(&mut self, j: &WoodJoint) {
@@ -139,11 +192,15 @@ impl VarstotasApp {
                     _ => self.doc.model.joints[i].clone(),
                 };
                 let before = j.clone();
+                let picked = self.joinery.selected == Some(i);
                 ui.push_id(("joint", i), |ui| {
                     ui.horizontal(|ui| {
                         let name = format!("{}. {} → {}", i + 1, part_name(&self.doc.model, &j.b), part_name(&self.doc.model, &j.a));
-                        if ui.link(RichText::new(name).strong()).on_hover_text(tr!("joinery-select-tip")).clicked() {
-                            select = Some(j.clone());
+                        let text = if picked { RichText::new(name).strong().color(JOINT_PICKED) } else { RichText::new(name).strong() };
+                        let r = ui.link(text);
+                        super::tray_lib::spot(format!("joinery:pick:{i}"), r.rect.center());
+                        if r.on_hover_text(tr!("joinery-select-tip")).clicked() {
+                            select = Some((i, j.clone()));
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let r = super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("joinery-remove"));
@@ -230,7 +287,8 @@ impl VarstotasApp {
         {
             self.doc.try_commit(&tr!("joinery-undo-edit"), move |m| m.set_wood_joint(i, j));
         }
-        if let Some(j) = select {
+        if let Some((i, j)) = select {
+            self.joinery.selected = Some(i);
             self.select_joint_parts(&j);
         }
         if let Some((i, k)) = kind {
@@ -245,6 +303,7 @@ impl VarstotasApp {
         }
         if let Some(i) = remove {
             self.joinery.draft = None;
+            self.joinery.selected = None;
             self.doc.commit(&tr!("joinery-undo-remove"), move |m| m.remove_wood_joint(i));
         }
     }

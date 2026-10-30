@@ -31,6 +31,8 @@ pub struct TessFace {
     /// Smoothed world normals, one per position, when the face borders smooth edges (empty =
     /// flat, use `normal`).
     pub normals: Vec<DVec3>,
+    /// A colour of its own (fastener bodies, [`crate::fasteners`]) instead of a material's.
+    pub color: Option<[f32; 4]>,
 }
 
 #[derive(Clone, Debug)]
@@ -201,6 +203,7 @@ fn rec(
             inherited,
             uv,
             normals,
+            color: None,
         });
     }
     for (eid, ed) in &mesh.edges {

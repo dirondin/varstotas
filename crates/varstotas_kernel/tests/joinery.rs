@@ -173,3 +173,32 @@ fn pocket_holes() {
     m.set_wood_joint(i, f).unwrap();
     assert!(volume(&m, shelf) < vh - 3.0 * 1000.0);
 }
+
+#[test]
+fn fasteners_follow_their_part() {
+    use varstotas_kernel::assembly::SceneAssembly;
+    use varstotas_kernel::fasteners::Solid;
+    let (mut m, side, shelf) = cabinet();
+    m.add_wood_joint(WoodJointKind::Dowels, vec![side], vec![shelf]).unwrap();
+    // three dowels across the contact plane x = 18, 12 into the side and 30 into the shelf
+    assert_eq!(m.fasteners.len(), 3);
+    for f in &m.fasteners {
+        let Solid::Round { at, dir, len, .. } = f.solids[0] else { panic!("a dowel is round") };
+        assert_eq!((at.x, dir, len), (47.0, DVec3::NEG_X, 40.0));
+        assert_eq!(f.name, "Dowel Ø8 × 40");
+    }
+    let faces = m.fastener_faces();
+    assert!(!faces.is_empty() && faces.iter().all(|f| f.color.is_some() && f.face.is_none()));
+    // exploded: without steps they stay in the shelf (b) and move with it
+    m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
+    let shift = m.assembly_offset(&[shelf]);
+    assert!(shift.length() > 1.0);
+    let moved = m.fastener_transform(&m.fasteners[0]).unwrap();
+    assert!(moved.transform_point3(DVec3::ZERO).distance(shift) < 1e-9);
+    // hidden from the view, and gone with the joint
+    m.assemble();
+    m.fasteners_hidden = true;
+    assert!(m.fastener_faces().is_empty());
+    m.remove_wood_joint(0);
+    assert!(m.fasteners.is_empty() && m.joint_contacts.is_empty());
+}

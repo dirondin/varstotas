@@ -57,7 +57,9 @@ The model optionally stores `assembly`: `{ "steps": [{ "parts": [instance path],
 "step", "moved": [[instance path, [x, y, z]]], "hid": [instance path] }` (`explode` the exploded view's
 distance in mm, `step` the step shown from 0; `moved` and `hid` record what the view did to the
 instances' transforms and `hidden` flags so it can be undone), and a scene optionally stores
-`assembly`: `{ "explode", "step" }`, the view it restores.
+`assembly`: `{ "explode", "step" }`, the view it restores. `fasteners_hidden: true` turns off
+View → Show → Fasteners; the fastener bodies themselves are not stored, they are placed again from
+the joints when the file is read.
 All are omitted while empty or default, so older readers and files are unaffected.
 
 Scenes optionally store the independent `style.triangles` display checkbox (default false).

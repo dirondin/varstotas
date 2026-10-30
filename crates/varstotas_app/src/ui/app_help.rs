@@ -29,6 +29,7 @@ pub enum Topic {
     Construction,
     Styles,
     Scenes,
+    Workshop,
     Files,
     Scripts,
     Shortcuts,
@@ -51,6 +52,7 @@ pub const TOPICS: &[(Topic, &str)] = &[
     (Topic::Construction, "help-topic-construction"),
     (Topic::Styles, "help-topic-styles"),
     (Topic::Scenes, "help-topic-scenes"),
+    (Topic::Workshop, "help-topic-workshop"),
     (Topic::Files, "help-topic-files"),
     (Topic::Scripts, "help-topic-scripts"),
     (Topic::Shortcuts, "help-topic-shortcuts"),
@@ -247,6 +249,16 @@ const SCENES: &[B] = &[
     B::Row("help-scenes-9", "help-scenes-10"),
 ];
 
+const WORKSHOP: &[B] = &[
+    B::P("help-workshop-1"),
+    B::Row("help-workshop-2", "help-workshop-3"),
+    B::Row("help-workshop-4", "help-workshop-5"),
+    B::Row("help-workshop-6", "help-workshop-7"),
+    B::Row("help-workshop-8", "help-workshop-9"),
+    B::Row("help-workshop-10", "help-workshop-11"),
+    B::Script(super::script_help::Topic::Functions, "help-workshop-12"),
+];
+
 const FILES: &[B] = &[
     B::P("help-files-1"),
     B::P("help-files-2"),
@@ -296,6 +308,7 @@ fn page(topic: Topic) -> &'static [B] {
         Topic::Construction => CONSTRUCTION,
         Topic::Styles => STYLES,
         Topic::Scenes => SCENES,
+        Topic::Workshop => WORKSHOP,
         Topic::Files => FILES,
         Topic::Scripts => SCRIPTS,
         Topic::Shortcuts => SHORTCUTS,
