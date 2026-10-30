@@ -453,11 +453,11 @@ fn assembly() {
         r##"let b = box(vec3(0, 0, 0), 600, 300, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 18), 18, 300, 700); l.name = "Side";
         let r = box(vec3(582, 0, 18), 18, 300, 700); r.name = "Side"; let t = box(vec3(0, 0, 718), 600, 300, 18); t.name = "Top";
         print(suggest_steps()); let s = assembly_steps(); print(s[0].parts[0].name + " " + s[1].parts.len());
-        assembly_view(100, 1); let v = assembly_view(); print(v.explode + " " + v.step + " " + bounds(t).min.z);
+        assembly_view(100, 1); let v = assembly_view(); print(v.explode + " " + v.step + " " + bounds(t).min.z.round());
         set_assembly_steps([[l, r], #{ parts: "Bottom", note: "Glue" }, t]); print(assembly_steps()[1].note + " " + assembly_view().step);
         assembly_view(0); print(type_of(assembly_view().step) + " " + bounds(t).min.z);"##,
     );
-    assert_eq!(r.output, "3\nBottom 2\n100.0 1 818.0\nGlue 1\n() 718.0\n", "{}", r.output);
+    assert_eq!(r.output, "3\nBottom 2\n100.0 1 816.0\nGlue 1\n() 718.0\n", "{}", r.output);
     assert_eq!(m.assembly.steps.len(), 3);
     let r = run(&mut m, &ScriptCtx::default(), r#"set_assembly_steps(["Top", "Top"])"#);
     assert!(r.error.as_ref().is_some_and(|e| e.contains("more than one")), "{:?}", r.error);

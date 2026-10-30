@@ -166,13 +166,13 @@ in Window → Cut List, with diagrams and PDF / SVG / CSV export.
 | `set_assembly_steps([bottom, [left, right], #{ parts: "Top", note: "Glue the dowels" }])` | sets the steps; each is a part, a name, an array of parts or a map with `parts`, `joints` and `note` (`#{ joints: [0, 1], note: "Dowels into the bottom" }`: a fastener step). A part may be in one step only; a joint not given to a step has its fasteners go in with the later of its parts |
 | `assembly_view(150)` | explodes the model by 150 mm (0: assembled); `assembly_view(150, 2)` also shows step 2 (from 0; -1 for all), the later steps' parts hidden; `assembly_view()` is `#{ explode, step }` |
 
-The exploded view keeps the parts that go together first (the base step) in place and moves
-every other part square to its face, away from the middle of the parts it touches: sides
-sideways, a top up, a back backwards, doors to the front. When the parts in before it (by the
-steps, else the suggested order) are in that way, as for a shelf between a top and a bottom,
-it slides out the first clear way, the front first. Parts that touch nothing of the carcass (a
-drawer) come out of it as a whole and then apart; no two parts end up in each other, and
-fasteners are pulled just clear of their holes. The whole is lifted so nothing goes below the floor. Joints and the cut list keep working from the assembled model while it is
+The exploded view stretches the model: each part's middle moves away from the model's middle
+across, and its bottom up from the floor, in proportion, the outermost parts by the distance
+(sides sideways, a top up, a back backwards, doors to the front, shelves apart between the
+sides, the bottom on the floor). Parts clear of each other as assembled only get further
+apart, so none goes into another, and everything moves evenly with the distance. Parts that
+touch nothing of the carcass (a drawer) also come out of it as a whole, the first clear way
+along an axis, the front first; fasteners are pulled just clear of their holes. The whole is lifted so nothing goes below the floor. Joints and the cut list keep working from the assembled model while it is
 exploded. Window → Assembly does the same and writes the instructions booklet (PDF); from
 Python, `m.export(path, what="assembly")`.
 

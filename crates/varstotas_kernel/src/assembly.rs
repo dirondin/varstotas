@@ -10,8 +10,8 @@
 //! [`with_fastener_steps`]).
 //!
 //! The view ([`Model::set_assembly_view`]) is document state: the exploded view moves parts
-//! apart (each square to its face, out of the way of the parts in before it, no two into each
-//! other, a drawer out as a whole, [`explode_offsets`]), and a step shown hides the
+//! apart (the model stretched away from its middle and floor, a drawer out as a whole, no two
+//! into each other, [`explode_offsets`]), and a step shown hides the
 //! later steps' parts. What it did is kept ([`Assembly::moved`], [`Assembly::hid`]) and undone
 //! before the next view, so joints, the cut list and new views work from the assembled model.
 
@@ -209,14 +209,6 @@ fn layout(model: &Model) -> Layout {
     Layout { paths, boxes, adj, rank }
 }
 
-/// Where the exploded view takes each part: its way out (unit) within its group and the
-/// group's, and its offset.
-struct Plan {
-    dir: Vec<DVec3>,
-    group_dir: Vec<DVec3>,
-    off: Vec<DVec3>,
-}
-
 impl Layout {
     /// The groups of parts that touch each other, the first going together first.
     fn groups(&self) -> Vec<Vec<usize>> {
@@ -240,7 +232,6 @@ impl Layout {
                     }
                 }
             }
-            members.sort_by_key(|&k| (self.rank[k], k));
             groups.push(members);
         }
         groups
@@ -252,134 +243,64 @@ impl Layout {
         blocks.iter().all(|&j| self.boxes[j].is_none_or(|o| !overlap(swept, o, -0.5)))
     }
 
-    /// Part `k`'s way out of its group: square to its face (its thinnest size), away from the
-    /// group's middle, so that sides go sideways, a top up, a back backwards and doors to the
-    /// front; when the parts in before it are in that way (a shelf between the top and the
-    /// bottom), the first way clear of them: to the front, then away from the middle, then any.
-    fn part_dir(&self, k: usize, group: &[usize], (lo, hi): (DVec3, DVec3)) -> DVec3 {
-        let Some(b) = self.boxes[k] else { return DVec3::ZERO };
-        let size = b.1 - b.0;
-        let off = (b.0 + b.1) * 0.5 - (lo + hi) * 0.5;
-        let thin = (0..3).min_by(|&x, &y| size[x].total_cmp(&size[y])).unwrap_or(2);
-        let along = |a: usize| DVec3::from_array(std::array::from_fn(|i| if i == a { if off[a] < -1e-6 { -1.0 } else { 1.0 } } else { 0.0 }));
-        let mut ways = vec![along(thin), DVec3::NEG_Y];
-        let mut axes = [0, 1, 2];
-        axes.sort_by(|&x, &y| (off[y].abs() / (hi - lo)[y].max(1e-9)).total_cmp(&(off[x].abs() / (hi - lo)[x].max(1e-9))));
-        ways.extend(axes.map(along));
-        ways.extend(WAYS);
-        let blocks: Vec<usize> = group.iter().copied().filter(|&j| j != k && self.rank[j] <= self.rank[k]).collect();
-        let reach = (hi - lo).length() * 2.0;
-        ways.iter().copied().find(|&d| self.swept_clear(b, d, reach, &blocks)).unwrap_or(ways[0])
-    }
-
-    /// Moves `parts` (with offsets `off`) further along `dir` while one comes closer than
-    /// `margin` to one of `placed`, or than they stand apart assembled when closer (parts that
-    /// touch: while they go into each other).
-    fn clear(&self, parts: &[usize], dir: DVec3, placed: &[usize], off: &mut [DVec3], margin: f64) {
-        if dir == DVec3::ZERO {
-            return;
-        }
-        let at = |off: &[DVec3], j: usize| self.boxes[j].map(|b| (b.0 + off[j], b.1 + off[j]));
-        for _ in 0..4 * (placed.len() + 1) {
-            let hit = parts.iter().find_map(|&k| {
-                let a = at(off, k)?;
-                placed.iter().find_map(|&j| {
-                    let o = at(off, j)?;
-                    // no closer than they stand assembled (doors side by side)
-                    let apart = match (self.boxes[k], self.boxes[j]) {
-                        (Some(x), Some(y)) => (0..3).map(|i| (x.0[i] - y.1[i]).max(y.0[i] - x.1[i])).fold(0.0, f64::max),
-                        _ => margin,
-                    };
-                    let m = if self.adj[k].contains(&j) { 0.0 } else { margin.min(apart) };
-                    overlap(a, o, m).then_some((a, o, m))
-                })
-            });
-            let Some(((lo, hi), o, m)) = hit else { return };
-            // the least way along `dir` that clears it on one axis
-            let t = (0..3)
-                .filter(|&a| dir[a].abs() > 1e-9)
-                .map(|a| if dir[a] > 0.0 { (o.1[a] + m - lo[a]) / dir[a] } else { (hi[a] + m - o.0[a]) / -dir[a] })
-                .fold(f64::INFINITY, f64::min);
-            for &k in parts {
-                off[k] += dir * t.max(1e-6);
-            }
-        }
-    }
-
-    /// The exploded view for `distance`: within each group the parts that go together first
-    /// stay, every other part goes `distance` its way ([`Layout::part_dir`]) out from where the
-    /// parts before it that it touches went along that way, and further while it would run into
-    /// a part placed before it; each later group (a drawer) then moves out of the first as a
-    /// whole, to the front when it can, `distance` and further until clear of all placed.
-    fn plan(&self, distance: f64) -> Plan {
+    /// The exploded view's offsets for `distance`: the model stretched, each part's middle
+    /// (across) and bottom (up) moved away from the model's middle and its floor in proportion,
+    /// the outermost parts by `distance`: sides go sideways, a top up, a back backwards, shelves
+    /// apart between the sides, the bottom stays on the floor. Parts clear of each other as
+    /// assembled (one beside, behind or above the other) only get further apart, so none ends
+    /// up in another, and the parts move evenly with `distance`. A group of parts touching
+    /// nothing of the first (a drawer) also comes out as a whole by `distance`, the first way
+    /// along an axis it can go without meeting another part (the front first), which keeps
+    /// them clear too.
+    fn offsets(&self, distance: f64) -> Vec<DVec3> {
         let n = self.paths.len();
-        let (mut dir, mut group_dir, mut off) = (vec![DVec3::ZERO; n], vec![DVec3::ZERO; n], vec![DVec3::ZERO; n]);
-        let margin = distance * 0.1;
-        let groups = self.groups();
-        let mut placed: Vec<usize> = Vec::new();
-        for (g, members) in groups.iter().enumerate() {
-            let Some(bounds) = hull(members.iter().filter_map(|&k| self.boxes[k])) else { continue };
-            let first = self.rank[members[0]];
-            let mut inside: Vec<usize> = Vec::new();
-            for &k in members {
-                if self.rank[k] != first {
-                    dir[k] = self.part_dir(k, members, bounds);
-                    let out = self.adj[k].iter().filter(|&&j| self.rank[j] < self.rank[k]).map(|&j| off[j].dot(dir[k])).fold(0.0, f64::max);
-                    off[k] = dir[k] * (out + distance);
-                    self.clear(&[k], dir[k], &inside, &mut off, margin);
-                }
-                inside.push(k);
+        let mut off = vec![DVec3::ZERO; n];
+        let Some((lo, hi)) = hull(self.boxes.iter().flatten().copied()) else { return off };
+        let size = hi - lo;
+        let anchor = DVec3::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5, lo.z);
+        let reach = DVec3::new(size.x * 0.5, size.y * 0.5, size.z);
+        let stretch = DVec3::from_array(std::array::from_fn(|a| if reach[a] > 1e-9 { distance / reach[a] } else { 0.0 }));
+        for (k, o) in off.iter_mut().enumerate() {
+            if let Some(b) = self.boxes[k] {
+                let at = DVec3::new((b.0.x + b.1.x) * 0.5, (b.0.y + b.1.y) * 0.5, b.0.z);
+                *o = (at - anchor) * stretch;
             }
-            if g > 0 {
-                // the group out of the ones before it: the front first, else the way it is off
-                // their middle, then any
-                let Some(before) = hull(placed.iter().filter_map(|&k| self.boxes[k])) else { continue };
-                let o = (bounds.0 + bounds.1) * 0.5 - (before.0 + before.1) * 0.5;
-                let mut ways = vec![DVec3::NEG_Y];
-                let mut axes = [0, 1, 2];
-                axes.sort_by(|&x, &y| (o[y].abs() / (before.1 - before.0)[y].max(1e-9)).total_cmp(&(o[x].abs() / (before.1 - before.0)[x].max(1e-9))));
-                ways.extend(axes.map(|a| DVec3::from_array(std::array::from_fn(|i| if i == a { if o[a] < 0.0 { -1.0 } else { 1.0 } } else { 0.0 }))));
-                ways.extend(WAYS);
-                let reach = (before.1 - before.0).length() * 2.0;
-                let d = ways.iter().copied().find(|&d| self.swept_clear(bounds, d, reach, &placed)).unwrap_or(DVec3::NEG_Y);
+        }
+        for members in self.groups().iter().skip(1) {
+            let Some(bounds) = hull(members.iter().filter_map(|&k| self.boxes[k])) else { continue };
+            let others: Vec<usize> = (0..n).filter(|k| !members.contains(k)).collect();
+            let o = (bounds.0 + bounds.1) * 0.5 - (lo + hi) * 0.5;
+            let mut ways = vec![DVec3::NEG_Y];
+            let mut axes = [0, 1, 2];
+            axes.sort_by(|&x, &y| (o[y].abs() / size[y].max(1e-9)).total_cmp(&(o[x].abs() / size[x].max(1e-9))));
+            ways.extend(axes.map(|a| DVec3::from_array(std::array::from_fn(|i| if i == a { if o[a] < 0.0 { -1.0 } else { 1.0 } } else { 0.0 }))));
+            ways.extend(WAYS);
+            // not down: below the floor
+            if let Some(d) = ways.into_iter().filter(|d| d.z >= 0.0).find(|&d| self.swept_clear(bounds, d, size.length() * 2.0, &others)) {
                 for &k in members {
                     off[k] += d * distance;
-                    group_dir[k] = d;
                 }
-                self.clear(members, d, &placed, &mut off, margin);
-            }
-            placed.extend(members);
-        }
-        // lifted so that nothing goes below the bottom (the floor it stands on)
-        let floor = self.boxes.iter().flatten().map(|b| b.0.z).fold(f64::INFINITY, f64::min);
-        let low = self.boxes.iter().zip(&off).filter_map(|(b, o)| b.map(|b| b.0.z + o.z)).fold(f64::INFINITY, f64::min);
-        if low < floor {
-            for o in &mut off {
-                o.z += floor - low;
             }
         }
-        Plan { dir, group_dir, off }
+        off
     }
 }
 
 /// The way each part leaves the assembled model in the exploded view (unit vectors, world):
-/// square to its face away from the middle of the parts it touches (sides sideways, a top up,
-/// a back backwards, doors to the front), or out of the way of the parts in before it (a shelf
-/// between a top and a bottom to the front); a part that stays in a group moved out as a whole
-/// (a drawer's) the group's way.
+/// away from the model's middle and its floor ([`explode_offsets`]).
 pub fn explode_dirs(model: &Model) -> Vec<(ContextPath, DVec3)> {
     let l = layout(model);
-    let p = l.plan(1.0);
-    l.paths.into_iter().enumerate().map(|(k, path)| (path, if p.dir[k] == DVec3::ZERO { p.group_dir[k] } else { p.dir[k] })).collect()
+    let off = l.offsets(1.0);
+    l.paths.into_iter().zip(off).map(|(p, o)| (p, o.normalize_or_zero())).collect()
 }
 
-/// The exploded view's offsets for `distance` (world, mm), from the assembled model: no two
-/// parts end up in each other (a tenth of `distance` apart unless closer as assembled), and
-/// nothing goes below the model's bottom ([`Layout::plan`]).
+/// The exploded view's offsets for `distance` (world, mm), from the assembled model: the model
+/// stretched so that the outermost parts move `distance`, a drawer out as a whole too; no part
+/// ends up in another or below the floor, and each moves in proportion to `distance`.
 pub fn explode_offsets(model: &Model, distance: f64) -> Vec<(ContextPath, DVec3)> {
     let l = layout(model);
-    let p = l.plan(distance);
-    l.paths.into_iter().zip(p.off).collect()
+    let off = l.offsets(distance);
+    l.paths.into_iter().zip(off).collect()
 }
 
 impl Model {

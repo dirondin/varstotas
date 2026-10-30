@@ -41,15 +41,16 @@ fn exploded_and_step_views_come_back() {
     let (mut m, [bottom, left, right, top, shelf]) = cabinet();
     let before: Vec<DVec3> = [bottom, left, right, top, shelf].iter().map(|&i| at(&m, i)).collect();
     m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
-    // without steps (in the suggested order): the bottom stays, the sides go sideways, the top
-    // up, the shelf between them out to the front (up and down are the top and the bottom)
+    // stretched from the middle and the floor, the outermost parts by 100: the sides sideways,
+    // the top up, the shelf up between them, the bottom on the floor; steps change nothing
     let moved = |m: &Model| -> Vec<DVec3> { [bottom, left, right, top, shelf].iter().enumerate().map(|(k, &i)| at(m, i) - before[k]).collect() };
-    let expected = vec![DVec3::ZERO, DVec3::new(-100.0, 0.0, 0.0), DVec3::new(100.0, 0.0, 0.0), DVec3::new(0.0, 0.0, 100.0), DVec3::new(0.0, -100.0, 0.0)];
-    assert_eq!(moved(&m), expected);
-    // the same with those steps set
+    let z = |h: f64| h * 100.0 / 736.0;
+    let expected = vec![DVec3::ZERO, DVec3::new(-97.0, 0.0, z(18.0)), DVec3::new(97.0, 0.0, z(18.0)), DVec3::new(0.0, 0.0, z(718.0)), DVec3::new(0.0, 0.0, z(350.0))];
+    let close = |a: &[DVec3], b: &[DVec3]| a.iter().zip(b).all(|(x, y)| x.distance(*y) < 1e-9);
+    assert!(close(&moved(&m), &expected), "{:?}", moved(&m));
     m.assembly.steps = suggest_steps(&m);
     m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
-    assert_eq!(moved(&m), expected);
+    assert!(close(&moved(&m), &expected), "{:?}", moved(&m));
     // the cut list and joints still see the assembled cabinet
     assert_eq!(varstotas_kernel::cutlist::cut_parts(&m).len(), 4);
     let i = m.add_wood_joint(WoodJointKind::Dowels, vec![left], vec![shelf]).unwrap();
@@ -108,17 +109,28 @@ fn exploded_parts_stay_clear_of_each_other() {
     let front = board(&mut m, "Front", DVec3::new(540.0, 10.0, 150.0), DVec3::new(30.0, 0.0, 60.0));
     let ids = [bottom, left, right, top, shelf, drawer, front];
     let before: Vec<DVec3> = ids.iter().map(|&i| at(&m, i)).collect();
+    // at any distance, moving evenly with it
+    for d in [10.0, 60.0, 200.0, 900.0] {
+        m.set_assembly_view(SceneAssembly { explode: d, step: None });
+        let boxes: Vec<_> = ids.iter().map(|&i| m.instance_world_bounds(&[], i).unwrap()).collect();
+        for i in 0..boxes.len() {
+            for j in i + 1..boxes.len() {
+                let (a, b) = (boxes[i], boxes[j]);
+                let into = (0..3).all(|x| a.min[x] < b.max[x] - 1e-6 && b.min[x] < a.max[x] - 1e-6);
+                assert!(!into, "parts {i} and {j} overlap at {d}");
+            }
+        }
+        assert!(boxes.iter().all(|b| b.min.z >= -1e-9));
+    }
     m.set_assembly_view(SceneAssembly { explode: 200.0, step: None });
+    let half: Vec<DVec3> = {
+        let mut h = m.clone();
+        h.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
+        ids.iter().enumerate().map(|(k, &i)| at(&h, i) - before[k]).collect()
+    };
     let moved: Vec<DVec3> = ids.iter().enumerate().map(|(k, &i)| at(&m, i) - before[k]).collect();
     // the drawer comes out to the front as a whole, its front further
-    assert!(moved[5].y <= -200.0 && moved[5].x == 0.0 && moved[5].z == 0.0, "{:?}", moved[5]);
+    assert!(moved[5].y <= -200.0 && moved[5].x.abs() < 1e-9 && moved[5].z >= 0.0, "{:?}", moved[5]);
     assert!(moved[6].y < moved[5].y);
-    let boxes: Vec<_> = ids.iter().map(|&i| m.instance_world_bounds(&[], i).unwrap()).collect();
-    for i in 0..boxes.len() {
-        for j in i + 1..boxes.len() {
-            let (a, b) = (boxes[i], boxes[j]);
-            let into = (0..3).all(|x| a.min[x] < b.max[x] - 1e-6 && b.min[x] < a.max[x] - 1e-6);
-            assert!(!into, "parts {i} and {j} overlap");
-        }
-    }
+    assert!(moved.iter().zip(&half).all(|(a, b)| a.distance(*b * 2.0) < 1e-9));
 }
