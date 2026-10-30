@@ -21,6 +21,7 @@ mod edit;
 mod nav_tools;
 pub(crate) mod primitives;
 pub mod plugin_pick;
+pub mod joint_points;
 pub mod plugin_select;
 pub(crate) mod light;
 pub(crate) mod section;

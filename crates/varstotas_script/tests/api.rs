@@ -398,6 +398,15 @@ fn joinery() {
     );
     assert_eq!(r.output, "dowels 4 8.0 Shelf 4 × Dowel Ø8 × 40\nhousing 6.0\n9.0\n", "{}", r.output);
     assert_eq!(m.joints.len(), 1);
+    // layouts: a margin and a pitch, then distances (which set the count), off centre
+    let r = go(
+        &mut m,
+        r##"set_joint(0, #{ kind: "dowels", count: 3, margin: 37, pitch: 32 }); print(joints()[0].positions);
+        set_joint(0, #{ at: [20, 200], offset: 2 }); let j = joints()[0]; print(j.positions + " " + j.count + " " + j.offset);"##,
+    );
+    assert_eq!(r.output, "[37.0, 69.0, 101.0]\n[20.0, 200.0] 2 2.0\n", "{}", r.output);
+    let r = run(&mut m, &ScriptCtx::default(), r#"set_joint(0, #{ at: [20, 299] })"#);
+    assert!(r.error.is_some());
     let r = run(&mut m, &ScriptCtx::default(), r#"joint("Side", "Shelf", "rivets")"#);
     assert!(r.error.is_some_and(|e| e.contains("rivets")));
     go(&mut m, "remove_joint(0);");

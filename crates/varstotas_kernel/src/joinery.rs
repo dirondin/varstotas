@@ -90,6 +90,17 @@ pub struct WoodJoint {
     pub pin: f64,
     /// Pocket holes from `b`'s other face.
     pub flip: bool,
+    /// Fasteners this far from the joint's ends (0: a quarter of its length, at most 32 mm).
+    pub margin: f64,
+    /// Fasteners this far apart from the first one (0: spread evenly between the margins; 32:
+    /// the 32 mm system).
+    pub pitch: f64,
+    /// Fasteners at these distances from the joint's start, its end with the lower coordinate
+    /// (empty: laid out by `count`, `margin` and `pitch`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub at: Vec<f64>,
+    /// Fasteners this far off the joint's middle, across it.
+    pub offset: f64,
 }
 
 /// A drilled hole: where it starts, its direction, its diameter.
@@ -284,13 +295,13 @@ impl WoodJoint {
     pub fn hardware(&self, c: Option<&Contact>) -> Option<(String, usize)> {
         let d = num(self.diameter);
         match self.kind {
-            WoodJointKind::Dowels => Some((tr!("joint-hw-dowel", diameter = d, length = num(self.depth + self.depth_b - 2.0)), self.count)),
+            WoodJointKind::Dowels => Some((tr!("joint-hw-dowel", diameter = d, length = num(self.depth + self.depth_b - 2.0)), self.fastener_count())),
             WoodJointKind::Screws => {
                 let len = c.map_or(self.depth_b, |c| c.a_size + self.depth_b);
-                Some((tr!("joint-hw-screw", diameter = d, length = num((len / 5.0).ceil() * 5.0)), self.count))
+                Some((tr!("joint-hw-screw", diameter = d, length = num((len / 5.0).ceil() * 5.0)), self.fastener_count()))
             }
             WoodJointKind::PocketHole => {
-                Some((tr!("joint-hw-pocket-screw", diameter = d, length = num(((POCKET_KEEP + self.depth) / 5.0).ceil() * 5.0)), self.count))
+                Some((tr!("joint-hw-pocket-screw", diameter = d, length = num(((POCKET_KEEP + self.depth) / 5.0).ceil() * 5.0)), self.fastener_count()))
             }
             _ => None,
         }
@@ -301,13 +312,7 @@ impl WoodJoint {
     pub fn holes(&self, c: &Contact) -> (Vec<Hole>, Vec<Hole>) {
         let mut n = DVec3::ZERO;
         n[c.axis] = c.into_a;
-        let mid = (c.lo[c.across] + c.hi[c.across]) * 0.5;
-        let point = |s: f64| {
-            let mut p = c.lo;
-            p[c.along] = s;
-            p[c.across] = mid;
-            p
-        };
+        let point = |s: f64| self.point(c, s);
         let (mut a, mut b) = (Vec::new(), Vec::new());
         for s in self.spots(c) {
             let e = point(s);
@@ -398,22 +403,46 @@ impl WoodJoint {
         self.spots(c).into_iter().map(|s| self.point(c, s)).collect()
     }
 
-    /// The point on the contact at `s` along the joint, across it in the middle.
-    fn point(&self, c: &Contact, s: f64) -> DVec3 {
+    /// The point on the contact at `s` along the joint, across it at `offset` from the middle.
+    pub fn point(&self, c: &Contact, s: f64) -> DVec3 {
         let mut p = c.lo;
         p[c.along] = s;
-        p[c.across] = (c.lo[c.across] + c.hi[c.across]) * 0.5;
+        p[c.across] = (c.lo[c.across] + c.hi[c.across]) * 0.5 + self.offset;
         p
     }
 
-    /// Where dowels and screws go along the joint.
+    /// How many fasteners it has.
+    pub fn fastener_count(&self) -> usize {
+        if self.at.is_empty() { self.count } else { self.at.len() }
+    }
+
+    /// Where its fasteners go along the joint, from its start.
+    pub fn positions(&self, c: &Contact) -> Vec<f64> {
+        let lo = c.lo[c.along];
+        self.spots(c).into_iter().map(|s| s - lo).collect()
+    }
+
+    /// Where dowels and screws go along the joint (world coordinate on its long axis).
     fn spots(&self, c: &Contact) -> Vec<f64> {
         let (lo, hi) = (c.lo[c.along], c.hi[c.along]);
-        if self.count <= 1 {
-            return vec![(lo + hi) * 0.5];
+        if !self.at.is_empty() {
+            return self.at.iter().map(|s| lo + s).collect();
         }
-        let e = (c.length() / 4.0).min(32.0).max(self.diameter);
+        let e = if self.margin > 0.0 { self.margin } else { (c.length() / 4.0).min(32.0).max(self.diameter) };
+        if self.pitch > 0.0 {
+            return (0..self.count).map(|i| lo + e + self.pitch * i as f64).collect();
+        }
+        if self.count <= 1 {
+            return vec![if self.margin > 0.0 { lo + e } else { (lo + hi) * 0.5 }];
+        }
         (0..self.count).map(|i| lo + e + (hi - lo - 2.0 * e) * i as f64 / (self.count - 1) as f64).collect()
+    }
+
+    /// The fasteners lie on the joint, their holes clear of its ends and sides.
+    fn spots_fit(&self, c: &Contact, r: f64) -> bool {
+        let (lo, hi) = (c.lo[c.along], c.hi[c.along]);
+        let half = c.width() / 2.0;
+        self.spots(c).iter().all(|&s| s - r >= lo - 1e-6 && s + r <= hi + 1e-6) && self.offset.abs() + r <= half + 1e-6
     }
 
     /// The solids taken from `a`, taken from `b` and added to `b`, placed in world space.
@@ -441,13 +470,7 @@ impl WoodJoint {
             let m = Primitive::Box { w: s.x, d: s.y, h: s.z }.mesh().ok_or_else(bad)?;
             Ok((m, DMat4::from_translation(lo)))
         };
-        let mid = (c.lo[c.across] + c.hi[c.across]) * 0.5;
-        let point = |s: f64| {
-            let mut p = c.lo;
-            p[c.along] = s;
-            p[c.across] = mid;
-            p
-        };
+        let point = |s: f64| self.point(c, s);
         let grow = |lo: DVec3, hi: DVec3, axes: &[usize], by: f64| {
             let (mut lo, mut hi) = (lo, hi);
             for &k in axes {
@@ -470,7 +493,7 @@ impl WoodJoint {
         let (mut from_a, mut from_b, mut to_b) = (Vec::new(), Vec::new(), Vec::new());
         match self.kind {
             WoodJointKind::Dowels => {
-                if self.diameter <= 0.0 || self.depth <= 0.0 || self.depth_b <= 0.0 || self.count == 0 || self.diameter >= c.width() {
+                if self.diameter <= 0.0 || self.depth <= 0.0 || self.depth_b <= 0.0 || self.fastener_count() == 0 || !self.spots_fit(c, self.diameter / 2.0) {
                     return Err(bad());
                 }
                 for s in self.spots(c) {
@@ -480,7 +503,7 @@ impl WoodJoint {
                 }
             }
             WoodJointKind::Screws => {
-                if self.diameter <= 0.0 || self.depth_b <= 0.0 || self.count == 0 || self.diameter >= c.width() {
+                if self.diameter <= 0.0 || self.depth_b <= 0.0 || self.fastener_count() == 0 || !self.spots_fit(c, self.diameter / 2.0) {
                     return Err(bad());
                 }
                 for s in self.spots(c) {
@@ -498,10 +521,11 @@ impl WoodJoint {
             }
             WoodJointKind::MortiseTenon => {
                 let len = if self.through { c.a_size } else { self.depth };
-                if self.thickness <= 0.0 || self.thickness >= c.width() || len <= 0.0 || len > c.a_size + 1e-9 || 2.0 * self.shoulder >= c.length() {
+                if self.thickness <= 0.0 || self.thickness / 2.0 + self.offset.abs() >= c.width() / 2.0 || len <= 0.0 || len > c.a_size + 1e-9 || 2.0 * self.shoulder >= c.length() {
                     return Err(bad());
                 }
                 let (mut lo, mut hi) = (c.lo, c.hi);
+                let mid = (c.lo[c.across] + c.hi[c.across]) * 0.5 + self.offset;
                 (lo[c.across], hi[c.across]) = (mid - self.thickness / 2.0, mid + self.thickness / 2.0);
                 lo[c.along] += self.shoulder;
                 hi[c.along] -= self.shoulder;
@@ -564,7 +588,7 @@ impl WoodJoint {
                 let dir = n * cos + m * sin;
                 let enter = t / 2.0 / sin;
                 let pocket_r = (2.0 * self.diameter + 1.5).max(9.5) / 2.0;
-                if self.diameter <= 0.0 || self.depth <= 0.0 || self.count == 0 || 2.0 * pocket_r >= c.length() || enter < POCKET_KEEP + 3.0 || self.depth >= c.a_size {
+                if self.diameter <= 0.0 || self.depth <= 0.0 || self.fastener_count() == 0 || 2.0 * pocket_r >= c.length() || enter < POCKET_KEEP + 3.0 || self.depth >= c.a_size || !self.spots_fit(c, 0.0) {
                     return Err(bad());
                 }
                 for s in self.spots(c) {

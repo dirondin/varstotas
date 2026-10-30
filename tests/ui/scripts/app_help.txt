@@ -24,11 +24,11 @@ wait 5
 expect guide=(true Modifying "autosave")
 screenshot shots/guide_search.bmp
 # a topic in the list clears the search
-raw click 143 525
+raw click 143 566
 wait 5
 expect guide=(true Files "")
 screenshot shots/guide_files.bmp
-raw click 135 579
+raw click 135 620
 wait 5
 expect guide=(true Shortcuts "")
 screenshot shots/guide_keys.bmp

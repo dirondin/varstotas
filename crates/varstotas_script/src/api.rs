@@ -1863,6 +1863,13 @@ fn joint_params(j: &mut WoodJoint, m: &Map) -> R<()> {
             "pin" => j.pin = num(v)?,
             "through" => j.through = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "through"))?,
             "flip" => j.flip = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "flip"))?,
+            "margin" => j.margin = num(v)?,
+            "pitch" => j.pitch = num(v)?,
+            "offset" => j.offset = num(v)?,
+            "at" => {
+                j.at = v.clone().into_array().map_err(|_| tr!("script-err-joint-at"))?.iter().map(num).collect::<R<Vec<f64>>>()?;
+                j.count = j.at.len().max(1);
+            }
             k => return err(tr!("script-err-joint-key", key = k.to_string())),
         }
     }
@@ -1883,7 +1890,14 @@ fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
     }
     m.insert("through".into(), j.through.into());
     m.insert("flip".into(), j.flip.into());
-    let hw = j.hardware(varstotas_kernel::joinery::contact(&st.model, &j.a, &j.b).as_ref());
+    for (k, v) in [("margin", j.margin), ("pitch", j.pitch), ("offset", j.offset)] {
+        m.insert(k.into(), v.into());
+    }
+    m.insert("at".into(), j.at.iter().map(|v| Dynamic::from(*v)).collect::<Array>().into());
+    let c = varstotas_kernel::joinery::contact(&st.model.unjoined(), &j.a, &j.b);
+    let pos: Array = c.as_ref().map(|c| j.positions(c)).unwrap_or_default().into_iter().map(Dynamic::from).collect();
+    m.insert("positions".into(), pos.into());
+    let hw = j.hardware(c.as_ref());
     m.insert("hardware".into(), hw.map_or(Dynamic::UNIT, |(n, c)| format!("{c} × {n}").into()));
     m.into()
 }

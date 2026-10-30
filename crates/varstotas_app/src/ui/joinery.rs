@@ -8,8 +8,8 @@ use crate::app::VarstotasApp;
 use crate::ui::theme;
 use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
-use varstotas_kernel::joinery::{WoodJoint, WoodJointKind};
-use varstotas_kernel::{EntityRef, InstanceId, Model};
+use varstotas_kernel::joinery::{Contact, WoodJoint, WoodJointKind};
+use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
 
 #[derive(Default)]
 pub struct JoineryState {
@@ -47,9 +47,81 @@ fn part_name(model: &Model, path: &[InstanceId]) -> String {
     model.defs.get(inst.def).map(|d| d.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| tr!("tray-info-group"))
 }
 
-fn mm(ui: &mut Ui, label: &str, v: &mut f64, max: f64) -> bool {
+/// A length field in the model's units (`min..=max` mm).
+fn len(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, min: f64, max: f64) -> egui::Response {
     ui.label(label);
-    ui.add(egui::DragValue::new(v).range(0.5..=max).speed(0.2).max_decimals(1).suffix(" mm")).changed()
+    ui.add(super::len_drag(v, unit).range(min..=max).speed(0.2))
+}
+
+fn mm(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, max: f64) -> bool {
+    len(ui, label, v, unit, 0.5, max).changed()
+}
+
+/// Kinds whose fasteners are laid out along the joint.
+pub(crate) fn spaced(k: WoodJointKind) -> bool {
+    matches!(k, WoodJointKind::Dowels | WoodJointKind::Screws | WoodJointKind::PocketHole)
+}
+
+/// How a joint's fasteners are laid out: evenly, from the ends with a pitch, at distances.
+fn layout_ui(ui: &mut Ui, j: &mut WoodJoint, c: Option<Contact>, unit: LengthUnit) {
+    let len_max = c.map_or(10_000.0, |c| c.length());
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr!("joinery-layout"));
+        let mode = if !j.at.is_empty() { 2 } else if j.pitch > 0.0 { 1 } else { 0 };
+        let mut m = mode;
+        let names = [tr!("joinery-layout-even"), tr!("joinery-layout-pitch"), tr!("joinery-layout-at")];
+        egui::ComboBox::from_id_salt("layout").selected_text(names[m].clone()).show_ui(ui, |ui| {
+            for (k, n) in names.iter().enumerate() {
+                ui.selectable_value(&mut m, k, n.clone());
+            }
+        });
+        if m != mode {
+            match m {
+                0 => {
+                    j.at.clear();
+                    j.pitch = 0.0;
+                }
+                1 => {
+                    j.at.clear();
+                    j.pitch = 32.0;
+                    if j.margin <= 0.0 {
+                        j.margin = 37.0;
+                    }
+                }
+                _ => j.at = c.map(|c| j.positions(&c)).unwrap_or_default(),
+            }
+        }
+        match m {
+            2 => {
+                let mut remove = None;
+                for k in 0..j.at.len() {
+                    ui.add(super::len_drag(&mut j.at[k], unit).range(0.0..=len_max).speed(0.5));
+                    if j.at.len() > 1 && ui.small_button("−").on_hover_text(tr!("joinery-point-remove")).clicked() {
+                        remove = Some(k);
+                    }
+                }
+                if let Some(k) = remove {
+                    j.at.remove(k);
+                }
+                if ui.small_button("+").on_hover_text(tr!("joinery-point-add")).clicked() {
+                    let last = j.at.last().copied().unwrap_or(0.0);
+                    j.at.push((last + 32.0).min(len_max));
+                }
+                j.count = j.at.len().max(1);
+            }
+            _ => {
+                ui.label(tr!("joinery-count"));
+                ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
+                len(ui, &tr!("joinery-margin"), &mut j.margin, unit, 0.0, len_max).on_hover_text(tr!("joinery-margin-tip"));
+                if m == 1 {
+                    len(ui, &tr!("joinery-pitch"), &mut j.pitch, unit, 1.0, len_max);
+                }
+            }
+        }
+        if j.kind != WoodJointKind::PocketHole {
+            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
+        }
+    });
 }
 
 impl VarstotasApp {
@@ -129,6 +201,12 @@ impl VarstotasApp {
         (m.fasteners.len(), shown.len(), names.into_iter().map(|(n, c)| format!("{c} × {n}")).collect())
     }
 
+    /// Where each joint's fasteners are, from its start (whole mm), for the debug dump.
+    pub(crate) fn joint_points_dump(&self) -> Vec<Vec<i64>> {
+        let m = &self.doc.model;
+        m.joints.iter().zip(&m.joint_contacts).map(|(j, c)| c.map(|c| j.positions(&c).iter().map(|p| p.round() as i64).collect()).unwrap_or_default()).collect()
+    }
+
     fn select_joint_parts(&mut self, j: &WoodJoint) {
         let (Some((&a, pa)), Some((&b, pb))) = (j.a.split_last(), j.b.split_last()) else { return };
         self.doc.set_active_path(pa.to_vec());
@@ -185,6 +263,7 @@ impl VarstotasApp {
         let mut kind = None;
         let mut select = None;
         let mut changed = None;
+        let mut points = None;
         egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
             for i in 0..self.doc.model.joints.len() {
                 let mut j = match &self.joinery.draft {
@@ -225,48 +304,55 @@ impl VarstotasApp {
                         });
                     });
                     let (na, nb) = (part_name(&self.doc.model, &j.a), part_name(&self.doc.model, &j.b));
+                    let unit = self.doc.model.unit;
                     ui.horizontal_wrapped(|ui| match j.kind {
                         WoodJointKind::Dowels | WoodJointKind::Screws => {
-                            ui.label(tr!("joinery-count"));
-                            ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, 30.0);
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 30.0);
                             if j.kind == WoodJointKind::Dowels {
-                                mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, 200.0);
+                                mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
                             }
-                            mm(ui, &tr!("joinery-depth-in", part = nb.clone()), &mut j.depth_b, 200.0);
+                            mm(ui, &tr!("joinery-depth-in", part = nb.clone()), &mut j.depth_b, unit, 200.0);
                         }
                         WoodJointKind::Housing => {
-                            mm(ui, &tr!("joinery-depth"), &mut j.depth, 200.0);
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
+                            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 200.0);
+                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
                         }
                         WoodJointKind::MortiseTenon => {
-                            mm(ui, &tr!("joinery-thickness"), &mut j.thickness, 200.0);
-                            mm(ui, &tr!("joinery-shoulder"), &mut j.shoulder, 500.0);
-                            ui.add_enabled_ui(!j.through, |ui| mm(ui, &tr!("joinery-depth"), &mut j.depth, 200.0));
+                            mm(ui, &tr!("joinery-thickness"), &mut j.thickness, unit, 200.0);
+                            mm(ui, &tr!("joinery-shoulder"), &mut j.shoulder, unit, 500.0);
+                            ui.add_enabled_ui(!j.through, |ui| mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 200.0));
                             ui.checkbox(&mut j.through, tr!("joinery-through"));
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
+                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
+                            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
                         }
                         WoodJointKind::BoxJoint => {
                             ui.label(tr!("joinery-fingers"));
                             ui.add(egui::DragValue::new(&mut j.count).range(1..=64).speed(0.05));
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
+                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
                         }
                         WoodJointKind::Dovetail => {
                             ui.label(tr!("joinery-tails"));
                             ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
-                            mm(ui, &tr!("joinery-pin"), &mut j.pin, 200.0);
+                            mm(ui, &tr!("joinery-pin"), &mut j.pin, unit, 200.0);
                             ui.label(tr!("joinery-angle"));
                             ui.add(egui::DragValue::new(&mut j.angle).range(0.5..=30.0).speed(0.1).max_decimals(1).suffix("°"));
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, 5.0);
+                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
                         }
                         WoodJointKind::PocketHole => {
-                            ui.label(tr!("joinery-count"));
-                            ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, 10.0);
-                            mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, 200.0);
+                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
+                            mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
                             ui.checkbox(&mut j.flip, tr!("joinery-flip")).on_hover_text(tr!("joinery-flip-tip"));
                         }
                     });
+                    if spaced(j.kind) {
+                        let c = self.doc.model.joint_contacts.get(i).copied().flatten();
+                        layout_ui(ui, &mut j, c, unit);
+                        let r = ui.small_button(tr!("joinery-points")).on_hover_text(tr!("joinery-points-tip"));
+                        super::tray_lib::spot(format!("joinery:points:{i}"), r.rect.center());
+                        if r.clicked() {
+                            points = Some(i);
+                        }
+                    }
                     if let Some((name, n)) = j.hardware(None).filter(|_| j.kind != WoodJointKind::Screws) {
                         ui.label(RichText::new(format!("{n} × {name}")).small().color(theme::text_dim()));
                     }
@@ -290,6 +376,10 @@ impl VarstotasApp {
         if let Some((i, j)) = select {
             self.joinery.selected = Some(i);
             self.select_joint_parts(&j);
+        }
+        if let Some(i) = points {
+            self.joinery.selected = Some(i);
+            self.install_tool(Box::new(crate::tools::joint_points::JointPointsTool::new(i)));
         }
         if let Some((i, k)) = kind {
             self.joinery.draft = None;

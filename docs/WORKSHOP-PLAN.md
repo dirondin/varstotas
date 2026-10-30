@@ -175,7 +175,8 @@ and pocket screws. View → Show → Fasteners; User Guide → Workshop.
 - While Window → Joinery is open, every joint's contact is outlined on the model with its number.
   The joint picked in the list is highlighted with its fastener positions.
 
-**B. Sizes and positions.**
+**B. Sizes and positions.** Status (2026-10-30): done. Joinery → Layout and Points…; Rhai keys
+`margin`, `pitch`, `at`, `offset` and `positions` in `joints()`.
 - Fasteners are laid out along the joint in one of these ways:
   - evenly (as before);
   - from the ends with a margin and a pitch (32 mm system);

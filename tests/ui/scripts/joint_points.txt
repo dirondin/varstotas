@@ -1,0 +1,39 @@
+# Joint Points with the real mouse: a shelf on three dowels in a side. Joinery → Points… starts
+# the tool; a dowel dragged along the joint, its distance typed, a dowel added by a double-click
+# on the joint and removed with Delete; a 32 mm layout from the window's fields by script.
+action script let s = box(vec3(0, 0, 0), 18, 300, 800); s.name = "Side"; let h = box(vec3(18, 0, 400), 500, 300, 18); h.name = "Shelf"; joint(s, h, "dowels");
+action console_close
+wait 5
+expect joint_points=[[32, 150, 268]]
+view iso
+zoom_extents
+wait 5
+action joinery
+wait 5
+action click_spot joinery:points:0
+wait 5
+rawp drag 18 32 409 18 80 409
+wait 5
+expect joint_points=[[80, 150, 268]]
+expect fasteners=(3, 3,
+screenshot shots/joint_points_drag.bmp
+raw text 100
+raw key Enter
+wait 5
+expect joint_points=[[100, 150, 268]]
+# seen from the side, the joint clear of the window
+view left
+zoom_extents
+wait 5
+rawp dblclick 18 220 409
+wait 5
+expect joint_points=[[100, 150, 220, 268]]
+raw key Delete
+wait 5
+expect joint_points=[[100, 150, 268]]
+raw key Escape
+wait 5
+action script set_joint(0, #{ at: [], count: 4, margin: 37, pitch: 32 }); print(joints()[0].positions);
+wait 5
+expect joint_points=[[37, 69, 101, 133]]
+quit

@@ -1,7 +1,7 @@
 //! Joinery: joints between touching parts cut into their geometry, editable and removable.
 
 use varstotas_kernel::glam::{DMat4, DVec3};
-use varstotas_kernel::joinery::{WoodJointKind, contact};
+use varstotas_kernel::joinery::{WoodJoint, WoodJointKind, contact};
 use varstotas_kernel::primitives::Primitive;
 use varstotas_kernel::{InstanceId, Model};
 
@@ -201,4 +201,37 @@ fn fasteners_follow_their_part() {
     assert!(m.fastener_faces().is_empty());
     m.remove_wood_joint(0);
     assert!(m.fasteners.is_empty() && m.joint_contacts.is_empty());
+}
+
+#[test]
+fn layouts_along_and_across_the_joint() {
+    let (mut m, side, shelf) = cabinet();
+    let i = m.add_wood_joint(WoodJointKind::Dowels, vec![side], vec![shelf]).unwrap();
+    let pos = |m: &Model| {
+        let c = m.joint_contacts[i].unwrap();
+        m.joints[i].positions(&c)
+    };
+    // evenly, 32 mm from the ends of the 300 mm joint
+    assert_eq!(pos(&m), vec![32.0, 150.0, 268.0]);
+    // the 32 mm system: a margin and a pitch
+    let mut j = m.joints[i].clone();
+    (j.count, j.margin, j.pitch) = (4, 37.0, 32.0);
+    m.set_wood_joint(i, j.clone()).unwrap();
+    assert_eq!(pos(&m), vec![37.0, 69.0, 101.0, 133.0]);
+    // one fastener with a margin sits at the margin, without one in the middle
+    (j.count, j.pitch) = (1, 0.0);
+    m.set_wood_joint(i, j.clone()).unwrap();
+    assert_eq!(pos(&m), vec![37.0]);
+    // at distances, which set the count; off centre across the joint
+    (j.at, j.offset) = (vec![20.0, 200.0], 3.0);
+    m.set_wood_joint(i, j.clone()).unwrap();
+    assert_eq!((pos(&m), m.joints[i].fastener_count()), (vec![20.0, 200.0], 2));
+    let c = m.joint_contacts[i].unwrap();
+    assert_eq!(m.joints[i].point(&c, c.lo[c.along] + 20.0).z, 409.0 + 3.0);
+    assert_eq!(m.fasteners.len(), 2);
+    // a point off the joint's end or a hole past its side is refused and the joint kept
+    for bad in [WoodJoint { at: vec![20.0, 298.0], ..j.clone() }, WoodJoint { offset: 6.0, ..j.clone() }] {
+        assert!(m.set_wood_joint(i, bad).is_err());
+        assert_eq!(pos(&m), vec![20.0, 200.0]);
+    }
 }

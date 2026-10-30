@@ -119,7 +119,7 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 | Function | Result |
 |---|---|
 | `joint("Side", "Shelf", "dowels")` | joins two touching groups or components, cut into both; kinds `"dowels"`, `"screws"`, `"pocket"` (pocket holes), `"housing"` (dado / rabbet), `"tenon"` (mortise and tenon), `"box"` (box joint), `"dovetail"`. The sizes suit the parts; a map sets some: `joint(side, top, "dovetail", #{ count: 5, pin: 8, angle: 9.5 })`. Returns the joint's index |
-| `joints()` | the joints: `#{ kind, a, b, count, diameter, depth, depth_b, thickness, shoulder, clearance, angle, pin, through, flip, hardware }`; `a` is the part joined into, `b` the one whose end meets it; `hardware` e.g. `"3 × Dowel Ø8 × 40"` |
+| `joints()` | the joints: `#{ kind, a, b, count, diameter, depth, depth_b, thickness, shoulder, clearance, angle, pin, through, flip, margin, pitch, at, offset, positions, hardware }`; `positions` are where the fasteners are, from the joint's start; `a` is the part joined into, `b` the one whose end meets it; `hardware` e.g. `"3 × Dowel Ø8 × 40"` |
 | `set_joint(i, #{ depth: 9 })` | changes joint `i`'s sizes; `kind` in the map turns it into another kind with sizes that suit it |
 | `remove_joint(i)` | deletes joint `i`; its parts get their shape back |
 
@@ -128,6 +128,13 @@ Keys (mm): `count` (dowels, screws, pocket holes; fingers of a box joint on `b`;
 `clearance` (gap around tenons, fingers, tails, in housings), `angle` (dovetail slope, degrees),
 `pin` (dovetail pins at their narrow end), `through` (tenon), `flip` (pocket holes from `b`'s other
 face). Box joints and dovetails join a corner: `a`'s end flush with `b`'s outer face.
+
+Dowels, screws and pocket holes are laid out along the joint, from its start (the end with the
+lower coordinate): evenly between `margin` from both ends (0: a quarter of the joint, at most
+32 mm), from `margin` every `pitch` (`set_joint(0, #{ margin: 37, pitch: 32 })`, the 32 mm system),
+or at the distances in `at` (`#{ at: [40, 150, 260] }`, which sets `count`; an empty array goes
+back to the count). `offset` moves them (and a tenon) across the joint from its middle. Lengths
+take units as strings (`"1 1/2 in"`).
 
 The parts are the innermost groups and components that have faces, sized by the bounding box in
 their own axes (length ≥ width ≥ thickness). A part takes its material's nearest stock thickness;
