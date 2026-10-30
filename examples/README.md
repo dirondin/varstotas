@@ -11,6 +11,8 @@ The examples stay in this repository; the application does not install or downlo
 | [Country house](demos/country_house.vrst) | A complete house, interiors, textured materials and scenes | — |
 | [Material gallery](demos/material_gallery.vrst) | PBR materials, textures, lighting and rendering scenes | — |
 | [Bookshelf](demos/bookshelf.vrst) | Named boards, shelves, grouping and materials; stock on the materials, so **Window → Cut List** shows the plywood sheet diagrams, shopping list and cost; rabbets and dowels, so **Window → Assembly** explodes it step by step and writes the instructions booklet | [Rhai](scripts/bookshelf.rhai) · [Python](scripts/bookshelf.py) |
+| [Nightstand](demos/nightstand.vrst) | Furniture hardware: a carcass on confirmats standing on legs, a drawer on ball-bearing slides with an inset front and a handle, a shelf on shelf pins, a nailed back. The fittings are drawn in place and priced in **Window → Cut List**; **Window → Assembly** goes through twelve noted steps, the pins, dowels and slides at steps of their own | [Rhai](scripts/nightstand.rhai) |
+| [Cabinet](demos/cabinet.vrst) | A two-door melamine cupboard: the bottom and the top on cam locks, three shelves on pins with rows of holes to move them, doors on cup hinges with handles, legs; eight noted assembly steps | [Rhai](scripts/cabinet.rhai) |
 | [Woodworking bench](demos/workbench.vrst) | Solid timber top, four legs and lower rails | [Rhai](scripts/workbench.rhai) |
 | [Dining set](demos/dining_set.vrst) | A table and four chairs, reusable functions and nested groups | [Rhai](scripts/dining_set.rhai) |
 | [Garden pergola](demos/garden_pergola.vrst) | Posts, footings, beams and repeated rafters | [Rhai](scripts/garden_pergola.rhai) |
@@ -20,7 +22,7 @@ The examples stay in this repository; the application does not install or downlo
 
 All construction scripts use millimetres. Run them in an empty document through **File → Run Script**,
 or paste them into **Window → Script Console**. Change the parameters near the top to explore variants.
-Model files embed their materials; these six smaller examples need no external assets.
+Model files embed their materials; these smaller examples need no external assets.
 
 To regenerate the small models from their checked-in scripts:
 

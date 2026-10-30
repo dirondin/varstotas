@@ -157,9 +157,25 @@ fn example_bookshelf_runs() {
     let r = go(&mut m, include_str!("../../../examples/scripts/bookshelf.rhai"));
     assert_eq!(r.output, "Bookshelf 800 x 300 x 1800, 9 parts, 12 joints\n");
     assert_eq!(m.root_mesh().instances.len(), 1);
-    assert_eq!(m.assembly.steps.len(), 4);
+    // two of them fastener steps, the dowels going in first
+    assert_eq!(m.assembly.steps.len(), 6);
+    assert_eq!(m.assembly.steps.iter().filter(|s| s.parts.is_empty()).count(), 2);
     let s = size(&m);
     assert!((s - DVec3::new(800.0, 304.0, 1800.0)).length() < 1e-6, "{s}");
+}
+
+#[test]
+fn example_nightstand_and_cabinet_run() {
+    let mut m = Model::new();
+    let r = go(&mut m, include_str!("../../../examples/scripts/nightstand.rhai"));
+    assert_eq!(r.output, "Nightstand 450 x 400 x 640, 19 joints, 12 steps\n");
+    let plan = varstotas_kernel::cutlist::plan(&m);
+    assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
+    let mut m = Model::new();
+    let r = go(&mut m, include_str!("../../../examples/scripts/cabinet.rhai"));
+    assert_eq!(r.output, "Cabinet 800 x 450 x 1500, 17 joints, 8 steps\n");
+    let plan = varstotas_kernel::cutlist::plan(&m);
+    assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
 }
 
 #[test]

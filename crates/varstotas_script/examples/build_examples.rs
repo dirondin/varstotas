@@ -12,6 +12,8 @@ fn main() {
         "staircase",
         "small_workshop",
         "desk_caddy",
+        "nightstand",
+        "cabinet",
     ] {
         let source =
             std::fs::read_to_string(root.join(format!("examples/scripts/{name}.rhai"))).unwrap();
