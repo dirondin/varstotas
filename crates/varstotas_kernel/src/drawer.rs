@@ -4,9 +4,9 @@
 //!
 //! The opening runs along the axis where the two parts are apart; the drawer goes in from
 //! their front (the lower end of the horizontal axis they share) and its depth is the longest
-//! standard slide that fits ([`crate::joinery::SLIDE_LENGTHS`]). The box leaves
-//! the slide's gap ([`SlideKind::gap`]) on each side. Its parts are groups next to
-//! the left part, joined as a woodworker would: the box front and back on dowels between the
+//! standard slide that fits ([`crate::joinery::SLIDE_LENGTHS`]) with 10 mm to spare behind.
+//! The box leaves the slide's gap ([`SlideKind::gap`]) on each side. Its parts are groups next
+//! to the left part, joined as a woodworker would: the box front and back on dowels between the
 //! sides, the bottom nailed on underneath, a slide on each side (undermount slides on the
 //! bottom's edges), and a front (inset in the opening or overlaying the carcass) screwed on
 //! from inside with a handle, or none when the slides push to open. Doors, one or a pair, hang
@@ -63,6 +63,8 @@ const OVERLAY: f64 = 16.0;
 /// `UNDER` under the box.
 const CLEAR: f64 = 10.0;
 const UNDER: f64 = 14.0;
+/// Room left behind a box (to a back, or the opening's end) for the slides' ends.
+const BEHIND: f64 = 10.0;
 
 /// The opening between two parts.
 pub(crate) struct Opening {
@@ -201,7 +203,7 @@ impl Model {
         let (w, t) = (spec.wall, spec.bottom);
         let ft = if spec.front == DrawerFront::None { 0.0 } else { spec.front_thickness };
         let inset = if spec.front == DrawerFront::Inset { ft } else { 0.0 };
-        let len = SLIDE_LENGTHS.iter().rev().copied().find(|s| *s <= d1 - d0 - inset).ok_or_else(|| OpError::Invalid(tr!("joint-err-slide-length")))?;
+        let len = SLIDE_LENGTHS.iter().rev().copied().find(|s| *s <= d1 - d0 - inset - BEHIND).ok_or_else(|| OpError::Invalid(tr!("joint-err-slide-length")))?;
         let (x0, x1) = (a + spec.slide.gap(), b - spec.slide.gap());
         let under = spec.slide == SlideKind::Undermount;
         let room = if under { UNDER } else { 0.0 };

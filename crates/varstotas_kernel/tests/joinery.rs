@@ -387,6 +387,8 @@ fn a_chest_of_drawers() {
         for &p in &d[..5] {
             let (a, b) = size(&m1, p);
             assert!(a.z >= f0.max(68.0) + 9.9 && b.z <= f1.min(782.0) - 9.9 && a.x >= 30.5 - 1e-6, "{a} {b}");
+            // 10 mm or more clear of the back
+            assert!(b.y <= 486.0 + 1e-6, "{a} {b}");
         }
     }
     let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m1).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
@@ -412,6 +414,13 @@ fn a_chest_of_drawers() {
     let n = m.joints.len();
     assert!(m.add_drawers(&[l], &[r], 16, space, DrawerSpec::default()).is_err());
     assert_eq!(m.joints.len(), n);
+    // 450 deep with an overlay front: a 450 slide would reach the very end, so 400
+    let mut m = Model::new();
+    let l = board(&mut m, "Left", DVec3::new(18.0, 450.0, 400.0), DVec3::ZERO);
+    let r = board(&mut m, "Right", DVec3::new(18.0, 450.0, 400.0), DVec3::new(518.0, 0.0, 0.0));
+    m.add_drawer(&[l], &[r], DrawerSpec { z: 50.0, front: DrawerFront::Overlay, ..Default::default() }).unwrap();
+    let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
+    assert!(hw.contains(&"2 × Ball-bearing slide 400".to_string()), "{hw:?}");
 }
 
 #[test]
