@@ -1,15 +1,17 @@
 //! Drawers (track W, batch 5): a drawer box built for the opening between two parts that face
-//! each other (cabinet sides), on ball-bearing slides.
+//! each other (cabinet sides), on slides (ball-bearing, roller or undermount, see
+//! [`SlideKind`]); a chest of them one above another in the free height of the opening.
 //!
 //! The opening runs along the axis where the two parts are apart; the drawer goes in from
 //! their front (the lower end of the horizontal axis they share) and its depth is the longest
 //! standard slide that fits ([`crate::joinery::SLIDE_LENGTHS`]). The box leaves
-//! [`crate::joinery::SLIDE_GAP`] on each side for the slides. Its parts are groups next to
+//! the slide's gap ([`SlideKind::gap`]) on each side. Its parts are groups next to
 //! the left part, joined as a woodworker would: the box front and back on dowels between the
-//! sides, the bottom nailed on underneath, a slide on each side, and a front (inset in the
-//! opening or overlaying the carcass) screwed on from inside with a handle.
+//! sides, the bottom nailed on underneath, a slide on each side (undermount slides on the
+//! bottom's edges), and a front (inset in the opening or overlaying the carcass) screwed on
+//! from inside with a handle, or none when the slides push to open.
 
-use crate::joinery::{SLIDE_GAP, SLIDE_LENGTHS, WoodJoint, WoodJointKind, joint_contact};
+use crate::joinery::{SLIDE_GAP, SLIDE_LENGTHS, SlideKind, WoodJoint, WoodJointKind, joint_contact};
 use crate::model::{ContextPath, Model};
 use crate::primitives::Primitive;
 use crate::{InstanceId, OpError, OpResult};
@@ -41,17 +43,25 @@ pub struct DrawerSpec {
     pub bottom: f64,
     pub front: DrawerFront,
     pub front_thickness: f64,
+    pub slide: SlideKind,
+    /// Push-to-open slides: no handle on the front.
+    pub push: bool,
 }
 
 impl Default for DrawerSpec {
     fn default() -> Self {
-        DrawerSpec { z: 0.0, height: 150.0, wall: 15.0, bottom: 6.0, front: DrawerFront::Inset, front_thickness: 18.0 }
+        DrawerSpec { z: 0.0, height: 150.0, wall: 15.0, bottom: 6.0, front: DrawerFront::Inset, front_thickness: 18.0, slide: SlideKind::BallBearing, push: false }
     }
 }
 
-/// Gap round an inset front, and how far an overlay front covers each side.
+/// Gap round an inset front (and between fronts), and how far an overlay front covers each
+/// side.
 const REVEAL: f64 = 2.0;
 const OVERLAY: f64 = 16.0;
+/// A box stands this far inside its front and the free height; undermount slides take
+/// `UNDER` under the box.
+const CLEAR: f64 = 10.0;
+const UNDER: f64 = 14.0;
 
 /// The opening between two parts.
 struct Opening {
@@ -97,19 +107,99 @@ impl Model {
         self.instance_world_bounds(parent, id).map(|b| (b.min - off, b.max - off))
     }
 
+    /// The free height of the opening between `l` and `r`: the tallest stretch of the height
+    /// they share that no other part at its front crosses (a bottom, a top, a rail, another
+    /// drawer).
+    pub fn drawer_space(&self, l: &[InstanceId], r: &[InstanceId]) -> Option<(f64, f64)> {
+        let o = opening(self.part_box(l)?, self.part_box(r)?)?;
+        let mut cuts: Vec<(f64, f64)> = Vec::new();
+        for (m0, m1) in self.in_opening(l, r, &o) {
+            if m1[o.d] > o.d0 + 1.0 && m0[o.d] < o.d0 + 100.0 && m1.z > o.z0 && m0.z < o.z1 {
+                cuts.push((m0.z, m1.z));
+            }
+        }
+        cuts.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let (mut best, mut at) = (None::<(f64, f64)>, o.z0);
+        for (c0, c1) in cuts.into_iter().chain([(o.z1, o.z1)]) {
+            let c0 = c0.min(o.z1);
+            if c0 > at && best.is_none_or(|(b0, b1)| c0 - at > b1 - b0) {
+                best = Some((at, c0));
+            }
+            at = at.max(c1);
+        }
+        best
+    }
+
+    /// The other parts in `l`'s parent that reach into the opening between `l` and `r`.
+    fn in_opening(&self, l: &[InstanceId], r: &[InstanceId], o: &Opening) -> Vec<(DVec3, DVec3)> {
+        let Some((_, parent)) = l.split_last() else { return Vec::new() };
+        let Some(mesh) = self.mesh_at(parent) else { return Vec::new() };
+        let ids: Vec<InstanceId> = mesh.instances.iter().map(|(id, _)| id).collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                let mut p = parent.to_vec();
+                p.push(id);
+                if p == l || p == r { None } else { self.part_box(&p) }
+            })
+            .filter(|(m0, m1)| m1[o.k] > o.a + 1.0 && m0[o.k] < o.b - 1.0)
+            .collect()
+    }
+
+    /// `count` drawers one above another filling the height `space` (world, as from
+    /// [`Model::drawer_space`]) of the opening between `l` and `r`: fronts of equal height
+    /// [`REVEAL`] apart (inset: in the space; overlay: over the parts above and below it), each
+    /// box `CLEAR` inside its front and the space. `spec.z` and `spec.height` are not used.
+    /// Returns each drawer's parts, the lowest first.
+    pub fn add_drawers(&mut self, l: &[InstanceId], r: &[InstanceId], count: usize, space: (f64, f64), spec: DrawerSpec) -> OpResult<Vec<Vec<InstanceId>>> {
+        let (lo, hi) = space;
+        let overlay = spec.front == DrawerFront::Overlay;
+        let (s0, s1, gaps) = if overlay { (lo - OVERLAY, hi + OVERLAY, count as f64 - 1.0) } else { (lo, hi, count as f64 + 1.0) };
+        let fh = (s1 - s0 - gaps * REVEAL) / count.max(1) as f64;
+        let first = if overlay { s0 } else { s0 + REVEAL };
+        let below = if spec.slide == SlideKind::Undermount { CLEAR + UNDER } else { CLEAR };
+        let slots: Vec<(f64, f64, f64, f64)> = (0..count)
+            .map(|i| {
+                let f0 = first + i as f64 * (fh + REVEAL);
+                let f1 = f0 + fh;
+                let z = f0.max(lo) + below;
+                (f0, f1, z, f1.min(hi) - CLEAR - z)
+            })
+            .collect();
+        if count == 0 || slots.iter().any(|s| s.3 < spec.bottom + 30.0) {
+            return Err(OpError::Invalid(tr!("drawer-err-opening")));
+        }
+        let mut out = Vec::new();
+        for (f0, f1, z, height) in slots {
+            out.push(self.build_drawer(l, r, DrawerSpec { z, height, ..spec }, (f0, f1))?);
+        }
+        Ok(out)
+    }
+
     /// Build a drawer for the opening between parts `l` and `r` (instance paths in one
-    /// parent): its parts and their joints. Returns the new parts.
+    /// parent): its parts and their joints, the front `CLEAR` beyond the box above and below.
+    /// Returns the new parts.
     pub fn add_drawer(&mut self, l: &[InstanceId], r: &[InstanceId], spec: DrawerSpec) -> OpResult<Vec<InstanceId>> {
+        self.build_drawer(l, r, spec, (spec.z - CLEAR, spec.z + spec.height + CLEAR))
+    }
+
+    /// A drawer with its front panel over the height range `fz` (world).
+    fn build_drawer(&mut self, l: &[InstanceId], r: &[InstanceId], spec: DrawerSpec, fz: (f64, f64)) -> OpResult<Vec<InstanceId>> {
         let bad = || OpError::Invalid(tr!("drawer-err-opening"));
         let (Some(lb), Some(rb)) = (self.part_box(l), self.part_box(r)) else { return Err(OpError::Invalid(tr!("joint-err-two-parts"))) };
-        let Opening { k, a, b, d, d0, d1, z0, z1 } = opening(lb, rb).ok_or_else(bad)?;
+        let o = opening(lb, rb).ok_or_else(bad)?;
+        // the depth ends at a part behind (a back between the sides)
+        let behind = self.in_opening(l, r, &o).into_iter().filter(|(m0, m1)| m0[o.d] >= o.d0 + 100.0 && m1.z > spec.z && m0.z < spec.z + spec.height).map(|(m0, _)| m0[o.d]);
+        let d1 = behind.fold(o.d1, f64::min);
+        let Opening { k, a, b, d, d0, z0, z1, .. } = o;
         let parent: ContextPath = l.split_last().map(|(_, p)| p.to_vec()).unwrap_or_default();
         let (w, t) = (spec.wall, spec.bottom);
         let ft = if spec.front == DrawerFront::None { 0.0 } else { spec.front_thickness };
         let inset = if spec.front == DrawerFront::Inset { ft } else { 0.0 };
         let len = SLIDE_LENGTHS.iter().rev().copied().find(|s| *s <= d1 - d0 - inset).ok_or_else(|| OpError::Invalid(tr!("joint-err-slide-length")))?;
-        let (x0, x1) = (a + SLIDE_GAP, b - SLIDE_GAP);
-        if x1 - x0 < 2.0 * w + 50.0 || spec.height < t + 30.0 || w < 8.0 || t < 3.0 || spec.z < z0 - 1e-6 || spec.z + spec.height > z1 + 1e-6 {
+        let (x0, x1) = (a + spec.slide.gap(), b - spec.slide.gap());
+        let under = spec.slide == SlideKind::Undermount;
+        let room = if under { UNDER } else { 0.0 };
+        if x1 - x0 < 2.0 * w + 50.0 || spec.height < t + 30.0 || w < 8.0 || t < 3.0 || spec.z - room < z0 - 1e-6 || spec.z + spec.height > z1 + 1e-6 {
             return Err(bad());
         }
         let (y0, z) = (d0 + inset, spec.z);
@@ -134,8 +224,8 @@ impl Model {
         let mut parts = vec![left, right, front, back, bottom];
         let panel = match spec.front {
             DrawerFront::None => None,
-            DrawerFront::Inset => Some(place(self, &tr!("drawer-front"), [a + REVEAL, d0, z - 10.0], [b - a - 2.0 * REVEAL, ft, spec.height + 20.0])?),
-            DrawerFront::Overlay => Some(place(self, &tr!("drawer-front"), [a - OVERLAY, d0 - ft, z - 10.0], [b - a + 2.0 * OVERLAY, ft, spec.height + 20.0])?),
+            DrawerFront::Inset => Some(place(self, &tr!("drawer-front"), [a + REVEAL, d0, fz.0], [b - a - 2.0 * REVEAL, ft, fz.1 - fz.0])?),
+            DrawerFront::Overlay => Some(place(self, &tr!("drawer-front"), [a - OVERLAY, d0 - ft, fz.0], [b - a + 2.0 * OVERLAY, ft, fz.1 - fz.0])?),
         };
         parts.extend(panel);
         let path = |id: InstanceId| {
@@ -144,7 +234,15 @@ impl Model {
             p
         };
         let (pl, pr) = if lb.0[k] <= rb.0[k] { (l.to_vec(), r.to_vec()) } else { (r.to_vec(), l.to_vec()) };
-        let mut joints = vec![(WoodJointKind::Slide, pl, path(left)), (WoodJointKind::Slide, pr, path(right))];
+        // the slides on the box's sides, undermount ones on the bottom's edges
+        let (sl, sr) = if under { (bottom, bottom) } else { (left, right) };
+        for (p, q) in [(pl, path(sl)), (pr, path(sr))] {
+            let c = joint_contact(self, &WoodJoint { kind: WoodJointKind::Slide, a: p.clone(), b: q.clone(), ..Default::default() }).ok_or_else(bad)?;
+            let mut j = WoodJoint::new(WoodJointKind::Slide, p, q, &c);
+            (j.slide, j.push) = (spec.slide, spec.push);
+            self.push_wood_joint(j)?;
+        }
+        let mut joints = Vec::new();
         for s in [left, right] {
             joints.push((WoodJointKind::Dowels, path(s), path(front)));
             joints.push((WoodJointKind::Dowels, path(s), path(back)));
@@ -158,7 +256,9 @@ impl Model {
             let (p, q) = (path(front), path(panel));
             let c = joint_contact(self, &WoodJoint { kind: WoodJointKind::Screws, a: p.clone(), b: q.clone(), ..Default::default() }).ok_or_else(bad)?;
             self.push_wood_joint(WoodJoint::new(WoodJointKind::Screws, p, q.clone(), &c))?;
-            let _ = self.add_wood_joint(WoodJointKind::Handle, q, Vec::new());
+            if !spec.push {
+                let _ = self.add_wood_joint(WoodJointKind::Handle, q, Vec::new());
+            }
         }
         Ok(parts)
     }

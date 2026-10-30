@@ -188,6 +188,12 @@ fn example_furniture_runs() {
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
     assert!(plan.hardware.iter().any(|h| h.name == "Gas strut 90 N" && h.count == 2));
+    let mut m = Model::new();
+    let r = go(&mut m, include_str!("../../../examples/scripts/chest_of_drawers.rhai"));
+    assert_eq!(r.output, "Chest of drawers 800 x 450 x 960, 4 drawers, 43 joints, 10 steps\n");
+    let plan = varstotas_kernel::cutlist::plan(&m);
+    assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
+    assert!(plan.hardware.iter().any(|h| h.name == "Undermount slide 450, push to open" && h.count == 8));
 }
 
 #[test]

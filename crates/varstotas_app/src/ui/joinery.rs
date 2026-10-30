@@ -9,7 +9,7 @@ use crate::ui::theme;
 use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
 use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
-use varstotas_kernel::joinery::{Contact, WoodJoint, WoodJointKind};
+use varstotas_kernel::joinery::{Contact, SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
 
 #[derive(Default)]
@@ -21,10 +21,32 @@ pub struct JoineryState {
     draft: Option<(usize, WoodJoint)>,
     /// The joint picked in the list (highlighted on the model).
     pub selected: Option<usize>,
-    /// A new drawer's height and front; its height from the floor (`None`: the opening's
-    /// bottom, a little up).
+    /// A new drawer's height, front and slides; its height from the floor (`None`: the
+    /// opening's bottom, a little up); how many (0 or 1: one).
     drawer: Option<DrawerSpec>,
     drawer_z: Option<f64>,
+    drawer_count: usize,
+}
+
+const SLIDES: [(SlideKind, &str); 3] = [(SlideKind::BallBearing, "joinery-slide-ball"), (SlideKind::Roller, "joinery-slide-roller"), (SlideKind::Undermount, "joinery-slide-undermount")];
+
+/// A combo box for a slide's kind.
+fn slide_combo(ui: &mut Ui, id: &str, kind: &mut SlideKind) -> egui::Response {
+    let name = |k: SlideKind| SLIDES.iter().find(|x| x.0 == k).map(|x| varstotas_i18n::tr(x.1)).unwrap_or_default();
+    ui.label(tr!("joinery-slide")).on_hover_text(tr!("joinery-slide-tip"));
+    let mut changed = false;
+    let mut r = egui::ComboBox::from_id_salt(id)
+        .selected_text(name(*kind))
+        .show_ui(ui, |ui| {
+            for (k, _) in SLIDES {
+                changed |= ui.selectable_value(kind, k, name(k)).changed();
+            }
+        })
+        .response;
+    if changed {
+        r.mark_changed();
+    }
+    r
 }
 
 const JOINT_LINE: egui::Color32 = egui::Color32::from_rgb(0xE0, 0x7A, 0x10);
@@ -308,10 +330,17 @@ impl VarstotasApp {
         let mut spec = self.joinery.drawer.unwrap_or_default();
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(tr!("joinery-drawer")).strong());
-            len(ui, &tr!("joinery-height"), &mut spec.height, unit, 40.0, 2000.0);
+            let count = &mut self.joinery.drawer_count;
+            *count = (*count).max(1);
+            ui.label(tr!("joinery-drawer-count")).on_hover_text(tr!("joinery-drawer-count-tip"));
+            ui.add(egui::DragValue::new(count).range(1..=12).speed(0.05));
+            let count = *count;
             let mut z = self.joinery.drawer_z.unwrap_or(auto);
-            if len(ui, &tr!("joinery-drawer-z"), &mut z, unit, 0.0, 10_000.0).changed() {
-                self.joinery.drawer_z = Some(z);
+            if count == 1 {
+                len(ui, &tr!("joinery-height"), &mut spec.height, unit, 40.0, 2000.0);
+                if len(ui, &tr!("joinery-drawer-z"), &mut z, unit, 0.0, 10_000.0).changed() {
+                    self.joinery.drawer_z = Some(z);
+                }
             }
             ui.label(tr!("joinery-drawer-front"));
             let fronts = [(DrawerFront::Inset, "joinery-drawer-front-inset"), (DrawerFront::Overlay, "joinery-drawer-front-overlay"), (DrawerFront::None, "joinery-drawer-front-none")];
@@ -321,13 +350,20 @@ impl VarstotasApp {
                     ui.selectable_value(&mut spec.front, f, name(f));
                 }
             });
+            slide_combo(ui, "drawer_slide", &mut spec.slide);
+            ui.checkbox(&mut spec.push, tr!("joinery-push")).on_hover_text(tr!("joinery-push-tip"));
             let r = ui.button(tr!("joinery-drawer-add"));
             super::tray_lib::spot("joinery:drawer", r.rect.center());
             if r.on_hover_text(tr!("joinery-drawer-tip")).clicked()
                 && let Some((l, r)) = pair.clone()
             {
                 let spec = DrawerSpec { z: z.max(0.0), ..spec };
-                if self.doc.try_commit(&tr!("joinery-drawer-undo"), move |m| m.add_drawer(&l, &r, spec)).is_some() {
+                let space = self.doc.model.drawer_space(&l, &r);
+                let add = move |m: &mut Model| match space {
+                    Some(space) if count > 1 => m.add_drawers(&l, &r, count, space, spec).map(|_| ()),
+                    _ => m.add_drawer(&l, &r, spec).map(|_| ()),
+                };
+                if self.doc.try_commit(&tr!("joinery-drawer-undo"), add).is_some() {
                     self.joinery.drawer_z = None;
                 }
             }
@@ -461,6 +497,8 @@ impl VarstotasApp {
                             len(ui, &tr!("joinery-length"), &mut j.size, unit, 0.0, 2000.0).on_hover_text(tr!("joinery-length-auto-tip"));
                             len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
                             ui.checkbox(&mut j.flip, tr!("joinery-flip-front"));
+                            slide_combo(ui, "joint_slide", &mut j.slide);
+                            ui.checkbox(&mut j.push, tr!("joinery-push")).on_hover_text(tr!("joinery-push-tip"));
                         }
                         WoodJointKind::Handle => {
                             mm(ui, &tr!("joinery-centres"), &mut j.size, unit, 1000.0);

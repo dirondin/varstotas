@@ -51,9 +51,10 @@ thickness, default 1 mm; `bands` the banded edges, omitted when none; `hardware`
 stores `joints`: `[{ "kind": "Dowels" | "Screws" | "PocketHole" | "Housing" | "MortiseTenon" | "BoxJoint" |
 "Dovetail" | "Confirmat" | "CamLock" | "ShelfPins" | "Hinge" | "GasStrut" | "Slide" | "Handle" | "Knob" | "Leg" | "Caster" |
 "TableTop" | "Nails", "a", "b", "count", "diameter", "depth", "depth_b", "thickness", "shoulder", "through",
-"clearance", "angle", "pin", "flip", "margin", "pitch", "at", "offset", "size", "inset", "rows" }]`
+"clearance", "angle", "pin", "flip", "margin", "pitch", "at", "offset", "size", "inset", "rows", "slide", "push" }]`
 (`a` and `b` are instance paths, `b` the part whose end meets `a`, empty for a handle, knob,
-legs or casters on one part; sizes in mm; fasteners lie `margin` from the
+legs or casters on one part; sizes in mm; `slide` is a slide's kind, `"Roller"` or `"Undermount"`,
+omitted for ball-bearing, and `push` is true for push-to-open slides, omitted when false; fasteners lie `margin` from the
 joint's ends and `pitch` apart, or at the distances `at` from its start, `offset` off its middle), and `joint_bases`: `[[def id, mesh]]`,
 the joined parts' geometry from before any joint, which the joints are cut into again on every change.
 The model optionally stores `assembly`: `{ "steps": [{ "parts": [instance path], "joints": [joint index], "note" }], "explode",

@@ -33,4 +33,7 @@ expect model_faces=1648
 open ../../examples/demos/wall_cabinet.vrst
 wait 5
 expect model_faces=844
+open ../../examples/demos/chest_of_drawers.vrst
+wait 5
+expect model_faces=2650
 quit

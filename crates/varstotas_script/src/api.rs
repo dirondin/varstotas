@@ -2,7 +2,7 @@
 
 use crate::{Entity, STATE, State};
 use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
-use varstotas_kernel::joinery::{WoodJoint, WoodJointKind};
+use varstotas_kernel::joinery::{SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::model::Definition;
 use varstotas_kernel::primitives::Primitive;
 use varstotas_kernel::tessellate::triangulate_face;
@@ -24,7 +24,7 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
-    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "suggest_steps", "assembly_steps",
+    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "drawers", "suggest_steps", "assembly_steps",
     "set_assembly_steps", "assembly_view",
 ];
 
@@ -1885,6 +1885,8 @@ fn joint_params(j: &mut WoodJoint, m: &Map) -> R<()> {
             "size" => j.size = num(v)?,
             "inset" => j.inset = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "inset"))?,
             "rows" => j.rows = num(v)?.max(0.0).round() as usize,
+            "slide" => j.slide = slide_kind(v)?,
+            "push" => j.push = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "push"))?,
             "at" => {
                 j.at = v.clone().into_array().map_err(|_| tr!("script-err-joint-at"))?.iter().map(num).collect::<R<Vec<f64>>>()?;
                 j.count = j.at.len().max(1);
@@ -1914,6 +1916,8 @@ fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
     }
     m.insert("inset".into(), j.inset.into());
     m.insert("rows".into(), (j.rows as i64).into());
+    m.insert("slide".into(), slide_name(j.slide).into());
+    m.insert("push".into(), j.push.into());
     m.insert("at".into(), j.at.iter().map(|v| Dynamic::from(*v)).collect::<Array>().into());
     let c = varstotas_kernel::joinery::joint_contact(&st.model.unjoined(), j);
     let pos: Array = c.as_ref().map(|c| j.positions(c)).unwrap_or_default().into_iter().map(Dynamic::from).collect();
@@ -1941,8 +1945,9 @@ fn register_joinery(e: &mut Engine) {
             op(st.model.set_wood_joint(i, j))
         })
     });
-    e.register_fn("drawer", |l: Dynamic, r: Dynamic| -> R<Array> { add_drawer(&l, &r, &Map::new()) });
-    e.register_fn("drawer", |l: Dynamic, r: Dynamic, m: Map| -> R<Array> { add_drawer(&l, &r, &m) });
+    e.register_fn("drawer", |l: Dynamic, r: Dynamic| -> R<Array> { add_drawers(&l, &r, &Map::new(), false) });
+    e.register_fn("drawer", |l: Dynamic, r: Dynamic, m: Map| -> R<Array> { add_drawers(&l, &r, &m, false) });
+    e.register_fn("drawers", |l: Dynamic, r: Dynamic, m: Map| -> R<Array> { add_drawers(&l, &r, &m, true) });
     e.register_fn("remove_joint", |i: i64| -> R<()> {
         edit(|st| {
             let i = usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()))?;
@@ -2059,9 +2064,28 @@ fn register_assembly(e: &mut Engine) {
     e.register_fn("assembly_view", move |explode: i64, step: i64| -> R<()> { view(explode as f64, step) });
 }
 
+fn slide_kind(v: &Dynamic) -> R<SlideKind> {
+    match v.to_string().as_str() {
+        "ball" => Ok(SlideKind::BallBearing),
+        "roller" => Ok(SlideKind::Roller),
+        "undermount" => Ok(SlideKind::Undermount),
+        f => err(tr!("script-err-drawer-slide", slide = f.to_string())),
+    }
+}
+
+fn slide_name(k: SlideKind) -> &'static str {
+    match k {
+        SlideKind::BallBearing => "ball",
+        SlideKind::Roller => "roller",
+        SlideKind::Undermount => "undermount",
+    }
+}
+
 /// A drawer between two parts: `#{ z, height, wall, bottom, front: "inset" | "overlay" | "none",
-/// front_thickness }`; its parts.
-fn add_drawer(l: &Dynamic, r: &Dynamic, m: &Map) -> R<Array> {
+/// front_thickness, slide: "ball" | "roller" | "undermount", push }`; its parts. With `count`
+/// (`drawers`): that many one above another filling the free height of the opening, or
+/// `from`..`to`; each one's parts.
+fn add_drawers(l: &Dynamic, r: &Dynamic, m: &Map, chest: bool) -> R<Array> {
     use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
     let (l, r) = (one(l)?, one(r)?);
     edit(|st| {
@@ -2072,13 +2096,19 @@ fn add_drawer(l: &Dynamic, r: &Dynamic, m: &Map) -> R<Array> {
         };
         let (pl, pr) = (path(&l)?, path(&r)?);
         let mut spec = DrawerSpec { z: st.model.drawer_z(&pl, &pr).unwrap_or(0.0), ..Default::default() };
+        let (mut count, mut space) = (1, st.model.drawer_space(&pl, &pr).unwrap_or_default());
         for (k, v) in m {
             match k.as_str() {
-                "z" => spec.z = num(v)?,
-                "height" => spec.height = num(v)?,
+                "z" if !chest => spec.z = num(v)?,
+                "height" if !chest => spec.height = num(v)?,
+                "count" if chest => count = num(v)?.max(0.0).round() as usize,
+                "from" if chest => space.0 = num(v)?,
+                "to" if chest => space.1 = num(v)?,
                 "wall" => spec.wall = num(v)?,
                 "bottom" => spec.bottom = num(v)?,
                 "front_thickness" => spec.front_thickness = num(v)?,
+                "slide" => spec.slide = slide_kind(v)?,
+                "push" => spec.push = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "push"))?,
                 "front" => {
                     spec.front = match v.to_string().as_str() {
                         "inset" => DrawerFront::Inset,
@@ -2090,8 +2120,13 @@ fn add_drawer(l: &Dynamic, r: &Dynamic, m: &Map) -> R<Array> {
                 k => return err(tr!("script-err-drawer-key", key = k.to_string())),
             }
         }
-        let parts = op(st.model.add_drawer(&pl, &pr, spec))?;
-        Ok(parts.into_iter().map(|id| dyn_ent(&l.path, EntityRef::Instance(id))).collect())
+        let ent = |ids: Vec<InstanceId>| -> Array { ids.into_iter().map(|id| dyn_ent(&l.path, EntityRef::Instance(id))).collect() };
+        if chest {
+            let ds = op(st.model.add_drawers(&pl, &pr, count, space, spec))?;
+            Ok(ds.into_iter().map(|d| Dynamic::from(ent(d))).collect())
+        } else {
+            Ok(ent(op(st.model.add_drawer(&pl, &pr, spec))?))
+        }
     })
 }
 

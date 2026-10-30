@@ -123,7 +123,8 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 | `set_joint(i, #{ depth: 9 })` | changes joint `i`'s sizes; `kind` in the map turns it into another kind with sizes that suit it |
 | `joint(door, "handle", #{ size: 128 })` | a fitting on one part: `"handle"`, `"knob"` (on its front face, min y; `flip`: the back), `"leg"` or `"caster"` (four under it) |
 | `remove_joint(i)` | deletes joint `i`; its parts get their shape back |
-| `drawer("Left", "Right", #{ z: 150, height: 160, front: "overlay" })` | a drawer for the opening between two parts facing each other: its box on the longest standard slides that fit, 12.7 mm each side, dowels, a nailed bottom, a `front` (`"inset"`, `"overlay"`, `"none"`) screwed on with a handle. Keys `z` (the box's underside; default the opening's bottom + 30), `height`, `wall`, `bottom`, `front_thickness`. Returns its parts |
+| `drawer("Left", "Right", #{ z: 150, height: 160, front: "overlay" })` | a drawer for the opening between two parts facing each other: its box on the longest standard slides that fit (stopping at a part behind, such as a back between the sides), dowels, a nailed bottom, a `front` (`"inset"`, `"overlay"`, `"none"`) screwed on with a handle. Keys `z` (the box's underside; default the opening's bottom + 30), `height`, `wall`, `bottom`, `front_thickness`, `slide` (`"ball"`: ball-bearing on the box's sides, 12.7 mm each side; `"roller"`: along their bottom, 12.5 mm; `"undermount"`: concealed under the bottom, 5 mm, the slide joints on the bottom's edges and 14 mm under the box), `push` (push-to-open slides, no handle). Returns its parts |
+| `drawers("Left", "Right", #{ count: 4, front: "overlay" })` | a chest: `count` drawers one above another filling the free height of the opening, the stretch of the parts' shared height that no other part at its front crosses (between a bottom and a top, under a drawer already there); `from` and `to` set the height instead. The fronts are of equal height, 2 mm apart (inset: also 2 mm from the parts above and below; overlay: over them by 16 mm), each box 10 mm inside its front and the free height. The other keys as for `drawer` but `z` and `height`. Returns each drawer's parts, the lowest first |
 
 Keys (mm): `count` (dowels, screws, pocket holes; fingers of a box joint on `b`; dovetail tails),
 `diameter`, `depth` (into `a`), `depth_b` (into `b`), `thickness` and `shoulder` (tenon),
@@ -139,8 +140,9 @@ on its back, half overlay when it covers only part of that edge; `inset: true`: 
 between the sides; the count follows the door's height; `angle`: the angle it opens to, 110 unless
 set, in the hinge's name when not), `"gas_strut"` (holds a lift-up flap open: the flap `a`,
 hinged along its top and over the side's front edge, the side `b`; `size`: its force in newtons,
-about three times the flap's weight unless set; one each side), `"slide"` (ball-bearing, the parts 12.7 mm apart; `size` 0: the longest standard length
-that fits; `flip`: the front at the other end), `"table_top"` (figure 8 fasteners in the edge of
+about three times the flap's weight unless set; one each side), `"slide"` (`slide`: `"ball"`, ball-bearing, the parts 12.7 mm apart; `"roller"`, 12.5 mm;
+`"undermount"`, 5 mm, `b` the drawer's bottom; `push`: push to open, in the name; `size` 0: the
+longest standard length that fits; `flip`: the front at the other end), `"table_top"` (figure 8 fasteners in the edge of
 an apron `b`, `flip`: the other side), `"nails"` (through a back panel `a`; `size`: the length),
 `"handle"` (`size`: centres), `"knob"`, `"leg"` (`size`: height, `diameter`, `margin` from the
 edges), `"caster"` (swivel casters: `diameter` of the wheel, `size` from the floor to the plate,

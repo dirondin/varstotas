@@ -352,3 +352,64 @@ fn a_drawer_for_an_opening() {
     assert_eq!(size(&m2, p2[5]).0.y, -18.0);
     assert!(m.add_drawer(&[l], &[r], DrawerSpec { z: 650.0, ..Default::default() }).is_err());
 }
+
+#[test]
+fn a_chest_of_drawers() {
+    use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
+    use varstotas_kernel::joinery::{SlideKind, WoodJointKind as K};
+    // sides with a bottom and a top between them, a back behind: the free height is between
+    // the bottom and the top
+    let mut m = Model::new();
+    let l = board(&mut m, "Left", DVec3::new(18.0, 500.0, 800.0), DVec3::ZERO);
+    let r = board(&mut m, "Right", DVec3::new(18.0, 500.0, 800.0), DVec3::new(518.0, 0.0, 0.0));
+    board(&mut m, "Bottom", DVec3::new(500.0, 500.0, 18.0), DVec3::new(18.0, 0.0, 50.0));
+    board(&mut m, "Top", DVec3::new(500.0, 500.0, 18.0), DVec3::new(18.0, 0.0, 782.0));
+    board(&mut m, "Back", DVec3::new(500.0, 4.0, 800.0), DVec3::new(18.0, 496.0, 0.0));
+    let space = m.drawer_space(&[l], &[r]).unwrap();
+    assert_eq!(space, (68.0, 782.0));
+    let size = |m: &Model, id| {
+        let b = m.instance_world_bounds(&[], id).unwrap();
+        (b.min, b.max)
+    };
+    // three inset fronts of equal height 2 mm apart, roller slides 12.5 mm each side
+    let mut m1 = m.clone();
+    let spec = DrawerSpec { slide: SlideKind::Roller, ..Default::default() };
+    let ds = m1.add_drawers(&[l], &[r], 3, space, spec).unwrap();
+    assert_eq!(ds.len(), 3);
+    let fronts: Vec<(f64, f64)> = ds.iter().map(|d| size(&m1, d[5])).map(|(a, b)| (a.z, b.z)).collect();
+    let fh = (714.0 - 4.0 * 2.0) / 3.0;
+    for (i, (f0, f1)) in fronts.iter().enumerate() {
+        assert!((f0 - (70.0 + i as f64 * (fh + 2.0))).abs() < 1e-6 && (f1 - f0 - fh).abs() < 1e-6, "{fronts:?}");
+    }
+    // each box within its front and clear of the bottom and the top
+    for d in &ds {
+        let (f0, f1) = (size(&m1, d[5]).0.z, size(&m1, d[5]).1.z);
+        for &p in &d[..5] {
+            let (a, b) = size(&m1, p);
+            assert!(a.z >= f0.max(68.0) + 9.9 && b.z <= f1.min(782.0) - 9.9 && a.x >= 30.5 - 1e-6, "{a} {b}");
+        }
+    }
+    let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m1).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
+    assert!(hw.contains(&"6 × Roller slide 450".to_string()) && hw.contains(&"3 × Handle, centres 192".to_string()), "{hw:?}");
+    // a drawer is in the way now: what is left is above it
+    let mut m2 = m.clone();
+    m2.add_drawers(&[l], &[r], 1, (68.0, 300.0), DrawerSpec::default()).unwrap();
+    assert_eq!(m2.drawer_space(&[l], &[r]).unwrap(), (298.0, 782.0), "above its front");
+    // overlay fronts push to open on undermount slides, the slides on the bottom's edges, 5 mm
+    // each side, room under the box; no handles
+    let spec = DrawerSpec { slide: SlideKind::Undermount, push: true, front: DrawerFront::Overlay, ..Default::default() };
+    let ds = m.add_drawers(&[l], &[r], 2, space, spec).unwrap();
+    let (f0, f1) = (size(&m, ds[0][5]).0.z, size(&m, ds[1][5]).1.z);
+    assert!((f0 - 52.0).abs() < 1e-6 && (f1 - 798.0).abs() < 1e-6, "{f0} {f1}");
+    assert!((size(&m, ds[0][4]).0.z - 92.0).abs() < 1e-6 && (size(&m, ds[0][0]).0.x - 23.0).abs() < 1e-6);
+    let slides: Vec<_> = m.joints.iter().filter(|j| j.kind == K::Slide).collect();
+    assert_eq!(slides.len(), 4);
+    assert!(slides.iter().all(|j| j.slide == SlideKind::Undermount && j.push && (j.b == vec![ds[0][4]] || j.b == vec![ds[1][4]])));
+    assert!(!m.joints.iter().any(|j| j.kind == K::Handle));
+    let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
+    assert!(hw.contains(&"4 × Undermount slide 450, push to open".to_string()), "{hw:?}");
+    // too many for the height: refused, nothing added
+    let n = m.joints.len();
+    assert!(m.add_drawers(&[l], &[r], 16, space, DrawerSpec::default()).is_err());
+    assert_eq!(m.joints.len(), n);
+}

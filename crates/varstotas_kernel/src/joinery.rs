@@ -130,6 +130,36 @@ impl WoodJointKind {
     }
 }
 
+/// What a drawer slide is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SlideKind {
+    /// Full-extension ball-bearing slides on the drawer's sides, 12.7 mm each side.
+    #[default]
+    BallBearing,
+    /// Roller slides along the bottom of the drawer's sides, 12.5 mm each side.
+    Roller,
+    /// Concealed slides under the drawer's bottom (the joint is on the bottom's edge), 5 mm
+    /// each side.
+    Undermount,
+}
+
+impl SlideKind {
+    pub const ALL: [SlideKind; 3] = [SlideKind::BallBearing, SlideKind::Roller, SlideKind::Undermount];
+
+    /// The gap it takes between the carcass and the drawer.
+    pub fn gap(self) -> f64 {
+        match self {
+            SlideKind::BallBearing => SLIDE_GAP,
+            SlideKind::Roller => 12.5,
+            SlideKind::Undermount => 5.0,
+        }
+    }
+
+    fn is_default(&self) -> bool {
+        *self == SlideKind::BallBearing
+    }
+}
+
 /// A joint between two parts (mm).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -183,6 +213,12 @@ pub struct WoodJoint {
     pub inset: bool,
     /// Shelf pins: rows of holes 32 mm apart above and below the shelf's.
     pub rows: usize,
+    /// Slides: what kind.
+    #[serde(skip_serializing_if = "SlideKind::is_default")]
+    pub slide: SlideKind,
+    /// Slides: push to open (a front without a handle).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub push: bool,
 }
 
 /// A drilled hole: where it starts, its direction, its diameter.
@@ -345,10 +381,10 @@ fn face_contact(model: &Model, a: &[crate::InstanceId], leg: bool, back: bool) -
 
 /// Slides are found between faces this far apart.
 const SLIDE_GAP_MAX: f64 = 30.0;
-/// The gap a ball-bearing slide takes, with what is tolerated.
+/// The gap a ball-bearing slide takes, and what is tolerated for any slide.
 pub const SLIDE_GAP: f64 = 12.7;
 const SLIDE_GAP_TOL: f64 = 0.8;
-/// Ball-bearing slide lengths on sale.
+/// Slide lengths on sale.
 pub const SLIDE_LENGTHS: [f64; 9] = [250.0, 300.0, 350.0, 400.0, 450.0, 500.0, 550.0, 600.0, 650.0];
 /// Cup hinges: the cup's centre from the door's edge; the angle they open to unless set.
 const CUP_FROM_EDGE: f64 = 22.5;
@@ -535,7 +571,15 @@ impl WoodJoint {
                 Some((name, self.fastener_count()))
             }
             WoodJointKind::GasStrut => Some((tr!("joint-hw-gas-strut", force = num(self.size)), 1)),
-            WoodJointKind::Slide => Some((tr!("joint-hw-slide", length = num(c.and_then(|c| self.slide_length(c)).unwrap_or(self.size))), 1)),
+            WoodJointKind::Slide => {
+                let length = num(c.and_then(|c| self.slide_length(c)).unwrap_or(self.size));
+                let name = match self.slide {
+                    SlideKind::BallBearing => tr!("joint-hw-slide", length = length),
+                    SlideKind::Roller => tr!("joint-hw-slide-roller", length = length),
+                    SlideKind::Undermount => tr!("joint-hw-slide-undermount", length = length),
+                };
+                Some((if self.push { tr!("joint-hw-slide-push", slide = name) } else { name }, 1))
+            }
             WoodJointKind::Handle => Some((tr!("joint-hw-handle", length = num(self.size)), self.fastener_count())),
             WoodJointKind::Knob => Some((tr!("joint-hw-knob", diameter = d), self.fastener_count())),
             WoodJointKind::Leg => Some((tr!("joint-hw-leg", length = num(self.size)), 4)),
@@ -899,15 +943,40 @@ impl WoodJoint {
             WoodJointKind::Slide => {
                 if let Some(len) = self.slide_length(c) {
                     // the cabinet member on a, the drawer member on b, the front flush
-                    let h = 45.0_f64.min(c.width());
                     let f = if self.flip { c.hi[c.along] - len } else { c.lo[c.along] };
                     let mut p = self.point(c, f);
                     p[c.along] = f;
-                    let (w, g) = (unit(c.across, h / 2.0), c.gap);
-                    let u = unit(c.along, len);
-                    out.push(body(Anchor::A, DVec3::ZERO, 0.0, ZINC, vec![block(p - w, p + w + u - n * (g / 2.0))]));
-                    let w = unit(c.across, h / 2.0 - 4.0);
-                    out.push(body(Anchor::B, DVec3::ZERO, 0.0, STEEL, vec![block(p - w - n * (g / 2.0), p + w + u - n * g)]));
+                    let (g, u, up) = (c.gap, unit(c.along, len), unit(c.across, 1.0));
+                    let mut q = p;
+                    q[c.across] = c.lo[c.across];
+                    match self.slide {
+                        SlideKind::BallBearing => {
+                            let h = 45.0_f64.min(c.width());
+                            let w = up * (h / 2.0);
+                            out.push(body(Anchor::A, DVec3::ZERO, 0.0, ZINC, vec![block(p - w, p + w + u - n * (g / 2.0))]));
+                            let w = up * (h / 2.0 - 4.0);
+                            out.push(body(Anchor::B, DVec3::ZERO, 0.0, STEEL, vec![block(p - w - n * (g / 2.0), p + w + u - n * g)]));
+                        }
+                        SlideKind::Roller => {
+                            // along the bottom of b, a wheel at the cabinet member's front and
+                            // at the drawer member's back
+                            let h = 30.0_f64.min(c.width());
+                            let wheel = |at: DVec3| Solid::Round { at: at + up * (h / 2.0) - n * (g * 0.2), dir: -n, len: g * 0.6, r0: h * 0.35, r1: h * 0.35 };
+                            let back = u - unit(c.along, 20.0);
+                            out.push(body(Anchor::A, DVec3::ZERO, 0.0, ZINC, vec![block(q, q + up * h + u - n * (g * 0.2))]));
+                            out.push(body(Anchor::A, DVec3::ZERO, 0.0, DARK, vec![wheel(q + unit(c.along, 20.0))]));
+                            out.push(body(Anchor::B, DVec3::ZERO, 0.0, STEEL, vec![block(q - n * (g * 0.8), q + up * h + u - n * g)]));
+                            out.push(body(Anchor::B, DVec3::ZERO, 0.0, DARK, vec![wheel(q + back)]));
+                        }
+                        SlideKind::Undermount => {
+                            // under b (the drawer's bottom): the cabinet member on a's face
+                            // and reaching under b, the drawer member under b's edge
+                            let reach = 30.0_f64.min(c.b_max[c.axis] - c.b_min[c.axis]);
+                            let (lo, mid) = (q - up * 14.0, q - up * 5.0);
+                            out.push(body(Anchor::A, DVec3::ZERO, 0.0, ZINC, vec![block(lo, mid - n * (g + reach) + u), block(lo, q + up * 10.0 - n * 2.0 + u)]));
+                            out.push(body(Anchor::B, DVec3::ZERO, 0.0, STEEL, vec![block(mid - n * (g + 2.0), q - n * (g + reach - 4.0) + u)]));
+                        }
+                    }
                 }
             }
             WoodJointKind::Leg => {
@@ -1205,8 +1274,8 @@ impl WoodJoint {
                 }
             }
             WoodJointKind::Slide => {
-                if (c.gap - SLIDE_GAP).abs() > SLIDE_GAP_TOL {
-                    return Err(OpError::Invalid(tr!("joint-err-slide-gap", gap = num(SLIDE_GAP), now = num(c.gap))));
+                if (c.gap - self.slide.gap()).abs() > SLIDE_GAP_TOL {
+                    return Err(OpError::Invalid(tr!("joint-err-slide-gap", gap = num(self.slide.gap()), now = num(c.gap))));
                 }
                 if self.slide_length(c).is_none() {
                     return Err(OpError::Invalid(tr!("joint-err-slide-length")));
