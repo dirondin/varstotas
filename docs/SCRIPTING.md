@@ -126,6 +126,7 @@ Instead of an entity, a string can be passed anywhere — the name of a child gr
 | `remove_joint(i)` | deletes joint `i`; its parts get their shape back |
 | `drawer("Left", "Right", #{ z: 150, height: 160, front: "overlay" })` | a drawer for the opening between two parts facing each other: its box on the longest standard slides that fit (stopping at a part behind, such as a back between the sides), dowels, a nailed bottom, a `front` (`"inset"`, `"overlay"`, `"none"`) screwed on with a handle. Keys `z` (the box's underside; default the opening's bottom + 30), `height`, `wall`, `bottom`, `front_thickness`, `slide` (`"ball"`: ball-bearing on the box's sides, 12.7 mm each side; `"roller"`: along their bottom, 12.5 mm; `"undermount"`: concealed under the bottom, 5 mm, the slide joints on the bottom's edges and 14 mm under the box), `push` (push-to-open slides, no handle). Returns its parts |
 | `drawers("Left", "Right", #{ count: 4, front: "overlay" })` | a chest: `count` drawers one above another filling the free height of the opening, the stretch of the parts' shared height that no other part at its front crosses (between a bottom and a top, under a drawer already there); `from` and `to` set the height instead. The fronts are of equal height, 2 mm apart (inset: also 2 mm from the parts above and below; overlay: over them by 16 mm), each box 10 mm inside its front and the free height. The other keys as for `drawer` but `z` and `height`. Returns each drawer's parts, the lowest first |
+| `doors("Side L", "Side R", #{ count: 2 })` | one door or a pair over the opening between two parts facing each other, from the part across its front at the bottom to the one at the top (shelves behind the doors); `from` and `to` set the height instead. `front`: `"overlay"` (default; over the parts round the opening by 16 mm) or `"inset"` (in it, 2 mm clear); a pair meets 2 mm apart in the middle. Each door hangs on cup hinges on its side, as many as its height wants (a single door on the first part), with a handle upright by its free edge; `push: true` leaves the handles off (push latches); `thickness` (18). Returns the doors |
 
 Keys (mm): `count` (dowels, screws, pocket holes; fingers of a box joint on `b`; dovetail tails),
 `diameter`, `depth` (into `a`), `depth_b` (into `b`), `thickness` and `shoulder` (tenon),
@@ -137,7 +138,7 @@ Furniture hardware kinds: `"confirmat"` (`size`: the screw's length), `"cam_lock
 `diameter` of the cam, `size` from `a`'s face to its centre, `flip` puts it in `b`'s other face),
 `"shelf_pins"` (under `b`, `flip`: over it; `rows` of holes 32 mm apart above and below),
 `"hinge"` (cup hinges, `diameter` 35 and cup `depth`; overlay: the door is `a`, the side's edge
-on its back, half overlay when it covers only part of that edge; `inset: true`: the door is `b`,
+on its back, half overlay when it covers about half that edge or less; `inset: true`: the door is `b`,
 between the sides; the count follows the door's height; `angle`: the angle it opens to, 110 unless
 set, in the hinge's name when not), `"gas_strut"` (holds a lift-up flap open: the flap `a`,
 hinged along its top and over the side's front edge, the side `b`; `size`: its force in newtons,

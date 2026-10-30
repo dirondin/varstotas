@@ -1,8 +1,8 @@
 // Cabinet: a two-door cupboard of white melamine. The bottom and the top sit between the sides
-// on cam locks (minifix), the shelves on shelf pins, the back is nailed on, the doors hang on
-// cup hinges over the sides with a handle each, and it stands on four legs. The fittings are
-// drawn in place and priced in Window → Cut List; Window → Assembly explodes it step by step
-// and writes the instructions booklet.
+// on cam locks (minifix), the shelves on shelf pins, the back is nailed on, a pair of doors made
+// by doors() hang on cup hinges over the sides with a handle each, and it stands on four legs.
+// The fittings are drawn in place and priced in Window → Cut List; Window → Assembly explodes it
+// step by step and writes the instructions booklet.
 // Run: File → Run Script… (or paste into Window → Script Console). One undo step.
 let w = 800;      // outer width, mm
 let d = 450;      // depth
@@ -34,13 +34,6 @@ for i in 1..=shelves {
     s.name = "Shelf " + i;
     parts.push(s);
 }
-// two doors over the carcass's front edges, 3 mm apart in the middle
-let door_w = w / 2 - 1.5;
-let door_l = box(vec3(0, -t, legs), door_w, t, h);
-door_l.name = "Door L";
-let door_r = box(vec3(w - door_w, -t, legs), door_w, t, h);
-door_r.name = "Door R";
-parts += [door_l, door_r];
 paint(parts, "White");
 let back = box(vec3(0, d, legs), w, 4, h);
 back.name = "Back";
@@ -62,12 +55,12 @@ for side in ["Side L", "Side R"] {
     }
     joint(part.call("Back"), part.call(side), "nails");
 }
-joint(part.call("Door L"), part.call("Side L"), "hinge");
-joint(part.call("Door R"), part.call("Side R"), "hinge");
-// the handles upright by the doors' meeting edges
-joint(part.call("Door L"), "handle", #{ size: 128, offset: door_w / 2 - 50 });
-joint(part.call("Door R"), "handle", #{ size: 128, offset: 50 - door_w / 2 });
 joint(part.call("Bottom"), "leg", #{ size: legs });
+// two doors over the carcass's front edges from the bottom to the top, 2 mm apart in the
+// middle, on as many cup hinges as their height wants, the handles upright by the meeting
+// edges
+let doors = doors(part.call("Side L"), part.call("Side R"), #{ count: 2 });
+paint(doors, "White");
 
 // Edge banding (Window → Cut List): 1 mm on every edge of the boards that shows, priced per
 // metre
@@ -79,7 +72,7 @@ cut_part("Cam lock Ø15 with bolt", #{ price: 0.35 });
 cut_part("Shelf pin Ø5", #{ price: 0.1 });
 cut_part("Nail 1.6 × 20", #{ price: 0.02 });
 cut_part("Cup hinge Ø35, overlay", #{ price: 2.8 });
-cut_part("Handle, centres 128", #{ price: 3.5 });
+cut_part("Handle, centres 192", #{ price: 3.5 });
 cut_part("Leg, height " + legs, #{ price: 4 });
 
 // Assembly steps (Window → Assembly): the cam bolts and the pins go in at steps of their own
@@ -105,7 +98,7 @@ set_assembly_steps([
     #{ parts: part.call("Back"), note: "Check the diagonals are equal, then nail the back on. Stand the cabinet up." },
     #{ joints: of_kind.call("shelf_pins"), note: "Push the shelf pins into the holes at the heights you want." },
     #{ parts: shelf_parts, note: "Lay the shelves on the pins." },
-    #{ parts: [part.call("Door L"), part.call("Door R")], note: "Screw the hinges' plates to the sides and clip the doors on; adjust them to an even gap. Fit the handles." },
+    #{ parts: doors, note: "Screw the hinges' plates to the sides and clip the doors on; adjust them to an even gap. Fit the handles." },
 ]);
 select(cabinet);
 print("Cabinet " + w + " x " + d + " x " + (h + legs) + ", " + joints().len() + " joints, " + assembly_steps().len() + " steps");

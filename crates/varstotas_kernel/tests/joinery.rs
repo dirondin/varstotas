@@ -415,6 +415,52 @@ fn a_chest_of_drawers() {
 }
 
 #[test]
+fn doors_for_a_carcass() {
+    use varstotas_kernel::drawer::DoorSpec;
+    use varstotas_kernel::joinery::WoodJointKind as K;
+    // a cupboard: sides, a bottom and a top between them, a shelf flush at the front
+    let mut m = Model::new();
+    let l = board(&mut m, "Left", DVec3::new(18.0, 450.0, 1200.0), DVec3::ZERO);
+    let r = board(&mut m, "Right", DVec3::new(18.0, 450.0, 1200.0), DVec3::new(782.0, 0.0, 0.0));
+    board(&mut m, "Bottom", DVec3::new(764.0, 450.0, 18.0), DVec3::new(18.0, 0.0, 0.0));
+    board(&mut m, "Top", DVec3::new(764.0, 450.0, 18.0), DVec3::new(18.0, 0.0, 1182.0));
+    board(&mut m, "Shelf", DVec3::new(764.0, 430.0, 18.0), DVec3::new(18.0, 0.0, 600.0));
+    // from the bottom to the top, the shelf behind the doors
+    let space = m.door_space(&[l], &[r]).unwrap();
+    assert_eq!(space, (18.0, 1182.0));
+    let size = |m: &Model, id| {
+        let b = m.instance_world_bounds(&[], id).unwrap();
+        (b.min, b.max)
+    };
+    // a pair over the carcass's edges by 16 mm, 2 mm apart, three hinges each (1196 tall)
+    let mut m1 = m.clone();
+    let ds = m1.add_doors(&[l], &[r], space, DoorSpec { count: 2, ..Default::default() }).unwrap();
+    let ((a0, a1), (b0, b1)) = (size(&m1, ds[0]), size(&m1, ds[1]));
+    assert!((a0.x - 2.0).abs() < 1e-6 && (b1.x - 798.0).abs() < 1e-6 && (b0.x - a1.x - 2.0).abs() < 1e-6, "{a0} {a1} {b0} {b1}");
+    assert!((a0.z - 2.0).abs() < 1e-6 && (a1.z - 1198.0).abs() < 1e-6 && (a0.y + 18.0).abs() < 1e-6 && a1.y.abs() < 1e-6);
+    let hinges: Vec<_> = m1.joints.iter().filter(|j| j.kind == K::Hinge).collect();
+    assert_eq!(hinges.len(), 2);
+    assert!(hinges.iter().all(|j| j.count == 3 && !j.inset));
+    assert!(hinges.iter().any(|j| j.a == vec![ds[0]] && j.b == vec![l]) && hinges.iter().any(|j| j.a == vec![ds[1]] && j.b == vec![r]));
+    // the handles by the meeting edges
+    let handles: Vec<_> = m1.joints.iter().filter(|j| j.kind == K::Handle).collect();
+    assert_eq!(handles.len(), 2);
+    assert!(handles.iter().all(|j| (j.offset.abs() - ((a1.x - a0.x) / 2.0 - 50.0)).abs() < 1e-6));
+    assert!(handles.iter().any(|j| j.a == vec![ds[0]] && j.offset > 0.0) && handles.iter().any(|j| j.a == vec![ds[1]] && j.offset < 0.0));
+    let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m1).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
+    assert!(hw.contains(&"6 × Cup hinge Ø35, overlay".to_string()), "{hw:?}");
+    // one inset door, push latch: in the opening 2 mm clear, the hinge with the door as b
+    let ds = m.add_doors(&[l], &[r], space, DoorSpec { inset: true, push: true, ..Default::default() }).unwrap();
+    let (d0, d1) = size(&m, ds[0]);
+    assert!((d0.x - 20.0).abs() < 1e-6 && (d1.x - 780.0).abs() < 1e-6 && (d0.z - 20.0).abs() < 1e-6 && (d1.z - 1180.0).abs() < 1e-6 && d0.y.abs() < 1e-6, "{d0} {d1}");
+    let j = m.joints.iter().find(|j| j.kind == K::Hinge).unwrap();
+    assert!(j.inset && j.a == vec![l] && j.b == vec![ds[0]] && j.count == 3);
+    assert!(!m.joints.iter().any(|j| j.kind == K::Handle));
+    // too narrow for a pair
+    assert!(m.add_doors(&[l], &[r], (18.0, 100.0), DoorSpec::default()).is_err());
+}
+
+#[test]
 fn joints_that_are_likely_mistakes_are_flagged() {
     use varstotas_kernel::joinery::WoodJointKind as K;
     // a partition with a shelf dowelled on either side at the same height: 12 mm holes from

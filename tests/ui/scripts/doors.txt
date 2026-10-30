@@ -1,0 +1,21 @@
+# Doors from the Joinery window with the real mouse: the two sides of a cupboard selected, the
+# Doors row's count dragged to a pair and Add doors clicked hangs two overlay doors on three cup
+# hinges each, with handles by the meeting edges; the shelf stays behind them.
+action script let b = box(vec3(18, 0, 100), 764, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 100), 18, 450, 1200); l.name = "Left"; let r = box(vec3(782, 0, 100), 18, 450, 1200); r.name = "Right"; let t = box(vec3(18, 0, 1282), 764, 450, 18); t.name = "Top"; let s = box(vec3(18, 0, 700), 764, 430, 18); s.name = "Shelf"; select([l, r]);
+action console_close
+wait 5
+action joinery
+wait 5
+action drag_spot joinery:doors_count 60 0
+wait 5
+action click_spot joinery:doors
+wait 10
+expect ("Hinge", "Left", "Door", "3 × Cup hinge Ø35, overlay")
+expect ("Hinge", "Right", "Door", "3 × Cup hinge Ø35, overlay")
+expect ("Handle", "", "Door", "1 × Handle, centres 192")
+expect hardware=[("Cup hinge Ø35, overlay", 6, "0.00"), ("Handle, centres 192", 2, "0.00")]
+view iso
+zoom_extents
+wait 10
+screenshot shots/doors_pair.bmp
+quit

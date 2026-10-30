@@ -1,4 +1,4 @@
-//! Drawers (track W, batch 5): a drawer box built for the opening between two parts that face
+//! Drawers (track W, batch 5) and doors: a drawer box built for the opening between two parts that face
 //! each other (cabinet sides), on slides (ball-bearing, roller or undermount, see
 //! [`SlideKind`]); a chest of them one above another in the free height of the opening.
 //!
@@ -9,7 +9,8 @@
 //! the left part, joined as a woodworker would: the box front and back on dowels between the
 //! sides, the bottom nailed on underneath, a slide on each side (undermount slides on the
 //! bottom's edges), and a front (inset in the opening or overlaying the carcass) screwed on
-//! from inside with a handle, or none when the slides push to open.
+//! from inside with a handle, or none when the slides push to open. Doors, one or a pair, hang
+//! on cup hinges on the parts round the opening ([`Model::add_doors`]).
 
 use crate::joinery::{SLIDE_GAP, SLIDE_LENGTHS, SlideKind, WoodJoint, WoodJointKind, joint_contact};
 use crate::model::{ContextPath, Model};
@@ -261,5 +262,107 @@ impl Model {
             }
         }
         Ok(parts)
+    }
+}
+
+/// Doors for an opening (track W): one or two, inset in it or overlaying the parts round it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DoorSpec {
+    /// One door or a pair meeting in the middle.
+    pub count: usize,
+    /// In the opening (between the parts, [`REVEAL`] clear) or over their front edges.
+    pub inset: bool,
+    pub thickness: f64,
+    /// Push latches: no handles.
+    pub push: bool,
+}
+
+impl Default for DoorSpec {
+    fn default() -> Self {
+        DoorSpec { count: 1, inset: false, thickness: 18.0, push: false }
+    }
+}
+
+impl Model {
+    /// The height of the opening between `l` and `r` for doors: from the part across its front
+    /// at the bottom (a bottom) to the one at the top (a top), else the height the two share;
+    /// the parts between (shelves) are behind the doors.
+    pub fn door_space(&self, l: &[InstanceId], r: &[InstanceId]) -> Option<(f64, f64)> {
+        let o = opening(self.part_box(l)?, self.part_box(r)?)?;
+        let (mut lo, mut hi) = (o.z0, o.z1);
+        for (m0, m1) in self.in_opening(l, r, &o) {
+            if m1[o.d] > o.d0 + 1.0 && m0[o.d] < o.d0 + 100.0 {
+                if m0.z <= o.z0 + 1.0 && m1.z > lo {
+                    lo = m1.z;
+                }
+                if m1.z >= o.z1 - 1.0 && m0.z < hi {
+                    hi = m0.z;
+                }
+            }
+        }
+        (hi - lo > 100.0).then_some((lo, hi))
+    }
+
+    /// Doors over the height `space` (world, as from [`Model::door_space`]) of the opening
+    /// between `l` and `r`: inset in it [`REVEAL`] clear of its edges, or over the parts round
+    /// it by [`OVERLAY`]; a pair [`REVEAL`] apart in the middle. Each hangs on cup hinges on its
+    /// side (one door on `l`), as many as its height wants, with a handle upright by its free
+    /// edge unless `spec.push`. Returns the doors, `l`'s first.
+    pub fn add_doors(&mut self, l: &[InstanceId], r: &[InstanceId], space: (f64, f64), spec: DoorSpec) -> OpResult<Vec<InstanceId>> {
+        let bad = || OpError::Invalid(tr!("door-err-opening"));
+        let (Some(lb), Some(rb)) = (self.part_box(l), self.part_box(r)) else { return Err(OpError::Invalid(tr!("joint-err-two-parts"))) };
+        let o = opening(lb, rb).ok_or_else(bad)?;
+        let Opening { k, a, b, d, d0, .. } = o;
+        let (lo, hi) = space;
+        let count = spec.count;
+        let ft = spec.thickness;
+        if !(1..=2).contains(&count) || hi - lo < 100.0 || ft < 6.0 {
+            return Err(bad());
+        }
+        // across the opening and up; the door's depth range
+        let (s0, s1, z0, z1, y0) = if spec.inset { (a + REVEAL, b - REVEAL, lo + REVEAL, hi - REVEAL, d0) } else { (a - OVERLAY, b + OVERLAY, lo - OVERLAY, hi + OVERLAY, d0 - ft) };
+        let w = (s1 - s0 - (count as f64 - 1.0) * REVEAL) / count as f64;
+        if w < 100.0 {
+            return Err(bad());
+        }
+        // `l` on the low side of the opening hangs the first door
+        let l_low = lb.0[k] <= rb.0[k];
+        let sides: Vec<&[InstanceId]> = if count == 1 { vec![l] } else if l_low { vec![l, r] } else { vec![r, l] };
+        let parent: ContextPath = l.split_last().map(|(_, p)| p.to_vec()).unwrap_or_default();
+        let pxf = self.transform_at(&parent).inverse();
+        let mut doors = Vec::new();
+        for (i, side) in sides.into_iter().enumerate() {
+            let x = s0 + i as f64 * (w + REVEAL);
+            let (mut p, mut s) = (DVec3::ZERO, DVec3::ZERO);
+            (p[k], p[d], p.z) = (x, y0, z0);
+            (s[k], s[d], s.z) = (w, ft, z1 - z0);
+            let mesh = Primitive::Box { w: s.x, d: s.y, h: s.z }.mesh().ok_or_else(bad)?;
+            let name = tr!("door-name");
+            let id = self.add_group_mesh(&parent, mesh, &name, pxf * DMat4::from_translation(p)).ok_or_else(bad)?;
+            self.mesh_at_mut(&parent).and_then(|m| m.instances.get_mut(id)).ok_or_else(bad)?.name = name;
+            let mut door = parent.clone();
+            door.push(id);
+            if spec.inset {
+                // the door is b, between the sides
+                let probe = WoodJoint { kind: WoodJointKind::Hinge, a: side.to_vec(), b: door.clone(), inset: true, ..Default::default() };
+                let c = joint_contact(self, &probe).ok_or_else(bad)?;
+                let mut j = WoodJoint::new(WoodJointKind::Hinge, side.to_vec(), door.clone(), &c);
+                j.inset = true;
+                self.push_wood_joint(j)?;
+            } else {
+                self.add_wood_joint(WoodJointKind::Hinge, door.clone(), side.to_vec())?;
+            }
+            if !spec.push && let Ok(h) = self.add_wood_joint(WoodJointKind::Handle, door.clone(), Vec::new()) {
+                // upright by the free edge, away from the hinged side
+                let hinged_low = self.part_box(side).is_some_and(|b| b.0[k] < x);
+                let mut j = self.joints[h].clone();
+                if s.z > w {
+                    j.offset = (w / 2.0 - 50.0) * if hinged_low { 1.0 } else { -1.0 };
+                    let _ = self.set_wood_joint(h, j);
+                }
+            }
+            doors.push(id);
+        }
+        Ok(doors)
     }
 }

@@ -23,8 +23,8 @@
 //!   15 mm cam in `b`'s face;
 //! - shelf pins: 5 mm holes in `a` just under `b`, optionally rows 32 mm apart above and below;
 //! - cup hinge: a 35 mm cup in the door, a plate on the side; overlay (the door is `a`, the
-//!   side's front edge on its back; half overlay when it covers only part of that edge, two
-//!   doors on a middle partition) or inset (the door is `b`, between the sides); the angle it
+//!   side's front edge on its back; half overlay when it covers about half that edge or less,
+//!   two doors on a middle partition) or inset (the door is `b`, between the sides); the angle it
 //!   opens to (110° unless set);
 //! - gas strut: holds a lift-up flap (an overlay door `a`, hinged along its top) open, from a
 //!   bracket low on the inside of the side `b` to one high on the door's back; its force in
@@ -383,6 +383,8 @@ fn face_contact(model: &Model, a: &[crate::InstanceId], leg: bool, back: bool) -
 
 /// Slides are found between faces this far apart.
 const SLIDE_GAP_MAX: f64 = 30.0;
+/// How far an inset door may stand clear of the side its hinges are on.
+const HINGE_GAP_MAX: f64 = 3.0;
 /// The gap a ball-bearing slide takes, and what is tolerated for any slide.
 pub const SLIDE_GAP: f64 = 12.7;
 const SLIDE_GAP_TOL: f64 = 0.8;
@@ -405,6 +407,8 @@ fn kind_contact(model: &Model, kind: WoodJointKind, a: &[crate::InstanceId], b: 
     match kind {
         k if k.single() => face_contact(model, a, k.under(), flip),
         WoodJointKind::Slide => contact_within(model, a, b, SLIDE_GAP_MAX),
+        // an inset door clear of the side
+        WoodJointKind::Hinge => contact_within(model, a, b, HINGE_GAP_MAX),
         _ => contact(model, a, b),
     }
 }
@@ -592,7 +596,7 @@ impl WoodJoint {
             WoodJointKind::CamLock => Some((tr!("joint-hw-cam-lock", diameter = d), self.fastener_count())),
             WoodJointKind::ShelfPins => Some((tr!("joint-hw-shelf-pin", diameter = d), self.fastener_count())),
             WoodJointKind::Hinge => {
-                let half = !self.inset && c.is_some_and(|c| c.width() + 1.0 < c.b_max[c.across] - c.b_min[c.across]);
+                let half = !self.inset && c.is_some_and(|c| 2.0 * c.width() <= c.b_max[c.across] - c.b_min[c.across] + 2.0);
                 let name = match (self.inset, half) {
                     (true, _) => tr!("joint-hw-hinge-inset", diameter = d),
                     (false, true) => tr!("joint-hw-hinge-half", diameter = d),
@@ -677,7 +681,7 @@ impl WoodJoint {
         } else {
             let (back, sb) = self.door_back(c);
             p[c.across] = back;
-            (p - n * CUP_FROM_EDGE, unit(c.across, -sb))
+            (p - n * (CUP_FROM_EDGE + c.gap), unit(c.across, -sb))
         }
     }
 

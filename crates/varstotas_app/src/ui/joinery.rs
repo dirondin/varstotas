@@ -8,7 +8,7 @@ use crate::app::VarstotasApp;
 use crate::ui::theme;
 use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
-use varstotas_kernel::drawer::{DrawerFront, DrawerSpec};
+use varstotas_kernel::drawer::{DoorSpec, DrawerFront, DrawerSpec};
 use varstotas_kernel::joinery::{Contact, SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
 
@@ -26,6 +26,8 @@ pub struct JoineryState {
     drawer: Option<DrawerSpec>,
     drawer_z: Option<f64>,
     drawer_count: usize,
+    /// New doors' count, front and latches.
+    door: Option<DoorSpec>,
 }
 
 const SLIDES: [(SlideKind, &str); 3] = [(SlideKind::BallBearing, "joinery-slide-ball"), (SlideKind::Roller, "joinery-slide-roller"), (SlideKind::Undermount, "joinery-slide-undermount")];
@@ -341,6 +343,7 @@ impl VarstotasApp {
         };
         ui.label(RichText::new(hint).small().color(theme::text_dim()));
         self.drawer_ui(ui);
+        self.door_ui(ui);
     }
 
     /// A drawer for the opening between the two selected parts (shown only for such a pair).
@@ -399,6 +402,42 @@ impl VarstotasApp {
             }
         });
         self.joinery.drawer = Some(spec);
+    }
+
+    /// Doors for the opening between the two selected parts (shown only for such a pair).
+    fn door_ui(&mut self, ui: &mut Ui) {
+        let ids: Vec<InstanceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None }).collect();
+        if ids.len() != 2 {
+            return;
+        }
+        let path = |id| {
+            let mut p = self.doc.active_path.clone();
+            p.push(id);
+            p
+        };
+        let (l, r) = (path(ids[0]), path(ids[1]));
+        let Some(space) = self.doc.model.door_space(&l, &r) else { return };
+        let mut spec = self.joinery.door.unwrap_or_default();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(tr!("joinery-doors")).strong());
+            let c = ui.add(egui::DragValue::new(&mut spec.count).range(1..=2).speed(0.05));
+            super::tray_lib::spot("joinery:doors_count", c.rect.center());
+            c.on_hover_text(tr!("joinery-doors-count-tip"));
+            ui.label(tr!("joinery-drawer-front"));
+            let name = |inset: bool| tr!(if inset { "joinery-drawer-front-inset" } else { "joinery-drawer-front-overlay" });
+            egui::ComboBox::from_id_salt("door_front").selected_text(name(spec.inset)).show_ui(ui, |ui| {
+                for inset in [false, true] {
+                    ui.selectable_value(&mut spec.inset, inset, name(inset));
+                }
+            });
+            ui.checkbox(&mut spec.push, tr!("joinery-door-push")).on_hover_text(tr!("joinery-door-push-tip"));
+            let b = ui.button(tr!("joinery-doors-add"));
+            super::tray_lib::spot("joinery:doors", b.rect.center());
+            if b.on_hover_text(tr!("joinery-doors-tip")).clicked() {
+                self.doc.try_commit(&tr!("joinery-doors-undo"), move |m: &mut Model| m.add_doors(&l, &r, space, spec).map(|_| ()));
+            }
+        });
+        self.joinery.door = Some(spec);
     }
 
     fn joinery_list_ui(&mut self, ui: &mut Ui) {

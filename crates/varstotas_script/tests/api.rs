@@ -176,6 +176,7 @@ fn example_furniture_runs() {
     assert_eq!(r.output, "Cabinet 800 x 450 x 1500, 17 joints, 8 steps\n");
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
+    assert!(plan.hardware.iter().any(|h| h.name == "Cup hinge Ø35, overlay" && h.count == 6), "doors() hangs 1396 mm doors on three hinges each");
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/mobile_pedestal.rhai"));
     assert_eq!(r.output, "Mobile pedestal 600 x 450 x 806, 19 joints, 12 steps\n");
