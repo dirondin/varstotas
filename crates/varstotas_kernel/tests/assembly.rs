@@ -41,22 +41,15 @@ fn exploded_and_step_views_come_back() {
     let (mut m, [bottom, left, right, top, shelf]) = cabinet();
     let before: Vec<DVec3> = [bottom, left, right, top, shelf].iter().map(|&i| at(&m, i)).collect();
     m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
-    // without steps: sides apart, bottom down, top up, the shelf out to the front; all lifted by 100 so
-    // that the bottom stays on the floor
-    assert_eq!(at(&m, left) - before[1], DVec3::new(-100.0, 0.0, 100.0));
-    assert_eq!(at(&m, right) - before[2], DVec3::new(100.0, 0.0, 100.0));
-    assert_eq!(at(&m, bottom) - before[0], DVec3::ZERO);
-    assert_eq!(at(&m, top) - before[3], DVec3::new(0.0, 0.0, 200.0));
-    assert_eq!(at(&m, shelf) - before[4], DVec3::new(0.0, -100.0, 100.0));
-    // with steps, in their order: the bottom stays, the sides go up off it, the shelf out to
-    // the front from between them, the top above them
+    // without steps (in the suggested order): the bottom stays, the sides go sideways, the top
+    // up, the shelf between them out to the front (up and down are the top and the bottom)
+    let moved = |m: &Model| -> Vec<DVec3> { [bottom, left, right, top, shelf].iter().enumerate().map(|(k, &i)| at(m, i) - before[k]).collect() };
+    let expected = vec![DVec3::ZERO, DVec3::new(-100.0, 0.0, 0.0), DVec3::new(100.0, 0.0, 0.0), DVec3::new(0.0, 0.0, 100.0), DVec3::new(0.0, -100.0, 0.0)];
+    assert_eq!(moved(&m), expected);
+    // the same with those steps set
     m.assembly.steps = suggest_steps(&m);
     m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
-    assert_eq!(at(&m, bottom) - before[0], DVec3::ZERO);
-    assert_eq!(at(&m, left) - before[1], DVec3::new(0.0, 0.0, 100.0));
-    assert_eq!(at(&m, right) - before[2], DVec3::new(0.0, 0.0, 100.0));
-    assert_eq!(at(&m, shelf) - before[4], DVec3::new(0.0, -100.0, 100.0));
-    assert_eq!(at(&m, top) - before[3], DVec3::new(0.0, 0.0, 200.0));
+    assert_eq!(moved(&m), expected);
     // the cut list and joints still see the assembled cabinet
     assert_eq!(varstotas_kernel::cutlist::cut_parts(&m).len(), 4);
     let i = m.add_wood_joint(WoodJointKind::Dowels, vec![left], vec![shelf]).unwrap();
@@ -105,4 +98,27 @@ fn fasteners_get_steps_of_their_own() {
     assert_eq!(m.assembly.steps[2].joints, vec![r - 1]);
     m.remove_wood_joint(r - 1);
     assert_eq!(m.assembly.steps.len(), 4);
+}
+
+#[test]
+fn exploded_parts_stay_clear_of_each_other() {
+    let (mut m, [bottom, left, right, top, shelf]) = cabinet();
+    // a drawer under the shelf, clear of the sides: a box and its front, touching each other only
+    let drawer = board(&mut m, "Drawer", DVec3::new(540.0, 280.0, 150.0), DVec3::new(30.0, 10.0, 60.0));
+    let front = board(&mut m, "Front", DVec3::new(540.0, 10.0, 150.0), DVec3::new(30.0, 0.0, 60.0));
+    let ids = [bottom, left, right, top, shelf, drawer, front];
+    let before: Vec<DVec3> = ids.iter().map(|&i| at(&m, i)).collect();
+    m.set_assembly_view(SceneAssembly { explode: 200.0, step: None });
+    let moved: Vec<DVec3> = ids.iter().enumerate().map(|(k, &i)| at(&m, i) - before[k]).collect();
+    // the drawer comes out to the front as a whole, its front further
+    assert!(moved[5].y <= -200.0 && moved[5].x == 0.0 && moved[5].z == 0.0, "{:?}", moved[5]);
+    assert!(moved[6].y < moved[5].y);
+    let boxes: Vec<_> = ids.iter().map(|&i| m.instance_world_bounds(&[], i).unwrap()).collect();
+    for i in 0..boxes.len() {
+        for j in i + 1..boxes.len() {
+            let (a, b) = (boxes[i], boxes[j]);
+            let into = (0..3).all(|x| a.min[x] < b.max[x] - 1e-6 && b.min[x] < a.max[x] - 1e-6);
+            assert!(!into, "parts {i} and {j} overlap");
+        }
+    }
 }
