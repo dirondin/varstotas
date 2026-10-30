@@ -382,6 +382,11 @@ impl VarstotasApp {
         let mut select = None;
         let mut changed = None;
         let mut points = None;
+        let warnings = self.doc.model.joint_warnings();
+        let flagged = warnings.iter().filter(|w| !w.is_empty()).count();
+        if flagged > 0 {
+            ui.label(RichText::new(format!("⚠ {}", tr!("joinery-warnings", count = flagged.to_string()))).color(theme::warning())).on_hover_text(tr!("joinery-warnings-tip"));
+        }
         egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
             for i in 0..self.doc.model.joints.len() {
                 let mut j = match &self.joinery.draft {
@@ -528,6 +533,9 @@ impl VarstotasApp {
                     }
                     if let Some((name, n)) = j.hardware(c.as_ref()) {
                         ui.label(RichText::new(format!("{n} × {name}")).small().color(theme::text_dim()));
+                    }
+                    for w in warnings.get(i).into_iter().flatten() {
+                        ui.label(RichText::new(format!("⚠ {w}")).small().color(theme::warning()));
                     }
                 });
                 if j != before {

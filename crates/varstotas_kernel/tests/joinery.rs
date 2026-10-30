@@ -413,3 +413,51 @@ fn a_chest_of_drawers() {
     assert!(m.add_drawers(&[l], &[r], 16, space, DrawerSpec::default()).is_err());
     assert_eq!(m.joints.len(), n);
 }
+
+#[test]
+fn joints_that_are_likely_mistakes_are_flagged() {
+    use varstotas_kernel::joinery::WoodJointKind as K;
+    // a partition with a shelf dowelled on either side at the same height: 12 mm holes from
+    // both faces of an 18 mm board meet
+    let mut m = Model::new();
+    let part = board(&mut m, "Partition", DVec3::new(18.0, 300.0, 800.0), DVec3::new(500.0, 0.0, 0.0));
+    let left = board(&mut m, "Shelf L", DVec3::new(500.0, 300.0, 18.0), DVec3::new(0.0, 0.0, 400.0));
+    let right = board(&mut m, "Shelf R", DVec3::new(500.0, 300.0, 18.0), DVec3::new(518.0, 0.0, 400.0));
+    let a = m.add_wood_joint(K::Dowels, vec![part], vec![left]).unwrap();
+    let b = m.add_wood_joint(K::Dowels, vec![part], vec![right]).unwrap();
+    let w = m.joint_warnings();
+    assert_eq!((w[a].as_slice(), w[b].as_slice()), (&["Its holes meet those of joint 2.".to_string()][..], &["Its holes meet those of joint 1.".to_string()][..]));
+    // one shelf raised: clear
+    let mut j = m.joints[b].clone();
+    j.offset = 0.0;
+    j.at = vec![40.0, 150.0, 260.0];
+    j.count = 3;
+    let mut moved = m.joints[a].clone();
+    moved.at = vec![80.0, 200.0];
+    moved.count = 2;
+    m.set_wood_joint(a, moved).unwrap();
+    m.set_wood_joint(b, j).unwrap();
+    assert!(m.joint_warnings().iter().all(|w| w.is_empty()), "{:?}", m.joint_warnings());
+    // too near the end, too thick, too deep
+    let mut j = m.joints[a].clone();
+    (j.at, j.diameter, j.depth) = (vec![5.0, 12.0], 10.0, 16.0);
+    m.set_wood_joint(a, j).unwrap();
+    let w = &m.joint_warnings()[a];
+    assert!(w.iter().any(|s| s.contains("5 mm from the joint’s end") && s.contains("11 mm")), "{w:?}");
+    assert!(w.iter().any(|s| s.contains("only 7 mm apart")), "{w:?}");
+    assert!(w.iter().any(|s| s.contains("Ø10 dowels in a 18 mm board")), "{w:?}");
+    assert!(w.iter().any(|s| s.contains("16 mm deep in a 18 mm board")), "{w:?}");
+    // a confirmat into a 12 mm board's end; a door on one hinge
+    let mut m = Model::new();
+    let side = board(&mut m, "Side", DVec3::new(18.0, 300.0, 800.0), DVec3::ZERO);
+    let thin = board(&mut m, "Thin", DVec3::new(400.0, 300.0, 12.0), DVec3::new(18.0, 0.0, 300.0));
+    let c = m.add_wood_joint(K::Confirmat, vec![side], vec![thin]).unwrap();
+    assert!(m.joint_warnings()[c].iter().any(|s| s.contains("end of a 12 mm board")));
+    let door = board(&mut m, "Door", DVec3::new(400.0, 18.0, 800.0), DVec3::new(0.0, -18.0, 0.0));
+    let h = m.add_wood_joint(K::Hinge, vec![door], vec![side]).unwrap();
+    assert!(m.joint_warnings()[h].is_empty());
+    let mut j = m.joints[h].clone();
+    j.count = 1;
+    m.set_wood_joint(h, j).unwrap();
+    assert!(m.joint_warnings()[h].iter().any(|s| s.contains("800 mm tall wants 2 hinges")), "{:?}", m.joint_warnings()[h]);
+}

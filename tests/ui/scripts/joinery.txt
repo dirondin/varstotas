@@ -1,5 +1,6 @@
 # Joinery: a shelf meeting a cabinet side. Both selected, Add joint makes dowels sized for the
-# boards (in the cut list's hardware); swap and delete by the list's buttons; a housing next.
+# boards (in the cut list's hardware); a likely mistake is flagged; swap and delete by the list's
+# buttons; a housing next.
 action script let s = box(vec3(0, 0, 0), 18, 300, 800); s.name = "Side"; let h = box(vec3(18, 0, 400), 500, 300, 18); h.name = "Shelf";
 action console_close
 wait 5
@@ -13,6 +14,13 @@ expect hardware=[("Dowel Ø8 × 40", 3, "0.00")]
 zoom_extents
 wait 5
 screenshot shots/joinery_dowels.bmp
+# a joint that is likely a mistake: ⚠ and what is wrong under it in the list
+action script set_joint(0, #{ diameter: 10, depth: 16 }); print(joints()[0].warnings.len());
+wait 10
+expect script=Some((true, "2
+screenshot shots/joinery_warnings.bmp
+action script set_joint(0, #{ diameter: 8, depth: 12 });
+wait 10
 action click_spot joinery:swap:0
 wait 10
 expect joints=[("Dowels", "Side", "Shelf", "3 × Dowel Ø8 × 40")]

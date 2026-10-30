@@ -223,6 +223,8 @@ pub struct WoodJoint {
 
 /// A drilled hole: where it starts, its direction, its diameter.
 pub type Hole = (DVec3, DVec3, f64);
+/// A hole and how deep it goes.
+pub type Bore = (DVec3, DVec3, f64, f64);
 
 /// Where two parts touch: a rectangle on a plane across a world axis.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -405,6 +407,36 @@ fn kind_contact(model: &Model, kind: WoodJointKind, a: &[crate::InstanceId], b: 
         WoodJointKind::Slide => contact_within(model, a, b, SLIDE_GAP_MAX),
         _ => contact(model, a, b),
     }
+}
+
+/// The shortest distance between segments `p0`–`p1` and `q0`–`q1`.
+fn segment_distance(p0: DVec3, p1: DVec3, q0: DVec3, q1: DVec3) -> f64 {
+    let (d1, d2, r) = (p1 - p0, q1 - q0, p0 - q0);
+    let (a, e, f) = (d1.length_squared(), d2.length_squared(), d2.dot(r));
+    let (s, t) = if a < 1e-12 && e < 1e-12 {
+        (0.0, 0.0)
+    } else if a < 1e-12 {
+        (0.0, (f / e).clamp(0.0, 1.0))
+    } else {
+        let c = d1.dot(r);
+        if e < 1e-12 {
+            ((-c / a).clamp(0.0, 1.0), 0.0)
+        } else {
+            let b = d1.dot(d2);
+            let den = a * e - b * b;
+            let mut s = if den > 1e-12 { ((b * f - c * e) / den).clamp(0.0, 1.0) } else { 0.0 };
+            let mut t = (b * s + f) / e;
+            if t < 0.0 {
+                t = 0.0;
+                s = (-c / a).clamp(0.0, 1.0);
+            } else if t > 1.0 {
+                t = 1.0;
+                s = ((b - c) / a).clamp(0.0, 1.0);
+            }
+            (s, t)
+        }
+    };
+    ((p0 + d1 * s) - (q0 + d2 * t)).length()
 }
 
 /// A box solid between two corners.
@@ -730,6 +762,14 @@ impl WoodJoint {
     /// The holes drilled into `a` and into `b`: where each starts on the part's surface, its
     /// direction (a pocket's: into the face it is drilled from) and diameter, in world space.
     pub fn holes(&self, c: &Contact) -> (Vec<Hole>, Vec<Hole>) {
+        let (a, b) = self.bores(c);
+        let hole = |v: Vec<Bore>| v.into_iter().map(|(p, d, r, _)| (p, d, r)).collect();
+        (hole(a), hole(b))
+    }
+
+    /// [`WoodJoint::holes`] with how deep each goes (0: not known, a pocket's counterbore, a
+    /// leg's bolt).
+    pub fn bores(&self, c: &Contact) -> (Vec<Bore>, Vec<Bore>) {
         let mut n = DVec3::ZERO;
         n[c.axis] = c.into_a;
         let point = |s: f64| self.point(c, s);
@@ -738,12 +778,12 @@ impl WoodJoint {
             let e = point(s);
             match self.kind {
                 WoodJointKind::Dowels => {
-                    a.push((e, n, self.diameter));
-                    b.push((e, -n, self.diameter));
+                    a.push((e, n, self.diameter, self.depth));
+                    b.push((e, -n, self.diameter, self.depth_b));
                 }
                 WoodJointKind::Screws => {
-                    a.push((e, n, self.diameter + 0.5));
-                    b.push((e, -n, self.diameter * 0.7));
+                    a.push((e, n, self.diameter + 0.5, c.a_size));
+                    b.push((e, -n, self.diameter * 0.7, self.depth_b));
                 }
                 WoodJointKind::PocketHole => {
                     let (sin, cos) = POCKET_ANGLE.to_radians().sin_cos();
@@ -751,40 +791,90 @@ impl WoodJoint {
                     m[c.across] = if self.flip { -1.0 } else { 1.0 };
                     let dir = n * cos + m * sin;
                     let entry = e - dir * (c.width() / 2.0 / sin);
-                    b.push((entry, m, (2.0 * self.diameter + 1.5).max(9.5)));
-                    a.push((e, dir, self.diameter * 0.7));
+                    b.push((entry, m, (2.0 * self.diameter + 1.5).max(9.5), 0.0));
+                    a.push((e, dir, self.diameter * 0.7, self.depth));
                 }
                 WoodJointKind::Confirmat => {
-                    a.push((e, n, self.diameter));
-                    b.push((e, -n, 5.0));
+                    a.push((e, n, self.diameter, c.a_size));
+                    b.push((e, -n, 5.0, (self.size - c.a_size).max(0.0)));
                 }
                 WoodJointKind::CamLock => {
-                    a.push((e, n, 5.0));
-                    b.push((e, -n, 8.0));
+                    a.push((e, n, 5.0, 11.0));
+                    b.push((e, -n, 8.0, self.size));
                     let (p, dir) = self.cam(c, s);
-                    b.push((p, dir, self.diameter));
+                    b.push((p, dir, self.diameter, 13.0));
                 }
                 WoodJointKind::Hinge => {
                     let (p, dir) = self.hinge_cup(c, s);
-                    if self.door_is_a() { &mut a } else { &mut b }.push((p, dir, self.diameter));
+                    if self.door_is_a() { &mut a } else { &mut b }.push((p, dir, self.diameter, self.depth));
                 }
-                WoodJointKind::Handle | WoodJointKind::Knob => a.extend(self.handle_points(c, e).into_iter().map(|p| (p, n, 5.0))),
+                WoodJointKind::Handle | WoodJointKind::Knob => a.extend(self.handle_points(c, e).into_iter().map(|p| (p, n, 5.0, c.a_size))),
                 _ => break,
             }
         }
         match self.kind {
             WoodJointKind::GasStrut => {
                 let (sa, sb) = self.strut_screws(c);
-                a.extend(sa.into_iter().map(|p| (p, n, 3.0)));
+                a.extend(sa.into_iter().map(|p| (p, n, 3.0, 10.0)));
                 let (_, _, inward) = self.strut(c);
-                b.extend(sb.into_iter().map(|p| (p, -inward, 3.0)));
+                b.extend(sb.into_iter().map(|p| (p, -inward, 3.0, 10.0)));
             }
-            WoodJointKind::ShelfPins => a.extend(self.pin_holes(c).into_iter().map(|p| (p, n, self.diameter))),
-            WoodJointKind::Leg => a.extend(self.leg_points(c).into_iter().map(|p| (p, n, 8.0))),
-            WoodJointKind::Caster => a.extend(self.leg_points(c).into_iter().flat_map(caster_screws).map(|p| (p, n, 3.0))),
+            WoodJointKind::ShelfPins => a.extend(self.pin_holes(c).into_iter().map(|p| (p, n, self.diameter, self.depth))),
+            WoodJointKind::Leg => a.extend(self.leg_points(c).into_iter().map(|p| (p, n, 8.0, 0.0))),
+            WoodJointKind::Caster => a.extend(self.leg_points(c).into_iter().flat_map(caster_screws).map(|p| (p, n, 3.0, 10.0))),
             _ => {}
         }
         (a, b)
+    }
+
+    /// What about it works but is likely a mistake: fasteners too close to the joint's ends or
+    /// to each other, holes too thick for the board they go into or coming out of its other
+    /// face, too few hinges for the door's height. Holes of two joints meeting are found by
+    /// [`Model::joint_warnings`].
+    pub fn warnings(&self, c: &Contact) -> Vec<String> {
+        let mut out = Vec::new();
+        let d = num(self.diameter);
+        let fastened = matches!(self.kind, WoodJointKind::Dowels | WoodJointKind::Screws | WoodJointKind::PocketHole | WoodJointKind::Confirmat | WoodJointKind::CamLock);
+        if fastened {
+            // the hole's centre at least its diameter and a millimetre in from the end
+            let (lo, hi) = (c.lo[c.along], c.hi[c.along]);
+            let min = self.diameter + 1.0;
+            let spots = self.spots(c);
+            if let Some(at) = spots.iter().map(|&s| (s - lo).min(hi - s)).min_by(f64::total_cmp).filter(|&e| e < min - 1e-6) {
+                out.push(tr!("joint-warn-end", at = num(at), min = num(min)));
+            }
+            if let Some(gap) = spots.windows(2).map(|w| w[1] - w[0]).min_by(f64::total_cmp).filter(|&g| g < self.diameter + 2.0 - 1e-6) {
+                out.push(tr!("joint-warn-spacing", gap = num(gap), min = num(self.diameter + 2.0)));
+            }
+        }
+        let width = c.width();
+        match self.kind {
+            WoodJointKind::Dowels if self.diameter > width / 2.0 + 0.5 => out.push(tr!("joint-warn-dowel-thick", diameter = d, thickness = num(width))),
+            WoodJointKind::Confirmat if width < 16.0 - 1e-6 => out.push(tr!("joint-warn-confirmat-thin", thickness = num(width))),
+            WoodJointKind::Screws if (width - self.diameter) / 2.0 - self.offset.abs() < 3.0 => out.push(tr!("joint-warn-screw-thick", diameter = d, thickness = num(width))),
+            _ => {}
+        }
+        // blind holes into a's face
+        let blind = match self.kind {
+            WoodJointKind::Dowels | WoodJointKind::ShelfPins => Some((self.depth, c.a_size)),
+            WoodJointKind::Hinge => Some((self.depth, if self.door_is_a() { c.a_size } else { c.b_max[c.axis] - c.b_min[c.axis] })),
+            _ => None,
+        };
+        if let Some((depth, thick)) = blind.filter(|(depth, thick)| depth + 3.0 > thick + 1e-6) {
+            out.push(tr!("joint-warn-through", depth = num(depth), thickness = num(thick)));
+        }
+        if self.kind == WoodJointKind::Hinge {
+            let want = match c.length() {
+                l if l <= 900.0 => 2,
+                l if l <= 1600.0 => 3,
+                l if l <= 2000.0 => 4,
+                _ => 5,
+            };
+            if self.fastener_count() < want {
+                out.push(tr!("joint-warn-hinges", height = num(c.length()), count = want.to_string()));
+            }
+        }
+        out
     }
 
     /// The bodies of its fasteners, in world space as assembled (their joint and parts' frames
@@ -1337,6 +1427,41 @@ impl Model {
     fn part_def(&self, path: &[crate::InstanceId]) -> Option<DefId> {
         let (&id, parent) = path.split_last()?;
         Some(self.mesh_at(parent)?.instances.get(id)?.def)
+    }
+
+    /// Each joint's warnings ([`WoodJoint::warnings`]), and holes of two joints that meet in a
+    /// part (two shelves' dowels from either side of a partition, a confirmat across a dowel).
+    pub fn joint_warnings(&self) -> Vec<Vec<String>> {
+        let mut out: Vec<Vec<String>> = self.joints.iter().enumerate().map(|(i, j)| self.joint_contacts.get(i).copied().flatten().map(|c| j.warnings(&c)).unwrap_or_default()).collect();
+        // the holes in each part: (joint, start, end, radius)
+        type Segments = Vec<(usize, DVec3, DVec3, f64)>;
+        let mut parts: Vec<(&ContextPath, Segments)> = Vec::new();
+        for (i, j) in self.joints.iter().enumerate() {
+            let Some(c) = self.joint_contacts.get(i).copied().flatten() else { continue };
+            let (a, b) = j.bores(&c);
+            for (path, bores) in [(&j.a, a), (&j.b, b)] {
+                let k = parts.iter().position(|(p, _)| *p == path).unwrap_or_else(|| {
+                    parts.push((path, Vec::new()));
+                    parts.len() - 1
+                });
+                parts[k].1.extend(bores.into_iter().filter(|b| b.3 > 0.0).map(|(p, dir, d, depth)| (i, p, p + dir.normalize_or_zero() * depth, d / 2.0)));
+            }
+        }
+        let mut met: Vec<(usize, usize)> = Vec::new();
+        for (_, holes) in &parts {
+            for (x, &(i, p0, p1, r0)) in holes.iter().enumerate() {
+                for &(k, q0, q1, r1) in &holes[x + 1..] {
+                    if i != k && !met.contains(&(i.min(k), i.max(k))) && segment_distance(p0, p1, q0, q1) < r0 + r1 - 0.5 {
+                        met.push((i.min(k), i.max(k)));
+                    }
+                }
+            }
+        }
+        for (i, k) in met {
+            out[i].push(tr!("joint-warn-meet", other = (k + 1).to_string()));
+            out[k].push(tr!("joint-warn-meet", other = (i + 1).to_string()));
+        }
+        out
     }
 
     /// Join parts `p` and `q` (instance paths) with a joint of `kind` sized for them; the one

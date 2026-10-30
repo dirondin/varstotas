@@ -1898,7 +1898,7 @@ fn joint_params(j: &mut WoodJoint, m: &Map) -> R<()> {
     Ok(())
 }
 
-fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
+fn joint_map(st: &State, j: &WoodJoint, warnings: &[String]) -> Dynamic {
     let mut m = Map::new();
     let kind = JOINT_KINDS.iter().find(|(_, k)| *k == j.kind).map_or("", |(n, _)| *n);
     m.insert("kind".into(), kind.into());
@@ -1925,6 +1925,7 @@ fn joint_map(st: &State, j: &WoodJoint) -> Dynamic {
     m.insert("positions".into(), pos.into());
     let hw = j.hardware(c.as_ref());
     m.insert("hardware".into(), hw.map_or(Dynamic::UNIT, |(n, c)| format!("{c} × {n}").into()));
+    m.insert("warnings".into(), warnings.iter().map(|w| Dynamic::from(w.clone())).collect::<Array>().into());
     m.into()
 }
 
@@ -1934,7 +1935,12 @@ fn register_joinery(e: &mut Engine) {
     // a fitting on one part: a handle, a knob, legs
     e.register_fn("joint", |a: Dynamic, kind: ImmutableString| -> R<i64> { add_joint(&a, &Dynamic::UNIT, &kind, &Map::new()) });
     e.register_fn("joint", |a: Dynamic, kind: ImmutableString, m: Map| -> R<i64> { add_joint(&a, &Dynamic::UNIT, &kind, &m) });
-    e.register_fn("joints", || -> R<Array> { with(|st| Ok(st.model.joints.iter().map(|j| joint_map(st, j)).collect())) });
+    e.register_fn("joints", || -> R<Array> {
+        with(|st| {
+            let w = st.model.joint_warnings();
+            Ok(st.model.joints.iter().zip(&w).map(|(j, w)| joint_map(st, j, w)).collect())
+        })
+    });
     e.register_fn("set_joint", |i: i64, m: Map| -> R<()> {
         edit(|st| {
             let i = usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()))?;
