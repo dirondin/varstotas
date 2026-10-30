@@ -241,8 +241,31 @@ impl VarstotasApp {
         }
     }
 
-    /// The fasteners for the debug dump: (bodies, bodies shown, their names with counts).
-    pub(crate) fn fasteners_dump(&self) -> (usize, usize, Vec<String>) {
+    /// The picked joint's fasteners drawn through its parts (Window → Joinery's checkbox),
+    /// shaded by a light from the eye; only the sides facing the eye.
+    pub(crate) fn joint_hardware_overlay(&self, o3: &mut varstotas_render::Overlay3d) {
+        let (true, true, Some(i)) = (self.joinery.open, self.prefs.joint_hardware, self.joinery.selected) else { return };
+        let eye = self.camera.eye;
+        let fwd = self.camera.basis().forward;
+        for (t, color) in self.doc.model.joint_fastener_triangles(i) {
+            let n = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
+            let view = if self.camera.ortho { -fwd } else { (eye - t[0]).normalize_or_zero() };
+            let lit = n.dot(view);
+            if lit <= 0.0 {
+                continue;
+            }
+            let k = (0.45 + 0.55 * lit) as f32;
+            o3.polygons.push(varstotas_render::OverlayPolygon {
+                tris: t.map(|p| p.as_vec3().to_array()).to_vec(),
+                color: [color[0] * k, color[1] * k, color[2] * k, 1.0],
+                on_top: true,
+            });
+        }
+    }
+
+    /// The fasteners for the debug dump: (bodies, bodies shown, their names with counts, the
+    /// picked joint's fastener triangles shown through its parts).
+    pub(crate) fn fasteners_dump(&self) -> (usize, usize, Vec<String>, usize) {
         let m = &self.doc.model;
         let shown: Vec<&varstotas_kernel::fasteners::Fastener> = m.fasteners.iter().filter(|f| m.fastener_transform(f).is_some()).collect();
         let mut names: Vec<(String, usize)> = Vec::new();
@@ -252,7 +275,11 @@ impl VarstotasApp {
                 None => names.push((f.name.clone(), 1)),
             }
         }
-        (m.fasteners.len(), shown.len(), names.into_iter().map(|(n, c)| format!("{c} × {n}")).collect())
+        let through = match (self.joinery.open, self.prefs.joint_hardware, self.joinery.selected) {
+            (true, true, Some(i)) => m.joint_fastener_triangles(i).len(),
+            _ => 0,
+        };
+        (m.fasteners.len(), shown.len(), names.into_iter().map(|(n, c)| format!("{c} × {n}")).collect(), through)
     }
 
     /// Where each joint's fasteners are, from its start (whole mm), for the debug dump.
@@ -302,6 +329,9 @@ impl VarstotasApp {
             if r.on_hover_text(tr!("joinery-add-tip")).on_disabled_hover_text(need.clone()).clicked() {
                 self.add_joint();
             }
+            let r = ui.checkbox(&mut self.prefs.joint_hardware, tr!("joinery-show-hardware"));
+            super::tray_lib::spot("joinery:hardware", r.rect.center());
+            r.on_hover_text(tr!("joinery-show-hardware-tip"));
         });
         let hint = match &sel {
             Some((p, q)) if q.is_empty() => tr!("joinery-selected-one", a = part_name(&self.doc.model, p)),

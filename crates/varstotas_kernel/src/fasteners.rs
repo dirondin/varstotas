@@ -201,6 +201,11 @@ impl Model {
         if self.fasteners_hidden {
             return None;
         }
+        self.fastener_placed(f)
+    }
+
+    /// Where fastener `f` is drawn with fasteners on (`fastener_transform` without the toggle).
+    fn fastener_placed(&self, f: &Fastener) -> Option<DMat4> {
         if let (Some(shown), Some(at)) = (self.assembly.step, self.fastener_step(f.joint))
             && at > shown
         {
@@ -230,6 +235,21 @@ impl Model {
             d = inst.def;
         }
         true
+    }
+
+    /// Joint `i`'s fasteners' triangles with their colours (world), even with fasteners off:
+    /// to show a joint's hardware through its parts.
+    pub fn joint_fastener_triangles(&self, i: usize) -> Vec<([DVec3; 3], [f32; 4])> {
+        let mut out = Vec::new();
+        for f in self.fasteners.iter().filter(|f| f.joint == i) {
+            let Some(xf) = self.fastener_placed(f) else { continue };
+            for s in &f.solids {
+                for (positions, _, _) in s.faces(&xf) {
+                    out.extend(positions.as_chunks::<3>().0.iter().map(|t| (*t, f.color)));
+                }
+            }
+        }
+        out
     }
 
     /// The fasteners' triangles to draw with the model, in their colours.

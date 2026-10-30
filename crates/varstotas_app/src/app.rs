@@ -74,6 +74,8 @@ pub struct Prefs {
     pub show_start_screen: bool,
     pub face_style: FaceStylePref,
     pub xray: bool,
+    /// Window → Joinery shows the picked joint's fasteners through its parts.
+    pub joint_hardware: bool,
     /// Edges in every style but Realistic. Stored under a new key: the old `show_edges` was
     /// shared with Realistic, and its scenes (demo house, gallery) left it off everywhere.
     #[serde(rename = "edges_shown")]
@@ -185,6 +187,7 @@ impl Default for Prefs {
             show_start_screen: true,
             face_style: FaceStylePref::Shaded,
             xray: false,
+            joint_hardware: false,
             show_edges: true,
             realistic_edges: false,
             profiles: true,
@@ -2609,6 +2612,7 @@ impl eframe::App for VarstotasApp {
             self.printing_overlay(&mut o3);
             self.cut_numbers_overlay(&mut o2);
             self.joints_overlay(&mut o3, &mut o2);
+            self.joint_hardware_overlay(&mut o3);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())
