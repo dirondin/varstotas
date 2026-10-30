@@ -1833,7 +1833,7 @@ fn register_cut_list(e: &mut Engine) {
     });
 }
 
-const JOINT_KINDS: [(&str, WoodJointKind); 17] = [
+const JOINT_KINDS: [(&str, WoodJointKind); 18] = [
     ("dowels", WoodJointKind::Dowels),
     ("screws", WoodJointKind::Screws),
     ("pocket", WoodJointKind::PocketHole),
@@ -1851,6 +1851,7 @@ const JOINT_KINDS: [(&str, WoodJointKind); 17] = [
     ("handle", WoodJointKind::Handle),
     ("knob", WoodJointKind::Knob),
     ("leg", WoodJointKind::Leg),
+    ("caster", WoodJointKind::Caster),
 ];
 
 fn kind_name_of(k: WoodJointKind) -> String {

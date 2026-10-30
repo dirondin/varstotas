@@ -27,4 +27,7 @@ expect model_faces=1411
 open ../../examples/demos/cabinet.vrst
 wait 5
 expect model_faces=1738
+open ../../examples/demos/mobile_pedestal.vrst
+wait 5
+expect model_faces=1648
 quit

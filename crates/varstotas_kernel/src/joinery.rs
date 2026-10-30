@@ -26,7 +26,7 @@
 //!   side's front edge on its back) or inset (the door is `b`, between the sides);
 //! - ball-bearing slide: between a cabinet side `a` and a drawer side `b` 12.7 mm apart, the
 //!   longest standard length that fits;
-//! - handle, knob, legs: on one part (`b` empty), on its front face (min y; `flip`: the back)
+//! - handle, knob, legs, casters: on one part (`b` empty), on its front face (min y; `flip`: the back)
 //!   or under it;
 //! - table-top fastener (figure 8): recessed into an apron's edge `b`, screwed to the top `a`;
 //! - nails: through a back panel `a` into the carcass edge `b`.
@@ -67,12 +67,14 @@ pub enum WoodJointKind {
     Handle,
     Knob,
     Leg,
+    /// Swivel casters, four under the part like legs.
+    Caster,
     TableTop,
     Nails,
 }
 
 impl WoodJointKind {
-    pub const ALL: [WoodJointKind; 17] = [
+    pub const ALL: [WoodJointKind; 18] = [
         WoodJointKind::Dowels,
         WoodJointKind::Screws,
         WoodJointKind::PocketHole,
@@ -90,17 +92,23 @@ impl WoodJointKind {
         WoodJointKind::Handle,
         WoodJointKind::Knob,
         WoodJointKind::Leg,
+        WoodJointKind::Caster,
     ];
 
-    /// On one part (`b` empty): handles, knobs, legs.
+    /// On one part (`b` empty): handles, knobs, legs, casters.
     pub fn single(self) -> bool {
-        matches!(self, WoodJointKind::Handle | WoodJointKind::Knob | WoodJointKind::Leg)
+        matches!(self, WoodJointKind::Handle | WoodJointKind::Knob | WoodJointKind::Leg | WoodJointKind::Caster)
     }
 
     /// Its fasteners go into the earlier part first, in a step of their own, and the later
     /// part comes onto them: dowels, shelf pins, cam lock bolts.
     pub fn goes_in_first(self) -> bool {
         matches!(self, WoodJointKind::Dowels | WoodJointKind::ShelfPins | WoodJointKind::CamLock)
+    }
+
+    /// Four under the part (legs, casters).
+    pub fn under(self) -> bool {
+        matches!(self, WoodJointKind::Leg | WoodJointKind::Caster)
     }
 
     /// Furniture hardware rather than a wood joint.
@@ -110,7 +118,7 @@ impl WoodJointKind {
 
     /// Its fasteners are laid out along the joint (count, margin, pitch, distances).
     pub fn spaced(self) -> bool {
-        !matches!(self, WoodJointKind::Housing | WoodJointKind::MortiseTenon | WoodJointKind::BoxJoint | WoodJointKind::Dovetail | WoodJointKind::Slide | WoodJointKind::Leg)
+        !matches!(self, WoodJointKind::Housing | WoodJointKind::MortiseTenon | WoodJointKind::BoxJoint | WoodJointKind::Dovetail | WoodJointKind::Slide | WoodJointKind::Leg | WoodJointKind::Caster)
     }
 }
 
@@ -159,7 +167,7 @@ pub struct WoodJoint {
     /// Fasteners this far off the joint's middle, across it.
     pub offset: f64,
     /// Confirmat and nail length, cam lock bolt (`a`'s face to the cam's centre), handle
-    /// centres, slide length (0: the longest that fits), leg height.
+    /// centres, slide length (0: the longest that fits), leg or caster height.
     pub size: f64,
     /// Cup hinge on an inset door (`b`); else an overlay door (`a`).
     pub inset: bool,
@@ -340,7 +348,7 @@ pub fn joint_contact(model: &Model, j: &WoodJoint) -> Option<Contact> {
 
 fn kind_contact(model: &Model, kind: WoodJointKind, a: &[crate::InstanceId], b: &[crate::InstanceId], flip: bool) -> Option<Contact> {
     match kind {
-        k if k.single() => face_contact(model, a, k == WoodJointKind::Leg, flip),
+        k if k.single() => face_contact(model, a, k.under(), flip),
         WoodJointKind::Slide => contact_within(model, a, b, SLIDE_GAP_MAX),
         _ => contact(model, a, b),
     }
@@ -356,6 +364,11 @@ fn unit(k: usize, s: f64) -> DVec3 {
     let mut v = DVec3::ZERO;
     v[k] = s;
     v
+}
+
+/// A caster plate's four screws about its centre `p` (on the underside, axis z).
+fn caster_screws(p: DVec3) -> [DVec3; 4] {
+    [(-18.0, -18.0), (18.0, -18.0), (-18.0, 18.0), (18.0, 18.0)].map(|(x, y)| p + DVec3::new(x, y, 0.0))
 }
 
 /// Rounded up to 5 mm.
@@ -449,6 +462,13 @@ impl WoodJoint {
                 j.size = 100.0;
                 j.margin = 50.0_f64.min(t / 4.0).max(20.0);
             }
+            WoodJointKind::Caster => {
+                // a Ø50 wheel, 70 mm from the floor to the plate
+                j.count = 4;
+                j.diameter = 50.0;
+                j.size = 70.0;
+                j.margin = 40.0_f64.min(t / 4.0).max(25.0);
+            }
             WoodJointKind::TableTop => {
                 j.diameter = 19.0;
                 j.count = ((len / 300.0).round() as usize + 1).clamp(2, 12);
@@ -483,6 +503,7 @@ impl WoodJoint {
             WoodJointKind::Handle => Some((tr!("joint-hw-handle", length = num(self.size)), self.fastener_count())),
             WoodJointKind::Knob => Some((tr!("joint-hw-knob", diameter = d), self.fastener_count())),
             WoodJointKind::Leg => Some((tr!("joint-hw-leg", length = num(self.size)), 4)),
+            WoodJointKind::Caster => Some((tr!("joint-hw-caster", diameter = d, length = num(self.size)), 4)),
             WoodJointKind::TableTop => Some((tr!("joint-hw-table-top"), self.fastener_count())),
             WoodJointKind::Nails => Some((tr!("joint-hw-nail", diameter = d, length = num(self.size)), self.fastener_count())),
             _ => None,
@@ -632,6 +653,7 @@ impl WoodJoint {
         match self.kind {
             WoodJointKind::ShelfPins => a.extend(self.pin_holes(c).into_iter().map(|p| (p, n, self.diameter))),
             WoodJointKind::Leg => a.extend(self.leg_points(c).into_iter().map(|p| (p, n, 8.0))),
+            WoodJointKind::Caster => a.extend(self.leg_points(c).into_iter().flat_map(caster_screws).map(|p| (p, n, 3.0))),
             _ => {}
         }
         (a, b)
@@ -793,6 +815,19 @@ impl WoodJoint {
                 let r = self.diameter / 2.0;
                 for p in self.leg_points(c) {
                     out.push(body(Anchor::A, -n, 0.0, DARK, vec![Solid::Round { at: p, dir: -n, len: self.size, r0: r, r1: r * 0.75 }]));
+                }
+            }
+            WoodJointKind::Caster => {
+                // a plate on the underside, the fork down to the wheel's axle, the wheel across it
+                let (r, down) = (self.diameter / 2.0, -n);
+                let (along, across) = (unit(c.along, 1.0), unit(c.across, 1.0));
+                for p in self.leg_points(c) {
+                    let axle = p + down * (self.size - r);
+                    let plate = block(p - along * 25.0 - across * 25.0, p + along * 25.0 + across * 25.0 + down * 3.0);
+                    let fork = block(p + down * 3.0 - along * 14.0 - across * (r * 0.45), axle + along * 14.0 + across * (r * 0.45));
+                    let wheel = Solid::Round { at: axle - along * 11.0, dir: along, len: 22.0, r0: r, r1: r };
+                    out.push(body(Anchor::A, -n, 0.0, ZINC, vec![plate, fork]));
+                    out.push(body(Anchor::A, -n, 0.0, DARK, vec![wheel]));
                 }
             }
             _ => {}
@@ -1081,6 +1116,16 @@ impl WoodJoint {
                     from_a.push(cyl(p - n * OVER, 10.0 + OVER, 4.0)?);
                 }
             }
+            WoodJointKind::Caster => {
+                // its plate's four screws
+                let r = self.diameter / 2.0;
+                if r <= 0.0 || self.size <= self.diameter || c.a_size <= 12.0 || self.margin < 25.0 || 2.0 * self.margin >= c.length().min(c.width()) {
+                    return Err(bad());
+                }
+                for p in self.leg_points(c).into_iter().flat_map(caster_screws) {
+                    from_a.push(cyl(p - n * OVER, 12.0 + OVER, 1.5)?);
+                }
+            }
             WoodJointKind::TableTop => {
                 let r = self.diameter / 2.0;
                 if r <= 0.0 || c.width() < 16.0 || self.fastener_count() == 0 || !self.spots_fit(c, 0.0) || self.spots(c).iter().any(|&s| s - r < c.lo[c.along] || s + r > c.hi[c.along]) {
@@ -1119,7 +1164,7 @@ impl Model {
                 return Err(OpError::Invalid(tr!("joint-err-one-part")));
             }
             self.unique_parts(&[&p])?;
-            let c = face_contact(&self.unjoined(), &p, kind == WoodJointKind::Leg, false).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
+            let c = face_contact(&self.unjoined(), &p, kind.under(), false).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
             return self.push_wood_joint(WoodJoint::new(kind, p, Vec::new(), &c));
         }
         if p == q || self.part_def(&p).is_none() || self.part_def(&q).is_none() {

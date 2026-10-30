@@ -165,7 +165,7 @@ fn example_bookshelf_runs() {
 }
 
 #[test]
-fn example_nightstand_and_cabinet_run() {
+fn example_furniture_runs() {
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/nightstand.rhai"));
     assert_eq!(r.output, "Nightstand 450 x 400 x 640, 19 joints, 12 steps\n");
@@ -176,6 +176,12 @@ fn example_nightstand_and_cabinet_run() {
     assert_eq!(r.output, "Cabinet 800 x 450 x 1500, 17 joints, 8 steps\n");
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
+    let mut m = Model::new();
+    let r = go(&mut m, include_str!("../../../examples/scripts/mobile_pedestal.rhai"));
+    assert_eq!(r.output, "Mobile pedestal 600 x 450 x 806, 19 joints, 12 steps\n");
+    let plan = varstotas_kernel::cutlist::plan(&m);
+    assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
+    assert!(plan.hardware.iter().any(|h| h.name == "Swivel caster Ø50, height 70" && h.count == 4));
 }
 
 #[test]

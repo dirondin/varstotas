@@ -47,6 +47,7 @@ pub(crate) fn kind_name(k: WoodJointKind) -> String {
         WoodJointKind::Handle => "joinery-kind-handle",
         WoodJointKind::Knob => "joinery-kind-knob",
         WoodJointKind::Leg => "joinery-kind-leg",
+        WoodJointKind::Caster => "joinery-kind-caster",
         WoodJointKind::TableTop => "joinery-kind-table-top",
         WoodJointKind::Nails => "joinery-kind-nails",
     })
@@ -459,7 +460,7 @@ impl VarstotasApp {
                             mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 100.0);
                             ui.checkbox(&mut j.flip, tr!("joinery-flip-back"));
                         }
-                        WoodJointKind::Leg => {
+                        WoodJointKind::Leg | WoodJointKind::Caster => {
                             mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 300.0);
                             mm(ui, &tr!("joinery-height"), &mut j.size, unit, 2000.0);
                             len(ui, &tr!("joinery-margin"), &mut j.margin, unit, 0.0, 1000.0);

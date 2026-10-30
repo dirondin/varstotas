@@ -277,6 +277,13 @@ fn furniture_fittings() {
     assert_eq!(m.joint_contacts[k].unwrap().at, -18.0, "on the front face");
     let l = m.add_wood_joint(K::Leg, vec![shelf], vec![]).unwrap();
     assert_eq!((hw(&m, l), bodies(&m, l)), (("Leg, height 100".into(), 4), 4));
+    // or casters instead: a plate and fork, and a wheel, each; four screws per plate
+    m.remove_wood_joint(l);
+    let vs = volume(&m, shelf);
+    let w = m.add_wood_joint(K::Caster, vec![shelf], vec![]).unwrap();
+    assert_eq!((hw(&m, w), bodies(&m, w)), (("Swivel caster Ø50, height 70".into(), 4), 8));
+    assert_eq!(m.joints[w].holes(&m.joint_contacts[w].unwrap()).0.len(), 16);
+    assert!(volume(&m, shelf) < vs);
     assert!(m.add_wood_joint(K::Knob, vec![], vec![]).is_err());
     // a back panel nailed onto the side's back edge: nothing cut
     let back = board(&mut m, "Back", DVec3::new(600.0, 6.0, 800.0), DVec3::new(0.0, 300.0, 0.0));
