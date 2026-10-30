@@ -54,6 +54,11 @@ paint(drawer_parts.extract(0, 4), "Birch");
 paint(drawer_parts[4], "HDF");
 paint(drawer_parts[5], "Oak");
 
+// Edge banding (Window → Cut List): 1 mm on every edge of the boards that shows, priced per
+// metre
+cut_settings(#{ band: 1, band_price: 0.4 });
+band_visible();
+
 // What else to buy: the fittings come with their names, priced here
 cut_part("Confirmat Ø7 × 50", #{ price: 0.15 });
 cut_part("Shelf pin Ø5", #{ price: 0.1 });

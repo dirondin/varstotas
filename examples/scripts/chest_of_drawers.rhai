@@ -53,6 +53,11 @@ for dr in drawers {
     paint(dr[5], "Oak");
 }
 
+// Edge banding (Window → Cut List): 1 mm on every edge of the boards that shows, priced per
+// metre
+cut_settings(#{ band: 1, band_price: 0.4 });
+band_visible();
+
 // What else to buy: the fittings come with their names, priced here
 cut_part("Confirmat Ø7 × 50", #{ price: 0.15 });
 cut_part("Nail 1.6 × 20", #{ price: 0.02 });

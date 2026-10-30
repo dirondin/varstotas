@@ -544,6 +544,67 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
     out
 }
 
+/// The edges of each sheet part that nothing covers, as [`PartOptions::bands`] by part name (an
+/// edge visible on any copy counts): an edge is covered where other parts' faces lie on it
+/// (within 1 mm, as assembled) over at least half of it: a top on a side's top edge, a back on
+/// the back edges, an overlay door on the front edges, a shelf's ends against the sides. Parts
+/// thinner than 10 mm (backs, drawer bottoms), parts of board or linear stock and hardware are
+/// left out. The long edges are the faces across the part's width, the lower one first.
+pub fn visible_bands(model: &Model) -> BTreeMap<String, [bool; 4]> {
+    let parts = cut_parts(model);
+    let world = |path: &ContextPath| -> Option<(DVec3, DVec3)> {
+        let (&id, parent) = path.split_last()?;
+        let off = model.assembly_offset(path);
+        model.instance_world_bounds(parent, id).map(|b| (b.min - off, b.max - off))
+    };
+    let boxes: Vec<(&ContextPath, (DVec3, DVec3))> = parts.iter().flat_map(|p| p.paths.iter()).filter_map(|path| world(path).map(|b| (path, b))).collect();
+    let solid = |m: Option<MaterialId>| m.and_then(|m| model.materials.get(m)).is_some_and(|m| !m.stock.is_empty() && m.stock.iter().all(|s| s.kind != StockKind::Sheet));
+    let mut out: BTreeMap<String, [bool; 4]> = BTreeMap::new();
+    for p in &parts {
+        if p.size[2] < 10.0 || solid(p.material) || model.cut_list.options(&p.name).hardware {
+            continue;
+        }
+        let mut bands = [false; 4];
+        for path in &p.paths {
+            let Some((p0, p1)) = world(path) else { continue };
+            let s = p1 - p0;
+            let mut ax = [0, 1, 2];
+            ax.sort_by(|&x, &y| s[y].total_cmp(&s[x]));
+            // L1, L2 across the width; W1, W2 across the length
+            for (e, (a, hi)) in [(ax[1], false), (ax[1], true), (ax[0], false), (ax[0], true)].into_iter().enumerate() {
+                let at = if hi { p1[a] } else { p0[a] };
+                let (u, v) = ((a + 1) % 3, (a + 2) % 3);
+                let face = s[u] * s[v];
+                let covered: f64 = boxes
+                    .iter()
+                    .filter(|(q, (q0, q1))| *q != path && q0[a] - 1.0 <= at && at <= q1[a] + 1.0)
+                    .map(|(_, (q0, q1))| (q1[u].min(p1[u]) - q0[u].max(p0[u])).max(0.0) * (q1[v].min(p1[v]) - q0[v].max(p0[v])).max(0.0))
+                    .sum();
+                if face > 0.0 && covered < face * 0.5 {
+                    bands[e] = true;
+                }
+            }
+        }
+        if bands.iter().any(|&b| b) {
+            out.insert(p.name.clone(), bands);
+        }
+    }
+    out
+}
+
+impl Model {
+    /// Band the edges [`visible_bands`] finds, replacing the banded edges of those parts.
+    /// Returns how many part names were banded.
+    pub fn band_visible_edges(&mut self) -> usize {
+        let bands = visible_bands(self);
+        let n = bands.len();
+        for (name, b) in bands {
+            self.cut_list.parts.entry(name).or_default().bands = b;
+        }
+        n
+    }
+}
+
 type Drilled = Vec<(ContextPath, Vec<crate::joinery::Hole>)>;
 
 /// Every joint's holes by part, in world space.

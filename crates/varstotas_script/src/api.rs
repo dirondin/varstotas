@@ -23,7 +23,7 @@ pub const NAMES: &[&str] = &[
     "make_parametric", "set_params", "params", "dimension", "note", "enter", "exit", "faces", "edges", "groups", "all",
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
-    "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings",
+    "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings", "band_visible",
     "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "drawers", "suggest_steps", "assembly_steps",
     "set_assembly_steps", "assembly_view",
 ];
@@ -1763,6 +1763,7 @@ fn register_cut_list(e: &mut Engine) {
             None => err(tr!("script-err-cut-no-material", material = material.to_string())),
         })
     });
+    e.register_fn("band_visible", || -> R<i64> { edit(|st| Ok(st.model.band_visible_edges() as i64)) });
     e.register_fn("cut_settings", |m: Map| -> R<()> {
         edit(|st| {
             for (k, v) in &m {

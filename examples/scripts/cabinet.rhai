@@ -69,6 +69,11 @@ joint(part.call("Door L"), "handle", #{ size: 128, offset: door_w / 2 - 50 });
 joint(part.call("Door R"), "handle", #{ size: 128, offset: 50 - door_w / 2 });
 joint(part.call("Bottom"), "leg", #{ size: legs });
 
+// Edge banding (Window → Cut List): 1 mm on every edge of the boards that shows, priced per
+// metre
+cut_settings(#{ band: 1, band_price: 0.4 });
+band_visible();
+
 // What else to buy: the fittings come with their names, priced here
 cut_part("Cam lock Ø15 with bolt", #{ price: 0.35 });
 cut_part("Shelf pin Ø5", #{ price: 0.1 });

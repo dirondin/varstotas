@@ -475,3 +475,35 @@ fn hardware_is_bought_not_cut() {
     let back: Model = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
     assert_eq!(back.cut_list, m.cut_list);
 }
+
+#[test]
+fn visible_edges_are_banded() {
+    use varstotas_kernel::cutlist::visible_bands;
+    // a carcass: sides on the floor, the bottom between them, the top over them, a back behind
+    // (too thin to band), a shelf set back from it
+    let mut m = Model::new();
+    board(&mut m, "Side", 18.0, 400.0, 700.0, DVec3::ZERO, None);
+    board(&mut m, "Side", 18.0, 400.0, 700.0, DVec3::new(582.0, 0.0, 0.0), None);
+    board(&mut m, "Bottom", 564.0, 400.0, 18.0, DVec3::ZERO + DVec3::X * 18.0, None);
+    board(&mut m, "Top", 600.0, 400.0, 18.0, DVec3::new(0.0, 0.0, 700.0), None);
+    board(&mut m, "Back", 600.0, 4.0, 718.0, DVec3::new(0.0, 400.0, 0.0), None);
+    board(&mut m, "Shelf", 564.0, 380.0, 18.0, DVec3::new(18.0, 0.0, 300.0), None);
+    let b = visible_bands(&m);
+    // [long edges (lower, upper), short edges (lower, upper)]
+    assert_eq!(b["Side"], [true, false, true, false], "the front and the bottom end");
+    assert_eq!(b["Bottom"], [true, false, false, false], "the front");
+    assert_eq!(b["Top"], [true, false, true, true], "the front and both ends");
+    assert_eq!(b["Shelf"], [true, true, false, false], "the front and the back");
+    assert!(!b.contains_key("Back"));
+    // an overlay door hides the front edges and shows all of its own
+    let mut d = m.clone();
+    board(&mut d, "Door", 600.0, 18.0, 718.0, DVec3::new(0.0, -18.0, 0.0), None);
+    let b = visible_bands(&d);
+    assert_eq!((b["Side"], b["Top"], b["Door"]), ([false, false, true, false], [false, false, true, true], [true; 4]));
+    assert!(!b.contains_key("Bottom"));
+    // banding them: the cut list sums the edges
+    assert_eq!(m.band_visible_edges(), 4);
+    assert_eq!(m.cut_list.options("Shelf").bands, [true, true, false, false]);
+    let banded: f64 = plan(&m).banding.iter().map(|b| b.length).sum();
+    assert!((banded - (2.0 * (700.0 + 400.0) + 564.0 + 600.0 + 800.0 + 2.0 * 564.0)).abs() < 1e-6, "{banded}");
+}

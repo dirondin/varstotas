@@ -589,6 +589,15 @@ impl VarstotasApp {
             if ui.checkbox(&mut s.band_subtract, tr!("cutlist-band-subtract")).on_hover_text(tr!("cutlist-band-subtract-tip")).changed() {
                 changed = true;
             }
+            ui.add_space(8.0);
+            let r = ui.button(tr!("cutlist-band-visible"));
+            super::tray_lib::spot("cutlist:band_visible", r.rect.center());
+            if r.on_hover_text(tr!("cutlist-band-visible-tip")).clicked() {
+                for (name, b) in varstotas_kernel::cutlist::visible_bands(&self.doc.model) {
+                    s.parts.entry(name).or_default().bands = b;
+                }
+                changed = true;
+            }
         });
         if changed {
             self.cutlist.draft = Some(s);

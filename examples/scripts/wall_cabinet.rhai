@@ -52,6 +52,11 @@ for side in ["Side L", "Side R"] {
 joint(part.call("Flap"), part.call("Top"), "hinge");
 joint(part.call("Flap"), "handle", #{ size: 320, offset: 40 - h / 2 });
 
+// Edge banding (Window → Cut List): 1 mm on every edge of the boards that shows, priced per
+// metre
+cut_settings(#{ band: 1, band_price: 0.4 });
+band_visible();
+
 // What else to buy: the fittings come with their names, priced here
 cut_part("Confirmat Ø7 × 50", #{ price: 0.15 });
 cut_part("Shelf pin Ø5", #{ price: 0.1 });
