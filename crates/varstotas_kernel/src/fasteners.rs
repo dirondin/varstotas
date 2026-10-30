@@ -58,6 +58,32 @@ pub const PLASTIC: [f32; 4] = [0.93, 0.93, 0.9, 1.0];
 
 const SEGS: usize = 16;
 
+impl Fastener {
+    /// How far the exploded view pulls it out for `distance`: `pull` × the distance, but no
+    /// further than just clear of its hole (its own length along `out` and 10 mm), so that it
+    /// stays by the hole it goes into.
+    pub fn pulled(&self, distance: f64) -> f64 {
+        let along = |q: DVec3| q.dot(self.out);
+        let (lo, hi) = self.solids.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), s| {
+            let (a, b) = match *s {
+                Solid::Round { at, dir, len, r0, r1 } => {
+                    let r = r0.max(r1) * dir.cross(self.out).length();
+                    let (a, b) = (along(at), along(at + dir * len));
+                    (a.min(b) - r, a.max(b) + r)
+                }
+                Solid::Block { min, max } => {
+                    let c = along((min + max) * 0.5);
+                    let h = ((max - min) * 0.5).dot(self.out.abs());
+                    (c - h, c + h)
+                }
+            };
+            (lo.min(a), hi.max(b))
+        });
+        let clear = if hi >= lo { hi - lo + 10.0 } else { f64::INFINITY };
+        (self.pull * distance).min(clear)
+    }
+}
+
 /// Two unit vectors across `d`, with `u × v = d`.
 fn across(d: DVec3) -> (DVec3, DVec3) {
     let u = d.any_orthonormal_vector();
@@ -184,7 +210,7 @@ impl Model {
         if !self.path_shown(path) {
             return None;
         }
-        let pull = DMat4::from_translation(f.out * f.pull * self.assembly.explode);
+        let pull = DMat4::from_translation(f.out * f.pulled(self.assembly.explode));
         Some(self.transform_at(path) * local * pull)
     }
 

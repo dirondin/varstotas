@@ -210,9 +210,10 @@ impl Layout {
             .collect()
     }
 
-    /// Away from the parts in `from`; held on opposite sides, out along a free axis: away from
-    /// the middle when well off it (a back panel backwards), else to the front.
-    fn dir(&self, k: usize, from: &[(usize, DVec3)]) -> DVec3 {
+    /// Away from the parts in `from`; held on opposite sides, out along a free axis whose way
+    /// out passes no part `blocks` keeps: away from the middle when well off it (a back panel
+    /// backwards), else to the front, the back, up, down or sideways.
+    fn dir(&self, k: usize, from: &[(usize, DVec3)], blocks: impl Fn(usize) -> bool) -> DVec3 {
         let dir: DVec3 = from.iter().map(|f| f.1).sum();
         if dir.length() >= 0.5 {
             return dir.normalize();
@@ -222,17 +223,21 @@ impl Layout {
         let centre = (lo + hi) * 0.5;
         let mid = self.boxes[k].map_or(centre, |(l, h)| (l + h) * 0.5);
         let off = mid - centre;
+        if blocked == DVec3::ONE {
+            return off.normalize_or_zero();
+        }
         let away = DVec3::from_array(std::array::from_fn(|a| if blocked[a] == 0.0 && off[a].abs() > 0.15 * (hi - lo)[a] { off[a] } else { 0.0 }));
-        let d = if away.length() > 1e-6 {
-            away
-        } else if blocked.y == 0.0 {
-            DVec3::NEG_Y
-        } else if blocked == DVec3::ONE {
-            off
-        } else {
-            DVec3::ONE - blocked
+        let mut ways = vec![away.normalize_or_zero()];
+        ways.extend([DVec3::NEG_Y, DVec3::Y, DVec3::Z, DVec3::NEG_Z, DVec3::NEG_X, DVec3::X].into_iter().filter(|d| blocked.dot(d.abs()) == 0.0));
+        ways.retain(|d| *d != DVec3::ZERO);
+        // the first way out that sweeps through nothing, else the first
+        let reach = (hi - lo).length();
+        let clear = |d: DVec3| {
+            let Some((l, h)) = self.boxes[k] else { return true };
+            let (l, h) = (l.min(l + d * reach), h.max(h + d * reach));
+            (0..self.boxes.len()).filter(|&j| j != k && blocks(j)).all(|j| self.boxes[j].is_none_or(|b| !overlap((l, h), b, 0.0)))
         };
-        d.normalize_or_zero()
+        ways.iter().copied().find(|&d| clear(d)).or(ways.first().copied()).unwrap_or(DVec3::ONE - blocked).normalize_or_zero()
     }
 
     /// Each part's way out (unit) and the earlier parts it follows (with steps).
@@ -244,19 +249,26 @@ impl Layout {
                 Some(s) => {
                     let from = self.away(k, |o| self.step[o].is_some_and(|t| t < s));
                     let follow = from.iter().map(|f| f.0).collect();
-                    (if from.is_empty() { self.dir(k, &self.away(k, |_| true)) } else { self.dir(k, &from) }, follow)
+                    // past the parts in by its step
+                    let blocks = |o: usize| self.step[o].is_some_and(|t| t <= s);
+                    (if from.is_empty() { self.dir(k, &self.away(k, |_| true), blocks) } else { self.dir(k, &from, blocks) }, follow)
                 }
-                None => (self.dir(k, &self.away(k, |_| true)), Vec::new()),
+                None => (self.dir(k, &self.away(k, |_| true), |_| true), Vec::new()),
             })
             .collect()
     }
 }
 
+/// Whether two boxes come closer than `margin` on every axis.
+fn overlap(a: (DVec3, DVec3), b: (DVec3, DVec3), margin: f64) -> bool {
+    (0..3).all(|i| a.0[i] < b.1[i] + margin - 1e-6 && b.0[i] < a.1[i] + margin - 1e-6)
+}
+
 /// The way each part leaves the assembled model in the exploded view (unit vectors, world).
 /// Without steps: away from the parts it touches (a side away from the shelf, the top and
 /// bottom away from the sides); a part held on opposite sides (a shelf between two sides)
-/// slides out along a free axis, away from the middle (a back panel backwards) or else to the
-/// front. With steps: the base stays, and a part leaves the parts of earlier steps it touches.
+/// slides out along a free axis that passes no other part, away from the middle (a back panel
+/// backwards) or else to the front. With steps: the base stays, and a part leaves the parts of earlier steps it touches.
 pub fn explode_dirs(model: &Model) -> Vec<(ContextPath, DVec3)> {
     let l = layout(model);
     let plan = l.plan();
@@ -265,18 +277,38 @@ pub fn explode_dirs(model: &Model) -> Vec<(ContextPath, DVec3)> {
 
 /// The exploded view's offsets for `distance` (world, mm), from the assembled model: each part
 /// `distance` along [`explode_dirs`], with steps on top of where the earlier parts it touches
-/// went (so each step stands further out); all then lifted so that nothing goes below the
-/// model's bottom (the floor it stands on).
+/// went (so each step stands further out), and further along its way while it would run into a
+/// part placed before it (in step order, a tenth of `distance` clear); all then lifted so that
+/// nothing goes below the model's bottom (the floor it stands on).
 pub fn explode_offsets(model: &Model, distance: f64) -> Vec<(ContextPath, DVec3)> {
     let l = layout(model);
     let plan = l.plan();
     let mut off = vec![DVec3::ZERO; l.paths.len()];
     let mut order: Vec<usize> = (0..l.paths.len()).collect();
-    order.sort_by_key(|&k| l.step[k].unwrap_or(usize::MAX));
+    order.sort_by_key(|&k| (l.step[k].unwrap_or(usize::MAX), plan[k].0 != DVec3::ZERO));
+    let mut placed: Vec<usize> = Vec::new();
     for k in order {
         let (dir, follow) = &plan[k];
         let base = if follow.is_empty() { DVec3::ZERO } else { follow.iter().map(|&j| off[j]).sum::<DVec3>() / follow.len() as f64 };
         off[k] = base + *dir * distance;
+        // further out along its way while it runs into a part placed before it
+        let Some(b) = l.boxes[k] else { continue };
+        let margin = distance * 0.1;
+        for _ in 0..placed.len() + 1 {
+            let at = |j: usize, b: (DVec3, DVec3)| (b.0 + off[j], b.1 + off[j]);
+            // the parts it touches as assembled only must not go into it
+            let gap = |j: usize| if l.contacts.iter().any(|c| (c.0, c.1) == (j.min(k), j.max(k))) { 0.0 } else { margin };
+            let hit = placed.iter().filter_map(|&j| l.boxes[j].map(|o| (at(j, o), gap(j)))).find(|&(o, g)| overlap(at(k, b), o, g));
+            let (Some((o, margin)), false) = (hit, *dir == DVec3::ZERO) else { break };
+            let (lo, hi) = at(k, b);
+            // the least way along `dir` that clears it on one axis
+            let t = (0..3)
+                .filter(|&a| dir[a].abs() > 1e-9)
+                .map(|a| if dir[a] > 0.0 { (o.1[a] + margin - lo[a]) / dir[a] } else { (hi[a] + margin - o.0[a]) / -dir[a] })
+                .fold(f64::INFINITY, f64::min);
+            off[k] += *dir * t.max(1e-6);
+        }
+        placed.push(k);
     }
     let floor = l.boxes.iter().flatten().map(|b| b.0.z).fold(f64::INFINITY, f64::min);
     let low = l.boxes.iter().zip(&off).filter_map(|(b, o)| b.map(|b| b.0.z + o.z)).fold(f64::INFINITY, f64::min);

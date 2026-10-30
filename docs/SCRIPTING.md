@@ -168,7 +168,7 @@ in Window → Cut List, with diagrams and PDF / SVG / CSV export.
 
 The exploded view moves each part away from the parts it touches; with steps, the base stays
 and each part leaves the parts of earlier steps it touches, standing out from where they went.
-The whole is lifted so nothing goes below the floor. Joints and the cut list keep working from the assembled model while it is
+A part held on opposite sides (a shelf between two sides) slides out the way that passes no other part, a part that would run into one placed before it moves further out, and fasteners are pulled just clear of their holes. The whole is lifted so nothing goes below the floor. Joints and the cut list keep working from the assembled model while it is
 exploded. Window → Assembly does the same and writes the instructions booklet (PDF); from
 Python, `m.export(path, what="assembly")`.
 
