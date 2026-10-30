@@ -41,7 +41,7 @@
 
 use crate::fasteners::{Anchor, BRASS, DARK, Fastener, STEEL, Solid, WOOD, ZINC};
 use crate::model::{ContextPath, Model};
-use crate::ops::solid::mesh_boolean;
+use crate::ops::solid::{mesh_boolean, merge_tools};
 use crate::primitives::Primitive;
 use crate::{DefId, Mesh, OpError, OpResult};
 use glam::{DMat4, DQuat, DVec3};
@@ -1118,53 +1118,51 @@ impl Model {
             if self.part_def(&p).is_none() {
                 return Err(OpError::Invalid(tr!("joint-err-one-part")));
             }
-            self.restore_joint_bases();
-            if let Some((&id, parent)) = p.split_last()
-                && let Err(e) = self.make_unique(parent, id)
-            {
-                self.rebuild_wood_joints();
-                return Err(e);
-            }
-            let c = face_contact(self, &p, kind == WoodJointKind::Leg, false);
-            self.rebuild_wood_joints();
-            let c = c.ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
+            self.unique_parts(&[&p])?;
+            let c = face_contact(&self.unjoined(), &p, kind == WoodJointKind::Leg, false).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
             return self.push_wood_joint(WoodJoint::new(kind, p, Vec::new(), &c));
         }
         if p == q || self.part_def(&p).is_none() || self.part_def(&q).is_none() {
             return Err(OpError::Invalid(tr!("joint-err-two-parts")));
         }
-        self.restore_joint_bases();
-        let c = kind_contact(self, kind, &p, &q, false).ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")));
-        let c = match c {
-            Ok(c) => c,
-            Err(e) => {
-                self.rebuild_wood_joints();
-                return Err(e);
-            }
+        // sized from the parts before any joint was cut
+        let (a, b, c) = {
+            let m = self.unjoined();
+            let c = kind_contact(&m, kind, &p, &q, false).ok_or_else(|| OpError::Invalid(tr!("joint-err-no-contact")))?;
+            let (a, b) = if face_area(&m, &q, c.axis) <= face_area(&m, &p, c.axis) { (p, q) } else { (q, p) };
+            let c = kind_contact(&m, kind, &a, &b, false).unwrap_or(c);
+            (a, b, c)
         };
-        let (a, b) = if face_area(self, &q, c.axis) <= face_area(self, &p, c.axis) { (p, q) } else { (q, p) };
-        let c = kind_contact(self, kind, &a, &b, false).unwrap_or(c);
-        // a copy of a component would cut every copy: the joined ones get their own
-        for path in [&a, &b] {
+        self.unique_parts(&[&a, &b])?;
+        self.push_wood_joint(WoodJoint::new(kind, a, b, &c))
+    }
+
+    /// A copy of a component would cut every copy: the parts to join get their own definition,
+    /// from their shape before any joint, and the joints are cut again.
+    fn unique_parts(&mut self, paths: &[&ContextPath]) -> OpResult<()> {
+        let shared = |m: &Model, path: &ContextPath| path.split_last().is_some_and(|(&id, parent)| m.can_make_unique(parent, id));
+        if !paths.iter().any(|p| shared(self, p)) {
+            return Ok(());
+        }
+        self.restore_joint_bases();
+        let mut r = Ok(());
+        for path in paths {
             if let Some((&id, parent)) = path.split_last() {
-                self.make_unique(parent, id)?;
+                r = r.and_then(|_| self.make_unique(parent, id));
             }
         }
         self.rebuild_wood_joints();
-        self.push_wood_joint(WoodJoint::new(kind, a, b, &c))
+        r
     }
 
     /// Add joint `j` and cut everything again; taken back if it cannot be cut.
     pub(crate) fn push_wood_joint(&mut self, j: WoodJoint) -> OpResult<usize> {
+        // the joints before it are cut already, in order: cutting only the new one gives what
+        // a rebuild would (a joint that fails changes nothing)
+        self.cut_wood_joint(&j)?;
         self.joints.push(j);
-        let errors = self.rebuild_wood_joints();
-        let i = self.joints.len() - 1;
-        if let Some((_, e)) = errors.into_iter().find(|(k, _)| *k == i) {
-            self.joints.pop();
-            self.rebuild_wood_joints();
-            return Err(OpError::Invalid(e));
-        }
-        Ok(i)
+        self.refresh_fasteners();
+        Ok(self.joints.len() - 1)
     }
 
     /// Change joint `i` and cut everything again. On failure the joint stays as it was.
@@ -1258,7 +1256,7 @@ impl Model {
                 return Err(OpError::Invalid(tr!("joint-err-not-solid", name = self.defs[d].name.clone())));
             }
             for (tools, add) in ops {
-                for (t, txf) in tools {
+                for (t, txf) in &merge_tools(tools) {
                     mesh = mesh_boolean(&mesh, &xf, t, txf, add).ok_or_else(|| OpError::Invalid(tr!("joint-err-cut")))?;
                 }
             }

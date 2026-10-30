@@ -320,6 +320,46 @@ fn boolean(a: (&Mesh, &DMat4, Option<MaterialId>), b: (&Mesh, &DMat4, Option<Mat
     r
 }
 
+/// `tools` (solids placed by their transforms) as few solids as can be: those whose bounding
+/// boxes keep clear of each other go into one mesh (several shells, in world coordinates), so
+/// that cutting many holes takes one boolean instead of one each.
+pub(crate) fn merge_tools(tools: &[(Mesh, DMat4)]) -> Vec<(Mesh, DMat4)> {
+    let boxes: Vec<Option<(DVec3, DVec3)>> = tools
+        .iter()
+        .map(|(m, t)| {
+            let pts: Vec<DVec3> = m.vertices.values().map(|v| t.transform_point3(v.pos)).collect();
+            let lo = pts.iter().copied().reduce(DVec3::min)?;
+            let hi = pts.iter().copied().reduce(DVec3::max)?;
+            Some((lo, hi))
+        })
+        .collect();
+    let clear = |a: (DVec3, DVec3), b: (DVec3, DVec3)| (0..3).any(|k| a.1[k] + 1e-3 < b.0[k] || b.1[k] + 1e-3 < a.0[k]);
+    let mut groups: Vec<(Mesh, Vec<(DVec3, DVec3)>)> = Vec::new();
+    let mut out = Vec::new();
+    for ((m, t), b) in tools.iter().zip(boxes) {
+        let Some(b) = b else {
+            out.push((m.clone(), *t));
+            continue;
+        };
+        match groups.iter_mut().find(|(_, bs)| bs.iter().all(|x| clear(*x, b))) {
+            Some((g, bs)) => {
+                append(g, m, t, None);
+                bs.push(b);
+            }
+            None => {
+                let mut g = Mesh::new();
+                append(&mut g, m, t, None);
+                groups.push((g, vec![b]));
+            }
+        }
+    }
+    out.extend(groups.into_iter().map(|(mut g, _)| {
+        g.rebuild_caches();
+        (g, DMat4::IDENTITY)
+    }));
+    out
+}
+
 /// `mesh` placed by `xf` with the solid `tool` placed by `txf` added (`add`) or taken away, back
 /// in the mesh's own frame; `None` when the result is empty or `xf` cannot be inverted.
 pub(crate) fn mesh_boolean(mesh: &Mesh, xf: &DMat4, tool: &Mesh, txf: &DMat4, add: bool) -> Option<Mesh> {
