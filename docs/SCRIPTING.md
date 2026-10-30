@@ -135,8 +135,11 @@ Furniture hardware kinds: `"confirmat"` (`size`: the screw's length), `"cam_lock
 `diameter` of the cam, `size` from `a`'s face to its centre, `flip` puts it in `b`'s other face),
 `"shelf_pins"` (under `b`, `flip`: over it; `rows` of holes 32 mm apart above and below),
 `"hinge"` (cup hinges, `diameter` 35 and cup `depth`; overlay: the door is `a`, the side's edge
-on its back; `inset: true`: the door is `b`, between the sides; the count follows the door's
-height), `"slide"` (ball-bearing, the parts 12.7 mm apart; `size` 0: the longest standard length
+on its back, half overlay when it covers only part of that edge; `inset: true`: the door is `b`,
+between the sides; the count follows the door's height; `angle`: the angle it opens to, 110 unless
+set, in the hinge's name when not), `"gas_strut"` (holds a lift-up flap open: the flap `a`,
+hinged along its top and over the side's front edge, the side `b`; `size`: its force in newtons,
+about three times the flap's weight unless set; one each side), `"slide"` (ball-bearing, the parts 12.7 mm apart; `size` 0: the longest standard length
 that fits; `flip`: the front at the other end), `"table_top"` (figure 8 fasteners in the edge of
 an apron `b`, `flip`: the other side), `"nails"` (through a back panel `a`; `size`: the length),
 `"handle"` (`size`: centres), `"knob"`, `"leg"` (`size`: height, `diameter`, `margin` from the

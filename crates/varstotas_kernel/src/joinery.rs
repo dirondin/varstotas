@@ -23,7 +23,12 @@
 //!   15 mm cam in `b`'s face;
 //! - shelf pins: 5 mm holes in `a` just under `b`, optionally rows 32 mm apart above and below;
 //! - cup hinge: a 35 mm cup in the door, a plate on the side; overlay (the door is `a`, the
-//!   side's front edge on its back) or inset (the door is `b`, between the sides);
+//!   side's front edge on its back; half overlay when it covers only part of that edge, two
+//!   doors on a middle partition) or inset (the door is `b`, between the sides); the angle it
+//!   opens to (110° unless set);
+//! - gas strut: holds a lift-up flap (an overlay door `a`, hinged along its top) open, from a
+//!   bracket low on the inside of the side `b` to one high on the door's back; its force in
+//!   newtons, from the door's weight unless set;
 //! - ball-bearing slide: between a cabinet side `a` and a drawer side `b` 12.7 mm apart, the
 //!   longest standard length that fits;
 //! - handle, knob, legs, casters: on one part (`b` empty), on its front face (min y; `flip`: the back)
@@ -63,6 +68,8 @@ pub enum WoodJointKind {
     CamLock,
     ShelfPins,
     Hinge,
+    /// A gas strut holding a lift-up flap open.
+    GasStrut,
     Slide,
     Handle,
     Knob,
@@ -74,7 +81,7 @@ pub enum WoodJointKind {
 }
 
 impl WoodJointKind {
-    pub const ALL: [WoodJointKind; 18] = [
+    pub const ALL: [WoodJointKind; 19] = [
         WoodJointKind::Dowels,
         WoodJointKind::Screws,
         WoodJointKind::PocketHole,
@@ -86,6 +93,7 @@ impl WoodJointKind {
         WoodJointKind::CamLock,
         WoodJointKind::ShelfPins,
         WoodJointKind::Hinge,
+        WoodJointKind::GasStrut,
         WoodJointKind::Slide,
         WoodJointKind::TableTop,
         WoodJointKind::Nails,
@@ -118,7 +126,7 @@ impl WoodJointKind {
 
     /// Its fasteners are laid out along the joint (count, margin, pitch, distances).
     pub fn spaced(self) -> bool {
-        !matches!(self, WoodJointKind::Housing | WoodJointKind::MortiseTenon | WoodJointKind::BoxJoint | WoodJointKind::Dovetail | WoodJointKind::Slide | WoodJointKind::Leg | WoodJointKind::Caster)
+        !matches!(self, WoodJointKind::Housing | WoodJointKind::MortiseTenon | WoodJointKind::BoxJoint | WoodJointKind::Dovetail | WoodJointKind::Slide | WoodJointKind::GasStrut | WoodJointKind::Leg | WoodJointKind::Caster)
     }
 }
 
@@ -149,7 +157,8 @@ pub struct WoodJoint {
     pub through: bool,
     /// Gap around tenons, fingers and tails, and in housings.
     pub clearance: f64,
-    /// Dovetail slope, degrees from the joint's direction.
+    /// Dovetail slope, degrees from the joint's direction; the angle a cup hinge opens to
+    /// (0: 110°).
     pub angle: f64,
     /// Dovetail pins at their narrow end (on `a`'s outer face).
     pub pin: f64,
@@ -167,7 +176,8 @@ pub struct WoodJoint {
     /// Fasteners this far off the joint's middle, across it.
     pub offset: f64,
     /// Confirmat and nail length, cam lock bolt (`a`'s face to the cam's centre), handle
-    /// centres, slide length (0: the longest that fits), leg or caster height.
+    /// centres, slide length (0: the longest that fits), leg or caster height, gas strut force
+    /// (N).
     pub size: f64,
     /// Cup hinge on an inset door (`b`); else an overlay door (`a`).
     pub inset: bool,
@@ -196,9 +206,11 @@ pub struct Contact {
     /// The parts' sizes along the axis.
     pub a_size: f64,
     pub b_size: f64,
-    /// `a`'s bounding box.
+    /// `a`'s and `b`'s bounding boxes (`b`'s is `a`'s for a fitting on one part).
     pub a_min: DVec3,
     pub a_max: DVec3,
+    pub b_min: DVec3,
+    pub b_max: DVec3,
     /// How far apart the faces are (slides; 0 where they touch).
     pub gap: f64,
 }
@@ -289,7 +301,7 @@ pub fn contact_within(model: &Model, a: &[crate::InstanceId], b: &[crate::Instan
             let (mut lo, mut hi) = (lo, hi);
             (lo[axis], hi[axis]) = (at, at);
             let (along, across) = if hi[u] - lo[u] >= hi[v] - lo[v] { (u, v) } else { (v, u) };
-            let c = Contact { axis, at, into_a, lo, hi, along, across, a_size: a1[axis] - a0[axis], b_size: b1[axis] - b0[axis], a_min: a0, a_max: a1, gap: apart.max(0.0) };
+            let c = Contact { axis, at, into_a, lo, hi, along, across, a_size: a1[axis] - a0[axis], b_size: b1[axis] - b0[axis], a_min: a0, a_max: a1, b_min: b0, b_max: b1, gap: apart.max(0.0) };
             let area = c.length() * c.width();
             if best.as_ref().is_none_or(|(x, _)| area > *x) {
                 best = Some((area, c));
@@ -328,7 +340,7 @@ fn face_contact(model: &Model, a: &[crate::InstanceId], leg: bool, back: bool) -
     let (mut lo, mut hi) = (a0, a1);
     (lo[axis], hi[axis]) = (at, at);
     let (along, across) = if s[u] >= s[v] { (u, v) } else { (v, u) };
-    Some(Contact { axis, at, into_a, lo, hi, along, across, a_size: s[axis], b_size: 0.0, a_min: a0, a_max: a1, gap: 0.0 })
+    Some(Contact { axis, at, into_a, lo, hi, along, across, a_size: s[axis], b_size: 0.0, a_min: a0, a_max: a1, b_min: a0, b_max: a1, gap: 0.0 })
 }
 
 /// Slides are found between faces this far apart.
@@ -338,8 +350,13 @@ pub const SLIDE_GAP: f64 = 12.7;
 const SLIDE_GAP_TOL: f64 = 0.8;
 /// Ball-bearing slide lengths on sale.
 pub const SLIDE_LENGTHS: [f64; 9] = [250.0, 300.0, 350.0, 400.0, 450.0, 500.0, 550.0, 600.0, 650.0];
-/// Cup hinges: the cup's centre from the door's edge.
+/// Cup hinges: the cup's centre from the door's edge; the angle they open to unless set.
 const CUP_FROM_EDGE: f64 = 22.5;
+pub const HINGE_ANGLE: f64 = 110.0;
+/// Gas struts: the tube's and the rod's radii, how far in from the side's face the strut runs.
+const STRUT_TUBE: f64 = 9.0;
+const STRUT_ROD: f64 = 4.0;
+const STRUT_IN: f64 = 14.0;
 
 /// Where joint `j`'s parts touch (fittings on one part: the face they go on).
 pub fn joint_contact(model: &Model, j: &WoodJoint) -> Option<Contact> {
@@ -445,6 +462,14 @@ impl WoodJoint {
                     _ => 5,
                 };
                 j.margin = 100.0_f64.min(len / 5.0);
+                j.angle = HINGE_ANGLE;
+            }
+            WoodJointKind::GasStrut => {
+                // one each side: about three times the door's weight, in tens of newtons
+                let s = c.a_max - c.a_min;
+                let kg = s.x * s.y * s.z * 0.7e-6;
+                j.count = 1;
+                j.size = ((kg * 9.81 * 3.0 / 10.0).ceil() * 10.0).clamp(50.0, 250.0);
             }
             WoodJointKind::Slide => j.count = 1,
             WoodJointKind::Handle => {
@@ -498,7 +523,18 @@ impl WoodJoint {
             WoodJointKind::Confirmat => Some((tr!("joint-hw-confirmat", diameter = d, length = num(self.size)), self.fastener_count())),
             WoodJointKind::CamLock => Some((tr!("joint-hw-cam-lock", diameter = d), self.fastener_count())),
             WoodJointKind::ShelfPins => Some((tr!("joint-hw-shelf-pin", diameter = d), self.fastener_count())),
-            WoodJointKind::Hinge => Some((if self.inset { tr!("joint-hw-hinge-inset", diameter = d) } else { tr!("joint-hw-hinge-overlay", diameter = d) }, self.fastener_count())),
+            WoodJointKind::Hinge => {
+                let half = !self.inset && c.is_some_and(|c| c.width() + 1.0 < c.b_max[c.across] - c.b_min[c.across]);
+                let name = match (self.inset, half) {
+                    (true, _) => tr!("joint-hw-hinge-inset", diameter = d),
+                    (false, true) => tr!("joint-hw-hinge-half", diameter = d),
+                    (false, false) => tr!("joint-hw-hinge-overlay", diameter = d),
+                };
+                let angle = self.hinge_angle();
+                let name = if (angle - HINGE_ANGLE).abs() < 0.5 { name } else { tr!("joint-hw-hinge-angle", hinge = name, angle = num(angle)) };
+                Some((name, self.fastener_count()))
+            }
+            WoodJointKind::GasStrut => Some((tr!("joint-hw-gas-strut", force = num(self.size)), 1)),
             WoodJointKind::Slide => Some((tr!("joint-hw-slide", length = num(c.and_then(|c| self.slide_length(c)).unwrap_or(self.size))), 1)),
             WoodJointKind::Handle => Some((tr!("joint-hw-handle", length = num(self.size)), self.fastener_count())),
             WoodJointKind::Knob => Some((tr!("joint-hw-knob", diameter = d), self.fastener_count())),
@@ -516,6 +552,34 @@ impl WoodJoint {
             return (self.size <= c.length() + 1e-6).then_some(self.size);
         }
         SLIDE_LENGTHS.iter().rev().copied().find(|l| *l <= c.length() + 1e-6)
+    }
+
+    /// The angle a cup hinge opens to.
+    pub fn hinge_angle(&self) -> f64 {
+        if self.angle > 0.0 { self.angle } else { HINGE_ANGLE }
+    }
+
+    /// A gas strut's ends, its bracket on the side `b` and on the door `a` (on the strut's
+    /// line, `STRUT_IN` in from the side's inner face), and the way from the side into the
+    /// carcass. The contact is the door's back on the side's front edge: the door's height
+    /// along it, the side's thickness across; the side bracket a third up the edge and about
+    /// a third of its height back (shelves set back clear it), the door's a third down from
+    /// its top.
+    fn strut(&self, c: &Contact) -> (DVec3, DVec3, DVec3) {
+        let n = c.normal();
+        let door_mid = (c.a_min[c.across] + c.a_max[c.across]) * 0.5;
+        let inward = if door_mid >= (c.lo[c.across] + c.hi[c.across]) * 0.5 { 1.0 } else { -1.0 };
+        let face = if inward > 0.0 { c.hi[c.across] } else { c.lo[c.across] };
+        let (lo, hi) = (c.lo[c.along], c.hi[c.along]);
+        let l = hi - lo;
+        let side_depth = (c.b_max - c.b_min)[c.axis];
+        let mut p = c.lo;
+        p[c.across] = face + inward * STRUT_IN;
+        let (mut side, mut door) = (p, p);
+        side[c.along] = lo + l * 0.3;
+        door[c.along] = hi - l * 0.3;
+        let back = (l * 0.35).min(side_depth - 40.0).max(40.0);
+        (side - n * back, door - n * 12.0, unit(c.across, inward))
     }
 
     /// The door of a cup hinge is `a` (overlay) or `b` (inset).
@@ -596,6 +660,20 @@ impl WoodJoint {
         out
     }
 
+    /// A gas strut's bracket screws: two in the door's back, two in the side's inner face.
+    fn strut_screws(&self, c: &Contact) -> (Vec<DVec3>, Vec<DVec3>) {
+        let (side, door, inward) = self.strut(c);
+        let n = c.normal();
+        let up = unit(c.along, 1.0);
+        let on_door = |p: DVec3| {
+            let mut q = p;
+            q[c.axis] = c.at;
+            q
+        };
+        let on_side = |p: DVec3| p - inward * STRUT_IN;
+        (vec![on_door(door - up * 12.0), on_door(door + up * 12.0)], vec![on_side(side - n * 12.0), on_side(side + n * 12.0)])
+    }
+
     /// A handle's two screw points about `e`, or a knob's one.
     fn handle_points(&self, c: &Contact, e: DVec3) -> Vec<DVec3> {
         if self.kind == WoodJointKind::Knob {
@@ -651,6 +729,12 @@ impl WoodJoint {
             }
         }
         match self.kind {
+            WoodJointKind::GasStrut => {
+                let (sa, sb) = self.strut_screws(c);
+                a.extend(sa.into_iter().map(|p| (p, n, 3.0)));
+                let (_, _, inward) = self.strut(c);
+                b.extend(sb.into_iter().map(|p| (p, -inward, 3.0)));
+            }
             WoodJointKind::ShelfPins => a.extend(self.pin_holes(c).into_iter().map(|p| (p, n, self.diameter))),
             WoodJointKind::Leg => a.extend(self.leg_points(c).into_iter().map(|p| (p, n, 8.0))),
             WoodJointKind::Caster => a.extend(self.leg_points(c).into_iter().flat_map(caster_screws).map(|p| (p, n, 3.0))),
@@ -797,6 +881,21 @@ impl WoodJoint {
             }
         }
         match self.kind {
+            WoodJointKind::GasStrut => {
+                // the tube from the side's bracket, the rod on to the door's; brackets on both
+                let (side, door, inward) = self.strut(c);
+                let d = door - side;
+                let (len, dir) = (d.length(), d.normalize_or_zero());
+                let tube = Solid::Round { at: side, dir, len: len * 0.55, r0: STRUT_TUBE, r1: STRUT_TUBE };
+                let rod = Solid::Round { at: side + dir * len * 0.55, dir, len: len * 0.45, r0: STRUT_ROD, r1: STRUT_ROD };
+                let (n, up) = (c.normal(), unit(c.along, 1.0));
+                let side_bracket = block(side - inward * STRUT_IN - n * 20.0 - up * 10.0, side + n * 20.0 + up * 10.0 - inward * 4.0);
+                let mut q = door;
+                q[c.axis] = c.at;
+                let door_bracket = block(q - up * 20.0 - inward * 10.0, door + up * 20.0 + inward * 10.0 + n * 0.0);
+                out.push(body(Anchor::B, DVec3::ZERO, 0.0, DARK, vec![tube, side_bracket]));
+                out.push(body(Anchor::A, DVec3::ZERO, 0.0, STEEL, vec![rod, door_bracket]));
+            }
             WoodJointKind::Slide => {
                 if let Some(len) = self.slide_length(c) {
                     // the cabinet member on a, the drawer member on b, the front flush
@@ -1087,6 +1186,22 @@ impl WoodJoint {
                     let (p, dir) = self.hinge_cup(c, s);
                     let cup = cyl_to(p - dir * OVER, dir, self.depth + OVER, r)?;
                     if self.door_is_a() { &mut from_a } else { &mut from_b }.push(cup);
+                }
+            }
+            WoodJointKind::GasStrut => {
+                // an overlay door (its back on the side's edge) tall enough, a side deep enough
+                let door = c.a_max - c.a_min;
+                let thin = door[c.axis] <= door[c.along].min(door[c.across]);
+                if self.size <= 0.0 || !thin || c.length() < 150.0 || (c.b_max - c.b_min)[c.axis] < 100.0 {
+                    return Err(OpError::Invalid(tr!("joint-err-gas-strut")));
+                }
+                let (sa, sb) = self.strut_screws(c);
+                let (_, _, inward) = self.strut(c);
+                for p in sa {
+                    from_a.push(cyl(p - n * OVER, 10.0 + OVER, 1.5)?);
+                }
+                for p in sb {
+                    from_b.push(cyl_to(p + inward * OVER, -inward, 10.0 + OVER, 1.5)?);
                 }
             }
             WoodJointKind::Slide => {

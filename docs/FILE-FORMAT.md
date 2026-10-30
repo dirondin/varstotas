@@ -49,7 +49,7 @@ thickness, default 1 mm; `bands` the banded edges, omitted when none; `hardware`
 `price` each rather than cut; `extras` is hardware listed by hand). A sheet (track D) optionally stores `cut_diagrams`:
 `[{ "min", "size", "page" }]`, a page of the cut list fitted into that rectangle. The model optionally
 stores `joints`: `[{ "kind": "Dowels" | "Screws" | "PocketHole" | "Housing" | "MortiseTenon" | "BoxJoint" |
-"Dovetail" | "Confirmat" | "CamLock" | "ShelfPins" | "Hinge" | "Slide" | "Handle" | "Knob" | "Leg" | "Caster" |
+"Dovetail" | "Confirmat" | "CamLock" | "ShelfPins" | "Hinge" | "GasStrut" | "Slide" | "Handle" | "Knob" | "Leg" | "Caster" |
 "TableTop" | "Nails", "a", "b", "count", "diameter", "depth", "depth_b", "thickness", "shoulder", "through",
 "clearance", "angle", "pin", "flip", "margin", "pitch", "at", "offset", "size", "inset", "rows" }]`
 (`a` and `b` are instance paths, `b` the part whose end meets `a`, empty for a handle, knob,

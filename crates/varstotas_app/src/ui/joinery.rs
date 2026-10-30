@@ -43,6 +43,7 @@ pub(crate) fn kind_name(k: WoodJointKind) -> String {
         WoodJointKind::CamLock => "joinery-kind-cam-lock",
         WoodJointKind::ShelfPins => "joinery-kind-shelf-pins",
         WoodJointKind::Hinge => "joinery-kind-hinge",
+        WoodJointKind::GasStrut => "joinery-kind-gas-strut",
         WoodJointKind::Slide => "joinery-kind-slide",
         WoodJointKind::Handle => "joinery-kind-handle",
         WoodJointKind::Knob => "joinery-kind-knob",
@@ -446,6 +447,15 @@ impl VarstotasApp {
                             mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 60.0);
                             mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 30.0);
                             ui.checkbox(&mut j.inset, tr!("joinery-inset")).on_hover_text(tr!("joinery-inset-tip"));
+                            let mut a = j.hinge_angle();
+                            ui.label(tr!("joinery-opens")).on_hover_text(tr!("joinery-opens-tip"));
+                            if ui.add(egui::DragValue::new(&mut a).range(90.0..=180.0).speed(0.5).max_decimals(0).suffix("°")).changed() {
+                                j.angle = a;
+                            }
+                        }
+                        WoodJointKind::GasStrut => {
+                            ui.label(tr!("joinery-force")).on_hover_text(tr!("joinery-force-tip"));
+                            ui.add(egui::DragValue::new(&mut j.size).range(10.0..=1000.0).speed(1.0).max_decimals(0).suffix(" N"));
                         }
                         WoodJointKind::Slide => {
                             len(ui, &tr!("joinery-length"), &mut j.size, unit, 0.0, 2000.0).on_hover_text(tr!("joinery-length-auto-tip"));

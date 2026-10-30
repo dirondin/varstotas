@@ -30,4 +30,7 @@ expect model_faces=1738
 open ../../examples/demos/mobile_pedestal.vrst
 wait 5
 expect model_faces=1648
+open ../../examples/demos/wall_cabinet.vrst
+wait 5
+expect model_faces=844
 quit

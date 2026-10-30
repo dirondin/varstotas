@@ -182,6 +182,12 @@ fn example_furniture_runs() {
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
     assert!(plan.hardware.iter().any(|h| h.name == "Swivel caster Ø50, height 70" && h.count == 4));
+    let mut m = Model::new();
+    let r = go(&mut m, include_str!("../../../examples/scripts/wall_cabinet.rhai"));
+    assert_eq!(r.output, "Wall cabinet 600 x 320 x 400, 12 joints, 7 steps\n");
+    let plan = varstotas_kernel::cutlist::plan(&m);
+    assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
+    assert!(plan.hardware.iter().any(|h| h.name == "Gas strut 90 N" && h.count == 2));
 }
 
 #[test]

@@ -1833,7 +1833,7 @@ fn register_cut_list(e: &mut Engine) {
     });
 }
 
-const JOINT_KINDS: [(&str, WoodJointKind); 18] = [
+const JOINT_KINDS: [(&str, WoodJointKind); 19] = [
     ("dowels", WoodJointKind::Dowels),
     ("screws", WoodJointKind::Screws),
     ("pocket", WoodJointKind::PocketHole),
@@ -1845,6 +1845,7 @@ const JOINT_KINDS: [(&str, WoodJointKind); 18] = [
     ("cam_lock", WoodJointKind::CamLock),
     ("shelf_pins", WoodJointKind::ShelfPins),
     ("hinge", WoodJointKind::Hinge),
+    ("gas_strut", WoodJointKind::GasStrut),
     ("slide", WoodJointKind::Slide),
     ("table_top", WoodJointKind::TableTop),
     ("nails", WoodJointKind::Nails),

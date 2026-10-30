@@ -271,6 +271,27 @@ fn furniture_fittings() {
     let c = m.joint_contacts[h].unwrap();
     assert_eq!(m.joints[h].holes(&c).0[0].0.x, 22.5);
     assert!(volume(&m, door) < vd);
+    // opening right back, said in its name
+    let mut j = m.joints[h].clone();
+    j.angle = 165.0;
+    m.set_wood_joint(h, j).unwrap();
+    assert_eq!(hw(&m, h).0, "Cup hinge Ø35, overlay, 165°");
+    // a gas strut from inside the side to the door's back, about three times its weight;
+    // the tube with the side, the rod with the door, two screws in each
+    let (vs, vd) = (volume(&m, side), volume(&m, door));
+    let g = m.add_wood_joint(K::GasStrut, vec![door], vec![side]).unwrap();
+    assert_eq!(m.joints[g].a, vec![door]);
+    assert_eq!((hw(&m, g), bodies(&m, g)), (("Gas strut 180 N".into(), 1), 2));
+    let (ha, hb) = m.joints[g].holes(&m.joint_contacts[g].unwrap());
+    assert_eq!((ha.len(), hb.len()), (2, 2));
+    assert!(hb.iter().all(|h| h.0.x == 18.0 && h.1 == DVec3::NEG_X), "into the side's inner face");
+    assert!(volume(&m, side) < vs && volume(&m, door) < vd);
+    m.remove_wood_joint(g);
+    // a door over half the side's edge: half overlay hinges
+    let (mut m2, side2, _) = cabinet();
+    let door2 = board(&mut m2, "Door", DVec3::new(591.0, 18.0, 800.0), DVec3::new(9.0, -18.0, 0.0));
+    let h2 = m2.add_wood_joint(K::Hinge, vec![side2], vec![door2]).unwrap();
+    assert_eq!(hw(&m2, h2).0, "Cup hinge Ø35, half overlay");
     // a handle on the door's front, the longest that fits; legs under the shelf
     let k = m.add_wood_joint(K::Handle, vec![door], vec![]).unwrap();
     assert_eq!((hw(&m, k), m.joints[k].b.len()), (("Handle, centres 192".into(), 1), 0));
