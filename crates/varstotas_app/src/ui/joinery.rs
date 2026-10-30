@@ -209,11 +209,20 @@ impl VarstotasApp {
         self.doc.try_commit(&tr!("joinery-undo-add"), move |m| m.add_wood_joint(kind, p, q));
     }
 
+    /// The joints listed in the window: those in the open group or component (or the model),
+    /// its own and those of the groups and components in it, each once (a component's joint
+    /// once for all its copies).
+    fn listed_joints(&self) -> Vec<usize> {
+        let m = &self.doc.model;
+        let mut seen = std::collections::HashSet::new();
+        m.joint_places.iter().enumerate().filter(|(_, p)| p.prefix.starts_with(&self.doc.active_path) && seen.insert((p.def, p.index))).map(|(i, _)| i).collect()
+    }
+
     /// The joints for the debug dump: (kind, b, a, hardware).
     pub(crate) fn joints_dump(&self) -> Vec<(String, String, String, String)> {
         let m = &self.doc.model;
         let name = |p: &[InstanceId]| if p.is_empty() { String::new() } else { part_name(m, p) };
-        m.joints
+        m.placed_joints
             .iter()
             .enumerate()
             .map(|(i, j)| (format!("{:?}", j.kind), name(&j.b), name(&j.a), j.hardware(m.joint_contacts.get(i).copied().flatten().as_ref()).map(|(n, c)| format!("{c} × {n}")).unwrap_or_default()))
@@ -227,7 +236,7 @@ impl VarstotasApp {
             return;
         }
         let m = &self.doc.model;
-        for (i, (j, c)) in m.joints.iter().zip(&m.joint_contacts).enumerate() {
+        for (i, (j, c)) in m.placed_joints.iter().zip(&m.joint_contacts).enumerate() {
             let Some(c) = c else { continue };
             // with part a, wherever the exploded view put it
             let off = m.assembly_offset(&j.a);
@@ -296,7 +305,7 @@ impl VarstotasApp {
     /// Where each joint's fasteners are, from its start (whole mm), for the debug dump.
     pub(crate) fn joint_points_dump(&self) -> Vec<Vec<i64>> {
         let m = &self.doc.model;
-        m.joints.iter().zip(&m.joint_contacts).map(|(j, c)| c.map(|c| j.positions(&c).iter().map(|p| p.round() as i64).collect()).unwrap_or_default()).collect()
+        m.placed_joints.iter().zip(&m.joint_contacts).map(|(j, c)| c.map(|c| j.positions(&c).iter().map(|p| p.round() as i64).collect()).unwrap_or_default()).collect()
     }
 
     fn select_joint_parts(&mut self, j: &WoodJoint) {
@@ -522,7 +531,8 @@ impl VarstotasApp {
     }
 
     fn joinery_list_ui(&mut self, ui: &mut Ui) {
-        if self.doc.model.joints.is_empty() {
+        let listed = self.listed_joints();
+        if listed.is_empty() {
             ui.label(RichText::new(tr!("joinery-none")).color(theme::text_dim()));
             return;
         }
@@ -538,10 +548,10 @@ impl VarstotasApp {
             ui.label(RichText::new(format!("⚠ {}", tr!("joinery-warnings", count = flagged.to_string()))).color(theme::warning())).on_hover_text(tr!("joinery-warnings-tip"));
         }
         egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-            for i in 0..self.doc.model.joints.len() {
+            for &i in &listed {
                 let mut j = match &self.joinery.draft {
                     Some((k, d)) if *k == i => d.clone(),
-                    _ => self.doc.model.joints[i].clone(),
+                    _ => self.doc.model.placed_joints[i].clone(),
                 };
                 let before = j.clone();
                 let picked = self.joinery.selected == Some(i);
@@ -700,7 +710,7 @@ impl VarstotasApp {
         let released = !ui.ctx().input(|i| i.pointer.any_down()) && !ui.ctx().memory(|m| m.focused().is_some());
         if released
             && let Some((i, j)) = self.joinery.draft.take()
-            && self.doc.model.joints.get(i).is_some_and(|o| *o != j)
+            && self.doc.model.placed_joints.get(i).is_some_and(|o| *o != j)
         {
             self.doc.try_commit(&tr!("joinery-undo-edit"), move |m| m.set_wood_joint(i, j));
         }
@@ -718,7 +728,7 @@ impl VarstotasApp {
         }
         if let Some(i) = swap {
             self.joinery.draft = None;
-            let mut j = self.doc.model.joints[i].clone();
+            let mut j = self.doc.model.placed_joints[i].clone();
             std::mem::swap(&mut j.a, &mut j.b);
             self.doc.try_commit(&tr!("joinery-undo-edit"), move |m| m.set_wood_joint(i, j));
         }

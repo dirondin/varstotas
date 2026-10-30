@@ -36,7 +36,7 @@ impl JointPointsTool {
 
     /// The joint, where its parts touch and where the joint lies now (with part a, exploded).
     fn joint<'a>(&self, m: &'a Model) -> Option<(&'a WoodJoint, Contact, DVec3)> {
-        let j = m.joints.get(self.joint)?;
+        let j = m.placed_joints.get(self.joint)?;
         let c = (*m.joint_contacts.get(self.joint)?)?;
         Some((j, c, m.assembly_offset(&j.a)))
     }
@@ -85,7 +85,7 @@ impl JointPointsTool {
     }
 
     fn commit(&mut self, ctx: &mut ToolContext, mut at: Vec<f64>, label: &str) -> bool {
-        let Some(mut j) = ctx.doc.model.joints.get(self.joint).cloned() else { return false };
+        let Some(mut j) = ctx.doc.model.placed_joints.get(self.joint).cloned() else { return false };
         at.sort_by(f64::total_cmp);
         j.count = at.len();
         j.at = at;

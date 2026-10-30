@@ -1426,6 +1426,45 @@ impl WoodJoint {
     }
 }
 
+/// What holds a path: a joint of a definition (the root's too), or an assembly step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Held {
+    Joint(DefId),
+    Step,
+}
+
+/// A held path that goes through an instance being moved ([`Model::paths_through`]).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PathAt {
+    held: Held,
+    index: usize,
+    part: usize,
+    at: usize,
+}
+
+/// Where a placed joint ([`Model::placed_joints`]) comes from: joint `index` of definition
+/// `def` (the root's: of [`Model::joints`]), its parts' paths under the instance path `prefix`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JointPlace {
+    pub def: DefId,
+    pub index: usize,
+    pub prefix: ContextPath,
+}
+
+impl WoodJoint {
+    /// The joint with its parts' paths under `prefix`.
+    pub fn under(&self, prefix: &[crate::InstanceId]) -> WoodJoint {
+        let put = |p: &ContextPath| if p.is_empty() { Vec::new() } else { prefix.iter().chain(p).copied().collect() };
+        WoodJoint { a: put(&self.a), b: put(&self.b), ..self.clone() }
+    }
+
+    /// The joint with `prefix` taken off its parts' paths; `None` when a part is not under it.
+    pub fn from_under(&self, prefix: &[crate::InstanceId]) -> Option<WoodJoint> {
+        let take = |p: &ContextPath| if p.is_empty() { Some(Vec::new()) } else { p.strip_prefix(prefix).filter(|r| !r.is_empty()).map(|r| r.to_vec()) };
+        Some(WoodJoint { a: take(&self.a)?, b: take(&self.b)?, ..self.clone() })
+    }
+}
+
 impl Model {
     /// The definition of the part at `path`.
     fn part_def(&self, path: &[crate::InstanceId]) -> Option<DefId> {
@@ -1433,14 +1472,56 @@ impl Model {
         Some(self.mesh_at(parent)?.instances.get(id)?.def)
     }
 
+    /// The joints of definition `d`, their paths from its content (the root's: [`Model::joints`]).
+    pub fn joints_of(&self, d: DefId) -> &[WoodJoint] {
+        if d == self.root { &self.joints } else { self.defs.get(d).map_or(&[], |x| x.joints.as_slice()) }
+    }
+
+    fn joints_of_mut(&mut self, d: DefId) -> Option<&mut Vec<WoodJoint>> {
+        if d == self.root { Some(&mut self.joints) } else { self.defs.get_mut(d).map(|x| &mut x.joints) }
+    }
+
+    /// Every joint as placed: the root's, then for each group or component instance (depth
+    /// first) its definition's joints under its path.
+    pub fn collect_joint_places(&self) -> Vec<JointPlace> {
+        fn walk(m: &Model, d: DefId, path: &mut ContextPath, out: &mut Vec<JointPlace>) {
+            let Some(def) = m.defs.get(d) else { return };
+            for (id, inst) in &def.mesh.instances {
+                path.push(id);
+                let n = m.defs.get(inst.def).map_or(0, |x| x.joints.len());
+                out.extend((0..n).map(|index| JointPlace { def: inst.def, index, prefix: path.clone() }));
+                walk(m, inst.def, path, out);
+                path.pop();
+            }
+        }
+        let mut out: Vec<JointPlace> = (0..self.joints.len()).map(|index| JointPlace { def: self.root, index, prefix: Vec::new() }).collect();
+        walk(self, self.root, &mut Vec::new(), &mut out);
+        out
+    }
+
+    /// The joint at `place`, its paths from the root.
+    fn placed_at(&self, place: &JointPlace) -> Option<WoodJoint> {
+        Some(self.joints_of(place.def).get(place.index)?.under(&place.prefix))
+    }
+
+    /// Bring [`Model::placed_joints`] and the fasteners up to date when copies of joined groups
+    /// or components came or went, or their joints changed (after any edit).
+    pub fn sync_joints(&mut self) {
+        let places = self.collect_joint_places();
+        let joints: Vec<WoodJoint> = places.iter().filter_map(|p| self.placed_at(p)).collect();
+        if places != self.joint_places || joints != self.placed_joints {
+            self.refresh_fasteners();
+        }
+    }
+
     /// Each joint's warnings ([`WoodJoint::warnings`]), and holes of two joints that meet in a
     /// part (two shelves' dowels from either side of a partition, a confirmat across a dowel).
     pub fn joint_warnings(&self) -> Vec<Vec<String>> {
-        let mut out: Vec<Vec<String>> = self.joints.iter().enumerate().map(|(i, j)| self.joint_contacts.get(i).copied().flatten().map(|c| j.warnings(&c)).unwrap_or_default()).collect();
+        let mut out: Vec<Vec<String>> = self.placed_joints.iter().enumerate().map(|(i, j)| self.joint_contacts.get(i).copied().flatten().map(|c| j.warnings(&c)).unwrap_or_default()).collect();
         // the holes in each part: (joint, start, end, radius)
         type Segments = Vec<(usize, DVec3, DVec3, f64)>;
         let mut parts: Vec<(&ContextPath, Segments)> = Vec::new();
-        for (i, j) in self.joints.iter().enumerate() {
+        for (i, j) in self.placed_joints.iter().enumerate() {
             let Some(c) = self.joint_contacts.get(i).copied().flatten() else { continue };
             let (a, b) = j.bores(&c);
             for (path, bores) in [(&j.a, a), (&j.b, b)] {
@@ -1513,31 +1594,195 @@ impl Model {
         r
     }
 
-    /// Add joint `j` and cut everything again; taken back if it cannot be cut.
+    /// Add joint `j` (its paths from the root) and cut it; taken back if it cannot be cut. It
+    /// goes into the definition of [`Model::joint_context`] when both its parts are inside it,
+    /// else into the root's. Returns its index in [`Model::placed_joints`].
     pub(crate) fn push_wood_joint(&mut self, j: WoodJoint) -> OpResult<usize> {
         // the joints before it are cut already, in order: cutting only the new one gives what
         // a rebuild would (a joint that fails changes nothing)
         self.cut_wood_joint(&j)?;
-        self.joints.push(j);
+        let ctx = self.joint_context.clone();
+        let owner = if ctx.is_empty() { None } else { self.def_at(&ctx).zip(j.from_under(&ctx)) };
+        let place = match owner {
+            Some((d, rel)) => {
+                let list = self.joints_of_mut(d).ok_or(OpError::NotFound)?;
+                list.push(rel);
+                JointPlace { def: d, index: list.len() - 1, prefix: ctx }
+            }
+            None => {
+                self.joints.push(j);
+                JointPlace { def: self.root, index: self.joints.len() - 1, prefix: Vec::new() }
+            }
+        };
         self.refresh_fasteners();
-        Ok(self.joints.len() - 1)
+        self.joint_places.iter().position(|p| *p == place).ok_or(OpError::NotFound)
     }
 
-    /// Change joint `i` and cut everything again. On failure the joint stays as it was.
+    /// Every path held by a joint (its owner, index, part: 0 `a`, 1 `b`) or an assembly step
+    /// (owner the root; index the step's, part the path's in it) that goes through instance
+    /// `id` of definition `pd` for an `id` of `ids`, with where in the path that instance is.
+    pub(crate) fn paths_through(&self, pd: DefId, ids: &[crate::InstanceId]) -> Vec<PathAt> {
+        let through = |owner: DefId, path: &[crate::InstanceId]| {
+            let mut d = owner;
+            for (k, id) in path.iter().enumerate() {
+                if d == pd && ids.contains(id) {
+                    return Some(k);
+                }
+                d = self.defs.get(d)?.mesh.instances.get(*id)?.def;
+            }
+            None
+        };
+        let mut out = Vec::new();
+        let owners = std::iter::once(self.root).chain(self.defs.keys().filter(|d| *d != self.root));
+        for owner in owners {
+            for (i, j) in self.joints_of(owner).iter().enumerate() {
+                for (part, path) in [&j.a, &j.b].into_iter().enumerate() {
+                    if let Some(at) = through(owner, path) {
+                        out.push(PathAt { held: Held::Joint(owner), index: i, part, at });
+                    }
+                }
+            }
+        }
+        for (i, st) in self.assembly.steps.iter().enumerate() {
+            for (part, path) in st.parts.iter().enumerate() {
+                if let Some(at) = through(self.root, path) {
+                    out.push(PathAt { held: Held::Step, index: i, part, at });
+                }
+            }
+        }
+        out
+    }
+
+    /// Give each path of `at` (from [`Model::paths_through`] before a change) its new tail:
+    /// `tail(the path from the instance on)`.
+    pub(crate) fn reroute_paths(&mut self, at: &[PathAt], tail: impl Fn(&[crate::InstanceId]) -> ContextPath) {
+        for h in at {
+            let path = match h.held {
+                Held::Joint(owner) => self.joints_of_mut(owner).and_then(|l| l.get_mut(h.index)).map(|j| if h.part == 0 { &mut j.a } else { &mut j.b }),
+                Held::Step => self.assembly.steps.get_mut(h.index).and_then(|s| s.parts.get_mut(h.part)),
+            };
+            if let Some(path) = path
+                && h.at < path.len()
+            {
+                let new = tail(&path[h.at..]);
+                path.truncate(h.at);
+                path.extend(new);
+            }
+        }
+    }
+
+    /// Instances `moved` of definition `pd` went into the new group or component `group` (an
+    /// instance of `pd`, its definition `nd`) as `map` says: paths through them go through the
+    /// group now, and `pd`'s own joints between them go with them into `nd`.
+    pub(crate) fn joints_into_group(&mut self, at: &[PathAt], pd: DefId, group: crate::InstanceId, nd: DefId, map: &[(crate::InstanceId, crate::InstanceId)]) {
+        let new_id = |id: crate::InstanceId| map.iter().find(|(o, _)| *o == id).map_or(id, |(_, n)| *n);
+        self.reroute_paths(at, |p| std::iter::once(group).chain(std::iter::once(new_id(p[0]))).chain(p[1..].iter().copied()).collect());
+        // pd's joints with every part in the group now belong to it
+        let inside = |j: &WoodJoint| [&j.a, &j.b].into_iter().all(|p| p.is_empty() || (p.len() > 1 && p[0] == group));
+        let own = self.joints_of(pd).to_vec();
+        let mut gone: Vec<usize> = Vec::new();
+        for (i, j) in own.iter().enumerate() {
+            if !j.a.is_empty() && inside(j)
+                && let Some(rel) = j.from_under(&[group])
+            {
+                self.defs[nd].joints.push(rel);
+                gone.push(i);
+            }
+        }
+        for &i in gone.iter().rev() {
+            if let Some(l) = self.joints_of_mut(pd) {
+                l.remove(i);
+            }
+            if pd == self.root {
+                for s in &mut self.assembly.steps {
+                    s.joints.retain(|&j| j != i);
+                    s.joints.iter_mut().filter(|j| **j > i).for_each(|j| *j -= 1);
+                }
+            }
+        }
+    }
+
+    /// A group or component of definition `pd` (its definition `cd`) was exploded, its
+    /// instances now in `pd` as `map` says: paths through it go to them directly, and `cd`'s
+    /// joints come into `pd`.
+    pub(crate) fn joints_out_of_group(&mut self, at: &[PathAt], pd: DefId, cd: DefId, map: &[(crate::InstanceId, crate::InstanceId)]) {
+        let new_id = |id: crate::InstanceId| map.iter().find(|(o, _)| *o == id).map(|(_, n)| *n);
+        // [inst, child, rest] -> [child', rest]; a path ending at the group keeps it (gone now)
+        self.reroute_paths(at, |p| match p.get(1).and_then(|c| new_id(*c)) {
+            Some(n) => std::iter::once(n).chain(p[2..].iter().copied()).collect(),
+            None => p.to_vec(),
+        });
+        let lifted: Vec<WoodJoint> = self.joints_of(cd).iter().filter_map(|j| {
+            let re = |p: &ContextPath| if p.is_empty() { Some(Vec::new()) } else { new_id(p[0]).map(|n| std::iter::once(n).chain(p[1..].iter().copied()).collect()) };
+            Some(WoodJoint { a: re(&j.a)?, b: re(&j.b)?, ..j.clone() })
+        }).collect();
+        if let Some(l) = self.joints_of_mut(pd) {
+            l.extend(lifted);
+        }
+    }
+
+    /// A copy `d` of a definition with joints gets its own copies of the parts they join (and of
+    /// the groups on the way to them), so that its joints and the original's do not both cut
+    /// one part; the copies keep their geometry from before the joints.
+    pub(crate) fn own_joined_parts(&mut self, d: DefId) {
+        let mut copied: std::collections::HashMap<DefId, DefId> = std::collections::HashMap::new();
+        let paths: Vec<ContextPath> = self.joints_of(d).iter().flat_map(|j| [j.a.clone(), j.b.clone()]).filter(|p| !p.is_empty()).collect();
+        for path in paths {
+            let mut cur = d;
+            for id in path {
+                let Some(child) = self.defs.get(cur).and_then(|x| x.mesh.instances.get(id)).map(|i| i.def) else { break };
+                let own = match copied.get(&child) {
+                    Some(&n) => n,
+                    None if copied.values().any(|&n| n == child) => child,
+                    None => {
+                        let n = self.defs.insert(self.defs[child].clone());
+                        if let Some(base) = self.joint_bases.iter().find(|(x, _)| *x == child).map(|b| b.1.clone()) {
+                            self.joint_bases.push((n, base));
+                        }
+                        copied.insert(child, n);
+                        n
+                    }
+                };
+                if let Some(inst) = self.defs.get_mut(cur).and_then(|x| x.mesh.instances.get_mut(id)) {
+                    inst.def = own;
+                }
+                cur = own;
+            }
+        }
+    }
+
+    /// Where placed joint `i` comes from (as the model is now).
+    fn joint_place(&self, i: usize) -> OpResult<JointPlace> {
+        self.collect_joint_places().into_iter().nth(i).ok_or(OpError::NotFound)
+    }
+
+    /// Change placed joint `i` (`j` with its paths from the root; a group's or component's
+    /// joint changes in every copy) and cut everything again. On failure the joint stays as it
+    /// was.
     pub fn set_wood_joint(&mut self, i: usize, j: WoodJoint) -> OpResult<()> {
-        let old = self.joints.get(i).cloned().ok_or(OpError::NotFound)?;
-        self.joints[i] = j;
-        if let Some((_, e)) = self.rebuild_wood_joints().into_iter().find(|(k, _)| *k == i) {
-            self.joints[i] = old;
+        let place = self.joint_place(i)?;
+        let rel = j.from_under(&place.prefix).ok_or_else(|| OpError::Invalid(tr!("joint-err-two-parts")))?;
+        let slot = self.joints_of_mut(place.def).and_then(|l| l.get_mut(place.index)).ok_or(OpError::NotFound)?;
+        let old = std::mem::replace(slot, rel);
+        let failed = |m: &Model, errors: Vec<(usize, String)>| {
+            let places = m.collect_joint_places();
+            errors.into_iter().find(|(k, _)| places.get(*k).is_some_and(|p| p.def == place.def && p.index == place.index)).map(|e| e.1)
+        };
+        let errors = self.rebuild_wood_joints();
+        if let Some(e) = failed(self, errors) {
+            if let Some(slot) = self.joints_of_mut(place.def).and_then(|l| l.get_mut(place.index)) {
+                *slot = old;
+            }
             self.rebuild_wood_joints();
             return Err(OpError::Invalid(e));
         }
         Ok(())
     }
 
-    /// Make joint `i` a joint of `kind`, with the sizes [`WoodJoint::new`] picks for it.
+    /// Make placed joint `i` a joint of `kind`, with the sizes [`WoodJoint::new`] picks for it.
     pub fn set_wood_joint_kind(&mut self, i: usize, kind: WoodJointKind) -> OpResult<()> {
-        let old = self.joints.get(i).cloned().ok_or(OpError::NotFound)?;
+        let place = self.joint_place(i)?;
+        let old = self.placed_at(&place).ok_or(OpError::NotFound)?;
         if kind.single() != old.kind.single() {
             return Err(OpError::Invalid(tr!(if kind.single() { "joint-err-one-part" } else { "joint-err-two-parts" })));
         }
@@ -1548,9 +1793,18 @@ impl Model {
         self.set_wood_joint(i, WoodJoint::new(kind, old.a, old.b, &c))
     }
 
-    /// Delete joint `i`; parts left in no joint get their geometry back, assembly steps forget
-    /// it (a fastener step left empty goes).
+    /// Delete placed joint `i` (a group's or component's from every copy); parts left in no
+    /// joint get their geometry back, assembly steps forget it (a fastener step left empty
+    /// goes).
     pub fn remove_wood_joint(&mut self, i: usize) {
+        let Ok(place) = self.joint_place(i) else { return };
+        if place.def != self.root {
+            if let Some(l) = self.joints_of_mut(place.def).filter(|l| place.index < l.len()) {
+                l.remove(place.index);
+            }
+            self.rebuild_wood_joints();
+            return;
+        }
         if i < self.joints.len() {
             self.joints.remove(i);
             for s in &mut self.assembly.steps {
@@ -1581,18 +1835,26 @@ impl Model {
         }
     }
 
-    /// Restore the joined parts and cut every joint again in order. Returns the joints that
-    /// could not be cut (index, why); they leave their parts as they were.
+    /// Restore the joined parts and cut every joint again in order: the root's, then each
+    /// group's or component's once, where it is first placed (its copies share the parts).
+    /// Returns the joints that could not be cut (index in [`Model::placed_joints`], why); they
+    /// leave their parts as they were.
     pub fn rebuild_wood_joints(&mut self) -> Vec<(usize, String)> {
         self.restore_joint_bases();
         let mut errors = Vec::new();
-        for i in 0..self.joints.len() {
-            let j = self.joints[i].clone();
+        let places = self.collect_joint_places();
+        let mut done = std::collections::HashSet::new();
+        let mut used = Vec::new();
+        for (k, p) in places.iter().enumerate() {
+            let Some(j) = self.placed_at(p) else { continue };
+            used.extend([self.part_def(&j.a), self.part_def(&j.b)].into_iter().flatten());
+            if !done.insert((p.def, p.index)) {
+                continue;
+            }
             if let Err(e) = self.cut_wood_joint(&j) {
-                errors.push((i, e.to_string()));
+                errors.push((k, e.to_string()));
             }
         }
-        let used: Vec<DefId> = self.joints.iter().flat_map(|j| [self.part_def(&j.a), self.part_def(&j.b)]).flatten().collect();
         self.joint_bases.retain(|(d, _)| used.contains(d) && self.defs.contains_key(*d));
         self.refresh_fasteners();
         errors

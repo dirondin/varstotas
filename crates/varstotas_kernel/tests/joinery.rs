@@ -569,3 +569,80 @@ fn joints_that_are_likely_mistakes_are_flagged() {
     m.set_wood_joint(h, j).unwrap();
     assert!(m.joint_warnings()[h].iter().any(|s| s.contains("800 mm tall wants 2 hinges")), "{:?}", m.joint_warnings()[h]);
 }
+
+#[test]
+fn joints_go_with_their_groups_and_components() {
+    use varstotas_kernel::EntityRef;
+    let (mut m, side, shelf) = cabinet();
+    let raw = volume(&m, shelf);
+    m.add_wood_joint(WoodJointKind::Confirmat, vec![side], vec![shelf]).unwrap();
+    let n = m.fasteners.len();
+    assert!(n > 0);
+    let cut = volume(&m, shelf);
+    assert!(cut < raw);
+
+    // made into a component, the joint goes into it, its paths from the component's content
+    let unit = m.make_component(&[], &[EntityRef::Instance(side), EntityRef::Instance(shelf)], "Unit").unwrap();
+    m.sync_joints();
+    let d = m.root_mesh().instances[unit].def;
+    assert!(m.joints.is_empty());
+    assert_eq!(m.defs[d].joints.len(), 1);
+    assert_eq!(m.defs[d].joints[0].a.len(), 1);
+    assert_eq!(m.placed_joints.len(), 1);
+    assert_eq!(m.placed_joints[0].a[0], unit);
+    assert_eq!(m.fasteners.len(), n);
+
+    // a second copy brings its fasteners and hardware; the parts are cut once and shared
+    let second = varstotas_kernel::Instance { transform: DMat4::from_translation(DVec3::new(1000.0, 0.0, 0.0)), ..m.root_mesh().instances[unit].clone() };
+    let copy = m.root_mesh_mut().instances.insert(second);
+    m.sync_joints();
+    assert_eq!(m.placed_joints.len(), 2);
+    assert_eq!(m.fasteners.len(), 2 * n);
+    let confirmats = |m: &Model| varstotas_kernel::cutlist::plan(m).hardware.iter().filter(|h| h.name.contains("Confirmat")).map(|h| h.count).sum::<usize>();
+    let one = m.placed_joints[0].fastener_count();
+    assert_eq!(confirmats(&m), 2 * one);
+    assert!(m.rebuild_wood_joints().is_empty());
+    let shelf_def = |m: &Model, inst: InstanceId| {
+        let ud = m.root_mesh().instances[inst].def;
+        let s = m.defs[ud].mesh.instances.values().find(|i| i.name == "Shelf").unwrap().def;
+        (s, m.defs[s].mesh.volume())
+    };
+    assert_eq!(shelf_def(&m, unit).0, shelf_def(&m, copy).0);
+    assert!((shelf_def(&m, copy).1 - cut).abs() < 1e-6);
+
+    // a joint changed in one copy changes in both
+    let mut j = m.placed_joints[1].clone();
+    j.count = 3;
+    m.set_wood_joint(1, j).unwrap();
+    assert_eq!(m.placed_joints[0].count, 3);
+
+    // made unique, the copy gets parts of its own, still cut once
+    m.make_unique(&[], copy).unwrap();
+    assert!(m.rebuild_wood_joints().is_empty());
+    assert_ne!(shelf_def(&m, unit).0, shelf_def(&m, copy).0);
+    assert!((shelf_def(&m, copy).1 - shelf_def(&m, unit).1).abs() < 1e-6);
+    assert!(shelf_def(&m, copy).1 < raw);
+
+    // exploded, its joint comes back to the root
+    m.explode(&[], unit).unwrap();
+    m.sync_joints();
+    assert_eq!(m.joints.len(), 1);
+    assert_eq!(m.joints[0].a.len(), 1);
+    assert_eq!(m.placed_joints.len(), 2);
+    assert_eq!(m.fasteners.len(), 2 * m.fasteners.iter().filter(|f| f.joint == 0).count());
+    assert!(m.rebuild_wood_joints().is_empty());
+
+    // built elsewhere (a generator's model) and grafted in, the joints come along
+    let (mut src, s2, h2) = cabinet();
+    src.add_wood_joint(WoodJointKind::Dowels, vec![s2], vec![h2]).unwrap();
+    let mut g = Model::new();
+    let gi = g.add_group_mesh(&[], varstotas_kernel::Mesh::new(), "Gen", DMat4::IDENTITY).unwrap();
+    let gd = g.root_mesh().instances[gi].def;
+    g.graft_content(gd, &src);
+    g.sync_joints();
+    assert_eq!(g.placed_joints.len(), 1);
+    assert_eq!(g.fasteners.len(), src.fasteners.len());
+    assert!(g.rebuild_wood_joints().is_empty());
+    let gs = g.defs[gd].mesh.instances.values().find(|i| i.name == "Shelf").unwrap().def;
+    assert!((g.defs[gs].mesh.volume() - src.defs[src.root_mesh().instances[h2].def].mesh.volume()).abs() < 1e-6);
+}

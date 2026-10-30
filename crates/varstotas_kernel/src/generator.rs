@@ -675,6 +675,17 @@ impl Model {
         let mesh = g.mesh(src, self, src.root_mesh().clone());
         if let Some(d) = self.defs.get_mut(into) {
             d.mesh = mesh;
+            // the joints come along (the instances keep their ids), with the parts' geometry
+            // from before them
+            d.joints = src.joints.clone();
+        }
+        self.joint_bases.retain(|(d, _)| !old.contains(d));
+        for (sd, base) in &src.joint_bases {
+            if let Some(&nd) = g.defs.get(sd) {
+                let mut base = base.clone();
+                g.restyle(src, self, &mut base);
+                self.joint_bases.push((nd, base));
+            }
         }
         self.remove_unused(old);
     }

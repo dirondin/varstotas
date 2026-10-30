@@ -130,6 +130,7 @@ fn definition(name: String, mesh: Mesh) -> Definition {
         rig: None,
         rigged: None,
         preview: None,
+        joints: Vec::new(),
     }
 }
 fn insert_part(

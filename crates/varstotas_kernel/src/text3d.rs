@@ -92,7 +92,7 @@ impl Model {
             return Err(OpError::Invalid(tr!("kernel-err-no-outlines")));
         }
         // i18n-ignore-next
-        let def = self.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+        let def = self.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
         let inst = Instance {
             def,
             transform: self.transform_at(path).inverse() * *xf,

@@ -316,7 +316,7 @@ impl Model {
             source: m.source.clone(),
             rig: None,
             rigged: Some(Rigged { master, values, paint: None }),
-            preview: None,
+            preview: None, joints: Vec::new(),
         };
         let v = self.defs.insert(def);
         self.pose_rig(v, master, ops);

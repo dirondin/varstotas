@@ -79,7 +79,7 @@ Entities (faces, edges, groups) are "references". After operations that merge or
 | `make_parametric(g)` | make a parametric group |
 | `set_params(g, #{ x: 1200, y: (), z: 36, count: 3, axis: "y", gap: 100, stretch: true })` | parameters (any subset of keys; `()` = "as modelled") |
 | `params(g)` | the current parameters (map) or `()`; for a generated component — the values of its generator |
-| `add_generator(src)`, `generators()` | add or update a generator from source (returns the name), the document's generator names |
+| `add_generator(src)`, `generators()` | add or update a generator from source (returns the name), the document's generator names. The joints its `build` makes (`joint`, `drawers`, `doors`, `back`, `plinth`) come with every component it builds: each copy has their fasteners and hardware |
 | `generate(name, at)`, `generate(name, at, #{ width: 1200 })` | place the generator's component at a point |
 | `set_params(g, #{ shelves: 5 })`, `reset_params(g)` | change the values of a generated component (some of the keys) or return the defaults; see `docs/GENERATORS.md` |
 

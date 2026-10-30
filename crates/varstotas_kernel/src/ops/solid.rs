@@ -433,7 +433,7 @@ impl Model {
             }
             r.rebuild_caches();
             // i18n-ignore-next
-            let def = self.defs.insert(Definition { name: "Group".into(), mesh: r, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+            let def = self.defs.insert(Definition { name: "Group".into(), mesh: r, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
             let inst = Instance { def, transform: tb, name: ib.name.clone(), material: None, tag: ib.tag, hidden: false, locked: false };
             out.push(self.defs[pd].mesh.instances.insert(inst));
         }

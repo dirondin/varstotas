@@ -1,0 +1,27 @@
+# A generated component is built on joints: the Cabinet generator (Examples) placed twice with
+# real clicks; each copy has its carcass's confirmats, the drawer's slides and the doors' hinges
+# (Joinery lists them once for both, the cut list counts both copies' hardware).
+wait 10
+view iso
+action components
+wait 40
+action generator Cabinet
+wait 3
+rawp click 0 0 0
+wait 5
+action generator Cabinet
+wait 3
+rawp click 1000 0 0
+wait 5
+expect gen_defs=1
+tool select
+zoom_extents
+wait 10
+action joinery
+wait 10
+expect ("Hinge", "Side L", "Door", "2 × Cup hinge Ø35, overlay")
+screenshot shots/generator_joints.bmp
+action cut_list
+wait 10
+expect ("Cup hinge Ø35, overlay", 8,
+quit

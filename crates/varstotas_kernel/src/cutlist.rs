@@ -535,7 +535,7 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
     }
     let mut out = Vec::new();
     walk(model, model.root, &mut Vec::new(), None, &mut out);
-    if !model.joints.is_empty() {
+    if !model.placed_joints.is_empty() {
         let drilled = joint_holes(model);
         for p in &mut out {
             p.holes = p.paths.iter().map(|path| face_holes(model, path, &drilled)).find(|h| !h.is_empty()).unwrap_or_default();
@@ -610,7 +610,7 @@ type Drilled = Vec<(ContextPath, Vec<crate::joinery::Hole>)>;
 /// Every joint's holes by part, in world space.
 fn joint_holes(model: &Model) -> Drilled {
     let mut out: Drilled = Vec::new();
-    for j in &model.joints {
+    for j in &model.placed_joints {
         let Some(c) = crate::joinery::joint_contact(model, j) else { continue };
         let (a, b) = j.holes(&c);
         for (path, h) in [(&j.a, a), (&j.b, b)] {
@@ -1158,7 +1158,7 @@ pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSetting
         }
     }
     // dowels and screws of the joints, priced by name like hardware parts
-    for j in &model.joints {
+    for j in &model.placed_joints {
         let c = crate::joinery::joint_contact(model, j);
         if let Some((name, count)) = j.hardware(c.as_ref()) {
             match hardware.iter_mut().find(|h| h.name == name && h.extra.is_none()) {

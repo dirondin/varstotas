@@ -83,7 +83,7 @@ pub(crate) fn step_parts(model: &Model, plan: &CutPlan, step: &Step) -> Vec<Stri
 /// The hardware a step uses: the joints given to it, and those whose later part it adds.
 pub(crate) fn step_hardware(model: &Model, step: usize) -> Vec<String> {
     let mut by: Vec<(String, usize)> = Vec::new();
-    for (i, j) in model.joints.iter().enumerate() {
+    for (i, j) in model.placed_joints.iter().enumerate() {
         if model.fastener_step(i) != Some(step) {
             continue;
         }

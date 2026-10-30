@@ -160,11 +160,13 @@ impl Model {
     /// Place the fasteners of every joint again (from the parts as they were before any joint
     /// was cut, as assembled).
     pub fn refresh_fasteners(&mut self) {
+        self.joint_places = self.collect_joint_places();
+        self.placed_joints = self.joint_places.iter().filter_map(|p| Some(self.joints_of(p.def).get(p.index)?.under(&p.prefix))).collect();
         let (fasteners, contacts) = {
             let m = self.unjoined();
             let mut fasteners = Vec::new();
             let mut contacts = Vec::new();
-            for (i, j) in m.joints.iter().enumerate() {
+            for (i, j) in m.placed_joints.iter().enumerate() {
                 let c = crate::joinery::joint_contact(&m, j);
                 if let Some(c) = &c {
                     let (la, lb) = (m.assembled_transform(&j.a).inverse(), if j.b.is_empty() { DMat4::IDENTITY } else { m.assembled_transform(&j.b).inverse() });
@@ -182,7 +184,7 @@ impl Model {
 
     /// The part fastener `f` moves with.
     pub fn fastener_anchor(&self, f: &Fastener) -> Option<(&ContextPath, DMat4)> {
-        let j = self.joints.get(f.joint)?;
+        let j = self.placed_joints.get(f.joint)?;
         let use_a = match f.anchor {
             Anchor::A => true,
             Anchor::B => j.b.is_empty(),

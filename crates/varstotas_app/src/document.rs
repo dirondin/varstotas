@@ -195,6 +195,8 @@ impl Document {
     /// if `f` panics the model is restored, nothing is recorded and `None` is returned.
     pub fn commit<R>(&mut self, label: &str, f: impl FnOnce(&mut Model) -> R) -> Option<R> {
         let before = self.model.clone();
+        // joints made in an open group or component go into it
+        self.model.joint_context = self.active_path.clone();
         match guarded(|| f(&mut self.model)) {
             Ok(r) => {
                 self.rig_hook();
@@ -238,6 +240,7 @@ impl Document {
         changed: impl FnOnce(&R) -> bool,
     ) -> Option<R> {
         let before = self.model.clone();
+        self.model.joint_context = self.active_path.clone();
         match guarded(|| f(&mut self.model)) {
             Ok(Ok(r)) if !changed(&r) => {
                 self.model = before;
@@ -327,6 +330,8 @@ impl Document {
     }
 
     fn after_change(&mut self) {
+        // copies of joined groups and components bring their fasteners
+        self.model.sync_joints();
         self.dirty = true;
         self.model_version = next_model_version();
         self.prune_selection();

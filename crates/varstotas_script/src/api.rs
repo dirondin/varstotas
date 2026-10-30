@@ -498,7 +498,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         source: None,
         rig: None,
         rigged: None,
-        preview: None,
+        preview: None, joints: Vec::new(),
     });
     let m = mesh_mut(st, &path)?;
     let id = m.instances.insert(Instance {
@@ -2253,7 +2253,7 @@ fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {
         };
         let i = op(st.model.add_wood_joint(kind, pa, pb))?;
         if !m.is_empty() {
-            let mut j = st.model.joints[i].clone();
+            let mut j = st.model.placed_joints[i].clone();
             joint_params(&mut j, m)?;
             j.kind = kind;
             if let Err(e) = st.model.set_wood_joint(i, j) {

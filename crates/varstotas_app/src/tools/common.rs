@@ -1123,7 +1123,7 @@ mod tests {
     fn dense_nested_models_have_complete_transform_and_clipboard_previews() {
         use varstotas_kernel::{Definition,Edge,Vertex,Instance};
         let mut model=varstotas_kernel::Model::new();
-        let empty=||Definition{name:String::new(),mesh:varstotas_kernel::Mesh::new(),is_group:true,guides:Default::default(),params:None,generated:None,source:None,rig:None,rigged:None,preview:None};
+        let empty=||Definition{name:String::new(),mesh:varstotas_kernel::Mesh::new(),is_group:true,guides:Default::default(),params:None,generated:None,source:None,rig:None,rigged:None,preview:None,joints:Vec::new()};
         let mut def=empty();
         let count=21_001;
         for i in 0..count {

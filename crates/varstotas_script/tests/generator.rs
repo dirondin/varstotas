@@ -269,8 +269,8 @@ fn bundled_generators_build() {
     let cases: &[(&str, &[(&str, GenValue)])] = &[
         (SHELF, &[("shelves", GenValue::Num(6.0))]),
         (STAIR, &[("risers", GenValue::Bool(false)), ("height", GenValue::Num(1200.0))]),
-        (CABINET, &[("doors", GenValue::Num(1.0)), ("hinge", GenValue::Text("right".into())), ("open", GenValue::Num(60.0)), ("drawers", GenValue::Num(2.0))]),
-        (CABINET, &[("doors", GenValue::Num(3.0)), ("open", GenValue::Num(90.0)), ("handles", GenValue::Bool(false))]),
+        (CABINET, &[("doors", GenValue::Num(1.0)), ("front", GenValue::Text("inset".into())), ("drawers", GenValue::Num(2.0))]),
+        (CABINET, &[("doors", GenValue::Num(0.0)), ("drawers", GenValue::Num(4.0)), ("push", GenValue::Bool(true)), ("back", GenValue::Bool(false))]),
         (RAILING, &[("infill", GenValue::Text("bars".into())), ("length", GenValue::Num(5200.0))]),
         (RAILING, &[("infill", GenValue::Text("none".into())), ("bottom_rail", GenValue::Bool(false))]),
         (TABLE, &[("legs", GenValue::Text("round".into())), ("apron", GenValue::Bool(false))]),
@@ -312,4 +312,38 @@ fn removing_a_generator_keeps_plain_components() {
     assert!(m.defs[def_of(&m, a)].generated.is_none());
     assert_eq!(m.root_mesh().instances.len(), 2);
     assert_eq!(m.generator_uses("Shelf"), 0);
+}
+
+#[test]
+fn a_generated_cabinet_is_built_on_joints() {
+    let mut m = Model::new();
+    let name = generator::add(&mut m, CABINET).unwrap();
+    let a = generator::place(&mut m, &[], &name, &GenValues::new(), DMat4::IDENTITY).unwrap();
+    m.sync_joints();
+    let d = def_of(&m, a);
+    let own = m.defs[d].joints.len();
+    assert!(own > 20, "{own} joints");
+    assert!(m.joints.is_empty());
+    assert_eq!(m.placed_joints.len(), own);
+    assert!(m.joint_warnings().iter().all(|w| w.is_empty()), "{:?}", m.joint_warnings());
+    assert!(!m.fasteners.is_empty());
+    let count = |m: &Model, what: &str| varstotas_kernel::cutlist::plan(m).hardware.iter().filter(|h| h.name.contains(what)).map(|h| h.count).sum::<usize>();
+    // two doors on two hinges, one drawer on a pair of slides, handles on all three fronts
+    assert_eq!(count(&m, "Cup hinge"), 4);
+    assert_eq!(count(&m, "slide"), 2);
+    assert_eq!(count(&m, "Handle"), 3);
+    // a second copy with the same values shares the definition and brings its own hardware
+    let b = generator::place(&mut m, &[], &name, &GenValues::new(), DMat4::from_translation(DVec3::new(1000.0, 0.0, 0.0))).unwrap();
+    m.sync_joints();
+    assert_eq!(def_of(&m, b), d);
+    assert_eq!(m.placed_joints.len(), 2 * own);
+    assert_eq!(count(&m, "Cup hinge"), 8);
+    assert!(m.rebuild_wood_joints().is_empty());
+    // other values: a new definition, built again with its joints
+    generator::set_values(&mut m, &[], b, &vals(&[("doors", GenValue::Num(1.0)), ("drawers", GenValue::Num(3.0)), ("push", GenValue::Bool(true))]), false).unwrap();
+    m.sync_joints();
+    assert_ne!(def_of(&m, b), d);
+    assert_eq!(count(&m, "Cup hinge"), 4 + 2);
+    assert_eq!(count(&m, "Handle"), 3);
+    assert!(m.joint_warnings().iter().all(|w| w.is_empty()), "{:?}", m.joint_warnings());
 }

@@ -63,9 +63,9 @@ impl Assembly {
         SceneAssembly { explode: self.explode, step: self.step }
     }
 
-    /// The step adding part `path`.
+    /// The step that adds the part at `path`, or the group or component it is in.
     pub fn step_of(&self, path: &[InstanceId]) -> Option<usize> {
-        self.steps.iter().position(|s| s.parts.iter().any(|p| p == path))
+        self.steps.iter().position(|s| s.parts.iter().any(|p| path.starts_with(p)))
     }
 
     /// The step joint `i`'s fasteners are given to, if any.
@@ -370,7 +370,7 @@ impl Model {
 
     /// The step joint `i` is made at: the step of the later of its two parts.
     pub fn joint_step(&self, i: usize) -> Option<usize> {
-        let j = self.joints.get(i)?;
+        let j = self.placed_joints.get(i)?;
         let a = self.assembly.step_of(&j.a)?;
         if j.b.is_empty() {
             return Some(a);

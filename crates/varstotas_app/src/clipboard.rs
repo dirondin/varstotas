@@ -456,6 +456,12 @@ impl Clipboard {
         }
         let nd = model.defs.insert(def);
         maps.defs.insert(d, nd);
+        // a joined part keeps its geometry from before the joints
+        if let Some(base) = self.model.joint_bases.iter().find(|(x, _)| *x == d) {
+            let mut mesh = base.1.clone();
+            maps.restyle(&self.model, model, &mut mesh);
+            model.joint_bases.push((nd, mesh));
+        }
         Ok(nd)
     }
 }

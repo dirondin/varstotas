@@ -55,6 +55,10 @@ pub struct Definition {
     /// like [`Model::preview`]). Omitted when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<crate::texture::TextureImage>,
+    /// Joints between parts inside it, their paths from its own content (see
+    /// [`crate::joinery`]); the root's are [`Model::joints`]. Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joints: Vec<crate::joinery::WoodJoint>,
 }
 
 /// The origin of a downloaded model (3D Library): needed to credit CC-BY authors.
@@ -450,6 +454,18 @@ pub struct Model {
     /// Where each joint's parts touch, as assembled; not saved.
     #[serde(skip)]
     pub joint_contacts: Vec<Option<crate::joinery::Contact>>,
+    /// Every joint as placed ([`Model::refresh_fasteners`]): the root's first, at the indices
+    /// of [`Model::joints`], then a group's or component's for each of its copies, their paths
+    /// from the root; not saved. Fasteners, contacts, warnings and the cut list go by these.
+    #[serde(skip)]
+    pub placed_joints: Vec<crate::joinery::WoodJoint>,
+    /// Where each of [`Model::placed_joints`] comes from.
+    #[serde(skip)]
+    pub joint_places: Vec<crate::joinery::JointPlace>,
+    /// The context new joints go into (an instance path; empty: the root's): set while an
+    /// edit made inside an open group or component adds joints; not saved.
+    #[serde(skip)]
+    pub joint_context: ContextPath,
 }
 
 /// Result of a model-wide ray pick.
@@ -473,7 +489,7 @@ impl Model {
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
         // i18n-ignore-next
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
         Self {
             metadata: ModelMetadata::default(),
             defs,
@@ -508,6 +524,9 @@ impl Model {
             fasteners_hidden: false,
             fasteners: Vec::new(),
             joint_contacts: Vec::new(),
+            placed_joints: Vec::new(),
+            joint_places: Vec::new(),
+            joint_context: Vec::new(),
         }
     }
 
@@ -728,6 +747,8 @@ impl Model {
         if ents.is_empty() && guides.is_empty() && dims.is_empty() {
             return Err(OpError::Invalid(tr!("kernel-err-nothing-selected")));
         }
+        let picked: Vec<InstanceId> = ents.iter().filter_map(|e| if let EntityRef::Instance(i) = e { Some(*i) } else { None }).collect();
+        let through = self.paths_through(pd, &picked);
         let parent = &mut self.defs[pd].mesh;
         parent.ensure();
         let mut faces: Vec<FaceId> = Vec::new();
@@ -806,9 +827,10 @@ impl Model {
             let holes = face.holes.iter().map(|h| h.iter().map(|v| vmap[v]).collect()).collect();
             mesh.f_new(outer, holes, &face);
         }
+        let mut moved = Vec::new();
         for i in &insts {
             let inst = parent.instances.remove(*i).unwrap();
-            mesh.instances.insert(inst);
+            moved.push((*i, mesh.instances.insert(inst)));
         }
         // Remove from parent: faces, then edges no longer used by remaining faces.
         for f in &faces {
@@ -841,7 +863,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -851,7 +873,10 @@ impl Model {
             hidden: false,
             locked: false,
         };
-        Ok(self.defs[pd].mesh.instances.insert(inst))
+        let g = self.defs[pd].mesh.instances.insert(inst);
+        // joints and assembly steps follow the parts into it
+        self.joints_into_group(&through, pd, g, def, &moved);
+        Ok(g)
     }
 
     /// Move `ents` from the mesh at `path` into a new group; returns the new instance.
@@ -865,7 +890,7 @@ impl Model {
     /// (made geometry, e.g. a draped cloth; no welding with the context).
     pub fn add_group_mesh(&mut self, path: &[InstanceId], mesh: Mesh, name: &str, transform: DMat4) -> Option<InstanceId> {
         self.mesh_at(path)?;
-        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
         let inst = Instance { def, transform, name: String::new(), material: None, tag: None, hidden: false, locked: false };
         self.mesh_at_mut(path).map(|m| m.instances.insert(inst))
     }
@@ -930,6 +955,7 @@ impl Model {
         let pd = self.def_at(path).ok_or(OpError::NotFound)?;
         let instance = self.defs[pd].mesh.instances.get(inst).ok_or(OpError::NotFound)?.clone();
         let child = self.defs.get(instance.def).ok_or(OpError::NotFound)?.mesh.clone();
+        let through = self.paths_through(pd, &[inst]);
         let t = instance.transform;
         // Guides inside the exploded group / component move to the parent context.
         self.lift_guides(path, instance.def, &t);
@@ -996,13 +1022,16 @@ impl Model {
             parent.carry_texture(f, face.normal, face.uv.as_ref(), &pts);
             out.push(EntityRef::Face(f));
         }
-        for (_, ci) in &child.instances {
+        let mut lifted = Vec::new();
+        for (cid, ci) in &child.instances {
             let mut c = ci.clone();
             c.transform = t * c.transform;
             if c.material.is_none() {
                 c.material = instance.material;
             }
-            out.push(EntityRef::Instance(parent.instances.insert(c)));
+            let n = parent.instances.insert(c);
+            lifted.push((cid, n));
+            out.push(EntityRef::Instance(n));
         }
         // Weld to the parent's geometry: T-junctions, crossings, faces split by edges lying in
         // them and coplanar overlaps merged.
@@ -1010,6 +1039,8 @@ impl Model {
         verts.sort(); // deterministic welding order
         verts.dedup();
         let out = parent.absorb_refs(&verts, out);
+        // joints and assembly steps follow the parts out of it
+        self.joints_out_of_group(&through, pd, instance.def, &lifted);
         if self.instance_count(instance.def) == 0 && instance.def != self.root && !self.param_bases().contains(&instance.def) {
             self.defs.remove(instance.def);
         }
@@ -1047,6 +1078,7 @@ impl Model {
             copy.name = new;
             let nd = self.defs.insert(copy);
             self.defs[pd].mesh.instances[inst].def = nd;
+            self.own_joined_parts(nd);
             return Ok(());
         }
         match self.rig_master(d).filter(|m| *m != d) {
@@ -1063,6 +1095,7 @@ impl Model {
         }
         let nd = self.defs.insert(copy);
         self.defs[pd].mesh.instances[inst].def = nd;
+        self.own_joined_parts(nd);
         Ok(())
     }
 
@@ -1203,7 +1236,7 @@ impl Model {
         for (_, m) in &mut self.joint_bases {
             m.rebuild_caches();
         }
-        if !self.joints.is_empty() {
+        if !self.joints.is_empty() || self.defs.values().any(|d| !d.joints.is_empty()) {
             self.refresh_fasteners();
         }
     }
@@ -1214,7 +1247,7 @@ mod move_tests {
     use super::*;
 
     fn group(m: &mut Model, parent: &[InstanceId], name: &str, at: DVec3) -> (DefId, InstanceId) {
-        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None });
+        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
         m.defs[d].mesh.add_face(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]);
         let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false };
         let id = m.mesh_at_mut(parent).unwrap().instances.insert(inst);

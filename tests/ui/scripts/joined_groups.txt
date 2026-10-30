@@ -1,0 +1,32 @@
+# Joints go with their parts: a carcass with two doors on cup hinges (made by script) selected
+# with Cmd+A and grouped keeps its joints inside the group; a copy pasted in place brings its own
+# hinges (the cut list counts both); the copy exploded gives its joints back to the model.
+action script let b = box(vec3(18, 0, 100), 564, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 100), 18, 450, 800); l.name = "Left"; let r = box(vec3(582, 0, 100), 18, 450, 800); r.name = "Right"; let t = box(vec3(18, 0, 882), 564, 450, 18); t.name = "Top"; let dl = box(vec3(0, -18, 100), 299, 18, 800); dl.name = "Door L"; let dr = box(vec3(301, -18, 100), 299, 18, 800); dr.name = "Door R"; joint(dl, l, "hinge"); joint(dr, r, "hinge");
+action console_close
+view iso
+zoom_extents
+wait 10
+action joinery
+wait 10
+expect ("Hinge", "Right", "Door R", "2 × Cup hinge Ø35, overlay")
+raw mods cmd
+raw key A
+raw mods none
+wait 5
+action make_group
+wait 10
+expect I=1
+expect ("Hinge", "Right", "Door R", "2 × Cup hinge Ø35, overlay")
+action copy
+wait 5
+action paste_in_place
+wait 10
+expect I=1
+action explode
+wait 10
+expect I=6
+action cut_list
+wait 10
+expect ("Cup hinge Ø35, overlay", 8,
+screenshot shots/joined_groups.bmp
+quit
