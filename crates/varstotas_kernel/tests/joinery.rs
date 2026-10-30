@@ -461,6 +461,59 @@ fn doors_for_a_carcass() {
 }
 
 #[test]
+fn a_back_in_grooves_and_a_plinth() {
+    use varstotas_kernel::carcass::{BackSpec, PlinthSpec};
+    use varstotas_kernel::joinery::WoodJointKind as K;
+    let carcass = || {
+        let mut m = Model::new();
+        let l = board(&mut m, "Left", DVec3::new(18.0, 450.0, 800.0), DVec3::new(0.0, 0.0, 100.0));
+        let r = board(&mut m, "Right", DVec3::new(18.0, 450.0, 800.0), DVec3::new(582.0, 0.0, 100.0));
+        let b = board(&mut m, "Bottom", DVec3::new(564.0, 450.0, 18.0), DVec3::new(18.0, 0.0, 100.0));
+        let t = board(&mut m, "Top", DVec3::new(564.0, 450.0, 18.0), DVec3::new(18.0, 0.0, 882.0));
+        (m, l, r, b, t)
+    };
+    let size = |m: &Model, id| {
+        let b = m.instance_world_bounds(&[], id).unwrap();
+        (b.min, b.max)
+    };
+    // in grooves 10 mm in from the back edges, 8 mm into the sides, the bottom and the top
+    let (mut m, l, r, b, t) = carcass();
+    let back = m.add_back(&[l], &[r], BackSpec::default()).unwrap();
+    let housings: Vec<_> = m.joints.iter().filter(|j| j.kind == K::Housing).collect();
+    assert_eq!(housings.len(), 4);
+    assert!(housings.iter().all(|j| j.b == vec![back] && j.depth == 8.0));
+    for part in [l, r, b, t] {
+        assert!(housings.iter().any(|j| j.a == vec![part]), "{part:?}");
+    }
+    // the back runs into the grooves: 8 mm past the sides' faces, the bottom's and the top's
+    let (b0, b1) = size(&m, back);
+    assert!((b0.x - 10.0).abs() < 1e-6 && (b1.x - 590.0).abs() < 1e-6 && (b0.y - 436.0).abs() < 1e-6 && (b1.y - 440.0).abs() < 1e-6, "{b0} {b1}");
+    assert!((b0.z - 110.0).abs() < 1e-6 && (b1.z - 890.0).abs() < 1e-6, "{b0} {b1}");
+    assert!(m.joint_warnings().iter().all(|w| w.is_empty()), "{:?}", m.joint_warnings());
+    // nailed over the back edges instead: as wide and tall as the carcass, nails into each
+    let (mut m, l, r, ..) = carcass();
+    let back = m.add_back(&[l], &[r], BackSpec { groove: false, ..Default::default() }).unwrap();
+    let (b0, b1) = size(&m, back);
+    assert!(b0.x.abs() < 1e-6 && (b1.x - 600.0).abs() < 1e-6 && (b0.y - 450.0).abs() < 1e-6 && (b0.z - 100.0).abs() < 1e-6 && (b1.z - 900.0).abs() < 1e-6, "{b0} {b1}");
+    assert_eq!(m.joints.iter().filter(|j| j.kind == K::Nails).count(), 4);
+    // a plinth 100 tall under it, 40 back from the front: confirmats at its corners, the
+    // bottom screwed down into the front and back rails
+    let (mut m, l, r, b, t) = carcass();
+    let rails = m.add_plinth(&[vec![l], vec![r], vec![b], vec![t]], PlinthSpec::default()).unwrap();
+    assert_eq!(rails.len(), 4);
+    let (f0, f1) = size(&m, rails[0]);
+    assert!((f0.x - 18.0).abs() < 1e-6 && (f1.x - 582.0).abs() < 1e-6 && (f0.y - 40.0).abs() < 1e-6 && f0.z.abs() < 1e-6 && (f1.z - 100.0).abs() < 1e-6, "{f0} {f1}");
+    let (s0, s1) = size(&m, rails[2]);
+    assert!(s0.x.abs() < 1e-6 && (s0.y - 40.0).abs() < 1e-6 && (s1.y - 450.0).abs() < 1e-6);
+    assert_eq!(m.joints.iter().filter(|j| j.kind == K::Confirmat).count(), 4);
+    let screws: Vec<_> = m.joints.iter().filter(|j| j.kind == K::Screws).collect();
+    assert_eq!(screws.len(), 2);
+    assert!(screws.iter().all(|j| j.a == vec![b] && (j.b == vec![rails[0]] || j.b == vec![rails[1]]) && j.margin >= 60.0));
+    assert!(m.joint_warnings().iter().all(|w| w.is_empty()), "{:?}", m.joint_warnings());
+    assert!(m.add_plinth(&[vec![b]], PlinthSpec { height: 10.0, ..Default::default() }).is_err());
+}
+
+#[test]
 fn joints_that_are_likely_mistakes_are_flagged() {
     use varstotas_kernel::joinery::WoodJointKind as K;
     // a partition with a shelf dowelled on either side at the same height: 12 mm holes from

@@ -8,6 +8,7 @@ use crate::app::VarstotasApp;
 use crate::ui::theme;
 use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
+use varstotas_kernel::carcass::{BackSpec, PlinthSpec};
 use varstotas_kernel::drawer::{DoorSpec, DrawerFront, DrawerSpec};
 use varstotas_kernel::joinery::{Contact, SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
@@ -28,6 +29,9 @@ pub struct JoineryState {
     drawer_count: usize,
     /// New doors' count, front and latches.
     door: Option<DoorSpec>,
+    /// A new back's and plinth's settings.
+    back: Option<BackSpec>,
+    plinth: Option<PlinthSpec>,
 }
 
 const SLIDES: [(SlideKind, &str); 3] = [(SlideKind::BallBearing, "joinery-slide-ball"), (SlideKind::Roller, "joinery-slide-roller"), (SlideKind::Undermount, "joinery-slide-undermount")];
@@ -344,6 +348,8 @@ impl VarstotasApp {
         ui.label(RichText::new(hint).small().color(theme::text_dim()));
         self.drawer_ui(ui);
         self.door_ui(ui);
+        self.back_ui(ui);
+        self.plinth_ui(ui);
     }
 
     /// A drawer for the opening between the two selected parts (shown only for such a pair).
@@ -438,6 +444,65 @@ impl VarstotasApp {
             }
         });
         self.joinery.door = Some(spec);
+    }
+
+    /// A back for the opening between the two selected parts (shown only for such a pair).
+    fn back_ui(&mut self, ui: &mut Ui) {
+        let ids: Vec<InstanceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None }).collect();
+        if ids.len() != 2 {
+            return;
+        }
+        let path = |id| {
+            let mut p = self.doc.active_path.clone();
+            p.push(id);
+            p
+        };
+        let (l, r) = (path(ids[0]), path(ids[1]));
+        if self.doc.model.drawer_z(&l, &r).is_none() {
+            return;
+        }
+        let mut spec = self.joinery.back.unwrap_or_default();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(tr!("joinery-back")).strong());
+            ui.checkbox(&mut spec.groove, tr!("joinery-back-groove")).on_hover_text(tr!("joinery-back-groove-tip"));
+            let b = ui.button(tr!("joinery-back-add"));
+            super::tray_lib::spot("joinery:back", b.rect.center());
+            if b.on_hover_text(tr!("joinery-back-tip")).clicked() {
+                self.doc.try_commit(&tr!("joinery-back-undo"), move |m: &mut Model| m.add_back(&l, &r, spec).map(|_| ()));
+            }
+        });
+        self.joinery.back = Some(spec);
+    }
+
+    /// A plinth frame under the selected parts (a carcass's).
+    fn plinth_ui(&mut self, ui: &mut Ui) {
+        let unit = self.doc.model.unit;
+        let parts: Vec<Vec<InstanceId>> = self
+            .doc
+            .selection
+            .iter()
+            .filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None })
+            .map(|id| {
+                let mut p = self.doc.active_path.clone();
+                p.push(id);
+                p
+            })
+            .collect();
+        if parts.is_empty() {
+            return;
+        }
+        let mut spec = self.joinery.plinth.unwrap_or_default();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(tr!("joinery-plinth")).strong());
+            len(ui, &tr!("joinery-height"), &mut spec.height, unit, 30.0, 1000.0);
+            len(ui, &tr!("joinery-plinth-setback"), &mut spec.setback, unit, 0.0, 300.0);
+            let b = ui.button(tr!("joinery-plinth-add"));
+            super::tray_lib::spot("joinery:plinth", b.rect.center());
+            if b.on_hover_text(tr!("joinery-plinth-tip")).clicked() {
+                self.doc.try_commit(&tr!("joinery-plinth-undo"), move |m: &mut Model| m.add_plinth(&parts, spec).map(|_| ()));
+            }
+        });
+        self.joinery.plinth = Some(spec);
     }
 
     fn joinery_list_ui(&mut self, ui: &mut Ui) {

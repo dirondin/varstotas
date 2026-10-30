@@ -1,0 +1,25 @@
+# A back and a plinth from the Joinery window with the real mouse: the two sides selected, Add
+# back puts a back in grooves in the sides, the bottom and the top; then all four parts
+# selected, Add plinth puts a frame under them on confirmats, the bottom screwed onto it.
+action script let b = box(vec3(18, 0, 100), 564, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 100), 18, 450, 800); l.name = "Left"; let r = box(vec3(582, 0, 100), 18, 450, 800); r.name = "Right"; let t = box(vec3(18, 0, 882), 564, 450, 18); t.name = "Top"; select([l, r]);
+action console_close
+wait 5
+action joinery
+wait 5
+action click_spot joinery:back
+wait 10
+expect ("Housing", "Back", "Left", "")
+expect ("Housing", "Back", "Bottom", "")
+expect ("Housing", "Back", "Top", "")
+action script select([child("Left"), child("Right"), child("Bottom"), child("Top")]);
+action console_close
+wait 5
+action click_spot joinery:plinth
+wait 10
+expect ("Confirmat", "Plinth front", "Plinth side", "2 × Confirmat Ø7 × 50")
+expect ("Screws", "Plinth back", "Bottom", "
+view iso
+zoom_extents
+wait 10
+screenshot shots/carcass_plinth.bmp
+quit

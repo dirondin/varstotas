@@ -65,22 +65,22 @@ const CLEAR: f64 = 10.0;
 const UNDER: f64 = 14.0;
 
 /// The opening between two parts.
-struct Opening {
+pub(crate) struct Opening {
     /// The axis they are apart on, and their inner faces on it.
-    k: usize,
-    a: f64,
-    b: f64,
+    pub k: usize,
+    pub a: f64,
+    pub b: f64,
     /// The depth axis, and the range on it they share.
-    d: usize,
-    d0: f64,
-    d1: f64,
+    pub d: usize,
+    pub d0: f64,
+    pub d1: f64,
     /// The height range they share.
-    z0: f64,
-    z1: f64,
+    pub z0: f64,
+    pub z1: f64,
 }
 
 /// The opening between parts `l` and `r` (assembled world bounds).
-fn opening(l: (DVec3, DVec3), r: (DVec3, DVec3)) -> Option<Opening> {
+pub(crate) fn opening(l: (DVec3, DVec3), r: (DVec3, DVec3)) -> Option<Opening> {
     let ((l0, l1), (r0, r1)) = (l, r);
     for k in [0, 1] {
         let (a, b) = if l1[k] <= r0[k] { (l1[k], r0[k]) } else if r1[k] <= l0[k] { (r1[k], l0[k]) } else { continue };
@@ -102,7 +102,7 @@ impl Model {
         Some(o.z0 + 30.0)
     }
 
-    fn part_box(&self, path: &[InstanceId]) -> Option<(DVec3, DVec3)> {
+    pub(crate) fn part_box(&self, path: &[InstanceId]) -> Option<(DVec3, DVec3)> {
         let (&id, parent) = path.split_last()?;
         let off = self.assembly_offset(path);
         self.instance_world_bounds(parent, id).map(|b| (b.min - off, b.max - off))
@@ -132,7 +132,12 @@ impl Model {
     }
 
     /// The other parts in `l`'s parent that reach into the opening between `l` and `r`.
-    fn in_opening(&self, l: &[InstanceId], r: &[InstanceId], o: &Opening) -> Vec<(DVec3, DVec3)> {
+    pub(crate) fn in_opening(&self, l: &[InstanceId], r: &[InstanceId], o: &Opening) -> Vec<(DVec3, DVec3)> {
+        self.parts_in_opening(l, r, o).into_iter().map(|(_, b)| b).collect()
+    }
+
+    /// [`Model::in_opening`] with the parts' paths.
+    pub(crate) fn parts_in_opening(&self, l: &[InstanceId], r: &[InstanceId], o: &Opening) -> Vec<(ContextPath, (DVec3, DVec3))> {
         let Some((_, parent)) = l.split_last() else { return Vec::new() };
         let Some(mesh) = self.mesh_at(parent) else { return Vec::new() };
         let ids: Vec<InstanceId> = mesh.instances.iter().map(|(id, _)| id).collect();
@@ -140,9 +145,9 @@ impl Model {
             .filter_map(|id| {
                 let mut p = parent.to_vec();
                 p.push(id);
-                if p == l || p == r { None } else { self.part_box(&p) }
+                if p == l || p == r { None } else { self.part_box(&p).map(|b| (p, b)) }
             })
-            .filter(|(m0, m1)| m1[o.k] > o.a + 1.0 && m0[o.k] < o.b - 1.0)
+            .filter(|(_, (m0, m1))| m1[o.k] > o.a + 1.0 && m0[o.k] < o.b - 1.0)
             .collect()
     }
 

@@ -24,7 +24,7 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings", "band_visible",
-    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "drawers", "doors", "suggest_steps", "assembly_steps",
+    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "drawers", "doors", "back", "plinth", "suggest_steps", "assembly_steps",
     "set_assembly_steps", "assembly_view",
 ];
 
@@ -1957,6 +1957,10 @@ fn register_joinery(e: &mut Engine) {
     e.register_fn("drawers", |l: Dynamic, r: Dynamic, m: Map| -> R<Array> { add_drawers(&l, &r, &m, true) });
     e.register_fn("doors", |l: Dynamic, r: Dynamic| -> R<Array> { add_doors(&l, &r, &Map::new()) });
     e.register_fn("doors", |l: Dynamic, r: Dynamic, m: Map| -> R<Array> { add_doors(&l, &r, &m) });
+    e.register_fn("back", |l: Dynamic, r: Dynamic| -> R<Dynamic> { add_back(&l, &r, &Map::new()) });
+    e.register_fn("back", |l: Dynamic, r: Dynamic, m: Map| -> R<Dynamic> { add_back(&l, &r, &m) });
+    e.register_fn("plinth", |parts: Dynamic| -> R<Array> { add_plinth(&parts, &Map::new()) });
+    e.register_fn("plinth", |parts: Dynamic, m: Map| -> R<Array> { add_plinth(&parts, &m) });
     e.register_fn("remove_joint", |i: i64| -> R<()> {
         edit(|st| {
             let i = usize::try_from(i).ok().filter(|&i| i < st.model.joints.len()).ok_or_else(|| tr!("script-err-joint-index", index = i.to_string()))?;
@@ -2172,6 +2176,60 @@ fn add_doors(l: &Dynamic, r: &Dynamic, m: &Map) -> R<Array> {
         }
         let ids = op(st.model.add_doors(&pl, &pr, space, spec))?;
         Ok(ids.into_iter().map(|id| dyn_ent(&l.path, EntityRef::Instance(id))).collect())
+    })
+}
+
+/// A back for the opening between two parts: `#{ groove, thickness, inset, depth }`.
+fn add_back(l: &Dynamic, r: &Dynamic, m: &Map) -> R<Dynamic> {
+    use varstotas_kernel::carcass::BackSpec;
+    let (l, r) = (one(l)?, one(r)?);
+    edit(|st| {
+        let path = |e: &Entity| -> R<ContextPath> {
+            let mut p = e.path.clone();
+            p.push(inst_id(st, e)?);
+            Ok(p)
+        };
+        let (pl, pr) = (path(&l)?, path(&r)?);
+        let mut spec = BackSpec::default();
+        for (k, v) in m {
+            match k.as_str() {
+                "groove" => spec.groove = v.as_bool().map_err(|_| tr!("script-err-joint-flag", key = "groove"))?,
+                "thickness" => spec.thickness = num(v)?,
+                "inset" => spec.inset = num(v)?,
+                "depth" => spec.depth = num(v)?,
+                k => return err(tr!("script-err-back-key", key = k.to_string())),
+            }
+        }
+        let id = op(st.model.add_back(&pl, &pr, spec))?;
+        Ok(dyn_ent(&l.path, EntityRef::Instance(id)))
+    })
+}
+
+/// A plinth frame under parts: `#{ height, setback, thickness }`.
+fn add_plinth(parts: &Dynamic, m: &Map) -> R<Array> {
+    use varstotas_kernel::carcass::PlinthSpec;
+    let parts = ents(parts)?;
+    let Some(first) = parts.first().cloned() else { return err(tr!("joint-err-one-part")) };
+    edit(|st| {
+        let paths = parts
+            .iter()
+            .map(|e| -> R<ContextPath> {
+                let mut p = e.path.clone();
+                p.push(inst_id(st, e)?);
+                Ok(p)
+            })
+            .collect::<R<Vec<ContextPath>>>()?;
+        let mut spec = PlinthSpec::default();
+        for (k, v) in m {
+            match k.as_str() {
+                "height" => spec.height = num(v)?,
+                "setback" => spec.setback = num(v)?,
+                "thickness" => spec.thickness = num(v)?,
+                k => return err(tr!("script-err-plinth-key", key = k.to_string())),
+            }
+        }
+        let ids = op(st.model.add_plinth(&paths, spec))?;
+        Ok(ids.into_iter().map(|id| dyn_ent(&first.path, EntityRef::Instance(id))).collect())
     })
 }
 
