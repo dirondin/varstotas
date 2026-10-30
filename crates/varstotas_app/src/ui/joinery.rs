@@ -88,14 +88,16 @@ pub(crate) fn kind_name(k: WoodJointKind) -> String {
 /// The kinds in a combo box, wood joints then fittings under their headings; `only` keeps
 /// the kinds on one part or on two.
 fn kind_combo(ui: &mut Ui, id: &str, k: &mut WoodJointKind, only: Option<bool>) {
-    egui::ComboBox::from_id_salt(id).selected_text(kind_name(*k)).height(520.0).show_ui(ui, |ui| {
+    let r = egui::ComboBox::from_id_salt(id).selected_text(kind_name(*k)).height(520.0).show_ui(ui, |ui| {
         for fitting in [false, true] {
             ui.label(RichText::new(tr!(if fitting { "joinery-group-fittings" } else { "joinery-group-joints" })).small().color(theme::text_dim()));
             for x in WoodJointKind::ALL.into_iter().filter(|x| x.fitting() == fitting && only.is_none_or(|o| x.single() == o)) {
-                ui.selectable_value(k, x, kind_name(x));
+                let r = ui.selectable_value(k, x, kind_name(x));
+                super::tray_lib::spot(format!("{id}:{x:?}"), r.rect.center());
             }
         }
     });
+    super::tray_lib::spot(id, r.response.rect.center());
 }
 
 /// A part's name: its instance name, else its definition's.
