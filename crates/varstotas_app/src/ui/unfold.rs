@@ -211,10 +211,9 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(40.0, 40.0);
         let mut open = true;
         let mut save: Option<&str> = None;
-        let win = self.placed(egui::Window::new(tr!("unfold-title")).id(egui::Id::new("unfold_window")).open(&mut open).collapsible(false).resizable(false), pos);
+        let win = self.placed(egui::Window::new(tr!("unfold-title")).id(egui::Id::new("unfold_window")).open(&mut open).collapsible(false).resizable(true).default_size([560.0, 560.0]).min_width(480.0), pos);
         let selection = !self.doc.selection.is_empty();
         win.show(ctx, |ui| {
-            ui.set_width(560.0);
             let what = tr(if selection { "unfold-selection" } else { "unfold-everything" });
             let summary = if u.faces == 0 {
                 tr!("unfold-no-faces", what = what)
@@ -247,8 +246,8 @@ impl VarstotasApp {
                 ui.end_row();
             });
             ui.add_space(6.0);
-            // Preview of the current sheet.
-            let (rect, _) = ui.allocate_exact_size(vec2(560.0, 340.0), Sense::hover());
+            // Preview of the current sheet: the window's rest above the legend and the export row.
+            let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), (ui.available_height() - 64.0).max(240.0)), Sense::hover());
             let painter = ui.painter_at(rect);
             painter.rect_filled(rect, 4.0, theme::border());
             if let Some(d) = pages.get(s.page) {

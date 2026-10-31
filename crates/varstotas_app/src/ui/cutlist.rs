@@ -774,7 +774,7 @@ impl VarstotasApp {
         let unit = self.doc.model.unit;
         let mut set: Option<(String, PartOptions)> = None;
         let mut select = None;
-        egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             egui::Grid::new("cutlist_parts").num_columns(7).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 for h in ["cutlist-col-part", "cutlist-col-count", "cutlist-col-size", "cutlist-col-material", "cutlist-col-grain", "cutlist-col-bands", "cutlist-col-use"] {
                     ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
@@ -832,7 +832,8 @@ impl VarstotasApp {
         let before = s.clone();
         let mut select = None;
         let mut remembered: Vec<(String, f64)> = Vec::new();
-        egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
+        // the note under it
+        egui::ScrollArea::vertical().max_height((ui.available_height() - 24.0).max(80.0)).auto_shrink([false, false]).show(ui, |ui| {
             egui::Grid::new("cutlist_hardware").num_columns(5).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 for h in ["cutlist-col-item", "cutlist-col-count", "cutlist-col-price", "cutlist-col-cost"] {
                     ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
@@ -911,9 +912,10 @@ impl VarstotasApp {
         });
         let (lo, hi) = bounds.filter(|(lo, hi)| hi.x > lo.x && hi.y > lo.y).unwrap_or((DVec2::ZERO, PAGE));
         let (lo, hi) = (lo - DVec2::splat(3.0), hi + DVec2::splat(3.0));
-        let k = ((640.0 - 16.0) / (hi.x - lo.x)).min((452.0 - 16.0) / (hi.y - lo.y));
-        let height = ((hi.y - lo.y) * k + 16.0).max(200.0) as f32;
-        let (rect, resp) = ui.allocate_exact_size(vec2(640.0, height), Sense::click());
+        // the rest of the window, under the page arrows when there are pages to turn
+        let size = vec2(ui.available_width(), (ui.available_height() - if drawings.len() > 1 { 28.0 } else { 0.0 }).max(200.0));
+        let k = ((size.x as f64 - 16.0) / (hi.x - lo.x)).min((size.y as f64 - 16.0) / (hi.y - lo.y));
+        let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 4.0, theme::border());
         let mut clicked = None;
@@ -984,9 +986,26 @@ impl VarstotasApp {
         let mut open = true;
         let mut save: Option<&str> = None;
         let mut labels = false;
-        let win = self.placed(egui::Window::new(tr!("cutlist-title")).id(egui::Id::new("cutlist_window")).open(&mut open).collapsible(false).resizable(false), pos);
+        let win = self.placed(egui::Window::new(tr!("cutlist-title")).id(egui::Id::new("cutlist_window")).open(&mut open).collapsible(false).resizable(true).default_size([640.0, 660.0]).min_width(560.0), pos);
         win.show(ctx, |ui| {
-            ui.set_width(640.0);
+            // the export buttons at the bottom, the tab above taking what is left
+            egui::Panel::bottom("cutlist_export").resizable(false).frame(egui::Frame::NONE.inner_margin(egui::Margin { top: 6, ..Default::default() })).show_separator_line(false).show(ui, |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_enabled_ui(!plan.parts.is_empty(), |ui| {
+                        let r = ui.button(RichText::new(tr!("cutlist-labels")).strong());
+                        if r.on_hover_text(tr!("cutlist-labels-tip")).clicked() {
+                            labels = true;
+                        }
+                        for (ext, need_plans) in [("csv", false), ("svg", true), ("pdf", true)] {
+                            let on = !need_plans || !plan.plans.is_empty();
+                            if ui.add_enabled(on, egui::Button::new(RichText::new(format!("{}…", ext.to_uppercase())).strong())).clicked() {
+                                save = Some(ext);
+                            }
+                        }
+                    });
+                    ui.label(RichText::new(tr!("cutlist-export")).color(theme::text_dim()));
+                });
+            });
             self.cut_settings_ui(ui);
             ui.add_space(4.0);
             self.cut_summary_ui(ui, &plan);
@@ -1002,22 +1021,6 @@ impl VarstotasApp {
                 Tab::Parts => self.cut_parts_ui(ui, &plan),
                 Tab::Hardware => self.cut_hardware_ui(ui, &plan),
             }
-            ui.add_space(6.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.add_enabled_ui(!plan.parts.is_empty(), |ui| {
-                    let r = ui.button(RichText::new(tr!("cutlist-labels")).strong());
-                    if r.on_hover_text(tr!("cutlist-labels-tip")).clicked() {
-                        labels = true;
-                    }
-                    for (ext, need_plans) in [("csv", false), ("svg", true), ("pdf", true)] {
-                        let on = !need_plans || !plan.plans.is_empty();
-                        if ui.add_enabled(on, egui::Button::new(RichText::new(format!("{}…", ext.to_uppercase())).strong())).clicked() {
-                            save = Some(ext);
-                        }
-                    }
-                });
-                ui.label(RichText::new(tr!("cutlist-export")).color(theme::text_dim()));
-            });
         });
         if !open {
             self.cutlist.open = false;

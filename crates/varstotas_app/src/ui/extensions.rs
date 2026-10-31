@@ -355,9 +355,8 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + egui::vec2(40.0, 40.0);
         let mut open = true;
         let (mut run, mut cancel) = (false, false);
-        let win = self.placed(egui::Window::new(&p.name).id(egui::Id::new("plugin_dialog")).open(&mut open).collapsible(false).resizable(false), pos);
+        let win = self.placed(egui::Window::new(&p.name).id(egui::Id::new("plugin_dialog")).open(&mut open).collapsible(false).default_width(300.0), pos);
         win.show(ctx, |ui| {
-            ui.set_min_width(300.0);
             if !p.description.is_empty() {
                 ui.label(RichText::new(&p.description).weak());
                 ui.add_space(4.0);

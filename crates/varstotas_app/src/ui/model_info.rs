@@ -200,20 +200,21 @@ impl VarstotasApp {
             .id(egui::Id::new("doc_preview_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false);
+            .default_width(360.0)
+            .min_width(240.0);
         let win = self.placed(win, pos);
         win.show(ctx, |ui| {
-            ui.set_width(360.0);
             match tex {
                 Some((id, size)) => {
-                    let k = (360.0 / size[0].max(size[1]) as f32).min(1.0);
+                    // as wide as the window is made, never past the image's own size
+                    let k = (ui.available_width() / size[0].max(size[1]) as f32).min(1.0);
                     ui.vertical_centered(|ui| {
                         ui.image((id, vec2(size[0] as f32 * k, size[1] as f32 * k)))
                     });
                     ui.label(RichText::new(label.unwrap_or_default()).weak());
                 }
                 None => {
-                    let (r, _) = ui.allocate_exact_size(vec2(360.0, 160.0), egui::Sense::hover());
+                    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 160.0), egui::Sense::hover());
                     ui.painter()
                         .rect_filled(r, 4.0, ui.visuals().faint_bg_color);
                     ui.painter().text(

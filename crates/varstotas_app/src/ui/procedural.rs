@@ -308,7 +308,7 @@ impl VarstotasApp {
         let gens: Vec<(std::path::PathBuf, String)> = self.plugins.list.iter().filter(|p| p.texture_generator.is_some()).map(|p| (p.path.clone(), p.name.clone())).collect();
         let mut open = true;
         let mut create = false;
-        egui::Window::new(tr!("proc-title")).id(egui::Id::new("procedural_win")).open(&mut open).resizable(false).default_pos([320.0, 160.0]).show(ctx, |ui| {
+        egui::Window::new(tr!("proc-title")).id(egui::Id::new("procedural_win")).open(&mut open).default_pos([320.0, 160.0]).show(ctx, |ui| {
             let st = &mut self.procedural;
             ui.horizontal_wrapped(|ui| {
                 for k in Kind::ALL {

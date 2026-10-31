@@ -345,7 +345,7 @@ impl VarstotasApp {
             .id(egui::Id::new("physics_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false);
+            .default_width(340.0);
         let win = self.placed(win, pos);
         // what a run would start from (not while one is shown: the selection is the run's)
         let ready: Result<String, String> = match (self.physics_live(), self.physics.mode) {
@@ -358,7 +358,6 @@ impl VarstotasApp {
         };
         let (mut run, mut stop, mut apply, mut cancel) = (false, false, false, false);
         win.show(ctx, |ui| {
-            ui.set_width(340.0);
             let live = self.physics.run.is_some();
             let button = |ui: &mut egui::Ui, label: String, id: &str, enabled: bool| {
                 let r = ui.add_enabled(enabled, egui::Button::new(label));

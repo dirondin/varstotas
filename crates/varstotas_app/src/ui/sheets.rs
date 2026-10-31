@@ -15,8 +15,8 @@ use std::path::Path;
 use std::rc::Rc;
 use varstotas_i18n::tr;
 
-/// Preview size, points.
-const PREVIEW: egui::Vec2 = vec2(620.0, 440.0);
+/// Smallest preview, points (it takes the rest of the window).
+const PREVIEW: egui::Vec2 = vec2(420.0, 300.0);
 /// Grab radius of the resize handle, points.
 const HANDLE: f32 = 7.0;
 
@@ -289,7 +289,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(20.0, 20.0);
         let mut open = true;
         let (mut add, mut delete, mut duplicate, mut goto, mut save) = (false, false, false, None, None);
-        let win = self.placed(egui::Window::new(tr!("sheets-title")).id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(false), pos);
+        let win = self.placed(egui::Window::new(tr!("sheets-title")).id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(true).default_size([920.0, 500.0]), pos);
         let model = &self.doc.model;
         let st = &mut self.sheets;
         win.show(ctx, |ui| {
@@ -531,7 +531,8 @@ impl VarstotasApp {
                 });
                 // Right: the sheet.
                 ui.vertical(|ui| {
-                    let (rect, resp) = ui.allocate_exact_size(PREVIEW, Sense::click_and_drag());
+                    // above the summary and export row
+                    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ui.available_height() - 30.0).max(PREVIEW), Sense::click_and_drag());
                     let painter = ui.painter_at(rect);
                     painter.rect_filled(rect, 4.0, theme::border());
                     let (Some(sheet), Some(page)) = (sheet.as_mut(), page.as_ref()) else {

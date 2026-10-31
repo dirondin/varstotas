@@ -37,10 +37,9 @@ impl VarstotasApp {
             .id(egui::Id::new("work_planes_window"))
             .open(&mut open)
             .collapsible(false)
-            .resizable(false);
+            .default_width(340.0);
         let win = self.placed(win, pos);
         win.show(ctx, |ui| {
-            ui.set_width(340.0);
             if planes.is_empty() {
                 ui.label(tr!("workplane-none"));
             }

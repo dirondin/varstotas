@@ -203,13 +203,13 @@ impl VarstotasApp {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(360.0);
-                    egui::ScrollArea::vertical().id_salt("render_settings_scroll").max_height(440.0).show(ui, |ui| {
+                    egui::ScrollArea::vertical().id_salt("render_settings_scroll").show(ui, |ui| {
                         settings_ui(ui, &mut settings, &mut env, &self.camera, unit);
                     });
                 });
                 if let Some((id, size)) = tex {
                     let avail = ui.available_width().max(100.0);
-                    let k = (avail / size[0] as f32).min(440.0 / size[1] as f32).min(1.0);
+                    let k = (avail / size[0] as f32).min(ui.available_height().max(200.0) / size[1] as f32).min(1.0);
                     ui.image(egui::load::SizedTexture::new(id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
                 }
             });

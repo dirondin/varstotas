@@ -624,9 +624,8 @@ impl VarstotasApp {
             self.doc.prune_selection();
         }
         let mut open = true;
-        let win = self.placed(egui::Window::new(tr!("assembly-title")).id(egui::Id::new("assembly_window")).open(&mut open).collapsible(false).resizable(false).pivot(egui::Align2::RIGHT_TOP), pos);
+        let win = self.placed(egui::Window::new(tr!("assembly-title")).id(egui::Id::new("assembly_window")).open(&mut open).collapsible(false).resizable(true).default_size([480.0, 420.0]).min_width(420.0).pivot(egui::Align2::RIGHT_TOP), pos);
         win.show(ctx, |ui| {
-            ui.set_width(480.0);
             self.assembly_view_ui(ui);
             ui.separator();
             self.assembly_steps_ui(ui);
@@ -716,7 +715,8 @@ impl VarstotasApp {
         let subs = sub_assemblies(&self.doc.model);
         let mut show: Option<Option<usize>> = None;
         let mut edit: Option<(String, Vec<Step>)> = None;
-        egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+        // the rest of the window, as large as it is made
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let r = ui.selectable_label(a.step.is_none(), tr!("assembly-all-steps"));
             if r.clicked() {
                 show = Some(None);
