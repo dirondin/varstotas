@@ -6,8 +6,8 @@
 # exports never meets a file from an earlier run, so no "replace?" dialog can stop it); in it,
 # shots/ is target/ui-tests/shots and home/ the script's home. $ROOT in a script is the repository.
 # The folder is removed after a passing run and kept (its path printed) after a failing one.
-# The app runs in the background: not activated, never focused, its window nearly transparent and
-# click-through (a script that records a video, or VARSTOTAS_FOREGROUND=1, shows it).
+# The app runs in the background: not activated, never focused, its window at the normal level
+# (a script that records a video, or VARSTOTAS_FOREGROUND=1, puts it on top and focuses it).
 root=${0:A:h:h:h}
 out=$root/target/ui-tests
 mkdir -p $out/shots $out/home $out/models
