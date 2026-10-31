@@ -259,6 +259,7 @@ const WORKSHOP: &[B] = &[
     B::Row("help-workshop-6", "help-workshop-7"),
     B::Row("help-workshop-8", "help-workshop-9"),
     B::Row("help-workshop-19", "help-workshop-20"),
+    B::Row("help-workshop-21", "help-workshop-22"),
     B::Row("help-workshop-10", "help-workshop-11"),
     B::Script(super::script_help::Topic::Functions, "help-workshop-12"),
 ];

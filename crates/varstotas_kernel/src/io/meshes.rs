@@ -88,7 +88,7 @@ pub(crate) fn add_meshes(model: &mut Model, meshes: Vec<ImpMesh>, mats: &[ImpMat
         }
         surface.finish(&mut mesh, opts);
         // i18n-ignore-next
-        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
+        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
         let root = model.root;
         model.defs[root].mesh.instances.insert(Instance { def, transform: DMat4::IDENTITY, name: m.name, material: None, tag: None, hidden: false, locked: false });
         groups += 1;

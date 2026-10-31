@@ -61,7 +61,10 @@ The model optionally stores `assembly`: `{ "steps": [{ "parts": [instance path],
 "step", "moved": [[instance path, [x, y, z]]], "hid": [instance path] }` (`joints` the joints whose fasteners go in
 at that step, a fastener step having no parts; `explode` the exploded view's distance in mm, `step` the step shown from 0; `moved` and `hid` record what the view did to the
 instances' transforms and `hidden` flags so it can be undone), and a scene optionally stores
-`assembly`: `{ "explode", "step" }`, the view it restores. `fasteners_hidden: true` turns off
+`assembly`: `{ "explode", "step" }`, the view it restores. A group's or component's definition optionally stores
+`steps` like the model's (paths from its own content, joints of its own `joints`): it is a
+sub-assembly, put together first and added to the steps it is placed in whole; `within` in the
+model's `assembly` is the sub-assembly whose steps the view shows. `fasteners_hidden: true` turns off
 View → Show → Fasteners; the fastener bodies themselves are not stored, they are placed again from
 the joints when the file is read.
 All are omitted while empty or default, so older readers and files are unaffected.

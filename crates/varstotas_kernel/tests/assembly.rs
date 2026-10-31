@@ -134,3 +134,54 @@ fn exploded_parts_stay_clear_of_each_other() {
     assert!(moved[6].y < moved[5].y);
     assert!(moved.iter().zip(&half).all(|(a, b)| a.distance(*b * 2.0) < 1e-9));
 }
+
+#[test]
+fn a_component_with_steps_is_a_sub_assembly() {
+    use varstotas_kernel::EntityRef;
+    use varstotas_kernel::assembly::suggest_all;
+    let (mut m, [bottom, left, right, top, shelf]) = cabinet();
+    // a tray on the shelf: its bottom and a front screwed onto it, made a component
+    let base = board(&mut m, "Tray bottom", DVec3::new(400.0, 250.0, 12.0), DVec3::new(50.0, 20.0, 368.0));
+    let front = board(&mut m, "Tray front", DVec3::new(400.0, 12.0, 80.0), DVec3::new(50.0, 20.0, 380.0));
+    m.add_wood_joint(WoodJointKind::Screws, vec![base], vec![front]).unwrap();
+    let tray = m.make_component(&[], &[EntityRef::Instance(base), EntityRef::Instance(front)], "Tray").unwrap();
+    let td = m.root_mesh().instances[tray].def;
+    assert!(m.joints.is_empty() && m.defs[td].joints.len() == 1);
+    // the tray gets steps of its own and goes into the cabinet whole, onto the shelf before
+    // the top
+    let (steps, subs) = suggest_all(&m);
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].0, td);
+    assert_eq!(subs[0].1.len(), 2);
+    let ids: Vec<Vec<Vec<InstanceId>>> = steps.iter().map(|s| s.parts.clone()).collect();
+    assert_eq!(ids, vec![vec![vec![bottom]], vec![vec![left], vec![right]], vec![vec![shelf]], vec![vec![tray]], vec![vec![top]]]);
+    m.assembly.steps = steps;
+    m.defs[td].steps = subs[0].1.clone();
+    m.refresh_fasteners();
+    // its screws go in at its own steps, not at the cabinet's
+    assert_eq!(m.placed_joints.len(), 1);
+    assert_eq!(m.fastener_step(0), None);
+    let sub = m.sub_model(td);
+    assert_eq!(sub.joints.len(), 1);
+    assert_eq!(sub.fastener_step(0), Some(1));
+    // exploded, the tray comes out whole
+    m.set_assembly_view(SceneAssembly { explode: 100.0, step: None });
+    let off = |m: &Model, rel: InstanceId| m.assembly_offset(&[tray, rel]);
+    let (b0, f0) = {
+        let inner = &m.defs[td].mesh.instances;
+        let mut ids = inner.iter().map(|(id, _)| id);
+        (ids.next().unwrap(), ids.next().unwrap())
+    };
+    assert!(off(&m, b0).length() > 1.0 && off(&m, b0) == off(&m, f0));
+    // its own view: its front hidden at its first step, the cabinet as it is
+    m.set_assembly_within(vec![tray]);
+    assert!(m.assembly.moved.is_empty());
+    m.set_assembly_view(SceneAssembly { explode: 50.0, step: Some(0) });
+    let first = &m.defs[td].steps[0].parts[0];
+    let later = if first[0] == b0 { f0 } else { b0 };
+    assert!(m.defs[td].mesh.instances[later].hidden);
+    assert!(m.assembly.moved.iter().all(|(p, _)| p[0] == tray));
+    assert_eq!(at(&m, top), DVec3::new(0.0, 0.0, 718.0));
+    m.assemble();
+    assert!(!m.defs[td].mesh.instances[later].hidden);
+}

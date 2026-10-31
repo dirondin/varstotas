@@ -188,7 +188,7 @@ impl Model {
         let use_a = match f.anchor {
             Anchor::A => true,
             Anchor::B => j.b.is_empty(),
-            Anchor::Earlier => match (self.assembly.step_of(&j.a), self.assembly.step_of(&j.b)) {
+            Anchor::Earlier => match (self.shown_step_of(&j.a), self.shown_step_of(&j.b)) {
                 (Some(x), Some(y)) => x <= y,
                 _ => j.b.is_empty(),
             },
@@ -223,7 +223,12 @@ impl Model {
 
     /// The step joint `i`'s fasteners go in at: the fastener step given them, else the joint's.
     pub fn fastener_step(&self, i: usize) -> Option<usize> {
-        self.assembly.joint_given(i).or_else(|| self.joint_step(i))
+        self.shown_steps().iter().position(|s| s.joints.contains(&i)).or_else(|| self.joint_step(i))
+    }
+
+    /// The step of the steps shown ([`Model::shown_steps`]) that adds the part at `path`.
+    pub fn shown_step_of(&self, path: &[crate::InstanceId]) -> Option<usize> {
+        self.shown_steps().iter().position(|s| s.parts.iter().any(|p| path.starts_with(p)))
     }
 
     /// Every instance on `path` is shown.

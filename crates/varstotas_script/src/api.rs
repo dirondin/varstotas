@@ -498,7 +498,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         source: None,
         rig: None,
         rigged: None,
-        preview: None, joints: Vec::new(),
+        preview: None, joints: Vec::new(), steps: Vec::new(),
     });
     let m = mesh_mut(st, &path)?;
     let id = m.instances.insert(Instance {

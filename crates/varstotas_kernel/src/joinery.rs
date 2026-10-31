@@ -1426,11 +1426,11 @@ impl WoodJoint {
     }
 }
 
-/// What holds a path: a joint of a definition (the root's too), or an assembly step.
+/// What holds a path: a joint or an assembly step of a definition (the root's too).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Held {
     Joint(DefId),
-    Step,
+    Step(DefId),
 }
 
 /// A held path that goes through an instance being moved ([`Model::paths_through`]).
@@ -1619,7 +1619,7 @@ impl Model {
     }
 
     /// Every path held by a joint (its owner, index, part: 0 `a`, 1 `b`) or an assembly step
-    /// (owner the root; index the step's, part the path's in it) that goes through instance
+    /// (its owner; index the step's, part the path's in it) that goes through instance
     /// `id` of definition `pd` for an `id` of `ids`, with where in the path that instance is.
     pub(crate) fn paths_through(&self, pd: DefId, ids: &[crate::InstanceId]) -> Vec<PathAt> {
         let through = |owner: DefId, path: &[crate::InstanceId]| {
@@ -1642,11 +1642,11 @@ impl Model {
                     }
                 }
             }
-        }
-        for (i, st) in self.assembly.steps.iter().enumerate() {
-            for (part, path) in st.parts.iter().enumerate() {
-                if let Some(at) = through(self.root, path) {
-                    out.push(PathAt { held: Held::Step, index: i, part, at });
+            for (i, st) in self.steps_of(owner).iter().enumerate() {
+                for (part, path) in st.parts.iter().enumerate() {
+                    if let Some(at) = through(owner, path) {
+                        out.push(PathAt { held: Held::Step(owner), index: i, part, at });
+                    }
                 }
             }
         }
@@ -1659,7 +1659,7 @@ impl Model {
         for h in at {
             let path = match h.held {
                 Held::Joint(owner) => self.joints_of_mut(owner).and_then(|l| l.get_mut(h.index)).map(|j| if h.part == 0 { &mut j.a } else { &mut j.b }),
-                Held::Step => self.assembly.steps.get_mut(h.index).and_then(|s| s.parts.get_mut(h.part)),
+                Held::Step(owner) => self.steps_of_mut(owner).and_then(|l| l.get_mut(h.index)).and_then(|s| s.parts.get_mut(h.part)),
             };
             if let Some(path) = path
                 && h.at < path.len()
@@ -1693,12 +1693,27 @@ impl Model {
             if let Some(l) = self.joints_of_mut(pd) {
                 l.remove(i);
             }
-            if pd == self.root {
-                for s in &mut self.assembly.steps {
-                    s.joints.retain(|&j| j != i);
-                    s.joints.iter_mut().filter(|j| **j > i).for_each(|j| *j -= 1);
-                }
+            self.forget_step_joint(pd, i);
+        }
+    }
+
+    /// The assembly steps of definition `d` (the root's: [`crate::assembly::Assembly::steps`]).
+    pub fn steps_of(&self, d: DefId) -> &[crate::assembly::Step] {
+        if d == self.root { &self.assembly.steps } else { self.defs.get(d).map_or(&[], |x| x.steps.as_slice()) }
+    }
+
+    pub fn steps_of_mut(&mut self, d: DefId) -> Option<&mut Vec<crate::assembly::Step>> {
+        if d == self.root { Some(&mut self.assembly.steps) } else { self.defs.get_mut(d).map(|x| &mut x.steps) }
+    }
+
+    /// Joint `i` of definition `d` went: its steps forget it (a fastener step left empty goes).
+    fn forget_step_joint(&mut self, d: DefId, i: usize) {
+        if let Some(steps) = self.steps_of_mut(d) {
+            for s in steps.iter_mut() {
+                s.joints.retain(|&j| j != i);
+                s.joints.iter_mut().filter(|j| **j > i).for_each(|j| *j -= 1);
             }
+            steps.retain(|s| !s.parts.is_empty() || !s.joints.is_empty());
         }
     }
 
@@ -1798,20 +1813,9 @@ impl Model {
     /// goes).
     pub fn remove_wood_joint(&mut self, i: usize) {
         let Ok(place) = self.joint_place(i) else { return };
-        if place.def != self.root {
-            if let Some(l) = self.joints_of_mut(place.def).filter(|l| place.index < l.len()) {
-                l.remove(place.index);
-            }
-            self.rebuild_wood_joints();
-            return;
-        }
-        if i < self.joints.len() {
-            self.joints.remove(i);
-            for s in &mut self.assembly.steps {
-                s.joints.retain(|&j| j != i);
-                s.joints.iter_mut().filter(|j| **j > i).for_each(|j| *j -= 1);
-            }
-            self.assembly.steps.retain(|s| !s.parts.is_empty() || !s.joints.is_empty());
+        if let Some(l) = self.joints_of_mut(place.def).filter(|l| place.index < l.len()) {
+            l.remove(place.index);
+            self.forget_step_joint(place.def, place.index);
             self.rebuild_wood_joints();
         }
     }

@@ -14,10 +14,10 @@ use crate::vector_export::{Drawing, Pen, Text2, VectorOptions, view_lines};
 use egui::{Context, RichText, Ui, vec2};
 use std::path::Path;
 use varstotas_i18n::tr;
-use varstotas_kernel::assembly::{SceneAssembly, Step, fasteners_first, suggest_steps};
+use varstotas_kernel::assembly::{SceneAssembly, Step, Unit, fasteners_first, suggest_all, suggest_steps};
 use varstotas_kernel::cutlist::CutPlan;
 use varstotas_kernel::glam::{DVec2, DVec3};
-use varstotas_kernel::{ContextPath, EntityRef, Model};
+use varstotas_kernel::{ContextPath, DefId, EntityRef, Model};
 use varstotas_render::Camera;
 
 /// A4 portrait, mm.
@@ -56,20 +56,29 @@ fn wrap(s: &str, n: usize) -> Vec<String> {
     out
 }
 
-/// The parts a step adds: "2 × Side (1)", numbered as the cut list numbers them.
-pub(crate) fn step_parts(model: &Model, plan: &CutPlan, step: &Step) -> Vec<String> {
-    let parts = varstotas_kernel::assembly::parts(model);
+/// The parts a step adds: "2 × Side (1)", numbered as the cut list numbers them, and its
+/// sub-assemblies: "3 × Drawer (A)", lettered as `subs` orders them.
+pub(crate) fn step_parts(model: &Model, plan: &CutPlan, step: &Step, subs: &[(DefId, usize)]) -> Vec<String> {
+    let units = varstotas_kernel::assembly::units_within(model, &model.assembly.within);
     let cut = varstotas_kernel::cutlist::cut_parts(model);
-    let mut by: Vec<(usize, usize)> = Vec::new();
-    for p in &step.parts {
-        let Some((_, i)) = parts.iter().find(|(q, _)| q == p) else { continue };
-        match by.iter_mut().find(|(k, _)| k == i) {
+    let mut by: Vec<(Unit, usize)> = Vec::new();
+    // a group's every unit (a group the steps add whole that is no sub-assembly)
+    for (_, u) in units.iter().filter(|(q, _)| step.parts.iter().any(|p| q.starts_with(p))) {
+        match by.iter_mut().find(|(k, _)| k == u) {
             Some(e) => e.1 += 1,
-            None => by.push((*i, 1)),
+            None => by.push((*u, 1)),
         }
     }
     by.into_iter()
-        .map(|(i, n)| {
+        .map(|(u, n)| {
+            let i = match u {
+                Unit::Part(i) => i,
+                Unit::Sub(d) => {
+                    let name = model.defs.get(d).map(|x| x.name.clone()).unwrap_or_default();
+                    let k = subs.iter().position(|s| s.0 == d).map(|k| format!(" ({})", letter(k))).unwrap_or_default();
+                    return format!("{n} × {name}{k}");
+                }
+            };
             let part = &cut[i];
             // its row: the same name, material and size (equal names can differ in size)
             let same = |p: &&varstotas_kernel::cutlist::CutPart| p.name == part.name && p.material == part.material;
@@ -221,44 +230,47 @@ fn draw_arrow(d: &mut Drawing, tail: DVec2, head: DVec2) {
     d.lines.push((head, head - u * 3.0 - side * 1.3, Pen::Profile));
 }
 
-/// The booklet: a cover, the parts and hardware, a page per step. Pictures are drawn with
-/// `cam`, every step framed alike (by the whole model exploded as now).
+/// The sub-assemblies the steps add (each with steps of its own), in the order they are put
+/// together (one inside another first), each with how many are made.
+pub(crate) fn sub_assemblies(model: &Model) -> Vec<(DefId, usize)> {
+    fn walk(m: &Model, prefix: &[varstotas_kernel::InstanceId], steps: &[Step], out: &mut Vec<(DefId, usize)>) {
+        for p in steps.iter().flat_map(|s| &s.parts) {
+            let full: ContextPath = prefix.iter().chain(p).copied().collect();
+            let Some(d) = m.def_at(&full).filter(|&d| m.defs.get(d).is_some_and(|x| !x.steps.is_empty())) else { continue };
+            walk(m, &full, &m.defs[d].steps, out);
+            match out.iter_mut().find(|e| e.0 == d) {
+                Some(e) => e.1 += 1,
+                None => out.push((d, 1)),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(model, &[], &model.assembly.steps, &mut out);
+    out
+}
+
+/// A sub-assembly's letter in the booklet: A, B, … (then AA, AB, …).
+fn letter(k: usize) -> String {
+    let a = |i: usize| char::from(b'A' + (i % 26) as u8);
+    if k < 26 { a(k).to_string() } else { format!("{}{}", a(k / 26 - 1), a(k)) }
+}
+
+/// The booklet: a cover, the parts and hardware, the pages of each sub-assembly (put together
+/// first, a drawer), then a page per step. Pictures are drawn with `cam`, every step framed
+/// alike (by the whole model, or the sub-assembly, exploded as now).
 pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &str) -> Vec<Drawing> {
+    let view = model.assembly.view();
+    let mut model = model.clone();
+    model.set_assembly_within(Vec::new());
+    model.set_assembly_view(view);
+    let model = &model;
     let a = &model.assembly;
-    let view = a.view();
     let rect = (DVec2::new(MARGIN, 32.0), DVec2::new(PAGE.x - 2.0 * MARGIN, 175.0));
     let px = rect.1 * 4.0;
     let opts = VectorOptions { profiles: true, hidden: false, dims: false, sections: false, ..Default::default() };
     let mut all = model.clone();
     all.set_assembly_view(SceneAssembly { explode: view.explode, step: None });
     let whole = view_lines(&all, cam, px, &opts);
-    // screen → paper, fitted to the whole model in `rect`
-    let fit_map = |lines: &crate::vector_export::ViewLines, (min, size): (DVec2, DVec2), extra: &[DVec2]| -> Option<(DVec2, f64)> {
-        let (lo, hi) = lines.bounds()?;
-        let (lo, hi) = extra.iter().fold((lo, hi), |(l, h), p| (l.min(*p), h.max(*p)));
-        let ext = (hi - lo).max(DVec2::splat(1e-6));
-        let k = (size.x / ext.x).min(size.y / ext.y);
-        Some((min + size * 0.5 - (lo + hi) * 0.5 * k, k))
-    };
-    // the steps' arrows (the parts' only with the model exploded) and fasteners, framed with
-    // the model
-    let dirs = varstotas_kernel::assembly::explode_dirs(model);
-    let (step_arrows, step_fasteners): (Vec<Vec<Arrow>>, Vec<Vec<Outline>>) = (0..a.steps.len())
-        .map(|k| {
-            let mut m = model.clone();
-            m.set_assembly_view(SceneAssembly { explode: view.explode, step: Some(k) });
-            let mut out = if view.explode > 0.0 { arrows(&m, &a.steps[k], &dirs, view.explode, cam, px) } else { Vec::new() };
-            let (outlines, more) = fastener_lines(&m, k, cam, px);
-            out.extend(more);
-            (out, outlines)
-        })
-        .unzip();
-    let ends: Vec<DVec2> = step_arrows.iter().flatten().flat_map(|&(t, h)| [t, h]).collect();
-    let map = fit_map(&whole, rect, &ends);
-    let picture = |d: Drawing, lines: &crate::vector_export::ViewLines, map: Option<(DVec2, f64)>| match map {
-        Some((off, k)) => lines.on_paper(d, move |p| off + p * k),
-        None => d,
-    };
     let blank = || Drawing { size: PAGE, ..Default::default() };
     let mut pages = Vec::new();
 
@@ -267,7 +279,10 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
     text(&mut d, DVec2::new(PAGE.x * 0.5, 28.0), 9.0, fit(&title(doc), 9.0, PAGE.x - 2.0 * MARGIN), false);
     text(&mut d, DVec2::new(PAGE.x * 0.5, 40.0), 5.0, tr!("assembly-booklet-title"), false);
     let cover = (DVec2::new(MARGIN, 55.0), DVec2::new(PAGE.x - 2.0 * MARGIN, 190.0));
-    let mut d = picture(d, &whole, fit_map(&whole, cover, &[]));
+    let mut d = match fit_map(&whole, cover, &[]) {
+        Some((off, k)) => whole.on_paper(d, move |p| off + p * k),
+        None => d,
+    };
     let count: usize = plan.parts.iter().map(|p| p.count).sum();
     text(&mut d, DVec2::new(PAGE.x * 0.5, 262.0), 4.0, tr!("assembly-booklet-summary", steps = a.steps.len(), parts = count), false);
     pages.push(d);
@@ -305,15 +320,74 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
     }
     pages.push(d);
 
-    // a page per step, arrows showing where its parts go
+    // each sub-assembly alone, seen the same way, framed by itself
+    let subs = sub_assemblies(model);
+    for (k, &(def, made)) in subs.iter().enumerate() {
+        let mut sub = model.sub_model(def);
+        sub.set_assembly_view(SceneAssembly { explode: view.explode, step: None });
+        let Some(b) = sub.bounds() else { continue };
+        let mut c = cam.clone();
+        c.zoom_extents(b.min, b.max, px.x / px.y);
+        let name = model.defs[def].name.clone();
+        let head = |n: usize, total: usize| tr!("assembly-booklet-sub-step", sub = letter(k), name = name.clone(), made = made, n = n, total = total);
+        pages.extend(step_pages(&sub, plan, &c, view.explode, &subs, &head));
+    }
+    pages.extend(step_pages(model, plan, cam, view.explode, &subs, &|n, total| tr!("assembly-booklet-step", n = n, total = total)));
+    let total = pages.len();
+    for (i, d) in pages.iter_mut().enumerate() {
+        text(d, DVec2::new(PAGE.x * 0.5, PAGE.y - 8.0), 2.6, tr!("assembly-booklet-footer", doc = doc.to_string(), n = i + 1, total = total), false);
+    }
+    pages
+}
+
+/// Screen → paper, fitted to `lines` (and the points `extra`) in the box `min`, `size`.
+fn fit_map(lines: &crate::vector_export::ViewLines, (min, size): (DVec2, DVec2), extra: &[DVec2]) -> Option<(DVec2, f64)> {
+    let (lo, hi) = lines.bounds()?;
+    let (lo, hi) = extra.iter().fold((lo, hi), |(l, h), p| (l.min(*p), h.max(*p)));
+    let ext = (hi - lo).max(DVec2::splat(1e-6));
+    let k = (size.x / ext.x).min(size.y / ext.y);
+    Some((min + size * 0.5 - (lo + hi) * 0.5 * k, k))
+}
+
+/// A page per step of `model`'s steps, headed `head(n, total)`, arrows showing where its parts
+/// go; `subs` letters the sub-assemblies a step adds.
+fn step_pages(model: &Model, plan: &CutPlan, cam: &Camera, explode: f64, subs: &[(DefId, usize)], head: &dyn Fn(usize, usize) -> String) -> Vec<Drawing> {
+    let a = &model.assembly;
+    let rect = (DVec2::new(MARGIN, 32.0), DVec2::new(PAGE.x - 2.0 * MARGIN, 175.0));
+    let px = rect.1 * 4.0;
+    let opts = VectorOptions { profiles: true, hidden: false, dims: false, sections: false, ..Default::default() };
+    let mut all = model.clone();
+    all.set_assembly_view(SceneAssembly { explode, step: None });
+    let whole = view_lines(&all, cam, px, &opts);
+    // the steps' arrows (the parts' only with the model exploded) and fasteners, framed with
+    // the model
+    let dirs = varstotas_kernel::assembly::explode_dirs(model);
+    let (step_arrows, step_fasteners): (Vec<Vec<Arrow>>, Vec<Vec<Outline>>) = (0..a.steps.len())
+        .map(|k| {
+            let mut m = model.clone();
+            m.set_assembly_view(SceneAssembly { explode, step: Some(k) });
+            let mut out = if explode > 0.0 { arrows(&m, &a.steps[k], &dirs, explode, cam, px) } else { Vec::new() };
+            let (outlines, more) = fastener_lines(&m, k, cam, px);
+            out.extend(more);
+            (out, outlines)
+        })
+        .unzip();
+    let ends: Vec<DVec2> = step_arrows.iter().flatten().flat_map(|&(t, h)| [t, h]).collect();
+    let map = fit_map(&whole, rect, &ends);
+    let picture = |d: Drawing, lines: &crate::vector_export::ViewLines, map: Option<(DVec2, f64)>| match map {
+        Some((off, k)) => lines.on_paper(d, move |p| off + p * k),
+        None => d,
+    };
+    let blank = || Drawing { size: PAGE, ..Default::default() };
+    let mut pages = Vec::new();
     let n = a.steps.len();
     for (k, step) in a.steps.iter().enumerate() {
         let mut m = model.clone();
-        m.set_assembly_view(SceneAssembly { explode: view.explode, step: Some(k) });
+        m.set_assembly_view(SceneAssembly { explode, step: Some(k) });
         let faint: Vec<ContextPath> = a.steps[..k].iter().flat_map(|s| s.parts.iter().cloned()).collect();
         let lines = view_lines(&m, cam, px, &VectorOptions { faint, ..opts.clone() });
         let mut d = blank();
-        text(&mut d, DVec2::new(MARGIN, 22.0), 7.0, tr!("assembly-booklet-step", n = k + 1, total = n), true);
+        text(&mut d, DVec2::new(MARGIN, 22.0), 7.0, fit(&head(k + 1, n), 7.0, PAGE.x - 2.0 * MARGIN), true);
         let mut d = picture(d, &lines, map);
         if let Some((off, scale)) = map {
             for o in &step_fasteners[k] {
@@ -376,7 +450,7 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
             }
             *y += 2.0;
         };
-        block(&mut d, tr!("assembly-booklet-add"), step_parts(model, plan, step), &mut y);
+        block(&mut d, tr!("assembly-booklet-add"), step_parts(model, plan, step, subs), &mut y);
         block(&mut d, tr!("assembly-booklet-hardware"), step_hardware(model, k), &mut y);
         for l in wrap(&step.note, if close.is_some() { 60 } else { 90 }) {
             if y > PAGE.y - 18.0 {
@@ -386,10 +460,6 @@ pub(crate) fn assembly_pages(model: &Model, plan: &CutPlan, cam: &Camera, doc: &
             y += 5.0;
         }
         pages.push(d);
-    }
-    let total = pages.len();
-    for (i, d) in pages.iter_mut().enumerate() {
-        text(d, DVec2::new(PAGE.x * 0.5, PAGE.y - 8.0), 2.6, tr!("assembly-booklet-footer", doc = doc.to_string(), n = i + 1, total = total), false);
     }
     pages
 }
@@ -402,7 +472,7 @@ impl VarstotasApp {
             return;
         }
         self.doc.mutate_untracked(|m| m.set_assembly_view(v));
-        if let Some(s) = v.step.and_then(|s| self.doc.model.assembly.steps.get(s)).filter(|s| !s.parts.is_empty()) {
+        if let Some(s) = v.step.and_then(|s| self.doc.model.shown_steps().get(s).cloned()).filter(|s| !s.parts.is_empty()) {
             let parent = s.parts.first().map(|p| p[..p.len() - 1].to_vec()).unwrap_or_default();
             let sel: Vec<EntityRef> = s.parts.iter().filter(|p| p[..p.len() - 1] == parent[..]).filter_map(|p| p.last().map(|&id| EntityRef::Instance(id))).collect();
             self.doc.set_active_path(parent);
@@ -411,11 +481,68 @@ impl VarstotasApp {
         self.doc.prune_selection();
     }
 
-    /// Replace the steps with those the contact graph suggests.
+    /// Replace the steps shown with those the contact graph suggests; the model's give every
+    /// group or component with joints inside steps of its own when it has none.
     pub(crate) fn suggest_assembly(&mut self) {
         self.set_assembly_view(SceneAssembly::default());
-        let steps = suggest_steps(&self.doc.model);
-        self.doc.commit(&tr!("assembly-undo-steps"), move |m| m.assembly.steps = steps);
+        let within = self.doc.model.assembly.within.clone();
+        match self.doc.model.def_at(&within).filter(|_| !within.is_empty()) {
+            None => {
+                let (steps, subs) = suggest_all(&self.doc.model);
+                self.doc.commit(&tr!("assembly-undo-steps"), move |m| {
+                    m.assembly.steps = steps;
+                    for (d, s) in subs {
+                        if let Some(def) = m.defs.get_mut(d) {
+                            def.steps = s;
+                        }
+                    }
+                });
+            }
+            Some(d) => self.make_sub_assembly(d),
+        }
+    }
+
+    /// Give definition `d` the steps its parts suggest: a sub-assembly.
+    fn make_sub_assembly(&mut self, d: DefId) {
+        let steps = suggest_steps(&self.doc.model.sub_model(d));
+        self.doc.commit(&tr!("assembly-undo-steps"), move |m| {
+            if let Some(def) = m.defs.get_mut(d) {
+                def.steps = steps;
+            }
+        });
+    }
+
+    /// The sub-assembly whose steps the window shows: the innermost open group or component
+    /// with steps of its own; the model's when none is open.
+    fn assembly_scope(&self) -> ContextPath {
+        let ap = &self.doc.active_path;
+        let m = &self.doc.model;
+        (1..=ap.len()).rev().map(|k| &ap[..k]).find(|p| m.def_at(p).is_some_and(|d| !m.defs[d].steps.is_empty())).map(|p| p.to_vec()).unwrap_or_default()
+    }
+
+    /// Replace the steps shown with `steps` (their paths from the root, joints of
+    /// [`Model::placed_joints`]): the model's, or the sub-assembly's.
+    fn commit_steps(&mut self, label: &str, steps: Vec<Step>) {
+        let m = &self.doc.model;
+        let within = m.assembly.within.clone();
+        let Some(d) = m.def_at(&within).filter(|_| !within.is_empty()) else {
+            self.doc.commit(label, move |m| m.assembly.steps = steps);
+            return;
+        };
+        let own = |i: usize| m.joint_places.get(i).map(|p| p.index);
+        let steps: Vec<Step> = steps
+            .into_iter()
+            .map(|s| Step {
+                parts: s.parts.iter().filter_map(|p| p.strip_prefix(&within[..]).map(|r| r.to_vec())).collect(),
+                joints: s.joints.iter().filter_map(|&i| own(i)).collect(),
+                note: s.note,
+            })
+            .collect();
+        self.doc.commit(label, move |m| {
+            if let Some(def) = m.defs.get_mut(d) {
+                def.steps = steps;
+            }
+        });
     }
 
     /// One scene per step ("Step N"), seen from the current view as exploded now; scenes of
@@ -440,11 +567,23 @@ impl VarstotasApp {
     }
 
     pub(crate) fn assembly_dump(&self) -> (usize, i64, Option<usize>, Vec<Vec<String>>) {
-        let a = &self.doc.model.assembly;
-        let plan = crate::ui::cutlist::model_plan(&self.doc.model);
+        let m = &self.doc.model;
+        let a = &m.assembly;
+        let plan = crate::ui::cutlist::model_plan(m);
+        let subs = sub_assemblies(m);
+        let steps = m.shown_steps();
         // a fastener step by its hardware
-        let what = |(k, s): (usize, &Step)| if s.parts.is_empty() { step_hardware(&self.doc.model, k) } else { step_parts(&self.doc.model, &plan, s) };
-        (a.steps.len(), a.explode.round() as i64, a.step, a.steps.iter().enumerate().map(what).collect())
+        let what = |(k, s): (usize, &Step)| if s.parts.is_empty() { step_hardware(m, k) } else { step_parts(m, &plan, s, &subs) };
+        (steps.len(), a.explode.round() as i64, a.step, steps.iter().enumerate().map(what).collect())
+    }
+
+    /// The sub-assembly shown (its name; "" the model's) and every sub-assembly the model's
+    /// steps add with how many are made.
+    pub(crate) fn sub_assembly_dump(&self) -> (String, Vec<(String, usize)>) {
+        let m = &self.doc.model;
+        let within = &m.assembly.within;
+        let name = if within.is_empty() { String::new() } else { m.def_at(within).map(|d| m.defs[d].name.clone()).unwrap_or_default() };
+        (name, sub_assemblies(m).into_iter().map(|(d, n)| (m.defs[d].name.clone(), n)).collect())
     }
 
     /// Write the instructions booklet to `path`.
@@ -478,6 +617,12 @@ impl VarstotasApp {
         }
         // at the view's right edge, clear of the model in the middle
         let pos = self.viewport.view_rect.right_top() + vec2(-20.0, 60.0);
+        // the steps of the open sub-assembly, or the model's
+        let scope = self.assembly_scope();
+        if scope != self.doc.model.assembly.within {
+            self.doc.mutate_untracked(|m| m.set_assembly_within(scope));
+            self.doc.prune_selection();
+        }
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("assembly-title")).id(egui::Id::new("assembly_window")).open(&mut open).collapsible(false).resizable(false).pivot(egui::Align2::RIGHT_TOP), pos);
         win.show(ctx, |ui| {
@@ -489,6 +634,7 @@ impl VarstotasApp {
         if !open {
             self.assembly.open = false;
             self.set_assembly_view(SceneAssembly::default());
+            self.doc.mutate_untracked(|m| m.set_assembly_within(Vec::new()));
         }
     }
 
@@ -506,15 +652,53 @@ impl VarstotasApp {
         self.set_assembly_view(v);
     }
 
+    /// Whose steps these are: a sub-assembly's (and a way back to a part of the whole), or the
+    /// model's, with a way to make the open group or component a sub-assembly.
+    fn assembly_scope_ui(&mut self, ui: &mut Ui) {
+        let m = &self.doc.model;
+        let within = m.assembly.within.clone();
+        let open = self.doc.active_path.clone();
+        if let Some(d) = m.def_at(&within).filter(|_| !within.is_empty()) {
+            let name = m.defs[d].name.clone();
+            let mut clear = false;
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(tr!("assembly-sub-of", name = name.clone())).strong());
+                let r = ui.small_button(tr!("assembly-sub-clear"));
+                super::tray_lib::spot("assembly:sub-clear", r.rect.center());
+                clear = r.on_hover_text(tr!("assembly-sub-clear-tip")).clicked();
+            });
+            ui.label(RichText::new(tr!("assembly-sub-note")).small().color(theme::text_dim()));
+            if clear {
+                self.set_assembly_view(SceneAssembly::default());
+                self.doc.commit(&tr!("assembly-undo-steps"), move |m| {
+                    if let Some(def) = m.defs.get_mut(d) {
+                        def.steps.clear();
+                    }
+                });
+            }
+        } else if let Some(d) = m.def_at(&open).filter(|_| !open.is_empty()) {
+            let name = m.defs[d].name.clone();
+            let r = ui.button(tr!("assembly-sub-make", name = name));
+            super::tray_lib::spot("assembly:sub-make", r.rect.center());
+            if r.on_hover_text(tr!("assembly-sub-make-tip")).clicked() {
+                self.set_assembly_view(SceneAssembly::default());
+                self.make_sub_assembly(d);
+            }
+        }
+    }
+
     fn assembly_steps_ui(&mut self, ui: &mut Ui) {
-        let a = self.doc.model.assembly.clone();
+        self.assembly_scope_ui(ui);
+        let mut a = self.doc.model.assembly.clone();
+        a.steps = self.doc.model.shown_steps().into_owned();
+        let sub = !a.within.is_empty();
         ui.horizontal(|ui| {
             let r = ui.button(RichText::new(tr!(if a.steps.is_empty() { "assembly-suggest" } else { "assembly-suggest-again" })).strong());
             super::tray_lib::spot("assembly:suggest", r.rect.center());
             if r.on_hover_text(tr!("assembly-suggest-tip")).clicked() {
                 self.suggest_assembly();
             }
-            ui.add_enabled_ui(!a.steps.is_empty(), |ui| {
+            ui.add_enabled_ui(!a.steps.is_empty() && !sub, |ui| {
                 if ui.button(tr!("assembly-scenes")).on_hover_text(tr!("assembly-scenes-tip")).clicked() {
                     self.assembly_scenes();
                 }
@@ -529,6 +713,7 @@ impl VarstotasApp {
             return;
         }
         let plan = crate::ui::cutlist::model_plan(&self.doc.model);
+        let subs = sub_assemblies(&self.doc.model);
         let mut show: Option<Option<usize>> = None;
         let mut edit: Option<(String, Vec<Step>)> = None;
         egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
@@ -545,7 +730,7 @@ impl VarstotasApp {
                             show = Some(Some(k));
                         }
                         // a fastener step by its hardware, in italics
-                        let what = if step.parts.is_empty() { step_hardware(&self.doc.model, k) } else { step_parts(&self.doc.model, &plan, step) };
+                        let what = if step.parts.is_empty() { step_hardware(&self.doc.model, k) } else { step_parts(&self.doc.model, &plan, step, &subs) };
                         let what = RichText::new(fit(&what.join(", "), 9.0, 220.0));
                         ui.label(if step.parts.is_empty() { what.italics() } else { what });
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -610,7 +795,7 @@ impl VarstotasApp {
         if let Some((label, steps)) = edit {
             let view = self.doc.model.assembly.view();
             self.set_assembly_view(SceneAssembly { step: None, ..view });
-            self.doc.commit(&label, move |m| m.assembly.steps = steps);
+            self.commit_steps(&label, steps);
         }
     }
 }

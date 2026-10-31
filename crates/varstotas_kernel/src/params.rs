@@ -74,7 +74,7 @@ impl Model {
             source: None,
             rig: None,
             rigged: None,
-            preview: None, joints: Vec::new(),
+            preview: None, joints: Vec::new(), steps: Vec::new(),
         });
         self.defs[pd].mesh.instances[inst].def = p;
         self.regenerate_params(p)?;

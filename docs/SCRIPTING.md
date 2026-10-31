@@ -185,6 +185,12 @@ along an axis, the front first; fasteners are pulled just clear of their holes. 
 exploded. Window → Assembly does the same and writes the instructions booklet (PDF); from
 Python, `m.export(path, what="assembly")`.
 
+A group or component with steps of its own is a sub-assembly (a drawer): put together first,
+it is one unit of the steps it is placed in, and the booklet has its pages first. In Window →
+Assembly, Suggest steps gives every group or component with joints inside steps of its own;
+opening one shows and edits its steps. A generator's `set_assembly_steps` gives the component
+it builds steps of its own.
+
 ## Example
 ```rhai
 material("Oak", "#C8A064");

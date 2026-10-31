@@ -131,6 +131,7 @@ fn definition(name: String, mesh: Mesh) -> Definition {
         rigged: None,
         preview: None,
         joints: Vec::new(),
+        steps: Vec::new(),
     }
 }
 fn insert_part(

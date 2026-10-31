@@ -59,6 +59,11 @@ pub struct Definition {
     /// [`crate::joinery`]); the root's are [`Model::joints`]. Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub joints: Vec<crate::joinery::WoodJoint>,
+    /// Its own assembly steps, its paths from its own content, joints of [`Definition::joints`]:
+    /// with steps it is a sub-assembly, put together first and added as one unit to the steps
+    /// it is placed in (see [`crate::assembly`]). Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<crate::assembly::Step>,
 }
 
 /// The origin of a downloaded model (3D Library): needed to credit CC-BY authors.
@@ -489,7 +494,7 @@ impl Model {
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
         // i18n-ignore-next
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
         Self {
             metadata: ModelMetadata::default(),
             defs,
@@ -863,7 +868,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -890,7 +895,7 @@ impl Model {
     /// (made geometry, e.g. a draped cloth; no welding with the context).
     pub fn add_group_mesh(&mut self, path: &[InstanceId], mesh: Mesh, name: &str, transform: DMat4) -> Option<InstanceId> {
         self.mesh_at(path)?;
-        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
+        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
         let inst = Instance { def, transform, name: String::new(), material: None, tag: None, hidden: false, locked: false };
         self.mesh_at_mut(path).map(|m| m.instances.insert(inst))
     }
@@ -1247,7 +1252,7 @@ mod move_tests {
     use super::*;
 
     fn group(m: &mut Model, parent: &[InstanceId], name: &str, at: DVec3) -> (DefId, InstanceId) {
-        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new() });
+        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
         m.defs[d].mesh.add_face(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]);
         let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false };
         let id = m.mesh_at_mut(parent).unwrap().instances.insert(inst);

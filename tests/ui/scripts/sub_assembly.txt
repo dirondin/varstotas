@@ -1,0 +1,42 @@
+# Sub-assemblies: a cabinet with a tray on its shelf, the tray a component of two boards screwed
+# together. Suggest steps gives the tray steps of its own and adds it to the cabinet's whole
+# ("1 × Tray (A)"); opening the tray (Outliner → Edit Component) shows its own steps, a step of
+# them hides its later board; "Not a sub-assembly" leaves its boards to the cabinet's step that
+# added it, and "Make Tray a sub-assembly" gives it its steps back. The booklet has the tray's pages.
+action script let b = box(vec3(0, 0, 0), 600, 300, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 18), 18, 300, 700); l.name = "Side"; let r = box(vec3(582, 0, 18), 18, 300, 700); r.name = "Side"; let t = box(vec3(0, 0, 718), 600, 300, 18); t.name = "Top"; let s = box(vec3(18, 0, 350), 564, 300, 18); s.name = "Shelf"; joint(l, s, "dowels"); joint(r, s, "dowels"); let tb = box(vec3(50, 20, 368), 400, 250, 12); tb.name = "Tray bottom"; let tf = box(vec3(50, 20, 380), 400, 12, 80); tf.name = "Tray front"; joint(tb, tf, "screws"); component([tb, tf], "Tray");
+action console_close
+action tray_only Outliner,Entity Info
+view iso
+zoom_extents
+wait 10
+action assembly
+wait 5
+action click_spot assembly:suggest
+wait 10
+expect assembly=(6, 0, None, [["1 × Bottom (1)"], ["2 × Side (2)"], ["6 × Dowel Ø8 × 40"], ["1 × Shelf (4)"], ["1 × Tray (A)"], ["1 × Top (3)"]])
+expect sub_assembly=("", [("Tray", 1)])
+action assembly_explode 120
+wait 10
+screenshot shots/sub_assembly_model.bmp
+# the tray opened: its own steps, the bottom first, the screws with the front
+action rclick_spot outliner_row:<Tray>
+wait 5
+action click_spot outliner_menu:edit
+wait 10
+expect sub_assembly=("Tray", [("Tray", 1)])
+expect assembly=(2, 0, None, [["1 × Tray bottom (
+action click_spot assembly:step:0
+wait 10
+expect assembly=(2, 0, Some(0),
+screenshot shots/sub_assembly_tray.bmp
+action export_assembly shots/sub_assembly.pdf
+# not a sub-assembly: the cabinet's step adds its boards; made one again
+action click_spot assembly:sub-clear
+wait 10
+expect sub_assembly=("", [])
+expect assembly=(6, 0, None,
+action click_spot assembly:sub-make
+wait 10
+expect sub_assembly=("Tray", [("Tray", 1)])
+expect assembly=(2, 0, None,
+quit

@@ -678,6 +678,7 @@ impl Model {
             // the joints come along (the instances keep their ids), with the parts' geometry
             // from before them
             d.joints = src.joints.clone();
+            d.steps = src.assembly.steps.clone();
         }
         self.joint_bases.retain(|(d, _)| !old.contains(d));
         for (sd, base) in &src.joint_bases {
