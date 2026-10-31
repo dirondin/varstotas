@@ -18,13 +18,11 @@ wait 3
 action preview_view
 wait 5
 expect previews=(Some([
-raw click 20 -105
+action click_spot menu:File
 wait 5
-raw move 60 97
+action click_spot menu:PreviewImage
 wait 10
-raw move 200 97
-wait 5
-raw click 200 97
+action click_spot cmd:PreviewShow
 wait 10
 expect preview_win=true
 screenshot shots/prevdemo_2.bmp

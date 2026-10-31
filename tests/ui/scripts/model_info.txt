@@ -9,11 +9,11 @@ select_all
 wait 3
 rawp rclick 500 0 500
 wait 5
-raw click 515 257
+action click_spot cmd:MakeComponent
 wait 5
 action components
 wait 40
-raw click 1185 145
+action click_spot Component#1
 wait 5
 raw move 150 560
 wait 3

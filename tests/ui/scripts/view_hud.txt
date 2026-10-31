@@ -123,18 +123,18 @@ wait 10
 expect panes=(1 0 [(Some(Top), true, Wireframe)])
 # presets (View → Viewports): Front, Left, Top parallel + Iso in perspective (the panes keep their
 # styles); then Front + Iso
-raw click 88 -105
+action click_spot menu:View
 wait 5
-raw click 110 496
+action click_spot menu:Viewports
 wait 5
-raw click 270 684
+action click_spot preset:3
 wait 20
 expect panes=(4 0 [(Some(Front), true, Wireframe), (Some(Left), true, Wireframe), (Some(Top), true, Wireframe), (Some(Iso), false, ShadedColor)])
 screenshot shots/hud_preset4.bmp
-raw click 88 -105
+action click_spot menu:View
 wait 5
-raw click 110 496
+action click_spot menu:Viewports
 wait 5
-raw click 270 603
+action click_spot preset:0
 wait 20
 expect panes=(2 0 [(Some(Front), true, Wireframe), (Some(Iso), false, Wireframe)])

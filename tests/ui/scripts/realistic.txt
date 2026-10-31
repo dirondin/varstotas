@@ -64,28 +64,28 @@ wait 10
 screenshot shots/realistic_nobg.bmp
 # the tray with only Materials, Material Editor (the physical properties) and Environment (real mouse)
 action env sky=hdri background=on exposure=0 tonemap=aces sun=3 rotation=0
-raw click 408 -106
+action click_spot menu:Window
 wait 3
-raw click 452 -50
-raw click 452 31
-raw click 452 58
-raw click 452 85
-raw click 452 112
-raw click 452 139
+action click_spot cmd:Card:Entity Info
+action click_spot cmd:Card:Components
+action click_spot cmd:Card:Tags
+action click_spot cmd:Card:Outliner
+action click_spot cmd:Card:Scenes
+action click_spot cmd:Card:Shadows
 wait 3
 raw key Escape
 wait 5
 expect tray_hidden=["Entity Info", "Components", "Tags", "Outliner", "Scenes", "Shadows"]
 screenshot shots/realistic_tray.bmp
 # hide Materials and Material Editor too and open the Environment card by its arrow
-raw click 408 -106
+action click_spot menu:Window
 wait 3
-raw click 452 -23
-raw click 452 4
+action click_spot cmd:Card:Materials
+action click_spot cmd:Card:Material Editor
 wait 3
 raw key Escape
 wait 3
-raw click 1137 27
+action click_spot card_toggle:Environment
 wait 5
 screenshot shots/realistic_env_card.bmp
 # a scene keeps the environment (scene tabs shift the viewport, so last); PNG export renders the Realistic style

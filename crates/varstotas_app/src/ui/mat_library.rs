@@ -473,7 +473,9 @@ impl VarstotasApp {
                         act = Some(MatAct::Replace(*id));
                         ui.close();
                     }
-                    if ui.button(tr!("delete")).on_hover_text(tr!("mat-delete-model-hover")).clicked() {
+                    let r = ui.button(tr!("delete")).on_hover_text(tr!("mat-delete-model-hover"));
+                    super::tray_lib::spot("menu:mat_delete", r.rect.center());
+                    if r.clicked() {
                         act = Some(MatAct::DeleteModel(*id));
                         ui.close();
                     }

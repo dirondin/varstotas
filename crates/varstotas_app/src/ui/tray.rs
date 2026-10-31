@@ -1568,43 +1568,43 @@ fn outliner_level(
             }
             drop_target(ui, model, &resp, &child_path, actions);
             resp.context_menu(|ui| {
-                if ui.button(tr!("tray-outliner-zoom")).on_hover_text(tr!("tray-outliner-zoom-hover")).clicked() {
+                if outliner_item(ui, tr!("tray-outliner-zoom"), "zoom").on_hover_text(tr!("tray-outliner-zoom-hover")).clicked() {
                     actions.push(Action::FocusInstance(path.clone(), id));
                     ui.close();
                 }
-                if ui.button(tr!(if is_group { "tray-outliner-edit-group" } else { "tray-outliner-edit-component" })).clicked() {
+                if outliner_item(ui, tr!(if is_group { "tray-outliner-edit-group" } else { "tray-outliner-edit-component" }), "edit").clicked() {
                     actions.push(Action::EditInstance(path.clone(), id));
                     ui.close();
                 }
-                if ui.button(tr!(if inst.hidden { "tray-outliner-unhide" } else { "tray-outliner-hide" })).clicked() {
+                if outliner_item(ui, tr!(if inst.hidden { "tray-outliner-unhide" } else { "tray-outliner-hide" }), "hide").clicked() {
                     actions.push(Action::ToggleInstanceHidden(path.clone(), id));
                     ui.close();
                 }
-                if ui.button(tr!(if inst.locked { "cmd-unlock" } else { "cmd-lock" })).clicked() {
+                if outliner_item(ui, tr!(if inst.locked { "cmd-unlock" } else { "cmd-lock" }), "lock").clicked() {
                     actions.push(Action::ToggleInstanceLocked(path.clone(), id));
                     ui.close();
                 }
-                if ui.button(tr!("tray-outliner-explode")).clicked() {
+                if outliner_item(ui, tr!("tray-outliner-explode"), "explode").clicked() {
                     actions.push(Action::SelectInstance(path.clone(), id));
                     actions.push(Action::Explode);
                     ui.close();
                 }
                 if !is_group
                     && model.can_make_unique(path, id)
-                    && ui.button(tr!("tray-outliner-make-unique")).on_hover_text(tr!("tray-outliner-make-unique-hover")).clicked()
+                    && outliner_item(ui, tr!("tray-outliner-make-unique"), "unique").on_hover_text(tr!("tray-outliner-make-unique-hover")).clicked()
                 {
                     actions.push(Action::SelectInstance(path.clone(), id));
                     actions.push(Action::MakeUnique);
                     ui.close();
                 }
                 if let Some((_, parent)) = path.split_last()
-                    && ui.button(tr!("tray-outliner-move-out")).on_hover_text(tr!("tray-outliner-move-out-hover")).clicked()
+                    && outliner_item(ui, tr!("tray-outliner-move-out"), "move_out").on_hover_text(tr!("tray-outliner-move-out-hover")).clicked()
                 {
                     actions.push(Action::MoveInstance(path.clone(), id, parent.to_vec()));
                     ui.close();
                 }
                 ui.separator();
-                if ui.button(tr!("delete")).clicked() {
+                if outliner_item(ui, tr!("delete"), "delete").clicked() {
                     actions.push(Action::DeleteInstance(path.clone(), id));
                     ui.close();
                 }
@@ -1652,6 +1652,13 @@ fn drop_target(ui: &Ui, model: &Model, resp: &egui::Response, to: &ContextPath, 
 }
 
 /// While a row is dragged: its name at the pointer.
+/// An Outliner row's context menu item, with a QA spot `outliner_menu:{key}`.
+fn outliner_item(ui: &mut Ui, text: String, key: &str) -> egui::Response {
+    let r = ui.button(text);
+    super::tray_lib::spot(format!("outliner_menu:{key}"), r.rect.center());
+    r
+}
+
 fn outliner_drag_label(ctx: &egui::Context) {
     let (Some(d), Some(p)) = (egui::DragAndDrop::payload::<OutlinerDrag>(ctx), ctx.pointer_latest_pos()) else { return };
     ctx.set_cursor_icon(egui::CursorIcon::Grabbing);

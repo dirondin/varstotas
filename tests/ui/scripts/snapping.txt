@@ -48,14 +48,16 @@ rawp move 200 0 200
 wait 3
 expect snapping=(true, [])
 expect snap=Some((Midpoint, 200, 0, 200))
-# directions: red off, a line from the corner along red stays free
+# directions: red off, a line from the corner along red stays free (the grid line along red off too)
 rawp click 0 0 0
 wait 3
 action snap_kind red off
+action snap_kind grid_line off
 rawp move -60 1 0
 wait 3
 expect snap=Some((Free,
 action snap_kind red on
+action snap_kind grid_line on
 rawp move -60 1 0
 wait 3
 expect snap=Some((OnRedAxis,

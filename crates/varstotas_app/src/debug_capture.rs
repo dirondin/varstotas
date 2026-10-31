@@ -608,7 +608,7 @@ impl Script {
     pub fn parse(text: &str) -> Self {
         let cmds: Vec<ScriptCmd> = text.lines().filter_map(parse_cmd).collect();
         let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..) | ScriptCmd::RawSheet(..))
-            || matches!(c, ScriptCmd::Action(name) if name.starts_with("click_spot ") || name.starts_with("drag_spot "))).then(RawInjector::default);
+            || matches!(c, ScriptCmd::Action(name) if ["click_spot ", "rclick_spot ", "dblclick_spot ", "drag_spot "].iter().any(|p| name.starts_with(p)))).then(RawInjector::default);
         Self {
             cmds,
             raw,
@@ -1015,20 +1015,27 @@ impl VarstotasApp {
             self.prefs.show_triangles = value.trim() == "on";
             return;
         }
-        if let Some(name) = name.strip_prefix("click_spot ") {
-            let spots = crate::ui::tray_lib::spots(self.viewport.view_rect.min);
-            let (_, x, y) = spots.iter().find(|(n, _, _)| n == name).expect("visible QA click spot");
-            self.queue_raw(RawCmd::Click(egui::pos2(*x as f32, *y as f32)));
-            return;
+        // `click_spot` / `rclick_spot` / `dblclick_spot <spot>`: a real click at a QA spot
+        for (prefix, click) in [("click_spot ", RawCmd::Click as fn(egui::Pos2) -> RawCmd), ("rclick_spot ", RawCmd::RightClick), ("dblclick_spot ", RawCmd::DoubleClick)] {
+            if let Some(name) = name.strip_prefix(prefix) {
+                let spots = crate::ui::tray_lib::spots(self.viewport.view_rect.min);
+                let (_, x, y) = spots.iter().find(|(n, _, _)| n == name).expect("visible QA click spot");
+                self.queue_raw(click(egui::pos2(*x as f32, *y as f32)));
+                return;
+            }
         }
         // `drag_spot <spot> <dx> <dy>`: a real mouse drag from a QA spot by (dx, dy) points
         if let Some(args) = name.strip_prefix("drag_spot ") {
-            let v: Vec<&str> = args.split_whitespace().collect();
+            // the spot's name may have spaces: dx and dy are the last two words
+            let v: Vec<&str> = args.trim().rsplitn(3, ' ').collect();
+            let (name, d) = match v.as_slice() {
+                [dy, dx, name] => (*name, egui::vec2(dx.parse().unwrap_or(0.0), dy.parse().unwrap_or(0.0))),
+                _ => (args.trim(), egui::Vec2::ZERO),
+            };
             let spots = crate::ui::tray_lib::spots(self.viewport.view_rect.min);
-            let (_, x, y) = spots.iter().find(|(n, _, _)| n == v[0]).expect("visible QA drag spot");
-            let d = |i: usize| v.get(i).and_then(|t| t.parse::<f32>().ok()).unwrap_or(0.0);
+            let (_, x, y) = spots.iter().find(|(n, _, _)| n == name).expect("visible QA drag spot");
             let a = egui::pos2(*x as f32, *y as f32);
-            self.queue_raw(RawCmd::Drag { a, b: a + egui::vec2(d(1), d(2)), steps: 8, fast: false });
+            self.queue_raw(RawCmd::Drag { a, b: a + d, steps: 8, fast: false });
             return;
         }
         if let Some(path) = name.strip_prefix("file_template ") {

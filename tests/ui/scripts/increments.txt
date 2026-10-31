@@ -1,5 +1,7 @@
 # Increments (track P batch 4): Move / Rotate / Scale rounded to a step with a real mouse,
 # model geometry and typed values win, the steps in the magnet menu.
+# (the grid off: its points would win over the steps)
+action grid off
 box 0 0 0 1000 600 400
 view iso
 zoom_extents

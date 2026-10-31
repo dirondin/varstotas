@@ -291,7 +291,7 @@ impl VarstotasApp {
                 ui.separator();
                 self.cmd_item(ui, Cmd::Save);
                 self.cmd_item(ui, Cmd::SaveAs);
-                icon_menu(ui, Some(Icon::Picture(0)), &tr!("menu-preview-image"), |ui| {
+                let r = icon_menu(ui, Some(Icon::Picture(0)), &tr!("menu-preview-image"), |ui| {
                     self.cmd_item(ui, Cmd::PreviewShow);
                     ui.separator();
                     for c in [Cmd::PreviewFromFile, Cmd::PreviewFromView, Cmd::PreviewRemove] {
@@ -299,6 +299,7 @@ impl VarstotasApp {
                     }
                 })
                 .on_hover_text(tr!("menu-preview-image-hint"));
+                super::tray_lib::spot("menu:PreviewImage", r.rect.center());
                 ui.separator();
                 icon_menu(ui, Some(Icon::Import("")), &tr!("menu-import"), |ui| {
                     use Cmd::*;
@@ -358,7 +359,7 @@ impl VarstotasApp {
             });
             super::tray_lib::spot("menu:Edit", edit_menu.response.rect.center());
 
-            ui.menu_button(tr!("menu-view"), |ui| {
+            let view_menu = ui.menu_button(tr!("menu-view"), |ui| {
                 ui.label(egui::RichText::new(tr!("menu-face-style")).small().weak());
                 for (st, icon, label) in [
                     (FaceStylePref::ShadedColor, Icon::StyleShaded, tr!("menu-shaded")),
@@ -414,9 +415,11 @@ impl VarstotasApp {
                 }
                 ui.separator();
                 let panes = [Icon::Panes1, Icon::Panes2, Icon::Panes2, Icon::Panes4, Icon::Panes4];
-                icon_menu(ui, Some(panes[self.pane_count.min(4)]), &tr!("menu-viewports"), |ui| {
+                let vp = icon_menu(ui, Some(panes[self.pane_count.min(4)]), &tr!("menu-viewports"), |ui| {
                     for (n, label) in [(1, tr!("menu-viewports-one")), (2, tr!("menu-viewports-two")), (4, tr!("menu-viewports-four"))] {
-                        if icon_radio(ui, self.pane_count == n, panes[n], &label).clicked() {
+                        let r = icon_radio(ui, self.pane_count == n, panes[n], &label);
+                        super::tray_lib::spot(format!("panes:{n}"), r.rect.center());
+                        if r.clicked() {
                             self.actions.push(Action::SetPanes(n));
                             ui.close();
                         }
@@ -424,12 +427,15 @@ impl VarstotasApp {
                     ui.separator();
                     ui.label(egui::RichText::new(tr!("menu-presets")).small().weak());
                     for (i, p) in crate::panes::PRESETS.iter().enumerate() {
-                        if icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), &p.name(), None, true, false).clicked() {
+                        let r = icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), &p.name(), None, true, false);
+                        super::tray_lib::spot(format!("preset:{i}"), r.rect.center());
+                        if r.clicked() {
                             self.actions.push(Action::ViewPreset(i));
                             ui.close();
                         }
                     }
                 });
+                super::tray_lib::spot("menu:Viewports", vp.rect.center());
                 ui.separator();
                 icon_menu(ui, Some(Icon::Film), &tr!("menu-animation"), |ui| {
                     let has = !self.doc.model.scenes.is_empty();
@@ -442,6 +448,7 @@ impl VarstotasApp {
                     self.icon_item(ui, Some(Icon::AddScene), &tr!("menu-add-scene"), None, true, Action::AddScene);
                 });
             });
+            super::tray_lib::spot("menu:View", view_menu.response.rect.center());
 
             ui.menu_button(tr!("menu-camera"), |ui| {
                 ui.menu_button(tr!("menu-standard-views"), |ui| {
@@ -529,7 +536,9 @@ impl VarstotasApp {
                 ui.indent("tray_cards", |ui| {
                     for c in crate::ui::tray::TRAY_CARDS {
                         let mut shown = Cmd::Card(c).checked(self).unwrap_or(true);
-                        if icon_check(ui, &mut shown, Cmd::Card(c).icon(), &crate::ui::tray::card_label(c)).clicked() {
+                        let r = icon_check(ui, &mut shown, Cmd::Card(c).icon(), &crate::ui::tray::card_label(c));
+                        super::tray_lib::spot(format!("cmd:{}", Cmd::Card(c).key()), r.rect.center());
+                        if r.clicked() {
                             self.actions.push(Action::ToggleCard(c));
                         }
                     }

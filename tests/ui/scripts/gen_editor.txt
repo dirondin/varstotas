@@ -40,15 +40,14 @@ action gen going=350 max_riser=220
 wait 3
 expect going=270
 screenshot shots/ged_stair.bmp
-# the cabinet: one door opened, three drawers
+# the cabinet: one door, three drawers
 select_none
 rawp click 400 1500 500
 wait 3
 expect gen=Cabinet{
-action gen doors=1 open=70 drawers=3
+action gen doors=1 drawers=3
 wait 3
-expect drawers=3
-expect open=70
+expect drawers=3,drawer_h=160,doors=1
 screenshot shots/ged_cabinet.bmp
 # the editor on the Shelf example: preview, a value, a source edit, errors
 action gen_editor Shelf

@@ -1,11 +1,16 @@
-# Fixture: a 2 mm box with the top face removed (target/ui-tests/models/printing-hole.vrst).
-open models/printing-hole.vrst
+# A 2 mm box with the top face removed (picked and deleted with the real mouse and keyboard).
+box 0 0 0 2 2 2
 view iso
 zoom_extents
+wait 5
+rawp click 1 1 2
+wait 3
+raw key Delete
+wait 5
+expect model_faces=5
 action print_repair
 wait 100
 expect printing=(true true busy=false stale=false faces=5 open=4
-expect document_dirty=false
 action click_spot printing:fill-holes
 wait 5
 action click_spot printing:repair-tab

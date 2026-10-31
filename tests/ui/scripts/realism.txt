@@ -59,9 +59,9 @@ raw move 60 640
 # the path tracer: rounded edges (bevel) and the layers
 action env sky=physical turbidity=3 sun=3
 action render_set w=480 h=300 samples=64 bounces=5 denoise=on match=off
-raw click 408 -106
+action click_spot menu:Window
 wait 3
-raw click 419 285
+action click_spot cmd:Render
 wait 5
 action render_start
 action render_wait

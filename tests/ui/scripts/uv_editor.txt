@@ -168,7 +168,7 @@ screenshot shots/uv_normal_map.bmp
 action click_spot uv:tile
 action uv_close
 wait 3
-raw click 408 -106
+action click_spot menu:Window
 wait 3
 screenshot shots/uv_window_menu.bmp
 action click_spot cmd:UvEditor

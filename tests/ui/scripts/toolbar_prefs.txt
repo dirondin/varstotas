@@ -3,27 +3,27 @@
 wait 10
 action preferences
 wait 10
-raw click 137 363
+action click_spot prefs:Toolbar
 wait 5
 expect prefs_win=(true Toolbar)
 expect toolbar="Select Eraser Paint | Line Arc ArcCenter Bezier Rectangle Circle Polygon | Box Cylinder Cone Pyramid Sphere Torus | Move Rotate Scale PushPull Offset FollowMe Chamfer Fillet | Tape Dimension Text Text3d Axes Section GuidePlane | Orbit Pan Zoom ZoomExtents | Snapping"
 # Select → the reserve
-raw click 419 160
+action click_spot tb_out:Select
 wait 5
 expect toolbar="Eraser Paint | Line
 # Eraser down, then up again
-raw click 387 160
+action click_spot tb_down:Eraser
 wait 5
 expect toolbar="Paint Eraser | Line
-raw click 353 187
+action click_spot tb_up:Eraser
 wait 5
 expect toolbar="Eraser Paint | Line
 # Save (the reserve starts with the File menu): the end of the toolbar
-raw click 465 261
+action click_spot tb_in:Save
 wait 5
 expect ZoomExtents | Snapping Save"
 # a separator after it
-raw click 465 160
+action click_spot tb_in:|
 wait 5
 expect Snapping Save |"
 screenshot shots/toolbar_prefs.bmp
@@ -32,7 +32,7 @@ raw click 27 -65
 wait 5
 expect tool=Eraser
 # Reset: the default toolbar
-raw click 649 92
+action click_spot prefs_reset
 wait 5
 expect toolbar="Select Eraser Paint | Line Arc ArcCenter Bezier Rectangle Circle Polygon | Box Cylinder Cone Pyramid Sphere Torus | Move Rotate Scale PushPull Offset FollowMe Chamfer Fillet | Tape Dimension Text Text3d Axes Section GuidePlane | Orbit Pan Zoom ZoomExtents | Snapping"
 quit

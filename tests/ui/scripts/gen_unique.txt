@@ -5,7 +5,7 @@ wait 10
 view iso
 action components
 wait 40
-raw click 1270 273
+action click_spot Shelf
 wait 3
 rawp click 0 0 0
 wait 3
@@ -34,9 +34,9 @@ select_none
 rawp click 1500 150 1200
 wait 30
 # right-click the second shelf's top board → Make Unique
-raw rclick 850 259
+rawp rclick 1500 150 1200
 wait 5
-raw click 913 502
+action click_spot cmd:MakeUnique
 wait 5
 expect undo=Some("Make Unique")
 expect gens=["Shelf", "Shelf 2"]

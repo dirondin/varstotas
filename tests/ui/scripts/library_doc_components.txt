@@ -8,14 +8,14 @@ select_all
 wait 3
 rawp rclick 500 0 500
 wait 5
-raw click 515 257
+action click_spot cmd:MakeComponent
 wait 5
 action components
 wait 40
 expect lib_folders=[("Document", 1, false), ("Examples", 6, false)]
 screenshot shots/libdoc_components.bmp
 # place a copy: click the tile, then a point of the model
-raw click 1185 173
+action click_spot Component#1
 wait 5
 expect tool=Move
 raw move 150 560

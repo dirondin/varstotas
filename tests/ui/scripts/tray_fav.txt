@@ -30,7 +30,7 @@ expect undo=Some("Paint")
 # In Model → Gold → Delete: the face is back to the default; Undo brings Gold back
 raw rclick 1186 336
 wait 5
-raw click 1220 455
+action click_spot menu:mat_delete
 wait 5
 expect mats={"-": 6}
 expect stats=(6 12 0 0 | 0/0 0/0 0/0)

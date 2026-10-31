@@ -8,12 +8,12 @@ select_all
 wait 3
 rawp rclick 500 0 500
 wait 5
-raw click 515 257
+action click_spot cmd:MakeComponent
 wait 5
 action components
 wait 40
 # a second copy from Components → In Model
-raw click 1185 173
+action click_spot Component#1
 wait 5
 raw move 780 600
 wait 3
@@ -28,7 +28,7 @@ wait 3
 rawp rclick 500 0 500
 wait 5
 screenshot shots/make_unique_menu.bmp
-raw click 515 257
+action click_spot cmd:MakeUnique
 wait 5
 expect undo=Some("Make Unique")
 expect defs=3
