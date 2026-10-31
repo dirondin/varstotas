@@ -50,7 +50,7 @@ for side in ["Side L", "Side R"] {
 }
 // the flap hangs on hinges along the top's front edge, a long handle by its bottom edge
 joint(part.call("Flap"), part.call("Top"), "hinge");
-joint(part.call("Flap"), "handle", #{ size: 320, offset: 40 - h / 2 });
+fitting(part.call("Flap"), "handle", #{ size: 320, offset: 40 - h / 2 });
 
 // Edge banding (Window → Cut List): 1 mm on every edge of the boards that shows, priced per
 // metre

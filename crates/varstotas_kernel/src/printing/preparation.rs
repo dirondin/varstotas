@@ -132,6 +132,7 @@ fn definition(name: String, mesh: Mesh) -> Definition {
         preview: None,
         joints: Vec::new(),
         steps: Vec::new(),
+        fitting: None,
     }
 }
 fn insert_part(
@@ -155,6 +156,7 @@ fn insert_part(
         tag: None,
         hidden: false,
         locked: false,
+        mount: None,
     }))
 }
 #[derive(Default)]

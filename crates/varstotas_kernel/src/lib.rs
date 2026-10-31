@@ -36,6 +36,7 @@ pub mod history;
 pub mod io;
 pub mod joinery;
 pub mod fasteners;
+pub mod fitting;
 pub mod assembly;
 pub mod layout;
 pub mod locking;
@@ -379,6 +380,9 @@ pub struct Instance {
     pub hidden: bool,
     #[serde(default)]
     pub locked: bool,
+    /// A fitting's place on a part (see [`fitting`]). Omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mount: Option<fitting::Mount>,
 }
 
 /// Reference to an entity inside one `Mesh` (an editing context).

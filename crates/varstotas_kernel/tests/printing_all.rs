@@ -31,6 +31,7 @@ fn part(m: &mut Model, size: DVec3, at: DVec3) -> InstanceId {
             tag: None,
             hidden: false,
             locked: false,
+            mount: None,
         })
 }
 fn selected(i: InstanceId) -> PrintSelection {

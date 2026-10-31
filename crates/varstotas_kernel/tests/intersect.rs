@@ -28,6 +28,7 @@ fn group_box(model: &mut Model, lo: DVec3, hi: DVec3) -> InstanceId {
         tag: None,
         hidden: false,
         locked: false,
+        mount: None,
     })
 }
 
@@ -133,7 +134,7 @@ fn coplanar_overlap_with_group_imprints_boundary() {
     let gf = scratch.add_face(&[v(50., 50., 10.), v(150., 50., 10.), v(150., 150., 10.), v(50., 150., 10.)]).unwrap();
     let _ = gf;
     let r = model.root;
-    let def = model.defs.insert(Definition { name: "G".into(), mesh: scratch, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
+    let def = model.defs.insert(Definition { name: "G".into(), mesh: scratch, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
     let g = model.defs[r].mesh.instances.insert(Instance {
         def,
         transform: DMat4::IDENTITY,
@@ -142,6 +143,7 @@ fn coplanar_overlap_with_group_imprints_boundary() {
         tag: None,
         hidden: false,
         locked: false,
+        mount: None,
     });
     let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     let r = model.root_mesh();
@@ -432,6 +434,7 @@ fn explode_face_inside_existing_face_makes_hole_partition() {
         tag: None,
         hidden: false,
         locked: false,
+        mount: None,
     });
     let out = model.explode(&[], inst).unwrap();
     let r = model.root_mesh();
@@ -523,7 +526,7 @@ fn group_prism_through_loose_face_makes_inner_face() {
     let d = s.defs.remove(def).unwrap();
     let nd = model.defs.insert(d);
     let r = model.root;
-    let g = model.defs[r].mesh.instances.insert(Instance { def: nd, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false });
+    let g = model.defs[r].mesh.instances.insert(Instance { def: nd, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None });
     let new = model.intersect_faces(&[], &[EntityRef::Instance(g)], IntersectScope::Model).unwrap();
     assert_eq!(new.len(), 7);
     let m = model.root_mesh();

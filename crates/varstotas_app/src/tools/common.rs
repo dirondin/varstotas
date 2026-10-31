@@ -1123,7 +1123,7 @@ mod tests {
     fn dense_nested_models_have_complete_transform_and_clipboard_previews() {
         use varstotas_kernel::{Definition,Edge,Vertex,Instance};
         let mut model=varstotas_kernel::Model::new();
-        let empty=||Definition{name:String::new(),mesh:varstotas_kernel::Mesh::new(),is_group:true,guides:Default::default(),params:None,generated:None,source:None,rig:None,rigged:None,preview:None,joints:Vec::new()};
+        let empty=||Definition{name:String::new(),mesh:varstotas_kernel::Mesh::new(),is_group:true,guides:Default::default(),params:None,generated:None,source:None,rig:None,rigged:None,preview:None,joints:Vec::new(),steps:Default::default(),fitting:None};
         let mut def=empty();
         let count=21_001;
         for i in 0..count {
@@ -1135,10 +1135,10 @@ mod tests {
         // More than the old 16-level transform-preview depth limit.
         for _ in 0..18 {
             let mut parent=empty();
-            parent.mesh.instances.insert(Instance{def:id,transform:DMat4::IDENTITY,name:String::new(),material:None,tag:None,hidden:false,locked:false});
+            parent.mesh.instances.insert(Instance{def:id,transform:DMat4::IDENTITY,name:String::new(),material:None,tag:None,hidden:false,locked:false,mount:None});
             id=model.defs.insert(parent);
         }
-        let instance=model.root_mesh_mut().instances.insert(Instance{def:id,transform:DMat4::IDENTITY,name:String::new(),material:None,tag:None,hidden:false,locked:false});
+        let instance=model.root_mesh_mut().instances.insert(Instance{def:id,transform:DMat4::IDENTITY,name:String::new(),material:None,tag:None,hidden:false,locked:false,mount:None});
         model.rebuild_caches();
         let doc=Document::from_model(model,None);
         let shift=DVec3::new(10.,20.,30.);

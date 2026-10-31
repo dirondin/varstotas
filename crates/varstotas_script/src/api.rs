@@ -24,7 +24,7 @@ pub const NAMES: &[&str] = &[
     "entities", "selection", "select", "bounds", "model_bounds", "length", "units", "materials", "all_faces", "read_text",
     "write_text", "generators", "add_generator", "generate", "reset_params", "file_exists", "list_files", "list_dirs",
     "parse_json", "fetch_text", "fetch_file", "child", "children", "show", "hide", "cut_list", "set_stock", "cut_settings", "band_visible",
-    "cut_part", "cut_hardware", "joint", "joints", "set_joint", "remove_joint", "drawer", "drawers", "doors", "back", "plinth", "suggest_steps", "assembly_steps",
+    "cut_part", "cut_hardware", "joint", "fitting", "joints", "set_joint", "remove_joint", "drawer", "drawers", "doors", "back", "plinth", "suggest_steps", "assembly_steps",
     "set_assembly_steps", "assembly_view",
 ];
 
@@ -499,6 +499,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         rig: None,
         rigged: None,
         preview: None, joints: Vec::new(), steps: Vec::new(),
+        fitting: None,
     });
     let m = mesh_mut(st, &path)?;
     let id = m.instances.insert(Instance {
@@ -509,6 +510,7 @@ fn insert_group(st: &mut State, mesh: Mesh, xf: DMat4) -> R<Dynamic> {
         tag: None,
         hidden: false,
         locked: false,
+        mount: None,
     });
     Ok(dyn_ent(&path, EntityRef::Instance(id)))
 }
@@ -1932,9 +1934,12 @@ fn joint_map(st: &State, j: &WoodJoint, warnings: &[String]) -> Dynamic {
 fn register_joinery(e: &mut Engine) {
     e.register_fn("joint", |a: Dynamic, b: Dynamic, kind: ImmutableString| -> R<i64> { add_joint(&a, &b, &kind, &Map::new()) });
     e.register_fn("joint", |a: Dynamic, b: Dynamic, kind: ImmutableString, m: Map| -> R<i64> { add_joint(&a, &b, &kind, &m) });
-    // a fitting on one part: a handle, a knob, legs
+    // one part: handles, knobs, legs and casters are fittings now, `fitting(part, kind)`
     e.register_fn("joint", |a: Dynamic, kind: ImmutableString| -> R<i64> { add_joint(&a, &Dynamic::UNIT, &kind, &Map::new()) });
     e.register_fn("joint", |a: Dynamic, kind: ImmutableString, m: Map| -> R<i64> { add_joint(&a, &Dynamic::UNIT, &kind, &m) });
+    // a fitting mounted on a part: a handle, a knob, legs, casters; the copies put on it
+    e.register_fn("fitting", |a: Dynamic, kind: ImmutableString| -> R<Array> { add_fitting(&a, &kind, &Map::new()) });
+    e.register_fn("fitting", |a: Dynamic, kind: ImmutableString, m: Map| -> R<Array> { add_fitting(&a, &kind, &m) });
     e.register_fn("joints", || -> R<Array> {
         with(|st| {
             let w = st.model.joint_warnings();
@@ -2237,8 +2242,11 @@ fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {
     let kind = joint_kind(kind)?;
     let a = one(a)?;
     let b = if b.is_unit() { None } else { Some(one(b)?) };
-    if kind.single() != b.is_none() {
-        return err(tr!(if kind.single() { "script-err-joint-one-part" } else { "script-err-joint-two-parts" }, kind = kind_name_of(kind)));
+    if kind.single() {
+        return err(tr!("script-err-joint-is-fitting", kind = kind_name_of(kind)));
+    }
+    if b.is_none() {
+        return err(tr!("script-err-joint-two-parts", kind = kind_name_of(kind)));
     }
     edit(|st| {
         let path = |e: &Entity| -> R<ContextPath> {
@@ -2262,6 +2270,28 @@ fn add_joint(a: &Dynamic, b: &Dynamic, kind: &str, m: &Map) -> R<i64> {
             }
         }
         Ok(i as i64)
+    })
+}
+
+fn add_fitting(a: &Dynamic, kind: &str, m: &Map) -> R<Array> {
+    let kind = joint_kind(kind)?;
+    if !kind.single() {
+        return err(tr!("script-err-fitting-kind", kind = kind_name_of(kind)));
+    }
+    let a = one(a)?;
+    edit(|st| {
+        let mut p = a.path.clone();
+        p.push(inst_id(st, &a)?);
+        let mut j = op(st.model.fitting_joint(kind, p))?;
+        if !m.is_empty() {
+            joint_params(&mut j, m)?;
+            j.kind = kind;
+        }
+        let paths = op(st.model.put_fitting_joint(&j))?;
+        Ok(paths
+            .into_iter()
+            .filter_map(|p| p.split_last().map(|(id, parent)| dyn_ent(&parent.to_vec(), EntityRef::Instance(*id))))
+            .collect())
     })
 }
 

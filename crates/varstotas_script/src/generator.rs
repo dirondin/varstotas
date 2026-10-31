@@ -157,6 +157,7 @@ pub fn def_for(model: &mut Model, name: &str, values: &GenValues) -> Result<DefI
         rig: None,
         rigged: None,
         preview: None, joints: Vec::new(), steps: Vec::new(),
+        fitting: None,
     });
     model.graft_content(d, &built);
     Ok(d)
@@ -202,7 +203,7 @@ pub fn rebuild_all(model: &mut Model, name: &str) -> Result<(), String> {
 pub fn place(model: &mut Model, path: &[InstanceId], name: &str, values: &GenValues, xf: DMat4) -> Result<InstanceId, String> {
     let d = def_for(model, name, values)?;
     let mesh = model.mesh_at_mut(path).ok_or_else(|| tr!("script-err-no-such-context"))?;
-    Ok(mesh.instances.insert(Instance { def: d, transform: xf, name: String::new(), material: None, tag: None, hidden: false, locked: false }))
+    Ok(mesh.instances.insert(Instance { def: d, transform: xf, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None }))
 }
 
 /// Change the values of generated instance `inst` (`values` over its current ones, or over the

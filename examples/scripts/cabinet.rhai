@@ -55,7 +55,7 @@ for side in ["Side L", "Side R"] {
     }
     joint(part.call("Back"), part.call(side), "nails");
 }
-joint(part.call("Bottom"), "leg", #{ size: legs });
+fitting(part.call("Bottom"), "leg", #{ size: legs });
 // two doors over the carcass's front edges from the bottom to the top, 2 mm apart in the
 // middle, on as many cup hinges as their height wants, the handles upright by the meeting
 // edges

@@ -26,6 +26,7 @@ fn model() -> Model {
         tag: None,
         hidden: false,
         locked: false,
+        mount: None,
     });
     let red = m.add_material("Red", [1.0, 0.0, 0.0, 1.0]);
     let mesh = m.root_mesh_mut();

@@ -45,7 +45,7 @@ for side in ["Side L", "Side R"] {
     joint(part.call(side), part.call("Shelf"), "shelf_pins", #{ rows: 2 });
     joint(part.call("Back"), part.call(side), "nails");
 }
-joint(part.call("Bottom"), "leg", #{ size: legs });
+fitting(part.call("Bottom"), "leg", #{ size: legs });
 // a drawer at the top of the opening: its box of 15 mm birch with a 4 mm HDF bottom (bought
 // as above), an inset oak front and a handle
 let opening_top = legs + h - t;

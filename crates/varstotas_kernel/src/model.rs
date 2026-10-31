@@ -64,6 +64,17 @@ pub struct Definition {
     /// it is placed in (see [`crate::assembly`]). Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<crate::assembly::Step>,
+    /// It is a fitting: bought, mounted on a part, drilling its holes (see [`crate::fitting`]).
+    /// Omitted when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fitting: Option<crate::fitting::Fitting>,
+}
+
+impl Definition {
+    /// An empty component called nothing.
+    pub fn empty() -> Definition {
+        Definition { name: String::new(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None }
+    }
 }
 
 /// The origin of a downloaded model (3D Library): needed to credit CC-BY authors.
@@ -471,6 +482,9 @@ pub struct Model {
     /// edit made inside an open group or component adds joints; not saved.
     #[serde(skip)]
     pub joint_context: ContextPath,
+    /// The fittings' holes as last drilled ([`Model::fitting_cutters`]); not saved.
+    #[serde(skip)]
+    pub fitting_drilled: Vec<(DefId, Vec<crate::fitting::Cutter>)>,
 }
 
 /// Result of a model-wide ray pick.
@@ -494,7 +508,7 @@ impl Model {
     pub fn new() -> Self {
         let mut defs = SlotMap::with_key();
         // i18n-ignore-next
-        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
+        let root = defs.insert(Definition { name: "Model".into(), mesh: Mesh::new(), is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
         Self {
             metadata: ModelMetadata::default(),
             defs,
@@ -532,6 +546,7 @@ impl Model {
             placed_joints: Vec::new(),
             joint_places: Vec::new(),
             joint_context: Vec::new(),
+            fitting_drilled: Vec::new(),
         }
     }
 
@@ -868,7 +883,7 @@ impl Model {
                 }
             }
         }
-        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
+        let def = self.defs.insert(Definition { name: name.to_string(), mesh, is_group, guides: def_guides, params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
         let inst = Instance {
             def,
             transform: DMat4::IDENTITY,
@@ -877,6 +892,7 @@ impl Model {
             tag: None,
             hidden: false,
             locked: false,
+            mount: None,
         };
         let g = self.defs[pd].mesh.instances.insert(inst);
         // joints and assembly steps follow the parts into it
@@ -895,8 +911,8 @@ impl Model {
     /// (made geometry, e.g. a draped cloth; no welding with the context).
     pub fn add_group_mesh(&mut self, path: &[InstanceId], mesh: Mesh, name: &str, transform: DMat4) -> Option<InstanceId> {
         self.mesh_at(path)?;
-        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
-        let inst = Instance { def, transform, name: String::new(), material: None, tag: None, hidden: false, locked: false };
+        let def = self.defs.insert(Definition { name: name.into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
+        let inst = Instance { def, transform, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None };
         self.mesh_at_mut(path).map(|m| m.instances.insert(inst))
     }
 
@@ -1161,7 +1177,7 @@ impl Model {
         faces.sort_unstable();
         edges.sort_unstable();
         insts.sort_unstable();
-        let extra = format!("{:?}{:?}{}", def.rig, def.generated, def.is_group);
+        let extra = format!("{:?}{:?}{}{:?}", def.rig, def.generated, def.is_group, def.fitting);
         h((faces, edges, insts, extra))
     }
 
@@ -1244,6 +1260,11 @@ impl Model {
         if !self.joints.is_empty() || self.defs.values().any(|d| !d.joints.is_empty()) {
             self.refresh_fasteners();
         }
+        // a file keeps its parts drilled; one from before fittings were objects has them as joints
+        self.fitting_drilled = self.fitting_cutters();
+        if self.joints.iter().chain(self.defs.values().flat_map(|d| &d.joints)).any(|j| j.kind.single()) {
+            self.fittings_from_joints();
+        }
     }
 }
 
@@ -1252,9 +1273,9 @@ mod move_tests {
     use super::*;
 
     fn group(m: &mut Model, parent: &[InstanceId], name: &str, at: DVec3) -> (DefId, InstanceId) {
-        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
+        let d = m.defs.insert(Definition { name: name.into(), mesh: Mesh::new(), is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
         m.defs[d].mesh.add_face(&[DVec3::ZERO, DVec3::X * 100.0, DVec3::new(100.0, 100.0, 0.0), DVec3::Y * 100.0]);
-        let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false };
+        let inst = Instance { def: d, transform: DMat4::from_translation(at), name: name.into(), material: None, tag: None, hidden: false, locked: false, mount: None };
         let id = m.mesh_at_mut(parent).unwrap().instances.insert(inst);
         (d, id)
     }

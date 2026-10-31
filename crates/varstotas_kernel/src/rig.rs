@@ -317,6 +317,7 @@ impl Model {
             rig: None,
             rigged: Some(Rigged { master, values, paint: None }),
             preview: None, joints: Vec::new(), steps: Vec::new(),
+            fitting: None,
         };
         let v = self.defs.insert(def);
         self.pose_rig(v, master, ops);

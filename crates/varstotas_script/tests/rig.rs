@@ -164,7 +164,7 @@ fn remove_rig_and_attach() {
     rig::set_values(&mut m, &[], a, &vals(&[("open", GenValue::Num(30.0))]), false).unwrap();
     // A copy placed with the master itself (paste, Components card) gets the default variant.
     let t = m.root_mesh().instances[a].transform;
-    let c = m.root_mesh_mut().instances.insert(varstotas_kernel::Instance { def: d, transform: t, name: String::new(), material: None, tag: None, hidden: false, locked: false });
+    let c = m.root_mesh_mut().instances.insert(varstotas_kernel::Instance { def: d, transform: t, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None });
     rig::attach(&mut m);
     assert_eq!(def_of(&m, c), def_of(&m, b));
     // Removing the rig: the copies use the master again, the variants are gone.
@@ -188,9 +188,9 @@ fn table() -> (Model, DefId, InstanceId, InstanceId) {
     varstotas_script::generator::add(&mut m, include_str!("../../../examples/generators/primitives/cylinder.rhai")).unwrap();
     let leg = varstotas_script::generator::def_for(&mut m, "Cylinder", &GenValues::new()).unwrap();
     let mut mesh = Mesh::new();
-    let inst = |def, name: &str, x: f64| Instance { def, transform: DMat4::from_translation(DVec3::new(x, 0.0, 0.0)), name: name.into(), material: None, tag: None, hidden: false, locked: false };
+    let inst = |def, name: &str, x: f64| Instance { def, transform: DMat4::from_translation(DVec3::new(x, 0.0, 0.0)), name: name.into(), material: None, tag: None, hidden: false, locked: false, mount: None };
     mesh.instances.insert(inst(leg, "Leg", 0.0));
-    let t = m.defs.insert(Definition { name: "Table".into(), mesh, is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
+    let t = m.defs.insert(Definition { name: "Table".into(), mesh, is_group: false, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
     let a = m.root_mesh_mut().instances.insert(inst(t, "", 0.0));
     let b = m.root_mesh_mut().instances.insert(inst(t, "", 3000.0));
     (m, t, a, b)

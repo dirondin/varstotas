@@ -215,7 +215,7 @@ impl Clipboard {
         m.defs[root].mesh = Mesh::new();
         m.guides.clear();
         m.guide_points.clear();
-        let inst = Instance { def: d, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false };
+        let inst = Instance { def: d, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None };
         let i = m.root_mesh_mut().instances.insert(inst);
         Self::from_parts(&m, doc_uid, &[], &[EntityRef::Instance(i)], &[])
     }
@@ -311,6 +311,7 @@ impl Clipboard {
                 tag: None,
                 hidden: false,
                 locked: false,
+                mount: None,
             };
             let iid = model.mesh_at_mut(path).ok_or(OpError::NotFound)?.instances.insert(inst);
             ents = model.explode(path, iid)?;

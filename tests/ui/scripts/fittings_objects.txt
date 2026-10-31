@@ -1,0 +1,32 @@
+# Fittings are objects mounted on a part: a handle put on a door from the Joinery window's
+# Fitting row, legs from a script; the handle detached and mounted again from Properties; the
+# door made wider takes its handle along; the cut list has them as hardware, not parts.
+action script let d = box(vec3(0, -18, 0), 600, 18, 800); d.name = "Door"; let t = box(vec3(800, 0, 700), 800, 500, 18); t.name = "Top"; let l = fitting(t, "leg"); select(d);
+action console_close
+wait 5
+expect fittings=[("Leg, height 100", "Top"), ("Leg, height 100", "Top"), ("Leg, height 100", "Top"), ("Leg, height 100", "Top")]
+action joinery
+wait 5
+action click_spot joinery:fitting
+wait 5
+expect ("Handle, centres 192", "Door")]
+expect joints=[]
+action joinery_close
+action script select(children().filter(|c| c.definition.contains("Handle")));
+wait 5
+action click_spot fitting:detach
+wait 5
+expect fittings=[("Leg, height 100", "Top"), ("Leg, height 100", "Top"), ("Leg, height 100", "Top"), ("Leg, height 100", "Top")]
+action script select(children().filter(|c| c.definition.contains("Handle") || c.name == "Door"));
+wait 5
+action click_spot fitting:mount
+wait 5
+expect ("Handle, centres 192", "Door")]
+action script scale(children().filter(|c| c.name == "Door"), vec3(0, 0, 0), vec3(1.5, 1, 1));
+wait 5
+expect hardware=[("Leg, height 100", 4, "0.00"), ("Handle, centres 192", 1,
+view iso
+zoom_extents
+wait 10
+screenshot shots/fittings_objects.bmp
+quit

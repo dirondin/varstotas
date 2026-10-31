@@ -710,6 +710,7 @@ impl VarstotasApp {
                 }
             });
         }
+        self.fitting_info(ui);
         if !self.generator_info(ui)
             && !self.rig_info(ui)
             && let [EntityRef::Instance(id)] = sel.as_slice()

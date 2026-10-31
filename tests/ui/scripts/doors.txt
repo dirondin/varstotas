@@ -12,8 +12,8 @@ action click_spot joinery:doors
 wait 10
 expect ("Hinge", "Left", "Door", "3 × Cup hinge Ø35, overlay")
 expect ("Hinge", "Right", "Door", "3 × Cup hinge Ø35, overlay")
-expect ("Handle", "", "Door", "1 × Handle, centres 192")
-expect hardware=[("Cup hinge Ø35, overlay", 6, "0.00"), ("Handle, centres 192", 2, "0.00")]
+expect ("Handle, centres 192", "Door")
+expect hardware=[("Handle, centres 192", 2, "0.00"), ("Cup hinge Ø35, overlay", 6, "0.00")]
 view iso
 zoom_extents
 wait 10

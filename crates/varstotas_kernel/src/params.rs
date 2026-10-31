@@ -75,6 +75,7 @@ impl Model {
             rig: None,
             rigged: None,
             preview: None, joints: Vec::new(), steps: Vec::new(),
+            fitting: None,
         });
         self.defs[pd].mesh.instances[inst].def = p;
         self.regenerate_params(p)?;
@@ -166,6 +167,7 @@ impl Model {
                 tag: None,
                 hidden: false,
                 locked: false,
+                mount: None,
             });
         }
         self.defs[d].params = Some(params);

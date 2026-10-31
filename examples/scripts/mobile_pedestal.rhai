@@ -46,7 +46,7 @@ for side in ["Side L", "Side R"] {
     joint(part.call(side), part.call("Shelf"), "shelf_pins", #{ rows: 2 });
     joint(part.call("Back"), part.call(side), "nails");
 }
-joint(part.call("Bottom"), "caster", #{ size: casters });
+fitting(part.call("Bottom"), "caster", #{ size: casters });
 // a deep drawer at the bottom of the opening: its box of 15 mm birch with a 4 mm HDF bottom,
 // an inset white front and a handle
 let drawer_parts = drawer(part.call("Side L"), part.call("Side R"), #{ z: casters + t + 30, height: drawer_h, wall: 15, bottom: 4, front: "inset", front_thickness: t });

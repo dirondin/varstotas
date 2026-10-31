@@ -1,7 +1,8 @@
 # Furniture hardware: a carcass on confirmats with a shelf on pins, a nailed back and legs; a
 # drawer added from the Joinery window between the two sides comes on slides with its front
-# and handle; the fittings' bodies show and price themselves.
-action script let b = box(vec3(0, 0, 100), 600, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 118), 18, 450, 700); l.name = "Left"; let r = box(vec3(582, 0, 118), 18, 450, 700); r.name = "Right"; let t = box(vec3(0, 0, 818), 600, 450, 18); t.name = "Top"; let s = box(vec3(18, 0, 500), 564, 430, 18); s.name = "Shelf"; let k = box(vec3(0, 450, 100), 600, 6, 736); k.name = "Back"; joint(b, l, "confirmat"); joint(b, r, "confirmat"); joint(t, l, "confirmat"); joint(t, r, "confirmat"); joint(l, s, "shelf_pins", #{ rows: 2 }); joint(r, s, "shelf_pins", #{ rows: 2 }); joint(k, l, "nails"); joint(k, r, "nails"); joint(b, "leg"); select([l, r]);
+# and handle; the fittings' bodies show and price themselves, the legs and the handle objects
+# mounted on their parts.
+action script let b = box(vec3(0, 0, 100), 600, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 118), 18, 450, 700); l.name = "Left"; let r = box(vec3(582, 0, 118), 18, 450, 700); r.name = "Right"; let t = box(vec3(0, 0, 818), 600, 450, 18); t.name = "Top"; let s = box(vec3(18, 0, 500), 564, 430, 18); s.name = "Shelf"; let k = box(vec3(0, 450, 100), 600, 6, 736); k.name = "Back"; joint(b, l, "confirmat"); joint(b, r, "confirmat"); joint(t, l, "confirmat"); joint(t, r, "confirmat"); joint(l, s, "shelf_pins", #{ rows: 2 }); joint(r, s, "shelf_pins", #{ rows: 2 }); joint(k, l, "nails"); joint(k, r, "nails"); fitting(b, "leg"); select([l, r]);
 action console_close
 wait 5
 expect hardware=
@@ -12,8 +13,8 @@ wait 10
 expect joints=[("Confirmat"
 expect ("Slide", "Drawer side", "Left", "1 × Ball-bearing slide 400")
 expect ("Screws", "Drawer front", "Drawer box front", "4 × Screw Ø4 × 25")
-expect fasteners=(67, 67,
-expect ("Handle", "", "Drawer front", "1 × Handle, centres 192")
+expect fasteners=(62, 62,
+expect ("Handle, centres 192", "Drawer front")]
 view iso
 zoom_extents
 wait 10

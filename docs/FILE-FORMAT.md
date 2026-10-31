@@ -52,8 +52,8 @@ stores `joints`: `[{ "kind": "Dowels" | "Screws" | "PocketHole" | "Housing" | "M
 "Dovetail" | "Confirmat" | "CamLock" | "ShelfPins" | "Hinge" | "GasStrut" | "Slide" | "Handle" | "Knob" | "Leg" | "Caster" |
 "TableTop" | "Nails", "a", "b", "count", "diameter", "depth", "depth_b", "thickness", "shoulder", "through",
 "clearance", "angle", "pin", "flip", "margin", "pitch", "at", "offset", "size", "inset", "rows", "slide", "push" }]`
-(`a` and `b` are instance paths, `b` the part whose end meets `a`, empty for a handle, knob,
-legs or casters on one part; sizes in mm; `slide` is a slide's kind, `"Roller"` or `"Undermount"`,
+(`a` and `b` are instance paths, `b` the part whose end meets `a`; sizes in mm; older files' `"Handle"`,
+`"Knob"`, `"Leg"` and `"Caster"` joints on one part, `b` empty, are read as fittings mounted where they were; `slide` is a slide's kind, `"Roller"` or `"Undermount"`,
 omitted for ball-bearing, and `push` is true for push-to-open slides, omitted when false; fasteners lie `margin` from the
 joint's ends and `pitch` apart, or at the distances `at` from its start, `offset` off its middle), and `joint_bases`: `[[def id, mesh]]`,
 the joined parts' geometry from before any joint, which the joints are cut into again on every change.
@@ -67,6 +67,17 @@ sub-assembly, put together first and added to the steps it is placed in whole; `
 model's `assembly` is the sub-assembly whose steps the view shows. `fasteners_hidden: true` turns off
 View → Show → Fasteners; the fastener bodies themselves are not stored, they are placed again from
 the joints when the file is read.
+A definition optionally stores `fitting`: `{ "item", "holes": [{ "at": [x, y, z], "diameter", "depth" }] }`,
+making it a fitting (a handle, a leg, any bought object put on a part): `item` its name on the
+shopping list (empty: the definition's name), `holes` what it drills into the part it is mounted
+on, in its own coordinates (its origin on the part's face, +Z out of it, holes along −Z; `depth`
+0: right through). An instance of it optionally stores `mount`: `{ "on", "axis", "high", "at",
+"offset", "lift", "turn" }`, the part it is on (an instance path from the same definition as
+the fitting), the face of the part's own box across its `axis` (0 = x) on the `high` side or
+the low one, the place on that face (`at`: 0, 0.5 or 1 along its two directions, a corner, an
+edge's middle or the face's middle) and `offset` from there in mm, `lift` off the face and
+`turn` about its normal in degrees. The fitting is placed from it again whenever the part
+changes, and it is a hardware line in the cut list, not a part.
 All are omitted while empty or default, so older readers and files are unaffected.
 
 Scenes optionally store the independent `style.triangles` display checkbox (default false).

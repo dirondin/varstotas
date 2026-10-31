@@ -737,8 +737,8 @@ pub fn add_gltf(model: &mut Model, data: &[u8], dir: Option<&Path>, opts: &Impor
         }
         surface.finish(&mut mesh, opts);
         // i18n-ignore-next
-        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new() });
-        let inst = Instance { def, transform: DMat4::IDENTITY, name, material: None, tag: None, hidden: false, locked: false };
+        let def = model.defs.insert(Definition { name: "Group".into(), mesh, is_group: true, guides: Default::default(), params: None, generated: None, source: None, rig: None, rigged: None, preview: None, joints: Vec::new(), steps: Vec::new(), fitting: None });
+        let inst = Instance { def, transform: DMat4::IDENTITY, name, material: None, tag: None, hidden: false, locked: false, mount: None };
         model.defs[pd].mesh.instances.insert(inst);
     }
     Ok(())

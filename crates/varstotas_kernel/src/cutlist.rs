@@ -280,6 +280,15 @@ pub struct CutPart {
     /// copy that has any: (along the length, along the width, diameter), mm from the corner of
     /// its bounding box.
     pub holes: Vec<[f64; 3]>,
+    /// A fitting ([`crate::fitting`]): bought, listed with the hardware by its item.
+    pub fitting: bool,
+}
+
+impl CutPart {
+    /// Bought rather than cut: a fitting, or a part marked as hardware.
+    pub fn bought(&self, settings: &CutSettings) -> bool {
+        self.fitting || settings.options(&self.name).hardware
+    }
 }
 
 /// A piece on a sheet or board, `x` along the stock's length.
@@ -504,7 +513,8 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
             let mat = inst.material.or(inherited);
             path.push(id);
             let name = if inst.name.is_empty() { &cd.name } else { &inst.name };
-            let hardware = model.cut_list.parts.get(name).is_some_and(|o| o.hardware);
+            let fitting = model.fitting_item(inst.def);
+            let hardware = fitting.is_some() || model.cut_list.parts.get(name).is_some_and(|o| o.hardware);
             if !hardware && cd.mesh.instances.values().any(|i| !i.hidden) {
                 walk(model, inst.def, path, mat, out);
             } else if hardware || !cd.mesh.faces.is_empty() {
@@ -514,7 +524,8 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
                 size.sort_by(|a, b| b.total_cmp(a));
                 let material = mat.or_else(|| face_material(model, inst.def));
                 let part = CutPart {
-                    name: if inst.name.is_empty() { cd.name.clone() } else { inst.name.clone() },
+                    fitting: fitting.is_some(),
+                    name: fitting.unwrap_or_else(|| if inst.name.is_empty() { cd.name.clone() } else { inst.name.clone() }),
                     material,
                     material_name: material.and_then(|m| model.materials.get(m)).map(|m| m.name.clone()).unwrap_or_default(),
                     size,
@@ -535,7 +546,7 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
     }
     let mut out = Vec::new();
     walk(model, model.root, &mut Vec::new(), None, &mut out);
-    if !model.placed_joints.is_empty() {
+    if !model.placed_joints.is_empty() || out.iter().any(|p| p.fitting) {
         let drilled = joint_holes(model);
         for p in &mut out {
             p.holes = p.paths.iter().map(|path| face_holes(model, path, &drilled)).find(|h| !h.is_empty()).unwrap_or_default();
@@ -561,7 +572,7 @@ pub fn visible_bands(model: &Model) -> BTreeMap<String, [bool; 4]> {
     let solid = |m: Option<MaterialId>| m.and_then(|m| model.materials.get(m)).is_some_and(|m| !m.stock.is_empty() && m.stock.iter().all(|s| s.kind != StockKind::Sheet));
     let mut out: BTreeMap<String, [bool; 4]> = BTreeMap::new();
     for p in &parts {
-        if p.size[2] < 10.0 || solid(p.material) || model.cut_list.options(&p.name).hardware {
+        if p.size[2] < 10.0 || solid(p.material) || p.bought(&model.cut_list) {
             continue;
         }
         let mut bands = [false; 4];
@@ -618,6 +629,13 @@ fn joint_holes(model: &Model) -> Drilled {
                 Some(e) => e.1.extend(h),
                 None => out.push((path.clone(), h)),
             }
+        }
+    }
+    for (path, bores) in model.fitting_holes() {
+        let h = bores.into_iter().map(|(p, d, r, _)| (p, d, r));
+        match out.iter_mut().find(|(p, _)| *p == path) {
+            Some(e) => e.1.extend(h),
+            None => out.push((path, h.collect())),
         }
     }
     out
@@ -1052,7 +1070,7 @@ pub fn plan_parts(model: &Model, parts: Vec<CutPart>, settings: &CutSettings) ->
 pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSettings, offcuts: &[Offcut]) -> CutPlan {
     let mut issues = Vec::new();
     let mut banding: Vec<Banding> = Vec::new();
-    for p in parts.iter().filter(|p| !settings.options(&p.name).exclude && !settings.options(&p.name).hardware) {
+    for p in parts.iter().filter(|p| !settings.options(&p.name).exclude && !p.bought(settings)) {
         let length = settings.options(&p.name).band_length(p.size) * p.count as f64;
         if length <= 0.0 {
             continue;
@@ -1074,7 +1092,7 @@ pub fn plan_parts_with(model: &Model, parts: Vec<CutPart>, settings: &CutSetting
         if o.exclude {
             continue;
         }
-        if o.hardware {
+        if p.bought(settings) {
             match hardware.iter_mut().find(|h| h.name == p.name) {
                 Some(h) => h.count += p.count,
                 None => hardware.push(HardwareRow { name: p.name.clone(), count: p.count, price: o.price, extra: None }),
@@ -1194,7 +1212,7 @@ pub fn plan_csv(model: &Model, plan: &CutPlan) -> String {
         let note = if o.exclude {
             // i18n-ignore-next
             "excluded".to_string()
-        } else if o.hardware {
+        } else if p.bought(&model.cut_list) {
             // i18n-ignore-next
             "hardware".to_string()
         } else {

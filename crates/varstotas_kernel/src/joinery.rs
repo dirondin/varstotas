@@ -31,8 +31,10 @@
 //!   newtons, from the door's weight unless set;
 //! - ball-bearing slide: between a cabinet side `a` and a drawer side `b` 12.7 mm apart, the
 //!   longest standard length that fits;
-//! - handle, knob, legs, casters: on one part (`b` empty), on its front face (min y; `flip`: the back)
-//!   or under it;
+//! - handle, knob, legs, casters: no longer joints but fittings, objects mounted on one part
+//!   ([`crate::fitting`]); [`Model::fitting_joint`] and [`Model::put_fitting_joint`] size and
+//!   place them the way these joints did (on its front face, min y, `flip`: the back, or under
+//!   it), and an older file's such joints become fittings when it is read;
 //! - table-top fastener (figure 8): recessed into an apron's edge `b`, screwed to the top `a`;
 //! - nails: through a back panel `a` into the carcass edge `b`.
 //!
@@ -1431,6 +1433,8 @@ impl WoodJoint {
 pub(crate) enum Held {
     Joint(DefId),
     Step(DefId),
+    /// The part a fitting of the definition is mounted on.
+    Mount(DefId, crate::InstanceId),
 }
 
 /// A held path that goes through an instance being moved ([`Model::paths_through`]).
@@ -1506,11 +1510,90 @@ impl Model {
 
     /// Bring [`Model::placed_joints`] and the fasteners up to date when copies of joined groups
     /// or components came or went, or their joints changed (after any edit).
+    /// Mounted fittings go with their parts ([`Model::place_fittings`]) and their holes are
+    /// drilled again when they changed.
     pub fn sync_joints(&mut self) {
+        self.place_fittings();
+        if self.fitting_cutters() != self.fitting_drilled {
+            self.rebuild_wood_joints();
+            return;
+        }
         let places = self.collect_joint_places();
         let joints: Vec<WoodJoint> = places.iter().filter_map(|p| self.placed_at(p)).collect();
         if places != self.joint_places || joints != self.placed_joints {
             self.refresh_fasteners();
+        }
+    }
+
+    /// A single-part joint of `kind` (handle, knob, legs, casters) sized for the part at `p`, as
+    /// [`Model::put_fitting_joint`] takes it.
+    pub fn fitting_joint(&self, kind: WoodJointKind, p: ContextPath) -> OpResult<WoodJoint> {
+        if !kind.single() || self.part_def(&p).is_none() {
+            return Err(OpError::Invalid(tr!("joint-err-one-part")));
+        }
+        let c = face_contact(&self.unjoined(), &p, kind.under(), false).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
+        Ok(WoodJoint::new(kind, p, Vec::new(), &c))
+    }
+
+    /// The handle, knob, legs or casters the single-part joint `j` (its paths from the root)
+    /// describes — its sizes, spots, margin and offset — as fittings mounted on its part, beside
+    /// it. Returns their paths.
+    pub fn put_fitting_joint(&mut self, j: &WoodJoint) -> OpResult<Vec<ContextPath>> {
+        let b = match j.kind {
+            WoodJointKind::Handle => crate::fitting::Builtin::Handle { centres: j.size },
+            WoodJointKind::Knob => crate::fitting::Builtin::Knob { diameter: j.diameter },
+            WoodJointKind::Leg => crate::fitting::Builtin::Leg { height: j.size, diameter: j.diameter },
+            WoodJointKind::Caster => crate::fitting::Builtin::Caster { wheel: j.diameter, height: j.size },
+            _ => return Err(OpError::Invalid(tr!("joint-err-one-part"))),
+        };
+        if self.part_def(&j.a).is_none() {
+            return Err(OpError::Invalid(tr!("joint-err-one-part")));
+        }
+        self.unique_parts(&[&j.a])?;
+        let c = joint_contact(&self.unjoined(), j).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
+        // the sizes a joint of the kind takes
+        j.cuts(&c)?;
+        let d = self.builtin_fitting(b)?;
+        let out = -c.normal();
+        let x = unit(c.along, 1.0);
+        let spots: Vec<DVec3> = if j.kind.under() { j.leg_points(&c) } else { j.spots(&c).into_iter().map(|s| j.point(&c, s)).collect() };
+        let (_, prefix) = j.a.split_last().ok_or(OpError::NotFound)?;
+        let into = self.transform_at(prefix).inverse();
+        let mut paths = Vec::new();
+        for p in spots {
+            let world = DMat4::from_cols(x.extend(0.0), out.cross(x).extend(0.0), out.extend(0.0), p.extend(1.0));
+            let inst = crate::Instance { def: d, transform: into * world, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None };
+            let id = self.mesh_at_mut(prefix).ok_or(OpError::NotFound)?.instances.insert(inst);
+            let path: ContextPath = prefix.iter().copied().chain(std::iter::once(id)).collect();
+            self.attach_fitting(&path, &j.a)?;
+            paths.push(path);
+        }
+        self.sync_joints();
+        Ok(paths)
+    }
+
+    /// Handles, knobs, legs and casters that are joints (files from before fittings were
+    /// objects) become fittings; one that cannot be placed stays a joint.
+    pub fn fittings_from_joints(&mut self) {
+        let firsts = self.first_paths();
+        let owners: Vec<DefId> = std::iter::once(self.root).chain(self.defs.keys().filter(|d| *d != self.root)).collect();
+        let mut changed = false;
+        for owner in owners {
+            let Some(prefix) = firsts.get(&owner).cloned() else { continue };
+            let single: Vec<usize> = self.joints_of(owner).iter().enumerate().filter(|(_, j)| j.kind.single()).map(|(i, _)| i).collect();
+            for i in single.into_iter().rev() {
+                let j = self.joints_of(owner)[i].under(&prefix);
+                if self.put_fitting_joint(&j).is_ok() {
+                    if let Some(l) = self.joints_of_mut(owner) {
+                        l.remove(i);
+                    }
+                    self.forget_step_joint(owner, i);
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            self.rebuild_wood_joints();
         }
     }
 
@@ -1554,12 +1637,7 @@ impl Model {
     /// takes `p` only. Returns the joint's index.
     pub fn add_wood_joint(&mut self, kind: WoodJointKind, p: ContextPath, q: ContextPath) -> OpResult<usize> {
         if kind.single() {
-            if self.part_def(&p).is_none() {
-                return Err(OpError::Invalid(tr!("joint-err-one-part")));
-            }
-            self.unique_parts(&[&p])?;
-            let c = face_contact(&self.unjoined(), &p, kind.under(), false).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
-            return self.push_wood_joint(WoodJoint::new(kind, p, Vec::new(), &c));
+            return Err(OpError::Invalid(tr!("fitting-err-joint")));
         }
         if p == q || self.part_def(&p).is_none() || self.part_def(&q).is_none() {
             return Err(OpError::Invalid(tr!("joint-err-two-parts")));
@@ -1649,6 +1727,11 @@ impl Model {
                     }
                 }
             }
+            for (id, inst) in self.defs.get(owner).map(|d| &d.mesh.instances).into_iter().flatten() {
+                if let Some(at) = inst.mount.as_ref().and_then(|m| through(owner, &m.on)) {
+                    out.push(PathAt { held: Held::Mount(owner, id), index: 0, part: 0, at });
+                }
+            }
         }
         out
     }
@@ -1660,6 +1743,7 @@ impl Model {
             let path = match h.held {
                 Held::Joint(owner) => self.joints_of_mut(owner).and_then(|l| l.get_mut(h.index)).map(|j| if h.part == 0 { &mut j.a } else { &mut j.b }),
                 Held::Step(owner) => self.steps_of_mut(owner).and_then(|l| l.get_mut(h.index)).and_then(|s| s.parts.get_mut(h.part)),
+                Held::Mount(owner, id) => self.defs.get_mut(owner).and_then(|d| d.mesh.instances.get_mut(id)).and_then(|i| i.mount.as_mut()).map(|m| &mut m.on),
             };
             if let Some(path) = path
                 && h.at < path.len()
@@ -1677,6 +1761,7 @@ impl Model {
     pub(crate) fn joints_into_group(&mut self, at: &[PathAt], pd: DefId, group: crate::InstanceId, nd: DefId, map: &[(crate::InstanceId, crate::InstanceId)]) {
         let new_id = |id: crate::InstanceId| map.iter().find(|(o, _)| *o == id).map_or(id, |(_, n)| *n);
         self.reroute_paths(at, |p| std::iter::once(group).chain(std::iter::once(new_id(p[0]))).chain(p[1..].iter().copied()).collect());
+        self.remap_mounts(nd, map);
         // pd's joints with every part in the group now belong to it
         let inside = |j: &WoodJoint| [&j.a, &j.b].into_iter().all(|p| p.is_empty() || (p.len() > 1 && p[0] == group));
         let own = self.joints_of(pd).to_vec();
@@ -1694,6 +1779,23 @@ impl Model {
                 l.remove(i);
             }
             self.forget_step_joint(pd, i);
+        }
+    }
+
+    /// Instances moved into definition `d` as `map` says (old id, new id): a fitting among them
+    /// keeps its part when that came too, else it is no longer mounted.
+    fn remap_mounts(&mut self, d: DefId, map: &[(crate::InstanceId, crate::InstanceId)]) {
+        let Some(def) = self.defs.get_mut(d) else { return };
+        for &(_, n) in map {
+            let Some(inst) = def.mesh.instances.get_mut(n) else { continue };
+            let Some(m) = inst.mount.as_mut() else { continue };
+            match m.on.first().and_then(|o| map.iter().find(|(x, _)| x == o)) {
+                Some(&(_, to)) => {
+                    m.on[0] = to;
+                    m.seen = None;
+                }
+                None => inst.mount = None,
+            }
         }
     }
 
@@ -1722,6 +1824,7 @@ impl Model {
     /// joints come into `pd`.
     pub(crate) fn joints_out_of_group(&mut self, at: &[PathAt], pd: DefId, cd: DefId, map: &[(crate::InstanceId, crate::InstanceId)]) {
         let new_id = |id: crate::InstanceId| map.iter().find(|(o, _)| *o == id).map(|(_, n)| *n);
+        self.remap_mounts(pd, map);
         // [inst, child, rest] -> [child', rest]; a path ending at the group keeps it (gone now)
         self.reroute_paths(at, |p| match p.get(1).and_then(|c| new_id(*c)) {
             Some(n) => std::iter::once(n).chain(p[2..].iter().copied()).collect(),
@@ -1859,9 +1962,38 @@ impl Model {
                 errors.push((k, e.to_string()));
             }
         }
+        used.extend(self.drill_fittings());
         self.joint_bases.retain(|(d, _)| used.contains(d) && self.defs.contains_key(*d));
         self.refresh_fasteners();
         errors
+    }
+
+    /// Drill the mounted fittings' holes into their parts (a part that is not a closed solid is
+    /// left as it is). Returns the parts drilled.
+    fn drill_fittings(&mut self) -> Vec<DefId> {
+        let cutters = self.fitting_cutters();
+        let mut drilled = Vec::new();
+        for (d, holes) in &cutters {
+            let mut tools = Vec::new();
+            for &(p, dir, dia, len) in holes {
+                let Some(m) = Primitive::Cylinder { r: dia / 2.0, h: len + OVER, segs: 16 }.mesh() else { continue };
+                tools.push((m, DMat4::from_translation(p - dir * OVER) * DMat4::from_quat(DQuat::from_rotation_arc(DVec3::Z, dir))));
+            }
+            let Some(mut mesh) = self.defs.get(*d).map(|x| x.mesh.clone()).filter(|m| m.is_solid() && !tools.is_empty()) else { continue };
+            // a hole that cannot be drilled is left out
+            for (t, txf) in &merge_tools(&tools) {
+                if let Some(m) = mesh_boolean(&mesh, &DMat4::IDENTITY, t, txf, false) {
+                    mesh = m;
+                }
+            }
+            if !self.joint_bases.iter().any(|(x, _)| x == d) {
+                self.joint_bases.push((*d, self.defs[*d].mesh.clone()));
+            }
+            self.defs[*d].mesh = mesh;
+            drilled.push(*d);
+        }
+        self.fitting_drilled = cutters;
+        drilled
     }
 
     fn cut_wood_joint(&mut self, j: &WoodJoint) -> OpResult<()> {

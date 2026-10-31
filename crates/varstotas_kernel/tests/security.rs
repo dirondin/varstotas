@@ -20,6 +20,7 @@ fn cyclic_native_file_is_rejected_and_bounds_terminate() {
             tag: None,
             hidden: false,
             locked: false,
+            mount: None,
         });
     }
     assert!(io::from_json(&io::to_json(&m).unwrap()).is_err());
@@ -114,7 +115,7 @@ fn zip_rejects_declared_bombs_and_actual_size_mismatch() {
 #[test]
 fn acyclic_expansion_and_depth_are_bounded() {
     fn instance(def: varstotas_kernel::DefId) -> Instance {
-        Instance { def, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false }
+        Instance { def, transform: DMat4::IDENTITY, name: String::new(), material: None, tag: None, hidden: false, locked: false, mount: None }
     }
     let mut m = Model::new();
     let empty = m.defs[m.root].clone();

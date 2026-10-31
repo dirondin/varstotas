@@ -168,24 +168,24 @@ fn example_bookshelf_runs() {
 fn example_furniture_runs() {
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/nightstand.rhai"));
-    assert_eq!(r.output, "Nightstand 450 x 400 x 640, 19 joints, 12 steps\n");
+    assert_eq!(r.output, "Nightstand 450 x 400 x 640, 17 joints, 12 steps\n");
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/cabinet.rhai"));
-    assert_eq!(r.output, "Cabinet 800 x 450 x 1500, 17 joints, 8 steps\n");
+    assert_eq!(r.output, "Cabinet 800 x 450 x 1500, 14 joints, 8 steps\n");
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
     assert!(plan.hardware.iter().any(|h| h.name == "Cup hinge Ø35, overlay" && h.count == 6), "doors() hangs 1396 mm doors on three hinges each");
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/mobile_pedestal.rhai"));
-    assert_eq!(r.output, "Mobile pedestal 600 x 450 x 806, 19 joints, 12 steps\n");
+    assert_eq!(r.output, "Mobile pedestal 600 x 450 x 806, 17 joints, 12 steps\n");
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
     assert!(plan.hardware.iter().any(|h| h.name == "Swivel caster Ø50, height 70" && h.count == 4));
     let mut m = Model::new();
     let r = go(&mut m, include_str!("../../../examples/scripts/wall_cabinet.rhai"));
-    assert_eq!(r.output, "Wall cabinet 600 x 320 x 400, 12 joints, 7 steps\n");
+    assert_eq!(r.output, "Wall cabinet 600 x 320 x 400, 11 joints, 7 steps\n");
     let plan = varstotas_kernel::cutlist::plan(&m);
     assert!(plan.issues.is_empty() && plan.hardware.iter().all(|h| h.price > 0.0), "{:?}", plan.hardware);
     assert!(plan.hardware.iter().any(|h| h.name == "Gas strut 90 N" && h.count == 2));
@@ -450,10 +450,14 @@ fn joinery() {
     let r = go(
         &mut m,
         r##"set_joint(0, #{ kind: "cam_lock" }); print(joints()[0].hardware);
-        let l = joint("Shelf", "leg", #{ size: 120 }); let j = joints()[l]; print(j.kind + " " + j.size + " " + type_of(j.b) + " " + j.hardware);
-        remove_joint(l);"##,
+        let l = fitting("Shelf", "leg", #{ size: 120 }); print(l.len() + " " + joints().len() + " " + cut_list().hardware.filter(|h| h.name.contains("Leg")).map(|h| h.count + " × " + h.name));
+        erase(l);"##,
     );
-    assert_eq!(r.output, "3 × Cam lock Ø15 with bolt\nleg 120.0 () 4 × Leg, height 120\n", "{}", r.output);
+    assert_eq!(r.output, "3 × Cam lock Ø15 with bolt\n4 1 [\"4 × Leg, height 120\"]\n", "{}", r.output);
+    let r = run(&mut m, &ScriptCtx::default(), r#"joint("Shelf", "leg")"#);
+    assert!(r.error.is_some_and(|e| e.contains("fitting(")), "a fitting now");
+    let r = run(&mut m, &ScriptCtx::default(), r#"fitting("Shelf", "dowels")"#);
+    assert!(r.error.is_some());
     let r = run(&mut m, &ScriptCtx::default(), r#"joint("Shelf", "dowels")"#);
     assert!(r.error.is_some_and(|e| e.contains("joint(a, b")));
     let r = run(&mut m, &ScriptCtx::default(), r#"joint("Side", "Shelf", "rivets")"#);

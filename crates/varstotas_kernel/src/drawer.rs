@@ -264,8 +264,10 @@ impl Model {
             let (p, q) = (path(front), path(panel));
             let c = joint_contact(self, &WoodJoint { kind: WoodJointKind::Screws, a: p.clone(), b: q.clone(), ..Default::default() }).ok_or_else(bad)?;
             self.push_wood_joint(WoodJoint::new(WoodJointKind::Screws, p, q.clone(), &c))?;
-            if !spec.push {
-                let _ = self.add_wood_joint(WoodJointKind::Handle, q, Vec::new());
+            if !spec.push
+                && let Ok(j) = self.fitting_joint(WoodJointKind::Handle, q)
+            {
+                let _ = self.put_fitting_joint(&j);
             }
         }
         Ok(parts)
@@ -359,14 +361,13 @@ impl Model {
             } else {
                 self.add_wood_joint(WoodJointKind::Hinge, door.clone(), side.to_vec())?;
             }
-            if !spec.push && let Ok(h) = self.add_wood_joint(WoodJointKind::Handle, door.clone(), Vec::new()) {
+            if !spec.push && let Ok(mut j) = self.fitting_joint(WoodJointKind::Handle, door.clone()) {
                 // upright by the free edge, away from the hinged side
                 let hinged_low = self.part_box(side).is_some_and(|b| b.0[k] < x);
-                let mut j = self.placed_joints[h].clone();
                 if s.z > w {
                     j.offset = (w / 2.0 - 50.0) * if hinged_low { 1.0 } else { -1.0 };
-                    let _ = self.set_wood_joint(h, j);
                 }
+                let _ = self.put_fitting_joint(&j);
             }
             doors.push(id);
         }

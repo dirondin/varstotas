@@ -292,20 +292,33 @@ fn furniture_fittings() {
     let door2 = board(&mut m2, "Door", DVec3::new(591.0, 18.0, 800.0), DVec3::new(9.0, -18.0, 0.0));
     let h2 = m2.add_wood_joint(K::Hinge, vec![side2], vec![door2]).unwrap();
     assert_eq!(hw(&m2, h2).0, "Cup hinge Ø35, half overlay");
-    // a handle on the door's front, the longest that fits; legs under the shelf
-    let k = m.add_wood_joint(K::Handle, vec![door], vec![]).unwrap();
-    assert_eq!((hw(&m, k), m.joints[k].b.len()), (("Handle, centres 192".into(), 1), 0));
-    assert_eq!(m.joint_contacts[k].unwrap().at, -18.0, "on the front face");
-    let l = m.add_wood_joint(K::Leg, vec![shelf], vec![]).unwrap();
-    assert_eq!((hw(&m, l), bodies(&m, l)), (("Leg, height 100".into(), 4), 4));
-    // or casters instead: a plate and fork, and a wheel, each; four screws per plate
-    m.remove_wood_joint(l);
+    // a handle on the door's front, the longest that fits: an object mounted on it, not a joint
+    assert!(m.add_wood_joint(K::Handle, vec![door], vec![]).is_err());
+    let vd = volume(&m, door);
+    let j = m.fitting_joint(K::Handle, vec![door]).unwrap();
+    let handle = m.put_fitting_joint(&j).unwrap();
+    let item = |m: &Model, p: &[InstanceId]| m.fitting_item(m.def_at(p).unwrap()).unwrap();
+    assert_eq!((handle.len(), item(&m, &handle[0])), (1, "Handle, centres 192".to_string()));
+    let f = m.transform_at(&handle[0]);
+    assert!((f.w_axis.y + 18.0).abs() < 1e-9 && f.z_axis.truncate().abs_diff_eq(DVec3::NEG_Y, 1e-9), "on the front face, out of it: {f}");
+    assert!(volume(&m, door) < vd, "its two holes drilled");
+    // legs under the shelf, four
+    let legs = m.put_fitting_joint(&m.fitting_joint(K::Leg, vec![shelf]).unwrap()).unwrap();
+    assert_eq!((legs.len(), item(&m, &legs[0])), (4, "Leg, height 100".to_string()));
+    // or casters instead, four screws per plate
+    for p in &legs {
+        m.root_mesh_mut().instances.remove(p[0]);
+    }
+    m.sync_joints();
     let vs = volume(&m, shelf);
-    let w = m.add_wood_joint(K::Caster, vec![shelf], vec![]).unwrap();
-    assert_eq!((hw(&m, w), bodies(&m, w)), (("Swivel caster Ø50, height 70".into(), 4), 8));
-    assert_eq!(m.joints[w].holes(&m.joint_contacts[w].unwrap()).0.len(), 16);
+    let casters = m.put_fitting_joint(&m.fitting_joint(K::Caster, vec![shelf]).unwrap()).unwrap();
+    assert_eq!(casters.len(), 4);
+    m.sync_joints();
+    assert_eq!(m.fitting_holes().iter().find(|(p, _)| *p == vec![shelf]).unwrap().1.len(), 16);
     assert!(volume(&m, shelf) < vs);
-    assert!(m.add_wood_joint(K::Knob, vec![], vec![]).is_err());
+    let rows: Vec<String> = varstotas_kernel::cutlist::plan(&m).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
+    assert!(rows.contains(&"4 × Swivel caster Ø50, height 70".to_string()) && rows.contains(&"1 × Handle, centres 192".to_string()), "{rows:?}");
+    assert!(m.fitting_joint(K::Knob, vec![]).is_err());
     // a back panel nailed onto the side's back edge: nothing cut
     let back = board(&mut m, "Back", DVec3::new(600.0, 6.0, 800.0), DVec3::new(0.0, 300.0, 0.0));
     let vb = volume(&m, back);
@@ -343,7 +356,10 @@ fn a_drawer_for_an_opening() {
     let (min, s) = size(&m, parts[0]);
     assert!((min.x - 30.7).abs() < 1e-9 && (s.y - 450.0).abs() < 1e-9 && (min.y - 18.0).abs() < 1e-9, "{min} {s}");
     let names: Vec<String> = m.joints.iter().map(|j| format!("{:?}", j.kind)).collect();
-    assert_eq!(names, ["Slide", "Slide", "Dowels", "Dowels", "Nails", "Dowels", "Dowels", "Nails", "Screws", "Handle"]);
+    assert_eq!(names, ["Slide", "Slide", "Dowels", "Dowels", "Nails", "Dowels", "Dowels", "Nails", "Screws"]);
+    // the handle on the front
+    let fittings = m.placed_fittings();
+    assert_eq!((fittings.len(), &fittings[0].1), (1, &vec![parts[5]]));
     let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
     assert!(hw.contains(&"2 × Ball-bearing slide 450".to_string()), "{hw:?}");
     // an overlay front stands in front of the carcass; no room: refused, nothing added
@@ -451,11 +467,14 @@ fn doors_for_a_carcass() {
     assert_eq!(hinges.len(), 2);
     assert!(hinges.iter().all(|j| j.count == 3 && !j.inset));
     assert!(hinges.iter().any(|j| j.a == vec![ds[0]] && j.b == vec![l]) && hinges.iter().any(|j| j.a == vec![ds[1]] && j.b == vec![r]));
-    // the handles by the meeting edges
-    let handles: Vec<_> = m1.joints.iter().filter(|j| j.kind == K::Handle).collect();
+    // the handles upright by the meeting edges, 50 from them
+    let handles = m1.placed_fittings();
     assert_eq!(handles.len(), 2);
-    assert!(handles.iter().all(|j| (j.offset.abs() - ((a1.x - a0.x) / 2.0 - 50.0)).abs() < 1e-6));
-    assert!(handles.iter().any(|j| j.a == vec![ds[0]] && j.offset > 0.0) && handles.iter().any(|j| j.a == vec![ds[1]] && j.offset < 0.0));
+    for (f, door) in &handles {
+        let t = m1.transform_at(f);
+        let x = if *door == vec![ds[0]] { a1.x - 50.0 } else { b0.x + 50.0 };
+        assert!((t.w_axis.x - x).abs() < 1e-6 && t.x_axis.truncate().z.abs() > 0.999, "{t}");
+    }
     let hw: Vec<String> = varstotas_kernel::cutlist::plan(&m1).hardware.iter().map(|h| format!("{} × {}", h.count, h.name)).collect();
     assert!(hw.contains(&"6 × Cup hinge Ø35, overlay".to_string()), "{hw:?}");
     // one inset door, push latch: in the opening 2 mm clear, the hinge with the door as b
@@ -464,7 +483,7 @@ fn doors_for_a_carcass() {
     assert!((d0.x - 20.0).abs() < 1e-6 && (d1.x - 780.0).abs() < 1e-6 && (d0.z - 20.0).abs() < 1e-6 && (d1.z - 1180.0).abs() < 1e-6 && d0.y.abs() < 1e-6, "{d0} {d1}");
     let j = m.joints.iter().find(|j| j.kind == K::Hinge).unwrap();
     assert!(j.inset && j.a == vec![l] && j.b == vec![ds[0]] && j.count == 3);
-    assert!(!m.joints.iter().any(|j| j.kind == K::Handle));
+    assert!(m.placed_fittings().is_empty());
     // too narrow for a pair
     assert!(m.add_doors(&[l], &[r], (18.0, 100.0), DoorSpec::default()).is_err());
 }
