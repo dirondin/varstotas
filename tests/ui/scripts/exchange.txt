@@ -45,7 +45,7 @@ screenshot shots/exchange_dae.bmp
 # OBJ whose .mtl is not beside it: the geometry loads, the missing file is reported (outside a
 # scripted run Varstotas offers to choose the model's folder and imports again from there)
 expect import_missing=[]
-action import_file ../../tests/ui/fixtures/sidecars/lonely.obj
+action import_file $ROOT/tests/ui/fixtures/sidecars/lonely.obj
 wait 5
 expect import_missing=["lonely.mtl"]
 expect undo=Some("Import OBJ")

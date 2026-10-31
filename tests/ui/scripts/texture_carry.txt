@@ -3,7 +3,7 @@ box -1000 0 0 2000 1000 1000
 view front
 zoom_extents
 wait 10
-texture ../../tests/ui/models/bricks.png 800
+texture $ROOT/tests/ui/models/bricks.png 800
 wait 2
 rawp click 0 0 500
 wait 3

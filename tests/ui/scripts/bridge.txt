@@ -3,7 +3,7 @@
 # The bridge starts with the first Python script; bridge.json (other clients, MCP) only once
 # Preferences → General lets them connect.
 expect bridge_open=None
-action run_script ../../examples/scripts/bookshelf.py
+action run_script $ROOT/examples/scripts/bookshelf.py
 wait 5
 expect script=Some((true, "Bookshelf 800 x 304 x 1800, 9 parts, 12 joints"))
 expect undo=Some("Bookshelf")
@@ -25,7 +25,7 @@ wait 5
 expect bridge_open=Some(true)
 action preferences
 wait 5
-action run_script ../../tests/ui/py/bridge_check.py
+action run_script $ROOT/tests/ui/py/bridge_check.py
 # the export over an existing file waits for the user: deny it
 expect bridge_confirm=1
 wait 5

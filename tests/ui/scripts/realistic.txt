@@ -47,7 +47,7 @@ screenshot shots/realistic_sky.bmp
 action toggle_shadows
 wait 10
 screenshot shots/realistic_shadows.bmp
-action hdri ../../tests/ui/models/studio.hdr
+action hdri $ROOT/tests/ui/models/studio.hdr
 wait 10
 expect env=(Hdri, 0, 1, 3, 0, aces, true)
 expect hdri=Some("studio.hdr")

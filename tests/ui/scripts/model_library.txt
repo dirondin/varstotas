@@ -20,7 +20,7 @@ raw click 248 265
 wait 10
 screenshot shots/modlib_3.bmp
 raw click 294 144
-raw text ../../tests/ui/fixtures/model_library/models
+raw text $ROOT/tests/ui/fixtures/model_library/models
 wait 3
 screenshot shots/modlib_4.bmp
 raw click 259 170
@@ -53,7 +53,7 @@ expect last=Some("plugin-model_folders:
 expect Tetra.vrst faces=4")
 expect previews=(None, ["Stool"], ["Stool"])
 screenshot shots/modlib_8.bmp
-action import_model ../../tests/ui/fixtures/model_library/models/Shapes/Tetra.ply
+action import_model $ROOT/tests/ui/fixtures/model_library/models/Shapes/Tetra.ply
 wait 5
 expect credits=["Stool"]
 action export_attributions credits.txt
@@ -61,7 +61,7 @@ wait 3
 raw click 783 56
 wait 5
 screenshot shots/modlib_9.bmp
-action library_preview Tetra|../../tests/ui/fixtures/model_library/models/Furniture/Stool.png
+action library_preview Tetra|$ROOT/tests/ui/fixtures/model_library/models/Furniture/Stool.png
 wait 5
 expect previews=(None, ["Stool", "Tetra"], ["Stool"])
 action library_preview Tetra|clear

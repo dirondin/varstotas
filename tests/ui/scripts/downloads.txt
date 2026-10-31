@@ -14,7 +14,7 @@ action dl_page url=https%3A%2F%2Fwww.printables.com%2Fmodel%2F1-chairs&title=Two
 wait 5
 expect downloads=(waiting=["Two Chairs [CC BY-NC 4.0]"] offers=0
 screenshot shots/dl_1.bmp
-action dl_drop ../../tests/ui/fixtures/downloads/chairs.zip
+action dl_drop $ROOT/tests/ui/fixtures/downloads/chairs.zip
 wait 5
 expect first=("Two Chairs" "Printables" "CC-BY-NC" 2/2 dup=false place=false)
 screenshot shots/dl_2.bmp
@@ -50,7 +50,7 @@ action export_attributions dl_export.obj
 wait 3
 screenshot shots/dl_6.bmp
 # A model file with no card: credit from its name, licence chosen (real clicks), placed.
-action dl_drop ../../tests/ui/fixtures/downloads/lamp.obj
+action dl_drop $ROOT/tests/ui/fixtures/downloads/lamp.obj
 wait 5
 expect first=("Lamp" "Downloads" "Unknown" 1/1 dup=false place=true)
 screenshot shots/dl_7.bmp
@@ -77,7 +77,7 @@ expect models=(true history models=2 shown=1
 screenshot shots/dl_10.bmp
 action models_filter
 # The same archive again: a duplicate; Ignore (real click).
-action dl_drop ../../tests/ui/fixtures/downloads/chairs.zip
+action dl_drop $ROOT/tests/ui/fixtures/downloads/chairs.zip
 wait 5
 expect dup=true
 screenshot shots/dl_11.bmp

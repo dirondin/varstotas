@@ -12,7 +12,7 @@ action rig_edit
 wait 5
 action rig_clear
 action rig_param open:angle(0..90) = 0 "Opening"
-action rig_script ../../tests/ui/fixtures/rig_script/update.rhai
+action rig_script $ROOT/tests/ui/fixtures/rig_script/update.rhai
 action rig_apply
 wait 10
 expect rig=Some("1 Cabinet [open=0°] joints=0 variants=1")

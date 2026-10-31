@@ -24,7 +24,7 @@ expect context_depth=0
 action script move(groups()[0],X*100);
 expect script=Some((false, "Runtime error: This operation would change locked objects.
 expect undo=Some("Lock")
-action run_script ../../tests/ui/py/locking_check.py
+action run_script $ROOT/tests/ui/py/locking_check.py
 expect locking bridge checks: 12 ok
 expect model_faces=6
 action console_close

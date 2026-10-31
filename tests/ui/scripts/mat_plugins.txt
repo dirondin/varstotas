@@ -4,10 +4,10 @@
 box 0 0 0 1000 1000 1000
 view iso
 zoom_extents
-action mat_import ../../tests/ui/fixtures/mat_plugins/unity/Assets/Materials/Old Brick.mat
+action mat_import $ROOT/tests/ui/fixtures/mat_plugins/unity/Assets/Materials/Old Brick.mat
 wait 5
 expect current_mat=Some(("Old Brick"
-action mat_import ../../tests/ui/fixtures/mat_plugins/unity/Assets/Materials/Blue Glow.mat
+action mat_import $ROOT/tests/ui/fixtures/mat_plugins/unity/Assets/Materials/Blue Glow.mat
 wait 5
 expect current_mat=Some(("Blue Glow", Some((1.0, 0.0))))
 action tray_only Materials
@@ -24,7 +24,7 @@ expect online=(true plugin-texture_folders catalogue=error
 screenshot shots/matplug_3.bmp
 expect catalogue=error "Set the folder (one subfolder per material) and press Load"
 raw click 300 163
-raw text ../../tests/ui/fixtures/mat_plugins/texture_sets
+raw text $ROOT/tests/ui/fixtures/mat_plugins/texture_sets
 wait 3
 raw click 616 163
 wait 5

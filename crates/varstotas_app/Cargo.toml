@@ -42,6 +42,8 @@ open = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 winit = { version = "0.30", default-features = false }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSProcessInfo", "NSString"] }
+# scripted runs fade their window out (debug_capture::fade_window)
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
 
 # The log window's local time (localtime_r).
 [target.'cfg(unix)'.dependencies]

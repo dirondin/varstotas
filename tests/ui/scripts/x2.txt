@@ -1,6 +1,6 @@
 # Axes: reopen keeps custom axes; context menu Move… (dx,dy,dz,angle), Reset, undo
 wait 10
-open ../../tests/ui/models/x1.vrst
+open $ROOT/tests/ui/models/x1.vrst
 wait 10
 view top
 parallel on

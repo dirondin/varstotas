@@ -6,7 +6,7 @@ box 0 0 0 1000 600 400
 view iso
 zoom_extents
 wait 10
-texture ../../tests/ui/models/bricks.png 800
+texture $ROOT/tests/ui/models/bricks.png 800
 wait 2
 raw mods shift
 rawp click 500 300 400
@@ -156,7 +156,7 @@ action click_spot uv:tile
 wait 3
 expect uv_view=(bricks base true)
 screenshot shots/uv_single_tile.bmp
-action mat_map bricks normal ../../tests/ui/models/alpha_disc.png
+action mat_map bricks normal $ROOT/tests/ui/models/alpha_disc.png
 wait 5
 action click_spot uv:map
 wait 3

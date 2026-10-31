@@ -12,7 +12,7 @@ raw click 250 215
 wait 5
 expect anim_win=true None
 screenshot shots/anim_window.bmp
-# an orbit as a PNG sequence (target/ui-tests/anim_orbit/frame_0000N.png)
+# an orbit as a PNG sequence (anim_orbit/frame_0000N.png in the run folder)
 action anim source=orbit seconds=1 turns=0.5 fps=6 w=320 h=200 traced=off gif=off out=anim_orbit
 wait 3
 expect anim_win=true Some(Ok("6 frames in anim_orbit"))

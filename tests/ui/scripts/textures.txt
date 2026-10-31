@@ -3,7 +3,7 @@ box 0 0 0 2000 1000 1000
 view iso
 zoom_extents
 wait 10
-texture ../../tests/ui/models/bricks.png 800
+texture $ROOT/tests/ui/models/bricks.png 800
 wait 2
 expect textures=["bricks:800x400"]
 expect tool=Paint

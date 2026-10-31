@@ -1,5 +1,5 @@
 # Full native workflow: analysis, bed, capped split with sockets/dowels, layout and scoped export.
-# Runs in target/ui-tests; Open in Slicer hands the export to the default app (recorded only).
+# Runs in its own temporary folder; Open in Slicer hands the export to the default app (recorded only).
 box 0 0 0 20 20 20
 select_all
 action make_group

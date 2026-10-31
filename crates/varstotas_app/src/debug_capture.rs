@@ -16,6 +16,28 @@ pub(crate) fn qa_examples_dir() -> Option<std::path::PathBuf> {
     None
 }
 
+/// Scripted runs: the window stays on screen (macOS hands a covered window no frames, so a
+/// screenshot would never come) but nearly transparent, so it does not get in the user's way;
+/// it takes no clicks (mouse passthrough) and no keys (never focused). Screenshots are the
+/// rendered frame, not the screen: the window's own transparency does not show in them.
+fn fade_window() {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::runtime::AnyObject;
+        use objc2::{class, msg_send};
+        // SAFETY: plain AppKit calls on the main thread (the UI runs there)
+        unsafe {
+            let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let windows: *mut AnyObject = msg_send![app, windows];
+            let n: usize = msg_send![windows, count];
+            for i in 0..n {
+                let w: *mut AnyObject = msg_send![windows, objectAtIndex: i];
+                let _: () = msg_send![w, setAlphaValue: 0.01f64];
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct DebugCapture {
     path: Option<String>,
@@ -67,8 +89,14 @@ impl DebugCapture {
     }
 
     pub fn from_env() -> Self {
+        // `$ROOT` in a script is the repository (the script is <root>/tests/ui/scripts/<name>.txt):
+        // scripts run in a fresh temporary folder, so repository files are named from the root
         let script = std::env::var("VARSTOTAS_SCRIPT").ok().and_then(|p| match std::fs::read_to_string(&p) {
-            Ok(text) => Some(Script::parse(&text)),
+            Ok(text) => {
+                let path = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone().into());
+                let root = path.ancestors().nth(4).map(|r| r.display().to_string()).unwrap_or_default();
+                Some(Script::parse(&text.replace("$ROOT", &root)))
+            }
             Err(e) => {
                 log::error!("cannot read script {p}: {e}");
                 None
@@ -602,6 +630,8 @@ pub struct Script {
     /// Present when the script uses `raw` commands: input then flows through egui exactly
     /// like real input (and OS input is replaced, see [`RawInjector::apply`]).
     pub raw: Option<RawInjector>,
+    /// The window on top and focused: a video (`record`) or VARSTOTAS_FOREGROUND=1.
+    foreground: bool,
 }
 
 impl Script {
@@ -609,6 +639,7 @@ impl Script {
         let cmds: Vec<ScriptCmd> = text.lines().filter_map(parse_cmd).collect();
         let raw = cmds.iter().any(|c| matches!(c, ScriptCmd::Raw(_) | ScriptCmd::RawWorld(..) | ScriptCmd::RawSheet(..))
             || matches!(c, ScriptCmd::Action(name) if ["click_spot ", "rclick_spot ", "dblclick_spot ", "drag_spot "].iter().any(|p| name.starts_with(p)))).then(RawInjector::default);
+        let foreground = std::env::var_os("VARSTOTAS_FOREGROUND").is_some() || cmds.iter().any(|c| matches!(c, ScriptCmd::Record(Some(_))));
         Self {
             cmds,
             raw,
@@ -620,6 +651,7 @@ impl Script {
             rec: None,
             last_vp: None,
             stable: 0,
+            foreground,
         }
     }
 }
@@ -672,11 +704,18 @@ impl VarstotasApp {
         let Some(script) = self.debug.script.as_mut() else { return };
         ctx.request_repaint();
         script.frame += 1;
-        // Above other windows: macOS does not draw a covered window, so a screenshot asked for
-        // then never arrives (the run hangs while the user works in other apps).
+        // Never focused and nearly invisible, so a run does not get in the way of the user's
+        // work; on top, since a covered window gets no frames (fade_window). A video (`record`)
+        // or VARSTOTAS_FOREGROUND=1 shows the window on top and focused, as before.
         if script.frame == 1 {
-            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            if script.foreground {
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            } else {
+                fade_window();
+                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+                ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(true));
+            }
         }
         // Let the window and renderer settle: the viewport size must be stable for a while
         // before the first command (world → screen mapping depends on it).

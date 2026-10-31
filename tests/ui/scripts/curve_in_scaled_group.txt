@@ -1,6 +1,6 @@
 # QA4B-003: Circle/Arc inside a non-uniformly scaled group must add edges
 wait 10
-open ../../tests/ui/models/ei6.vrst
+open $ROOT/tests/ui/models/ei6.vrst
 wait 10
 view top
 parallel on

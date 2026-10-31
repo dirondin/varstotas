@@ -4,7 +4,7 @@ box 0 0 0 1000 1000 1000
 view iso
 zoom_extents
 wait 10
-texture ../../tests/ui/models/bricks.png 800
+texture $ROOT/tests/ui/models/bricks.png 800
 wait 2
 rawp click 500 0 500
 rawp click 1000 500 500
@@ -53,7 +53,7 @@ wait 5
 expect tex_look=Some("0 0.00 0.00 0.50 w")
 screenshot shots/look_world.bmp
 # alpha cut-off: disc (opaque centre, ring alpha 100/255) on the top face
-texture ../../tests/ui/models/alpha_disc.png 1000
+texture $ROOT/tests/ui/models/alpha_disc.png 1000
 wait 2
 rawp click 500 500 1000
 wait 5

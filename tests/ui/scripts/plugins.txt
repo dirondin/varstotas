@@ -80,7 +80,7 @@ action script let s = groups().filter(|g| g.name == "Beam")[0]; let z = bounds(s
 wait 3
 expect script=Some((true, "[9
 # --- importer and exporter (File → Import / Export entries) --------------------
-action plugin Points from CSV (plugin) @ ../../tests/ui/data/outline.csv
+action plugin Points from CSV (plugin) @ $ROOT/tests/ui/data/outline.csv
 wait 5
 expect script=Some((true, "Imported 4 points"))
 expect undo=Some("Points from CSV (plugin)")

@@ -7,7 +7,7 @@ view iso
 zoom_extents
 wait 5
 expect active_mesh F=7
-texture ../../tests/ui/models/bricks.png 100
+texture $ROOT/tests/ui/models/bricks.png 100
 wait 2
 rawp click 20 280 150
 wait 3

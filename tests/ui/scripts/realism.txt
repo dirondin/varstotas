@@ -7,7 +7,7 @@ box 2500 2700 100 1000 1000 600
 view iso
 zoom_extents
 wait 10
-texture ../../tests/ui/models/bricks.png 800
+texture $ROOT/tests/ui/models/bricks.png 800
 action mat_pbr Grey metallic=1 roughness=0.35 aniso=0.8 bevel=60
 action mat_pbr Brick roughness=0.6 coat=1 coat_rough=0.03
 action mat_pbr Orange roughness=0.9 sheen=1 sheen_tint=0.3

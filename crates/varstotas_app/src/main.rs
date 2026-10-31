@@ -141,8 +141,10 @@ fn main() -> eframe::Result<()> {
     }
     // Scripted runs stay in the background (the harness feeds its own input and fakes the
     // window focus): the window opens inactive, on macOS the app is not activated and has no
-    // Dock icon. It still has to stay uncovered: eframe skips frames of an occluded window
-    // and macOS gives it no drawables. VARSTOTAS_FOREGROUND=1 activates the window as before.
+    // Dock icon. It has to stay uncovered (eframe skips frames of an occluded window and macOS
+    // gives it no drawables), so the script keeps it on top but nearly transparent and
+    // click-through (debug_capture::fade_window). VARSTOTAS_FOREGROUND=1 activates the window
+    // and shows it, as a script that records a video does.
     let background = std::env::var_os("VARSTOTAS_SCRIPT").is_some() && std::env::var_os("VARSTOTAS_FOREGROUND").is_none();
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut options = eframe::NativeOptions {
