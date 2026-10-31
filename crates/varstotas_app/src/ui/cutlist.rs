@@ -60,10 +60,68 @@ fn offcuts_rev() -> u64 {
     OFFCUTS.lock().map(|o| o.0).unwrap_or(0)
 }
 
-/// The cut list of `model`, offcuts on hand first.
+/// The user's hardware prices (`Prefs::hardware_prices`); a change bumps the revision of
+/// [`OFFCUTS`] too.
+static PRICES: std::sync::Mutex<Vec<HardwarePrice>> = std::sync::Mutex::new(Vec::new());
+
+/// The cut list of `model`, offcuts on hand first, hardware it has no price for priced from
+/// the user's price list.
 pub(crate) fn model_plan(model: &Model) -> CutPlan {
     let offcuts = OFFCUTS.lock().map(|o| o.1.clone()).unwrap_or_default();
-    guarded(|| plan_with(model, &offcuts)).unwrap_or_default()
+    let mut plan = guarded(|| plan_with(model, &offcuts)).unwrap_or_default();
+    if let Ok(prices) = PRICES.lock() {
+        for h in plan.hardware.iter_mut().filter(|h| h.extra.is_none() && h.price == 0.0) {
+            if let Some(p) = prices.iter().find(|p| p.name == h.name) {
+                h.price = p.price;
+            }
+        }
+    }
+    plan
+}
+
+/// A hardware item's price in the user's price list (Preferences → Cut List).
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct HardwarePrice {
+    /// As the cut list names it ("Confirmat Ø7 × 50").
+    pub name: String,
+    pub price: f64,
+}
+
+/// Typical furniture hardware, named as the joints name it: the rows "Add typical items" puts
+/// in the price list.
+fn typical_hardware() -> Vec<String> {
+    let mut out = Vec::new();
+    for (d, l) in [("6", "30"), ("8", "30"), ("8", "35"), ("8", "40"), ("10", "40")] {
+        out.push(tr!("joint-hw-dowel", diameter = d, length = l));
+    }
+    for l in ["50", "70"] {
+        out.push(tr!("joint-hw-confirmat", diameter = "7", length = l));
+    }
+    for l in ["30", "40", "50"] {
+        out.push(tr!("joint-hw-screw", diameter = "4", length = l));
+    }
+    out.push(tr!("joint-hw-cam-lock", diameter = "15"));
+    out.push(tr!("joint-hw-shelf-pin", diameter = "5"));
+    out.push(tr!("joint-hw-hinge-overlay", diameter = "35"));
+    out.push(tr!("joint-hw-hinge-half", diameter = "35"));
+    out.push(tr!("joint-hw-hinge-inset", diameter = "35"));
+    for l in (300..=550).step_by(50) {
+        out.push(tr!("joint-hw-slide", length = l.to_string()));
+    }
+    for l in (300..=500).step_by(50) {
+        out.push(tr!("joint-hw-slide-undermount", length = l.to_string()));
+    }
+    for l in ["96", "128", "160", "192"] {
+        out.push(tr!("joint-hw-handle", length = l));
+    }
+    out.push(tr!("joint-hw-knob", diameter = "30"));
+    for l in ["100", "150"] {
+        out.push(tr!("joint-hw-leg", length = l));
+    }
+    out.push(tr!("joint-hw-caster", diameter = "50", length = "70"));
+    out.push(tr!("joint-hw-table-top"));
+    out
 }
 
 /// A diagram page: one sheet, or several boards of one stock item.
@@ -377,11 +435,31 @@ impl VarstotasApp {
                 Offcut { count: if usable { o.count } else { 0 }, ..o.clone() }
             })
             .collect();
+        let prices_changed = PRICES.lock().is_ok_and(|mut p| {
+            let changed = *p != self.prefs.hardware_prices;
+            if changed {
+                p.clone_from(&self.prefs.hardware_prices);
+            }
+            changed
+        });
         if let Ok(mut g) = OFFCUTS.lock()
-            && g.1 != want
+            && (g.1 != want || prices_changed)
         {
             g.0 += 1;
             g.1 = want;
+        }
+    }
+
+    /// Keep `price` for hardware `name` in the user's price list (0: forget it).
+    fn remember_price(&mut self, name: &str, price: f64) {
+        let list = &mut self.prefs.hardware_prices;
+        match list.iter_mut().position(|p| p.name == name) {
+            Some(i) if price == 0.0 => {
+                list.remove(i);
+            }
+            Some(i) => list[i].price = price,
+            None if price > 0.0 => list.push(HardwarePrice { name: name.to_string(), price }),
+            None => {}
         }
     }
 
@@ -753,6 +831,7 @@ impl VarstotasApp {
         let mut s = self.cutlist.draft.clone().unwrap_or_else(|| self.doc.model.cut_list.clone());
         let before = s.clone();
         let mut select = None;
+        let mut remembered: Vec<(String, f64)> = Vec::new();
         egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
             egui::Grid::new("cutlist_hardware").num_columns(5).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 for h in ["cutlist-col-item", "cutlist-col-count", "cutlist-col-price", "cutlist-col-cost"] {
@@ -768,9 +847,17 @@ impl VarstotasApp {
                                 select = plan.parts.iter().position(|p| p.name == h.name);
                             }
                             ui.label(h.count.to_string());
+                            // the model's price, else the price list's (shown dim)
                             let mut o = s.options(&h.name);
-                            if ui.add(egui::DragValue::new(&mut o.price).range(0.0..=100000.0).speed(0.05).max_decimals(2)).changed() {
+                            let listed = o.price == 0.0 && h.price > 0.0;
+                            let mut price = if listed { h.price } else { o.price };
+                            let r = ui.add(egui::DragValue::new(&mut price).range(0.0..=100000.0).speed(0.05).max_decimals(2));
+                            super::tray_lib::spot(format!("cutlist:price:{}", h.name), r.rect.center());
+                            let r = if listed { r.on_hover_text(tr!("cutlist-price-listed")) } else { r.on_hover_text(tr!("cutlist-price-remembered")) };
+                            if r.changed() {
+                                o.price = price;
                                 s.parts.insert(h.name.clone(), o);
+                                remembered.push((h.name.clone(), price));
                             }
                         }
                         Some(k) => {
@@ -802,6 +889,9 @@ impl VarstotasApp {
             s.extras.push(Extra { name: tr!("cutlist-hardware-new"), count: 1, price: 0.0 });
         }
         ui.label(RichText::new(tr!("cutlist-hardware-note")).small().color(theme::text_dim()));
+        for (name, price) in remembered {
+            self.remember_price(&name, price);
+        }
         if s != before {
             self.cutlist.draft = Some(s);
         }
@@ -1070,6 +1160,7 @@ impl VarstotasApp {
                 self.prefs.stock_presets.push(StockPreset { name: stock_label(&st, unit), stock: st });
             }
         });
+        self.prefs_hardware_prices(ui);
         // offcuts kept from earlier projects
         ui.add_space(12.0);
         ui.label(RichText::new(tr!("prefs-cut-offcuts")).strong());
@@ -1099,6 +1190,52 @@ impl VarstotasApp {
         if ui.button(tr!("prefs-cut-offcuts-clear")).clicked() {
             self.prefs.offcuts.clear();
         }
+    }
+}
+
+impl VarstotasApp {
+    /// Preferences → Cut List → Hardware prices: the user's price list, typical items added on
+    /// request.
+    fn prefs_hardware_prices(&mut self, ui: &mut Ui) {
+        ui.add_space(12.0);
+        ui.label(RichText::new(tr!("prefs-cut-prices")).strong());
+        ui.label(RichText::new(tr!("prefs-cut-prices-note")).small().color(theme::text_dim()));
+        ui.add_space(4.0);
+        let list = &mut self.prefs.hardware_prices;
+        if list.is_empty() {
+            ui.label(RichText::new(tr!("prefs-cut-prices-none")).color(theme::text_dim()));
+        }
+        let mut remove = None;
+        egui::ScrollArea::vertical().id_salt("prefs_prices").max_height(260.0).show(ui, |ui| {
+            egui::Grid::new("prefs_prices_grid").num_columns(3).spacing([10.0, 4.0]).striped(true).show(ui, |ui| {
+                for (i, p) in list.iter_mut().enumerate() {
+                    ui.add_sized([280.0, 20.0], egui::TextEdit::singleline(&mut p.name));
+                    let r = ui.add(egui::DragValue::new(&mut p.price).range(0.0..=100000.0).speed(0.05).max_decimals(2));
+                    super::tray_lib::spot(format!("prefs:price:{i}"), r.rect.center());
+                    if super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("prefs-cut-price-remove")).clicked() {
+                        remove = Some(i);
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+        if let Some(i) = remove {
+            list.remove(i);
+        }
+        ui.horizontal(|ui| {
+            if ui.button(tr!("prefs-cut-price-add")).clicked() {
+                list.push(HardwarePrice { name: tr!("cutlist-hardware-new"), price: 0.0 });
+            }
+            let r = ui.button(tr!("prefs-cut-prices-typical"));
+            super::tray_lib::spot("prefs:prices-typical", r.rect.center());
+            if r.on_hover_text(tr!("prefs-cut-prices-typical-tip")).clicked() {
+                for name in typical_hardware() {
+                    if !list.iter().any(|p| p.name == name) {
+                        list.push(HardwarePrice { name, price: 0.0 });
+                    }
+                }
+            }
+        });
     }
 }
 

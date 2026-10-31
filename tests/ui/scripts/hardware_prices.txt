@@ -1,0 +1,52 @@
+# The hardware price list: a confirmat's price typed into a cut list's Hardware (real click and
+# keys) is kept in the model and in Preferences → Cut List → Hardware prices; with the model's own
+# price taken off, it comes from the list; the typical items join the list. The list
+# is emptied before and after (the preferences outlive the script).
+action hardware_prices_clear
+action script let b = box(vec3(18, 0, 0), 564, 300, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 0), 18, 300, 400); l.name = "Side"; let r = box(vec3(582, 0, 0), 18, 300, 400); r.name = "Side"; joint(l, b, "confirmat"); joint(r, b, "confirmat");
+action console_close
+wait 5
+action cut_list
+wait 10
+action cut_list_tab hardware
+wait 5
+expect hardware=[("Confirmat Ø7 × 50", 6, "0.00")]
+action click_spot cutlist:price:Confirmat Ø7 × 50
+wait 5
+raw mods cmd
+raw key A
+raw mods none
+raw text 0.35
+raw key Enter
+wait 10
+expect hardware=[("Confirmat Ø7 × 50", 6, "2.10")]
+expect prices=[("Confirmat Ø7 × 50", "0.35")]
+screenshot shots/hardware_prices_cut_list.bmp
+# the model's own price taken off: priced from the list, a change there priced at once
+action script cut_part("Confirmat Ø7 × 50", #{ price: 0 });
+action console_close
+wait 10
+expect hardware=[("Confirmat Ø7 × 50", 6, "2.10")]
+action preferences
+wait 10
+action click_spot prefs:Cut List
+wait 5
+action click_spot prefs:price:0
+wait 5
+raw mods cmd
+raw key A
+raw mods none
+raw text 0.5
+raw key Enter
+wait 10
+expect prices=[("Confirmat Ø7 × 50", "0.50")]
+expect hardware=[("Confirmat Ø7 × 50", 6, "3.00")]
+# the typical items join the list, the price kept
+action click_spot prefs:prices-typical
+wait 5
+expect prices=[("Confirmat Ø7 × 50", "0.50"), ("Dowel Ø6 × 30", "0.00")
+screenshot shots/hardware_prices_prefs.bmp
+action preferences_close
+action hardware_prices_clear
+wait 5
+quit

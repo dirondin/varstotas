@@ -166,6 +166,9 @@ pub struct Prefs {
     pub offcuts: Vec<varstotas_kernel::cutlist::Offcut>,
     /// The cut list is planned with [`Prefs::offcuts`] first.
     pub use_offcuts: bool,
+    /// The user's hardware price list (Preferences → Cut List): hardware a model has no price
+    /// for is priced from it; a price set in a cut list is kept in it.
+    pub hardware_prices: Vec<crate::ui::cutlist::HardwarePrice>,
 }
 
 impl Prefs {
@@ -218,6 +221,7 @@ impl Default for Prefs {
             stock_presets: Vec::new(),
             offcuts: Vec::new(),
             use_offcuts: true,
+            hardware_prices: Vec::new(),
             mat_recent: Vec::new(),
             watch_downloads: false,
             tray_hidden: Vec::new(),
