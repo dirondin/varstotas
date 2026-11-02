@@ -1,6 +1,8 @@
 //! Window → Fittings (track W, `varstotas_kernel::fitting`): a handle, knob, legs or casters
 //! put on the selected part, a plinth under the selected parts, and every fitting on the model by part — its sizes and shape made
-//! again, its holes, where each copy is on its face; selected, deleted, its part's joints opened.
+//! again, its holes, where each copy is on its face; selected, deleted, its part's joints opened;
+//! and the fittings that are joints between two parts (hinges, slides, gas struts, shelf pins,
+//! confirmats…) with their sizes as in Joinery.
 
 use super::joinery::{fitting_sizes, kind_combo, len};
 use crate::app::VarstotasApp;
@@ -21,6 +23,8 @@ pub struct FittingsState {
     style: Style,
     /// A new plinth's settings.
     plinth: Option<PlinthSpec>,
+    /// A joint between parts being edited (committed when the pointer is released).
+    joint_draft: Option<(usize, WoodJoint)>,
 }
 
 /// The fittings of one definition on one part (or not mounted).
@@ -119,7 +123,11 @@ impl VarstotasApp {
             self.fitting_put_ui(ui);
             self.plinth_ui(ui);
             ui.separator();
-            egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| self.fittings_list_ui(ui));
+            egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| {
+                self.fittings_list_ui(ui);
+                ui.separator();
+                self.fitting_joints_ui(ui);
+            });
         });
         if !open {
             self.fittings.open = false;
@@ -359,6 +367,124 @@ impl VarstotasApp {
                 }
             });
         }
+    }
+
+    /// The fittings that are joints between two parts (confirmats, cam locks, shelf pins, hinges,
+    /// gas struts, slides, table-top fasteners, nails), once each, as the Joinery window's.
+    fn fitting_joint_list(&self) -> Vec<usize> {
+        let m = &self.doc.model;
+        let mut seen = std::collections::HashSet::new();
+        m.joint_places
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| seen.insert((p.def, p.index)) && m.placed_joints.get(*i).is_some_and(|j| j.kind.fitting() && !j.kind.single()))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// The fittings between parts: a line each (what and how many, on which parts; select the
+    /// parts, open in Joinery, delete) opening to its sizes and layout, as in Joinery.
+    fn fitting_joints_ui(&mut self, ui: &mut Ui) {
+        let list = self.fitting_joint_list();
+        ui.label(RichText::new(tr!("fittings-between", count = list.len())).strong()).on_hover_text(tr!("fittings-between-tip"));
+        if list.is_empty() {
+            ui.label(RichText::new(tr!("fittings-between-none")).color(theme::text_dim()));
+            return;
+        }
+        let unit = self.doc.model.unit;
+        let warnings = self.doc.model.joint_warnings();
+        let (mut act, mut changed) = (None, None);
+        for (row, &i) in list.iter().enumerate() {
+            let m = &self.doc.model;
+            let mut j = match &self.fittings.joint_draft {
+                Some((k, d)) if *k == i => d.clone(),
+                _ => m.placed_joints[i].clone(),
+            };
+            let before = j.clone();
+            let c = m.joint_contacts.get(i).copied().flatten();
+            let what = j.hardware(c.as_ref()).map_or_else(|| super::joinery::kind_name(j.kind), |(n, k)| format!("{k} × {n}"));
+            let (na, nb) = (super::joinery::part_name(m, &j.a), super::joinery::part_name(m, &j.b));
+            let warn = warnings.get(i).cloned().unwrap_or_default();
+            let id = ui.make_persistent_id(("fittings_joint", i));
+            let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, false);
+            let (toggle, _, _) = state
+                .show_header(ui, |ui| {
+                    ui.label(RichText::new(what).strong());
+                    ui.label(RichText::new(tr!("fittings-between-parts", a = nb.clone(), b = na.clone())).color(theme::text_dim()));
+                    if !warn.is_empty() {
+                        ui.label(RichText::new("⚠").color(theme::warning())).on_hover_text(warn.join("\n"));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let r = super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("joinery-remove"));
+                        super::tray_lib::spot(format!("fittings:joint:{row}:delete"), r.rect.center());
+                        if r.clicked() {
+                            act = Some((0, i));
+                        }
+                        let r = super::small_icon_button(ui, super::icons::Icon::Joinery, &tr!("fittings-joint-open"));
+                        super::tray_lib::spot(format!("fittings:joint:{row}:joinery"), r.rect.center());
+                        if r.clicked() {
+                            act = Some((1, i));
+                        }
+                        let r = super::small_icon_button(ui, super::icons::Icon::Select, &tr!("fittings-joint-select"));
+                        super::tray_lib::spot(format!("fittings:joint:{row}:select"), r.rect.center());
+                        if r.clicked() {
+                            act = Some((2, i));
+                        }
+                    });
+                })
+                .body(|ui| {
+                    ui.push_id(("fittings_joint_body", i), |ui| {
+                        super::joinery::joint_params_ui(ui, &mut j, c, unit, &na, &nb, &format!("fittings:joint:{row}"));
+                        for w in &warn {
+                            ui.label(RichText::new(format!("⚠ {w}")).small().color(theme::warning()));
+                        }
+                    });
+                });
+            super::tray_lib::spot(format!("fittings:joint:{row}"), toggle.rect.center());
+            if j != before {
+                changed = Some((i, j));
+            }
+        }
+        if let Some(d) = changed {
+            self.fittings.joint_draft = Some(d);
+        }
+        let released = !ui.ctx().input(|i| i.pointer.any_down()) && !ui.ctx().memory(|m| m.focused().is_some());
+        if released
+            && let Some((i, j)) = self.fittings.joint_draft.take()
+            && self.doc.model.placed_joints.get(i).is_some_and(|o| *o != j)
+        {
+            self.doc.try_commit(&tr!("joinery-undo-edit"), move |m| m.set_wood_joint(i, j));
+        }
+        match act {
+            Some((0, i)) => {
+                self.fittings.joint_draft = None;
+                self.joinery.selected = None;
+                self.doc.commit(&tr!("joinery-undo-remove"), move |m| m.remove_wood_joint(i));
+            }
+            Some((k, i)) => {
+                let j = self.doc.model.placed_joints[i].clone();
+                self.select_joint_parts(&j);
+                if k == 1 {
+                    self.joinery.selected = Some(i);
+                    self.joinery.open = true;
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// The fittings between parts as (what, parts), for the debug dump.
+    pub(crate) fn fitting_joints_dump(&self) -> Vec<(String, String)> {
+        let m = &self.doc.model;
+        self.fitting_joint_list()
+            .into_iter()
+            .map(|i| {
+                let j = &m.placed_joints[i];
+                let c = m.joint_contacts.get(i).copied().flatten();
+                let what = j.hardware(c.as_ref()).map_or_else(|| super::joinery::kind_name(j.kind), |(n, k)| format!("{k} × {n}"));
+                (what, format!("{} → {}", super::joinery::part_name(m, &j.b), super::joinery::part_name(m, &j.a)))
+            })
+            .collect()
     }
 
     /// The fittings window's lines as (count, item, part), for the debug dump.

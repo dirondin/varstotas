@@ -115,10 +115,114 @@ pub(super) fn part_name(model: &Model, path: &[InstanceId]) -> String {
     model.defs.get(inst.def).map(|d| d.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| tr!("tray-info-group"))
 }
 
+/// A joint's sizes by its kind (and its fasteners' layout along it); `spots` names its fields
+/// `{spots}:f0`, `{spots}:f1`… in order.
+pub(super) fn joint_params_ui(ui: &mut Ui, j: &mut WoodJoint, c: Option<Contact>, unit: LengthUnit, na: &str, nb: &str, spots: &str) {
+    FIELD_SPOTS.with(|f| f.replace(Some((spots.to_string(), 0))));
+    let (na, nb) = (na.to_string(), nb.to_string());
+    ui.horizontal_wrapped(|ui| match j.kind {
+        WoodJointKind::Dowels | WoodJointKind::Screws => {
+            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 30.0);
+            if j.kind == WoodJointKind::Dowels {
+                mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
+            }
+            mm(ui, &tr!("joinery-depth-in", part = nb.clone()), &mut j.depth_b, unit, 200.0);
+        }
+        WoodJointKind::Housing => {
+            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 200.0);
+            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
+        }
+        WoodJointKind::MortiseTenon => {
+            mm(ui, &tr!("joinery-thickness"), &mut j.thickness, unit, 200.0);
+            mm(ui, &tr!("joinery-shoulder"), &mut j.shoulder, unit, 500.0);
+            ui.add_enabled_ui(!j.through, |ui| mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 200.0));
+            ui.checkbox(&mut j.through, tr!("joinery-through"));
+            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
+            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
+        }
+        WoodJointKind::BoxJoint => {
+            ui.label(tr!("joinery-fingers"));
+            ui.add(egui::DragValue::new(&mut j.count).range(1..=64).speed(0.05));
+            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
+        }
+        WoodJointKind::Dovetail => {
+            ui.label(tr!("joinery-tails"));
+            ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
+            mm(ui, &tr!("joinery-pin"), &mut j.pin, unit, 200.0);
+            ui.label(tr!("joinery-angle"));
+            ui.add(egui::DragValue::new(&mut j.angle).range(0.5..=30.0).speed(0.1).max_decimals(1).suffix("°"));
+            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
+        }
+        WoodJointKind::PocketHole => {
+            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
+            mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
+            ui.checkbox(&mut j.flip, tr!("joinery-flip")).on_hover_text(tr!("joinery-flip-tip"));
+        }
+        WoodJointKind::Confirmat | WoodJointKind::Nails => {
+            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
+            mm(ui, &tr!("joinery-length"), &mut j.size, unit, 200.0);
+        }
+        WoodJointKind::CamLock => {
+            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 40.0);
+            mm(ui, &tr!("joinery-to-cam"), &mut j.size, unit, 100.0);
+            ui.checkbox(&mut j.flip, tr!("joinery-flip-cam"));
+        }
+        WoodJointKind::ShelfPins => {
+            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
+            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 50.0);
+            ui.label(tr!("joinery-rows")).on_hover_text(tr!("joinery-rows-tip"));
+            ui.add(egui::DragValue::new(&mut j.rows).range(0..=40).speed(0.05));
+            ui.checkbox(&mut j.flip, tr!("joinery-flip-pins"));
+        }
+        WoodJointKind::Hinge => {
+            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 60.0);
+            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 30.0);
+            ui.checkbox(&mut j.inset, tr!("joinery-inset")).on_hover_text(tr!("joinery-inset-tip"));
+            let mut a = j.hinge_angle();
+            ui.label(tr!("joinery-opens")).on_hover_text(tr!("joinery-opens-tip"));
+            if ui.add(egui::DragValue::new(&mut a).range(90.0..=180.0).speed(0.5).max_decimals(0).suffix("°")).changed() {
+                j.angle = a;
+            }
+        }
+        WoodJointKind::GasStrut => {
+            ui.label(tr!("joinery-force")).on_hover_text(tr!("joinery-force-tip"));
+            ui.add(egui::DragValue::new(&mut j.size).range(10.0..=1000.0).speed(1.0).max_decimals(0).suffix(" N"));
+        }
+        WoodJointKind::Slide => {
+            len(ui, &tr!("joinery-length"), &mut j.size, unit, 0.0, 2000.0).on_hover_text(tr!("joinery-length-auto-tip"));
+            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
+            ui.checkbox(&mut j.flip, tr!("joinery-flip-front"));
+            slide_combo(ui, "joint_slide", &mut j.slide);
+            ui.checkbox(&mut j.push, tr!("joinery-push")).on_hover_text(tr!("joinery-push-tip"));
+        }
+        // an old file's fitting that could not become one
+        WoodJointKind::Handle | WoodJointKind::Knob | WoodJointKind::Leg | WoodJointKind::Caster => fitting_sizes(ui, j, unit),
+        WoodJointKind::TableTop => {
+            ui.checkbox(&mut j.flip, tr!("joinery-flip-side"));
+        }
+    });
+    if j.kind.spaced() {
+        layout_ui(ui, j, c, unit);
+    }
+    FIELD_SPOTS.with(|f| f.replace(None));
+}
+
+thread_local! {
+    /// The name the length fields drawn now are spotted by, and how many there were.
+    static FIELD_SPOTS: std::cell::RefCell<Option<(String, usize)>> = const { std::cell::RefCell::new(None) };
+}
+
 /// A length field in the model's units (`min..=max` mm).
 pub(super) fn len(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, min: f64, max: f64) -> egui::Response {
     ui.label(label);
-    ui.add(super::len_drag(v, unit).range(min..=max).speed(0.2))
+    let r = ui.add(super::len_drag(v, unit).range(min..=max).speed(0.2));
+    FIELD_SPOTS.with(|f| {
+        if let Some((name, n)) = f.borrow_mut().as_mut() {
+            super::tray_lib::spot(format!("{name}:f{n}"), r.rect.center());
+            *n += 1;
+        }
+    });
+    r
 }
 
 fn mm(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, max: f64) -> bool {
@@ -593,90 +697,9 @@ impl VarstotasApp {
                     });
                     let (na, nb) = (part_name(&self.doc.model, &j.a), part_name(&self.doc.model, &j.b));
                     let unit = self.doc.model.unit;
-                    ui.horizontal_wrapped(|ui| match j.kind {
-                        WoodJointKind::Dowels | WoodJointKind::Screws => {
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 30.0);
-                            if j.kind == WoodJointKind::Dowels {
-                                mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
-                            }
-                            mm(ui, &tr!("joinery-depth-in", part = nb.clone()), &mut j.depth_b, unit, 200.0);
-                        }
-                        WoodJointKind::Housing => {
-                            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 200.0);
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
-                        }
-                        WoodJointKind::MortiseTenon => {
-                            mm(ui, &tr!("joinery-thickness"), &mut j.thickness, unit, 200.0);
-                            mm(ui, &tr!("joinery-shoulder"), &mut j.shoulder, unit, 500.0);
-                            ui.add_enabled_ui(!j.through, |ui| mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 200.0));
-                            ui.checkbox(&mut j.through, tr!("joinery-through"));
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
-                            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
-                        }
-                        WoodJointKind::BoxJoint => {
-                            ui.label(tr!("joinery-fingers"));
-                            ui.add(egui::DragValue::new(&mut j.count).range(1..=64).speed(0.05));
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
-                        }
-                        WoodJointKind::Dovetail => {
-                            ui.label(tr!("joinery-tails"));
-                            ui.add(egui::DragValue::new(&mut j.count).range(1..=32).speed(0.05));
-                            mm(ui, &tr!("joinery-pin"), &mut j.pin, unit, 200.0);
-                            ui.label(tr!("joinery-angle"));
-                            ui.add(egui::DragValue::new(&mut j.angle).range(0.5..=30.0).speed(0.1).max_decimals(1).suffix("°"));
-                            mm(ui, &tr!("joinery-clearance"), &mut j.clearance, unit, 5.0);
-                        }
-                        WoodJointKind::PocketHole => {
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
-                            mm(ui, &tr!("joinery-depth-in", part = na.clone()), &mut j.depth, unit, 200.0);
-                            ui.checkbox(&mut j.flip, tr!("joinery-flip")).on_hover_text(tr!("joinery-flip-tip"));
-                        }
-                        WoodJointKind::Confirmat | WoodJointKind::Nails => {
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
-                            mm(ui, &tr!("joinery-length"), &mut j.size, unit, 200.0);
-                        }
-                        WoodJointKind::CamLock => {
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 40.0);
-                            mm(ui, &tr!("joinery-to-cam"), &mut j.size, unit, 100.0);
-                            ui.checkbox(&mut j.flip, tr!("joinery-flip-cam"));
-                        }
-                        WoodJointKind::ShelfPins => {
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 10.0);
-                            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 50.0);
-                            ui.label(tr!("joinery-rows")).on_hover_text(tr!("joinery-rows-tip"));
-                            ui.add(egui::DragValue::new(&mut j.rows).range(0..=40).speed(0.05));
-                            ui.checkbox(&mut j.flip, tr!("joinery-flip-pins"));
-                        }
-                        WoodJointKind::Hinge => {
-                            mm(ui, &tr!("joinery-diameter"), &mut j.diameter, unit, 60.0);
-                            mm(ui, &tr!("joinery-depth"), &mut j.depth, unit, 30.0);
-                            ui.checkbox(&mut j.inset, tr!("joinery-inset")).on_hover_text(tr!("joinery-inset-tip"));
-                            let mut a = j.hinge_angle();
-                            ui.label(tr!("joinery-opens")).on_hover_text(tr!("joinery-opens-tip"));
-                            if ui.add(egui::DragValue::new(&mut a).range(90.0..=180.0).speed(0.5).max_decimals(0).suffix("°")).changed() {
-                                j.angle = a;
-                            }
-                        }
-                        WoodJointKind::GasStrut => {
-                            ui.label(tr!("joinery-force")).on_hover_text(tr!("joinery-force-tip"));
-                            ui.add(egui::DragValue::new(&mut j.size).range(10.0..=1000.0).speed(1.0).max_decimals(0).suffix(" N"));
-                        }
-                        WoodJointKind::Slide => {
-                            len(ui, &tr!("joinery-length"), &mut j.size, unit, 0.0, 2000.0).on_hover_text(tr!("joinery-length-auto-tip"));
-                            len(ui, &tr!("joinery-offset"), &mut j.offset, unit, -500.0, 500.0).on_hover_text(tr!("joinery-offset-tip"));
-                            ui.checkbox(&mut j.flip, tr!("joinery-flip-front"));
-                            slide_combo(ui, "joint_slide", &mut j.slide);
-                            ui.checkbox(&mut j.push, tr!("joinery-push")).on_hover_text(tr!("joinery-push-tip"));
-                        }
-                        // an old file's fitting that could not become one
-                        WoodJointKind::Handle | WoodJointKind::Knob | WoodJointKind::Leg | WoodJointKind::Caster => fitting_sizes(ui, &mut j, unit),
-                        WoodJointKind::TableTop => {
-                            ui.checkbox(&mut j.flip, tr!("joinery-flip-side"));
-                        }
-                    });
                     let c = self.doc.model.joint_contacts.get(i).copied().flatten();
+                    joint_params_ui(ui, &mut j, c, unit, &na, &nb, &format!("joinery:joint:{i}"));
                     if j.kind.spaced() {
-                        layout_ui(ui, &mut j, c, unit);
                         let r = ui.small_button(tr!("joinery-points")).on_hover_text(tr!("joinery-points-tip"));
                         super::tray_lib::spot(format!("joinery:points:{i}"), r.rect.center());
                         if r.clicked() {

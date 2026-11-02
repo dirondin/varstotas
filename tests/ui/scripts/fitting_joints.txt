@@ -1,0 +1,35 @@
+# Window → Fittings, Between parts: confirmats joining a bottom to a side are listed with their
+# parts; opened, their length typed (real click and keys) as in Joinery; their parts selected
+# from the line; deleted from it.
+action script let b = box(vec3(18, 0, 0), 564, 450, 18); b.name = "Bottom"; let l = box(vec3(0, 0, 0), 18, 450, 800); l.name = "Left"; joint(b, l, "confirmat"); select([]);
+action console_close
+wait 5
+action click_spot menu:Window
+wait 5
+action click_spot cmd:Fittings
+wait 5
+expect Confirmat Ø7 × 50", "Bottom → Left")]
+action click_spot fittings:joint:0
+wait 5
+action click_spot fittings:joint:0:f1
+wait 3
+raw mods cmd
+raw key A
+raw mods none
+raw text 60
+raw key Enter
+wait 10
+expect Confirmat Ø7 × 60", "Bottom → Left")]
+expect undo=Some("
+action click_spot fittings:joint:0:select
+wait 5
+expect sel F=0 E=0 I=2
+view iso
+zoom_extents
+wait 10
+screenshot shots/fitting_joints.bmp
+action click_spot fittings:joint:0:delete
+wait 5
+expect fitting_joints=[]
+expect joints=[]
+quit
