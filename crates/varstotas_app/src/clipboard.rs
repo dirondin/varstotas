@@ -276,6 +276,18 @@ impl Clipboard {
     }
 
     /// Point of the content that follows the cursor while pasting (bounding-box min corner).
+    /// A single fitting copied (a handle, a leg, any object made a fitting): its frame in the
+    /// world where it was copied — its origin on the face it goes on, +Z out of it.
+    pub fn fitting_frame(&self) -> Option<DMat4> {
+        let mesh = &self.model.defs.get(self.def?)?.mesh;
+        let mut it = mesh.instances.values();
+        let (Some(inst), None) = (it.next(), it.next()) else { return None };
+        if !mesh.faces.is_empty() || self.model.fitting_of(inst.def).is_none() {
+            return None;
+        }
+        Some(self.src_xf * inst.transform)
+    }
+
     pub fn reference_point(&self) -> DVec3 {
         self.bounds.min
     }

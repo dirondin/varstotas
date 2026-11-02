@@ -125,6 +125,19 @@ impl VarstotasApp {
         f.map(|f| f.holes.iter().map(|h| (h.at.x.round() as i64, h.at.y.round() as i64, h.diameter.round() as i64, h.depth.round() as i64)).collect()).unwrap_or_default()
     }
 
+    /// Where the mounted fittings are on their faces (at, offset, whole mm), for the debug dump.
+    pub(crate) fn fitting_mounts_dump(&self) -> Vec<([f64; 2], [i64; 2])> {
+        let m = &self.doc.model;
+        m.placed_fittings()
+            .iter()
+            .filter_map(|(f, _)| {
+                let (&id, prefix) = f.split_last()?;
+                let mt = m.mesh_at(prefix)?.instances.get(id)?.mount.as_ref()?;
+                Some((mt.at, mt.offset.map(|o| o.round() as i64)))
+            })
+            .collect()
+    }
+
     /// The mounted fittings as (item, part), for the debug dump.
     pub(crate) fn fittings_dump(&self) -> Vec<(String, String)> {
         let m = &self.doc.model;

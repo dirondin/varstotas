@@ -1127,11 +1127,16 @@ pub struct PasteTool {
     engine: InferenceEngine,
     cur: Option<InferenceResult>,
     clicker: Clicker,
+    /// A fitting over a part's face: the move that puts it on the face, turned out of it, and
+    /// the part (from the root) it is then mounted on.
+    onto: Option<(DMat4, varstotas_kernel::ContextPath)>,
+    /// Where it goes on the face, pulled to its middle or an edge, and the part's name.
+    onto_at: Option<(DVec3, bool, String)>,
 }
 
 impl PasteTool {
     pub fn new(clip: std::rc::Rc<crate::clipboard::Clipboard>) -> Self {
-        Self { clip, name: None, engine: InferenceEngine::default(), cur: None, clicker: Clicker::default() }
+        Self { clip, name: None, engine: InferenceEngine::default(), cur: None, clicker: Clicker::default(), onto: None, onto_at: None }
     }
 
     /// Placing a library component.
@@ -1140,20 +1145,77 @@ impl PasteTool {
     }
 
     fn offset(&self) -> Option<DMat4> {
+        if let Some((t, _)) = &self.onto {
+            return Some(*t);
+        }
         Some(DMat4::from_translation(self.cur.as_ref()?.point - self.clip.reference_point()))
     }
 
     fn update(&mut self, ctx: &ToolContext) {
-        self.cur = Some(infer(&mut self.engine, ctx, None, None, None));
+        let r = infer(&mut self.engine, ctx, None, None, None);
+        self.onto_at = None;
+        self.onto = self.fitting_onto(ctx, &r);
+        self.cur = Some(r);
+    }
+
+    /// A fitting being placed over a face of a part (a group or component in the open context,
+    /// not a fitting): put on that face at the point, +Z out of it towards the eye, its X kept
+    /// as near its own as the face allows.
+    fn fitting_onto(&mut self, ctx: &ToolContext, r: &InferenceResult) -> Option<(DMat4, varstotas_kernel::ContextPath)> {
+        let frame = self.clip.fitting_frame()?;
+        let face = r.face.as_ref()?;
+        let m = &ctx.doc.model;
+        let part = face.path.clone();
+        if part.len() <= ctx.doc.active_path.len() || !part.starts_with(&ctx.doc.active_path) {
+            return None;
+        }
+        let part = part[..ctx.doc.active_path.len() + 1].to_vec();
+        if m.def_at(&part).is_some_and(|d| m.fitting_of(d).is_some()) {
+            return None;
+        }
+        let mut n = face.plane.normal.normalize_or_zero();
+        if n.dot(ctx.camera.eye - r.point) < 0.0 {
+            n = -n;
+        }
+        // pulled to the face's middle or edges, as a fitting is mounted by them
+        let tol = ctx.camera.pixel_size_at(r.point, ctx.viewport_d()) * 10.0;
+        let (point, hit) = m.mount_snap(&part, r.point, n, tol).unwrap_or((r.point, [false; 2]));
+        let name = m.mesh_at(&part[..part.len() - 1]).and_then(|x| x.instances.get(*part.last()?)).map(|i| if i.name.is_empty() { m.defs.get(i.def).map(|d| d.name.clone()).unwrap_or_default() } else { i.name.clone() }).unwrap_or_default();
+        self.onto_at = Some((point, hit[0] || hit[1], name));
+        let own = frame.transform_vector3(DVec3::X);
+        let mut u = own - n * own.dot(n);
+        if u.length_squared() < 1e-12 {
+            u = if n.z.abs() < 0.9 { DVec3::Z.cross(n) } else { DVec3::X };
+        }
+        let u = u.normalize();
+        let v = n.cross(u);
+        let scale = DVec3::new(own.length(), frame.transform_vector3(DVec3::Y).length(), frame.transform_vector3(DVec3::Z).length());
+        let at = DMat4::from_cols((u * scale.x).extend(0.0), (v * scale.y).extend(0.0), (n * scale.z).extend(0.0), point.extend(1.0));
+        Some((at * frame.inverse(), part))
     }
 }
 
 /// Paste `clip` into the document's active context moved by `t` (world); selects the result.
 pub fn paste_clipboard(doc: &mut crate::document::Document, clip: &crate::clipboard::Clipboard, t: &DMat4) -> bool {
+    paste_clipboard_onto(doc, clip, t, None)
+}
+
+/// [`paste_clipboard`]; a fitting pasted `onto` a part (its path from the root) is mounted on it.
+pub fn paste_clipboard_onto(doc: &mut crate::document::Document, clip: &crate::clipboard::Clipboard, t: &DMat4, onto: Option<varstotas_kernel::ContextPath>) -> bool {
     let path = doc.active_path.clone();
     let uid = doc.uid;
     match doc.try_commit(&tr!("tool-undo-paste"), |m| {
         let (e, g) = clip.paste_into(m, uid, &path, t)?;
+        if let Some(part) = &onto {
+            for x in &e {
+                let EntityRef::Instance(id) = x else { continue };
+                let mut f = path.clone();
+                f.push(*id);
+                if m.def_at(&f).is_some_and(|d| m.fitting_of(d).is_some()) {
+                    m.mount_fitting(&f, part)?;
+                }
+            }
+        }
         let d = clip.paste_dims_into(m, &path, t);
         Ok::<_, varstotas_kernel::OpError>((e, g, d))
     }) {
@@ -1180,8 +1242,9 @@ impl Tool for PasteTool {
             return;
         }
         self.update(ctx);
+        let onto = self.onto.as_ref().map(|o| o.1.clone());
         if let Some(t) = self.offset()
-            && paste_clipboard(ctx.doc, &self.clip, &t)
+            && paste_clipboard_onto(ctx.doc, &self.clip, &t, onto)
         {
             ctx.requests.push(super::ToolRequest::SwitchTool(ToolId::Select));
         }
@@ -1201,6 +1264,9 @@ impl Tool for PasteTool {
         r
     }
     fn status_text(&self) -> String {
+        if let Some((_, _, part)) = &self.onto_at {
+            return tr!("tool-paste-fitting-on", part = part.as_str());
+        }
         match &self.name {
             Some(n) => tr!("tool-paste-place-named", name = n.as_str()),
             None => tr!("tool-paste-place", count = self.clip.count),
@@ -1219,7 +1285,11 @@ impl Tool for PasteTool {
         for p in self.clip.guide_points() {
             out3d.add_guide_point(view.camera, vp, t.transform_point3(*p), true);
         }
-        if let Some(r) = &self.cur {
+        if let Some((p, snapped, _)) = &self.onto_at {
+            // on the part's face: where it goes, green when pulled to the middle or an edge
+            let color = if *snapped { egui::Color32::from_rgb(0x10, 0xA0, 0x40) } else { SELECT_BLUE };
+            out2d.push(Marker2d::Point { at: *p, shape: crate::overlay::MarkerShape::Diamond, color });
+        } else if let Some(r) = &self.cur {
             inference::draw_result(r, out3d, out2d);
         }
     }

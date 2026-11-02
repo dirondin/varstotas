@@ -297,7 +297,8 @@ impl Model {
             let pd = self.defs.insert(Definition { name: item.clone(), mesh: piece, is_group: true, ..Definition::empty() });
             mesh.instances.insert(Instance { def: pd, transform: xf, name: String::new(), material: Some(mat), tag: None, hidden: false, locked: false, mount: None });
         }
-        let name = self.free_def_name(&item);
+        // its item as it is ("…, centres 192" is not a copy number) unless that name is taken
+        let name = if self.defs.values().any(|d| !d.is_group && d.name == item) { self.free_def_name(&item) } else { item.clone() };
         Ok(self.defs.insert(Definition { name, mesh, is_group: false, fitting: Some(Fitting { item, holes: b.holes() }), ..Definition::empty() }))
     }
 
@@ -334,6 +335,33 @@ impl Model {
     fn rel_assembled(&self, prefix: &[InstanceId], path: &[InstanceId]) -> DMat4 {
         let full: ContextPath = prefix.iter().chain(path).copied().collect();
         self.assembled_transform(prefix).inverse() * self.assembled_transform(&full)
+    }
+
+    /// A point `p` (world) on the face of the part at `part` (from the root) facing along `n`:
+    /// pulled to the face's edge, middle or far edge along each of its directions when within
+    /// `tol` of one (the places a fitting is mounted by), and which directions were.
+    pub fn mount_snap(&self, part: &[InstanceId], p: DVec3, n: DVec3, tol: f64) -> Option<(DVec3, [bool; 2])> {
+        let (&pid, prefix) = part.split_last()?;
+        let to = self.assembled_transform(prefix);
+        let from = to.inverse();
+        let (lp, ln) = (from.transform_point3(p), from.transform_vector3(n).normalize_or_zero());
+        let face = (0..3)
+            .flat_map(|axis| [false, true].map(|high| (axis, high)))
+            .filter_map(|(axis, high)| self.mount_face(prefix, &[pid], axis, high))
+            .filter(|f| f.n.dot(ln) > 0.9)
+            .min_by(|a, b| (lp - a.origin).dot(a.n).abs().total_cmp(&(lp - b.origin).dot(b.n).abs()))?;
+        let d = lp - face.origin;
+        let mut q = lp;
+        let mut hit = [false; 2];
+        for k in 0..2 {
+            let (dir, size) = ([face.u, face.v][k], face.size[k]);
+            let t = d.dot(dir);
+            if let Some(a) = [0.0, 0.5, 1.0].into_iter().map(|a| a * size).find(|a| (t - a).abs() <= tol) {
+                q += dir * (a - t);
+                hit[k] = true;
+            }
+        }
+        Some((to.transform_point3(q), hit))
     }
 
     /// Face (`axis`, `high`) of the part at `on` from the container placed at `prefix`, in that

@@ -134,3 +134,21 @@ fn fittings_are_saved_and_old_handles_become_fittings() {
     let far = old.placed_fittings().iter().filter(|p| p.1 == vec![table]).map(|p| at(&old, &p.0).x).fold(0.0, f64::max);
     assert!((far - 1150.0).abs() < 1e-6, "{far}");
 }
+
+#[test]
+fn a_point_on_a_part_snaps_to_its_middle_and_edges() {
+    let (m, door, _) = door_with_handle();
+    let n = DVec3::new(0.0, -1.0, 0.0);
+    // the door's front at y = −18, 600 wide and 800 high: near its middle, pulled onto it
+    let (p, hit) = m.mount_snap(&[door], DVec3::new(296.0, -18.0, 405.0), n, 10.0).unwrap();
+    assert!(close(p, DVec3::new(300.0, -18.0, 400.0)) && hit == [true, true], "{p} {hit:?}");
+    // near its left edge only
+    let (p, hit) = m.mount_snap(&[door], DVec3::new(6.0, -18.0, 250.0), n, 10.0).unwrap();
+    assert!(close(p, DVec3::new(0.0, -18.0, 250.0)) && hit.iter().filter(|h| **h).count() == 1, "{p} {hit:?}");
+    // nowhere near: as it is
+    let (p, hit) = m.mount_snap(&[door], DVec3::new(150.0, -18.0, 600.0), n, 10.0).unwrap();
+    assert!(close(p, DVec3::new(150.0, -18.0, 600.0)) && hit == [false, false]);
+    // the handle's definition is named by its item
+    let d = m.defs.values().find(|d| d.fitting.is_some()).unwrap();
+    assert_eq!(d.name, "Handle, centres 192");
+}
