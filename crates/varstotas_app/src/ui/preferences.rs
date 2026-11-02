@@ -811,7 +811,7 @@ impl VarstotasApp {
     }
 
     fn prefs_navigation(&mut self, ui: &mut Ui) {
-        use crate::nav::{NavGesture, TwistGesture};
+        use crate::nav::{ButtonDrag, NavGesture, TwistGesture};
         let n = &mut self.prefs.nav;
         heading(ui, &tr!("prefs-speed"));
         egui::Grid::new("nav_speed").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
@@ -892,6 +892,22 @@ impl VarstotasApp {
             });
             note(ui, &tr!("prefs-trackpad-platform"));
         });
+        // laptops: no middle button, a touchpad that reports a wheel
+        heading(ui, &tr!("prefs-no-middle"));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("prefs-right-drag"));
+            ui.radio_value(&mut n.right, ButtonDrag::Orbit, tr!("prefs-nav-orbit"));
+            let r = ui.radio_value(&mut n.right, ButtonDrag::Pan, tr!("prefs-nav-pan"));
+            super::tray_lib::spot("nav:right_pan", r.rect.center());
+            let r = ui.radio_value(&mut n.right, ButtonDrag::Off, tr!("prefs-right-drag-off"));
+            super::tray_lib::spot("nav:right_off", r.rect.center());
+        });
+        let r = ui.checkbox(&mut n.space_drag, tr!("prefs-space-drag")).on_hover_text(tr!("prefs-space-drag-tip"));
+        super::tray_lib::spot("nav:space", r.rect.center());
+        let r = ui.checkbox(&mut n.buttons, tr!("prefs-nav-buttons")).on_hover_text(tr!("prefs-nav-buttons-tip"));
+        super::tray_lib::spot("nav:buttons", r.rect.center());
+        let r = ui.checkbox(&mut n.wheel_is_trackpad, tr!("prefs-wheel-trackpad")).on_hover_text(tr!("prefs-wheel-trackpad-tip"));
+        super::tray_lib::spot("nav:wheel_trackpad", r.rect.center());
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {

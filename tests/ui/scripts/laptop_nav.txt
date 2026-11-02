@@ -1,0 +1,93 @@
+# Navigation without a middle button (real input): a right drag orbits and a right click still
+# selects for the context menu; Space + drag navigates in any tool and a tap on Space picks
+# Select; the round buttons at the view's right edge orbit, pan and zoom by dragging; a wheel
+# that is a touchpad (Windows, Linux) orbits, with Ctrl it zooms.
+wait 10
+action preferences
+wait 5
+action click_spot prefs:Navigation
+wait 5
+action click_spot prefs_reset
+wait 5
+raw click 664 54
+wait 5
+action new
+wait 10
+action script box(vec3(-500, -500, 0), 1000, 1000, 1000);
+action console_close
+wait 5
+zoom_extents
+wait 10
+screenshot shots/laptop_nav_start.bmp
+expect cam=(1242,-2258,2126)
+raw rdrag 300 300 400 300
+wait 5
+# a right drag orbits, the selection as it was
+expect cam=(-33,-2865,2126)
+expect sel F=0 E=0 I=0
+raw rclick 500 350
+wait 5
+# a right click (no drag) selects the box for the context menu
+expect sel F=0 E=0 I=1
+raw key Escape
+wait 5
+tool line
+wait 3
+raw key Space down
+wait 3
+raw drag 300 300 300 380
+wait 3
+raw key Space up
+wait 5
+# Space + drag in the Line tool: orbited, nothing drawn, the tool kept
+expect cam=(49,-2019,3053)
+expect tool=Line
+expect sel F=0 E=0 I=0
+expect model_faces=6
+raw key Space
+wait 5
+# Space tapped alone: Select
+expect tool=Select
+action drag_spot nav:button:orbit 80 0
+wait 5
+expect cam=(-640,-1777,3053)
+action drag_spot nav:button:zoom 0 -60
+wait 5
+# up on Zoom: nearer
+expect cam_dist=1672
+screenshot shots/laptop_nav_buttons.bmp
+action click_spot nav:button:extents
+wait 30
+expect cam_dist=3047
+# a wheel that is a touchpad: scrolling orbits, Ctrl + scroll zooms
+action preferences
+wait 5
+raw scroll 500 350 -1500
+wait 8
+screenshot shots/laptop_nav_prefs.bmp
+action click_spot nav:wheel_trackpad
+wait 3
+expect wheel_is_trackpad: true
+raw click 664 54
+wait 5
+raw wheel 600 400 1
+wait 5
+# the wheel orbits
+expect cam_dist=3047
+expect cam=(-543,-833,3351)
+raw mods ctrl
+raw wheel 600 400 1
+raw mods none
+wait 5
+# Ctrl + wheel zooms
+expect cam_dist=2043
+action preferences
+wait 5
+raw scroll 500 350 3000
+wait 8
+action click_spot prefs_reset
+wait 5
+expect wheel_is_trackpad: false
+raw click 664 54
+wait 5
+quit

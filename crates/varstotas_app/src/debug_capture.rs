@@ -354,6 +354,7 @@ fn parse_raw(rest: &str) -> Option<RawCmd> {
         "rclick" => RawCmd::RightClick(p(0)?),
         "dblclick" => RawCmd::DoubleClick(p(0)?),
         "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
+        "rdrag" => RawCmd::RightDrag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1) },
         "dragfast" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: true },
         "scroll" => RawCmd::Scroll(p(0)?, *n.get(2)?),
         "pinch" => RawCmd::Pinch(p(0)?, *n.get(2)?),
@@ -400,6 +401,8 @@ pub enum RawCmd {
     /// `raw drag x0 y0 x1 y1 [steps]` — move, press, `steps` moves (one per frame), release.
     /// `raw dragfast ...` delivers the last move and the release in the same frame.
     Drag { a: Pos2, b: Pos2, steps: u32, fast: bool },
+    /// `raw rdrag x0 y0 x1 y1 [steps]` — the same with the right button.
+    RightDrag { a: Pos2, b: Pos2, steps: u32 },
     /// `raw scroll x y dy` — move, then a trackpad swipe of `dy` points (negative: the
     /// content moves up, i.e. scroll down).
     Scroll(Pos2, f32),
@@ -2658,6 +2661,15 @@ impl VarstotasApp {
                 } else {
                     f.push(vec![btn(b, false)]);
                 }
+                f
+            }
+            RawCmd::RightDrag { a, b, steps } => {
+                let rb = |p: Pos2, pressed: bool| Event::PointerButton { pos: p + origin, button: PointerButton::Secondary, pressed, modifiers: m };
+                let mut f = vec![vec![mv(a)], vec![rb(a, true)]];
+                for i in 1..=steps {
+                    f.push(vec![mv(a.lerp(b, i as f32 / steps as f32))]);
+                }
+                f.push(vec![rb(b, false)]);
                 f
             }
             RawCmd::Mods(new) => {

@@ -1,5 +1,7 @@
-//! Camera navigation: middle-drag orbit / shift+middle pan / wheel zoom toward cursor,
-//! macOS trackpad gestures, smooth camera transitions and zoom extents.
+//! Camera navigation: middle-drag orbit / shift+middle pan / wheel zoom toward cursor, the
+//! same with the right button or with Space held and the left one (no middle button on a
+//! laptop), trackpad gestures (a wheel that is a touchpad on Windows and Linux too), smooth
+//! camera transitions and zoom extents.
 
 use crate::document::guarded;
 use egui::{Event, MouseWheelUnit, PointerButton, Pos2, Rect, Response, Vec2};
@@ -16,6 +18,15 @@ pub enum NavGesture {
     Pan,
     /// Trackpad only: two fingers zoom (Shift = pan).
     Zoom,
+}
+
+/// What dragging with a mouse button does (the other one comes with Shift).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ButtonDrag {
+    Off,
+    #[default]
+    Orbit,
+    Pan,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +63,16 @@ pub struct NavPrefs {
     pub twist: TwistGesture,
     pub twist_speed: f64,
     pub invert_twist: bool,
+    /// Right-button drag: Orbit, Pan (Shift gives the other) or nothing; a right click that
+    /// does not move still opens the context menu.
+    pub right: ButtonDrag,
+    /// Space held: a left drag navigates as the middle button does, whatever the tool.
+    pub space_drag: bool,
+    /// Wheel scrolling comes from a touchpad (Windows and Linux report two fingers as a
+    /// wheel): it navigates as two fingers do, Ctrl + scroll (a pinch there) zooms.
+    pub wheel_is_trackpad: bool,
+    /// Orbit / pan / zoom buttons to drag at the view's right edge.
+    pub buttons: bool,
 }
 
 impl Default for NavPrefs {
@@ -59,7 +80,8 @@ impl Default for NavPrefs {
         Self { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: NavGesture::Orbit, two_finger: NavGesture::Orbit, pan_speed: 1.0,
             trackpad_enabled: true, trackpad_speed: 1.0, invert_swipe: false,
             pinch_enabled: true, pinch_speed: 1.0, invert_pinch: false,
-            twist: TwistGesture::Orbit, twist_speed: 1.0, invert_twist: false }
+            twist: TwistGesture::Orbit, twist_speed: 1.0, invert_twist: false,
+            right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, buttons: true }
     }
 }
 
@@ -167,6 +189,9 @@ pub fn point_under(model: &Model, camera: &Camera, local: Pos2, viewport: Vec2) 
     ray.origin + ray.dir * dist
 }
 
+/// Points a wheel line counts as when the wheel is a touchpad.
+const WHEEL_LINE: f32 = 40.0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NavDrag {
     Orbit,
@@ -175,7 +200,8 @@ enum NavDrag {
 
 #[derive(Default)]
 pub struct NavController {
-    drag: Option<NavDrag>,
+    /// The drag going on and the button it is made with.
+    drag: Option<(NavDrag, PointerButton)>,
     pivot: DVec3,
     pan_point: DVec3,
     /// Pivot for trackpad orbit/pan gestures and the time it was last used.
@@ -187,9 +213,14 @@ impl NavController {
         self.drag.is_some()
     }
 
-    /// Handle middle-button drags and wheel/trackpad gestures over the viewport.
-    /// Returns true if the camera changed.
-    pub fn handle(&mut self, response: &Response, rect: Rect, model: &Model, camera: &mut Camera, prefs: &NavPrefs) -> bool {
+    /// The button of the navigating drag going on, if any.
+    pub fn button(&self) -> Option<PointerButton> {
+        self.drag.map(|d| d.1)
+    }
+
+    /// Handle navigating drags (middle button, right button, left with `space` held) and
+    /// wheel/trackpad gestures over the viewport. Returns true if the camera changed.
+    pub fn handle(&mut self, response: &Response, rect: Rect, model: &Model, camera: &mut Camera, prefs: &NavPrefs, space: bool) -> bool {
         let ctx = response.ctx.clone();
         let viewport = rect.size();
         let mut changed = false;
@@ -200,45 +231,65 @@ impl NavController {
             let l = if prefs.zoom_to_cursor { l } else { (viewport * 0.5).to_pos2() };
             point_under(model, camera, l, viewport)
         };
-        let middle = |shift: bool| match (prefs.middle == NavGesture::Pan) != shift {
-            true => NavDrag::Pan,
-            false => NavDrag::Orbit,
+        // what a drag with `button` does, Shift giving the other: the middle button's way for
+        // it and for a left drag with Space held, the right button's own
+        let mode = |button: PointerButton, shift: bool| {
+            let base = match button {
+                PointerButton::Middle => Some(prefs.middle == NavGesture::Pan),
+                PointerButton::Secondary => match prefs.right {
+                    ButtonDrag::Off => None,
+                    r => Some(r == ButtonDrag::Pan),
+                },
+                PointerButton::Primary if space && prefs.space_drag => Some(prefs.middle == NavGesture::Pan),
+                _ => None,
+            };
+            base.map(|pan| if pan != shift { NavDrag::Pan } else { NavDrag::Orbit })
         };
 
-        // ---- middle-button drag ------------------------------------------------
-        if response.drag_started_by(PointerButton::Middle) {
-            let press = ctx
-                .input(|i| i.pointer.press_origin())
-                .map(|p| (p - rect.min).to_pos2())
-                .or(local)
-                .unwrap_or(rect.size().to_pos2() * 0.5);
-            let p = point_under(model, camera, press, viewport);
-            self.pivot = p;
-            self.pan_point = p;
-            self.drag = Some(middle(shift));
+        // ---- navigating drags ------------------------------------------------------
+        if self.drag.is_none() {
+            for button in [PointerButton::Middle, PointerButton::Secondary, PointerButton::Primary] {
+                if !response.drag_started_by(button) {
+                    continue;
+                }
+                let Some(m) = mode(button, shift) else { continue };
+                let press = ctx
+                    .input(|i| i.pointer.press_origin())
+                    .map(|p| (p - rect.min).to_pos2())
+                    .or(local)
+                    .unwrap_or(rect.size().to_pos2() * 0.5);
+                let p = point_under(model, camera, press, viewport);
+                self.pivot = p;
+                self.pan_point = p;
+                self.drag = Some((m, button));
+                break;
+            }
         }
-        if self.drag.is_some() && response.dragged_by(PointerButton::Middle) {
+        if let Some((now, button)) = self.drag
+            && response.dragged_by(button)
+        {
             // Shift can be pressed/released mid-drag.
-            let want = middle(shift);
-            if Some(want) != self.drag {
+            let want = mode(button, shift).unwrap_or(now);
+            if want != now {
                 if let Some(l) = local {
                     let p = point_under(model, camera, l, viewport);
                     self.pivot = p;
                     self.pan_point = p;
                 }
-                self.drag = Some(want);
+                self.drag = Some((want, button));
             }
             let d = response.drag_delta();
             if d != Vec2::ZERO {
-                match self.drag {
-                    Some(NavDrag::Orbit) => camera.orbit(prefs.orbit_delta(dvec2(d)), self.pivot),
-                    Some(NavDrag::Pan) => camera.pan(dvec2(d) * prefs.pan_speed.clamp(0.1, 10.0), self.pan_point, dvec2(viewport)),
-                    None => {}
+                match want {
+                    NavDrag::Orbit => camera.orbit(prefs.orbit_delta(dvec2(d)), self.pivot),
+                    NavDrag::Pan => camera.pan(dvec2(d) * prefs.pan_speed.clamp(0.1, 10.0), self.pan_point, dvec2(viewport)),
                 }
                 changed = true;
             }
         }
-        if self.drag.is_some() && !ctx.input(|i| i.pointer.button_down(PointerButton::Middle)) {
+        if let Some((_, button)) = self.drag
+            && !ctx.input(|i| i.pointer.button_down(button))
+        {
             self.drag = None;
         }
 
@@ -249,6 +300,8 @@ impl NavController {
                 match ev {
                     Event::MouseWheel { unit, delta, modifiers, phase } => {
                         let Some(l) = local else { continue };
+                        // a touchpad reporting a wheel: its lines as points, as a trackpad's
+                        let (unit, delta) = if prefs.wheel_is_trackpad && prefs.trackpad_enabled && unit == MouseWheelUnit::Line { (MouseWheelUnit::Point, delta * WHEEL_LINE) } else { (unit, delta) };
                         match unit {
                             MouseWheelUnit::Line | MouseWheelUnit::Page => {
                                 // Classic mouse wheel: zoom toward cursor.

@@ -582,6 +582,15 @@ pub struct VarstotasApp {
     pub(crate) last_pointer: Option<Pos2>,
     /// Where the primary button went down in the viewport (click vs drag detection).
     press_local: Option<Pos2>,
+    /// Where the right button went down: released there, it is a click (the context menu),
+    /// else it was a navigating drag.
+    rpress_local: Option<Pos2>,
+    /// Space is held (navigation with a left drag): a tap without a drag or click is the
+    /// Space shortcut, on release.
+    pub(crate) space_held: bool,
+    space_used: bool,
+    /// The navigation buttons drawn over the view last frame (not the tools' clicks).
+    pub(crate) nav_button_rects: Vec<egui::Rect>,
     pub(crate) last_modifiers: Modifiers,
     /// A text field had keyboard focus last frame: Escape / Enter that just released it must
     /// not also reach the tools (e.g. clear the selection).
@@ -776,6 +785,10 @@ impl VarstotasApp {
             restarting: false,
             tool_pressed: false,
             primary_held: false,
+            rpress_local: None,
+            space_held: false,
+            space_used: false,
+            nav_button_rects: Vec::new(),
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
@@ -1049,6 +1062,23 @@ impl VarstotasApp {
         let events = ctx.input(|i| i.events.clone());
         for ev in events {
             match ev {
+                egui::Event::Key { key: Key::Space, pressed, repeat, modifiers, .. }
+                    if self.prefs.nav.space_drag && self.vcb.is_empty() && (self.space_held || !(modifiers.command || modifiers.ctrl || modifiers.alt)) =>
+                {
+                    // held: a left drag navigates; tapped: its shortcut (Select), on release
+                    self.last_modifiers = modifiers;
+                    if pressed && !repeat && !self.space_held {
+                        self.space_held = true;
+                        self.space_used = false;
+                    } else if !pressed && self.space_held {
+                        self.space_held = false;
+                        if !self.space_used
+                            && let Some(c) = crate::keymap::lookup(crate::keymap::Shortcut::from_event(Key::Space, egui::Modifiers { shift: modifiers.shift, ..Default::default() }))
+                        {
+                            self.actions.push(c.action());
+                        }
+                    }
+                }
                 egui::Event::Key { key, pressed, modifiers, .. } => {
                     self.last_modifiers = modifiers;
                     if modifiers.command || modifiers.ctrl || modifiers.alt {
@@ -1137,6 +1167,10 @@ impl VarstotasApp {
                 _ => {}
             }
         }
+        // Space let go unseen (the window was away): no tap
+        if self.space_held && !ctx.input(|i| i.key_down(Key::Space)) {
+            self.space_held = false;
+        }
         // A key that opened a dialog (e.g. Enter submitting a Tape resize) must not also
         // answer it in the same frame.
         if self.modal_open() {
@@ -1172,7 +1206,8 @@ impl VarstotasApp {
             self.press_local = None;
             return;
         }
-        let user_nav = self.viewport.nav.handle(response, rect, &self.doc.model, &mut self.camera, &self.prefs.nav);
+        let space = self.space_held && self.prefs.nav.space_drag;
+        let user_nav = self.viewport.nav.handle(response, rect, &self.doc.model, &mut self.camera, &self.prefs.nav, space);
         if user_nav {
             self.cam_anim = None;
             self.scene_player = None;
@@ -1190,7 +1225,8 @@ impl VarstotasApp {
         // Not over the view / style controls drawn on top of the viewport.
         let hud = self.hud_rect.expand(2.0);
         let strips = self.splitter_strips.clone();
-        let on_hud = |p: egui::Pos2| hud.contains(p) || strips.iter().any(|s| s.contains(p));
+        let buttons = self.nav_button_rects.clone();
+        let on_hud = |p: egui::Pos2| hud.contains(p) || strips.iter().any(|s| s.contains(p)) || buttons.iter().any(|b| b.expand(2.0).contains(p));
         let over = response.contains_pointer() && !ctx.input(|i| i.pointer.hover_pos()).is_some_and(on_hud);
         let (events, modifiers) = ctx.input(|i| (i.events.clone(), i.modifiers));
         // Primary-button state as of each event, NOT `i.pointer.primary_down()` (the state at
@@ -1216,10 +1252,30 @@ impl VarstotasApp {
                     }
                 }
                 egui::Event::PointerButton { pos, button, pressed, modifiers } => {
+                    if button == PointerButton::Middle {
+                        continue;
+                    }
+                    // a left press with Space held navigates, all of it (not the tool's)
+                    if button == PointerButton::Primary && (space || self.viewport.nav.button() == Some(PointerButton::Primary)) && !self.tool_pressed {
+                        if pressed {
+                            self.space_used = true;
+                        }
+                        continue;
+                    }
                     if button == PointerButton::Primary {
                         primary_down = pressed;
                     }
-                    if button == PointerButton::Middle {
+                    // the right button: a click selects what is under it for the context
+                    // menu, a drag navigates
+                    if button == PointerButton::Secondary {
+                        let local = (pos - rect.min).to_pos2();
+                        if pressed && over && rect.contains(pos) && !on_hud(pos) {
+                            self.rpress_local = Some(local);
+                        } else if !pressed && let Some(p0) = self.rpress_local.take()
+                            && p0.distance(local) < 6.0
+                        {
+                            self.context_select(local);
+                        }
                         continue;
                     }
                     self.last_modifiers = modifiers;
@@ -1228,9 +1284,6 @@ impl VarstotasApp {
                         // A new click supersedes any stale error message.
                         if self.flash.as_ref().is_some_and(|f| f.2) {
                             self.flash = None;
-                        }
-                        if button == PointerButton::Secondary {
-                            self.context_select(local);
                         }
                         self.tool_pressed = true;
                         self.last_pointer = Some(local);
@@ -1268,7 +1321,13 @@ impl VarstotasApp {
                 self.with_tool(pi, |t, c| t.on_double_click(c));
             }
         if over {
-            let icon = if self.viewport.nav.is_dragging() { egui::CursorIcon::Grabbing } else { self.tool.cursor() };
+            let icon = if self.viewport.nav.is_dragging() {
+                egui::CursorIcon::Grabbing
+            } else if space {
+                egui::CursorIcon::Grab
+            } else {
+                self.tool.cursor()
+            };
             ctx.set_cursor_icon(icon);
         } else if !self.tool_pressed && !self.debug.synthetic_input() {
             self.last_pointer = None;
@@ -2626,6 +2685,7 @@ impl eframe::App for VarstotasApp {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())
             });
+            self.nav_button_rects.clear();
             for (k, &rect) in rects.iter().enumerate() {
                 let is_active = k == active;
                 if !is_active {

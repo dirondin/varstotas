@@ -3,7 +3,8 @@
 //! (Shaded … Realistic, X-Ray, edges, profiles) and what is shown (axes, ground, grid; the
 //! model's guides, shadows, sections) — each a small drop-down. Drawn in the viewport's layer
 //! (windows stay above it); clicks on it do not reach the tools (`hud_rect`). One per pane of
-//! a split view (`panes.rs`).
+//! a split view (`panes.rs`). Under it, the navigation buttons: orbit, pan and zoom by
+//! dragging them, zoom extents by a click (no middle button or gestures needed).
 
 use super::icons::{Icon, paint_icon};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
@@ -121,6 +122,59 @@ impl VarstotasApp {
             hud = r.response.rect;
         });
         self.hud_rect = hud;
+        if self.prefs.nav.buttons {
+            self.nav_buttons(ui, rect, hud);
+        }
+    }
+
+    /// The navigation buttons down the view's right edge under the bar `hud`: a drag on Orbit
+    /// turns the view round its middle, on Pan moves it, on Zoom (up: nearer) zooms; a click on
+    /// Zoom Extents shows the whole model.
+    fn nav_buttons(&mut self, ui: &mut Ui, rect: Rect, hud: Rect) {
+        const R: f32 = 14.0;
+        let x = rect.right() - 8.0 - R;
+        let top = if hud.is_finite() { hud.bottom() } else { rect.top() + 44.0 } + 8.0 + R;
+        let fill = if ui.visuals().dark_mode { Color32::from_black_alpha(150) } else { Color32::from_white_alpha(200) };
+        let buttons = [
+            (Icon::Orbit, "orbit", tr!("view-nav-orbit-tip")),
+            (Icon::Pan, "pan", tr!("view-nav-pan-tip")),
+            (Icon::Zoom, "zoom", tr!("view-nav-zoom-tip")),
+            (Icon::ZoomExtents, "extents", tr!("view-zoom-extents")),
+        ];
+        let prefs = self.prefs.nav.clone();
+        let viewport = varstotas_kernel::glam::DVec2::new(rect.width() as f64, rect.height() as f64);
+        for (i, (icon, name, tip)) in buttons.into_iter().enumerate() {
+            let c = egui::pos2(x, top + i as f32 * (2.0 * R + 6.0));
+            if c.y + R > rect.bottom() - 8.0 {
+                break;
+            }
+            let r = Rect::from_center_size(c, vec2(2.0 * R, 2.0 * R));
+            self.nav_button_rects.push(r);
+            let resp = ui.interact(r, ui.id().with(("nav_button", name)), egui::Sense::click_and_drag());
+            super::tray_lib::spot(format!("nav:button:{name}"), c);
+            let hot = resp.hovered() || resp.dragged();
+            ui.painter().circle(c, R, if hot { super::theme::accent_soft() } else { fill }, Stroke::new(1.0, Color32::from_black_alpha(30)));
+            paint_icon(ui.painter(), Rect::from_center_size(c, vec2(ICON, ICON)), icon, false);
+            if resp.dragged() || resp.hovered() {
+                ui.ctx().set_cursor_icon(if resp.dragged() { egui::CursorIcon::Grabbing } else if name == "extents" { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Grab });
+            }
+            let d = crate::nav::dvec2(resp.drag_delta());
+            if resp.dragged() && d != varstotas_kernel::glam::DVec2::ZERO {
+                let target = self.camera.target;
+                match name {
+                    "orbit" => self.camera.orbit(prefs.orbit_delta(d), target),
+                    "pan" => self.camera.pan(d * prefs.pan_speed.clamp(0.1, 10.0), target, viewport),
+                    "zoom" => self.camera.zoom(prefs.zoom_factor((-d.y * 0.01).exp()), target),
+                    _ => {}
+                }
+                self.cam_anim = None;
+                self.scene_player = None;
+            }
+            if name == "extents" && resp.clicked() {
+                self.actions.push(Action::ZoomExtents);
+            }
+            resp.on_hover_text(tip);
+        }
     }
 
     fn hud_view_menu(&mut self, ui: &mut Ui) {
