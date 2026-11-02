@@ -50,8 +50,12 @@ raw mods cmd
 raw key A
 raw mods none
 wait 5
-action click_spot joinery:plinth
+action fittings
+wait 5
+action click_spot fittings:plinth
 wait 10
+action fittings_close
+wait 3
 expect ("Confirmat", "Plinth front", "Plinth side", "2 × Confirmat Ø7 × 50")
 action click_spot joinery:pick:0
 wait 5

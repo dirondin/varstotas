@@ -145,6 +145,8 @@ pub enum Icon {
     CutList,
     /// Window → Joinery: a shelf held in a side by dowels.
     Joinery,
+    /// Window → Fittings: a door with a bar handle on it.
+    Fittings,
     /// Window → Assembly: a box with its parts moved apart.
     Assembly,
     /// Window → Physics: a box falling onto a block.

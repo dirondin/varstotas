@@ -5,13 +5,13 @@ action script let d = box(vec3(0, -18, 0), 600, 18, 800); d.name = "Door"; let t
 action console_close
 wait 5
 expect fittings=[("Leg, height 100", "Top"), ("Leg, height 100", "Top"), ("Leg, height 100", "Top"), ("Leg, height 100", "Top")]
-action joinery
+action fittings
 wait 5
-action click_spot joinery:fitting
+action click_spot fittings:put
 wait 5
 expect ("Handle, centres 192", "Door")]
 expect joints=[]
-action joinery_close
+action fittings_close
 action script select(children().filter(|c| c.definition.contains("Handle")));
 wait 5
 action click_spot fitting:detach

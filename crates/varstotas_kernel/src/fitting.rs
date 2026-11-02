@@ -34,6 +34,9 @@ pub struct Fitting {
     /// The holes it drills into the part it is mounted on.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub holes: Vec<FittingHole>,
+    /// The built-in fitting it was made as, so it can be made again in other sizes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builtin: Option<Builtin>,
 }
 
 /// A hole a fitting needs, drilled along −Z (into the part).
@@ -164,7 +167,7 @@ fn round(v: f64) -> f64 {
 }
 
 /// The usual fittings, made on demand ([`Model::builtin_fitting`]).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Builtin {
     /// A bar handle on two posts `centres` apart.
     Handle { centres: f64, style: Style },
@@ -175,7 +178,7 @@ pub enum Builtin {
 }
 
 /// The shape of a built-in handle, knob or leg.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Style {
     /// A round bar handle, a round knob, a round leg.
     #[default]
@@ -376,7 +379,42 @@ impl Model {
         }
         // its item as it is ("…, centres 192" is not a copy number) unless that name is taken
         let name = if self.defs.values().any(|d| !d.is_group && d.name == item) { self.free_def_name(&item) } else { item.clone() };
-        Ok(self.defs.insert(Definition { name, mesh, is_group: false, fitting: Some(Fitting { item, holes: b.holes() }), ..Definition::empty() }))
+        Ok(self.defs.insert(Definition { name, mesh, is_group: false, fitting: Some(Fitting { item, holes: b.holes(), builtin: Some(b) }), ..Definition::empty() }))
+    }
+
+    /// Make the fittings at `paths` (from the root) built-in fitting `b` instead, where they are
+    /// mounted; a built-in definition no longer used goes, its pieces with it.
+    pub fn refit(&mut self, paths: &[ContextPath], b: Builtin) -> OpResult<()> {
+        let d = self.builtin_fitting(b)?;
+        let mut old = Vec::new();
+        for p in paths {
+            let (&id, prefix) = p.split_last().ok_or(OpError::NotFound)?;
+            let inst = self.mesh_at_mut(prefix).and_then(|x| x.instances.get_mut(id)).ok_or(OpError::NotFound)?;
+            if inst.def != d {
+                old.push(inst.def);
+                inst.def = d;
+                if let Some(m) = inst.mount.as_mut() {
+                    m.seen = None;
+                }
+            }
+        }
+        old.sort();
+        old.dedup();
+        for o in old {
+            let used = |m: &Model, d: DefId| m.defs.values().any(|x| x.mesh.instances.values().any(|i| i.def == d));
+            if used(self, o) || self.fitting_of(o).is_none_or(|f| f.builtin.is_none()) {
+                continue;
+            }
+            if let Some(def) = self.defs.remove(o) {
+                for piece in def.mesh.instances.values().map(|i| i.def) {
+                    if self.defs.get(piece).is_some_and(|x| x.is_group) && !used(self, piece) {
+                        self.defs.remove(piece);
+                    }
+                }
+            }
+        }
+        self.sync_joints();
+        Ok(())
     }
 
     /// The first place each definition is used at (the root at the empty path).

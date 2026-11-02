@@ -361,6 +361,12 @@ pub(super) fn paint(pen: &Pen, icon: Icon) {
             rect(pen, (9.0, 13.0), (15.0, 15.5), WOOD, pen.stroke());
             pen.line_c(&[(12.0, 6.5), (12.0, 11.5)], Stroke::new(W * pen.s, ORANGE));
         }
+        Icon::Fittings => {
+            // a door, a bar handle standing off it on two posts
+            rect(pen, (4.0, 2.5), (16.0, 21.5), WOOD, pen.stroke());
+            pen.line_c(&[(13.0, 7.0), (20.0, 7.0), (20.0, 17.0), (13.0, 17.0)], Stroke::new(W * pen.s * 1.4, pen.ink));
+            pen.line_c(&[(19.0, 9.0), (19.0, 15.0)], Stroke::new(W * pen.s, ORANGE));
+        }
         Icon::Joinery => {
             // a side standing up, a shelf meeting it, the dowels across the joint
             rect(pen, (3.0, 2.5), (9.0, 21.5), WOOD, pen.stroke());

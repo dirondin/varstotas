@@ -177,3 +177,28 @@ fn handles_knobs_and_legs_come_in_shapes() {
     items.sort();
     assert_eq!(items, ["Hairpin leg, height 100", "Leg, height 100"]);
 }
+
+#[test]
+fn fittings_are_made_again_in_other_sizes() {
+    use varstotas_kernel::fitting::{Builtin, Style};
+    let mut m = Model::new();
+    let top = board(&mut m, "Top", DVec3::new(800.0, 500.0, 18.0), DVec3::new(0.0, 0.0, 700.0));
+    let j = m.fitting_joint(K::Leg, vec![top]).unwrap();
+    let legs = m.put_fitting_joint(&j).unwrap();
+    let defs = m.defs.len();
+    let old = m.def_at(&legs[0]).unwrap();
+    let b = m.fitting_of(old).unwrap().builtin.unwrap();
+    assert!(matches!(b, Builtin::Leg { height: 100.0, style: Style::Round, .. }), "{b:?}");
+    // kept in the file
+    let back = varstotas_kernel::io::from_json(&varstotas_kernel::io::to_json(&m).unwrap()).unwrap();
+    assert_eq!(back.fitting_of(back.def_at(&legs[0]).unwrap()).unwrap().builtin, Some(b));
+    let before: Vec<DVec3> = legs.iter().map(|p| at(&m, p)).collect();
+    m.refit(&legs, Builtin::Leg { height: 300.0, diameter: 40.0, style: Style::Square }).unwrap();
+    let d = m.def_at(&legs[0]).unwrap();
+    assert_eq!(m.fitting_item(d).unwrap(), "Square leg, height 300");
+    assert!(legs.iter().all(|p| m.def_at(p) == Some(d)));
+    assert!(legs.iter().zip(&before).all(|(p, b)| close(at(&m, p), *b)), "where they were");
+    assert!(m.defs.get(old).is_none(), "the old legs' definition went");
+    assert_eq!(m.defs.len(), defs, "a leg for a leg, a piece for a piece");
+    assert_eq!(m.placed_fittings().len(), 4);
+}

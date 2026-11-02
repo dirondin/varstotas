@@ -44,6 +44,7 @@ pub mod unfold;
 pub mod cutlist;
 pub mod joinery;
 pub mod fittings;
+pub mod fittings_window;
 pub mod assembly;
 pub mod workplanes;
 

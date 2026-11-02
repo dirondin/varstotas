@@ -1,18 +1,18 @@
-# A fitting's shape: the Joinery window's Fitting row puts a square handle on a door (the shape
+# A fitting's shape: the Fittings window puts a square handle on a door (the shape
 # picked with a real click), a script hairpin legs on a top; each shape is its own item.
 action script let d = box(vec3(0, -18, 0), 600, 18, 800); d.name = "Door"; let t = box(vec3(800, 0, 700), 800, 500, 18); t.name = "Top"; fitting(t, "leg", #{ style: "hairpin", size: 400 }); select(d);
 action console_close
 wait 5
-action joinery
+action fittings
 wait 5
-action click_spot joinery:fitting_style
+action click_spot fittings:style
 wait 5
-action click_spot joinery:fitting_style:1
+action click_spot fittings:style:1
 wait 5
-action click_spot joinery:fitting
+action click_spot fittings:put
 wait 5
 expect ("Square handle, centres 192", "Door")]
-action joinery_close
+action fittings_close
 wait 3
 expect hardware=[("Hairpin leg, height 400", 4, "0.00"), ("Square handle, centres 192", 1,
 view iso

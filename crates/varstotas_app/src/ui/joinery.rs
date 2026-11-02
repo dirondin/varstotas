@@ -8,9 +8,8 @@ use crate::app::VarstotasApp;
 use crate::ui::theme;
 use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
-use varstotas_kernel::carcass::{BackSpec, PlinthSpec};
+use varstotas_kernel::carcass::BackSpec;
 use varstotas_kernel::drawer::{DoorSpec, DrawerFront, DrawerSpec};
-use varstotas_kernel::fitting::Style;
 use varstotas_kernel::joinery::{Contact, SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
 
@@ -30,13 +29,8 @@ pub struct JoineryState {
     drawer_count: usize,
     /// New doors' count, front and latches.
     door: Option<DoorSpec>,
-    /// A new back's and plinth's settings.
+    /// A new back's settings.
     back: Option<BackSpec>,
-    plinth: Option<PlinthSpec>,
-    /// A new fitting: the part it is for and its kind and sizes (suiting that part until changed).
-    fitting: Option<(Vec<InstanceId>, WoodJoint)>,
-    /// The shape a new handle, knob or leg is put on in.
-    fitting_style: Style,
 }
 
 const SLIDES: [(SlideKind, &str); 3] = [(SlideKind::BallBearing, "joinery-slide-ball"), (SlideKind::Roller, "joinery-slide-roller"), (SlideKind::Undermount, "joinery-slide-undermount")];
@@ -92,7 +86,7 @@ pub(crate) fn kind_name(k: WoodJointKind) -> String {
 
 /// The kinds in a combo box, wood joints then fittings under their headings; `only` keeps
 /// the kinds on one part or on two.
-fn kind_combo(ui: &mut Ui, id: &str, k: &mut WoodJointKind, only: Option<bool>) {
+pub(super) fn kind_combo(ui: &mut Ui, id: &str, k: &mut WoodJointKind, only: Option<bool>) {
     let r = egui::ComboBox::from_id_salt(id).selected_text(kind_name(*k)).height(520.0).show_ui(ui, |ui| {
         for fitting in [false, true] {
             let kinds: Vec<WoodJointKind> = WoodJointKind::ALL.into_iter().filter(|x| x.fitting() == fitting && only.is_none_or(|o| x.single() == o)).collect();
@@ -112,7 +106,7 @@ fn kind_combo(ui: &mut Ui, id: &str, k: &mut WoodJointKind, only: Option<bool>) 
 }
 
 /// A part's name: its instance name, else its definition's.
-fn part_name(model: &Model, path: &[InstanceId]) -> String {
+pub(super) fn part_name(model: &Model, path: &[InstanceId]) -> String {
     let Some((&id, parent)) = path.split_last() else { return "?".into() };
     let Some(inst) = model.mesh_at(parent).and_then(|m| m.instances.get(id)) else { return "?".into() };
     if !inst.name.is_empty() {
@@ -122,7 +116,7 @@ fn part_name(model: &Model, path: &[InstanceId]) -> String {
 }
 
 /// A length field in the model's units (`min..=max` mm).
-fn len(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, min: f64, max: f64) -> egui::Response {
+pub(super) fn len(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, min: f64, max: f64) -> egui::Response {
     ui.label(label);
     ui.add(super::len_drag(v, unit).range(min..=max).speed(0.2))
 }
@@ -131,32 +125,8 @@ fn mm(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, max: f64) -> bool
     len(ui, label, v, unit, 0.5, max).changed()
 }
 
-/// The name of a handle's, knob's or leg's shape.
-fn style_name(kind: WoodJointKind, style: Style) -> String {
-    tr!(match (style, kind) {
-        (Style::Round, _) => "fitting-style-round",
-        (Style::Square, _) => "fitting-style-square",
-        (Style::Shaped, WoodJointKind::Handle) => "fitting-style-bow",
-        (Style::Shaped, WoodJointKind::Knob) => "fitting-style-mushroom",
-        (Style::Shaped, _) => "fitting-style-hairpin",
-    })
-}
-
-/// The shape of a new handle, knob or leg.
-fn style_combo(ui: &mut Ui, kind: WoodJointKind, style: &mut Style) {
-    ui.label(tr!("joinery-fitting-style"));
-    let r = egui::ComboBox::from_id_salt("joinery_fitting_style").selected_text(style_name(kind, *style)).show_ui(ui, |ui| {
-        for (i, s) in Style::ALL.into_iter().enumerate() {
-            let r = ui.selectable_value(style, s, style_name(kind, s));
-            super::tray_lib::spot(format!("joinery:fitting_style:{i}"), r.rect.center());
-        }
-    });
-    super::tray_lib::spot("joinery:fitting_style", r.response.rect.center());
-    r.response.on_hover_text(tr!("joinery-fitting-style-tip"));
-}
-
 /// A fitting's sizes, by its kind.
-fn fitting_sizes(ui: &mut Ui, j: &mut WoodJoint, unit: LengthUnit) {
+pub(super) fn fitting_sizes(ui: &mut Ui, j: &mut WoodJoint, unit: LengthUnit) {
     match j.kind {
         WoodJointKind::Handle => {
             mm(ui, &tr!("joinery-centres"), &mut j.size, unit, 1000.0);
@@ -363,7 +333,7 @@ impl VarstotasApp {
         m.placed_joints.iter().zip(&m.joint_contacts).map(|(j, c)| c.map(|c| j.positions(&c).iter().map(|p| p.round() as i64).collect()).unwrap_or_default()).collect()
     }
 
-    fn select_joint_parts(&mut self, j: &WoodJoint) {
+    pub(super) fn select_joint_parts(&mut self, j: &WoodJoint) {
         let Some((&a, pa)) = j.a.split_last() else { return };
         let Some((&b, pb)) = j.b.split_last() else {
             self.doc.set_active_path(pa.to_vec());
@@ -409,6 +379,13 @@ impl VarstotasApp {
             let r = ui.checkbox(&mut self.prefs.joint_hardware, tr!("joinery-show-hardware"));
             super::tray_lib::spot("joinery:hardware", r.rect.center());
             r.on_hover_text(tr!("joinery-show-hardware-tip"));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let r = super::small_icon_button(ui, super::icons::Icon::Fittings, &tr!("joinery-open-fittings-tip"));
+                super::tray_lib::spot("joinery:fittings", r.rect.center());
+                if r.clicked() {
+                    self.fittings.open = true;
+                }
+            });
         });
         let hint = match &sel {
             Some((p, q)) if q.is_empty() => tr!("joinery-selected-one", a = part_name(&self.doc.model, p)),
@@ -417,11 +394,9 @@ impl VarstotasApp {
             None => tr!("joint-err-two-parts"),
         };
         ui.label(RichText::new(hint).small().color(theme::text_dim()));
-        self.fitting_ui(ui);
         self.drawer_ui(ui);
         self.door_ui(ui);
         self.back_ui(ui);
-        self.plinth_ui(ui);
     }
 
     /// A drawer for the opening between the two selected parts (shown only for such a pair).
@@ -527,51 +502,6 @@ impl VarstotasApp {
         self.joinery.door = Some(spec);
     }
 
-    /// A fitting (a handle, a knob, legs, casters) for the one selected part: its kind and
-    /// sizes, put on as objects mounted on it (`varstotas_kernel::fitting`).
-    fn fitting_ui(&mut self, ui: &mut Ui) {
-        let ids: Vec<InstanceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None }).collect();
-        if ids.len() != 1 || self.doc.selection.len() != 1 {
-            return;
-        }
-        let mut part = self.doc.active_path.clone();
-        part.push(ids[0]);
-        if self.doc.model.def_at(&part).is_some_and(|d| self.doc.model.fitting_of(d).is_some()) {
-            return;
-        }
-        let kind = self.joinery.fitting.as_ref().map_or(WoodJointKind::Handle, |f| f.1.kind);
-        let mut j = match self.joinery.fitting.take() {
-            Some((p, j)) if p == part => j,
-            _ => match self.doc.model.fitting_joint(kind, part.clone()) {
-                Ok(j) => j,
-                Err(_) => return,
-            },
-        };
-        let unit = self.doc.model.unit;
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(tr!("joinery-fitting")).strong()).on_hover_text(tr!("joinery-fitting-tip"));
-            let mut k = j.kind;
-            kind_combo(ui, "joinery_fitting_kind", &mut k, Some(true));
-            if k != j.kind
-                && let Ok(n) = self.doc.model.fitting_joint(k, part.clone())
-            {
-                j = n;
-            }
-            fitting_sizes(ui, &mut j, unit);
-            if j.kind != WoodJointKind::Caster {
-                style_combo(ui, j.kind, &mut self.joinery.fitting_style);
-            }
-            let style = if j.kind == WoodJointKind::Caster { Style::Round } else { self.joinery.fitting_style };
-            let b = ui.button(tr!("joinery-fitting-add"));
-            super::tray_lib::spot("joinery:fitting", b.rect.center());
-            if b.on_hover_text(tr!("joinery-fitting-add-tip")).clicked() {
-                let f = j.clone();
-                self.doc.try_commit(&tr!("joinery-fitting-undo"), move |m: &mut Model| m.put_fitting_joint_styled(&f, style).map(|_| ()));
-            }
-        });
-        self.joinery.fitting = Some((part, j));
-    }
-
     /// A back for the opening between the two selected parts (shown only for such a pair).
     fn back_ui(&mut self, ui: &mut Ui) {
         let ids: Vec<InstanceId> = self.doc.selection.iter().filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None }).collect();
@@ -600,37 +530,6 @@ impl VarstotasApp {
             }
         });
         self.joinery.back = Some(spec);
-    }
-
-    /// A plinth frame under the selected parts (a carcass's).
-    fn plinth_ui(&mut self, ui: &mut Ui) {
-        let unit = self.doc.model.unit;
-        let parts: Vec<Vec<InstanceId>> = self
-            .doc
-            .selection
-            .iter()
-            .filter_map(|e| if let EntityRef::Instance(id) = e { Some(*id) } else { None })
-            .map(|id| {
-                let mut p = self.doc.active_path.clone();
-                p.push(id);
-                p
-            })
-            .collect();
-        if parts.is_empty() {
-            return;
-        }
-        let mut spec = self.joinery.plinth.unwrap_or_default();
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(tr!("joinery-plinth")).strong());
-            len(ui, &tr!("joinery-height"), &mut spec.height, unit, 30.0, 1000.0);
-            len(ui, &tr!("joinery-plinth-setback"), &mut spec.setback, unit, 0.0, 300.0);
-            let b = ui.button(tr!("joinery-plinth-add"));
-            super::tray_lib::spot("joinery:plinth", b.rect.center());
-            if b.on_hover_text(tr!("joinery-plinth-tip")).clicked() {
-                self.doc.try_commit(&tr!("joinery-plinth-undo"), move |m: &mut Model| m.add_plinth(&parts, spec).map(|_| ()));
-            }
-        });
-        self.joinery.plinth = Some(spec);
     }
 
     fn joinery_list_ui(&mut self, ui: &mut Ui) {

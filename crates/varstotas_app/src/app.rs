@@ -293,6 +293,7 @@ pub enum Action {
     /// Window → Cut List.
     CutList,
     Joinery,
+    Fittings,
     Assembly,
     /// Window → Physics: drop the selected groups / components.
     Physics,
@@ -609,6 +610,7 @@ pub struct VarstotasApp {
     /// Window → Cut List window.
     pub(crate) cutlist: crate::ui::cutlist::CutListState,
     pub(crate) joinery: crate::ui::joinery::JoineryState,
+    pub(crate) fittings: crate::ui::fittings_window::FittingsState,
     pub(crate) assembly: crate::ui::assembly::AssemblyState,
     /// Window → Physics window and its run.
     pub(crate) physics: crate::ui::physics::PhysicsState,
@@ -794,6 +796,7 @@ impl VarstotasApp {
             unfold: Default::default(),
             cutlist: Default::default(),
             joinery: Default::default(),
+            fittings: Default::default(),
             assembly: Default::default(),
             physics: Default::default(),
             sheets: Default::default(),
@@ -1444,6 +1447,7 @@ impl VarstotasApp {
             Action::Unfold => self.unfold.open = true,
             Action::CutList => self.cutlist.open = true,
             Action::Joinery => self.joinery.open = true,
+            Action::Fittings => self.fittings.open = true,
             Action::Assembly => self.assembly.open = true,
             Action::Physics => self.physics.open = true,
             Action::OnlineMaterials => self.online.open = !self.online.open,
@@ -2701,6 +2705,7 @@ impl eframe::App for VarstotasApp {
         self.sync_offcuts();
         self.cut_list_window(&ctx);
         self.joinery_window(&ctx);
+        self.fittings_window(&ctx);
         self.assembly_window(&ctx);
         self.physics_window(&ctx);
         self.sheets_window(&ctx);

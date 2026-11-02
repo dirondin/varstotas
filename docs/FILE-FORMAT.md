@@ -71,7 +71,10 @@ A definition optionally stores `fitting`: `{ "item", "holes": [{ "at": [x, y, z]
 making it a fitting (a handle, a leg, any bought object put on a part): `item` its name on the
 shopping list (empty: the definition's name), `holes` what it drills into the part it is mounted
 on, in its own coordinates (its origin on the part's face, +Z out of it, holes along −Z; `depth`
-0: right through). An instance of it optionally stores `mount`: `{ "on", "axis", "high", "at",
+0: right through); a built-in one also `builtin`, what it was made as and can be made again in
+other sizes: `{ "Handle": { "centres", "style" } }`, `{ "Knob": { "diameter", "style" } }`,
+`{ "Leg": { "height", "diameter", "style" } }` or `{ "Caster": { "wheel", "height" } }`, `style`
+`"Round"`, `"Square"` or `"Shaped"`. An instance of it optionally stores `mount`: `{ "on", "axis", "high", "at",
 "offset", "lift", "turn" }`, the part it is on (an instance path from the same definition as
 the fitting), the face of the part's own box across its `axis` (0 = x) on the `high` side or
 the low one, the place on that face (`at`: 0, 0.5 or 1 along its two directions, a corner, an

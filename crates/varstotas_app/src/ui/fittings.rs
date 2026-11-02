@@ -24,7 +24,8 @@ fn name_of(m: &Model, path: &[InstanceId]) -> String {
 
 /// A fitting's holes as a table (x, y on the face, diameter, depth; 0: through), edited in a
 /// draft kept while a field is dragged or typed in; the new holes once one is let go.
-fn holes_ui(ui: &mut Ui, d: DefId, holes: &[FittingHole], unit: LengthUnit) -> Option<Vec<FittingHole>> {
+/// `spots` starts its spots' names.
+pub(super) fn holes_ui(ui: &mut Ui, d: DefId, holes: &[FittingHole], unit: LengthUnit, spots: &str) -> Option<Vec<FittingHole>> {
     let key = egui::Id::new(("fitting_holes", d));
     let mut draft: Vec<FittingHole> = ui.data(|x| x.get_temp(key)).unwrap_or_else(|| holes.to_vec());
     let mut done = false;
@@ -32,7 +33,7 @@ fn holes_ui(ui: &mut Ui, d: DefId, holes: &[FittingHole], unit: LengthUnit) -> O
     ui.horizontal(|ui| {
         ui.label(RichText::new(tr!("fitting-holes")).strong()).on_hover_text(tr!("fitting-holes-tip"));
         let r = ui.small_button(tr!("fitting-hole-add"));
-        super::tray_lib::spot("fitting:hole_add", r.rect.center());
+        super::tray_lib::spot(format!("{spots}hole_add"), r.rect.center());
         if r.on_hover_text(tr!("fitting-hole-add-tip")).clicked() {
             let next = draft.last().map_or(FittingHole { at: DVec3::ZERO, diameter: 5.0, depth: 10.0 }, |h| FittingHole { at: h.at + DVec3::X * 32.0, ..*h });
             draft.push(next);
@@ -42,7 +43,7 @@ fn holes_ui(ui: &mut Ui, d: DefId, holes: &[FittingHole], unit: LengthUnit) -> O
     if draft.is_empty() {
         ui.label(RichText::new(tr!("fitting-no-holes")).color(theme::text_dim()));
     } else {
-        egui::Grid::new(("fitting_holes_grid", d)).num_columns(5).spacing([4.0, 4.0]).show(ui, |ui| {
+        egui::Grid::new(("fitting_holes_grid", d, spots)).num_columns(5).spacing([4.0, 4.0]).show(ui, |ui| {
             ui.label("");
             for t in ["X", "Y", "Ø"] {
                 ui.label(RichText::new(t).small().color(theme::text_dim()));
@@ -51,13 +52,13 @@ fn holes_ui(ui: &mut Ui, d: DefId, holes: &[FittingHole], unit: LengthUnit) -> O
             ui.end_row();
             for (i, h) in draft.iter_mut().enumerate() {
                 let r = super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("fitting-hole-remove"));
-                super::tray_lib::spot(format!("fitting:hole:{i}:remove"), r.rect.center());
+                super::tray_lib::spot(format!("{spots}hole:{i}:remove"), r.rect.center());
                 if r.clicked() {
                     remove = Some(i);
                 }
                 let mut field = |ui: &mut Ui, v: &mut f64, name: &str, range: std::ops::RangeInclusive<f64>| {
                     let r = ui.add(super::len_drag(v, unit).range(range).speed(0.2));
-                    super::tray_lib::spot(format!("fitting:hole:{i}:{name}"), r.rect.center());
+                    super::tray_lib::spot(format!("{spots}hole:{i}:{name}"), r.rect.center());
                     done |= r.drag_stopped() || r.lost_focus();
                 };
                 field(ui, &mut h.at.x, "x", -2000.0..=2000.0);
@@ -253,7 +254,7 @@ impl VarstotasApp {
                 }
             }
         });
-        if let Some(holes) = holes_ui(ui, d, &f.holes, unit) {
+        if let Some(holes) = holes_ui(ui, d, &f.holes, unit, "fitting:") {
             new_fitting = Some(Some(Fitting { holes, ..f.clone() }));
         }
         ui.horizontal(|ui| {
