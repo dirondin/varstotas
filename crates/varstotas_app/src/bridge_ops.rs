@@ -464,13 +464,13 @@ impl VarstotasApp {
                 let Some(path) = s("path").map(PathBuf::from) else { return done(Err("missing path".into()));
                 };
                 // the workshop documents: the cut list (pdf / svg / csv), its labels, the
-                // assembly instructions (pdf)
+                // drilling maps, the assembly instructions (pdf)
                 if let Some(what) = s("what").filter(|w| *w != "model") {
                     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
                     let formats: &[&str] = match what {
                         "cut_list" => &["pdf", "svg", "csv"],
-                        "labels" | "assembly" => &["pdf"],
-                        _ => return done(Err(format!("unknown export {what}: model, cut_list, labels or assembly"))),
+                        "labels" | "drilling" | "assembly" => &["pdf"],
+                        _ => return done(Err(format!("unknown export {what}: model, cut_list, labels, drilling or assembly"))),
                     };
                     if !formats.contains(&ext.as_str()) {
                         return done(Err(format!("{what} exports as .{}", formats.join(", ."))));
@@ -482,6 +482,7 @@ impl VarstotasApp {
                     match what {
                         "cut_list" => self.export_cut_list(&path),
                         "labels" => self.export_cut_labels(&path),
+                        "drilling" => self.export_drilling(&path),
                         _ => self.export_assembly(&path),
                     }
                     return match &self.flash {

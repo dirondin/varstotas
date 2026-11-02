@@ -188,13 +188,13 @@ fn board_scale(sp: &StockPlan) -> (f64, f64) {
     (k, width * k + 9.0)
 }
 
-fn rect_lines(d: &mut Drawing, a: DVec2, b: DVec2, pen: Pen) {
+pub(super) fn rect_lines(d: &mut Drawing, a: DVec2, b: DVec2, pen: Pen) {
     let (c, e) = (DVec2::new(b.x, a.y), DVec2::new(a.x, b.y));
     d.lines.extend([(a, c, pen), (c, b, pen), (b, e, pen), (e, a, pen)]);
 }
 
 /// A drilled hole: a circle (radius on paper, never too small to see) with a centre cross.
-fn hole(d: &mut Drawing, c: DVec2, r: f64) {
+pub(super) fn hole(d: &mut Drawing, c: DVec2, r: f64) {
     let r = r.max(0.5);
     let p = |i: usize| c + DVec2::from_angle(i as f64 * std::f64::consts::TAU / 16.0) * r;
     d.lines.extend((0..16).map(|i| (p(i), p(i + 1), Pen::Edge)));
@@ -202,7 +202,7 @@ fn hole(d: &mut Drawing, c: DVec2, r: f64) {
     d.lines.extend([(c - x, c + x, Pen::Hidden), (c - x.perp(), c + x.perp(), Pen::Hidden)]);
 }
 
-fn text(d: &mut Drawing, at: DVec2, size: f64, s: String, left: bool) {
+pub(super) fn text(d: &mut Drawing, at: DVec2, size: f64, s: String, left: bool) {
     d.texts.push(Text2 { at, angle: 0.0, size, lines: vec![s], left });
 }
 
@@ -334,7 +334,7 @@ const LABEL_COLS: usize = 3;
 const LABEL_ROWS: usize = 8;
 
 /// `s` cut to about `width` mm at text `size`.
-fn fit_text(s: &str, size: f64, width: f64) -> String {
+pub(super) fn fit_text(s: &str, size: f64, width: f64) -> String {
     let max = (width / (size * 0.55)).floor() as usize;
     if s.chars().count() <= max { s.to_string() } else { format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>()) }
 }
@@ -986,6 +986,7 @@ impl VarstotasApp {
         let mut open = true;
         let mut save: Option<&str> = None;
         let mut labels = false;
+        let mut drilling = false;
         let win = self.placed(egui::Window::new(tr!("cutlist-title")).id(egui::Id::new("cutlist_window")).open(&mut open).collapsible(false).resizable(true).default_size([640.0, 660.0]).min_width(560.0), pos);
         win.show(ctx, |ui| {
             // the export buttons at the bottom, the tab above taking what is left
@@ -995,6 +996,12 @@ impl VarstotasApp {
                         let r = ui.button(RichText::new(tr!("cutlist-labels")).strong());
                         if r.on_hover_text(tr!("cutlist-labels-tip")).clicked() {
                             labels = true;
+                        }
+                        let on = super::drilling::any_drilling(&plan, &self.doc.model.cut_list);
+                        let r = ui.add_enabled(on, egui::Button::new(RichText::new(tr!("cutlist-drilling")).strong()));
+                        super::tray_lib::spot("cutlist:drilling", r.rect.center());
+                        if r.on_hover_text(tr!("cutlist-drilling-tip")).on_disabled_hover_text(tr!("cutlist-drilling-none")).clicked() {
+                            drilling = true;
                         }
                         for (ext, need_plans) in [("csv", false), ("svg", true), ("pdf", true)] {
                             let on = !need_plans || !plan.plans.is_empty();
@@ -1030,6 +1037,9 @@ impl VarstotasApp {
         }
         if labels {
             self.cut_labels_save();
+        }
+        if drilling {
+            self.drilling_save();
         }
     }
 

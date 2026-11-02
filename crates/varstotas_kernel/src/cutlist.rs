@@ -280,6 +280,9 @@ pub struct CutPart {
     /// copy that has any: (along the length, along the width, diameter), mm from the corner of
     /// its bounding box.
     pub holes: Vec<[f64; 3]>,
+    /// Every hole drilled into the part, faces, edges and ends, its copies drilled alike
+    /// together (copies with no holes are left out).
+    pub drilling: Vec<Drilling>,
     /// A fitting ([`crate::fitting`]): bought, listed with the hardware by its item.
     pub fitting: bool,
 }
@@ -289,6 +292,28 @@ impl CutPart {
     pub fn bought(&self, settings: &CutSettings) -> bool {
         self.fitting || settings.options(&self.name).hardware
     }
+}
+
+/// A hole to drill in a part, in its own frame: (length, width, thickness) from a corner of its
+/// bounding box, the three axes turning as a right hand's do, so the frame is the part's and not
+/// its mirror image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DrillHole {
+    /// The side it is drilled from: the axis it goes along (0 length: an end, 1 width: an
+    /// edge, 2 thickness: a face) × 2, plus 1 for the side at the axis' far end.
+    pub side: usize,
+    /// Where it starts, on that side (mm).
+    pub at: [f64; 3],
+    pub diameter: f64,
+    /// How deep (mm; 0 not known, or right through a fitting's part).
+    pub depth: f64,
+}
+
+/// The holes of `count` copies of a part drilled alike, ordered by side and place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drilling {
+    pub count: usize,
+    pub holes: Vec<DrillHole>,
 }
 
 /// A piece on a sheet or board, `x` along the stock's length.
@@ -532,6 +557,7 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
                     count: 1,
                     paths: vec![path.clone()],
                     holes: Vec::new(),
+                    drilling: Vec::new(),
                 };
                 match out.iter_mut().find(|p| p.name == part.name && p.material == part.material && p.size == part.size) {
                     Some(p) => {
@@ -549,7 +575,19 @@ pub fn cut_parts(model: &Model) -> Vec<CutPart> {
     if !model.placed_joints.is_empty() || out.iter().any(|p| p.fitting) {
         let drilled = joint_holes(model);
         for p in &mut out {
-            p.holes = p.paths.iter().map(|path| face_holes(model, path, &drilled)).find(|h| !h.is_empty()).unwrap_or_default();
+            for path in &p.paths {
+                let holes = part_holes(model, path, &drilled);
+                if holes.is_empty() {
+                    continue;
+                }
+                if p.holes.is_empty() {
+                    p.holes = holes.iter().filter(|h| h.side / 2 == 2).map(|h| [h.at[0], h.at[1], h.diameter]).collect();
+                }
+                match p.drilling.iter_mut().find(|d| d.holes == holes) {
+                    Some(d) => d.count += 1,
+                    None => p.drilling.push(Drilling { count: 1, holes }),
+                }
+            }
         }
     }
     out
@@ -616,14 +654,14 @@ impl Model {
     }
 }
 
-type Drilled = Vec<(ContextPath, Vec<crate::joinery::Hole>)>;
+type Drilled = Vec<(ContextPath, Vec<crate::joinery::Bore>)>;
 
 /// Every joint's holes by part, in world space.
 fn joint_holes(model: &Model) -> Drilled {
     let mut out: Drilled = Vec::new();
     for j in &model.placed_joints {
         let Some(c) = crate::joinery::joint_contact(model, j) else { continue };
-        let (a, b) = j.holes(&c);
+        let (a, b) = j.bores(&c);
         for (path, h) in [(&j.a, a), (&j.b, b)] {
             match out.iter_mut().find(|(p, _)| p == path) {
                 Some(e) => e.1.extend(h),
@@ -632,35 +670,79 @@ fn joint_holes(model: &Model) -> Drilled {
         }
     }
     for (path, bores) in model.fitting_holes() {
-        let h = bores.into_iter().map(|(p, d, r, _)| (p, d, r));
         match out.iter_mut().find(|(p, _)| *p == path) {
-            Some(e) => e.1.extend(h),
-            None => out.push((path, h.collect())),
+            Some(e) => e.1.extend(bores),
+            None => out.push((path, bores)),
         }
     }
     out
 }
 
-/// The holes in the face of the part at `path`, in its length × width frame.
-fn face_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> Vec<[f64; 3]> {
+/// The holes drilled into the part at `path` in its own frame ([`DrillHole`]), rounded to 0.01
+/// mm and ordered, so copies drilled alike have equal lists: of the part turned half round
+/// each of its axes (the same board), the way with the most holes in its far face (side 5),
+/// then the first in order.
+fn part_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> Vec<DrillHole> {
     let Some((_, holes)) = drilled.iter().find(|(p, _)| p == path) else { return Vec::new() };
     let Some((&id, parent)) = path.split_last() else { return Vec::new() };
     let Some(inst) = model.mesh_at(parent).and_then(|m| m.instances.get(id)) else { return Vec::new() };
-    let to_local = model.assembled_transform(path).inverse();
+    let placed = model.assembled_transform(path);
+    let to_local = placed.inverse();
     let k = axis_scales(&inst.transform);
     let (lo, hi) = bounds(model, inst.def, DMat4::IDENTITY);
     let s = k * (hi - lo);
     // the part's axes by size, as `cut_parts` sorts them: length, width, thickness
     let mut ax = [0, 1, 2];
     ax.sort_by(|&x, &y| s[y].total_cmp(&s[x]));
-    holes
+    // the width turned over when the sorted axes or the placement mirror the part
+    let odd = matches!(ax, [0, 2, 1] | [1, 0, 2] | [2, 1, 0]);
+    let flip = odd != (placed.determinant() < 0.0);
+    let round = |v: f64| (v * 100.0).round() / 100.0;
+    let size = [s[ax[0]], s[ax[1]], s[ax[2]]].map(round);
+    let raw: Vec<DrillHole> = holes
         .iter()
-        .filter_map(|&(at, dir, d)| {
+        .filter_map(|&(at, dir, diameter, depth)| {
             let p = k * (to_local.transform_point3(at) - lo);
             let dir = (k * to_local.transform_vector3(dir)).normalize_or_zero();
-            (dir[ax[2]].abs() > 0.7).then_some([p[ax[0]], p[ax[1]], d])
+            let mut at = [p[ax[0]], p[ax[1]], p[ax[2]]];
+            let mut dir = [dir[ax[0]], dir[ax[1]], dir[ax[2]]];
+            if flip {
+                at[1] = s[ax[1]] - at[1];
+                dir[1] = -dir[1];
+            }
+            // drilled into the side it goes in from: along +axis from the near side
+            let a = (0..3).find(|&a| dir[a].abs() > 0.7)?;
+            Some(DrillHole { side: a * 2 + usize::from(dir[a] < 0.0), at: at.map(round), diameter: round(diameter), depth: round(depth) })
         })
-        .collect()
+        .collect();
+    let key = |h: &DrillHole| (h.side, h.at, h.diameter, h.depth);
+    let order = |a: &DrillHole, b: &DrillHole| key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal);
+    // half a turn round no axis, the length, the width, the thickness: two axes reversed
+    let turns = [None, Some(0), Some(1), Some(2)].map(|keep: Option<usize>| {
+        let mut v: Vec<DrillHole> = raw
+            .iter()
+            .map(|h| {
+                let mut h = *h;
+                if let Some(keep) = keep {
+                    for a in (0..3).filter(|&a| a != keep) {
+                        h.at[a] = round(size[a] - h.at[a]);
+                        if h.side / 2 == a {
+                            h.side ^= 1;
+                        }
+                    }
+                }
+                h
+            })
+            .collect();
+        v.sort_by(order);
+        v.dedup();
+        v
+    });
+    let far = |v: &Vec<DrillHole>| v.iter().filter(|h| h.side == 5).count();
+    turns
+        .into_iter()
+        .min_by(|a, b| far(b).cmp(&far(a)).then_with(|| a.iter().zip(b).map(|(x, y)| order(x, y)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)))
+        .unwrap_or_default()
 }
 
 /// A rectangle to pack: `w` along the sheet's length when it cannot turn.

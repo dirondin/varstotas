@@ -1,0 +1,18 @@
+# Drilling maps from the Cut List: a PDF page for each part with holes, its copies drilled
+# alike together, every side with holes seen from outside and measured from a marked corner.
+# The cabinet demo: sides, top, bottom, shelf pins, confirmats, hinges and handles.
+open $ROOT/examples/demos/cabinet.vrst
+wait 10
+action cut_list
+wait 10
+screenshot shots/drilling_cut_list.bmp
+# the sides' shelf pins and confirmats in face A; the bottom's and top's confirmats in face A and
+# dowels in both ends; the two doors drilled alike: hinge cups in face A, the handle in face B
+expect drilling=[("Side L", 1, 26, [5]), ("Side R", 1, 26, [5]), ("Bottom", 1, 20, [0, 1, 5]), ("Top", 1, 16, [0, 1, 5]), ("Door", 2, 5, [4, 5])]
+action script let d = cut_list().parts.filter(|p| p.name == "Door")[0].drilling[0]; print(`${d.count} ${d.holes.len()} ${d.holes.filter(|h| h.side == "face_a" && h.diameter == 35.0).len()}`);
+wait 5
+expect script=Some((true, "2 5 3
+# the Drilling… button exports the maps (its save dialog skipped)
+action export_drilling drilling.pdf
+wait 5
+quit

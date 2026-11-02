@@ -279,7 +279,7 @@ class Model:
     def export(self, path, what="model"):
         """Export by extension: stl, obj, dxf, glb, 3mf, dae, ply, csv, svg, pdf, png. `what` picks a
         workshop document instead of the model: "cut_list" (pdf, svg, csv), "labels" (pdf, part
-        labels) or "assembly" (pdf, the assembly instructions)."""
+        labels), "drilling" (pdf, the drilling maps) or "assembly" (pdf, the assembly instructions)."""
         return self.request("export", path=os.path.abspath(path), what=what)
 
     def open(self, path):

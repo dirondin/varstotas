@@ -75,11 +75,12 @@ fn joints_cut_both_parts_and_come_off_again() {
     assert!(volume(&m, side) < vs - 3.0 * 500.0 && volume(&m, side) > vs - 3.0 * 700.0, "{}", volume(&m, side));
     assert!(volume(&m, shelf) < vh - 3.0 * 1300.0, "{}", volume(&m, shelf));
     assert_eq!(m.joints[i].hardware(None), Some(("Dowel Ø8 × 40".to_string(), 3)));
-    // on the cut list: three holes in the side's face (length up, width across), none on the
-    // shelf, whose holes are in its end
+    // on the cut list: three holes in the side's face (length up, width across; the board
+    // turned to have them in its far face, 409 up from its other end), none on the shelf,
+    // whose holes are in its end
     let parts = varstotas_kernel::cutlist::cut_parts(&m);
     let holes = |n: &str| parts.iter().find(|p| p.name == n).unwrap().holes.clone();
-    assert_eq!(holes("Side"), vec![[409.0, 32.0, 8.0], [409.0, 150.0, 8.0], [409.0, 268.0, 8.0]]);
+    assert_eq!(holes("Side"), vec![[391.0, 32.0, 8.0], [391.0, 150.0, 8.0], [391.0, 268.0, 8.0]]);
     assert!(holes("Shelf").is_empty());
 
     // saved and loaded: still rebuilds
@@ -664,4 +665,43 @@ fn joints_go_with_their_groups_and_components() {
     assert!(g.rebuild_wood_joints().is_empty());
     let gs = g.defs[gd].mesh.instances.values().find(|i| i.name == "Shelf").unwrap().def;
     assert!((g.defs[gs].mesh.volume() - src.defs[src.root_mesh().instances[h2].def].mesh.volume()).abs() < 1e-6);
+}
+
+#[test]
+fn drilling_lists_each_side_and_copies_drilled_alike() {
+    // two sides and a shelf between them on dowels
+    let mut m = Model::new();
+    let left = board(&mut m, "Side", DVec3::new(18.0, 300.0, 800.0), DVec3::ZERO);
+    let shelf = board(&mut m, "Shelf", DVec3::new(500.0, 300.0, 18.0), DVec3::new(18.0, 0.0, 400.0));
+    let right = board(&mut m, "Side", DVec3::new(18.0, 300.0, 800.0), DVec3::new(518.0, 0.0, 0.0));
+    let i = m.add_wood_joint(WoodJointKind::Dowels, vec![left], vec![shelf]).unwrap();
+    m.add_wood_joint(WoodJointKind::Dowels, vec![right], vec![shelf]).unwrap();
+    let j = m.joints[i].clone();
+    let parts = varstotas_kernel::cutlist::cut_parts(&m);
+    let part = |n: &str| parts.iter().find(|p| p.name == n).unwrap().clone();
+    // the sides are the same board turned round: one drilling for both, in the far face
+    let side = part("Side");
+    assert_eq!(side.drilling.len(), 1, "{:?}", side.drilling);
+    let d = &side.drilling[0];
+    assert_eq!((d.count, d.holes.len()), (2, j.count));
+    assert!(d.holes.iter().all(|h| h.side == 5 && h.at[2] == 18.0 && h.diameter == j.diameter && h.depth == j.depth), "{:?}", d.holes);
+    // 400 up the side, the middle of the shelf's 18
+    assert!(d.holes.iter().all(|h| h.at[0] == 409.0 || h.at[0] == 391.0), "{:?}", d.holes);
+    // the shelf: both ends, the same holes
+    let s = part("Shelf");
+    assert_eq!(s.drilling.len(), 1);
+    let ends: Vec<usize> = s.drilling[0].holes.iter().map(|h| h.side).collect();
+    assert_eq!(ends.iter().filter(|&&e| e == 0).count(), j.count);
+    assert_eq!(ends.iter().filter(|&&e| e == 1).count(), j.count);
+    assert!(s.drilling[0].holes.iter().all(|h| h.depth == j.depth_b && (h.at[2] - 9.0).abs() < 1e-9), "{:?}", s.drilling[0].holes);
+    // no holes in the faces of the shelf to draw on the cut diagram
+    assert!(s.holes.is_empty());
+
+    // another dowel on one side only: two drillings
+    let mut k = j.clone();
+    k.count += 1;
+    m.set_wood_joint(i, k).unwrap();
+    let parts = varstotas_kernel::cutlist::cut_parts(&m);
+    let side = parts.iter().find(|p| p.name == "Side").unwrap();
+    assert_eq!(side.drilling.iter().map(|d| d.count).collect::<Vec<_>>(), vec![1, 1]);
 }

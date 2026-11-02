@@ -1632,6 +1632,23 @@ fn register_cut_list(e: &mut Engine) {
                         Dynamic::from_map(hm)
                     });
                     m.insert("holes".into(), Dynamic::from_array(holes.collect()));
+                    let drilling = x.drilling.iter().map(|dr| {
+                        let holes = dr.holes.iter().map(|h| {
+                            let mut hm = Map::new();
+                            hm.insert("side".into(), Dynamic::from(["end_1", "end_2", "edge_1", "edge_2", "face_b", "face_a"][h.side].to_string()));
+                            hm.insert("x".into(), d(h.at[0]));
+                            hm.insert("y".into(), d(h.at[1]));
+                            hm.insert("z".into(), d(h.at[2]));
+                            hm.insert("diameter".into(), d(h.diameter));
+                            hm.insert("depth".into(), d(h.depth));
+                            Dynamic::from_map(hm)
+                        });
+                        let mut dm = Map::new();
+                        dm.insert("count".into(), Dynamic::from(dr.count as i64));
+                        dm.insert("holes".into(), Dynamic::from_array(holes.collect()));
+                        Dynamic::from_map(dm)
+                    });
+                    m.insert("drilling".into(), Dynamic::from_array(drilling.collect()));
                     Dynamic::from_map(m)
                 })
                 .collect();

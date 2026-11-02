@@ -42,6 +42,7 @@ pub mod tray;
 pub mod tray_lib;
 pub mod unfold;
 pub mod cutlist;
+pub mod drilling;
 pub mod joinery;
 pub mod fittings;
 pub mod fittings_window;
