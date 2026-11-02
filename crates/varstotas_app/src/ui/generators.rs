@@ -243,7 +243,13 @@ pub(crate) fn param_field(
                     if step > 0.0 {
                         s = s.step_by(step);
                     }
-                    ui.add(s)
+                    let resp = ui.add(s);
+                    // QA spots: the handle at the low end and the rail's high end
+                    let w = ui.spacing().slider_width;
+                    let c = resp.rect.left_center();
+                    super::tray_lib::spot(format!("gen:{key}"), c + egui::vec2(6.0, 0.0));
+                    super::tray_lib::spot(format!("gen:{key}:end"), c + egui::vec2(w - 3.0, 0.0));
+                    resp
                 }
                 _ => {
                     let mut d = egui::DragValue::new(&mut x).speed(if step > 0.0 { step } else { 0.1 });

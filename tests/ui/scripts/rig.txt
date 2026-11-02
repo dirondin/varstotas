@@ -44,7 +44,7 @@ raw click 802 57
 wait 5
 screenshot shots/rig_info.bmp
 # drag the Opening slider to the end: this copy gets its own variant
-raw drag 1213 220 1330 220 10
+action drag_spot gen:open 120 0
 wait 10
 expect rig=Some("1 Cabinet [open=90°] joints=1 variants=2")
 screenshot shots/rig_open.bmp
@@ -55,8 +55,8 @@ expect rig=Some("1 Cabinet [open=0°] joints=1 variants=2")
 action scene_timing_0.5_0.2
 action add_scene
 wait 5
-# click the slider's end (raw y shifted by the scene tabs): 90°, as the first copy — one variant shared
-raw click 1303 191
+# click the slider's end: 90°, as the first copy — one variant shared
+action click_spot gen:open:end
 wait 10
 expect rig=Some("1 Cabinet [open=90°] joints=1 variants=1")
 action add_scene
