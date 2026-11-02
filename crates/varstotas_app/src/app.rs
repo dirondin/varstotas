@@ -2617,6 +2617,7 @@ impl eframe::App for VarstotasApp {
             self.cut_numbers_overlay(&mut o2);
             self.joints_overlay(&mut o3, &mut o2);
             self.joint_hardware_overlay(&mut o3);
+            self.fitting_holes_overlay(&mut o3);
             let cursor = response.hover_pos().or_else(|| {
                 let p = self.last_pointer.filter(|_| self.debug.script_active())?;
                 Some(self.viewport.rect.min + p.to_vec2())

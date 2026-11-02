@@ -6,8 +6,11 @@ use crate::app::VarstotasApp;
 use crate::ui::theme;
 use egui::{RichText, Ui};
 use varstotas_i18n::tr;
-use varstotas_kernel::fitting::{Fitting, Mount};
-use varstotas_kernel::{EntityRef, InstanceId, Model};
+use varstotas_kernel::fitting::{Fitting, FittingHole, Mount};
+use varstotas_kernel::glam::DVec3;
+use varstotas_kernel::{DefId, EntityRef, InstanceId, LengthUnit, Model};
+
+const HOLE: egui::Color32 = egui::Color32::from_rgb(0xD0, 0x20, 0x60);
 
 /// A part's name: its instance name, else its definition's.
 fn name_of(m: &Model, path: &[InstanceId]) -> String {
@@ -19,7 +22,109 @@ fn name_of(m: &Model, path: &[InstanceId]) -> String {
     m.defs.get(inst.def).map(|d| d.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| tr!("tray-info-group"))
 }
 
+/// A fitting's holes as a table (x, y on the face, diameter, depth; 0: through), edited in a
+/// draft kept while a field is dragged or typed in; the new holes once one is let go.
+fn holes_ui(ui: &mut Ui, d: DefId, holes: &[FittingHole], unit: LengthUnit) -> Option<Vec<FittingHole>> {
+    let key = egui::Id::new(("fitting_holes", d));
+    let mut draft: Vec<FittingHole> = ui.data(|x| x.get_temp(key)).unwrap_or_else(|| holes.to_vec());
+    let mut done = false;
+    let mut remove = None;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(tr!("fitting-holes")).strong()).on_hover_text(tr!("fitting-holes-tip"));
+        let r = ui.small_button(tr!("fitting-hole-add"));
+        super::tray_lib::spot("fitting:hole_add", r.rect.center());
+        if r.on_hover_text(tr!("fitting-hole-add-tip")).clicked() {
+            let next = draft.last().map_or(FittingHole { at: DVec3::ZERO, diameter: 5.0, depth: 10.0 }, |h| FittingHole { at: h.at + DVec3::X * 32.0, ..*h });
+            draft.push(next);
+            done = true;
+        }
+    });
+    if draft.is_empty() {
+        ui.label(RichText::new(tr!("fitting-no-holes")).color(theme::text_dim()));
+    } else {
+        egui::Grid::new(("fitting_holes_grid", d)).num_columns(5).spacing([4.0, 4.0]).show(ui, |ui| {
+            ui.label("");
+            for t in ["X", "Y", "Ø"] {
+                ui.label(RichText::new(t).small().color(theme::text_dim()));
+            }
+            ui.label(RichText::new(tr!("fitting-hole-depth")).small().color(theme::text_dim())).on_hover_text(tr!("fitting-hole-depth-tip"));
+            ui.end_row();
+            for (i, h) in draft.iter_mut().enumerate() {
+                let r = super::small_icon_button(ui, super::icons::Icon::Trash, &tr!("fitting-hole-remove"));
+                super::tray_lib::spot(format!("fitting:hole:{i}:remove"), r.rect.center());
+                if r.clicked() {
+                    remove = Some(i);
+                }
+                let mut field = |ui: &mut Ui, v: &mut f64, name: &str, range: std::ops::RangeInclusive<f64>| {
+                    let r = ui.add(super::len_drag(v, unit).range(range).speed(0.2));
+                    super::tray_lib::spot(format!("fitting:hole:{i}:{name}"), r.rect.center());
+                    done |= r.drag_stopped() || r.lost_focus();
+                };
+                field(ui, &mut h.at.x, "x", -2000.0..=2000.0);
+                field(ui, &mut h.at.y, "y", -2000.0..=2000.0);
+                field(ui, &mut h.diameter, "d", 0.5..=200.0);
+                field(ui, &mut h.depth, "depth", 0.0..=500.0);
+                ui.end_row();
+            }
+        });
+    }
+    if let Some(i) = remove {
+        draft.remove(i);
+        done = true;
+    }
+    if done {
+        ui.data_mut(|x| x.remove::<Vec<FittingHole>>(key));
+        return (draft != holes).then_some(draft);
+    }
+    if draft != holes {
+        ui.data_mut(|x| x.insert_temp(key, draft));
+    } else {
+        ui.data_mut(|x| x.remove::<Vec<FittingHole>>(key));
+    }
+    None
+}
+
 impl VarstotasApp {
+    /// The holes of the selected fittings on the model: a ring where each starts and a line
+    /// as deep as it goes (a through hole: a short dashed one).
+    pub(crate) fn fitting_holes_overlay(&self, o3: &mut varstotas_render::Overlay3d) {
+        let m = &self.doc.model;
+        for e in self.doc.selection.iter().take(64) {
+            let EntityRef::Instance(id) = e else { continue };
+            let mut p = self.doc.active_path.clone();
+            p.push(*id);
+            let Some(f) = m.def_at(&p).and_then(|d| m.fitting_of(d)) else { continue };
+            let xf = m.transform_at(&p);
+            for h in &f.holes {
+                let c = xf.transform_point3(h.at);
+                let (u, v) = (xf.transform_vector3(DVec3::X).normalize_or_zero(), xf.transform_vector3(DVec3::Y).normalize_or_zero());
+                let down = -xf.transform_vector3(DVec3::Z).normalize_or_zero();
+                let r = h.diameter * 0.5;
+                let ring: Vec<DVec3> = (0..=24).map(|k| {
+                    let a = k as f64 / 24.0 * std::f64::consts::TAU;
+                    c + (u * a.cos() + v * a.sin()) * r
+                }).collect();
+                for w in ring.windows(2) {
+                    crate::inference::push_line(o3, w[0], w[1], HOLE, 2.0, false, true);
+                }
+                let depth = if h.depth > 0.0 { h.depth } else { 30.0 };
+                crate::inference::push_line(o3, c, c + down * depth, HOLE, 1.5, h.depth <= 0.0, true);
+            }
+        }
+    }
+
+    /// The first selected fitting's holes (x, y, diameter, depth, whole mm), for the debug dump.
+    pub(crate) fn fitting_holes_dump(&self) -> Vec<(i64, i64, i64, i64)> {
+        let m = &self.doc.model;
+        let f = self.doc.selection.iter().find_map(|e| {
+            let EntityRef::Instance(id) = e else { return None };
+            let mut p = self.doc.active_path.clone();
+            p.push(*id);
+            m.def_at(&p).and_then(|d| m.fitting_of(d))
+        });
+        f.map(|f| f.holes.iter().map(|h| (h.at.x.round() as i64, h.at.y.round() as i64, h.diameter.round() as i64, h.depth.round() as i64)).collect()).unwrap_or_default()
+    }
+
     /// The mounted fittings as (item, part), for the debug dump.
     pub(crate) fn fittings_dump(&self) -> Vec<(String, String)> {
         let m = &self.doc.model;
@@ -50,9 +155,11 @@ impl VarstotasApp {
                         let b = ui.button(tr!("fitting-make"));
                         super::tray_lib::spot("fitting:make", b.rect.center());
                         if b.on_hover_text(tr!("fitting-make-tip")).clicked() {
+                            // on the shopping list by the name it was given, else its definition's
+                            let item = model.mesh_at(&p[..p.len() - 1]).and_then(|x| x.instances.get(*id)).map(|i| i.name.clone()).unwrap_or_default();
                             self.doc.commit(&tr!("fitting-make"), |m| {
                                 if let Some(def) = m.defs.get_mut(d) {
-                                    def.fitting = Some(Fitting::default());
+                                    def.fitting = Some(Fitting { item, ..Fitting::default() });
                                 }
                             });
                         }
@@ -81,7 +188,7 @@ impl VarstotasApp {
     }
 
     /// A selected fitting: its item and holes, its mount.
-    fn fitting_def_ui(&mut self, ui: &mut Ui, p: &[InstanceId], d: varstotas_kernel::DefId, f: &Fitting) {
+    fn fitting_def_ui(&mut self, ui: &mut Ui, p: &[InstanceId], d: DefId, f: &Fitting) {
         let unit = self.doc.model.unit;
         ui.separator();
         ui.label(RichText::new(tr!("fitting-title")).strong());
@@ -98,10 +205,6 @@ impl VarstotasApp {
             if r.on_hover_text(tr!("fitting-item-tip")).lost_focus() && item != f.item {
                 new_fitting = Some(Some(Fitting { item: item.clone(), ..f.clone() }));
             }
-            ui.end_row();
-            ui.label(tr!("fitting-holes"));
-            let holes = f.holes.iter().map(|h| format!("Ø{}", super::fmt_len(h.diameter, unit))).collect::<Vec<_>>();
-            ui.label(if holes.is_empty() { tr!("fitting-no-holes") } else { holes.join(", ") }).on_hover_text(tr!("fitting-holes-tip"));
             ui.end_row();
             match &mount {
                 Some(mt) => {
@@ -137,6 +240,9 @@ impl VarstotasApp {
                 }
             }
         });
+        if let Some(holes) = holes_ui(ui, d, &f.holes, unit) {
+            new_fitting = Some(Some(Fitting { holes, ..f.clone() }));
+        }
         ui.horizontal(|ui| {
             if mount.is_some() {
                 let r = ui.button(tr!("fitting-detach"));

@@ -1,0 +1,41 @@
+# A fitting's own holes: a block made a fitting from Properties gets a hole (+ Hole), its
+# diameter typed (real click and keys), a second one 32 mm along, then removed; mounted on a
+# board it drills its hole into it and is a hardware line by its name.
+action script let b = box(vec3(0, 0, 0), 600, 300, 18); b.name = "Board"; let k = box(vec3(280, 130, 18), 40, 40, 30); k.name = "Block"; select(k);
+action console_close
+wait 5
+action click_spot fitting:make
+wait 5
+expect fitting_holes=[]
+action click_spot fitting:hole_add
+wait 5
+expect fitting_holes=[(0, 0, 5, 10)]
+action click_spot fitting:hole:0:d
+wait 3
+raw mods cmd
+raw key A
+raw mods none
+raw text 8
+raw key Enter
+wait 5
+expect fitting_holes=[(0, 0, 8, 10)]
+action click_spot fitting:hole_add
+wait 5
+expect fitting_holes=[(0, 0, 8, 10), (32, 0, 8, 10)]
+action click_spot fitting:hole:1:remove
+wait 5
+expect fitting_holes=[(0, 0, 8, 10)]
+action script select(children().filter(|c| c.name == "Block" || c.name == "Board"));
+wait 5
+action click_spot fitting:mount
+wait 5
+expect fittings=[("Block", "Board")]
+expect hardware=[("Block", 1,
+view iso
+zoom_extents
+wait 10
+screenshot shots/fitting_holes.bmp
+action script select(children().filter(|c| c.name == "Block"));
+wait 5
+screenshot shots/fitting_holes_sel.bmp
+quit
