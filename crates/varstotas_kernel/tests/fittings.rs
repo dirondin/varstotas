@@ -152,3 +152,28 @@ fn a_point_on_a_part_snaps_to_its_middle_and_edges() {
     let d = m.defs.values().find(|d| d.fitting.is_some()).unwrap();
     assert_eq!(d.name, "Handle, centres 192");
 }
+
+#[test]
+fn handles_knobs_and_legs_come_in_shapes() {
+    use varstotas_kernel::fitting::{Builtin, Style};
+    for style in Style::ALL {
+        for b in [Builtin::Handle { centres: 128.0, style }, Builtin::Knob { diameter: 30.0, style }, Builtin::Leg { height: 400.0, diameter: 40.0, style }] {
+            assert!(Model::new().builtin_fitting(b).is_ok(), "{b:?}");
+        }
+    }
+    // hairpin legs on a top: four, each its own item, screwed on at the corners of its plate
+    let mut m = Model::new();
+    let top = board(&mut m, "Top", DVec3::new(800.0, 500.0, 18.0), DVec3::new(0.0, 0.0, 700.0));
+    let j = m.fitting_joint(K::Leg, vec![top]).unwrap();
+    let legs = m.put_fitting_joint_styled(&j, Style::Shaped).unwrap();
+    assert_eq!(legs.len(), 4);
+    let d = m.defs.values().find(|d| d.fitting.is_some()).unwrap();
+    assert_eq!(d.fitting.as_ref().unwrap().item, "Hairpin leg, height 100");
+    assert_eq!(d.fitting.as_ref().unwrap().holes.len(), 4);
+    // a round one beside them is another item
+    let round = m.put_fitting_joint(&j).unwrap();
+    assert_eq!(round.len(), 4);
+    let mut items: Vec<String> = m.defs.values().filter_map(|d| d.fitting.as_ref().map(|f| f.item.clone())).collect();
+    items.sort();
+    assert_eq!(items, ["Hairpin leg, height 100", "Leg, height 100"]);
+}

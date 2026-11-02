@@ -10,6 +10,7 @@ use egui::{Context, RichText, Ui, vec2};
 use varstotas_i18n::tr;
 use varstotas_kernel::carcass::{BackSpec, PlinthSpec};
 use varstotas_kernel::drawer::{DoorSpec, DrawerFront, DrawerSpec};
+use varstotas_kernel::fitting::Style;
 use varstotas_kernel::joinery::{Contact, SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::{EntityRef, InstanceId, LengthUnit, Model};
 
@@ -34,6 +35,8 @@ pub struct JoineryState {
     plinth: Option<PlinthSpec>,
     /// A new fitting: the part it is for and its kind and sizes (suiting that part until changed).
     fitting: Option<(Vec<InstanceId>, WoodJoint)>,
+    /// The shape a new handle, knob or leg is put on in.
+    fitting_style: Style,
 }
 
 const SLIDES: [(SlideKind, &str); 3] = [(SlideKind::BallBearing, "joinery-slide-ball"), (SlideKind::Roller, "joinery-slide-roller"), (SlideKind::Undermount, "joinery-slide-undermount")];
@@ -126,6 +129,30 @@ fn len(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, min: f64, max: f
 
 fn mm(ui: &mut Ui, label: &str, v: &mut f64, unit: LengthUnit, max: f64) -> bool {
     len(ui, label, v, unit, 0.5, max).changed()
+}
+
+/// The name of a handle's, knob's or leg's shape.
+fn style_name(kind: WoodJointKind, style: Style) -> String {
+    tr!(match (style, kind) {
+        (Style::Round, _) => "fitting-style-round",
+        (Style::Square, _) => "fitting-style-square",
+        (Style::Shaped, WoodJointKind::Handle) => "fitting-style-bow",
+        (Style::Shaped, WoodJointKind::Knob) => "fitting-style-mushroom",
+        (Style::Shaped, _) => "fitting-style-hairpin",
+    })
+}
+
+/// The shape of a new handle, knob or leg.
+fn style_combo(ui: &mut Ui, kind: WoodJointKind, style: &mut Style) {
+    ui.label(tr!("joinery-fitting-style"));
+    let r = egui::ComboBox::from_id_salt("joinery_fitting_style").selected_text(style_name(kind, *style)).show_ui(ui, |ui| {
+        for (i, s) in Style::ALL.into_iter().enumerate() {
+            let r = ui.selectable_value(style, s, style_name(kind, s));
+            super::tray_lib::spot(format!("joinery:fitting_style:{i}"), r.rect.center());
+        }
+    });
+    super::tray_lib::spot("joinery:fitting_style", r.response.rect.center());
+    r.response.on_hover_text(tr!("joinery-fitting-style-tip"));
 }
 
 /// A fitting's sizes, by its kind.
@@ -531,11 +558,15 @@ impl VarstotasApp {
                 j = n;
             }
             fitting_sizes(ui, &mut j, unit);
+            if j.kind != WoodJointKind::Caster {
+                style_combo(ui, j.kind, &mut self.joinery.fitting_style);
+            }
+            let style = if j.kind == WoodJointKind::Caster { Style::Round } else { self.joinery.fitting_style };
             let b = ui.button(tr!("joinery-fitting-add"));
             super::tray_lib::spot("joinery:fitting", b.rect.center());
             if b.on_hover_text(tr!("joinery-fitting-add-tip")).clicked() {
                 let f = j.clone();
-                self.doc.try_commit(&tr!("joinery-fitting-undo"), move |m: &mut Model| m.put_fitting_joint(&f).map(|_| ()));
+                self.doc.try_commit(&tr!("joinery-fitting-undo"), move |m: &mut Model| m.put_fitting_joint_styled(&f, style).map(|_| ()));
             }
         });
         self.joinery.fitting = Some((part, j));

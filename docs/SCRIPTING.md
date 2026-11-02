@@ -150,7 +150,10 @@ longest standard length that fits; `flip`: the front at the other end), `"table_
 an apron `b`, `flip`: the other side), `"nails"` (through a back panel `a`; `size`: the length),
 and the fittings (`fitting(part, kind, #{…})`): `"handle"` (`size`: centres, `offset` along the
 part), `"knob"`, `"leg"` (`size`: height, `diameter`, `margin` from the edges), `"caster"` (swivel
-casters: `diameter` of the wheel, `size` from the floor to the plate, `margin`).
+casters: `diameter` of the wheel, `size` from the floor to the plate, `margin`); `style` gives a
+handle, knob or leg its shape: `"round"` (the default), `"square"`, `"bow"` (a handle),
+`"mushroom"` (a knob) or `"hairpin"` (a leg, two steel rods in a V each side on a plate screwed on
+at its corners), each its own item in the cut list.
 
 Dowels, screws, pocket holes and the fittings along a joint are laid out along it, from its start (the end with the
 lower coordinate): evenly between `margin` from both ends (0: a quarter of the joint, at most

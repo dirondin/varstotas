@@ -1539,10 +1539,15 @@ impl Model {
     /// describes — its sizes, spots, margin and offset — as fittings mounted on its part, beside
     /// it. Returns their paths.
     pub fn put_fitting_joint(&mut self, j: &WoodJoint) -> OpResult<Vec<ContextPath>> {
+        self.put_fitting_joint_styled(j, crate::fitting::Style::Round)
+    }
+
+    /// [`Model::put_fitting_joint`] with a handle, knob or leg of shape `style`.
+    pub fn put_fitting_joint_styled(&mut self, j: &WoodJoint, style: crate::fitting::Style) -> OpResult<Vec<ContextPath>> {
         let b = match j.kind {
-            WoodJointKind::Handle => crate::fitting::Builtin::Handle { centres: j.size },
-            WoodJointKind::Knob => crate::fitting::Builtin::Knob { diameter: j.diameter },
-            WoodJointKind::Leg => crate::fitting::Builtin::Leg { height: j.size, diameter: j.diameter },
+            WoodJointKind::Handle => crate::fitting::Builtin::Handle { centres: j.size, style },
+            WoodJointKind::Knob => crate::fitting::Builtin::Knob { diameter: j.diameter, style },
+            WoodJointKind::Leg => crate::fitting::Builtin::Leg { height: j.size, diameter: j.diameter, style },
             WoodJointKind::Caster => crate::fitting::Builtin::Caster { wheel: j.diameter, height: j.size },
             _ => return Err(OpError::Invalid(tr!("joint-err-one-part"))),
         };

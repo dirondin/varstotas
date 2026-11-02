@@ -456,6 +456,10 @@ fn joinery() {
     assert_eq!(r.output, "3 × Cam lock Ø15 with bolt\n4 1 [\"4 × Leg, height 120\"]\n", "{}", r.output);
     let r = run(&mut m, &ScriptCtx::default(), r#"joint("Shelf", "leg")"#);
     assert!(r.error.is_some_and(|e| e.contains("fitting(")), "a fitting now");
+    let r = go(&mut m, r#"let l = fitting("Shelf", "leg", #{ style: "hairpin" }); print(cut_list().hardware.filter(|h| h.name.contains("Hairpin")).map(|h| h.count + " × " + h.name)); erase(l);"#);
+    assert!(r.output.starts_with("[\"4 × Hairpin leg, height"), "{}", r.output);
+    let r = run(&mut m, &ScriptCtx::default(), r#"fitting("Shelf", "leg", #{ style: "oval" })"#);
+    assert!(r.error.is_some_and(|e| e.contains("hairpin")));
     let r = run(&mut m, &ScriptCtx::default(), r#"fitting("Shelf", "dowels")"#);
     assert!(r.error.is_some());
     let r = run(&mut m, &ScriptCtx::default(), r#"joint("Shelf", "dowels")"#);

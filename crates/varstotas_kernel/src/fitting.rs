@@ -167,11 +167,28 @@ fn round(v: f64) -> f64 {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Builtin {
     /// A bar handle on two posts `centres` apart.
-    Handle { centres: f64 },
-    Knob { diameter: f64 },
-    Leg { height: f64, diameter: f64 },
+    Handle { centres: f64, style: Style },
+    Knob { diameter: f64, style: Style },
+    Leg { height: f64, diameter: f64, style: Style },
     /// A swivel caster: the wheel's diameter, from the floor to its plate.
     Caster { wheel: f64, height: f64 },
+}
+
+/// The shape of a built-in handle, knob or leg.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Style {
+    /// A round bar handle, a round knob, a round leg.
+    #[default]
+    Round,
+    /// Square ones.
+    Square,
+    /// A bow handle (the bar between its posts, rounded at the corners), a mushroom knob, a
+    /// hairpin leg (two steel rods in a V each side).
+    Shaped,
+}
+
+impl Style {
+    pub const ALL: [Style; 3] = [Style::Round, Style::Square, Style::Shaped];
 }
 
 /// A size in mm without trailing zeros.
@@ -208,9 +225,9 @@ impl Builtin {
     pub fn is_valid(&self) -> bool {
         let ok = |v: f64| v.is_finite() && v > 0.0 && v < 10_000.0;
         match *self {
-            Builtin::Handle { centres } => ok(centres) && centres >= 16.0,
-            Builtin::Knob { diameter } => ok(diameter),
-            Builtin::Leg { height, diameter } => ok(height) && ok(diameter),
+            Builtin::Handle { centres, .. } => ok(centres) && centres >= 16.0,
+            Builtin::Knob { diameter, .. } => ok(diameter),
+            Builtin::Leg { height, diameter, .. } => ok(height) && ok(diameter) && height > 10.0,
             Builtin::Caster { wheel, height } => ok(wheel) && ok(height) && height > wheel,
         }
     }
@@ -218,9 +235,21 @@ impl Builtin {
     /// Its line on the shopping list, also its definition's name.
     pub fn item(&self) -> String {
         match *self {
-            Builtin::Handle { centres } => tr!("joint-hw-handle", length = num(centres)),
-            Builtin::Knob { diameter } => tr!("joint-hw-knob", diameter = num(diameter)),
-            Builtin::Leg { height, .. } => tr!("joint-hw-leg", length = num(height)),
+            Builtin::Handle { centres, style } => tr!(match style {
+                Style::Round => "joint-hw-handle",
+                Style::Square => "fitting-hw-handle-square",
+                Style::Shaped => "fitting-hw-handle-bow",
+            }, length = num(centres)),
+            Builtin::Knob { diameter, style } => tr!(match style {
+                Style::Round => "joint-hw-knob",
+                Style::Square => "fitting-hw-knob-square",
+                Style::Shaped => "fitting-hw-knob-mushroom",
+            }, diameter = num(diameter)),
+            Builtin::Leg { height, style, .. } => tr!(match style {
+                Style::Round => "joint-hw-leg",
+                Style::Square => "fitting-hw-leg-square",
+                Style::Shaped => "fitting-hw-leg-hairpin",
+            }, length = num(height)),
             Builtin::Caster { wheel, height } => tr!("joint-hw-caster", diameter = num(wheel), length = num(height)),
         }
     }
@@ -228,8 +257,10 @@ impl Builtin {
     pub fn holes(&self) -> Vec<FittingHole> {
         let hole = |x: f64, y: f64, diameter: f64, depth: f64| FittingHole { at: DVec3::new(x, y, 0.0), diameter, depth };
         match *self {
-            Builtin::Handle { centres } => vec![hole(-centres / 2.0, 0.0, 5.0, 0.0), hole(centres / 2.0, 0.0, 5.0, 0.0)],
+            Builtin::Handle { centres, .. } => vec![hole(-centres / 2.0, 0.0, 5.0, 0.0), hole(centres / 2.0, 0.0, 5.0, 0.0)],
             Builtin::Knob { .. } => vec![hole(0.0, 0.0, 5.0, 0.0)],
+            // a hairpin leg's plate is screwed on at its corners
+            Builtin::Leg { style: Style::Shaped, .. } => [(-24.0, -24.0), (24.0, -24.0), (-24.0, 24.0), (24.0, 24.0)].map(|(x, y)| hole(x, y, 3.0, 12.0)).to_vec(),
             Builtin::Leg { .. } => vec![hole(0.0, 0.0, 8.0, 10.0)],
             Builtin::Caster { .. } => [(-18.0, -18.0), (18.0, -18.0), (-18.0, 18.0), (18.0, 18.0)].map(|(x, y)| hole(x, y, 3.0, 12.0)).to_vec(),
         }
@@ -239,8 +270,12 @@ impl Builtin {
         let at = |x: f64, y: f64, z: f64| DMat4::from_translation(DVec3::new(x, y, z));
         let along_x = DMat4::from_quat(DQuat::from_rotation_arc(DVec3::Z, DVec3::X));
         let cyl = |r: f64, h: f64| Primitive::Cylinder { r, h, segs: 24 };
+        // a box of `w` × `d` × `h` standing centred on (x, y, z)
+        let block = |w: f64, d: f64, h: f64, x: f64, y: f64, z: f64| (Primitive::Box { w, d, h }, at(x - w / 2.0, y - d / 2.0, z));
+        // a rod of radius `r` from `a` to `b`
+        let rod = |r: f64, a: DVec3, b: DVec3| (cyl(r, a.distance(b)), DMat4::from_translation(a) * DMat4::from_quat(DQuat::from_rotation_arc(DVec3::Z, (b - a).normalize())));
         match *self {
-            Builtin::Handle { centres } => {
+            Builtin::Handle { centres, style: Style::Round } => {
                 let (r, len) = (6.0, centres + 30.0);
                 vec![
                     (cyl(4.5, 28.0), at(-centres / 2.0, 0.0, 0.0), Metal::Steel),
@@ -248,8 +283,50 @@ impl Builtin {
                     (cyl(r, len), at(-len / 2.0, 0.0, 28.0 + r) * along_x, Metal::Steel),
                 ]
             }
-            Builtin::Knob { diameter } => vec![(cyl(4.5, 18.0), DMat4::IDENTITY, Metal::Brass), (cyl(diameter / 2.0, 14.0), at(0.0, 0.0, 18.0), Metal::Brass)],
-            Builtin::Leg { height, diameter } => vec![(cyl(diameter / 2.0, height), DMat4::IDENTITY, Metal::Dark)],
+            Builtin::Handle { centres, style: Style::Square } => {
+                let (p0, b0) = (block(8.0, 8.0, 28.0, -centres / 2.0, 0.0, 0.0), block(8.0, 8.0, 28.0, centres / 2.0, 0.0, 0.0));
+                let bar = block(centres + 24.0, 12.0, 8.0, 0.0, 0.0, 28.0);
+                vec![(p0.0, p0.1, Metal::Dark), (b0.0, b0.1, Metal::Dark), (bar.0, bar.1, Metal::Dark)]
+            }
+            Builtin::Handle { centres, style: Style::Shaped } => {
+                let (r, h) = (5.0, 26.0);
+                let (a, b) = (DVec3::new(-centres / 2.0, 0.0, h), DVec3::new(centres / 2.0, 0.0, h));
+                vec![
+                    (cyl(r, h), at(-centres / 2.0, 0.0, 0.0), Metal::Brass),
+                    (cyl(r, h), at(centres / 2.0, 0.0, 0.0), Metal::Brass),
+                    (rod(r, a, b).0, rod(r, a, b).1, Metal::Brass),
+                    (Primitive::Sphere { r, segs: 16 }, DMat4::from_translation(a), Metal::Brass),
+                    (Primitive::Sphere { r, segs: 16 }, DMat4::from_translation(b), Metal::Brass),
+                ]
+            }
+            Builtin::Knob { diameter, style: Style::Round } => vec![(cyl(4.5, 18.0), DMat4::IDENTITY, Metal::Brass), (cyl(diameter / 2.0, 14.0), at(0.0, 0.0, 18.0), Metal::Brass)],
+            Builtin::Knob { diameter, style: Style::Square } => {
+                let top = block(diameter, diameter, 14.0, 0.0, 0.0, 16.0);
+                vec![(cyl(4.5, 16.0), DMat4::IDENTITY, Metal::Dark), (top.0, top.1, Metal::Dark)]
+            }
+            Builtin::Knob { diameter, style: Style::Shaped } => {
+                let r = diameter / 2.0;
+                let stem = (r * 0.4).max(4.5);
+                vec![(cyl(stem, 14.0), DMat4::IDENTITY, Metal::Brass), (Primitive::Sphere { r, segs: 24 }, at(0.0, 0.0, 14.0 + r * 0.5) * DMat4::from_scale(DVec3::new(1.0, 1.0, 0.6)), Metal::Brass)]
+            }
+            Builtin::Leg { height, diameter, style: Style::Round } => vec![(cyl(diameter / 2.0, height), DMat4::IDENTITY, Metal::Dark)],
+            Builtin::Leg { height, diameter, style: Style::Square } => {
+                let b = block(diameter, diameter, height, 0.0, 0.0, 0.0);
+                vec![(b.0, b.1, Metal::Dark)]
+            }
+            Builtin::Leg { height, style: Style::Shaped, .. } => {
+                // a plate, and two rods each side meeting at the floor
+                let plate = block(64.0, 64.0, 4.0, 0.0, 0.0, 0.0);
+                let mut v = vec![(plate.0, plate.1, Metal::Dark)];
+                for y in [-20.0, 20.0] {
+                    let foot = DVec3::new(0.0, y, height - 5.0);
+                    for x in [-22.0, 22.0] {
+                        let r = rod(5.0, DVec3::new(x, y, 4.0), foot);
+                        v.push((r.0, r.1, Metal::Dark));
+                    }
+                }
+                v
+            }
             Builtin::Caster { wheel, height } => {
                 let r = wheel / 2.0;
                 let fork = (height - r - 3.0).max(1.0);

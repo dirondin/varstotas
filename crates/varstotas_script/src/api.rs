@@ -2,6 +2,7 @@
 
 use crate::{Entity, STATE, State};
 use varstotas_kernel::glam::{DMat3, DMat4, DVec3};
+use varstotas_kernel::fitting::Style;
 use varstotas_kernel::joinery::{SlideKind, WoodJoint, WoodJointKind};
 use varstotas_kernel::model::Definition;
 use varstotas_kernel::primitives::Primitive;
@@ -2283,11 +2284,18 @@ fn add_fitting(a: &Dynamic, kind: &str, m: &Map) -> R<Array> {
         let mut p = a.path.clone();
         p.push(inst_id(st, &a)?);
         let mut j = op(st.model.fitting_joint(kind, p))?;
+        let mut m = m.clone();
+        let style = match m.remove("style").map(|v| v.to_string()).as_deref() {
+            None | Some("round") => Style::Round,
+            Some("square") => Style::Square,
+            Some("bow" | "mushroom" | "hairpin") if kind != WoodJointKind::Caster => Style::Shaped,
+            Some(s) => return err(tr!("script-err-fitting-style", style = s.to_string())),
+        };
         if !m.is_empty() {
-            joint_params(&mut j, m)?;
+            joint_params(&mut j, &m)?;
             j.kind = kind;
         }
-        let paths = op(st.model.put_fitting_joint(&j))?;
+        let paths = op(st.model.put_fitting_joint_styled(&j, style))?;
         Ok(paths
             .into_iter()
             .filter_map(|p| p.split_last().map(|(id, parent)| dyn_ent(&parent.to_vec(), EntityRef::Instance(*id))))
