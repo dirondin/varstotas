@@ -5,7 +5,7 @@
 # creates a draft with all the files and then publishes it. With release immutability enabled
 # (Settings → General → Releases) the published release's files and its tag can no longer change.
 # Notes: .github/release-notes.md + the changes since the previous release. Then packages.yml
-# updates the package managers.
+# updates the package managers and pages.yml puts the build's web version on GitHub Pages.
 # release-1.2.3-rc1 (any version with a "-") makes a pre-release.
 name: Publish release
 
@@ -109,3 +109,13 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
     secrets: inherit
+
+  # the web version on GitHub Pages, for releases only
+  pages:
+    needs: publish
+    if: needs.publish.outputs.prerelease == 'false'
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

@@ -1,0 +1,58 @@
+# Puts the web version of a release-* tag on GitHub Pages: the `web-site` artifact of the tag's
+# latest successful Release build (release.yml → web.yml), as is (no rebuild). Called by Publish
+# release (publish.yml) for releases; run it by hand from a tag ("Use workflow from") to publish
+# that tag's site again. The github-pages environment allows the master branch and release-* tags.
+name: Web site
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pages:
+    name: GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Release build
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != tag || "$TAG" != release-* ]]; then
+            echo "::error::Run this workflow from a release-* tag (Use workflow from → Tags), not $GITHUB_REF_TYPE $TAG"
+            exit 1
+          fi
+          build="$(gh run list --workflow release.yml --commit "$GITHUB_SHA" --status success --limit 20 \
+            --json databaseId,headBranch --jq "[.[] | select(.headBranch == \"$TAG\")][0].databaseId // empty")"
+          if [[ -z "$build" ]]; then
+            echo "::error::No successful Release build of $TAG at ${GITHUB_SHA::7}"
+            exit 1
+          fi
+          echo "Release build: $GITHUB_SERVER_URL/$GH_REPO/actions/runs/$build"
+          echo "BUILD_RUN=$build" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-site
+          path: site
+          run-id: ${{ env.BUILD_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Summary
+        run: echo "Web version of [$TAG](${{ steps.deployment.outputs.page_url }}) from Release build run $BUILD_RUN" >> "$GITHUB_STEP_SUMMARY"

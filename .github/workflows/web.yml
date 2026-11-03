@@ -1,24 +1,23 @@
-# The web build: scripts/build-web.sh makes the static site (target/web/), published on GitHub
-# Pages for pushes to master and when run by hand. Pull requests only check that it builds.
-name: Web
+# The web build: scripts/build-web.sh makes the static site, tests/web/smoke.mjs checks it in
+# headless Chrome (WebGPU on SwiftShader: the runner has no GPU). Called by Release build
+# (release.yml) for a release-* tag; the site is kept as the run's `web-site` artifact, which
+# Publish release puts on GitHub Pages (pages.yml). Run by hand to try a branch.
+name: Web build
 
 on:
-  pull_request:
-  push:
-    branches: [master]
+  workflow_call:
   workflow_dispatch:
 
-concurrency:
-  group: web-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
 
 jobs:
-  build:
-    name: Build
+  web:
+    name: Web build and smoke test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,22 +38,19 @@ jobs:
         run: cargo clippy -p varstotas_app --target wasm32-unknown-unknown --locked -- -D warnings
       - name: Build
         run: scripts/build-web.sh
-      - uses: actions/upload-pages-artifact@v3
-        if: github.event_name != 'pull_request'
+      - uses: actions/setup-node@v4
         with:
+          node-version: 22
+      - name: Smoke test
+        run: node tests/web/smoke.mjs target/web target/web-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-smoke
+          path: target/web-smoke
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-site
           path: target/web
-
-  deploy:
-    name: Publish
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          if-no-files-found: error
