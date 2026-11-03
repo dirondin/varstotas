@@ -20,7 +20,6 @@ followed by `- ` lines; a Release build fails when its version has no section he
 - First public release for macOS, Windows and Linux
 - Direct modelling with inference snapping and exact typed values
 - Groups, components, tags, scenes, sections, dimensions and text
-- Furniture making: cut list and cutting diagrams, joinery, hardware, assembly steps and an instructions booklet
 - Preparing models for 3D printing, unfolding, sheets with scaled views, simple physics
 - PBR materials, a realistic real-time style and a GPU path tracer
 - Material and component libraries, online models and materials, parametric generators
