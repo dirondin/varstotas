@@ -226,6 +226,8 @@ menu-script-reference = Даведнік па скрыптах
 menu-script-reference-hint = Скрыпты, генератары і скрыпты кампанентаў: функцыі, уласцівасці, прыклады
 menu-licences = Ліцэнзіі…
 menu-licences-hint = Ліцэнзія Varstotas, кампаненты з адкрытым кодам, фарматы файлаў і анлайн-бібліятэкі з іх умовамі
+menu-release-notes = Што новага
+menu-release-notes-hint = Версіі Varstotas і што з'явілася ў кожнай
 menu-about = Пра Varstotas
 menu-increments = Прырашчэнні
 menu-all-on = Уключыць усе
@@ -5416,3 +5418,7 @@ physics-cloth-self = Не праходзіць праз сябе
 physics-cloth-self-hint = Складкі сутыкаюцца адна з адной (павольней).
 physics-cloth-undo = Тканіна
 physics-cloth-applied = Тканіна стала новай групай.
+
+## Help → What's New
+release-notes-title = Што новага
+release-notes-current = { $date }, гэтая версія

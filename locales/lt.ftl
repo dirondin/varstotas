@@ -226,6 +226,8 @@ menu-script-reference = Scenarijų žinynas
 menu-script-reference-hint = Scenarijai, generatoriai ir komponentų scenarijai: funkcijos, savybės, pavyzdžiai
 menu-licences = Licencijos…
 menu-licences-hint = Varstotas licencija, atvirojo kodo komponentai, failų formatai ir internetinės bibliotekos su jų sąlygomis
+menu-release-notes = Kas naujo
+menu-release-notes-hint = Varstotas versijos ir kas atsirado kiekvienoje
 menu-about = Apie Varstotas
 menu-increments = Žingsniai
 menu-all-on = Įjungti visus
@@ -5364,3 +5366,7 @@ physics-cloth-self = Nepraeina pro save
 physics-cloth-self-hint = Klostės susiduria tarpusavyje (lėčiau).
 physics-cloth-undo = Audinys
 physics-cloth-applied = Audinys tapo nauja grupe.
+
+## Help → What's New
+release-notes-title = Kas naujo
+release-notes-current = { $date }, ši versija

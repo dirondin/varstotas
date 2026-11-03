@@ -231,6 +231,8 @@ menu-script-reference = Справочник по скриптам
 menu-script-reference-hint = Скрипты, генераторы и скрипты компонентов: функции, свойства, примеры
 menu-licences = Лицензии…
 menu-licences-hint = Лицензия Varstotas, компоненты с открытым кодом, форматы файлов и онлайн-библиотеки с их условиями
+menu-release-notes = Что нового
+menu-release-notes-hint = Версии Varstotas и что появилось в каждой
 menu-about = О программе Varstotas
 menu-increments = Шаги
 menu-all-on = Все включить
@@ -5436,3 +5438,7 @@ physics-cloth-self = Не проходит сквозь себя
 physics-cloth-self-hint = Складки сталкиваются друг с другом (медленнее).
 physics-cloth-undo = Ткань
 physics-cloth-applied = Ткань стала новой группой.
+
+## Help → What's New
+release-notes-title = Что нового
+release-notes-current = { $date }, эта версия

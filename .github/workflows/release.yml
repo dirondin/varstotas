@@ -42,6 +42,11 @@ jobs:
             echo "::error::Tag $TAG does not match the workspace version $cargo_version in Cargo.toml (expected release-$cargo_version)"
             exit 1
           fi
+          # the release's notes (publish.yml) and Help → What's New come from CHANGELOG.md
+          if [[ -z "$(awk -v v="$cargo_version" '/^## /{f=($2==v); next} f && /^- /' CHANGELOG.md)" ]]; then
+            echo "::error::CHANGELOG.md has no section '## $cargo_version — <date>' with '- ' lines"
+            exit 1
+          fi
           # Flatpak is off (see flatpak.yml), and with it the metainfo checks
           # # Flathub shows the releases listed in the AppStream metadata
           # metainfo=packaging/flatpak/io.github.dirondin.Varstotas.metainfo.xml

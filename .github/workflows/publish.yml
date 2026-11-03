@@ -4,7 +4,7 @@
 # commit, takes that build's `release-files` artifact as is (no rebuild), checks SHA256SUMS.txt,
 # creates a draft with all the files and then publishes it. With release immutability enabled
 # (Settings → General → Releases) the published release's files and its tag can no longer change.
-# Notes: .github/release-notes.md + the changes since the previous release. Then packages.yml
+# Notes: the version's section of CHANGELOG.md + .github/release-notes.md (downloads). Then packages.yml
 # updates the package managers and pages.yml puts the build's web version on GitHub Pages.
 # release-1.2.3-rc1 (any version with a "-") makes a pre-release.
 name: Publish release
@@ -62,7 +62,10 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: .github
+          sparse-checkout: |
+            .github
+            CHANGELOG.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           name: release-files
@@ -86,12 +89,18 @@ jobs:
           echo "prerelease=$([[ "$VERSION" == *-* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Publish
         run: |
-          sed "s/{version}/$VERSION/g" .github/release-notes.md > notes.md
+          # what the version brought (its CHANGELOG.md section), then the downloads
+          awk -v v="$VERSION" '/^## /{f=($2==v); next} f' CHANGELOG.md > notes.md
+          if ! grep -q '^- ' notes.md; then
+            echo "::error::CHANGELOG.md has no section for $VERSION"
+            exit 1
+          fi
+          sed "s/{version}/$VERSION/g" .github/release-notes.md >> notes.md
           pre=()
           [[ "$VERSION" == *-* ]] && pre=(--prerelease)
           # all files are attached to a draft first: an immutable release cannot get them later
           gh release create "$TAG" dist/* --draft --verify-tag --title "Varstotas $VERSION" \
-            --notes-file notes.md --generate-notes "${pre[@]}"
+            --notes-file notes.md "${pre[@]}"
           gh release edit "$TAG" --draft=false
           url="$(gh release view "$TAG" --json url --jq .url)"
           immutable="$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq '.immutable // false')"

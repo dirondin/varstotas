@@ -612,6 +612,12 @@ impl VarstotasApp {
                     self.open_licences(crate::ui::licences::Tab::Varstotas);
                     ui.close();
                 }
+                let notes = ui.add(egui::Button::new(tr!("menu-release-notes")).selected(self.release_notes_open)).on_hover_text(tr!("menu-release-notes-hint"));
+                super::tray_lib::spot("menu:ReleaseNotes", notes.rect.center());
+                if notes.clicked() {
+                    self.actions.push(Action::ReleaseNotes);
+                    ui.close();
+                }
                 if ui.button(tr!("menu-about")).clicked() {
                     self.actions.push(Action::About);
                     ui.close();

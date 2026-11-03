@@ -347,6 +347,8 @@ pub enum Action {
     NextScene,
     PrevScene,
     About,
+    /// Help → What's New.
+    ReleaseNotes,
     StartScreen,
     Tutorial,
     ReportProblem,
@@ -548,6 +550,8 @@ pub struct VarstotasApp {
     pub(crate) confirm: Option<Pending>,
     pub(crate) tutorial: crate::ui::tutorial::TutorialWindow,
     pub(crate) show_about: bool,
+    /// Help → What's New is open.
+    pub(crate) release_notes_open: bool,
     pub(crate) about_icon: Option<egui::TextureHandle>,
     pub(crate) console: crate::ui::console::ConsoleState,
     pub(crate) script_help: crate::ui::script_help::ScriptHelp,
@@ -762,6 +766,7 @@ impl VarstotasApp {
             confirm: None,
             tutorial: Default::default(),
             show_about: false,
+            release_notes_open: false,
             about_icon: None,
             console: Default::default(),
             script_help: Default::default(),
@@ -1757,6 +1762,7 @@ impl VarstotasApp {
             }
             Action::Tutorial => { self.show_start = false; self.tutorial.open = true; }
             Action::About => self.show_about = true,
+            Action::ReleaseNotes => self.release_notes_open = true,
             Action::StartScreen => self.show_start = true,
             Action::ReportProblem => self.feedback.open = true,
             Action::Preferences => self.prefs_win.open = true,
@@ -2744,6 +2750,7 @@ impl eframe::App for VarstotasApp {
         self.app_help_window(&ctx);
         self.script_help_window(&ctx);
         self.licences_window(&ctx);
+        self.release_notes_window(&ctx);
         self.log_window(&ctx);
         self.gen_editor_window(&ctx);
         self.model_info_window(&ctx);

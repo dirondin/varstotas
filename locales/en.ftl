@@ -222,6 +222,8 @@ menu-script-reference = Script Reference
 menu-script-reference-hint = Scripts, generators and component scripts: functions, properties, examples
 menu-licences = Licences…
 menu-licences-hint = Varstotas's licence, the open-source components, file formats and online libraries with their terms
+menu-release-notes = What's New
+menu-release-notes-hint = The versions of Varstotas and what each brought
 menu-about = About Varstotas
 menu-increments = Increments
 menu-all-on = All On
@@ -5340,3 +5342,7 @@ physics-cloth-self = Does not pass through itself
 physics-cloth-self-hint = Folds collide with each other (slower).
 physics-cloth-undo = Cloth
 physics-cloth-applied = The cloth is a new group.
+
+## Help → What's New
+release-notes-title = What's New
+release-notes-current = { $date }, this version

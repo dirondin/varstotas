@@ -1,0 +1,9 @@
+# Help → What's New: the window with the versions from CHANGELOG.md.
+wait 5
+expect release_notes=false
+action click_spot menu:Help
+wait 5
+action click_spot menu:ReleaseNotes
+wait 10
+expect release_notes=true
+screenshot shots/release_notes.bmp
