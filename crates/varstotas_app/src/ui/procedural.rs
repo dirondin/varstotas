@@ -484,7 +484,7 @@ impl VarstotasApp {
         let (tx, rx) = std::sync::mpsc::channel();
         st.job = Some(Job { create, path: path.to_path_buf(), values, rx });
         st.error = None;
-        std::thread::spawn(move || {
+        crate::task::spawn(move || {
             let _ = tx.send(crate::mat_plugins::texture(&p, size, params, &name, width));
         });
     }

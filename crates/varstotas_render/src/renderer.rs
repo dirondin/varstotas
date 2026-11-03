@@ -1791,12 +1791,12 @@ impl Renderer {
     }
 
     /// The shown image (after `pt_resolve`), sRGB.
-    pub fn pt_image(&self, rs: &egui_wgpu::RenderState) -> Option<RgbaImage> {
+    pub fn pt_image(&self, rs: &egui_wgpu::RenderState) -> Option<crate::Pending<RgbaImage>> {
         self.pt.as_ref()?.read_image(rs)
     }
 
     /// The render as linear RGB with the exposure applied (for EXR): width, height, pixels.
-    pub fn pt_linear(&mut self, rs: &egui_wgpu::RenderState, denoise: bool) -> Option<(u32, u32, Vec<f32>)> {
+    pub fn pt_linear(&mut self, rs: &egui_wgpu::RenderState, denoise: bool) -> Option<crate::Pending<(u32, u32, Vec<f32>)>> {
         let pt = self.pt.as_mut()?;
         pt.read_linear(rs, [&self.bind_group, &self.face_textures.bind_group], denoise)
     }

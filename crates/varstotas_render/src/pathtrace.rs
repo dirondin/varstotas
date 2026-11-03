@@ -650,6 +650,10 @@ impl PathTracer {
             let sub = rs.queue.submit(Some(enc.finish()));
             let _ = rs.device.poll(wgpu::PollType::Wait { submission_index: Some(sub), timeout: None });
             job.samples += n;
+            // a browser does not wait for the GPU here: one batch a frame, or it gets them all
+            if cfg!(target_arch = "wasm32") {
+                break;
+            }
             // About BATCH_TIME per dispatch: few round trips, yet the UI stays responsive.
             let per = t.elapsed().as_secs_f64() / n as f64;
             if n == job.batch {
@@ -757,7 +761,7 @@ impl PathTracer {
     }
 
     /// The shown image as sRGB RGBA8 (after `resolve`).
-    pub fn read_image(&self, rs: &egui_wgpu::RenderState) -> Option<crate::RgbaImage> {
+    pub fn read_image(&self, rs: &egui_wgpu::RenderState) -> Option<crate::Pending<crate::RgbaImage>> {
         let job = self.job.as_ref()?;
         let [w, h] = job.size;
         let padded = (w * 4).div_ceil(256) * 256;
@@ -776,16 +780,20 @@ impl PathTracer {
             },
             wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
         );
-        let data = map_read(rs, &buf, enc)?;
-        let mut pixels = Vec::with_capacity((w * h * 4) as usize);
-        for r in 0..h as usize {
-            pixels.extend_from_slice(&data[r * padded as usize..][..w as usize * 4]);
-        }
-        Some(crate::RgbaImage { width: w, height: h, pixels })
+        let mut pending = crate::Pending::new(move |mut data: Vec<Vec<u8>>| {
+            let data = data.pop().unwrap_or_default();
+            let mut pixels = Vec::with_capacity((w * h * 4) as usize);
+            for r in 0..h as usize {
+                pixels.extend_from_slice(&data[r * padded as usize..][..w as usize * 4]);
+            }
+            crate::RgbaImage { width: w, height: h, pixels }
+        });
+        pending.read(&rs.queue, buf, enc);
+        Some(pending)
     }
 
     /// The image as linear RGB (exposure applied, no tone map), rows top to bottom.
-    pub fn read_linear(&mut self, rs: &egui_wgpu::RenderState, groups: [&wgpu::BindGroup; 2], denoise: bool) -> Option<(u32, u32, Vec<f32>)> {
+    pub fn read_linear(&mut self, rs: &egui_wgpu::RenderState, groups: [&wgpu::BindGroup; 2], denoise: bool) -> Option<crate::Pending<(u32, u32, Vec<f32>)>> {
         self.run_output(rs, groups, denoise, true);
         let job = self.job.as_ref()?;
         let [w, h] = job.size;
@@ -798,27 +806,22 @@ impl PathTracer {
         });
         let mut enc = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("varstotas pt readback") });
         enc.copy_buffer_to_buffer(&job.dn_a, 0, &buf, 0, size);
-        let data = map_read(rs, &buf, enc)?;
-        let px: &[[f32; 4]] = bytemuck::cast_slice(&data);
-        let rgb = px.iter().flat_map(|p| [p[0], p[1], p[2]]).collect();
-        // Leave the shown texture as it was.
-        Some((w, h, rgb))
+        let mut pending = crate::Pending::new(move |mut data: Vec<Vec<u8>>| {
+            let data = data.pop().unwrap_or_default();
+            let px: &[[f32; 4]] = bytemuck::cast_slice(&data);
+            let rgb = px.iter().flat_map(|p| [p[0], p[1], p[2]]).collect();
+            (w, h, rgb)
+        });
+        pending.read(&rs.queue, buf, enc);
+        Some(pending)
     }
 }
 
-/// Submit `enc` and read `buf` back.
+/// Submit `enc` and read `buf` back, waiting for the GPU (the denoiser's input; desktop only).
 fn map_read(rs: &egui_wgpu::RenderState, buf: &wgpu::Buffer, enc: wgpu::CommandEncoder) -> Option<Vec<u8>> {
-    let sub = rs.queue.submit(Some(enc.finish()));
-    let slice = buf.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |r| {
-        let _ = tx.send(r);
-    });
-    rs.device.poll(wgpu::PollType::Wait { submission_index: Some(sub), timeout: None }).ok()?;
-    rx.recv().ok()?.ok()?;
-    let data = slice.get_mapped_range().ok()?.to_vec();
-    buf.unmap();
-    Some(data)
+    let mut pending = crate::Pending::new(|mut data: Vec<Vec<u8>>| data.pop().unwrap_or_default());
+    pending.read(&rs.queue, buf.clone(), enc);
+    pending.wait(&rs.device).ok()
 }
 
 fn set_grade(u: &mut PtUniform, o: &PtOutput) {

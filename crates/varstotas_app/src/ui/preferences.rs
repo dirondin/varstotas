@@ -46,6 +46,11 @@ impl Section {
         Section::Toolbar,
     ];
 
+    /// The web build watches no Downloads folder (a page cannot read it).
+    fn available(self) -> bool {
+        !(cfg!(target_arch = "wasm32") && self == Section::Downloads)
+    }
+
     pub fn name(self) -> String {
         varstotas_i18n::tr(match self {
             Section::General => "prefs-section-general",
@@ -167,6 +172,10 @@ impl Default for ViewDefaults {
 
 /// A folder row: the path (or "default: …"), Choose…, Default, Show in Finder.
 fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: Option<PathBuf>, tip: &str) {
+    // a page cannot choose folders: the web build keeps its own
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
     ui.label(label).on_hover_text(tip);
     let shown = custom.clone().or(default);
     ui.horizontal(|ui| {
@@ -186,7 +195,8 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
         if ui.add_enabled(custom.is_some(), egui::Button::new(tr!("prefs-default"))).clicked() {
             *custom = None;
         }
-        if ui.add_enabled(shown.as_deref().is_some_and(Path::is_dir), egui::Button::new(tr!("prefs-show-in-finder"))).clicked()
+        if super::extensions::CAN_REVEAL
+            && ui.add_enabled(shown.as_deref().is_some_and(Path::is_dir), egui::Button::new(tr!("prefs-show-in-finder"))).clicked()
             && let Some(d) = &shown
         {
             crate::ui::extensions::reveal(d);
@@ -227,7 +237,7 @@ impl VarstotasApp {
                     super::tray_lib::spot("prefs_search", r.rect.center());
                     ui.add_space(4.0);
                     let search = self.prefs_win.search.clone();
-                    let shown: Vec<Section> = Section::ALL.into_iter().filter(|s| s.matches(&search)).collect();
+                    let shown: Vec<Section> = Section::ALL.into_iter().filter(|s| s.available() && s.matches(&search)).collect();
                     if !shown.is_empty() && !shown.contains(&self.prefs_win.section) {
                         self.prefs_win.section = shown[0];
                     }
@@ -417,7 +427,10 @@ impl VarstotasApp {
                 self.prefs_web_data(ui);
             }
         }
-        self.prefs_graphics(ui);
+        // the browser picks the GPU, and outside programs cannot reach a page
+        if cfg!(not(target_arch = "wasm32")) {
+            self.prefs_graphics(ui);
+        }
         if crate::appimage::running().is_some() {
             heading(ui, &tr!("prefs-appimage-menu"));
             if crate::appimage::installed() {
@@ -429,10 +442,12 @@ impl VarstotasApp {
             }
             note(ui, &tr!("prefs-appimage-note"));
         }
-        heading(ui, &tr!("prefs-bridge"));
-        let r = ui.checkbox(&mut self.prefs.bridge_external, tr!("prefs-bridge-external"));
-        super::tray_lib::spot("prefs:bridge_external", r.rect.center());
-        note(ui, &tr!("prefs-bridge-note"));
+        if cfg!(not(target_arch = "wasm32")) {
+            heading(ui, &tr!("prefs-bridge"));
+            let r = ui.checkbox(&mut self.prefs.bridge_external, tr!("prefs-bridge-external"));
+            super::tray_lib::spot("prefs:bridge_external", r.rect.center());
+            note(ui, &tr!("prefs-bridge-note"));
+        }
         heading(ui, &tr!("prefs-autosave"));
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.prefs.autosave, tr!("prefs-autosave-every"));
@@ -536,6 +551,10 @@ impl VarstotasApp {
             }
         });
         note(ui, &tr!("prefs-render-note"));
+        // no programs of the computer in a browser
+        if cfg!(target_arch = "wasm32") {
+            return;
+        }
 
         heading(ui, &tr!("prefs-programs"));
         ui.label(tr!("prefs-oidn"));

@@ -5,7 +5,7 @@
 
 use crate::document::guarded;
 use varstotas_kernel::Model;
-use varstotas_render::{Camera, ExportOptions, FaceStyle, Overlay3d, RenderStyle, Renderer};
+use varstotas_render::{Camera, ExportOptions, FaceStyle, Overlay3d, Pending, RenderStyle, Renderer, RgbaImage};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
@@ -28,6 +28,9 @@ pub struct Thumbs {
     /// The renderer could not be created: tiles keep their drawn edges.
     failed: bool,
     queue: VecDeque<Job>,
+    /// Rendered, on their way back from the GPU (a frame or more in a browser).
+    waiting: Vec<(Job, Pending<RgbaImage>)>,
+    /// Queued or waiting.
     queued: HashSet<String>,
     done: HashMap<String, egui::TextureHandle>,
     /// Thumbnails rendered (harness).
@@ -88,7 +91,7 @@ impl Thumbs {
 
     /// Render a few queued thumbnails (called once per frame).
     pub fn process(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        if self.queue.is_empty() {
+        if self.queue.is_empty() && self.waiting.is_empty() {
             return;
         }
         let Some(rs) = frame.wgpu_render_state() else { return };
@@ -106,31 +109,47 @@ impl Thumbs {
         }
         for _ in 0..PER_FRAME {
             let Some(job) = self.queue.pop_front() else { break };
-            self.queued.remove(&job.key);
             let renderer = self.renderer.as_mut().expect("renderer");
             match guarded(|| render(renderer, rs, &job.model)).and_then(|r| r) {
-                Ok(img) => {
-                    if let Some(p) = &job.disk {
-                        let _ = varstotas_kernel::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
-                        if let Err(e) = img.write_png(p) {
-                            log::warn!("thumbnail {}: {e}", p.display());
-                        }
-                    }
-                    let ci = egui::ColorImage::from_rgba_unmultiplied([img.width as usize, img.height as usize], &img.pixels);
-                    let t = ctx.load_texture(format!("thumb:{}", job.key), ci, egui::TextureOptions::LINEAR);
-                    self.done.insert(job.key, t);
-                    self.rendered += 1;
+                Ok(pending) => self.waiting.push((job, pending)),
+                Err(e) => {
+                    log::warn!("thumbnail {}: {e}", job.key);
+                    self.queued.remove(&job.key);
                 }
-                Err(e) => log::warn!("thumbnail {}: {e}", job.key),
+            }
+        }
+        for (job, mut pending) in std::mem::take(&mut self.waiting) {
+            match pending.poll(&rs.device, true) {
+                None => self.waiting.push((job, pending)),
+                Some(r) => {
+                    self.queued.remove(&job.key);
+                    match r {
+                        Ok(img) => self.finish(ctx, job, img),
+                        Err(e) => log::warn!("thumbnail {}: {e}", job.key),
+                    }
+                }
             }
         }
         ctx.request_repaint();
+    }
+
+    fn finish(&mut self, ctx: &egui::Context, job: Job, img: RgbaImage) {
+        if let Some(p) = &job.disk {
+            let _ = varstotas_kernel::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
+            if let Err(e) = img.write_png(p) {
+                log::warn!("thumbnail {}: {e}", p.display());
+            }
+        }
+        let ci = egui::ColorImage::from_rgba_unmultiplied([img.width as usize, img.height as usize], &img.pixels);
+        let t = ctx.load_texture(format!("thumb:{}", job.key), ci, egui::TextureOptions::LINEAR);
+        self.done.insert(job.key, t);
+        self.rendered += 1;
     }
 }
 
 /// `model` drawn Shaded with Textures from the iso direction, fitted, on a transparent
 /// background.
-fn render(renderer: &mut Renderer, rs: &egui_wgpu::RenderState, model: &Model) -> Result<varstotas_render::RgbaImage, String> {
+fn render(renderer: &mut Renderer, rs: &egui_wgpu::RenderState, model: &Model) -> Result<Pending<RgbaImage>, String> {
     let b = model.bounds().ok_or("empty model")?; // i18n-ignore
     let tess = crate::scene_builder::tessellate_model(model);
     let params = crate::scene_builder::BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Shaded, textures: true, prev_origin: None };
@@ -144,5 +163,5 @@ fn render(renderer: &mut Renderer, rs: &egui_wgpu::RenderState, model: &Model) -
     camera.zoom_extents(b.min, b.max, 1.0);
     let style = RenderStyle { face_style: FaceStyle::Shaded, show_axes: false, grid: None, shadows: None, ..RenderStyle::default() };
     let opts = ExportOptions { transparent_background: true, line_scale: 1.0, show_selection: false, show_context_dimming: false };
-    renderer.render_to_image(rs, &camera, &Overlay3d::default(), &style, [SIDE, SIDE], &opts).map_err(|e| e.to_string())
+    renderer.start_image(rs, &camera, &Overlay3d::default(), &style, [SIDE, SIDE], &opts).map_err(|e| e.to_string())
 }

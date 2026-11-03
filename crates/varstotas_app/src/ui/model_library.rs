@@ -384,7 +384,7 @@ impl VarstotasApp {
     pub(crate) fn models_download_in_browser(&mut self, a: &ModelAsset) {
         self.downloads_expect(crate::downloads::Expect::from_asset(a));
         let page = a.page.clone();
-        std::thread::spawn(move || {
+        crate::task::spawn(move || {
             let link = crate::online_mats::fetch(&page).ok().and_then(|h| crate::online_models::quaternius_download(&String::from_utf8_lossy(&h)));
             open_url(link.as_deref().unwrap_or(&page));
         });

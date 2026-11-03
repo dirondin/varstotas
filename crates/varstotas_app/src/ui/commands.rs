@@ -146,7 +146,14 @@ impl Cmd {
         v.extend(crate::ui::tray::TRAY_CARDS.map(Card));
         v.extend(WINDOW_MENU.into_iter().flatten());
         v.extend([PrintRepair, PrintAnalysis, PrintBed, PrintSplit, PrintExport]);
+        v.retain(|c| c.available());
         v
+    }
+
+    /// Whether the build has the command: the web build has no quitting, no FBX import (a C
+    /// library) and no online libraries (no downloads from a page).
+    pub fn available(self) -> bool {
+        !(cfg!(target_arch = "wasm32") && matches!(self, Cmd::Quit | Cmd::ImportFbx | Cmd::Library3d | Cmd::MaterialsOnline))
     }
 
     /// Its menu (the headings of Preferences → Toolbar's reserve); `None`: in no menu (the

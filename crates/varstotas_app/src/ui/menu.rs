@@ -82,6 +82,9 @@ impl VarstotasApp {
     }
 
     pub(super) fn cmd_item_as(&mut self, ui: &mut Ui, c: Cmd, label: &str) {
+        if !c.available() {
+            return;
+        }
         let response = icon_row(ui, Some(c.icon()), label, c.shortcut().as_deref(), c.enabled(self), false);
         super::tray_lib::spot(format!("cmd:{}", c.key()), response.rect.center());
         if response.clicked() {
@@ -267,8 +270,10 @@ impl VarstotasApp {
                             Err(e) => { ui.label(tr!("template-folder-error", error = e.to_string())); }
                         }
                     }
-                    ui.separator();
-                    if ui.add_enabled(dir.is_some(), Button::new(tr!("template-open-folder"))).clicked() {
+                    if super::extensions::CAN_REVEAL {
+                        ui.separator();
+                    }
+                    if super::extensions::CAN_REVEAL && ui.add_enabled(dir.is_some(), Button::new(tr!("template-open-folder"))).clicked() {
                         if let Some(dir) = dir { super::extensions::reveal(&dir); }
                         ui.close();
                     }
@@ -327,8 +332,10 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 self.cmd_item(ui, Cmd::RunScript);
-                ui.separator();
-                self.cmd_item(ui, Cmd::Quit);
+                if Cmd::Quit.available() {
+                    ui.separator();
+                    self.cmd_item(ui, Cmd::Quit);
+                }
             });
             super::tray_lib::spot("menu:File", file_menu.response.rect.center());
 
@@ -522,8 +529,11 @@ impl VarstotasApp {
 
             ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));
 
-            let extensions_menu = ui.menu_button(tr!("menu-extensions"), |ui| self.extensions_menu(ui));
-            super::tray_lib::spot("menu:Plugins",extensions_menu.response.rect.center());
+            // plugins are programs of their own: none in a browser
+            if cfg!(not(target_arch = "wasm32")) {
+                let extensions_menu = ui.menu_button(tr!("menu-extensions"), |ui| self.extensions_menu(ui));
+                super::tray_lib::spot("menu:Plugins", extensions_menu.response.rect.center());
+            }
 
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
@@ -545,11 +555,17 @@ impl VarstotasApp {
                 });
                 ui.separator();
                 use Cmd::*;
+                let mut after_separator = false;
                 for c in super::commands::WINDOW_MENU {
-                    let Some(c) = c else {
-                        ui.separator();
+                    let Some(c) = c.filter(|c| c.available()) else {
+                        // one separator where a group is left out
+                        if c.is_none() && !after_separator {
+                            ui.separator();
+                            after_separator = true;
+                        }
                         continue;
                     };
+                    after_separator = false;
                     let label = match c {
                         Sheets => tr!("menu-sheets"),
                         PrintCheck => tr!("print-title"),

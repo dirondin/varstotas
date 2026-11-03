@@ -9,6 +9,7 @@ use super::{
     Camera, FrameCounts, HL_HIDE_DIMMED, HL_HIDE_SELECTED, Overlay3d, PassOpts, RenderStyle, Renderer, DEPTH_FORMAT,
     SAMPLES,
 };
+use crate::readback::Pending;
 use crate::wgpu;
 
 /// Largest supported export side in pixels (16384² RGBA8 = 1 GiB of CPU memory).
@@ -222,6 +223,20 @@ impl Renderer {
         size: [u32; 2],
         opts: &ExportOptions,
     ) -> Result<RgbaImage, ExportError> {
+        self.start_image(rs, camera, overlay, style, size, opts)?.wait(&rs.device).map_err(ExportError::Gpu)
+    }
+
+    /// [`Self::render_to_image`] without waiting for the GPU: the image comes from the returned
+    /// [`Pending`] once its tiles are read back (a frame or more later in a browser).
+    pub fn start_image(
+        &mut self,
+        rs: &egui_wgpu::RenderState,
+        camera: &Camera,
+        overlay: &Overlay3d,
+        style: &RenderStyle,
+        size: [u32; 2],
+        opts: &ExportOptions,
+    ) -> Result<Pending<RgbaImage>, ExportError> {
         let [w, h] = size;
         if w == 0 || h == 0 {
             return Err(ExportError::EmptySize);
@@ -257,12 +272,6 @@ impl Renderer {
             (msaa.create_view(&Default::default()), depth.create_view(&Default::default()), resolve.create_view(&Default::default()));
         let row_bytes = tw * 4;
         let padded_row = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let readback = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("varstotas export readback"),
-            size: padded_row as u64 * th as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
 
         self.update_shadow_map(rs, style);
         self.update_env(rs, style);
@@ -273,67 +282,70 @@ impl Renderer {
             .ensure_post(rs, style)
             .then(|| super::post::PostTargets::new(device, self.post.as_ref().expect("post"), [tw, th]));
         let pass = PassOpts { ppp, background: !opts.transparent_background, selection_tint: opts.show_selection };
-        let mut pixels = vec![0u8; w as usize * h as usize * 4];
+        // each tile into a buffer of its own, all put together once they are read back
+        let mut tiles = Vec::new();
         for y0 in (0..h).step_by(th as usize) {
             for x0 in (0..w).step_by(tw as usize) {
-                let t = tile_transform(w, h, x0, y0, tw, th);
-                let globals = self.globals(camera, style, size, [tw, th], ppp, t, hide_mask);
-                rs.queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
-                if post_targets.is_some() {
-                    self.write_post_uniform(rs, style, &globals, [tw, th], ppp);
-                }
-                let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("varstotas export"),
-                });
-                self.encode_scene(&mut enc, &msaa_view, &depth_view, &resolve_view, post_targets.as_ref(), style, &counts, pass);
-                let (cw, ch) = ((w - x0).min(tw), (h - y0).min(th));
-                enc.copy_texture_to_buffer(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &resolve,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::TexelCopyBufferInfo {
-                        buffer: &readback,
-                        layout: wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(padded_row),
-                            rows_per_image: Some(th),
-                        },
-                    },
-                    wgpu::Extent3d { width: cw, height: ch, depth_or_array_layers: 1 },
-                );
-                let submission = rs.queue.submit(Some(enc.finish()));
-                let slice = readback.slice(..);
-                let (tx, rx) = std::sync::mpsc::channel();
-                slice.map_async(wgpu::MapMode::Read, move |r| {
-                    let _ = tx.send(r);
-                });
-                device
-                    .poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None })
-                    .map_err(|e| ExportError::Gpu(e.to_string()))?;
-                rx.recv()
-                    .map_err(|e| ExportError::Gpu(e.to_string()))?
-                    .map_err(|e| ExportError::Gpu(e.to_string()))?;
-                {
-                    let data = slice.get_mapped_range().map_err(|e| ExportError::Gpu(e.to_string()))?;
-                    let row = cw as usize * 4;
-                    for r in 0..ch as usize {
-                        let src = &data[r * padded_row as usize..][..row];
-                        let dst = ((y0 as usize + r) * w as usize + x0 as usize) * 4;
-                        pixels[dst..dst + row].copy_from_slice(src);
-                    }
-                }
-                readback.unmap();
+                tiles.push((x0, y0, (w - x0).min(tw), (h - y0).min(th)));
             }
         }
-        if opts.transparent_background {
-            unpremultiply(&mut pixels, !self.manual_gamma);
-        } else {
-            pixels.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[3] = 255);
+        let (transparent, manual_gamma) = (opts.transparent_background, self.manual_gamma);
+        let placed = tiles.clone();
+        let mut pending = Pending::new(move |data: Vec<Vec<u8>>| {
+            let mut pixels = vec![0u8; w as usize * h as usize * 4];
+            for ((x0, y0, cw, ch), data) in placed.into_iter().zip(data) {
+                let row = cw as usize * 4;
+                for r in 0..ch as usize {
+                    let src = &data[r * padded_row as usize..][..row];
+                    let dst = ((y0 as usize + r) * w as usize + x0 as usize) * 4;
+                    pixels[dst..dst + row].copy_from_slice(src);
+                }
+            }
+            if transparent {
+                unpremultiply(&mut pixels, !manual_gamma);
+            } else {
+                pixels.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[3] = 255);
+            }
+            RgbaImage { width: w, height: h, pixels }
+        });
+        for (x0, y0, cw, ch) in tiles {
+            let t = tile_transform(w, h, x0, y0, tw, th);
+            let globals = self.globals(camera, style, size, [tw, th], ppp, t, hide_mask);
+            rs.queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
+            if post_targets.is_some() {
+                self.write_post_uniform(rs, style, &globals, [tw, th], ppp);
+            }
+            let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("varstotas export"),
+            });
+            self.encode_scene(&mut enc, &msaa_view, &depth_view, &resolve_view, post_targets.as_ref(), style, &counts, pass);
+            let readback = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("varstotas export readback"),
+                size: padded_row as u64 * th as u64,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            enc.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &resolve,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &readback,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded_row),
+                        rows_per_image: Some(th),
+                    },
+                },
+                wgpu::Extent3d { width: cw, height: ch, depth_or_array_layers: 1 },
+            );
+            // the queue keeps the order: the next tile draws over the targets after this copy
+            pending.read(&rs.queue, readback, enc);
         }
-        Ok(RgbaImage { width: w, height: h, pixels })
+        Ok(pending)
     }
 }
 

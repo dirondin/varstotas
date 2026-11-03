@@ -28,6 +28,14 @@ impl Shortcut {
     const fn cmd_shift(key: Key) -> Self {
         Self { key, cmd: true, shift: true, alt: false }
     }
+    const fn alt(key: Key) -> Self {
+        Self { key, cmd: false, shift: false, alt: true }
+    }
+    /// `Cmd+key`, or `Alt+key` in the web build where the browser keeps that one to itself
+    /// (`Cmd+N` new window, `Cmd+T` new tab).
+    const fn cmd_or_web_alt(key: Key) -> Self {
+        if cfg!(target_arch = "wasm32") { Self::alt(key) } else { Self::cmd(key) }
+    }
     const fn shift(key: Key) -> Self {
         Self { key, cmd: false, shift: true, alt: false }
     }
@@ -170,9 +178,10 @@ impl KeyCmd {
         }
     }
 
-    /// Commands first, then every tool.
+    /// Commands first, then every tool (the web build has no Quit).
     pub fn all() -> Vec<KeyCmd> {
-        COMMANDS.into_iter().chain(ToolId::ALL.into_iter().map(KeyCmd::Tool)).collect()
+        let web = cfg!(target_arch = "wasm32");
+        COMMANDS.into_iter().filter(|c| !(web && *c == KeyCmd::Quit)).chain(ToolId::ALL.into_iter().map(KeyCmd::Tool)).collect()
     }
 
     /// Id in `Prefs::shortcuts`.
@@ -206,7 +215,7 @@ impl KeyCmd {
     pub fn defaults(self) -> Vec<Shortcut> {
         let one = |s| vec![s];
         match self {
-            KeyCmd::New => one(Shortcut::cmd(Key::N)),
+            KeyCmd::New => one(Shortcut::cmd_or_web_alt(Key::N)),
             KeyCmd::Open => one(Shortcut::cmd(Key::O)),
             KeyCmd::Save => one(Shortcut::cmd(Key::S)),
             KeyCmd::SaveAs => one(Shortcut::cmd_shift(Key::S)),
@@ -214,7 +223,7 @@ impl KeyCmd {
             KeyCmd::Undo => one(Shortcut::cmd(Key::Z)),
             KeyCmd::Redo => vec![Shortcut::cmd_shift(Key::Z), Shortcut::cmd(Key::Y)],
             KeyCmd::SelectAll => one(Shortcut::cmd(Key::A)),
-            KeyCmd::SelectNone => one(Shortcut::cmd(Key::T)),
+            KeyCmd::SelectNone => one(Shortcut::cmd_or_web_alt(Key::T)),
             KeyCmd::MakeGroup => one(Shortcut::plain(Key::G)),
             KeyCmd::ZoomExtents => one(Shortcut::shift(Key::Z)),
             KeyCmd::ToggleSnapping => one(Shortcut::shift(Key::S)),

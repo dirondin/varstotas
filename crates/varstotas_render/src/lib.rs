@@ -526,6 +526,8 @@ mod bvh;
 mod oidn;
 pub use oidn::{available as oidn_available, library as oidn_library};
 mod pathtrace;
+mod readback;
+pub use readback::Pending;
 pub use pathtrace::{PtLight, PtLightKind, PtOutput, PtSettings, white_balance};
 mod renderer;
 mod textures;

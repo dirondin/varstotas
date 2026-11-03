@@ -132,7 +132,7 @@ impl VarstotasApp {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         self.printing.error = None;
-        std::thread::spawn(move || {
+        crate::task::spawn(move || {
             let result = guarded(|| {
                 let summary = if repair {
                     Some(

@@ -393,6 +393,7 @@ impl VarstotasApp {
                 ui.close();
             }
             if let Some(f) = &it.file
+                && crate::ui::extensions::CAN_REVEAL
                 && ui.button(tr!("gen-show-in-finder")).clicked()
             {
                 crate::ui::extensions::reveal(f);

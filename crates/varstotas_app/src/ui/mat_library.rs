@@ -384,7 +384,7 @@ impl VarstotasApp {
                     default_dir = true;
                     ui.close();
                 }
-                if ui.button(tr!("library-show-in-finder")).clicked() {
+                if crate::ui::extensions::CAN_REVEAL && ui.button(tr!("library-show-in-finder")).clicked() {
                     reveal_root = true;
                     ui.close();
                 }
@@ -568,7 +568,7 @@ impl VarstotasApp {
                 continue;
             }
             let mut hide = false;
-            let (folded, clicked, title) = section(ui, &mut self.prefs.library_collapsed, &sec.key, &sec.title, &sec.tip, sec.dir.is_some(), sec.fold_default, Some(sec.list.len()), |ui| {
+            let (folded, clicked, title) = section(ui, &mut self.prefs.library_collapsed, &sec.key, &sec.title, &sec.tip, sec.dir.is_some() && crate::ui::extensions::CAN_REVEAL, sec.fold_default, Some(sec.list.len()), |ui| {
                 if sec.examples {
                     let r = super::icon_button(ui, super::icons::Icon::EyeOff, false, 18.0).on_hover_text(tr!("library-hide-examples"));
                     super::tray_lib::spot("hide:mat:Examples", r.rect.center());
@@ -621,7 +621,7 @@ impl VarstotasApp {
                                 act = Some(MatAct::Rename(super::library::RenameTarget::MatFile(p.clone()), m.name.clone()));
                                 ui.close();
                             }
-                            if ui.button(tr!("library-show-in-finder")).clicked() {
+                            if crate::ui::extensions::CAN_REVEAL && ui.button(tr!("library-show-in-finder")).clicked() {
                                 crate::ui::extensions::reveal(p);
                                 ui.close();
                             }

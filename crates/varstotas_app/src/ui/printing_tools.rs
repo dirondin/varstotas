@@ -221,7 +221,7 @@ impl VarstotasApp {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         self.printing.error = None;
-        std::thread::spawn(move || {
+        crate::task::spawn(move || {
             let r = guarded(|| {
                 let result = if to_bed {
                     model.print_split_to_bed(&scope, &bed)
@@ -262,7 +262,7 @@ impl VarstotasApp {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         self.printing.error = None;
-        std::thread::spawn(move || {
+        crate::task::spawn(move || {
             let result = guarded(|| {
                 let mut snapshot = model
                     .print_export_model(scope.as_ref())

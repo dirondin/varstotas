@@ -41,6 +41,7 @@ mod plugins;
 mod scene_builder;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // no command line in the web build
 mod startup;
+mod task;
 mod templates;
 mod text3d;
 mod textures;

@@ -83,8 +83,35 @@ pub struct Viewport {
     pub export: Option<crate::app::ExportJob>,
     /// Outcome of the last export (path written or error), taken by the app.
     pub export_result: Option<Result<std::path::PathBuf, String>>,
+    /// The export's image on its way back from the GPU.
+    exporting: Option<Readout>,
     /// The path traced render of the Render window.
     pub pt: Option<PtJob>,
+}
+
+/// A picture read back from the GPU, then written to `path`: at once on the desktop, a frame or
+/// more after it was asked for in a browser (see `varstotas_render::Pending`).
+struct Readout {
+    image: ReadoutImage,
+    path: std::path::PathBuf,
+}
+
+enum ReadoutImage {
+    /// Saved as PNG.
+    Rgba(varstotas_render::Pending<varstotas_render::RgbaImage>),
+    /// Linear float (the render's EXR): width, height, RGB.
+    Linear(varstotas_render::Pending<(u32, u32, Vec<f32>)>),
+}
+
+impl Readout {
+    /// The file written, or why not, once the picture is in.
+    fn poll(&mut self, device: &varstotas_render::wgpu::Device) -> Option<Result<std::path::PathBuf, String>> {
+        let bytes = match &mut self.image {
+            ReadoutImage::Rgba(p) => p.poll(device, true)?.and_then(|img| img.encode_png(None).map_err(|e| e.to_string())),
+            ReadoutImage::Linear(p) => p.poll(device, true)?.map(|(w, h, rgb)| varstotas_render::encode_exr(w, h, &rgb)),
+        };
+        Some(bytes.and_then(|b| varstotas_kernel::io::atomic_write(&self.path, b).map_err(|e| e.to_string())).map(|()| self.path.clone()))
+    }
 }
 
 /// A path traced render (Window → Render), advanced by every `paint` while it runs.
@@ -112,6 +139,8 @@ pub struct PtJob {
     output: Option<varstotas_render::PtOutput>,
     /// Save the image at the next paint: `.exr` = linear float, else PNG.
     pub save: Option<std::path::PathBuf>,
+    /// The image being saved, on its way back from the GPU.
+    saving: Option<Readout>,
     pub saved: Option<Result<std::path::PathBuf, String>>,
 }
 
@@ -133,6 +162,7 @@ impl PtJob {
             denoised: false,
             output: None,
             save: None,
+            saving: None,
             saved: None,
         }
     }
@@ -163,6 +193,7 @@ impl Default for Viewport {
             checker: false,
             export: None,
             export_result: None,
+            exporting: None,
             pt: None,
         }
     }
@@ -237,7 +268,7 @@ impl Viewport {
                         self.tess_version = Some(doc.model_version);
                         // Freeing 100k+ tessellated faces takes milliseconds: do it off the UI thread.
                         if old.faces.len() + old.edges.len() > 10_000 {
-                            std::thread::spawn(move || drop(old));
+                            crate::task::spawn(move || drop(old));
                         }
                     }
                     let t1 = web_time::Instant::now();
@@ -390,18 +421,24 @@ impl Viewport {
                     }
                     if let Some(path) = job.save.take() {
                         let exr = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("exr"));
-                        let r = if exr {
-                            renderer
-                                .pt_linear(rs, job.denoised)
-                                .ok_or_else(|| tr!("view-nothing-rendered"))
-                                .and_then(|(w, h, rgb)| varstotas_kernel::io::atomic_write(&path, varstotas_render::encode_exr(w, h, &rgb)).map_err(|e| e.to_string()))
+                        let image = if exr {
+                            renderer.pt_linear(rs, job.denoised).map(ReadoutImage::Linear)
                         } else {
-                            renderer
-                                .pt_image(rs)
-                                .ok_or_else(|| tr!("view-nothing-rendered"))
-                                .and_then(|img| img.encode_png(None).and_then(|png| varstotas_kernel::io::atomic_write(&path, png)).map_err(|e| e.to_string()))
+                            renderer.pt_image(rs).map(ReadoutImage::Rgba)
                         };
-                        job.saved = Some(r.map(|()| path));
+                        match image {
+                            Some(image) => job.saving = Some(Readout { image, path }),
+                            None => job.saved = Some(Err(tr!("view-nothing-rendered"))),
+                        }
+                    }
+                    if let Some(r) = job.saving.as_mut() {
+                        match r.poll(&rs.device) {
+                            Some(res) => {
+                                job.saved = Some(res);
+                                job.saving = None;
+                            }
+                            None => ui.ctx().request_repaint(),
+                        }
                     }
                 }
                 if let Some(job) = self.export.take_if(|_| active) {
@@ -412,11 +449,19 @@ impl Viewport {
                         show_context_dimming: true,
                     };
                     let style = RenderStyle { show_axes: style.show_axes && job.axes, grid: None, ..style.clone() };
-                    let r = guarded(|| renderer.render_to_image(rs, &job.camera, &job.overlay, &style, job.size, &opts))
-                        .and_then(|r| r.map_err(|e| e.to_string()))
-                        .and_then(|img| img.encode_png(None).and_then(|png| varstotas_kernel::io::atomic_write(&job.path, png)).map_err(|e| e.to_string()))
-                        .map(|()| job.path.clone());
-                    self.export_result = Some(r);
+                    match guarded(|| renderer.start_image(rs, &job.camera, &job.overlay, &style, job.size, &opts)).and_then(|r| r.map_err(|e| e.to_string())) {
+                        Ok(p) => self.exporting = Some(Readout { image: ReadoutImage::Rgba(p), path: job.path }),
+                        Err(e) => self.export_result = Some(Err(e)),
+                    }
+                }
+                if let Some(r) = self.exporting.as_mut() {
+                    match r.poll(&rs.device) {
+                        Some(res) => {
+                            self.export_result = Some(res);
+                            self.exporting = None;
+                        }
+                        None => ui.ctx().request_repaint(),
+                    }
                 }
                 match guarded(|| renderer.render(rs, camera, overlay3d, style, size_px, ppp)) {
                     Ok(tex) => {

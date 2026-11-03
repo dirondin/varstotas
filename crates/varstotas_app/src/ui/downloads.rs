@@ -144,7 +144,7 @@ impl VarstotasApp {
         let importers = self.model_importers();
         let (tx, rx) = std::sync::mpsc::channel();
         self.models.dl.importing = Some(rx);
-        std::thread::spawn(move || {
+        crate::task::spawn(move || {
             let res = import_offer(&o, &lib, &work, &importers);
             let _ = tx.send((o, res));
         });

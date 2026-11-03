@@ -129,7 +129,9 @@ impl VarstotasApp {
             t_ctx.request_repaint();
             ok
         };
-        let work: Box<dyn FnOnce() -> Result<(), String> + Send> = match self.physics.mode {
+        // one step of the run: more to come, or done (a thread's loop on the desktop, a call at
+        // a time in the web build)
+        let work: Box<dyn FnMut() -> Result<bool, String> + Send> = match self.physics.mode {
             PhysicsMode::Drop => {
                 bodies = self.physics_bodies();
                 if bodies.is_empty() {
@@ -137,15 +139,14 @@ impl VarstotasApp {
                     return;
                 }
                 let (t_bodies, settings) = (bodies.clone(), self.physics.settings.clone());
+                let mut sim = None;
                 Box::new(move || {
-                    let mut sim = DropSim::new(&model, &t_path, &t_bodies, settings).map_err(|e| e.to_string())?;
-                    loop {
-                        let frame = sim.step(STEPS_PER_FRAME);
-                        let done = frame.done;
-                        if !send(Shot::Drop(frame)) || done || t_stop.load(Ordering::Relaxed) {
-                            return Ok(());
-                        }
+                    if sim.is_none() {
+                        sim = Some(DropSim::new(&model, &t_path, &t_bodies, settings.clone()).map_err(|e| e.to_string())?);
                     }
+                    let frame = sim.as_mut().expect("made").step(STEPS_PER_FRAME);
+                    let done = frame.done;
+                    Ok(send(Shot::Drop(frame)) && !done && !t_stop.load(Ordering::Relaxed))
                 })
             }
             PhysicsMode::Cloth => {
@@ -158,32 +159,38 @@ impl VarstotasApp {
                     }
                 };
                 cloth = Some(src.clone());
+                let parent = model.transform_at(&t_path);
+                let (mut sim, mut sent) = (None, None::<Instant>);
                 Box::new(move || {
-                    let mut sim = ClothSim::new(&model, &src, settings).map_err(|e| e.to_string())?;
-                    let parent = model.transform_at(&t_path);
-                    let mut sent: Option<Instant> = None;
-                    loop {
-                        let f = sim.step(STEPS_PER_FRAME);
-                        let last = f.done || t_stop.load(Ordering::Relaxed);
-                        if last || sent.is_none_or(|t| t.elapsed() >= CLOTH_FRAME_EVERY) {
-                            sent = Some(Instant::now());
-                            let mesh = cloth_mesh(&src, &sim.grid, &f.positions, parent);
-                            if !send(Shot::Cloth { mesh: Box::new(mesh), time: f.time, done: f.done }) {
-                                return Ok(());
-                            }
-                        }
-                        if last {
-                            return Ok(());
+                    if sim.is_none() {
+                        sim = Some(ClothSim::new(&model, &src, settings.clone()).map_err(|e| e.to_string())?);
+                    }
+                    let sim = sim.as_mut().expect("made");
+                    let f = sim.step(STEPS_PER_FRAME);
+                    let last = f.done || t_stop.load(Ordering::Relaxed);
+                    if last || sent.is_none_or(|t| t.elapsed() >= CLOTH_FRAME_EVERY) {
+                        sent = Some(Instant::now());
+                        let mesh = cloth_mesh(&src, &sim.grid, &f.positions, parent);
+                        if !send(Shot::Cloth { mesh: Box::new(mesh), time: f.time, done: f.done }) {
+                            return Ok(false);
                         }
                     }
+                    Ok(!last)
                 })
             }
         };
-        std::thread::spawn(move || {
-            if let Err(e) = crate::document::guarded(work).and_then(|r| r) {
-                let _ = err_tx.send(Err(e));
+        let mut work = work;
+        crate::task::spawn_steps(move || match crate::document::guarded(&mut work).and_then(|r| r) {
+            Ok(true) => true,
+            Ok(false) => {
+                err_ctx.request_repaint();
+                false
             }
-            err_ctx.request_repaint();
+            Err(e) => {
+                let _ = err_tx.send(Err(e));
+                err_ctx.request_repaint();
+                false
+            }
         });
         let selection = self.doc.selection.clone();
         if cloth.is_some() {

@@ -382,7 +382,7 @@ impl VarstotasApp {
         let mut hide = None;
         let unused = if folder == DOCUMENT_FOLDER { self.unused_defs() } else { 0 };
         let mut purge = false;
-        let (folded, clicked, title) = super::tray_lib::section(ui, &mut self.prefs.library_collapsed, folder, &title, &tip, link, false, Some(count), |ui| {
+        let (folded, clicked, title) = super::tray_lib::section(ui, &mut self.prefs.library_collapsed, folder, &title, &tip, link && crate::ui::extensions::CAN_REVEAL, false, Some(count), |ui| {
             if folder == DOCUMENT_FOLDER {
                 purge = super::tray_lib::purge_button(ui, "doc", "components", unused);
             }
@@ -1001,7 +1001,7 @@ impl VarstotasApp {
                     default_dir = true;
                     ui.close();
                 }
-                if ui.button(tr!("library-show-in-finder")).clicked() {
+                if crate::ui::extensions::CAN_REVEAL && ui.button(tr!("library-show-in-finder")).clicked() {
                     reveal_root = true;
                     ui.close();
                 }
@@ -1172,7 +1172,7 @@ impl VarstotasApp {
                                 rename = Some((RenameTarget::File(it.path.clone()), it.name.clone()));
                                 ui.close();
                             }
-                            if ui.button(tr!("library-show-in-finder")).clicked() {
+                            if crate::ui::extensions::CAN_REVEAL && ui.button(tr!("library-show-in-finder")).clicked() {
                                 crate::ui::extensions::reveal(&it.path);
                                 ui.close();
                             }

@@ -423,6 +423,9 @@ impl VarstotasApp {
 pub(crate) static LAST_REVEALED: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
 
 /// Show a folder in Finder / Explorer / the file manager.
+/// A file manager to show folders in: none in a browser, where the buttons are left out.
+pub(crate) const CAN_REVEAL: bool = cfg!(not(target_arch = "wasm32"));
+
 pub(crate) fn reveal(dir: &std::path::Path) {
     let _ = varstotas_kernel::fs::create_dir_all(dir);
     if let Ok(mut l) = LAST_REVEALED.lock() {

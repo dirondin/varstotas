@@ -209,7 +209,7 @@ impl VarstotasApp {
             Some(out) => {
                 let (tx, rx) = std::sync::mpsc::channel();
                 let (dir, fps) = (run.dir.clone(), run.fps);
-                std::thread::spawn(move || {
+                crate::task::spawn(move || {
                     let r = encode_gif(&dir, n, fps, &out).map(|()| out);
                     let _ = varstotas_kernel::fs::remove_dir_all(&dir);
                     let _ = tx.send(r);
