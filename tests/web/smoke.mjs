@@ -116,8 +116,9 @@ await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: dow
 await send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
 
 await send("Page.navigate", { url });
-await sleep(1000);
-check(await evaluate("!!navigator.gpu && navigator.gpu.requestAdapter().then((a) => !!a)"), "WebGPU adapter");
+for (let i = 0; i < 60 && (await evaluate("location.href")) !== url; i++) await sleep(500);
+const adapter = await evaluate(`(async () => { if (!navigator.gpu) return "no navigator.gpu"; const a = await navigator.gpu.requestAdapter(); return a ? "ok" : "no adapter"; })()`);
+check(adapter === "ok", `WebGPU adapter (${adapter})`);
 let started = false;
 for (let i = 0; i < 120 && !started; i++) {
   await sleep(500);
