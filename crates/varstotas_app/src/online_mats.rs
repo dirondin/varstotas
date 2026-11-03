@@ -218,7 +218,7 @@ pub(crate) fn cached(url: &str, name: &str, max_age: Option<Duration>) -> Result
     if let Some(p) = &path
         && let Ok(bytes) = varstotas_kernel::fs::read(p)
     {
-        let fresh = max_age.is_none_or(|age| varstotas_kernel::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|e| e < age));
+        let fresh = max_age.is_none_or(|age| varstotas_kernel::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| varstotas_kernel::fs::now().duration_since(t).ok()).is_some_and(|e| e < age));
         if fresh {
             return Ok(bytes);
         }

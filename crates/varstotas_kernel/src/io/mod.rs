@@ -30,7 +30,7 @@ pub use gltf::{add_gltf, export_glb, import_gltf, import_gltf_with, write_glb};
 pub use native::{VERSION as NATIVE_VERSION, MIN_VERSION as NATIVE_MIN_VERSION, MATERIAL_VERSION, MATERIAL_EXT, MATERIAL_FORMAT, from_json, load, load_material, save, save_with_backup, save_material, to_json};
 pub use obj::{export_obj, import_obj, import_obj_with, write_obj, write_obj_with_textures};
 pub use threemf::{add_3mf, export_3mf, import_3mf, import_3mf_with, write_3mf, write_3mf_model};
-pub use zip::unzip;
+pub use zip::{unzip, zip_stored};
 pub use ply::{add_ply, export_ply, import_ply, import_ply_with, write_ply};
 pub use points::{export_faces_json, faces_json, import_points_csv, parse_points_csv};
 pub use stl::{export_stl, import_stl, import_stl_with, write_stl_binary};

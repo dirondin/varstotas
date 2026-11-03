@@ -369,16 +369,53 @@ impl VarstotasApp {
         }
     }
 
+    /// The web build's data folder lives in the browser: it is saved as a zip and restored from one.
+    #[cfg(target_arch = "wasm32")]
+    fn prefs_web_data(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            if ui.button(tr!("prefs-data-save-zip")).clicked() {
+                let zip = crate::web::data_zip(&self.prefs);
+                if let Err(e) = varstotas_kernel::fs::write("/downloads/varstotas-data.zip", zip) { // i18n-ignore
+                    self.flash_error(e.to_string());
+                }
+            }
+            if ui.button(tr!("prefs-data-restore-zip")).clicked() {
+                let d = crate::file_dialog::FileDialog::new().add_filter("Zip", &["zip"]); // i18n-ignore
+                self.pick_file(d, |app, path| {
+                    let restored = varstotas_kernel::fs::read(&path).map_err(|e| e.to_string()).and_then(|z| crate::web::restore_data(&z));
+                    match restored {
+                        Ok((count, prefs)) => {
+                            if let Some(p) = prefs {
+                                app.prefs = p;
+                            }
+                            app.flash(tr!("prefs-data-restored", count = count));
+                        }
+                        Err(e) => app.flash_error(tr!("prefs-data-restore-failed", error = e)),
+                    }
+                });
+            }
+        });
+        note(ui, &tr!("prefs-data-folder-web-note"));
+    }
+
     fn prefs_general(&mut self, ui: &mut Ui) {
         if let Some(dir) = crate::paths::data_dir() {
             heading(ui, &tr!("prefs-data-folder"));
-            ui.horizontal(|ui| {
-                ui.monospace(crate::paths::display(&dir));
-                if ui.button(tr!("reveal-in-file-manager")).clicked() {
-                    super::extensions::reveal(&dir);
-                }
-            });
-            note(ui, &tr!("prefs-data-folder-note"));
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                ui.horizontal(|ui| {
+                    ui.monospace(crate::paths::display(&dir));
+                    if ui.button(tr!("reveal-in-file-manager")).clicked() {
+                        super::extensions::reveal(&dir);
+                    }
+                });
+                note(ui, &tr!("prefs-data-folder-note"));
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let _ = dir;
+                self.prefs_web_data(ui);
+            }
         }
         self.prefs_graphics(ui);
         if crate::appimage::running().is_some() {

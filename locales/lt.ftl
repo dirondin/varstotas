@@ -1275,6 +1275,11 @@ prefs-show-in-finder = Rodyti failų tvarkyklėje
 
 prefs-data-folder = Duomenų aplankas
 prefs-data-folder-note = Čia laikomi papildiniai, bibliotekos, šablonai, jūsų vertimai ir tiltas Python scenarijams bei DI agentams (bridge.json, python/).
+prefs-data-save-zip = Išsaugoti kaip zip
+prefs-data-restore-zip = Atkurti iš zip…
+prefs-data-folder-web-note = Jūsų bibliotekos, šablonai, papildiniai ir automatiniai įrašai laikomi šios naršyklės saugykloje (išvalius svetainės duomenis jie dingsta). Išsaugokite juos kartu su nuostatomis kaip zip, kad turėtumėte kopiją arba perkeltumėte į kitą naršyklę.
+prefs-data-restored = Iš zip atkurta failų: { $count }, taip pat nuostatos. Įkelkite puslapį iš naujo, kad visa tai būtų pritaikyta.
+prefs-data-restore-failed = Nepavyko atkurti iš zip: { $error }
 prefs-autosave = Automatinis išsaugojimas
 prefs-autosave-every = Automatiškai išsaugoti kas
 prefs-minutes = min.

@@ -1279,6 +1279,11 @@ prefs-show-in-finder = Показать в файловом менеджере
 
 prefs-data-folder = Папка данных
 prefs-data-folder-note = Здесь хранятся плагины, библиотеки, шаблоны, ваши переводы и мост для Python-скриптов и ИИ-агентов (bridge.json, python/).
+prefs-data-save-zip = Сохранить в zip
+prefs-data-restore-zip = Восстановить из zip…
+prefs-data-folder-web-note = Ваши библиотеки, шаблоны, плагины и автосохранения хранятся в хранилище этого браузера (очистка данных сайта их удалит). Сохраните их вместе с настройками в zip, чтобы иметь копию или перенести в другой браузер.
+prefs-data-restored = Из zip восстановлены файлы ({ $count }) и настройки. Перезагрузите страницу, чтобы применить всё.
+prefs-data-restore-failed = Не удалось восстановить из zip: { $error }
 prefs-autosave = Автосохранение
 prefs-autosave-every = Автосохранение каждые
 prefs-minutes = мин.

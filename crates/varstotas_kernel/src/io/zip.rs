@@ -1,4 +1,5 @@
-//! Reading zip archives (3MF packages, downloaded model and texture archives).
+//! Zip archives: reading them (3MF packages, downloaded model and texture archives) and writing
+//! stored ones (3MF packages, the web build's data folder).
 
 use std::io::Read;
 use varstotas_i18n::tr;
@@ -58,4 +59,71 @@ pub fn unzip(data: &[u8], want: impl Fn(&str) -> bool) -> Result<Vec<(String, Ve
         out.push((name, bytes));
     }
     Ok(out)
+}
+
+/// CRC-32 (IEEE) of `data`, as zip entries carry it.
+pub(crate) fn crc32(data: &[u8]) -> u32 {
+    let mut table = [0u32; 256];
+    for (i, t) in table.iter_mut().enumerate() {
+        let mut c = i as u32;
+        for _ in 0..8 {
+            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+        }
+        *t = c;
+    }
+    let mut c = !0u32;
+    for &b in data {
+        c = table[((c ^ b as u32) & 0xFF) as usize] ^ (c >> 8);
+    }
+    !c
+}
+
+/// A ZIP archive with stored (uncompressed) entries.
+pub fn zip_stored(files: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut central = Vec::new();
+    for (name, data) in files {
+        let crc = crc32(data);
+        let offset = out.len() as u32;
+        let header = |sig: u32, central: bool| {
+            let mut h = Vec::new();
+            h.extend(sig.to_le_bytes());
+            if central {
+                h.extend(20u16.to_le_bytes()); // made by
+            }
+            h.extend(20u16.to_le_bytes()); // version needed
+            h.extend(0u16.to_le_bytes()); // flags
+            h.extend(0u16.to_le_bytes()); // stored
+            h.extend(0u16.to_le_bytes()); // time
+            h.extend(0x21u16.to_le_bytes()); // date: 1980-01-01
+            h.extend(crc.to_le_bytes());
+            h.extend((data.len() as u32).to_le_bytes());
+            h.extend((data.len() as u32).to_le_bytes());
+            h.extend((name.len() as u16).to_le_bytes());
+            h.extend(0u16.to_le_bytes()); // extra
+            if central {
+                h.extend(0u16.to_le_bytes()); // comment
+                h.extend(0u16.to_le_bytes()); // disk
+                h.extend(0u16.to_le_bytes()); // internal attrs
+                h.extend(0u32.to_le_bytes()); // external attrs
+                h.extend(offset.to_le_bytes());
+            }
+            h.extend(name.as_bytes());
+            h
+        };
+        out.extend(header(0x0403_4B50, false));
+        out.extend_from_slice(data);
+        central.extend(header(0x0201_4B50, true));
+    }
+    let cd_offset = out.len() as u32;
+    let cd_len = central.len() as u32;
+    out.extend(central);
+    out.extend(0x0605_4B50u32.to_le_bytes());
+    out.extend([0u8; 4]); // disk numbers
+    out.extend((files.len() as u16).to_le_bytes());
+    out.extend((files.len() as u16).to_le_bytes());
+    out.extend(cd_len.to_le_bytes());
+    out.extend(cd_offset.to_le_bytes());
+    out.extend(0u16.to_le_bytes());
+    out
 }

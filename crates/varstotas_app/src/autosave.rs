@@ -74,7 +74,7 @@ impl Recovery {
 
     /// "5 minutes ago"-style age of the autosave.
     pub fn age_text(&self) -> String {
-        let Some(secs) = self.modified.and_then(|t| SystemTime::now().duration_since(t).ok()).map(|d| d.as_secs())
+        let Some(secs) = self.modified.and_then(|t| varstotas_kernel::fs::now().duration_since(t).ok()).map(|d| d.as_secs())
         else {
             return tr!("dialog-age-recently");
         };

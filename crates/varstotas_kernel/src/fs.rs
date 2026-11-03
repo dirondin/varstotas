@@ -1,6 +1,6 @@
 //! The file system the app works with. The desktop builds use the real one (`std::fs`, re-exported
 //! here as is); the web build (wasm32) has no file system, so there it is kept in memory: the
-//! files the user opens are put in, what is written is handed to the page (`set_on_write`: a
+//! files the user opens are put in, what is written is handed to the page (`set_on_change`: a
 //! download, or the browser's storage for the data folder). The calls are the ones of `std::fs`
 //! the app makes, so the same code runs in both.
 
@@ -27,6 +27,17 @@ pub fn is_dir(path: &Path) -> bool {
     metadata(path).is_ok_and(|m| m.is_dir())
 }
 
+/// The time now on the clock of the file times (`SystemTime::now` panics in the web build).
+pub fn now() -> std::time::SystemTime {
+    #[cfg(not(target_arch = "wasm32"))]
+    return std::time::SystemTime::now();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let since = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).unwrap_or_default();
+        std::time::UNIX_EPOCH + since
+    }
+}
+
 /// The web build's file system: files and folders in memory under `/`.
 #[cfg(target_arch = "wasm32")]
 mod web {
@@ -49,21 +60,26 @@ mod web {
     }
 
     static FS: Mutex<Option<Fs>> = Mutex::new(None);
-    static ON_WRITE: OnceLock<fn(&Path, &[u8])> = OnceLock::new();
+    static ON_CHANGE: OnceLock<fn(&Path, Change)> = OnceLock::new();
 
-    /// Called with every file written, copied or renamed to (its path and contents).
-    pub fn set_on_write(f: fn(&Path, &[u8])) {
-        let _ = ON_WRITE.set(f);
+    /// What became of a path.
+    pub enum Change<'a> {
+        /// A file written, copied or renamed to, with its contents.
+        File(&'a [u8]),
+        /// A folder made.
+        Dir,
+        /// A file or folder removed or renamed away.
+        Removed,
+    }
+
+    /// Called with every change made by the calls below (not by [`insert`] / [`insert_dir`]).
+    pub fn set_on_change(f: fn(&Path, Change)) {
+        let _ = ON_CHANGE.set(f);
     }
 
     fn with<R>(f: impl FnOnce(&mut Fs) -> R) -> R {
         let mut g = FS.lock().unwrap_or_else(|e| e.into_inner());
         f(g.get_or_insert_with(Fs::default))
-    }
-
-    fn now() -> SystemTime {
-        let since = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).unwrap_or_default();
-        std::time::UNIX_EPOCH + since
     }
 
     /// An absolute path without `.` and `..` (relative ones are taken from `/`).
@@ -85,9 +101,15 @@ mod web {
         io::Error::new(ErrorKind::NotFound, format!("{}: not found", p.display()))
     }
 
-    fn written(p: &Path, data: &[u8]) {
-        if let Some(f) = ON_WRITE.get() {
-            f(p, data);
+    fn changed(p: &Path, c: Change) {
+        if let Some(f) = ON_CHANGE.get() {
+            f(p, c);
+        }
+    }
+
+    fn removed(paths: &[PathBuf]) {
+        for p in paths {
+            changed(p, Change::Removed);
         }
     }
 
@@ -104,7 +126,7 @@ mod web {
         }
         fn put(&mut self, p: PathBuf, data: Vec<u8>) {
             self.add_parents(&p);
-            self.files.insert(p, Node { data, modified: now() });
+            self.files.insert(p, Node { data, modified: super::now() });
         }
     }
 
@@ -112,6 +134,12 @@ mod web {
     pub fn insert(path: impl AsRef<Path>, data: Vec<u8>) {
         let p = norm(path.as_ref());
         with(|fs| fs.put(p, data));
+    }
+
+    /// Make a folder (one kept from an earlier visit) without handing it back to the page.
+    pub fn insert_dir(path: impl AsRef<Path>) {
+        let p = norm(path.as_ref());
+        with(|fs| fs.add_parents(&p.join("x")));
     }
 
     pub fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
@@ -127,15 +155,20 @@ mod web {
         let p = norm(path.as_ref());
         let data = contents.as_ref().to_vec();
         with(|fs| fs.put(p.clone(), data.clone()));
-        written(&p, &data);
+        changed(&p, Change::File(&data));
         Ok(())
     }
 
     pub fn create_dir_all(path: impl AsRef<Path>) -> io::Result<()> {
         let p = norm(path.as_ref());
-        with(|fs| {
+        let new = with(|fs| {
+            let new = !fs.is_dir(&p);
             fs.add_parents(&p.join("x"));
+            new
         });
+        if new {
+            changed(&p, Change::Dir);
+        }
         Ok(())
     }
 
@@ -147,12 +180,16 @@ mod web {
             }
             fs.add_parents(&p.join("x"));
             Ok(())
-        })
+        })?;
+        changed(&p, Change::Dir);
+        Ok(())
     }
 
     pub fn remove_file(path: impl AsRef<Path>) -> io::Result<()> {
         let p = norm(path.as_ref());
-        with(|fs| fs.files.remove(&p).map(|_| ())).ok_or_else(|| not_found(&p))
+        with(|fs| fs.files.remove(&p).map(|_| ())).ok_or_else(|| not_found(&p))?;
+        changed(&p, Change::Removed);
+        Ok(())
     }
 
     pub fn remove_dir(path: impl AsRef<Path>) -> io::Result<()> {
@@ -162,49 +199,69 @@ mod web {
                 return Err(io::Error::other(format!("{}: not empty", p.display())));
             }
             fs.dirs.remove(&p).then_some(()).ok_or_else(|| not_found(&p))
-        })
+        })?;
+        changed(&p, Change::Removed);
+        Ok(())
     }
 
     pub fn remove_dir_all(path: impl AsRef<Path>) -> io::Result<()> {
         let p = norm(path.as_ref());
-        with(|fs| {
-            let had = fs.is_dir(&p);
+        let gone = with(|fs| {
+            if !fs.is_dir(&p) {
+                return Err(not_found(&p));
+            }
+            let mut gone: Vec<PathBuf> = fs.files.keys().filter(|f| f.starts_with(&p)).cloned().collect();
+            gone.extend(fs.dirs.iter().filter(|d| d.starts_with(&p)).cloned());
             fs.files.retain(|f, _| !f.starts_with(&p));
             fs.dirs.retain(|d| !d.starts_with(&p));
-            had.then_some(()).ok_or_else(|| not_found(&p))
-        })
+            Ok(gone)
+        })?;
+        removed(&gone);
+        Ok(())
     }
 
     pub fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
         let (a, b) = (norm(from.as_ref()), norm(to.as_ref()));
-        let data = with(|fs| {
+        // what is gone, the files that came (with their contents), the folders that came
+        let (gone, files, dirs) = with(|fs| {
             if let Some(n) = fs.files.remove(&a) {
                 let data = n.data.clone();
                 fs.add_parents(&b);
                 fs.files.insert(b.clone(), n);
-                return Ok(Some(data));
+                return Ok((vec![a.clone()], vec![(b.clone(), data)], Vec::new()));
             }
             if !fs.is_dir(&a) {
                 return Err(not_found(&a));
             }
             // a folder: everything in it moves
-            let files: Vec<PathBuf> = fs.files.keys().filter(|f| f.starts_with(&a)).cloned().collect();
-            for f in files {
+            let (mut gone, mut files, mut dirs) = (vec![a.clone()], Vec::new(), vec![b.clone()]);
+            let moved: Vec<PathBuf> = fs.files.keys().filter(|f| f.starts_with(&a)).cloned().collect();
+            for f in moved {
                 let n = fs.files.remove(&f).expect("listed");
                 let to = b.join(f.strip_prefix(&a).expect("inside"));
                 fs.add_parents(&to);
+                files.push((to.clone(), n.data.clone()));
                 fs.files.insert(to, n);
+                gone.push(f);
             }
-            let dirs: Vec<PathBuf> = fs.dirs.iter().filter(|d| d.starts_with(&a)).cloned().collect();
-            for d in dirs {
+            let moved: Vec<PathBuf> = fs.dirs.iter().filter(|d| d.starts_with(&a) && **d != a).cloned().collect();
+            for d in moved {
                 fs.dirs.remove(&d);
-                fs.dirs.insert(b.join(d.strip_prefix(&a).expect("inside")));
+                let to = b.join(d.strip_prefix(&a).expect("inside"));
+                fs.dirs.insert(to.clone());
+                dirs.push(to);
+                gone.push(d);
             }
+            fs.dirs.remove(&a);
             fs.add_parents(&b.join("x"));
-            Ok(None)
+            Ok((gone, files, dirs))
         })?;
-        if let Some(data) = data {
-            written(&b, &data);
+        removed(&gone);
+        for d in &dirs {
+            changed(d, Change::Dir);
+        }
+        for (f, data) in &files {
+            changed(f, Change::File(data));
         }
         Ok(())
     }
@@ -343,7 +400,7 @@ mod web {
             OpenOptions::new()
         }
         pub fn metadata(&self) -> io::Result<Metadata> {
-            Ok(Metadata { dir: false, len: self.data.len() as u64, modified: now() })
+            Ok(Metadata { dir: false, len: self.data.len() as u64, modified: super::now() })
         }
         pub fn sync_all(&mut self) -> io::Result<()> {
             std::io::Write::flush(self)

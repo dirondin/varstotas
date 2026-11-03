@@ -1269,6 +1269,11 @@ prefs-show-in-finder = Show in File Manager
 
 prefs-data-folder = Data folder
 prefs-data-folder-note = Plugins, libraries, templates, your own translations and the bridge for Python scripts and AI agents (bridge.json, python/) are kept here.
+prefs-data-save-zip = Save as zip
+prefs-data-restore-zip = Restore from zip…
+prefs-data-folder-web-note = Your libraries, templates, plugins and autosaves are kept in this browser's storage (clearing the site's data removes them). Save them with the preferences as a zip to keep a copy or to take them to another browser.
+prefs-data-restored = Restored { $count } files and the preferences from the zip. Reload the page to use them all.
+prefs-data-restore-failed = Could not restore from the zip: { $error }
 prefs-autosave = Auto-save
 prefs-autosave-every = Auto-save every
 prefs-minutes = minutes

@@ -1275,6 +1275,11 @@ prefs-show-in-finder = Паказаць у файлавым менеджары
 
 prefs-data-folder = Тэчка даных
 prefs-data-folder-note = Тут захоўваюцца плагіны, бібліятэкі, шаблоны, вашы пераклады і мост для Python-скрыптоў і ШІ-агентаў (bridge.json, python/).
+prefs-data-save-zip = Захаваць у zip
+prefs-data-restore-zip = Аднавіць з zip…
+prefs-data-folder-web-note = Вашы бібліятэкі, шаблоны, плагіны і аўтазахаванні захоўваюцца ў сховішчы гэтага браўзера (ачыстка даных сайта іх выдаліць). Захавайце іх разам з наладамі ў zip, каб мець копію або перанесці ў іншы браўзер.
+prefs-data-restored = З zip адноўлены файлы ({ $count }) і налады. Перазагрузіце старонку, каб ужыць усё.
+prefs-data-restore-failed = Не ўдалося аднавіць з zip: { $error }
 prefs-autosave = Аўтазахаванне
 prefs-autosave-every = Аўтазахоўваць кожныя
 prefs-minutes = хвілін

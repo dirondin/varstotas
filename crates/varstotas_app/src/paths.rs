@@ -8,6 +8,9 @@
 //! written without the user choosing the place: a sandbox (Flatpak) lets the app see only the
 //! file picked in the dialog, not the folder around it.
 //!
+//! The web build's is `/data` in its in-memory file system, kept in the browser's storage
+//! (`web.rs`).
+//!
 //! `VARSTOTAS_DATA_DIR` replaces it (UI tests).
 
 use std::path::{Path, PathBuf};
@@ -22,9 +25,9 @@ pub fn data_dir() -> Option<PathBuf> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     return eframe::storage_dir(APP);
-    // the web build keeps its data in the browser (see web.rs), not in a folder
+    // the web build's, kept in the browser's storage (see web.rs)
     #[cfg(target_arch = "wasm32")]
-    None
+    Some(PathBuf::from(crate::web::DATA))
 }
 
 /// FNV-1a of the absolute path (stable across Rust versions, unlike DefaultHasher), 32 bits.
