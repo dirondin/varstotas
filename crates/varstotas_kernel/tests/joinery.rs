@@ -685,6 +685,7 @@ fn drilling_lists_each_side_and_copies_drilled_alike() {
     let d = &side.drilling[0];
     assert_eq!((d.count, d.holes.len()), (2, j.count));
     assert!(d.holes.iter().all(|h| h.side == 5 && h.at[2] == 18.0 && h.diameter == j.diameter && h.depth == j.depth), "{:?}", d.holes);
+    assert!(d.holes.iter().all(|h| !h.through && h.what == varstotas_kernel::cutlist::DrillFor::Joint(WoodJointKind::Dowels)));
     // 400 up the side, the middle of the shelf's 18
     assert!(d.holes.iter().all(|h| h.at[0] == 409.0 || h.at[0] == 391.0), "{:?}", d.holes);
     // the shelf: both ends, the same holes

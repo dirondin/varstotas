@@ -238,6 +238,8 @@ impl Clipboard {
             ([EntityRef::Instance(i)], true) if model.defs.get(root.instances[*i].def).is_some_and(|d| !d.is_group && d.name == name) => *i,
             // A component with parameters keeps them whatever the file is called.
             ([EntityRef::Instance(i)], true) if model.instance_rigged(&[], *i).is_some() => *i,
+            // A fitting stays one (its holes, its item) whatever the file is called.
+            ([EntityRef::Instance(i)], true) if model.fitting_of(root.instances[*i].def).is_some() => *i,
             _ => model.make_component(&[], &ents, name)?,
         };
         // The file's picture goes with the component (its tile in the document shows it).
@@ -263,11 +265,12 @@ impl Clipboard {
         self.paste_into(&mut m, LIBRARY_UID - 1, &[], &t)?;
         let root = m.root_mesh();
         if root.faces.is_empty() && root.edges.is_empty() && root.instances.len() == 1 {
-            let i = root.instances.keys().next().expect("one instance");
+            let (i, d) = root.instances.iter().next().map(|(i, x)| (i, x.def)).expect("one instance");
             // A component's own picture becomes the file's.
-            m.preview = m.defs.get(root.instances[i].def).and_then(|d| d.preview.clone());
-            // A component with parameters stays one (its master and variants in the file).
-            if m.instance_rigged(&[], i).is_none() {
+            m.preview = m.defs.get(d).and_then(|d| d.preview.clone());
+            // A component with parameters stays one (its master and variants in the file), and
+            // so does a fitting (its holes and item are its definition's).
+            if m.instance_rigged(&[], i).is_none() && m.fitting_of(d).is_none() {
                 m.explode(&[], i)?;
             }
         }
@@ -286,6 +289,32 @@ impl Clipboard {
             return None;
         }
         Some(self.src_xf * inst.transform)
+    }
+
+    /// The copied fitting when the content is one (a library file of a handle, a leg…): its
+    /// item on the shopping list.
+    pub fn fitting_item(&self) -> Option<String> {
+        let mesh = &self.model.defs.get(self.def?)?.mesh;
+        let mut it = mesh.instances.values();
+        let (Some(inst), None) = (it.next(), it.next()) else { return None };
+        if !mesh.faces.is_empty() {
+            return None;
+        }
+        self.model.fitting_item(inst.def)
+    }
+
+    /// Bring the copied fitting into `model` (of document `doc_uid`) as a definition, placed
+    /// nowhere — the model's own when it is already there with the same content.
+    pub fn fitting_into(&self, model: &mut Model, doc_uid: u64) -> OpResult<DefId> {
+        let (ents, _) = self.paste_into(model, doc_uid, &[], &DMat4::IDENTITY)?;
+        let mesh = model.root_mesh();
+        let found = ents.iter().find_map(|e| match e {
+            EntityRef::Instance(i) => mesh.instances.get(*i).map(|x| (*i, x.def)).filter(|(_, d)| model.fitting_of(*d).is_some()),
+            _ => None,
+        });
+        let (_, d) = found.ok_or_else(|| OpError::Invalid(tr!("fitting-err-not-fitting")))?;
+        model.root_mesh_mut().erase(&ents);
+        Ok(d)
     }
 
     pub fn reference_point(&self) -> DVec3 {
@@ -391,7 +420,7 @@ impl Clipboard {
         // its master) is reused while it still has the library's content — a copy changed in
         // the model leaves it be, and the library's original comes in as a new definition.
         let from_library = !top && !src.is_group && src.rigged.is_none() && src.generated.is_none() && self.src_doc == LIBRARY_UID;
-        if from_library && (src.rig.is_some() || self.library.as_deref() == Some(src.name.as_str())) {
+        if from_library && (src.rig.is_some() || src.fitting.is_some() || self.library.as_deref() == Some(src.name.as_str())) {
             let h = self.model.content_hash(d);
             if let Some((id, _)) =
                 model.defs.iter().find(|(id, t)| !t.is_group && t.rigged.is_none() && same_or_numbered(&t.name, &src.name) && model.content_hash(*id) == h)
@@ -507,6 +536,26 @@ mod tests {
             }
         });
         doc
+    }
+
+    #[test]
+    fn a_fitting_saved_to_the_library_stays_a_fitting() {
+        // a built-in handle saved from the model, as Save to Library on a fitting's line does
+        let mut src = Model::new();
+        let b = varstotas_kernel::fitting::Builtin::Knob { diameter: 30.0, style: varstotas_kernel::fitting::Style::Round };
+        let d = src.builtin_fitting(b).unwrap();
+        let file = Clipboard::of_definition(&src, 7, d).unwrap().to_model(varstotas_kernel::LengthUnit::Millimeter).unwrap();
+        let root = file.root_mesh();
+        assert_eq!(root.instances.len(), 1, "kept one component");
+        assert!(file.fitting_of(root.instances.values().next().unwrap().def).is_some());
+        // the file read back under another name: still the fitting, brought in once
+        let clip = Clipboard::from_library(file, "My knob").unwrap();
+        assert_eq!(clip.fitting_item(), src.fitting_item(d));
+        let mut m = Model::new();
+        let a = clip.fitting_into(&mut m, 1).unwrap();
+        assert_eq!(clip.fitting_into(&mut m, 1).unwrap(), a, "the model's own the second time");
+        assert_eq!(m.fitting_of(a).unwrap().holes, src.fitting_of(d).unwrap().holes);
+        assert!(m.root_mesh().instances.is_empty() && m.root_mesh().faces.is_empty(), "placed nowhere");
     }
 
     #[test]

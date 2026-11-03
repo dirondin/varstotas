@@ -614,18 +614,28 @@ impl Model {
     /// direction, diameter, depth; 0 right through).
     pub fn fitting_holes(&self) -> Vec<(ContextPath, Vec<crate::joinery::Bore>)> {
         let mut out: Vec<(ContextPath, Vec<crate::joinery::Bore>)> = Vec::new();
+        for (part, _, holes) in self.fitting_holes_of() {
+            match out.iter_mut().find(|(p, _)| *p == part) {
+                Some(e) => e.1.extend(holes),
+                None => out.push((part, holes)),
+            }
+        }
+        out
+    }
+
+    /// The holes of each mounted fitting with any: (its part's path, the fitting's definition,
+    /// the holes in world space as assembled).
+    pub fn fitting_holes_of(&self) -> Vec<(ContextPath, DefId, Vec<crate::joinery::Bore>)> {
+        let mut out = Vec::new();
         for (f, part) in self.placed_fittings() {
-            let Some(fit) = self.def_at(&f).and_then(|d| self.fitting_of(d)) else { continue };
+            let Some(d) = self.def_at(&f) else { continue };
+            let Some(fit) = self.fitting_of(d) else { continue };
             if fit.holes.is_empty() || self.def_at(&part).is_none() {
                 continue;
             }
             let xf = self.assembled_transform(&f);
             let down = xf.transform_vector3(DVec3::NEG_Z).normalize_or_zero();
-            let holes = fit.holes.iter().map(|h| (xf.transform_point3(h.at), down, h.diameter, h.depth));
-            match out.iter_mut().find(|(p, _)| *p == part) {
-                Some(e) => e.1.extend(holes),
-                None => out.push((part, holes.collect())),
-            }
+            out.push((part, d, fit.holes.iter().map(|h| (xf.transform_point3(h.at), down, h.diameter, h.depth)).collect()));
         }
         out
     }

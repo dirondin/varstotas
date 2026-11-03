@@ -8,7 +8,7 @@ use crate::vector_export::{Drawing, Pen, Text2};
 use std::path::Path;
 use varstotas_i18n::tr;
 use varstotas_kernel::LengthUnit;
-use varstotas_kernel::cutlist::{CutPart, CutPlan, CutSettings, DrillHole, Drilling};
+use varstotas_kernel::cutlist::{CutPart, CutPlan, CutSettings, DrillFor, DrillHole, Drilling};
 use varstotas_kernel::glam::DVec2;
 
 /// A4 landscape.
@@ -90,20 +90,109 @@ fn spread(at: &[f64], gap: f64) -> Vec<f64> {
     runs.iter().flat_map(|r| (0..r.0).map(move |j| start(r) + j as f64 * gap)).collect()
 }
 
-/// What to drill on a side: "count × Ø d, depth deep" rows, the largest holes first.
-fn rows(holes: &[&DrillHole], unit: LengthUnit) -> Vec<String> {
-    let mut groups: Vec<(f64, f64, usize)> = Vec::new();
-    for h in holes {
-        match groups.iter_mut().find(|g| g.0 == h.diameter && g.1 == h.depth) {
-            Some(g) => g.2 += 1,
-            None => groups.push((h.diameter, h.depth, 1)),
+/// Runs of at least four values `v` (ascending) the same distance apart, as (first, last)
+/// indices: a row drilled at one pitch (shelf pins on the 32 mm system).
+fn chains(v: &[f64]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 1 < v.len() {
+        let p = v[i + 1] - v[i];
+        let mut j = i + 1;
+        // marks are to 0.1: a pitch of 128.67 reads 128.7, 128.6, 128.7
+        while j + 1 < v.len() && (v[j + 1] - v[j] - p).abs() < 0.15 {
+            j += 1;
+        }
+        if j - i >= 3 {
+            out.push((i, j));
+            i = j;
+        } else {
+            i += 1;
         }
     }
-    groups.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.total_cmp(&a.1)));
+    out
+}
+
+/// The pitch of holes (as placed on their side) in rows: each line along one direction of the
+/// side holding four or more at one distance apart, the same in every line.
+fn pitch(at: &[(f64, f64)]) -> Option<f64> {
+    let along = |swap: bool| -> Option<f64> {
+        let mut lines: Vec<(f64, Vec<f64>)> = Vec::new();
+        for &(u, v) in at {
+            let (u, v) = if swap { (v, u) } else { (u, v) };
+            match lines.iter_mut().find(|l| (l.0 - v).abs() < 0.05) {
+                Some(l) => l.1.push(u),
+                None => lines.push((v, vec![u])),
+            }
+        }
+        let mut p = None;
+        for (_, mut l) in lines {
+            l.sort_by(f64::total_cmp);
+            let d = l.get(1)? - l[0];
+            if l.len() < 4 || d < 0.05 || l.windows(2).any(|w| (w[1] - w[0] - d).abs() >= 0.05) || p.is_some_and(|p: f64| (p - d).abs() >= 0.05) {
+                return None;
+            }
+            p = Some(d);
+        }
+        p
+    };
+    along(false).or_else(|| along(true))
+}
+
+/// What a hole is for, as the list says it.
+fn what_name(w: &DrillFor) -> String {
+    match w {
+        DrillFor::Joint(k) => super::joinery::kind_name(*k),
+        DrillFor::Fitting(item) => item.clone(),
+    }
+}
+
+/// What to drill on side `side`: a row for each kind of hole, the largest first — "count × Ø d,
+/// depth deep" (or right through), and under it what for, and the pitch of holes in rows.
+fn rows(side: usize, size: [f64; 3], holes: &[&DrillHole], unit: LengthUnit) -> Vec<(String, String)> {
+    let mut groups: Vec<(&DrillHole, Vec<&DrillHole>)> = Vec::new();
+    for &h in holes {
+        match groups.iter_mut().find(|g| g.0.diameter == h.diameter && g.0.depth == h.depth && g.0.through == h.through && g.0.what == h.what) {
+            Some(g) => g.1.push(h),
+            None => groups.push((h, vec![h])),
+        }
+    }
+    groups.sort_by(|a, b| b.0.diameter.total_cmp(&a.0.diameter).then(b.0.depth.total_cmp(&a.0.depth)));
     groups
         .into_iter()
-        .map(|(d, depth, n)| if depth > 0.0 { tr!("drill-row", n = n, d = dim(d, unit), depth = dim(depth, unit)) } else { tr!("drill-row-open", n = n, d = dim(d, unit)) })
+        .map(|(h, all)| {
+            let (n, d) = (all.len(), dim(h.diameter, unit));
+            let row = match (h.through, h.depth > 0.0) {
+                (true, _) => tr!("drill-row-through", n = n, d = d),
+                (false, true) => tr!("drill-row", n = n, d = d, depth = dim(h.depth, unit)),
+                (false, false) => tr!("drill-row-open", n = n, d = d),
+            };
+            let at: Vec<(f64, f64)> = all.iter().map(|x| view(side, size, x)).collect();
+            let what = what_name(&h.what);
+            let note = match pitch(&at) {
+                Some(p) => tr!("drill-row-pitch", what = what, pitch = dim(p, unit)),
+                None => what,
+            };
+            (row, note)
+        })
         .collect()
+}
+
+/// Ordinate labels for marks `v` (ascending) at paper places `at`: (paper place, text) — a run
+/// at one pitch labelled at its ends and once between them "n × pitch".
+fn labels(v: &[f64], at: &[f64], unit: LengthUnit) -> Vec<(f64, String)> {
+    let runs = chains(v);
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < v.len() {
+        out.push((at[i], dim(v[i], unit)));
+        if let Some(&(_, j)) = runs.iter().find(|r| r.0 == i) {
+            out.push(((at[i] + at[j]) / 2.0, tr!("drill-chain", n = j - i, pitch = dim(v[i + 1] - v[i], unit))));
+            out.push((at[j], dim(v[j], unit)));
+            i = j;
+        }
+        i += 1;
+    }
+    out
 }
 
 /// One page: the part's number, name, how many copies, size and material at the top, its
@@ -143,32 +232,44 @@ fn drilling_page(number: usize, p: &CutPart, dr: &Drilling, unit: LengthUnit, do
         d.fills.push(vec![c, c + DVec2::new(4.0, 0.0), c + DVec2::new(0.0, -4.0)]);
         let places: Vec<(f64, f64)> = on.iter().map(|x| view(s, size, x)).collect();
         for (x, (u, v)) in on.iter().zip(&places) {
-            hole(&mut d, at(*u, *v), x.diameter / 2.0 * k);
+            let (c, r) = (at(*u, *v), (x.diameter / 2.0 * k).max(0.5));
+            hole(&mut d, c, r);
+            // right through: crossed out past its rim
+            if x.through {
+                let (a, b) = (DVec2::new(1.0, 1.0) * r * 1.6, DVec2::new(1.0, -1.0) * r * 1.6);
+                d.lines.extend([(c - a, c + a, Pen::Edge), (c - b, c + b, Pen::Edge)]);
+            }
         }
         // ordinate measures from the corner: across under the side, up on its left, labels
         // that would touch moved apart with a slanted leader to their tick
         if !on.is_empty() {
             let us = marks(places.iter().map(|p| p.0).chain([0.0]).collect());
+            let base = at(0.0, 0.0).y;
             let xs: Vec<f64> = us.iter().map(|&u| at(u, 0.0).x).collect();
-            for ((u, x), q) in us.iter().zip(&xs).zip(spread(&xs, TEXT * 1.1)) {
-                let p = DVec2::new(*x, at(0.0, 0.0).y);
-                d.lines.push((p + DVec2::new(0.0, 1.0), p + DVec2::new(0.0, 3.0), Pen::Dim));
-                d.lines.push((p + DVec2::new(0.0, 3.0), DVec2::new(q, p.y + 4.5), Pen::Dim));
-                let s = dim(*u, unit);
+            for x in &xs {
+                d.lines.push((DVec2::new(*x, base + 1.0), DVec2::new(*x, base + 3.0), Pen::Dim));
+            }
+            let ls = labels(&us, &xs, unit);
+            let anchors: Vec<f64> = ls.iter().map(|l| l.0).collect();
+            for ((x, s), q) in ls.into_iter().zip(spread(&anchors, TEXT * 1.1)) {
+                d.lines.push((DVec2::new(x, base + 3.0), DVec2::new(q, base + 4.5), Pen::Dim));
                 let len = s.chars().count() as f64 * TEXT * 0.55;
-                d.texts.push(Text2 { at: DVec2::new(q + TEXT * 0.35, p.y + 5.5 + len), angle: -std::f64::consts::FRAC_PI_2, size: TEXT, lines: vec![s], left: true });
+                d.texts.push(Text2 { at: DVec2::new(q + TEXT * 0.35, base + 5.5 + len), angle: -std::f64::consts::FRAC_PI_2, size: TEXT, lines: vec![s], left: true });
             }
             // up: from the top down on paper
-            let mut vs = marks(places.iter().map(|p| p.1).chain([0.0]).collect());
-            vs.reverse();
+            let vs = marks(places.iter().map(|p| p.1).chain([0.0]).collect());
+            let left = at(0.0, 0.0).x;
             let ys: Vec<f64> = vs.iter().map(|&v| at(0.0, v).y).collect();
-            for ((v, y), q) in vs.iter().zip(&ys).zip(spread(&ys, TEXT * 1.2)) {
-                let p = DVec2::new(at(0.0, 0.0).x, *y);
-                d.lines.push((p - DVec2::new(1.0, 0.0), p - DVec2::new(3.0, 0.0), Pen::Dim));
-                d.lines.push((p - DVec2::new(3.0, 0.0), DVec2::new(p.x - 4.5, q), Pen::Dim));
-                let s = dim(*v, unit);
+            for y in &ys {
+                d.lines.push((DVec2::new(left - 1.0, *y), DVec2::new(left - 3.0, *y), Pen::Dim));
+            }
+            let mut ls = labels(&vs, &ys, unit);
+            ls.reverse();
+            let anchors: Vec<f64> = ls.iter().map(|l| l.0).collect();
+            for ((y, s), q) in ls.into_iter().zip(spread(&anchors, TEXT * 1.2)) {
+                d.lines.push((DVec2::new(left - 3.0, y), DVec2::new(left - 4.5, q), Pen::Dim));
                 let len = s.chars().count() as f64 * TEXT * 0.55;
-                text(&mut d, DVec2::new(p.x - 5.5 - len, q + TEXT * 0.35), TEXT, s, true);
+                text(&mut d, DVec2::new(left - 5.5 - len, q + TEXT * 0.35), TEXT, s, true);
             }
         }
         y += h * k + BELOW_H;
@@ -186,8 +287,10 @@ fn drilling_page(number: usize, p: &CutPart, dr: &Drilling, unit: LengthUnit, do
         }
         text(&mut d, DVec2::new(lx, ly), 3.0, side_name(s), true);
         ly += 4.5;
-        for r in rows(&on, unit) {
+        for (r, note) in rows(s, size, &on, unit) {
             text(&mut d, DVec2::new(lx + 3.0, ly), 2.7, fit_text(&r, 2.7, LIST_W - 3.0), true);
+            ly += 3.2;
+            text(&mut d, DVec2::new(lx + 5.0, ly), 2.2, fit_text(&note, 2.2, LIST_W - 5.0), true);
             ly += 4.0;
         }
         text(&mut d, DVec2::new(lx + 3.0, ly), 2.2, fit_text(&corner_note(s), 2.2, LIST_W - 3.0), true);
@@ -284,7 +387,26 @@ impl VarstotasApp {
 
 #[cfg(test)]
 mod tests {
-    use super::spread;
+    use super::{chains, pitch, spread};
+
+    #[test]
+    fn rows_at_one_pitch_are_found() {
+        // 0 and a row of five 32 apart: one chain from the second mark
+        assert_eq!(chains(&[0.0, 37.0, 69.0, 101.0, 133.0, 165.0, 300.0]), vec![(1, 5)]);
+        // three marks are not a chain
+        assert!(chains(&[0.0, 32.0, 64.0]).is_empty());
+        // a third of 386 to 0.1
+        assert_eq!(chains(&[0.0, 32.0, 160.7, 289.3, 418.0]), vec![(1, 4)]);
+        // shelf pins: two lines of four 32 apart (three are not a row)
+        let pins: Vec<(f64, f64)> = [37.0, 260.0].iter().flat_map(|&v| (0..4).map(move |i| (100.0 + 32.0 * i as f64, v))).collect();
+        assert_eq!(pitch(&pins), Some(32.0));
+        // the same row up the side
+        let up: Vec<(f64, f64)> = pins.iter().map(|&(u, v)| (v, u)).collect();
+        assert_eq!(pitch(&up), Some(32.0));
+        // lines at two pitches, or a pair: none
+        assert_eq!(pitch(&[(0.0, 0.0), (32.0, 0.0), (64.0, 0.0), (96.0, 0.0), (0.0, 50.0), (20.0, 50.0), (40.0, 50.0), (60.0, 50.0)]), None);
+        assert_eq!(pitch(&[(0.0, 0.0), (32.0, 0.0), (64.0, 0.0)]), None);
+    }
 
     #[test]
     fn labels_that_would_touch_move_apart_round_their_ticks() {

@@ -297,7 +297,7 @@ impl CutPart {
 /// A hole to drill in a part, in its own frame: (length, width, thickness) from a corner of its
 /// bounding box, the three axes turning as a right hand's do, so the frame is the part's and not
 /// its mirror image.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DrillHole {
     /// The side it is drilled from: the axis it goes along (0 length: an end, 1 width: an
     /// edge, 2 thickness: a face) × 2, plus 1 for the side at the axis' far end.
@@ -305,8 +305,20 @@ pub struct DrillHole {
     /// Where it starts, on that side (mm).
     pub at: [f64; 3],
     pub diameter: f64,
-    /// How deep (mm; 0 not known, or right through a fitting's part).
+    /// How deep (mm; 0 not known; the part's size along it when right through).
     pub depth: f64,
+    /// Right through the part.
+    pub through: bool,
+    /// What it is for.
+    pub what: DrillFor,
+}
+
+/// What a hole is drilled for: a joint of a kind (its dowels, a hinge's cup, a confirmat…) or
+/// a fitting (by its item on the shopping list).
+#[derive(Clone, Debug, PartialEq)]
+pub enum DrillFor {
+    Joint(crate::joinery::WoodJointKind),
+    Fitting(String),
 }
 
 /// The holes of `count` copies of a part drilled alike, ordered by side and place.
@@ -654,26 +666,29 @@ impl Model {
     }
 }
 
-type Drilled = Vec<(ContextPath, Vec<crate::joinery::Bore>)>;
+/// A hole as drilled: its bore (world space), what it is for, and whether depth 0 means
+/// right through (a fitting's) rather than not known.
+type Drilled = Vec<(ContextPath, Vec<(crate::joinery::Bore, DrillFor, bool)>)>;
 
-/// Every joint's holes by part, in world space.
+/// Every joint's and fitting's holes by part, in world space.
 fn joint_holes(model: &Model) -> Drilled {
     let mut out: Drilled = Vec::new();
+    let mut add = |path: &ContextPath, h: Vec<crate::joinery::Bore>, what: &DrillFor, through: bool| {
+        let h = h.into_iter().map(|b| (b, what.clone(), through));
+        match out.iter_mut().find(|(p, _)| p == path) {
+            Some(e) => e.1.extend(h),
+            None => out.push((path.clone(), h.collect())),
+        }
+    };
     for j in &model.placed_joints {
         let Some(c) = crate::joinery::joint_contact(model, j) else { continue };
         let (a, b) = j.bores(&c);
-        for (path, h) in [(&j.a, a), (&j.b, b)] {
-            match out.iter_mut().find(|(p, _)| p == path) {
-                Some(e) => e.1.extend(h),
-                None => out.push((path.clone(), h)),
-            }
-        }
+        let what = DrillFor::Joint(j.kind);
+        add(&j.a, a, &what, false);
+        add(&j.b, b, &what, false);
     }
-    for (path, bores) in model.fitting_holes() {
-        match out.iter_mut().find(|(p, _)| *p == path) {
-            Some(e) => e.1.extend(bores),
-            None => out.push((path, bores)),
-        }
+    for (path, d, bores) in model.fitting_holes_of() {
+        add(&path, bores, &DrillFor::Fitting(model.fitting_item(d).unwrap_or_default()), true);
     }
     out
 }
@@ -701,7 +716,8 @@ fn part_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> V
     let size = [s[ax[0]], s[ax[1]], s[ax[2]]].map(round);
     let raw: Vec<DrillHole> = holes
         .iter()
-        .filter_map(|&(at, dir, diameter, depth)| {
+        .filter_map(|((at, dir, diameter, depth), what, open)| {
+            let (at, dir) = (*at, *dir);
             let p = k * (to_local.transform_point3(at) - lo);
             let dir = (k * to_local.transform_vector3(dir)).normalize_or_zero();
             let mut at = [p[ax[0]], p[ax[1]], p[ax[2]]];
@@ -712,7 +728,10 @@ fn part_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> V
             }
             // drilled into the side it goes in from: along +axis from the near side
             let a = (0..3).find(|&a| dir[a].abs() > 0.7)?;
-            Some(DrillHole { side: a * 2 + usize::from(dir[a] < 0.0), at: at.map(round), diameter: round(diameter), depth: round(depth) })
+            // right through: a fitting's hole of no depth, or one as deep as the part
+            let through = (*depth <= 0.0 && *open) || *depth >= size[a] - 0.01;
+            let depth = if through { size[a] } else { round(*depth) };
+            Some(DrillHole { side: a * 2 + usize::from(dir[a] < 0.0), at: at.map(round), diameter: round(*diameter), depth, through, what: what.clone() })
         })
         .collect();
     let key = |h: &DrillHole| (h.side, h.at, h.diameter, h.depth);
@@ -722,7 +741,7 @@ fn part_holes(model: &Model, path: &[crate::InstanceId], drilled: &Drilled) -> V
         let mut v: Vec<DrillHole> = raw
             .iter()
             .map(|h| {
-                let mut h = *h;
+                let mut h = h.clone();
                 if let Some(keep) = keep {
                     for a in (0..3).filter(|&a| a != keep) {
                         h.at[a] = round(size[a] - h.at[a]);

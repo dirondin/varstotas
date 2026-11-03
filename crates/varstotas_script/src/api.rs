@@ -1641,6 +1641,12 @@ fn register_cut_list(e: &mut Engine) {
                             hm.insert("z".into(), d(h.at[2]));
                             hm.insert("diameter".into(), d(h.diameter));
                             hm.insert("depth".into(), d(h.depth));
+                            hm.insert("through".into(), Dynamic::from(h.through));
+                            let what = match &h.what {
+                                varstotas_kernel::cutlist::DrillFor::Joint(k) => format!("{k:?}"),
+                                varstotas_kernel::cutlist::DrillFor::Fitting(item) => item.clone(),
+                            };
+                            hm.insert("what".into(), Dynamic::from(what));
                             Dynamic::from_map(hm)
                         });
                         let mut dm = Map::new();

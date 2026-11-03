@@ -1554,11 +1554,24 @@ impl Model {
         if self.part_def(&j.a).is_none() {
             return Err(OpError::Invalid(tr!("joint-err-one-part")));
         }
+        let d = self.builtin_fitting(b)?;
+        self.put_fitting_joint_def(j, d)
+    }
+
+    /// Fitting definition `d` (a handle, knob, leg or caster of the user's, from the library…)
+    /// put on the one part of `j` where a fitting of `j`'s kind goes, as
+    /// [`Model::put_fitting_joint_styled`] puts a built-in one.
+    pub fn put_fitting_joint_def(&mut self, j: &WoodJoint, d: DefId) -> OpResult<Vec<ContextPath>> {
+        if !j.kind.single() || self.part_def(&j.a).is_none() {
+            return Err(OpError::Invalid(tr!("joint-err-one-part")));
+        }
+        if self.fitting_of(d).is_none() {
+            return Err(OpError::Invalid(tr!("fitting-err-not-fitting")));
+        }
         self.unique_parts(&[&j.a])?;
         let c = joint_contact(&self.unjoined(), j).ok_or_else(|| OpError::Invalid(tr!("joint-err-one-part")))?;
         // the sizes a joint of the kind takes
         j.cuts(&c)?;
-        let d = self.builtin_fitting(b)?;
         let out = -c.normal();
         let x = unit(c.along, 1.0);
         let spots: Vec<DVec3> = if j.kind.under() { j.leg_points(&c) } else { j.spots(&c).into_iter().map(|s| j.point(&c, s)).collect() };

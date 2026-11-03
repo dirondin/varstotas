@@ -202,3 +202,15 @@ fn fittings_are_made_again_in_other_sizes() {
     assert_eq!(m.defs.len(), defs, "a leg for a leg, a piece for a piece");
     assert_eq!(m.placed_fittings().len(), 4);
 }
+
+#[test]
+fn a_handles_holes_go_through_its_door_on_the_drilling_map() {
+    let (m, _, _) = door_with_handle();
+    let parts = varstotas_kernel::cutlist::cut_parts(&m);
+    let door = parts.iter().find(|p| p.name == "Door").unwrap();
+    let holes = &door.drilling[0].holes;
+    assert_eq!(holes.len(), 2, "{holes:?}");
+    let item = m.fitting_item(m.root_mesh().instances.values().find(|i| i.mount.is_some()).unwrap().def).unwrap();
+    // through the door's 18, the depth its thickness
+    assert!(holes.iter().all(|h| h.through && h.depth == 18.0 && h.what == varstotas_kernel::cutlist::DrillFor::Fitting(item.clone())), "{holes:?}");
+}

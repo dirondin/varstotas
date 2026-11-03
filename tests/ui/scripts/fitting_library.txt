@@ -1,0 +1,27 @@
+# A fitting saved to the Components library from its line in Window → Fittings (disk icon), then
+# put on another part from the library with Model (real clicks): it stays a fitting with its
+# holes, and the model's one is used again rather than brought in twice.
+action script let d = box(vec3(0, -18, 0), 600, 18, 800); d.name = "Door"; let f = box(vec3(800, -18, 0), 600, 18, 200); f.name = "Front"; fitting(d, "knob"); select([f]);
+action console_close
+wait 5
+action fittings
+wait 10
+expect fitting_model="builtin"
+action click_spot fittings:row:0:save
+wait 10
+expect lib_names=["Knob Ø30"]
+action click_spot fittings:model
+wait 5
+action click_spot fittings:model:1
+wait 5
+expect fitting_model="Knob Ø30"
+action click_spot fittings:put
+wait 10
+expect undo=Some("Put on fitting")
+expect fitting_rows=[(1, "Knob Ø30", "Door"), (1, "Knob Ø30", "Front")]
+expect fittings=[("Knob Ø30", "Door"), ("Knob Ø30", "Front")]
+view iso
+zoom_extents
+wait 10
+screenshot shots/fitting_library.bmp
+quit

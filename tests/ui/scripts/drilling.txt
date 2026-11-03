@@ -12,6 +12,10 @@ expect drilling=[("Side L", 1, 26, [5]), ("Side R", 1, 26, [5]), ("Bottom", 1, 2
 action script let d = cut_list().parts.filter(|p| p.name == "Door")[0].drilling[0]; print(`${d.count} ${d.holes.len()} ${d.holes.filter(|h| h.side == "face_a" && h.diameter == 35.0).len()}`);
 wait 5
 expect script=Some((true, "2 5 3
+# the handle's holes go right through the door, named by the handle
+action script let h = cut_list().parts.filter(|p| p.name == "Door")[0].drilling[0].holes.filter(|h| h.side == "face_b"); print(`${h.len()} ${h.all(|x| x.through && x.depth == 18.0)} ${h[0].what}`);
+wait 5
+expect script=Some((true, "2 true Handle
 # the Drilling… button exports the maps (its save dialog skipped)
 action export_drilling drilling.pdf
 wait 5

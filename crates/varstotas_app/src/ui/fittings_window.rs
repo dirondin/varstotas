@@ -21,10 +21,19 @@ pub struct FittingsState {
     fitting: Option<(Vec<InstanceId>, WoodJoint)>,
     /// The shape a new handle, knob or leg is put on in.
     style: Style,
+    /// A fitting of the user's put on instead of a built-in one.
+    own: Option<Own>,
     /// A new plinth's settings.
     plinth: Option<PlinthSpec>,
     /// A joint between parts being edited (committed when the pointer is released).
     joint_draft: Option<(usize, WoodJoint)>,
+}
+
+/// A fitting of the user's: the model's own (not built in) or a library file's.
+#[derive(Clone, Debug, PartialEq)]
+enum Own {
+    Def(DefId),
+    File(std::path::PathBuf),
 }
 
 /// The fittings of one definition on one part (or not mounted).
@@ -116,6 +125,10 @@ impl VarstotasApp {
         if !self.fittings.open {
             return;
         }
+        // the library's fittings, the Components card shown or not
+        if self.library.scanned != self.library_dir() {
+            self.refresh_library();
+        }
         let pos = self.viewport.view_rect.min + vec2(80.0, 80.0);
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("fittings-title")).id(egui::Id::new("fittings_window")).open(&mut open).collapsible(false).resizable(true).default_size([520.0, 380.0]).min_width(440.0), pos);
@@ -166,7 +179,8 @@ impl VarstotasApp {
                 j = n;
             }
             fitting_sizes(ui, &mut j, unit);
-            if j.kind != WoodJointKind::Caster {
+            self.own_combo(ui);
+            if j.kind != WoodJointKind::Caster && self.fittings.own.is_none() {
                 style_combo(ui, "fittings:style", j.kind, &mut self.fittings.style);
             }
             let style = if j.kind == WoodJointKind::Caster { Style::Round } else { self.fittings.style };
@@ -174,10 +188,71 @@ impl VarstotasApp {
             super::tray_lib::spot("fittings:put", b.rect.center());
             if b.on_hover_text(tr!("joinery-fitting-add-tip")).clicked() {
                 let f = j.clone();
-                self.doc.try_commit(&tr!("joinery-fitting-undo"), move |m: &mut Model| m.put_fitting_joint_styled(&f, style).map(|_| ()));
+                let label = tr!("joinery-fitting-undo");
+                match self.fittings.own.clone() {
+                    None => {
+                        self.doc.try_commit(&label, move |m: &mut Model| m.put_fitting_joint_styled(&f, style).map(|_| ()));
+                    }
+                    Some(Own::Def(d)) => {
+                        self.doc.try_commit(&label, move |m: &mut Model| m.put_fitting_joint_def(&f, d).map(|_| ()));
+                    }
+                    Some(Own::File(path)) => {
+                        if let Some(clip) = self.library.items.iter().find(|x| x.path == path).map(|x| x.clip.clone()) {
+                            let uid = self.doc.uid;
+                            self.doc.try_commit(&label, move |m: &mut Model| clip.fitting_into(m, uid).and_then(|d| m.put_fitting_joint_def(&f, d)).map(|_| ()));
+                        }
+                    }
+                }
             }
         });
         self.fittings.fitting = Some((part, j));
+    }
+
+    /// The fittings of the user's to put on instead of a built-in one: the model's own (not
+    /// built in) and the library's, as (which, name).
+    fn own_fittings(&self) -> Vec<(Own, String)> {
+        let m = &self.doc.model;
+        let mut out: Vec<(Own, String)> = m.defs.iter().filter(|(_, d)| d.fitting.as_ref().is_some_and(|f| f.builtin.is_none())).map(|(id, _)| (Own::Def(id), m.fitting_item(id).unwrap_or_default())).collect();
+        out.sort_by(|a, b| a.1.cmp(&b.1));
+        let mut lib: Vec<(Own, String)> = self.library.items.iter().filter(|x| x.clip.fitting_item().is_some()).map(|x| (Own::File(x.path.clone()), x.name.clone())).collect();
+        lib.sort_by(|a, b| a.1.cmp(&b.1));
+        out.extend(lib);
+        out
+    }
+
+    /// Built in or one of the user's fittings ([`Self::own_fittings`]): the Model combo, spot
+    /// `fittings:model` and its items `fittings:model:<n>` (0 built in).
+    fn own_combo(&mut self, ui: &mut Ui) {
+        let list = self.own_fittings();
+        if self.fittings.own.as_ref().is_some_and(|o| !list.iter().any(|x| x.0 == *o)) {
+            self.fittings.own = None;
+        }
+        if list.is_empty() {
+            return;
+        }
+        let name = |o: &Own, n: &str| match o {
+            Own::Def(_) => tr!("fittings-model-own", name = n),
+            Own::File(_) => tr!("fittings-model-library", name = n),
+        };
+        let shown = self.fittings.own.as_ref().and_then(|o| list.iter().find(|x| x.0 == *o)).map_or_else(|| tr!("fittings-model-builtin"), |x| name(&x.0, &x.1));
+        ui.label(tr!("fittings-model"));
+        let own = &mut self.fittings.own;
+        let r = egui::ComboBox::from_id_salt("fittings:model").selected_text(shown).show_ui(ui, |ui| {
+            let r = ui.selectable_value(own, None, tr!("fittings-model-builtin"));
+            super::tray_lib::spot("fittings:model:0", r.rect.center());
+            for (i, (o, n)) in list.iter().enumerate() {
+                let r = ui.selectable_value(own, Some(o.clone()), name(o, n));
+                super::tray_lib::spot(format!("fittings:model:{}", i + 1), r.rect.center());
+            }
+        });
+        super::tray_lib::spot("fittings:model", r.response.rect.center());
+        r.response.on_hover_text(tr!("fittings-model-tip"));
+    }
+
+    /// The fitting put on as (built in or not, its name), for the debug dump.
+    pub(crate) fn fitting_model_dump(&self) -> String {
+        let list = self.own_fittings();
+        self.fittings.own.as_ref().and_then(|o| list.into_iter().find(|x| x.0 == *o)).map_or_else(|| "builtin".into(), |x| x.1) // i18n-ignore
     }
 
     /// A plinth frame under the selected parts (a carcass's).
@@ -253,6 +328,11 @@ impl VarstotasApp {
                         if r.clicked() {
                             act = Some(2);
                         }
+                        let r = super::small_icon_button(ui, super::icons::Icon::FileSave, &tr!("fittings-save"));
+                        super::tray_lib::spot(format!("fittings:row:{i}:save"), r.rect.center());
+                        if r.clicked() {
+                            act = Some(3);
+                        }
                     });
                 })
                 .body(|ui| self.fitting_row_ui(ui, i, row, unit));
@@ -279,6 +359,7 @@ impl VarstotasApp {
                     }
                 }
                 Some(2) => self.select_paths(&row.copies),
+                Some(3) => self.save_definition_to_library(row.def),
                 _ => {}
             }
         }
