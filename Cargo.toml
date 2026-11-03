@@ -45,3 +45,9 @@ codegen-units = 1
 # Vendored with a local fix, see vendor/egui_code_editor/VARSTOTAS.md.
 [patch.crates-io]
 egui_code_editor = { path = "vendor/egui_code_editor" }
+
+# The web build (scripts/build-web.sh): smaller to download rather than fastest.
+[profile.web]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
