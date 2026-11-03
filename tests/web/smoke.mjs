@@ -2,7 +2,7 @@
 // the page starts the app, a document is opened from "disk", exported as PNG and saved, both
 // come back as downloads. No dependencies: Node 22+ (fetch, WebSocket) and Chrome over CDP.
 // usage: node tests/web/smoke.mjs [site dir, default target/web] [out dir, default target/web-smoke]
-// CHROME=<path> picks the browser. Screenshots of each step are left in the out dir.
+// CHROME=<path> picks the browser, CHROME_FLAGS adds switches, CHROME_LOG=1 shows its log. Screenshots of each step are left in the out dir.
 // The clicks are at fixed points of a 1400×900 page: move them when the layout changes.
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -37,8 +37,8 @@ const url = `http://127.0.0.1:${server.address().port}/`;
 const port = 9300 + Math.floor(Math.random() * 500);
 const browser = spawn(chrome, [
   "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "varstotas-"))}`,
-  "--enable-unsafe-webgpu", "--enable-unsafe-swiftshader", "--no-first-run", "--window-size=1400,900", "about:blank",
-], { stdio: "ignore" });
+  "--enable-unsafe-webgpu", "--enable-unsafe-swiftshader", ...(process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean), "--no-first-run", "--window-size=1400,900", ...(process.env.CHROME_LOG ? ["--enable-logging=stderr", "--v=0"] : []), "about:blank",
+], { stdio: ["ignore", "ignore", process.env.CHROME_LOG ? "inherit" : "ignore"] });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let targets;

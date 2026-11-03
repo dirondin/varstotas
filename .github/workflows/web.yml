@@ -26,6 +26,8 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Tools
         run: |
           # wasm-bindgen-cli must match the wasm-bindgen crate in Cargo.lock
@@ -38,6 +40,12 @@ jobs:
         run: cargo clippy -p varstotas_app --target wasm32-unknown-unknown --locked -- -D warnings
       - name: Build
         run: scripts/build-web.sh
+      # kept even when the smoke test fails (the run fails, so Publish release does not take it)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-site
+          path: target/web
+          if-no-files-found: error
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -49,8 +57,3 @@ jobs:
           name: web-smoke
           path: target/web-smoke
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-site
-          path: target/web
-          if-no-files-found: error
