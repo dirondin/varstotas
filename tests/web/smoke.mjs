@@ -34,10 +34,15 @@ const server = createServer((req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const url = `http://127.0.0.1:${server.address().port}/`;
 
+// Linux without a GPU: the page's WebGPU canvas is shown only when Chrome itself draws with
+// SwiftShader too (without these its swap chain gets no shared image, and buffers fail next)
+const linux = process.platform === "linux"
+  ? ["--use-gl=angle", "--use-angle=swiftshader", "--enable-features=Vulkan", "--use-vulkan=swiftshader"]
+  : [];
 const port = 9300 + Math.floor(Math.random() * 500);
 const browser = spawn(chrome, [
   "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), "varstotas-"))}`,
-  "--enable-unsafe-webgpu", "--enable-unsafe-swiftshader", ...(process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean), "--no-first-run", "--window-size=1400,900", ...(process.env.CHROME_LOG ? ["--enable-logging=stderr", "--v=0"] : []), "about:blank",
+  "--enable-unsafe-webgpu", "--enable-unsafe-swiftshader", ...linux, ...(process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean), "--no-first-run", "--window-size=1400,900", ...(process.env.CHROME_LOG ? ["--enable-logging=stderr", "--v=0"] : []), "about:blank",
 ], { stdio: ["ignore", "ignore", process.env.CHROME_LOG ? "inherit" : "ignore"] });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
