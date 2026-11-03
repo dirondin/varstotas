@@ -6,7 +6,7 @@ action click_spot menu:Help
 wait 5
 action click_spot menu:ReleaseNotes
 wait 10
-expect release_notes=(true, "0.2.0")
+expect release_notes=(true, "0.3.0")
 screenshot shots/release_notes.bmp
 action click_spot release_notes:0.1.0
 wait 5
