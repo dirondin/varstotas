@@ -5149,7 +5149,7 @@ view-triangles-hint = Rodyti visas trianguliacijos briaunas virš esamo stiliaus
 
 # 3D Printing: basic surface checks and conservative repair.
 menu-3d-printing = 3D Printing
-print-title = Paruošimas 3D spausdinimui
+print-title = 3D spausdinimas
 print-check-command = Tikrinti modelį…
 print-repair-command = Taisyti tinklą…
 print-check-description = Tikrinti pasirinktus objektus arba matomą modelį dėl pagrindinių spausdinimo tinklo defektų.

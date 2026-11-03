@@ -5201,7 +5201,7 @@ view-triangles-hint = Паказаць усе рэбры трыянгуляцы�
 
 # 3D Printing: basic surface checks and conservative repair.
 menu-3d-printing = 3D Printing
-print-title = Падрыхтоўка да 3D-друку
+print-title = 3D-друк
 print-check-command = Праверыць мадэль…
 print-repair-command = Рамонт сеткі…
 print-check-description = Праверыць выбраныя аб’екты або бачную мадэль на асноўныя дэфекты сеткі для друку.

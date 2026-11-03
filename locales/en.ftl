@@ -5125,7 +5125,7 @@ view-triangles-hint = Show every tessellation edge over the current style, inclu
 
 # 3D Printing: basic surface checks and conservative repair.
 menu-3d-printing = 3D Printing
-print-title = 3D printing preparation
+print-title = 3D printing
 print-check-command = Check Model…
 print-repair-command = Repair Mesh…
 print-check-description = Inspect the selected objects or visible model for basic print-surface defects.
