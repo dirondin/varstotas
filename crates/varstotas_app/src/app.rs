@@ -550,8 +550,7 @@ pub struct VarstotasApp {
     pub(crate) confirm: Option<Pending>,
     pub(crate) tutorial: crate::ui::tutorial::TutorialWindow,
     pub(crate) show_about: bool,
-    /// Help → What's New is open.
-    pub(crate) release_notes_open: bool,
+    pub(crate) release_notes: crate::ui::release_notes::ReleaseNotesWindow,
     pub(crate) about_icon: Option<egui::TextureHandle>,
     pub(crate) console: crate::ui::console::ConsoleState,
     pub(crate) script_help: crate::ui::script_help::ScriptHelp,
@@ -766,7 +765,7 @@ impl VarstotasApp {
             confirm: None,
             tutorial: Default::default(),
             show_about: false,
-            release_notes_open: false,
+            release_notes: Default::default(),
             about_icon: None,
             console: Default::default(),
             script_help: Default::default(),
@@ -1762,7 +1761,7 @@ impl VarstotasApp {
             }
             Action::Tutorial => { self.show_start = false; self.tutorial.open = true; }
             Action::About => self.show_about = true,
-            Action::ReleaseNotes => self.release_notes_open = true,
+            Action::ReleaseNotes => self.release_notes.show(),
             Action::StartScreen => self.show_start = true,
             Action::ReportProblem => self.feedback.open = true,
             Action::Preferences => self.prefs_win.open = true,

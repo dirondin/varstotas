@@ -1,9 +1,14 @@
-# Help → What's New: the window with the versions from CHANGELOG.md.
+# Help → What's New: the versions from CHANGELOG.md listed, this version's lines shown, another
+# version picked from the list.
 wait 5
-expect release_notes=false
+expect release_notes=(false
 action click_spot menu:Help
 wait 5
 action click_spot menu:ReleaseNotes
 wait 10
-expect release_notes=true
+expect release_notes=(true, "0.2.0")
 screenshot shots/release_notes.bmp
+action click_spot release_notes:0.1.0
+wait 5
+expect release_notes=(true, "0.1.0")
+screenshot shots/release_notes_old.bmp

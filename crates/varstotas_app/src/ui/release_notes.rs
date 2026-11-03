@@ -29,35 +29,75 @@ pub fn parse(text: &str) -> Vec<Release<'_>> {
     out
 }
 
+/// Help → What's New: the list of versions, and the lines of the one picked.
+#[derive(Default)]
+pub struct ReleaseNotesWindow {
+    pub open: bool,
+    /// The version shown (index in the changelog's sections).
+    pub sel: usize,
+}
+
+impl ReleaseNotesWindow {
+    /// Open on this version (the newest when it has no section).
+    pub fn show(&mut self) {
+        self.open = true;
+        self.sel = parse(CHANGELOG).iter().position(|r| r.version == env!("CARGO_PKG_VERSION")).unwrap_or(0);
+    }
+
+    /// For the debug harness: open and the version shown.
+    pub fn dump(&self) -> (bool, String) {
+        (self.open, parse(CHANGELOG).get(self.sel).map(|r| r.version.to_string()).unwrap_or_default())
+    }
+}
+
 impl VarstotasApp {
     pub(crate) fn release_notes_window(&mut self, ctx: &Context) {
-        if !self.release_notes_open {
+        if !self.release_notes.open {
             return;
         }
+        let releases = parse(CHANGELOG);
         let mut open = true;
-        let win = self.placed(egui::Window::new(tr!("release-notes-title")).id(egui::Id::new("release_notes")).open(&mut open).default_size([520.0, 480.0]).resizable(true), [160.0, 140.0]);
+        let win = self.placed(egui::Window::new(tr!("release-notes-title")).id(egui::Id::new("release_notes")).open(&mut open).default_size([600.0, 380.0]).resizable(true), [160.0, 140.0]);
+        let sel = &mut self.release_notes.sel;
         win.show(ctx, |ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                for (i, r) in parse(CHANGELOG).iter().enumerate() {
-                    if i > 0 {
-                        ui.add_space(10.0);
-                    }
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(r.version).size(18.0).strong());
-                        let current = r.version == env!("CARGO_PKG_VERSION");
-                        let date = if current { tr!("release-notes-current", date = r.date) } else { r.date.to_string() };
-                        ui.label(RichText::new(date).color(theme::text_dim()));
+            let h = ui.available_height();
+            ui.horizontal_top(|ui| {
+                egui::ScrollArea::vertical().id_salt("release_notes_list").max_height(h).max_width(140.0).show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(130.0);
+                        for (i, r) in releases.iter().enumerate() {
+                            let resp = ui.selectable_label(*sel == i, RichText::new(r.version).strong());
+                            super::tray_lib::spot(format!("release_notes:{}", r.version), resp.rect.center());
+                            if resp.clicked() {
+                                *sel = i;
+                            }
+                            ui.label(RichText::new(r.date).small().color(theme::text_dim()));
+                            ui.add_space(4.0);
+                        }
                     });
-                    for item in &r.items {
-                        ui.horizontal_top(|ui| {
-                            ui.label("•");
-                            ui.add(egui::Label::new(*item).wrap());
+                });
+                ui.separator();
+                let Some(r) = releases.get(*sel) else { return };
+                egui::ScrollArea::vertical().id_salt("release_notes_items").max_height(h).auto_shrink([false, false]).show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(r.version).size(18.0).strong());
+                            let current = r.version == env!("CARGO_PKG_VERSION");
+                            let date = if current { tr!("release-notes-current", date = r.date) } else { r.date.to_string() };
+                            ui.label(RichText::new(date).color(theme::text_dim()));
                         });
-                    }
-                }
+                        ui.add_space(4.0);
+                        for item in &r.items {
+                            ui.horizontal_top(|ui| {
+                                ui.label("•");
+                                ui.add(egui::Label::new(*item).wrap());
+                            });
+                        }
+                    });
+                });
             });
         });
-        self.release_notes_open &= open;
+        self.release_notes.open &= open;
     }
 }
 
