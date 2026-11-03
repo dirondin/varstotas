@@ -12,6 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 const APP: &str = "Varstotas"; // i18n-ignore
 
 /// The data folder (not created here).
@@ -19,7 +20,11 @@ pub fn data_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("VARSTOTAS_DATA_DIR").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(d));
     }
-    eframe::storage_dir(APP)
+    #[cfg(not(target_arch = "wasm32"))]
+    return eframe::storage_dir(APP);
+    // the web build keeps its data in the browser (see web.rs), not in a folder
+    #[cfg(target_arch = "wasm32")]
+    None
 }
 
 /// FNV-1a of the absolute path (stable across Rust versions, unlike DefaultHasher), 32 bits.

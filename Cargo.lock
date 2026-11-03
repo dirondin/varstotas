@@ -1084,8 +1084,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3573,6 +3575,10 @@ dependencies = [
  "varstotas_physics",
  "varstotas_render",
  "varstotas_script",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "winit",
  "winresource",
 ]
@@ -3601,6 +3607,7 @@ dependencies = [
  "thiserror 2.0.21",
  "ufbx",
  "varstotas_i18n",
+ "web-time",
 ]
 
 [[package]]
@@ -3626,6 +3633,7 @@ dependencies = [
  "log",
  "png",
  "varstotas_i18n",
+ "web-time",
 ]
 
 [[package]]
@@ -3640,6 +3648,7 @@ dependencies = [
  "ureq",
  "varstotas_i18n",
  "varstotas_kernel",
+ "web-time",
 ]
 
 [[package]]

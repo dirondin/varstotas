@@ -21,6 +21,8 @@ egui-wgpu = "0.36"
 eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts", "persistence", "x11", "wayland"] }
 rfd = "0.17"
 log = "0.4"
+# Instant / SystemTime that work in a browser too (the std ones on the desktop).
+web-time = "1"
 env_logger = "0.11"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "hdr", "tga", "bmp", "gif"] }
 

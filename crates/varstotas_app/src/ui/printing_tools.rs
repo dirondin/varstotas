@@ -298,7 +298,7 @@ impl VarstotasApp {
         self.printing.tool_job = Some(PrintToolJob { key, rx });
     }
     fn choose_print_export(&mut self, ctx: &Context, ext: &str) {
-        if let Some(mut path) = rfd::FileDialog::new()
+        if let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             .set_file_name(format!("{}-print.{ext}", self.doc.display_name()))
             .save_file()

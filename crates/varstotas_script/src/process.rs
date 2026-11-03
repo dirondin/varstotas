@@ -5,7 +5,7 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 type OutputObserver<'a> = dyn FnMut(usize, &[u8]) + 'a;
 type PrefixState = (Arc<AtomicUsize>, Arc<Mutex<Vec<u8>>>);
@@ -13,6 +13,7 @@ type PrefixState = (Arc<AtomicUsize>, Arc<Mutex<Vec<u8>>>);
 /// Starts the child in its own process group (Unix), so [`terminate`] kills its children too;
 /// on Windows without a console window (the app is a GUI program: a console child would
 /// otherwise open one, e.g. for every Python plugin call).
+#[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
 pub fn isolate_group(cmd: &mut Command) {
     #[cfg(unix)]
     {

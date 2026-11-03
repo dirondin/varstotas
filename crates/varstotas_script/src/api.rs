@@ -11,7 +11,7 @@ use varstotas_kernel::{
     Aabb, ContextPath, CurveInfo, EdgeId, EntityRef, FaceId, Instance, InstanceId, Mesh, OpError, SolidOp, units,
 };
 use rhai::{Array, Dynamic, Engine, EvalAltResult, ImmutableString, Map, Scope};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 use varstotas_i18n::tr;
 
 type R<T> = Result<T, Box<EvalAltResult>>;

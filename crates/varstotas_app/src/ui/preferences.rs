@@ -179,7 +179,7 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
     });
     ui.horizontal(|ui| {
         if ui.button(tr!("prefs-choose")).clicked()
-            && let Some(d) = rfd::FileDialog::new().pick_folder()
+            && let Some(d) = crate::file_dialog::FileDialog::new().pick_folder()
         {
             *custom = Some(d);
         }

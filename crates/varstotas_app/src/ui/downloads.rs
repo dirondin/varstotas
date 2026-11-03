@@ -238,7 +238,7 @@ impl VarstotasApp {
                 }
                 if ui.button(tr!("downloads-import-file")).on_hover_text(tr!("downloads-import-file-hover")).clicked() {
                     let exts = crate::downloads::FILE_EXTS;
-                    if let Some(p) = rfd::FileDialog::new().add_filter(tr!("downloads-models-filter"), &exts).pick_file() {
+                    if let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("downloads-models-filter"), &exts).pick_file() {
                         self.models.dl.offered.remove(&p);
                         self.downloads_offer(&p);
                     }

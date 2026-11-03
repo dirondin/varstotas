@@ -10,7 +10,8 @@ use crate::document::PaletteMaterial;
 use crate::textures::{LARGE_SIDE, SLOTS};
 use egui::{Color32, RichText, Sense, Stroke, Ui, vec2};
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime};
+use std::time::SystemTime; // file times
+use web_time::Instant;
 use varstotas_i18n::tr;
 use varstotas_kernel::{TexLook, TextureImage};
 

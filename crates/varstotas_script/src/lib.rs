@@ -59,7 +59,7 @@ pub(crate) struct State {
     pub selection_set: bool,
     pub out: String,
     pub dirty: bool,
-    pub deadline: std::time::Instant,
+    pub deadline: web_time::Instant,
 }
 
 thread_local! {
@@ -117,7 +117,7 @@ pub(crate) fn run_with<T>(
         );
     }
     let mut deadline =
-        std::time::Instant::now() + ctx.time_limit.unwrap_or(Duration::from_secs(30));
+        web_time::Instant::now() + ctx.time_limit.unwrap_or(Duration::from_secs(30));
     STATE.with(|s| {
         if let Some(outer) = s.borrow().as_ref() {
             deadline = deadline.min(outer.deadline);
@@ -136,7 +136,7 @@ pub(crate) fn run_with<T>(
     // A generator built from inside a script nests: the outer state comes back afterwards.
     let outer = STATE.with(|s| s.borrow_mut().replace(state));
     let engine = api::engine(
-        deadline.saturating_duration_since(std::time::Instant::now()),
+        deadline.saturating_duration_since(web_time::Instant::now()),
         ctx.trusted_io,
     );
     let mut scope = api::scope();
@@ -158,7 +158,7 @@ pub(crate) fn run_with<T>(
                 });
                 validation.map_err(|e| Box::new(rhai::EvalAltResult::ErrorRuntime(e.to_string().into(), rhai::Position::NONE)))?;
             }
-            if std::time::Instant::now() > deadline {
+            if web_time::Instant::now() > deadline {
                 Err(Box::new(rhai::EvalAltResult::ErrorRuntime(
                     "Script deadline exceeded".into(),
                     rhai::Position::NONE,

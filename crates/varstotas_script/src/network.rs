@@ -29,6 +29,7 @@ pub const MAX_DOWNLOAD: usize = 256 * 1024 * 1024;
 /// One HTTP client for the whole app: connections (and TLS sessions) to a host are reused, so a
 /// catalogue's thumbnails do not each pay for a new connection. Certificates are checked against
 /// the system's store; proxies come from the usual environment variables (`HTTPS_PROXY`, …).
+#[cfg(not(target_arch = "wasm32"))]
 fn agent() -> &'static ureq::Agent {
     static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
     AGENT.get_or_init(|| {
@@ -46,6 +47,7 @@ fn agent() -> &'static ureq::Agent {
 /// GET `url` (HTTP(S) only, redirects followed, HTTP errors fail) with extra request headers,
 /// within `timeout`; at most [`MAX_DOWNLOAD`] bytes. `cancelled` is checked while the body
 /// arrives; the worker's progress observer ([`observe_progress`]) sees the body bytes.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn fetch(
     url: &str,
     headers: &[(String, String)],
@@ -119,6 +121,12 @@ pub fn fetch(
         report(out.len());
     }
     Ok(out)
+}
+
+/// The web build has no sockets: downloads are not available there (yet).
+#[cfg(target_arch = "wasm32")]
+pub fn fetch(_url: &str, _headers: &[(String, String)], _timeout: Duration, _cancelled: impl Fn() -> bool) -> Result<Vec<u8>, String> {
+    Err("Downloads are not available in the web version".into())
 }
 
 #[cfg(test)]

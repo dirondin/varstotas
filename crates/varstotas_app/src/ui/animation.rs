@@ -66,7 +66,7 @@ pub struct AnimRun {
     spp: Option<u32>,
     /// The frame file being rendered.
     waiting: Option<PathBuf>,
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// The view before the export, restored after it.
     orig: varstotas_render::Camera,
 }
@@ -114,7 +114,7 @@ impl VarstotasApp {
         let size = [w.width.clamp(16, 8192), w.height.clamp(16, 8192)];
         let spp = w.traced.then_some(w.spp.max(1));
         self.anim_window.last = None;
-        self.anim_window.run = Some(AnimRun { frames, next: 0, dir, gif, fps, size, spp, waiting: None, started: std::time::Instant::now(), orig: self.camera.clone() });
+        self.anim_window.run = Some(AnimRun { frames, next: 0, dir, gif, fps, size, spp, waiting: None, started: web_time::Instant::now(), orig: self.camera.clone() });
     }
 
     /// Advance the export: collect the frame in flight, then queue the next one. Runs before
@@ -325,9 +325,9 @@ impl VarstotasApp {
         }
         if export {
             let out = if self.anim_window.gif {
-                rfd::FileDialog::new().add_filter("GIF", &["gif"]).set_file_name("Animation.gif").save_file()
+                crate::file_dialog::FileDialog::new().add_filter("GIF", &["gif"]).set_file_name("Animation.gif").save_file()
             } else {
-                rfd::FileDialog::new().pick_folder()
+                crate::file_dialog::FileDialog::new().pick_folder()
             };
             if let Some(out) = out {
                 self.start_animation(out);

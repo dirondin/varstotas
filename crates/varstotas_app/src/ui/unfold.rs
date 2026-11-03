@@ -187,7 +187,7 @@ impl VarstotasApp {
     }
 
     fn unfold_save(&mut self, ext: &str) {
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             .set_file_name(format!("{} unfold.{ext}", self.doc.display_name()))
             .save_file()

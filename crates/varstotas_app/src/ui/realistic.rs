@@ -379,7 +379,7 @@ impl VarstotasApp {
                             let name = if src == NEW_SHADER { tr!("realistic-checker-new") } else { crate::shaders::label(name) };
                             if ui.selectable_label(false, name).on_hover_text(tr!("realistic-start-from-tip")).clicked() {
                                 ed.code = src.to_string();
-                                ed.changed = Some(std::time::Instant::now());
+                                ed.changed = Some(web_time::Instant::now());
                             }
                         }
                     });
@@ -408,7 +408,7 @@ impl VarstotasApp {
                     })
                     .inner;
                 if out.response.changed() {
-                    ed.changed = Some(std::time::Instant::now());
+                    ed.changed = Some(web_time::Instant::now());
                 }
                 match &ed.error {
                     Some(e) => ui.label(RichText::new(e).color(ERROR_RED)),
@@ -595,7 +595,7 @@ pub(crate) fn preview_sphere(color: [f32; 4], p: &Pbr, env: &Environment, side: 
 pub(crate) struct ShaderEdit {
     pub material: String,
     pub code: String,
-    pub changed: Option<std::time::Instant>,
+    pub changed: Option<web_time::Instant>,
     pub error: Option<String>,
     /// The code editor (WGSL highlighting, completion, call hints).
     pub editor: crate::ui::code_editor::ScriptEditor,

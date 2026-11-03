@@ -522,6 +522,7 @@ pub mod shaders {
     pub use crate::custom::check;
 }
 mod bvh;
+#[cfg_attr(target_arch = "wasm32", path = "oidn_web.rs")]
 mod oidn;
 pub use oidn::{available as oidn_available, library as oidn_library};
 mod pathtrace;

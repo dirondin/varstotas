@@ -20,5 +20,9 @@ pub fn open(target: impl AsRef<OsStr>) -> std::io::Result<()> {
         log::info!("open {}", target.to_string_lossy());
         return Ok(());
     }
-    open::that_detached(target)
+    #[cfg(not(target_arch = "wasm32"))]
+    return open::that_detached(target);
+    // the web build: links open in a new tab (files and folders are not reachable)
+    #[cfg(target_arch = "wasm32")]
+    crate::web::open_url(&target.to_string_lossy())
 }

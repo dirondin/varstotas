@@ -467,7 +467,7 @@ pub(crate) fn plugin_params_ui(ui: &mut Ui, salt: &str, params: &[Param], values
             let r = ui.add(egui::TextEdit::singleline(v).desired_width(w).hint_text(if !q.default.is_empty() { q.default.clone() } else if q.is_path() { tr!("model-lib-choose-with") } else { "—".to_string() }).id_salt((salt, &q.key)));
             load |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if q.is_path() && ui.small_button("…").on_hover_text(tr!("model-lib-choose-it")).clicked() {
-                let d = rfd::FileDialog::new();
+                let d = crate::file_dialog::FileDialog::new();
                 let picked = if q.key.to_lowercase().contains("file") { d.pick_file() } else { d.pick_folder() };
                 if let Some(d) = picked {
                     *v = d.to_string_lossy().to_string();

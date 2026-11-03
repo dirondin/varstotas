@@ -205,7 +205,7 @@ impl VarstotasApp {
         let Some(p) = self.plugins.list.get(idx) else { return;
         };
         let exts: Vec<&str> = if export { p.export.iter().map(String::as_str).collect() } else { p.import.iter().map(String::as_str).collect() };
-        let d = rfd::FileDialog::new().add_filter(p.name.clone(), &exts);
+        let d = crate::file_dialog::FileDialog::new().add_filter(p.name.clone(), &exts);
         let path = if export {
             d.set_file_name(format!("{}.{}", self.doc.display_name(), exts.first().copied().unwrap_or("txt"))).save_file()
         } else {

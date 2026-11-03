@@ -166,7 +166,7 @@ impl VarstotasApp {
             ui.label(tr!("licences-count", n = tp.crates.len()));
             ui.add(egui::TextEdit::singleline(&mut self.licences.filter).hint_text(tr!("licences-filter")).desired_width(200.0).id_salt("licences_filter"));
             if ui.button(tr!("licences-save")).on_hover_text(tr!("licences-save-hint")).clicked()
-                && let Some(p) = rfd::FileDialog::new().set_file_name("THIRD-PARTY-LICENSES.txt") // i18n-ignore
+                && let Some(p) = crate::file_dialog::FileDialog::new().set_file_name("THIRD-PARTY-LICENSES.txt") // i18n-ignore
 .save_file()
             {
                 match varstotas_kernel::io::atomic_write(&p, all_text()) {

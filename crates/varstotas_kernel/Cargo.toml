@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+web-time.workspace = true
 varstotas_i18n = { workspace = true }
 glam.workspace = true
 slotmap.workspace = true
@@ -15,8 +16,11 @@ thiserror.workspace = true
 draco-core = { version = "2.3.2", default-features = false, features = ["decoder", "edgebreaker_valence_decode", "legacy_bitstream_decode"] }
 flate2 = "1"
 quick-xml = "0.41"
-ufbx = "0.11.5"
 
 [dev-dependencies]
 # Encodes the Draco test primitive.
 draco-core = "2.3.2"
+
+# FBX import (C library): not in the web build.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ufbx = "0.11.5"

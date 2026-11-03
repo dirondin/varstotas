@@ -4987,6 +4987,7 @@ kernel-io-not-a-dxf-file = не файл DXF
 
 ## fbx.rs
 kernel-io-fbx-description = FBX: { $description }
+kernel-io-fbx-web = Импорт FBX недоступен в веб-версии
 
 ## gltf.rs
 kernel-io-index-out-of-range = индекс вне диапазона

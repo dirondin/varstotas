@@ -16,7 +16,7 @@ use egui::{Color32, RichText, Ui};
 use varstotas_kernel::io::MATERIAL_EXT;
 use varstotas_kernel::{Material, MaterialId};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::SystemTime; // file times (std even in the web build: from the file system)
 
 /// The folder of the bundled examples (not files).
 pub const EXAMPLES: &str = "Examples"; // i18n-ignore
@@ -265,7 +265,7 @@ impl VarstotasApp {
     /// Export model material `id` to a file chosen by the user.
     pub(crate) fn export_material(&mut self, id: MaterialId) {
         let Some(mat) = self.doc.model.materials.get(id).cloned() else { return };
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter(tr!("mat-file-filter"), &[MATERIAL_EXT])
             .set_file_name(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name, MATERIAL)))
             .save_file()
@@ -292,7 +292,7 @@ impl VarstotasApp {
         let importers: Vec<_> = self.plugins.list.iter().filter(|p| !p.material_import.is_empty()).cloned().collect();
         let mut all: Vec<&str> = vec![MATERIAL_EXT];
         all.extend(importers.iter().flat_map(|p| p.material_import.iter().map(String::as_str)));
-        let mut d = rfd::FileDialog::new();
+        let mut d = crate::file_dialog::FileDialog::new();
         if !importers.is_empty() {
             d = d.add_filter(tr!("mat-all-filter"), &all);
         }
@@ -410,7 +410,7 @@ impl VarstotasApp {
         if import {
             self.import_materials();
         }
-        if choose && let Some(d) = rfd::FileDialog::new().pick_folder() {
+        if choose && let Some(d) = crate::file_dialog::FileDialog::new().pick_folder() {
             self.prefs.mat_library_dir = Some(d);
         }
         if default_dir {

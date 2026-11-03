@@ -197,6 +197,8 @@ pub fn atomic_write(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> std::io:
     let result = (|| {
         file.write_all(bytes)?;
         file.sync_all()?;
+        // no `Drop` for a file on wasm (no files there): the lint only fires there
+        #[cfg_attr(target_arch = "wasm32", allow(clippy::drop_non_drop))]
         drop(file);
         std::fs::rename(&tmp, path)
     })();

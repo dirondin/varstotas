@@ -3,6 +3,7 @@
 
 mod dae;
 mod dxf;
+#[cfg_attr(target_arch = "wasm32", path = "fbx_web.rs")]
 mod fbx;
 mod gltf;
 mod meshes;

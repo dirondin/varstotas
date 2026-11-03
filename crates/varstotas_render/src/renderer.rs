@@ -690,7 +690,7 @@ impl Renderer {
     /// opaque-only scenes are uploaded straight from `geo` (no partition copy), and CPU scratch
     /// vectors are kept between calls. Resets all highlight states to `Highlight::None`.
     pub fn set_geometry(&mut self, rs: &egui_wgpu::RenderState, geo: &SceneGeometry) {
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let device = &rs.device;
         let queue = &rs.queue;
         let max_tris_verts = (self.max_buffer / std::mem::size_of::<TriVertex>() as u64) as usize;
@@ -863,7 +863,7 @@ impl Renderer {
     /// `edge_ids` / `profile_ids` (or the triangle / edge-segment index when those are empty);
     /// ids beyond the slices get `Highlight::None`. Replaces the whole previous state.
     pub fn update_highlight(&mut self, rs: &egui_wgpu::RenderState, update: &HighlightUpdate<'_>) {
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let queue = &rs.queue;
         let state = |states: &[Highlight], id: u32| states.get(id as usize).map_or(0, |&h| h as u32);
         let write = |buf: &wgpu::Buffer, v: &[u32]| {
@@ -932,7 +932,7 @@ impl Renderer {
         if self.blend.key == Some(key) {
             return self.blend.count;
         }
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let s = &mut self.blend;
         let eye = eye_local.as_vec3();
         let f = fwd.as_vec3();
@@ -1060,7 +1060,7 @@ impl Renderer {
         size_px: [u32; 2],
         pixels_per_point: f32,
     ) -> egui::TextureId {
-        let t_start = std::time::Instant::now();
+        let t_start = web_time::Instant::now();
         let max_dim = self.max_texture_dim;
         let size = [size_px[0].clamp(1, max_dim), size_px[1].clamp(1, max_dim)];
         self.ensure_targets(rs, size);
@@ -1088,7 +1088,7 @@ impl Renderer {
         let submission = queue.submit(Some(enc.finish()));
         if let Some(t) = self.timing.as_mut() {
             t.cpu += t_start.elapsed();
-            let g0 = std::time::Instant::now();
+            let g0 = web_time::Instant::now();
             let _ = device.poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None });
             t.gpu += g0.elapsed();
             t.frames += 1;

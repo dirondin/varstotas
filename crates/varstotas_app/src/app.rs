@@ -1447,7 +1447,7 @@ impl VarstotasApp {
                 self.save_as();
             }
             Action::ImportTexture => {
-                if let Some(path) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
+                if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
                     self.add_texture_material(&path, 1000.0);
                 }
             }
@@ -1482,14 +1482,14 @@ impl VarstotasApp {
             Action::ImportModelPlugin(i) => {
                 if let Some(p) = self.plugins.list.get(i).cloned() {
                     let exts: Vec<&str> = p.model_import.iter().map(String::as_str).collect();
-                    if let Some(path) = rfd::FileDialog::new().add_filter(p.name.clone(), &exts).pick_file() {
+                    if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(p.name.clone(), &exts).pick_file() {
                         self.import_model_file(&path, Some(&p));
                     }
                 }
             }
             Action::ModelLibrary => self.models.open = !self.models.open,
             Action::PreviewFromFile => {
-                if let Some(f) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() {
+                if let Some(f) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() {
                     self.preview_from_file(&f);
                 }
             }
@@ -1845,7 +1845,7 @@ impl VarstotasApp {
                 self.flash(tr!("app-plugins-loaded", count = self.plugins.list.len()));
             }
             Action::RunScript => {
-                if let Some(p) = rfd::FileDialog::new().add_filter(tr!("app-filter-script"), &["rhai", "py"]).pick_file() {
+                if let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-script"), &["rhai", "py"]).pick_file() {
                     self.run_script_file(&p);
                 }
             }
@@ -1879,12 +1879,12 @@ impl VarstotasApp {
                 }
             }
             Action::PickHdri => {
-                if let Some(path) = rfd::FileDialog::new().add_filter("HDRI", &["hdr", "png", "jpg", "jpeg"]).pick_file() {
+                if let Some(path) = crate::file_dialog::FileDialog::new().add_filter("HDRI", &["hdr", "png", "jpg", "jpeg"]).pick_file() {
                     self.load_hdri(&path);
                 }
             }
             Action::PickSlotFile(name, slot) => {
-                if let Some(path) = rfd::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
+                if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
                     self.load_slot_file(&name, slot, &path);
                 }
             }
@@ -1894,13 +1894,13 @@ impl VarstotasApp {
                 });
                 if let Some(img) = img {
                     let file = if img.file_name.is_empty() { format!("{name}-{slot}.{}", img.extension()) } else { img.file_name };
-                    if let Some(path) = rfd::FileDialog::new().set_file_name(file).save_file() {
+                    if let Some(path) = crate::file_dialog::FileDialog::new().set_file_name(file).save_file() {
                         self.export_slot(&name, slot, &path);
                     }
                 }
             }
             Action::PickMapFolder(name) => {
-                if let Some(dir) = rfd::FileDialog::new().pick_folder() {
+                if let Some(dir) = crate::file_dialog::FileDialog::new().pick_folder() {
                     self.load_map_folder(&name, &dir);
                 }
             }
@@ -2592,7 +2592,7 @@ impl eframe::App for VarstotasApp {
             pace_script_frame();
         }
         crate::gpu::frame_drawn(frame);
-        let frame_start = std::time::Instant::now();
+        let frame_start = web_time::Instant::now();
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
@@ -2833,7 +2833,7 @@ impl eframe::App for VarstotasApp {
 /// would give: double clicks, hover times and animations then see the usual timing.
 fn pace_script_frame() {
     use std::cell::Cell;
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
     thread_local! {
         static LAST: Cell<Option<Instant>> = const { Cell::new(None) };
     }

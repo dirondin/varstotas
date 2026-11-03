@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use web_time::{Duration, SystemTime};
 
 /// Model files and archives the watcher offers.
 pub const FILE_EXTS: [&str; 11] = ["glb", "gltf", "fbx", "dae", "obj", "3mf", "ply", "stl", "dxf", "vrst", "zip"];

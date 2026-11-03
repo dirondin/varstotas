@@ -19,7 +19,9 @@ mod document;
 mod downloads;
 mod download_progress;
 mod file_ops;
+mod file_dialog;
 mod files;
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the web build has no GPU probe
 mod gpu;
 mod inference;
 mod keymap;
@@ -37,6 +39,7 @@ mod paths;
 mod panes;
 mod plugins;
 mod scene_builder;
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))] // no command line in the web build
 mod startup;
 mod templates;
 mod text3d;
@@ -46,6 +49,8 @@ mod vector_export;
 mod tools;
 mod ui;
 mod viewport;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 // Repository examples; available on GitHub once the project is pushed.
 const EXAMPLES_URL: &str = "https://github.com/dirondin/varstotas/tree/master/examples";
@@ -74,6 +79,7 @@ fn build_line() -> String {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() == 2 && args[0] == "--probe-gpu" {
@@ -181,9 +187,14 @@ fn main() -> eframe::Result<()> {
     result
 }
 
+/// The web build starts from the page (`web.rs`).
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
 /// A start that fails before there is a window (no usable graphics adapter: a virtual machine
 /// without 3D acceleration, Windows Sandbox, a broken driver). The Windows build has no console
 /// and a desktop launcher shows none either, so the reason goes into a message box.
+#[cfg(not(target_arch = "wasm32"))]
 fn start_failed(error: &str) {
     log::error!("start failed: {error}");
     // earlier errors that may explain it (this one is in the log twice already)
@@ -201,6 +212,7 @@ fn start_failed(error: &str) {
 }
 
 /// The window / Dock icon (`assets/icon.png`, drawn by scripts/make_icon.py).
+#[cfg(not(target_arch = "wasm32"))]
 fn app_icon() -> egui::IconData {
     let img = image::load_from_memory(include_bytes!("../assets/icon.png")).map(|i| i.to_rgba8()).unwrap_or_default();
     let (width, height) = img.dimensions();

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 use varstotas_i18n::tr;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 use varstotas_kernel::{ContextPath, EntityRef, InstanceId, Mesh, Model};
 use varstotas_physics::cloth::{ClothError, ClothSettings, ClothSim, ClothSource, cloth_grid, cloth_mesh, cloth_source, place_cloth, set_cloth_mesh};
 use varstotas_physics::{DropFrame, DropSettings, DropShape, DropSim, drop_bodies, set_transforms};

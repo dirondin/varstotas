@@ -23,7 +23,7 @@ pub struct Txn {
     base_version: u64,
     path: varstotas_kernel::ContextPath,
     selection: Option<Vec<varstotas_kernel::EntityRef>>,
-    started: std::time::Instant,
+    started: web_time::Instant,
     changed: bool,
 }
 
@@ -55,7 +55,7 @@ pub struct PythonRun {
     out: Receiver<(bool, String)>,
     name: String,
     text: String,
-    started: std::time::Instant,
+    started: web_time::Instant,
     exceeded: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -378,7 +378,7 @@ impl VarstotasApp {
                     base_version: self.doc.model_version,
                     path: self.doc.active_path.clone(),
                     selection: None,
-                    started: std::time::Instant::now(),
+                    started: web_time::Instant::now(),
                     changed: false,
                 });
                 done(Ok(Value::Null))
@@ -705,7 +705,7 @@ impl VarstotasApp {
         self.console.open = true;
         self.console.push(LogLine::Input(format!("python {name}")));
         self.bridge.python = Some(PythonRun { child, out: rx, name, text: String::new(),
-            started: std::time::Instant::now(),
+            started: web_time::Instant::now(),
             exceeded,
         });
     }
@@ -771,7 +771,7 @@ mod transaction_security_tests {
     use crate::document::Document;
     fn stage(doc: &Document) -> Txn {
         Txn { conn: 1, label: "Staged".into(), model: doc.model.clone(), base_version: doc.model_version,
-            path: doc.active_path.clone(), selection: None, started: std::time::Instant::now(), changed: true }
+            path: doc.active_path.clone(), selection: None, started: web_time::Instant::now(), changed: true }
     }
     #[test]
     fn transaction_commit_preserves_intervening_ui_edit() {

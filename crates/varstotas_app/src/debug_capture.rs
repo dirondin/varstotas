@@ -1329,7 +1329,7 @@ impl VarstotasApp {
         if let Some(code) = name.strip_prefix("shader_code ") {
             if let Some(ed) = &mut self.tray.shader_edit {
                 ed.code = code.replace("\\n", "\n");
-                ed.changed = Some(std::time::Instant::now());
+                ed.changed = Some(web_time::Instant::now());
             }
             return;
         }
@@ -2908,7 +2908,7 @@ impl VarstotasApp {
 
     /// Stress model: `n`×`n` separate boxes (6 faces each), one undo step.
     pub(crate) fn insert_stress_grid(&mut self, n: u32) {
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         self.doc.commit("Insert Stress Grid", |m| {
             let mesh = m.root_mesh_mut();
             for i in 0..n {

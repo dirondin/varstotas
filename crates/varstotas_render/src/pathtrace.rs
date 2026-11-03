@@ -632,13 +632,13 @@ impl PathTracer {
     pub fn step(&mut self, rs: &egui_wgpu::RenderState, groups: [&wgpu::BindGroup; 2], max_samples: u32, budget: std::time::Duration) -> u32 {
         let set = self.groups(groups);
         let Some(job) = &mut self.job else { return 0 };
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let wg = [job.size[0].div_ceil(8), job.size[1].div_ceil(8)];
         while job.samples < max_samples.max(1) {
             let n = job.batch.min(max_samples.max(1) - job.samples);
             job.u.size[2] = job.samples as f32;
             job.u.misc[3] = n as f32;
-            let t = std::time::Instant::now();
+            let t = web_time::Instant::now();
             rs.queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&job.u));
             let mut enc = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("varstotas pt") });
             {
@@ -740,7 +740,7 @@ impl PathTracer {
             let n = aov[2 * i + 1];
             normal.extend([n[0] * k, n[1] * k, n[2] * k]);
         }
-        let t = std::time::Instant::now();
+        let t = web_time::Instant::now();
         let Some(out) = crate::oidn::denoise(w as usize, h as usize, &mut color, &mut albedo, &mut normal) else { return false };
         log::info!("denoiser: {w}x{h} in {:.2} s", t.elapsed().as_secs_f64());
         // B holds light / albedo (pt_resolve multiplies by max(albedo, 0.02)).

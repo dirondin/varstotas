@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+web-time.workspace = true
 varstotas_i18n = { workspace = true }
 glam.workspace = true
 bytemuck.workspace = true
@@ -12,8 +13,11 @@ egui.workspace = true
 egui-wgpu.workspace = true
 log.workspace = true
 png = "0.18"
-libloading = "0.8"
 
 [dev-dependencies]
 eframe.workspace = true
 env_logger.workspace = true
+
+# Open Image Denoise, loaded at run time: not in the web build.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+libloading = "0.8"

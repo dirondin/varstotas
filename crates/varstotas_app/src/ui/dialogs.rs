@@ -254,7 +254,7 @@ impl VarstotasApp {
             match choice {
                 Some(true) => {
                     self.export_dialog = None;
-                    if let Some(mut path) = rfd::FileDialog::new()
+                    if let Some(mut path) = crate::file_dialog::FileDialog::new()
                         .add_filter(tr!("dialog-filter-png"), &["png"])
                         .set_file_name(format!("{}.png", self.doc.display_name()))
                         .save_file()
@@ -325,7 +325,7 @@ impl VarstotasApp {
                 Some(ext) => {
                     self.vector_dialog = None;
                     self.vector_opts = o;
-                    if let Some(mut path) = rfd::FileDialog::new()
+                    if let Some(mut path) = crate::file_dialog::FileDialog::new()
                         .add_filter(ext.to_uppercase(), &[ext])
                         .set_file_name(format!("{}.{ext}", self.doc.display_name()))
                         .save_file()

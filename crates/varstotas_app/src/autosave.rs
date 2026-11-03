@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::JoinHandle;
-use std::time::SystemTime;
+use std::time::SystemTime; // file times (std even in the web build: from the file system)
 use varstotas_i18n::tr;
 
 pub const SUFFIX: &str = "~autosave";
@@ -178,7 +178,7 @@ impl Autosaver {
                 for job in rx {
                     match job {
                         Job::Write(path, model) => {
-                            let t0 = std::time::Instant::now();
+                            let t0 = web_time::Instant::now();
                             let result = crate::document::guarded(|| write_model(&model, &path))
                                 .unwrap_or_else(Err);
                             match &result {
@@ -350,7 +350,7 @@ mod tests {
         let auto = d.join(UNTITLED_FILE);
         let w = Autosaver::new();
         w.write(auto.clone(), sample_model());
-        let t0 = std::time::Instant::now();
+        let t0 = web_time::Instant::now();
         let mut got = Vec::new();
         while got.is_empty() && t0.elapsed().as_secs() < 10 {
             got = w.poll();

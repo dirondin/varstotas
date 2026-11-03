@@ -14,7 +14,7 @@ use egui::{Color32, RichText, Stroke, Ui, pos2, vec2};
 use varstotas_kernel::glam::DVec3;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::SystemTime;
+use std::time::SystemTime; // file times (std even in the web build: from the file system)
 
 /// Edges kept for a thumbnail.
 pub(crate) const THUMB_EDGES: usize = 4000;
@@ -1033,7 +1033,7 @@ impl VarstotasApp {
         if new_gen {
             self.gen_editor.new_generator();
         }
-        if choose && let Some(d) = rfd::FileDialog::new().pick_folder() {
+        if choose && let Some(d) = crate::file_dialog::FileDialog::new().pick_folder() {
             self.prefs.library_dir = Some(d);
         }
         if default_dir {
@@ -1294,7 +1294,7 @@ impl VarstotasApp {
             self.library.rename = rename;
         }
         if let Some((target, set)) = set_preview {
-            let image = if set { rfd::FileDialog::new().add_filter(tr!("library-image-filter"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
+            let image = if set { crate::file_dialog::FileDialog::new().add_filter(tr!("library-image-filter"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
             if !set || image.is_some() {
                 self.preview_of_from_file(&target, image.as_deref());
             }

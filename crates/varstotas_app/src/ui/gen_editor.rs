@@ -230,7 +230,7 @@ impl VarstotasApp {
                 self.gen_editor.new_generator();
             }
             if ui.button(tr!("gen-open")).clicked()
-                && let Some(p) = rfd::FileDialog::new()
+                && let Some(p) = crate::file_dialog::FileDialog::new()
                     .add_filter(tr!("gen-filter"), &["rhai"])
                     .set_directory(self.library_dir().unwrap_or_default())
                     .pick_file()

@@ -4915,6 +4915,7 @@ kernel-io-not-a-dxf-file = ne DXF failas
 
 ## fbx.rs
 kernel-io-fbx-description = FBX: { $description }
+kernel-io-fbx-web = FBX importas neprieinamas žiniatinklio versijoje
 
 ## gltf.rs
 kernel-io-index-out-of-range = indeksas už ribų

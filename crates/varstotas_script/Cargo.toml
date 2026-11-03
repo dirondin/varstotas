@@ -6,16 +6,20 @@ license.workspace = true
 description = "Rhai scripting API over the Varstotas kernel (console, script files, agents)"
 
 [dependencies]
+web-time.workspace = true
 varstotas_i18n = { workspace = true }
 varstotas_kernel = { workspace = true }
 rhai = { version = "1.26", default-features = false, features = ["std", "only_i64", "no_custom_syntax", "no_module"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slotmap = { workspace = true }
-ureq = { version = "3.5", default-features = false, features = ["rustls", "platform-verifier"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# Downloads: the web build has no ureq (no sockets in a browser).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = { version = "3.5", default-features = false, features = ["rustls", "platform-verifier"] }

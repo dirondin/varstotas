@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -510,6 +510,7 @@ pub(crate) fn restart(restart: &Restart, model: Option<&varstotas_kernel::Model>
         .spawn()
         .map_err(|e| e.to_string())?;
     // the pipe closes when this process exits
+    #[cfg_attr(target_arch = "wasm32", allow(clippy::forget_non_drop))]
     std::mem::forget(child.stdin);
     Ok(())
 }

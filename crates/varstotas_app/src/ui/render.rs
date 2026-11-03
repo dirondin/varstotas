@@ -279,13 +279,13 @@ impl VarstotasApp {
         }
         if let Some(ext) = save {
             let name = if ext == "exr" { "Render.exr" } else { "Render.png" }; // i18n-ignore
-            if let Some(path) = rfd::FileDialog::new().add_filter(ext.to_uppercase(), &[ext]).set_file_name(name).save_file()
+            if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(ext.to_uppercase(), &[ext]).set_file_name(name).save_file()
                 && let Some(job) = &mut self.viewport.pt
             {
                 job.save = Some(path);
             }
         }
-        if all && let Some(folder) = rfd::FileDialog::new().pick_folder() {
+        if all && let Some(folder) = crate::file_dialog::FileDialog::new().pick_folder() {
             self.render_all_scenes(folder);
         }
         if let Some(job) = &mut self.viewport.pt

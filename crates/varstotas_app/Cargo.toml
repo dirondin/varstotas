@@ -9,6 +9,7 @@ name = "varstotas"
 path = "src/main.rs"
 
 [dependencies]
+web-time.workspace = true
 varstotas_i18n = { workspace = true }
 varstotas_kernel.workspace = true
 varstotas_render.workspace = true
@@ -35,7 +36,6 @@ toml = "1"
 getrandom = "0.4"
 # Files, folders and links in the system's default program (ShellExecute, open, xdg-open / gio,
 # the OpenURI portal in a Flatpak) instead of a program path the user enters.
-open = "5"
 
 # macOS: scripted runs start as a background app (no activation, no Dock icon); the same
 # winit as eframe's.
@@ -50,3 +50,13 @@ libc = "0.2"
 # Windows-only: embeds icon + version info into varstotas.exe (see build.rs).
 [build-dependencies]
 winresource = "0.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+open = "5"
+
+# The web build: randomness from the browser's crypto.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement"] }

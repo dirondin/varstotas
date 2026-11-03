@@ -507,7 +507,7 @@ pub fn write_dae(model: &Model) -> (String, Vec<TextureFile>) {
         let bind = if binds.is_empty() { String::new() } else { format!("<bind_material><technique_common>{binds}</technique_common></bind_material>") };
         let _ = writeln!(scene, "      <node id=\"node{gi}\" name=\"{}\" type=\"NODE\"><instance_geometry url=\"#{id}\">{bind}</instance_geometry></node>", xml_escape(&name));
     }
-    let now = iso_time(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+    let now = iso_time(web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let lib = |tag: &str, body: &str| if body.is_empty() { String::new() } else { format!("  <{tag}>\n{body}  </{tag}>\n") };
     let text = format!(
         // i18n-ignore-next

@@ -370,7 +370,7 @@ impl VarstotasApp {
     }
 
     pub(crate) fn drilling_save(&mut self) {
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter("PDF", &["pdf"])
             // i18n-ignore-next
             .set_file_name(format!("{} drilling.pdf", self.doc.display_name()))

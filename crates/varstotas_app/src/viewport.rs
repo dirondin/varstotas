@@ -105,7 +105,7 @@ pub struct PtJob {
     /// Seconds rendered so far.
     pub elapsed: f64,
     /// When the render (re)started: wall-clock time for the log.
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// The texture shows the denoised image.
     pub denoised: bool,
     /// The image settings the texture was resolved with (`pbr::pt_output`).
@@ -129,7 +129,7 @@ impl PtJob {
             running: true,
             samples: 0,
             elapsed: 0.0,
-            started: std::time::Instant::now(),
+            started: web_time::Instant::now(),
             denoised: false,
             output: None,
             save: None,
@@ -231,7 +231,7 @@ impl Viewport {
             if let Some(renderer) = g.renderer.as_mut() {
                 let key = GeometryKey { model: doc.model_version, face_style: style.face_style, textures: self.show_textures, checker: self.checker, show_triangles: style.show_triangles, xray: style.xray };
                 if g.built != Some(key) {
-                    let t0 = std::time::Instant::now();
+                    let t0 = web_time::Instant::now();
                     if self.tess_version != Some(doc.model_version) {
                         let old = std::mem::replace(&mut self.tess, scene_builder::tessellate_model(&doc.model));
                         self.tess_version = Some(doc.model_version);
@@ -240,7 +240,7 @@ impl Viewport {
                             std::thread::spawn(move || drop(old));
                         }
                     }
-                    let t1 = std::time::Instant::now();
+                    let t1 = web_time::Instant::now();
                     let params = BuildParams { show_triangles: style.show_triangles, clean_xray: style.xray, face_style: style.face_style, textures: self.show_textures, prev_origin: g.origin };
                     let geo = guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params))
                         .unwrap_or_else(|e| {
@@ -251,7 +251,7 @@ impl Viewport {
                     self.tri_count = geo.tris.len() / 3;
                     g.origin = Some(varstotas_kernel::glam::DVec3::from_array(geo.origin));
                     self.rebuild_count += 1;
-                    let t2 = std::time::Instant::now();
+                    let t2 = web_time::Instant::now();
                     if let Some(images) = g.textures.changed(&doc.model, self.checker)
                         && let Err(e) = guarded(|| renderer.set_textures(rs, &images))
                     {
@@ -282,8 +282,8 @@ impl Viewport {
                     if let Err(e) = guarded(|| renderer.set_geometry(rs, &geo)) {
                         log::warn!("set_geometry failed: {e}");
                     }
-                    let ms = |a: std::time::Instant, b: std::time::Instant| (b - a).as_secs_f64() * 1e3;
-                    self.last_rebuild_parts = [ms(t0, t1), ms(t1, t2), ms(t2, std::time::Instant::now())];
+                    let ms = |a: web_time::Instant, b: web_time::Instant| (b - a).as_secs_f64() * 1e3;
+                    self.last_rebuild_parts = [ms(t0, t1), ms(t1, t2), ms(t2, web_time::Instant::now())];
                     g.built = Some(key);
                     // set_geometry resets all highlight states.
                     g.highlighted = None;
@@ -296,7 +296,7 @@ impl Viewport {
                 }
                 let hkey = HighlightKey { selection: doc.selection_version, active_path: doc.active_path.clone() };
                 if g.highlighted.as_ref() != Some(&hkey) {
-                    let t0 = std::time::Instant::now();
+                    let t0 = web_time::Instant::now();
                     let (faces, edges) = scene_builder::highlight(
                         &self.tess,
                         &HighlightParams { selection: &doc.selection, active_path: &doc.active_path },
@@ -347,7 +347,7 @@ impl Viewport {
                         }
                         job.samples = 0;
                         job.elapsed = 0.0;
-                        job.started = std::time::Instant::now();
+                        job.started = web_time::Instant::now();
                         job.denoised = false;
                         job.output = None;
                     }
@@ -362,7 +362,7 @@ impl Viewport {
                         }
                     }
                     if job.running && !job.done() {
-                        let t0 = std::time::Instant::now();
+                        let t0 = web_time::Instant::now();
                         let budget = std::time::Duration::from_millis(40);
                         job.samples = guarded(|| renderer.pt_step(rs, &job.style, job.max_samples, budget)).unwrap_or(job.max_samples);
                         job.elapsed += t0.elapsed().as_secs_f64();

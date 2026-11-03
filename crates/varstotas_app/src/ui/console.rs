@@ -174,7 +174,7 @@ impl VarstotasApp {
                     run = Some(self.prefs.console_code.clone());
                 }
                 if ui.button(tr!("console-open")).clicked()
-                    && let Some(p) = rfd::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).pick_file()
+                    && let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).pick_file()
                 {
                     match std::fs::read_to_string(&p) {
                         Ok(s) => self.prefs.console_code = s,
@@ -182,7 +182,7 @@ impl VarstotasApp {
                     }
                 }
                 if ui.button(tr!("console-save")).clicked()
-                    && let Some(p) = rfd::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).set_file_name("script.rhai").save_file()
+                    && let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).set_file_name("script.rhai").save_file()
                     && let Err(e) = varstotas_kernel::io::atomic_write(&p, &self.prefs.console_code)
                 {
                     self.console.push(LogLine::Error(format!("{}: {e}", p.display())));

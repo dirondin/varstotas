@@ -526,7 +526,7 @@ impl VarstotasApp {
     }
 
     fn cut_labels_save(&mut self) {
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter("PDF", &["pdf"])
             // i18n-ignore-next
             .set_file_name(format!("{} labels.pdf", self.doc.display_name()))
@@ -541,7 +541,7 @@ impl VarstotasApp {
     }
 
     fn cut_list_save(&mut self, ext: &str) {
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             // i18n-ignore-next
             .set_file_name(format!("{} cut list.{ext}", self.doc.display_name()))

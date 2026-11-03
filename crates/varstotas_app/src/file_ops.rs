@@ -30,7 +30,7 @@ impl VarstotasApp {
             Pending::NewFrom(t) => self.new_from_template(t),
             Pending::NewFromFileTemplate(path) => self.new_from_file_template(&path),
             Pending::Open => {
-                if let Some(path) = rfd::FileDialog::new()
+                if let Some(path) = crate::file_dialog::FileDialog::new()
                     .add_filter(tr!("app-filter-model"), &["vrst"])
                     .add_filter(tr!("app-filter-backup"), &["bak"])
                     .pick_file()
@@ -153,7 +153,7 @@ impl VarstotasApp {
     }
 
     pub(crate) fn save_as(&mut self) -> bool {
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter(tr!("app-filter-model"), &["vrst"])
             .set_file_name(format!("{}.vrst", self.doc.display_name()))
             .save_file()
@@ -210,7 +210,7 @@ impl VarstotasApp {
     }
 
     pub(crate) fn export(&mut self, ext: &str) {
-        let Some(mut path) = rfd::FileDialog::new()
+        let Some(mut path) = crate::file_dialog::FileDialog::new()
             .add_filter(ext.to_uppercase(), &[ext])
             .set_file_name(format!("{}.{ext}", self.doc.display_name()))
             .save_file()
@@ -226,7 +226,7 @@ impl VarstotasApp {
         let sidecars = io::export_bundle(&self.doc.model, &path).is_some_and(|f| f.len() > 1);
         if sidecars && !path.parent().is_some_and(writable_dir) {
             let Some(name) = path.file_name().map(|n| n.to_owned()) else { return };
-            let mut dialog = rfd::FileDialog::new().set_title(tr!("app-export-folder", file = name.to_string_lossy().to_string()));
+            let mut dialog = crate::file_dialog::FileDialog::new().set_title(tr!("app-export-folder", file = name.to_string_lossy().to_string()));
             if let Some(dir) = path.parent() {
                 dialog = dialog.set_directory(dir);
             }
@@ -338,7 +338,7 @@ impl VarstotasApp {
     }
 
     pub(crate) fn import(&mut self, exts: &[&str], label: &str) {
-        let Some(path) = rfd::FileDialog::new().add_filter(label, exts).pick_file() else {
+        let Some(path) = crate::file_dialog::FileDialog::new().add_filter(label, exts).pick_file() else {
             return;
         };
         self.import_from(&path, label);
@@ -410,7 +410,7 @@ impl VarstotasApp {
         if !yes {
             return None;
         }
-        let mut dialog = rfd::FileDialog::new();
+        let mut dialog = crate::file_dialog::FileDialog::new();
         if let Some(dir) = path.parent() {
             dialog = dialog.set_directory(dir);
         }

@@ -51,7 +51,7 @@ struct Store {
 static LOG: Mutex<Store> = Mutex::new(Store { entries: VecDeque::new(), unseen: 0, version: 0 });
 
 fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 /// Add an entry (a repeat of the last one only counts up).
