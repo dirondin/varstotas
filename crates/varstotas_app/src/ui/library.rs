@@ -102,10 +102,10 @@ impl FolderDelete {
         let (mut files, mut dirs, mut sample) = (0, 0, Vec::new());
         let mut stack = vec![dir.clone()];
         while let Some(d) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            let Ok(rd) = varstotas_kernel::fs::read_dir(&d) else { continue };
             for e in rd.flatten() {
                 let p = e.path();
-                if p.is_dir() {
+                if varstotas_kernel::fs::is_dir(&p) {
                     dirs += 1;
                     stack.push(p);
                 } else {
@@ -205,7 +205,7 @@ fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
         size: clip.bounds.max - clip.bounds.min,
         thumb: thumbnail(&edges),
         clip: Rc::new(clip),
-        mtime: std::fs::metadata(path).and_then(|m| m.modified()).ok(),
+        mtime: varstotas_kernel::fs::metadata(path).and_then(|m| m.modified()).ok(),
         preview,
         picture: Default::default(),
     })
@@ -215,10 +215,10 @@ fn load_item(path: &Path, root: &Path) -> Result<LibItem, String> {
 fn scan(root: &Path, old: Vec<LibItem>) -> (Vec<LibItem>, Vec<String>) {
     let mut files = Vec::new();
     fn walk(d: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(d) else { return };
+        let Ok(rd) = varstotas_kernel::fs::read_dir(d) else { return };
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() && depth < 2 {
+            if varstotas_kernel::fs::is_dir(&p) && depth < 2 {
                 walk(&p, depth + 1, out);
             } else if p.extension().is_some_and(|x| x == "vrst") {
                 out.push(p);
@@ -230,7 +230,7 @@ fn scan(root: &Path, old: Vec<LibItem>) -> (Vec<LibItem>, Vec<String>) {
     let mut old: std::collections::HashMap<PathBuf, LibItem> = old.into_iter().map(|i| (i.path.clone(), i)).collect();
     let (mut items, mut errors) = (Vec::new(), Vec::new());
     for f in files {
-        let mtime = std::fs::metadata(&f).and_then(|m| m.modified()).ok();
+        let mtime = varstotas_kernel::fs::metadata(&f).and_then(|m| m.modified()).ok();
         match old.remove(&f) {
             Some(i) if i.mtime == mtime => items.push(i),
             _ => match load_item(&f, root) {
@@ -251,7 +251,7 @@ fn rename_library_file(path: &Path, name: &str) -> Result<PathBuf, String> {
     if to == path {
         return Ok(to);
     }
-    if to.exists() && !to.to_string_lossy().eq_ignore_ascii_case(&path.to_string_lossy()) {
+    if varstotas_kernel::fs::exists(&to) && !to.to_string_lossy().eq_ignore_ascii_case(&path.to_string_lossy()) {
         return Err(tr!("library-exists", path = to.display().to_string()));
     }
     let old = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
@@ -266,7 +266,7 @@ fn rename_library_file(path: &Path, name: &str) -> Result<PathBuf, String> {
     }
     varstotas_kernel::io::save(&model, &to).map_err(|e| e.to_string())?;
     if !to.to_string_lossy().eq_ignore_ascii_case(&path.to_string_lossy()) {
-        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        varstotas_kernel::fs::remove_file(path).map_err(|e| e.to_string())?;
     }
     Ok(to)
 }
@@ -279,7 +279,7 @@ impl VarstotasApp {
 
     pub(crate) fn refresh_library(&mut self) {
         let Some(dir) = self.library_dir() else { return };
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = varstotas_kernel::fs::create_dir_all(&dir);
         let (items, errors) = scan(&dir, std::mem::take(&mut self.library.items));
         for e in &errors {
             log::warn!("library: {e}");
@@ -348,11 +348,11 @@ impl VarstotasApp {
         let base = safe_name(name, COMPONENT);
         let mut path = dir.join(format!("{base}.vrst"));
         let mut n = 2;
-        while path.exists() {
+        while varstotas_kernel::fs::exists(&path) {
             path = dir.join(format!("{base} {n}.vrst"));
             n += 1;
         }
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = varstotas_kernel::fs::create_dir_all(&dir);
         match varstotas_kernel::io::save(&model, &path) {
             Ok(()) => {
                 self.flash(tr!("library-saved", path = path.display().to_string()));
@@ -490,7 +490,7 @@ impl VarstotasApp {
         if !ok {
             return;
         }
-        match std::fs::remove_dir_all(&del.dir) {
+        match varstotas_kernel::fs::remove_dir_all(&del.dir) {
             Ok(()) => {
                 // favourites and recents of what was inside go too
                 let (prefix, lists) = if del.materials {
@@ -549,14 +549,14 @@ impl VarstotasApp {
         let Some(root) = root else { return };
         let name = ask.name.trim().to_string();
         let r = match &ask.rename {
-            None => std::fs::create_dir_all(root.join(&name)).map_err(|e| e.to_string()),
+            None => varstotas_kernel::fs::create_dir_all(root.join(&name)).map_err(|e| e.to_string()),
             Some(old) => {
                 let from = root.join(old);
                 let to = from.parent().unwrap_or(&root).join(&name);
-                if to.exists() {
+                if varstotas_kernel::fs::exists(&to) {
                     Err(tr!("library-exists", path = to.display().to_string()))
                 } else {
-                    std::fs::rename(&from, &to).map_err(|e| e.to_string()).map(|()| {
+                    varstotas_kernel::fs::rename(&from, &to).map_err(|e| e.to_string()).map(|()| {
                         let (prefix, lists) = if ask.materials {
                             ("m:", [&mut self.prefs.mat_favourites, &mut self.prefs.mat_recent])
                         } else {
@@ -633,7 +633,7 @@ impl VarstotasApp {
             Some(true) => {
                 self.library.delete_ask = None;
                 let path = path.unwrap_or_default();
-                match std::fs::remove_file(&path) {
+                match varstotas_kernel::fs::remove_file(&path) {
                     Ok(()) => {
                         self.flash(tr!("library-deleted", name = name.as_str()));
                         self.refresh_library();
@@ -847,7 +847,7 @@ impl VarstotasApp {
 
     /// The document's preview picture from an image file.
     pub(crate) fn preview_from_file(&mut self, f: &Path) {
-        match std::fs::read(f).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b)) {
+        match varstotas_kernel::fs::read(f).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b)) {
             Ok(b) => self.set_doc_preview(Some(b)),
             Err(e) => self.flash_error(tr!("library-preview-error-file", path = f.display().to_string(), error = e)),
         }
@@ -872,8 +872,8 @@ impl VarstotasApp {
         let Some((path, target)) = self.preview_shot.take() else { return false };
         match r {
             Ok(p) if *p == path => {
-                let res = std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b));
-                let _ = std::fs::remove_file(p);
+                let res = varstotas_kernel::fs::read(p).map_err(|e| e.to_string()).and_then(|b| crate::textures::preview_bytes(&b));
+                let _ = varstotas_kernel::fs::remove_file(p);
                 match res {
                     Ok(b) => self.set_preview_of(&target, Some(b)),
                     Err(e) => self.flash_error(tr!("library-preview-error", error = e)),
@@ -913,7 +913,7 @@ impl VarstotasApp {
     /// Set (from the image file `image`) or remove the preview picture of `target`.
     pub(crate) fn preview_of_from_file(&mut self, target: &PreviewTarget, image: Option<&Path>) {
         let bytes = match image {
-            Some(f) => match std::fs::read(f).map_err(|e| format!("{}: {e}", f.display())).and_then(|b| crate::textures::preview_bytes(&b)) {
+            Some(f) => match varstotas_kernel::fs::read(f).map_err(|e| format!("{}: {e}", f.display())).and_then(|b| crate::textures::preview_bytes(&b)) {
                 Ok(b) => Some(b),
                 Err(e) => return self.flash_error(tr!("library-preview-error", error = e)),
             },
@@ -1294,9 +1294,11 @@ impl VarstotasApp {
             self.library.rename = rename;
         }
         if let Some((target, set)) = set_preview {
-            let image = if set { crate::file_dialog::FileDialog::new().add_filter(tr!("library-image-filter"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() } else { None };
-            if !set || image.is_some() {
-                self.preview_of_from_file(&target, image.as_deref());
+            if set {
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("library-image-filter"), &["png", "jpg", "jpeg", "tga", "bmp"]);
+                self.pick_file(d, move |app, image| app.preview_of_from_file(&target, Some(&image)));
+            } else {
+                self.preview_of_from_file(&target, None);
             }
         }
         if let Some(target) = preview_view {

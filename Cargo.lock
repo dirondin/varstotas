@@ -3561,6 +3561,7 @@ dependencies = [
  "getrandom 0.4.3",
  "glam 0.34.1",
  "image",
+ "js-sys",
  "libc",
  "log",
  "objc2-foundation 0.3.2",

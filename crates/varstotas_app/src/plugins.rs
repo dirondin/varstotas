@@ -319,10 +319,10 @@ pub fn plugins_dir() -> Option<PathBuf> {
 pub fn scan(dir: &Path) -> (Vec<Plugin>, Vec<String>) {
     let mut files = Vec::new();
     fn walk(d: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(d) else { return };
+        let Ok(rd) = varstotas_kernel::fs::read_dir(d) else { return };
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() {
+            if varstotas_kernel::fs::is_dir(&p) {
                 if depth < 2 {
                     walk(&p, depth + 1, out);
                 }
@@ -334,7 +334,7 @@ pub fn scan(dir: &Path) -> (Vec<Plugin>, Vec<String>) {
     walk(dir, 0, &mut files);
     let (mut list, mut errors) = (Vec::new(), Vec::new());
     for f in files {
-        match std::fs::read_to_string(&f).map_err(|e| e.to_string()).and_then(|s| parse(&s, &f)) {
+        match varstotas_kernel::fs::read_to_string(&f).map_err(|e| e.to_string()).and_then(|s| parse(&s, &f)) {
             Ok(p) => list.push(p),
             Err(e) => errors.push(format!("{}: {e}", f.display())),
         }

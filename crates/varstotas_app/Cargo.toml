@@ -59,4 +59,5 @@ open = "5"
 getrandom = { version = "0.4", features = ["wasm_js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement"] }
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlInputElement", "HtmlAnchorElement", "File", "FileList", "Blob", "Url", "BeforeUnloadEvent", "Event", "EventTarget"] }

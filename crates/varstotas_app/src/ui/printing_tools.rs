@@ -320,7 +320,7 @@ impl VarstotasApp {
             self.printing.error = Some(tr!("print-export-stale"));
             return;
         }
-        if !path.is_file() {
+        if !varstotas_kernel::fs::is_file(path) {
             self.printing.error = Some(tr!("print-export-missing"));
             return;
         }
@@ -659,7 +659,7 @@ impl VarstotasApp {
                     .printing
                     .last_export
                     .as_ref()
-                    .is_some_and(|(key, path)| key == &self.print_key() && path.is_file());
+                    .is_some_and(|(key, path)| key == &self.print_key() && varstotas_kernel::fs::is_file(path));
                 if let Some((_, path)) = &self.printing.last_export {
                     ui.label(path.display().to_string());
                 }

@@ -285,7 +285,7 @@ impl VarstotasApp {
                 job.save = Some(path);
             }
         }
-        if all && let Some(folder) = crate::file_dialog::FileDialog::new().pick_folder() {
+        if all && let Some(folder) = crate::file_dialog::output_folder(crate::file_dialog::FileDialog::new()) {
             self.render_all_scenes(folder);
         }
         if let Some(job) = &mut self.viewport.pt

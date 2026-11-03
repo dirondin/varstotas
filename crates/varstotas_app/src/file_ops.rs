@@ -30,13 +30,8 @@ impl VarstotasApp {
             Pending::NewFrom(t) => self.new_from_template(t),
             Pending::NewFromFileTemplate(path) => self.new_from_file_template(&path),
             Pending::Open => {
-                if let Some(path) = crate::file_dialog::FileDialog::new()
-                    .add_filter(tr!("app-filter-model"), &["vrst"])
-                    .add_filter(tr!("app-filter-backup"), &["bak"])
-                    .pick_file()
-                {
-                    self.open_path(&path);
-                }
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-model"), &["vrst"]).add_filter(tr!("app-filter-backup"), &["bak"]);
+                self.pick_file(d, |app, path| app.open_path(&path));
             }
             Pending::OpenPath(path) => self.open_path(&path),
             Pending::Quit => {
@@ -48,7 +43,7 @@ impl VarstotasApp {
 
     pub(crate) fn ensure_templates_dir(&self) {
         if let Some(dir) = crate::templates::directory(self.prefs.templates_dir.as_deref())
-            && let Err(e) = std::fs::create_dir_all(&dir)
+            && let Err(e) = varstotas_kernel::fs::create_dir_all(&dir)
         {
             log::warn!("templates: cannot create {}: {e}", dir.display());
         }
@@ -173,7 +168,7 @@ impl VarstotasApp {
             match crate::paths::backup_path(path, beside).filter(|_| self.prefs.save_backups) {
                 Some(backup) => {
                     if let Some(dir) = backup.parent() {
-                        std::fs::create_dir_all(dir)?;
+                        varstotas_kernel::fs::create_dir_all(dir)?;
                     }
                     io::save_with_backup(&self.doc.model, path, &backup)
                 }
@@ -230,7 +225,7 @@ impl VarstotasApp {
             if let Some(dir) = path.parent() {
                 dialog = dialog.set_directory(dir);
             }
-            let Some(dir) = dialog.pick_folder() else { return };
+            let Some(dir) = crate::file_dialog::output_folder(dialog) else { return };
             self.export_into(&dir.join(name));
             return;
         }
@@ -244,7 +239,7 @@ impl VarstotasApp {
             .unwrap_or_default()
             .into_iter()
             .map(|(p, _)| p)
-            .filter(|p| p.exists())
+            .filter(|p| varstotas_kernel::fs::exists(p))
             .collect();
         if !existing.is_empty() {
             let mut files: Vec<String> = existing.iter().map(|p| p.display().to_string()).collect();
@@ -276,13 +271,13 @@ impl VarstotasApp {
             .map(|f| {
                 f.iter()
                     .skip(1)
-                    .filter(|(p, _)| p.exists())
+                    .filter(|(p, _)| varstotas_kernel::fs::exists(p))
                     .map(|(p, _)| p.display().to_string())
                     .collect()
             })
             .unwrap_or_default();
         let local_approved: std::collections::HashSet<PathBuf> = bundle.as_ref()
-            .map(|f| f.iter().filter(|(p, _)| p.exists()).map(|(p, _)| p.clone()).collect()).unwrap_or_default();
+            .map(|f| f.iter().filter(|(p, _)| varstotas_kernel::fs::exists(p)).map(|(p, _)| p.clone()).collect()).unwrap_or_default();
         let allow_sidecars = if approved.is_none() && !collisions.is_empty() {
             rfd::MessageDialog::new()
                 .set_title(tr!("app-export-replace-title"))
@@ -338,10 +333,9 @@ impl VarstotasApp {
     }
 
     pub(crate) fn import(&mut self, exts: &[&str], label: &str) {
-        let Some(path) = crate::file_dialog::FileDialog::new().add_filter(label, exts).pick_file() else {
-            return;
-        };
-        self.import_from(&path, label);
+        let label = label.to_string();
+        let d = crate::file_dialog::FileDialog::new().add_filter(&label, exts);
+        self.pick_file(d, move |app, path| app.import_from(&path, &label));
     }
 
     /// Import `path` (format by extension) as one undo step "Import <label>".
@@ -376,7 +370,7 @@ impl VarstotasApp {
         {
             let Some(name) = path.file_name() else { return };
             let again = folder.join(name);
-            if !again.is_file() {
+            if !varstotas_kernel::fs::is_file(&again) {
                 self.flash_error(tr!("app-import-not-in-folder", file = name.to_string_lossy().to_string(), folder = folder.display().to_string()));
             } else {
                 if r.is_some() {
@@ -502,8 +496,8 @@ impl VarstotasApp {
 /// The app may create files in `dir` (not so in a sandbox that granted one picked file).
 fn writable_dir(dir: &Path) -> bool {
     let probe = dir.join(format!(".varstotas-write-test-{}", std::process::id()));
-    match std::fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
-        Ok(_) => std::fs::remove_file(&probe).is_ok(),
+    match varstotas_kernel::fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(_) => varstotas_kernel::fs::remove_file(&probe).is_ok(),
         Err(_) => false,
     }
 }

@@ -274,7 +274,7 @@ impl VarstotasApp {
             .doc
             .path
             .as_ref()
-            .and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|p| varstotas_kernel::fs::metadata(p).ok())
             .map(|m| m.len());
         let lib_components = self.library.items.len();
         let lib_materials = self

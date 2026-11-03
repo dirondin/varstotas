@@ -124,7 +124,7 @@ fn state_path() -> Option<PathBuf> {
 
 fn load() -> State {
     let mut s: State = state_path()
-        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|p| varstotas_kernel::fs::read(p).ok())
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
     if s.version != env!("CARGO_PKG_VERSION") {
@@ -137,7 +137,7 @@ fn load() -> State {
 fn store(s: &State) {
     if let Some(p) = state_path() {
         if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            let _ = varstotas_kernel::fs::create_dir_all(dir);
         }
         if let Ok(text) = serde_json::to_vec_pretty(s) {
             let _ = varstotas_kernel::io::atomic_write(&p, text);
@@ -493,7 +493,7 @@ fn restart_paths() -> Option<(PathBuf, PathBuf)> {
 pub(crate) fn restart(restart: &Restart, model: Option<&varstotas_kernel::Model>) -> Result<(), String> {
     let (json, vrst) = restart_paths().ok_or("no data folder")?;
     if let Some(dir) = json.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        varstotas_kernel::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     if let Some(model) = model {
         crate::autosave::write_model(model, &vrst)?;
@@ -533,10 +533,10 @@ pub(crate) fn wait_for_restart() {
 pub(crate) fn take_restart() -> Option<(Restart, Option<varstotas_kernel::Model>)> {
     std::env::var_os("VARSTOTAS_RESTART")?;
     let (json, vrst) = restart_paths()?;
-    let r: Restart = std::fs::read(&json).ok().and_then(|b| serde_json::from_slice(&b).ok())?;
-    let _ = std::fs::remove_file(&json);
+    let r: Restart = varstotas_kernel::fs::read(&json).ok().and_then(|b| serde_json::from_slice(&b).ok())?;
+    let _ = varstotas_kernel::fs::remove_file(&json);
     let model = r.unsaved.then(|| varstotas_kernel::io::load(&vrst).ok()).flatten();
-    let _ = std::fs::remove_file(&vrst);
+    let _ = varstotas_kernel::fs::remove_file(&vrst);
     Some((r, model))
 }
 

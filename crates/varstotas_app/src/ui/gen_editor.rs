@@ -110,11 +110,11 @@ fn save_path(dir: &Path, file: Option<&Path>, name: &str) -> PathBuf {
     if let Some(f) = file.filter(|f| f.starts_with(dir) && !f.starts_with(dir.join(EXAMPLES_FOLDER))) {
         return f.to_path_buf();
     }
-    let ours = |p: &Path| std::fs::read_to_string(p).ok().and_then(|s| Generator::parse(&s).ok()).is_some_and(|g| g.name == name);
+    let ours = |p: &Path| varstotas_kernel::fs::read_to_string(p).ok().and_then(|s| Generator::parse(&s).ok()).is_some_and(|g| g.name == name);
     let base = slug(name);
     (1..)
         .map(|n| dir.join(if n == 1 { format!("{base}.rhai") } else { format!("{base}_{n}.rhai") }))
-        .find(|p| !p.exists() || ours(p))
+        .find(|p| !varstotas_kernel::fs::exists(p) || ours(p))
         .expect("a free file name")
 }
 
@@ -229,16 +229,12 @@ impl VarstotasApp {
             if ui.button(tr!("gen-new")).on_hover_text(tr!("gen-new-hint")).clicked() {
                 self.gen_editor.new_generator();
             }
-            if ui.button(tr!("gen-open")).clicked()
-                && let Some(p) = crate::file_dialog::FileDialog::new()
-                    .add_filter(tr!("gen-filter"), &["rhai"])
-                    .set_directory(self.library_dir().unwrap_or_default())
-                    .pick_file()
-            {
-                match std::fs::read_to_string(&p) {
-                    Ok(s) => self.gen_editor.edit(&s, Some(p)),
-                    Err(e) => self.gen_editor.status = tr!("console-cannot-read", path = p.display().to_string(), error = e.to_string()),
-                }
+            if ui.button(tr!("gen-open")).clicked() {
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("gen-filter"), &["rhai"]).set_directory(self.library_dir().unwrap_or_default());
+                self.pick_file(d, |app, p| match varstotas_kernel::fs::read_to_string(&p) {
+                    Ok(s) => app.gen_editor.edit(&s, Some(p)),
+                    Err(e) => app.gen_editor.status = tr!("console-cannot-read", path = p.display().to_string(), error = e.to_string()),
+                });
             }
             ui.separator();
             let ok = name.is_some();
@@ -384,7 +380,7 @@ impl VarstotasApp {
         let Ok(g) = &self.gen_editor.parsed else { return };
         let Some(dir) = self.library_dir() else { return self.flash_error(tr!("gen-no-home")) };
         let path = save_path(&dir, self.gen_editor.file.as_deref(), &g.name);
-        match std::fs::create_dir_all(&dir).and_then(|()| varstotas_kernel::io::atomic_write(&path, &self.gen_editor.source)) {
+        match varstotas_kernel::fs::create_dir_all(&dir).and_then(|()| varstotas_kernel::io::atomic_write(&path, &self.gen_editor.source)) {
             Ok(()) => {
                 self.gen_editor.status = tr!("gen-saved", path = path.display().to_string());
                 self.gen_editor.file = Some(path);
@@ -444,7 +440,7 @@ mod tests {
     #[test]
     fn save_paths() {
         let dir = std::env::temp_dir().join(format!("varstotas_gen_editor_{}", std::process::id()));
-        std::fs::create_dir_all(dir.join(EXAMPLES_FOLDER)).unwrap();
+        varstotas_kernel::fs::create_dir_all(dir.join(EXAMPLES_FOLDER)).unwrap();
         assert_eq!(slug("My Shelf 2"), "my_shelf_2");
         assert_eq!(save_path(&dir, None, "My Shelf"), dir.join("my_shelf.rhai"));
         // A file outside the folder is saved as a copy in it.
@@ -454,6 +450,6 @@ mod tests {
         assert_eq!(save_path(&dir, None, "Shelf"), dir.join("shelf_2.rhai"));
         varstotas_kernel::io::atomic_write(dir.join("mine.rhai"), "x").unwrap();
         assert_eq!(save_path(&dir, Some(&dir.join("mine.rhai")), "Shelf"), dir.join("mine.rhai"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = varstotas_kernel::fs::remove_dir_all(&dir);
     }
 }

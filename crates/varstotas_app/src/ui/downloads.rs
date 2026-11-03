@@ -14,7 +14,7 @@ const WARN: Color32 = Color32::from_rgb(220, 160, 50);
 
 /// The address in a dropped `.webloc` (macOS) / `.url` (Windows) link file.
 pub fn link_file_url(p: &Path) -> Option<String> {
-    let t = std::fs::read_to_string(p).ok()?;
+    let t = varstotas_kernel::fs::read_to_string(p).ok()?;
     let ext = p.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
     let url = if ext == "webloc" {
         t.split("<string>").nth(1)?.split("</string>").next()?.trim().replace("&amp;", "&")
@@ -97,7 +97,7 @@ impl VarstotasApp {
         let dir = self.models.dl.dir.clone().or_else(|| self.prefs.downloads_watch_dir.clone()).or_else(crate::downloads::downloads_folder);
         match (&self.models.dl.watcher, want, dir) {
             (Some(w), true, Some(d)) if w.dir == d => {}
-            (_, true, Some(d)) if d.is_dir() => self.models.dl.watcher = Some(Watcher::start(d, ctx.clone())),
+            (_, true, Some(d)) if varstotas_kernel::fs::is_dir(&d) => self.models.dl.watcher = Some(Watcher::start(d, ctx.clone())),
             (Some(_), false, _) => self.models.dl.watcher = None,
             _ => {}
         }
@@ -238,10 +238,11 @@ impl VarstotasApp {
                 }
                 if ui.button(tr!("downloads-import-file")).on_hover_text(tr!("downloads-import-file-hover")).clicked() {
                     let exts = crate::downloads::FILE_EXTS;
-                    if let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("downloads-models-filter"), &exts).pick_file() {
-                        self.models.dl.offered.remove(&p);
-                        self.downloads_offer(&p);
-                    }
+                    let d = crate::file_dialog::FileDialog::new().add_filter(tr!("downloads-models-filter"), &exts);
+                    self.pick_file(d, |app, p| {
+                        app.models.dl.offered.remove(&p);
+                        app.downloads_offer(&p);
+                    });
                 }
             });
             let mut close = None;
@@ -289,7 +290,7 @@ impl VarstotasApp {
             let more = self.models.dl.offers.len() - 1;
             let o = &mut self.models.dl.offers[0];
             let name = o.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-            let size = std::fs::metadata(&o.path).map(|m| m.len()).unwrap_or(0);
+            let size = varstotas_kernel::fs::metadata(&o.path).map(|m| m.len()).unwrap_or(0);
             ui.label(RichText::new(tr!("downloads-file-size", name = name.as_str(), mb = format!("{:.1}", size as f64 / 1_048_576.0))).strong());
             if o.expect.is_some() {
                 ui.label(RichText::new(tr!("downloads-credit-from-page")).small().weak());
@@ -376,7 +377,7 @@ impl VarstotasApp {
         if let Some(p) = show {
             let lib = lib.unwrap_or_default();
             let rel = p.strip_prefix(&lib).unwrap_or(&p);
-            let folder = if p.is_dir() { rel.to_path_buf() } else { rel.parent().map(Path::to_path_buf).unwrap_or_default() };
+            let folder = if varstotas_kernel::fs::is_dir(&p) { rel.to_path_buf() } else { rel.parent().map(Path::to_path_buf).unwrap_or_default() };
             self.show_library_folder(&folder.to_string_lossy());
         }
         match act {

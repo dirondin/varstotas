@@ -70,7 +70,7 @@ pub fn is_image_file(path: &Path) -> bool {
 }
 
 pub fn load_file(path: &Path, width_mm: f64) -> Result<(TextureImage, Decoded), String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let bytes = varstotas_kernel::fs::read(path).map_err(|e| e.to_string())?;
     let decoded = decode(&bytes)?;
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("texture").to_string();
     let mut tex = TextureImage::new(bytes, name, width_mm);
@@ -122,7 +122,7 @@ pub fn slot_of_file(name: &str) -> Option<(&'static str, bool)> {
 /// The image files of `dir` sorted into slots by name (the first match per slot; an OpenGL
 /// normal map wins over a DirectX one).
 pub fn map_set_in(dir: &Path) -> Vec<(&'static str, std::path::PathBuf)> {
-    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+    let mut files: Vec<std::path::PathBuf> = varstotas_kernel::fs::read_dir(dir)
         .map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).collect())
         .unwrap_or_default();
     files.retain(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg")));

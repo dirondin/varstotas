@@ -101,12 +101,12 @@ impl VarstotasApp {
         }
         let (dir, gif) = if w.gif {
             let dir = std::env::temp_dir().join(format!("varstotas_anim_{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
+            let _ = varstotas_kernel::fs::remove_dir_all(&dir);
             (dir, Some(out))
         } else {
             (out, None)
         };
-        if let Err(e) = std::fs::create_dir_all(&dir) {
+        if let Err(e) = varstotas_kernel::fs::create_dir_all(&dir) {
             self.anim_window.last = Some(Err(e.to_string()));
             self.flash_error(tr!("anim-error", error = e.to_string()));
             return;
@@ -211,7 +211,7 @@ impl VarstotasApp {
                 let (dir, fps) = (run.dir.clone(), run.fps);
                 std::thread::spawn(move || {
                     let r = encode_gif(&dir, n, fps, &out).map(|()| out);
-                    let _ = std::fs::remove_dir_all(&dir);
+                    let _ = varstotas_kernel::fs::remove_dir_all(&dir);
                     let _ = tx.send(r);
                 });
                 self.anim_window.encoding = Some(rx);
@@ -327,7 +327,7 @@ impl VarstotasApp {
             let out = if self.anim_window.gif {
                 crate::file_dialog::FileDialog::new().add_filter("GIF", &["gif"]).set_file_name("Animation.gif").save_file()
             } else {
-                crate::file_dialog::FileDialog::new().pick_folder()
+                crate::file_dialog::output_folder(crate::file_dialog::FileDialog::new())
             };
             if let Some(out) = out {
                 self.start_animation(out);

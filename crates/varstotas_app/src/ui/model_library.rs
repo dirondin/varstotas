@@ -322,7 +322,7 @@ impl VarstotasApp {
     /// The library file / pack folder an earlier download of `a` became (still there).
     fn models_saved_path(&self, a: &ModelAsset) -> Option<PathBuf> {
         let key = a.key();
-        self.models.state.history.iter().find(|h| h.key() == key).and_then(|h| h.path.clone()).filter(|p| p.exists())
+        self.models.state.history.iter().find(|h| h.key() == key).and_then(|h| h.path.clone()).filter(|p| varstotas_kernel::fs::exists(p))
     }
 
     /// Download and import the model file at `url` (glb, gltf, fbx, dae, obj, 3mf, ply, stl, dxf, zip…).
@@ -343,7 +343,7 @@ impl VarstotasApp {
     /// The components library item downloaded for `a`, if any (a pack: its first model).
     fn models_in_library(&self, a: &ModelAsset) -> Option<usize> {
         if let Some(p) = self.models_saved_path(a) {
-            let found = if p.is_dir() { self.library.items.iter().position(|i| i.path.starts_with(&p)) } else { self.library.items.iter().position(|i| i.path == p) };
+            let found = if varstotas_kernel::fs::is_dir(&p) { self.library.items.iter().position(|i| i.path.starts_with(&p)) } else { self.library.items.iter().position(|i| i.path == p) };
             if found.is_some() {
                 return found;
             }
@@ -434,7 +434,7 @@ impl VarstotasApp {
                         self.models.saved_dirty = true;
                     }
                     match res {
-                        Ok((path, n)) if path.is_dir() => {
+                        Ok((path, n)) if varstotas_kernel::fs::is_dir(&path) => {
                             self.models.last = Some(format!("{key} ok {} models={n}", path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
                             self.refresh_library();
                             let folder = path.parent().and_then(|p| p.file_name()).map(|f| f.to_string_lossy().to_string()).unwrap_or_default();

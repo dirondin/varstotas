@@ -340,11 +340,11 @@ pub fn move_file(file: &Path, root: &Path, folder: &str) -> Result<PathBuf, Stri
     if to == file {
         return Ok(to);
     }
-    if to.exists() {
+    if varstotas_kernel::fs::exists(&to) {
         return Err(tr!("tray-lib-exists", path = to.display().to_string()));
     }
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::rename(file, &to).map_err(|e| e.to_string())?;
+    varstotas_kernel::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    varstotas_kernel::fs::rename(file, &to).map_err(|e| e.to_string())?;
     Ok(to)
 }
 
@@ -353,11 +353,11 @@ pub fn move_file(file: &Path, root: &Path, folder: &str) -> Result<PathBuf, Stri
 pub fn subfolders(root: &Path) -> Vec<String> {
     fn level(dir: &Path, prefix: &str, out: &mut Vec<String>) -> Vec<(PathBuf, String)> {
         let mut next = Vec::new();
-        let Ok(rd) = std::fs::read_dir(dir) else { return next };
+        let Ok(rd) = varstotas_kernel::fs::read_dir(dir) else { return next };
         for e in rd.flatten() {
             let p = e.path();
             let name = e.file_name().to_string_lossy().to_string();
-            if p.is_dir() && !name.starts_with('.') {
+            if varstotas_kernel::fs::is_dir(&p) && !name.starts_with('.') {
                 let rel = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
                 out.push(rel.clone());
                 next.push((p, rel));
@@ -406,7 +406,7 @@ pub fn folder_menu(title: &Response, folder: &str, dir: Option<&Path>, act: &mut
             *act = Some(FolderAct::Rename(folder.to_string()));
             ui.close();
         }
-        let empty = std::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none());
+        let empty = varstotas_kernel::fs::read_dir(dir).is_ok_and(|mut d| d.next().is_none());
         let r = ui.button(tr!(if empty { "tray-folder-delete" } else { "tray-folder-delete-files" }));
         spot("menu:delete_folder", r.rect.center());
         if r.clicked() {

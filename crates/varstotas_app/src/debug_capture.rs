@@ -69,9 +69,9 @@ impl DebugCapture {
     pub fn from_env() -> Self {
         // `$ROOT` in a script is the repository (the script is <root>/tests/ui/scripts/<name>.txt):
         // scripts run in a fresh temporary folder, so repository files are named from the root
-        let script = std::env::var("VARSTOTAS_SCRIPT").ok().and_then(|p| match std::fs::read_to_string(&p) {
+        let script = std::env::var("VARSTOTAS_SCRIPT").ok().and_then(|p| match varstotas_kernel::fs::read_to_string(&p) {
             Ok(text) => {
-                let path = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone().into());
+                let path = varstotas_kernel::fs::canonicalize(&p).unwrap_or_else(|_| p.clone().into());
                 let root = path.ancestors().nth(4).map(|r| r.display().to_string()).unwrap_or_default();
                 Some(Script::parse(&text.replace("$ROOT", &root)))
             }
@@ -160,7 +160,7 @@ fn write_bmp(path: &str, w: usize, h: usize, px: &[egui::Color32]) -> std::io::R
         }
         out.extend(std::iter::repeat_n(0u8, pad));
     }
-    std::fs::write(path, out)
+    varstotas_kernel::fs::write(path, out)
 }
 
 /// Marks the screenshots taken by `record`, so they are not mistaken for a `screenshot`'s.
@@ -859,7 +859,7 @@ impl VarstotasApp {
             }
             ScriptCmd::Record(target) => {
                 let rec = target.map(|(dir, every)| {
-                    if let Err(e) = std::fs::create_dir_all(&dir) {
+                    if let Err(e) = varstotas_kernel::fs::create_dir_all(&dir) {
                         log::error!("record: cannot create {dir}: {e}");
                     }
                     Recorder { dir, every, count: 0, pending: false, asked: 0 }
@@ -1247,7 +1247,7 @@ impl VarstotasApp {
         }
         if let Some(folder) = name.strip_prefix("render_scenes ") {
             let folder = std::path::PathBuf::from(folder.trim());
-            let _ = std::fs::create_dir_all(&folder);
+            let _ = varstotas_kernel::fs::create_dir_all(&folder);
             self.render_all_scenes(folder);
             if let Some(s) = self.debug.script.as_mut() {
                 s.pt_wait = true;
@@ -1420,7 +1420,7 @@ impl VarstotasApp {
         // `copy_file <src>|<dst>`: stands in for another program saving a file.
         if let Some(args) = name.strip_prefix("copy_file ") {
             if let Some((src, dst)) = args.split_once('|')
-                && let Err(e) = std::fs::copy(src.trim(), dst.trim())
+                && let Err(e) = varstotas_kernel::fs::copy(src.trim(), dst.trim())
             {
                 log::warn!("script: copy_file: {e}");
             }
@@ -2019,7 +2019,7 @@ impl VarstotasApp {
             return;
         }
         if let Some(p) = name.strip_prefix("rig_script ") {
-            match std::fs::read_to_string(p.trim()) {
+            match varstotas_kernel::fs::read_to_string(p.trim()) {
                 Ok(s) => self.rig_editor.script = s,
                 Err(e) => log::warn!("script: rig_script {p}: {e}"),
             }

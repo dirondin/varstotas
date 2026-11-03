@@ -37,7 +37,7 @@ use std::sync::Arc;
 pub fn call(p: &Plugin, func: &str, args: Vec<(&str, Value)>) -> Result<Value, String> {
     match p.lang {
         Lang::Rhai => {
-            let src = std::fs::read_to_string(&p.path).map_err(|e| format!("{}: {e}", p.path.display()))?;
+            let src = varstotas_kernel::fs::read_to_string(&p.path).map_err(|e| format!("{}: {e}", p.path.display()))?;
             let names: Vec<&str> = args.iter().map(|(k, _)| *k).collect();
             let call = format!("{src}\n{func}({})\n", names.join(", "));
             let vars: Map<String, Value> = args.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
@@ -132,7 +132,7 @@ fn work_dir(p: &Plugin, id: &str) -> Result<PathBuf, String> {
     let safe = |s: &str| s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' }).collect::<String>();
     let stem = p.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let d = crate::online_mats::cache_dir().ok_or_else(|| tr!("ext-mat-no-home"))?.join(safe(&stem)).join(safe(id).trim_matches('.'));
-    std::fs::create_dir_all(&d).map_err(|e| format!("{}: {e}", d.display()))?;
+    varstotas_kernel::fs::create_dir_all(&d).map_err(|e| format!("{}: {e}", d.display()))?;
     Ok(d)
 }
 
@@ -295,12 +295,12 @@ pub fn material_from_spec(spec: &Value, base: &Path, name: &str, width_mm: f64) 
         let p = PathBuf::from(s.trim_start_matches("file://"));
         Some(if p.is_absolute() { p } else { base.join(p) })
     };
-    let read = |p: &Path| std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()));
+    let read = |p: &Path| varstotas_kernel::fs::read(p).map_err(|e| format!("{}: {e}", p.display()));
     let mut maps: Vec<(MapKind, String, Vec<u8>)> = Vec::new();
     if let Some(z) = o.get("zip").and_then(path) {
         maps = sort_maps(unzip(&read(&z)?, is_image)?);
     } else if let Some(d) = o.get("folder").and_then(path) {
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&d).map_err(|e| format!("{}: {e}", d.display()))?.flatten().map(|e| e.path()).filter(|p| is_image(&file_name(p))).collect();
+        let mut files: Vec<PathBuf> = varstotas_kernel::fs::read_dir(&d).map_err(|e| format!("{}: {e}", d.display()))?.flatten().map(|e| e.path()).filter(|p| is_image(&file_name(p))).collect();
         files.sort();
         maps = sort_maps(files.iter().map(|p| Ok((file_name(p), read(p)?))).collect::<Result<_, String>>()?);
     }
@@ -370,8 +370,8 @@ mod tests {
 
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("varstotas_matplug_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
+        varstotas_kernel::fs::create_dir_all(&d).unwrap();
         d
     }
 
@@ -397,9 +397,9 @@ mod tests {
     #[test]
     fn spec_with_maps_folder_and_factors() {
         let d = tmp("spec");
-        std::fs::write(d.join("a_diff.png"), png([200, 0, 0])).unwrap();
-        std::fs::write(d.join("a_nor_gl.png"), png([128, 128, 255])).unwrap();
-        std::fs::write(d.join("a_nor_dx.png"), png([128, 0, 255])).unwrap();
+        varstotas_kernel::fs::write(d.join("a_diff.png"), png([200, 0, 0])).unwrap();
+        varstotas_kernel::fs::write(d.join("a_nor_gl.png"), png([128, 128, 255])).unwrap();
+        varstotas_kernel::fs::write(d.join("a_nor_dx.png"), png([128, 0, 255])).unwrap();
         let m = material_from_spec(&json!({ "folder": ".", "width": 500, "clearcoat": 0.5, "roughness": 2 }), &d, "Fallback", 1000.0).unwrap();
         assert_eq!(m.name, "Fallback");
         assert_eq!(m.image.as_ref().unwrap().size[0], 500.0);
@@ -414,7 +414,7 @@ mod tests {
         assert!(m.pbr.unwrap().roughness_map.is_some());
         assert!(material_from_spec(&json!({ "texture": "missing.png" }), &d, "x", 1.0).is_err());
         assert!(material_from_spec(&json!(3), &d, "x", 1.0).is_err());
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 
     #[test]
@@ -438,7 +438,7 @@ mod tests {
         let (file, src) = crate::plugins::EXAMPLES.iter().find(|(n, _)| *n == name).unwrap();
         let d = tmp(&format!("ex_{name}"));
         let path = d.join(file);
-        std::fs::write(&path, src).unwrap();
+        varstotas_kernel::fs::write(&path, src).unwrap();
         crate::plugins::parse(src, &path).unwrap()
     }
 
@@ -450,12 +450,12 @@ mod tests {
         let root = tmp("unity");
         let mats = root.join("Assets").join("Materials");
         let tex = root.join("Assets").join("Textures");
-        std::fs::create_dir_all(&mats).unwrap();
-        std::fs::create_dir_all(&tex).unwrap();
-        std::fs::write(tex.join("brick_albedo.png"), png([180, 60, 40])).unwrap();
-        std::fs::write(tex.join("brick_albedo.png.meta"), "fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n").unwrap();
-        std::fs::write(tex.join("brick_normal.png"), png([128, 128, 255])).unwrap();
-        std::fs::write(tex.join("brick_normal.png.meta"), "fileFormatVersion: 2\nguid: fedcba9876543210fedcba9876543210\n").unwrap();
+        varstotas_kernel::fs::create_dir_all(&mats).unwrap();
+        varstotas_kernel::fs::create_dir_all(&tex).unwrap();
+        varstotas_kernel::fs::write(tex.join("brick_albedo.png"), png([180, 60, 40])).unwrap();
+        varstotas_kernel::fs::write(tex.join("brick_albedo.png.meta"), "fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n").unwrap();
+        varstotas_kernel::fs::write(tex.join("brick_normal.png"), png([128, 128, 255])).unwrap();
+        varstotas_kernel::fs::write(tex.join("brick_normal.png.meta"), "fileFormatVersion: 2\nguid: fedcba9876543210fedcba9876543210\n").unwrap();
         let mat = r"%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!21 &2100000
@@ -487,7 +487,7 @@ Material:
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
 ";
         let f = mats.join("RedBrick.mat");
-        std::fs::write(&f, mat).unwrap();
+        varstotas_kernel::fs::write(&f, mat).unwrap();
         let ms = import(&p, &f, Map::new()).unwrap();
         assert_eq!(ms.len(), 1);
         let m = &ms[0];
@@ -497,11 +497,11 @@ Material:
         assert!(pbr.normal_map.is_some());
         assert!((pbr.metallic - 0.25).abs() < 1e-6 && (pbr.roughness - 0.25).abs() < 1e-6 && (pbr.normal_scale - 0.8).abs() < 1e-6);
         // No texture: the base colour.
-        std::fs::write(&f, mat.replace("0123456789abcdef0123456789abcdef", "00000000000000000000000000000000")).unwrap();
+        varstotas_kernel::fs::write(&f, mat.replace("0123456789abcdef0123456789abcdef", "00000000000000000000000000000000")).unwrap();
         let m = &import(&p, &f, Map::new()).unwrap()[0];
         assert!(m.image.is_none());
         assert_eq!(m.color, [1.0, 0.5, 0.25, 1.0]);
-        let _ = std::fs::remove_dir_all(root);
+        let _ = varstotas_kernel::fs::remove_dir_all(root);
     }
 
     /// The texture-folder source: one material per subfolder.
@@ -511,9 +511,9 @@ Material:
         assert!(p.material_source);
         let root = tmp("folders");
         for (d, files) in [("Oak Floor", vec!["oak_diff.jpg", "oak_rough.png"]), ("Slate", vec!["slate.png"]), ("empty", vec![])] {
-            std::fs::create_dir_all(root.join(d)).unwrap();
+            varstotas_kernel::fs::create_dir_all(root.join(d)).unwrap();
             for f in files {
-                std::fs::write(root.join(d).join(f), png([90, 60, 30])).unwrap();
+                varstotas_kernel::fs::write(root.join(d).join(f), png([90, 60, 30])).unwrap();
             }
         }
         let src = Arc::new(PluginSource { plugin: p, params: [("folder".to_string(), json!(root.to_string_lossy())), ("width".to_string(), json!(800.0))].into_iter().collect() });
@@ -523,7 +523,7 @@ Material:
         let m = download(&src, &list[0]).unwrap();
         assert_eq!((m.name.as_str(), m.image.as_ref().unwrap().size[0]), ("Oak Floor", 800.0));
         assert!(m.pbr.unwrap().roughness_map.is_some());
-        let _ = std::fs::remove_dir_all(root);
+        let _ = varstotas_kernel::fs::remove_dir_all(root);
     }
 
     /// The texture generator examples answer `texture` with an inline colour map.
@@ -564,15 +564,15 @@ Material:
         }
         let d = tmp("py");
         let path = d.join("echo.py");
-        std::fs::write(
+        varstotas_kernel::fs::write(
             &path,
             "# @material_source\nimport json, sys\nargs = json.load(sys.stdin)\nprint('working')\nif sys.argv[1] == 'catalogue':\n    print(json.dumps([{'id': 'a', 'name': args['params']['n']}]))\nelse:\n    sys.exit('no ' + sys.argv[1])\n",
         )
         .unwrap();
-        let p = crate::plugins::parse(&std::fs::read_to_string(&path).unwrap(), &path).unwrap();
+        let p = crate::plugins::parse(&varstotas_kernel::fs::read_to_string(&path).unwrap(), &path).unwrap();
         let src = Arc::new(PluginSource { plugin: p.clone(), params: [("n".to_string(), json!("Echo"))].into_iter().collect() });
         assert_eq!(catalogue(&src).unwrap()[0].name, "Echo");
         assert_eq!(call(&p, "download", vec![]).unwrap_err(), "no download");
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 }

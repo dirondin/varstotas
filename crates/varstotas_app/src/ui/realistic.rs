@@ -79,7 +79,7 @@ impl VarstotasApp {
 
     /// Use an HDRI file as the environment (the sky switches to HDRI).
     pub(crate) fn load_hdri(&mut self, path: &Path) {
-        let bytes = match std::fs::read(path) {
+        let bytes = match varstotas_kernel::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
                 self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string()));

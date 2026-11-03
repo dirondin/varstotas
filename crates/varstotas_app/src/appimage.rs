@@ -20,7 +20,7 @@ pub(crate) fn running() -> Option<PathBuf> {
     if !cfg!(target_os = "linux") {
         return None;
     }
-    std::env::var_os("APPIMAGE").map(PathBuf::from).filter(|p| p.is_absolute() && p.is_file())
+    std::env::var_os("APPIMAGE").map(PathBuf::from).filter(|p| p.is_absolute() && varstotas_kernel::fs::is_file(p))
 }
 
 fn data_home() -> Option<PathBuf> {
@@ -36,7 +36,7 @@ fn entry_path() -> Option<PathBuf> {
 
 /// The text of the entry this module wrote, if there is one.
 fn our_entry() -> Option<String> {
-    entry_path().and_then(|p| std::fs::read_to_string(p).ok()).filter(|t| t.lines().any(|l| l == MARK))
+    entry_path().and_then(|p| varstotas_kernel::fs::read_to_string(p).ok()).filter(|t| t.lines().any(|l| l == MARK))
 }
 
 /// The AppImage's menu entry is in place.
@@ -50,7 +50,7 @@ fn known() -> bool {
     let mut dirs: Vec<PathBuf> = data_home().into_iter().collect();
     let system = std::env::var("XDG_DATA_DIRS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/usr/local/share:/usr/share".into());
     dirs.extend(system.split(':').filter(|s| !s.is_empty()).map(PathBuf::from));
-    dirs.iter().any(|d| d.join("applications/varstotas.desktop").is_file())
+    dirs.iter().any(|d| varstotas_kernel::fs::is_file(&d.join("applications/varstotas.desktop")))
 }
 
 /// `path` as one argument of a desktop entry's Exec key: quoted, with the characters the
@@ -84,9 +84,9 @@ fn entry(app: &Path) -> String {
 
 fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+        varstotas_kernel::fs::create_dir_all(dir)?;
     }
-    std::fs::write(path, bytes)
+    varstotas_kernel::fs::write(path, bytes)
 }
 
 /// Let the desktop see the change (best effort: the tools may be missing).
@@ -113,7 +113,7 @@ pub(crate) fn install(app: &Path) -> Result<(), String> {
     if let Some(appdir) = std::env::var_os("APPDIR").map(PathBuf::from) {
         for s in ICON_SIZES {
             let rel = format!("icons/hicolor/{s}x{s}/apps/varstotas.png");
-            if let Ok(png) = std::fs::read(appdir.join("usr/share").join(&rel)) {
+            if let Ok(png) = varstotas_kernel::fs::read(appdir.join("usr/share").join(&rel)) {
                 write(&home.join(&rel), &png).map_err(|e| e.to_string())?;
             }
         }
@@ -128,10 +128,10 @@ pub(crate) fn remove() -> Result<(), String> {
     if !installed() {
         return Ok(());
     }
-    std::fs::remove_file(home.join("applications/varstotas.desktop")).map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_file(home.join("mime/packages/varstotas.xml"));
+    varstotas_kernel::fs::remove_file(home.join("applications/varstotas.desktop")).map_err(|e| e.to_string())?;
+    let _ = varstotas_kernel::fs::remove_file(home.join("mime/packages/varstotas.xml"));
     for s in ICON_SIZES {
-        let _ = std::fs::remove_file(home.join(format!("icons/hicolor/{s}x{s}/apps/varstotas.png")));
+        let _ = varstotas_kernel::fs::remove_file(home.join(format!("icons/hicolor/{s}x{s}/apps/varstotas.png")));
     }
     refresh(&home);
     Ok(())

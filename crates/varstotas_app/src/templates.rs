@@ -81,9 +81,9 @@ pub struct FileTemplate {
 /// List the directory afresh so external file additions appear on the next menu opening.
 pub fn scan(dir: &std::path::Path) -> std::io::Result<Vec<FileTemplate>> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
+    for entry in varstotas_kernel::fs::read_dir(dir)? {
         let path = entry?.path();
-        if path.is_file() && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("vrst")) {
+        if varstotas_kernel::fs::is_file(&path) && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("vrst")) {
             let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
             files.push(FileTemplate { name, path });
         }
@@ -119,22 +119,22 @@ mod tests {
     fn temp_dir() -> std::path::PathBuf {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!("varstotas_templates_{}_{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-        std::fs::create_dir_all(&dir).unwrap();
+        varstotas_kernel::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
     #[test]
     fn file_templates_scan_only_models_and_refresh() {
         let dir = temp_dir();
-        std::fs::write(dir.join("zeta.vrst"), "").unwrap();
-        std::fs::write(dir.join("Alpha.VRST"), "").unwrap();
-        std::fs::write(dir.join("ignored.txt"), "").unwrap();
-        std::fs::create_dir(dir.join("directory.vrst")).unwrap();
+        varstotas_kernel::fs::write(dir.join("zeta.vrst"), "").unwrap();
+        varstotas_kernel::fs::write(dir.join("Alpha.VRST"), "").unwrap();
+        varstotas_kernel::fs::write(dir.join("ignored.txt"), "").unwrap();
+        varstotas_kernel::fs::create_dir(dir.join("directory.vrst")).unwrap();
         assert_eq!(scan(&dir).unwrap().iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["Alpha", "zeta"]);
-        std::fs::write(dir.join("new.vrst"), "").unwrap();
+        varstotas_kernel::fs::write(dir.join("new.vrst"), "").unwrap();
         assert_eq!(scan(&dir).unwrap().len(), 3);
         assert_eq!(directory(Some(&dir)), Some(dir.clone()));
-        std::fs::remove_dir_all(dir).unwrap();
+        varstotas_kernel::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -146,7 +146,7 @@ mod tests {
         model.add_material("Template material", [0.2, 0.3, 0.4, 1.0]);
         model.render.samples = 64;
         varstotas_kernel::io::save(&model, &path).unwrap();
-        let original = std::fs::read(&path).unwrap();
+        let original = varstotas_kernel::fs::read(&path).unwrap();
         let mut doc = load_document(&path).unwrap();
         assert!(doc.path.is_none());
         assert!(doc.dirty);
@@ -156,11 +156,11 @@ mod tests {
         assert!(doc.model.materials.values().any(|m| m.name == "Template material"));
         doc.model.unit = LengthUnit::Inch;
         varstotas_kernel::io::save(&doc.model, &dir.join("New document.vrst")).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), original);
-        std::fs::write(dir.join("Broken.vrst"), "invalid JSON").unwrap();
+        assert_eq!(varstotas_kernel::fs::read(&path).unwrap(), original);
+        varstotas_kernel::fs::write(dir.join("Broken.vrst"), "invalid JSON").unwrap();
         assert!(load_document(&dir.join("Broken.vrst")).is_err());
         assert!(load_document(&dir.join("Missing.vrst")).is_err());
-        std::fs::remove_dir_all(dir).unwrap();
+        varstotas_kernel::fs::remove_dir_all(dir).unwrap();
     }
 
 }

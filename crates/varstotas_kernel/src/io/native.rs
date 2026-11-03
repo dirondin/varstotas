@@ -73,7 +73,7 @@ pub fn save(model: &Model, path: &Path) -> Result<(), IoError> {
 pub fn save_with_backup(model: &Model, path: &Path, backup: &Path) -> Result<(), IoError> {
     super::validate_model(model)?;
     let text = to_json(model)?;
-    match std::fs::symlink_metadata(path) {
+    match crate::fs::symlink_metadata(path) {
         Ok(meta) => {
             if !meta.is_file() || meta.file_type().is_symlink() {
                 return Err(std::io::Error::other("Expected a regular document file").into());
@@ -151,7 +151,7 @@ mod material_tests {
         let path = std::env::temp_dir().join(format!("varstotas_mat_{}.{MATERIAL_EXT}", std::process::id()));
         save_material(&m.materials[id], &path).unwrap();
         let back = load_material(&path).unwrap();
-        let _ = std::fs::remove_file(&path);
+        let _ = crate::fs::remove_file(&path);
         assert_eq!(back.name, "Brass");
         assert_eq!(back.pbr, m.materials[id].pbr);
         assert_eq!(back.image, m.materials[id].image);
@@ -159,6 +159,6 @@ mod material_tests {
         let p2 = std::env::temp_dir().join(format!("varstotas_notmat_{}.vrst", std::process::id()));
         save(&m, &p2).unwrap();
         assert!(load_material(&p2).is_err());
-        let _ = std::fs::remove_file(&p2);
+        let _ = crate::fs::remove_file(&p2);
     }
 }

@@ -1447,9 +1447,8 @@ impl VarstotasApp {
                 self.save_as();
             }
             Action::ImportTexture => {
-                if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
-                    self.add_texture_material(&path, 1000.0);
-                }
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]);
+                self.pick_file(d, |app, path| app.add_texture_material(&path, 1000.0));
             }
             Action::ImportObj => self.import(&["obj"], "OBJ"),
             Action::ImportStl => self.import(&["stl"], "STL"),
@@ -1482,16 +1481,14 @@ impl VarstotasApp {
             Action::ImportModelPlugin(i) => {
                 if let Some(p) = self.plugins.list.get(i).cloned() {
                     let exts: Vec<&str> = p.model_import.iter().map(String::as_str).collect();
-                    if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(p.name.clone(), &exts).pick_file() {
-                        self.import_model_file(&path, Some(&p));
-                    }
+                    let d = crate::file_dialog::FileDialog::new().add_filter(p.name.clone(), &exts);
+                    self.pick_file(d, move |app, path| app.import_model_file(&path, Some(&p)));
                 }
             }
             Action::ModelLibrary => self.models.open = !self.models.open,
             Action::PreviewFromFile => {
-                if let Some(f) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg", "tga", "bmp"]).pick_file() {
-                    self.preview_from_file(&f);
-                }
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg", "tga", "bmp"]);
+                self.pick_file(d, |app, f| app.preview_from_file(&f));
             }
             Action::PreviewFromView => self.preview_from_view(crate::ui::library::PreviewTarget::Document),
             Action::PreviewShow => self.model_info.preview_open = !self.model_info.preview_open,
@@ -1845,9 +1842,8 @@ impl VarstotasApp {
                 self.flash(tr!("app-plugins-loaded", count = self.plugins.list.len()));
             }
             Action::RunScript => {
-                if let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-script"), &["rhai", "py"]).pick_file() {
-                    self.run_script_file(&p);
-                }
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-script"), &["rhai", "py"]);
+                self.pick_file(d, |app, p| app.run_script_file(&p));
             }
             Action::MakeParametric | Action::SetParams(_) => {
                 let path = self.doc.active_path.clone();
@@ -1879,14 +1875,12 @@ impl VarstotasApp {
                 }
             }
             Action::PickHdri => {
-                if let Some(path) = crate::file_dialog::FileDialog::new().add_filter("HDRI", &["hdr", "png", "jpg", "jpeg"]).pick_file() {
-                    self.load_hdri(&path);
-                }
+                let d = crate::file_dialog::FileDialog::new().add_filter("HDRI", &["hdr", "png", "jpg", "jpeg"]);
+                self.pick_file(d, |app, path| app.load_hdri(&path));
             }
             Action::PickSlotFile(name, slot) => {
-                if let Some(path) = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]).pick_file() {
-                    self.load_slot_file(&name, slot, &path);
-                }
+                let d = crate::file_dialog::FileDialog::new().add_filter(tr!("app-filter-image"), &["png", "jpg", "jpeg"]);
+                self.pick_file(d, move |app, path| app.load_slot_file(&name, slot, &path));
             }
             Action::ExportSlot(name, slot) => {
                 let img = self.doc.model.materials.values().find(|m| m.name == name).and_then(|m| {
@@ -2605,6 +2599,9 @@ impl eframe::App for VarstotasApp {
         crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);
         self.handle_close_request(&ctx);
+        self.picked_files();
+        #[cfg(target_arch = "wasm32")]
+        crate::web::DIRTY.store(self.doc.dirty, std::sync::atomic::Ordering::Relaxed);
         self.handle_keyboard(&ctx);
         crate::axes::sync(&self.doc.model);
 

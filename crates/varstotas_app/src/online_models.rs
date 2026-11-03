@@ -585,9 +585,9 @@ pub fn downloads_dir() -> Option<PathBuf> {
 
 fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(d) = path.parent() {
-        std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+        varstotas_kernel::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
     }
-    std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+    varstotas_kernel::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The last part of a URL path (decoded spaces), for a file name.
@@ -640,7 +640,7 @@ fn find_model(dir: &Path, importers: &[Plugin]) -> Option<PathBuf> {
 
 /// Extract a zip into `dir` (its paths made safe).
 fn extract(zip: &Path, dir: &Path) -> Result<(), String> {
-    let data = std::fs::read(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    let data = varstotas_kernel::fs::read(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
     for (name, bytes) in unzip(&data, |_| true)? {
         if let Some(rel) = safe_rel(&name) {
             save(&dir.join(rel), &bytes)?;
@@ -735,7 +735,7 @@ pub fn model_from_spec(spec: &Value, base: &Path, importers: &[Plugin], depth: u
 
 fn from_zip(zip: &Path, base: &Path, importers: &[Plugin], depth: usize) -> Result<(Model, DMat4), String> {
     let dir = base.join(format!("{}_files", zip.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let _ = varstotas_kernel::fs::remove_dir_all(&dir);
     extract(zip, &dir)?;
     let f = find_model(&dir, importers).ok_or_else(|| tr!("model-lib-err-archive-no-model"))?;
     import_file(&f, importers, depth)
@@ -834,14 +834,14 @@ pub fn library_model(mut m: Model, xf: DMat4, name: &str, credit: Option<Attribu
 pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<(PathBuf, usize), String> {
     let id = if asset.id.len() > 80 { format!("{:016x}", fxhash(&asset.id)) } else { file_safe(&asset.id) };
     let dir = downloads_dir().ok_or_else(|| tr!("model-lib-err-no-home"))?.join(asset.source.key()).join(id);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    varstotas_kernel::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let spec = fetch_asset(asset, &dir)?;
     if asset.pack {
         let url = spec["url"].as_str().ok_or("no download for this pack")?;
         let zip = dir.join(url_file(url));
         save(&zip, &fetch(url)?)?;
         let files = dir.join("files");
-        let _ = std::fs::remove_dir_all(&files);
+        let _ = varstotas_kernel::fs::remove_dir_all(&files);
         extract(&zip, &files)?;
         let out = lib.join(asset.source.folder()).join(safe_name(&asset.name, MODEL));
         let n = import_pack(&files, &out, &asset.attribution(), importers)?;
@@ -854,7 +854,7 @@ pub fn download(asset: &ModelAsset, lib: &Path, importers: &[Plugin]) -> Result<
     m.set_preview(preview_of(asset, &spec, &dir));
     let path = lib.join(asset.source.folder()).join(format!("{name}.vrst"));
     if let Some(d) = path.parent() {
-        let _ = std::fs::create_dir_all(d);
+        let _ = varstotas_kernel::fs::create_dir_all(d);
     }
     varstotas_kernel::io::save(&m, &path).map_err(|e| e.to_string())?;
     Ok((path, faces))
@@ -895,7 +895,7 @@ pub fn import_pack(dir: &Path, out: &Path, credit: &Attribution, importers: &[Pl
     if best.is_empty() {
         return Err(tr!("model-lib-err-archive-none"));
     }
-    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    varstotas_kernel::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let (mut n, mut first_err) = (0, None);
     let mut used = std::collections::HashSet::new();
     for (k, (_, f)) in &best {
@@ -910,7 +910,7 @@ pub fn import_pack(dir: &Path, out: &Path, credit: &Attribution, importers: &[Pl
         let r = import_file(f, importers, 0).and_then(|(m, xf)| library_model(m, xf, &name, Some(c)));
         match r {
             Ok(mut m) => {
-                m.set_preview(images.get(k).and_then(|p| std::fs::read(p).ok()).and_then(|b| crate::textures::preview_bytes(&b).ok()));
+                m.set_preview(images.get(k).and_then(|p| varstotas_kernel::fs::read(p).ok()).and_then(|b| crate::textures::preview_bytes(&b).ok()));
                 varstotas_kernel::io::save(&m, &out.join(format!("{name}.vrst"))).map_err(|e| e.to_string())?;
                 n += 1;
             }
@@ -935,7 +935,7 @@ fn preview_of(asset: &ModelAsset, spec: &Value, dir: &Path) -> Option<Vec<u8>> {
             cached(src, cache, None).ok()
         } else {
             let p = Path::new(src.trim_start_matches("file://"));
-            std::fs::read(if p.is_absolute() { p.to_path_buf() } else { dir.join(p) }).ok()
+            varstotas_kernel::fs::read(if p.is_absolute() { p.to_path_buf() } else { dir.join(p) }).ok()
         }
     };
     let key = file_safe(&format!("model_{}", asset.key()));
@@ -1052,8 +1052,8 @@ mod tests {
 
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("varstotas_models_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
+        varstotas_kernel::fs::create_dir_all(&d).unwrap();
         d
     }
 
@@ -1089,7 +1089,7 @@ mod tests {
         clip.paste_into(&mut doc, 7, &[], &DMat4::IDENTITY).unwrap();
         assert_eq!(doc.attributions().len(), 1);
         assert!(model_from_spec(&json!({ "nothing": 1 }), &d, &[], 0).is_err());
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 
     /// A zip with a glTF inside (written by the kernel's exporter) is found and imported.
@@ -1100,12 +1100,12 @@ mod tests {
         src.root_mesh_mut().add_face(&[DVec3::ZERO, DVec3::new(500.0, 0.0, 0.0), DVec3::new(500.0, 500.0, 0.0), DVec3::new(0.0, 500.0, 0.0)]).unwrap();
         let glb = varstotas_kernel::io::write_glb(&src);
         let zip = crate::online_mats::tests::zip(&[("models/thing.glb", &glb, true), ("readme.txt", b"hi", false)]);
-        std::fs::write(d.join("pack.zip"), zip).unwrap();
+        varstotas_kernel::fs::write(d.join("pack.zip"), zip).unwrap();
         let (m, _) = model_from_spec(&json!({ "zip": "pack.zip" }), &d, &[], 0).unwrap();
         assert_eq!(face_count(&m), 1);
         let b = m.bounds().unwrap();
         assert!((b.max.x - 500.0).abs() < 1e-3, "{b:?}");
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 
     /// The PLY importer example (Python) through a model spec with meshes.
@@ -1117,17 +1117,17 @@ mod tests {
         let (file, src) = crate::plugins::EXAMPLES.iter().find(|(n, _)| *n == "import_ply.py").unwrap();
         let d = tmp("ply");
         let path = d.join(file);
-        std::fs::write(&path, src).unwrap();
+        varstotas_kernel::fs::write(&path, src).unwrap();
         let p = crate::plugins::parse(src, &path).unwrap();
         assert_eq!(p.model_import, ["ply"]);
         let ply = "ply\nformat ascii 1.0\ncomment a tetrahedron\nelement vertex 4\nproperty float x\nproperty float y\nproperty float z\nelement face 4\nproperty list uchar int vertex_indices\nend_header\n0 0 0\n1 0 0\n0 1 0\n0 0 1\n3 0 2 1\n3 0 1 3\n3 1 2 3\n3 0 3 2\n";
-        std::fs::write(d.join("tetra.ply"), ply).unwrap();
+        varstotas_kernel::fs::write(d.join("tetra.ply"), ply).unwrap();
         let (m, xf) = import_with_plugin(&d.join("tetra.ply"), &p, std::slice::from_ref(&p), 0).unwrap();
         assert_eq!(face_count(&m), 4);
         let lib = library_model(m, xf, "tetra", None).unwrap();
         let b = lib.bounds().unwrap();
         assert!((b.max.z - 1000.0).abs() < 1e-6, "metres by default: {b:?}");
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 
     /// A download's preview: the spec's file (relative to the download folder) first, then
@@ -1147,7 +1147,7 @@ mod tests {
         a.thumb.clear();
         assert!(preview_of(&a, &json!({}), &d).is_none());
         assert!(preview_of(&a, &json!({ "preview": "missing.png" }), &d).is_none());
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 
     #[test]
@@ -1186,13 +1186,13 @@ mod tests {
         let files = d.join("files");
         for (p, b) in [("Models/GLB format/car-sedan.glb", &glb[..]), ("Models/GLB format/car_truck.glb", &glb[..]), ("Models/OBJ format/car-sedan.obj", b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"), ("License.txt", b"CC0")] {
             let f = files.join(p);
-            std::fs::create_dir_all(f.parent().unwrap()).unwrap();
-            std::fs::write(f, b).unwrap();
+            varstotas_kernel::fs::create_dir_all(f.parent().unwrap()).unwrap();
+            varstotas_kernel::fs::write(f, b).unwrap();
         }
         let mut png = Vec::new();
         image::RgbaImage::from_pixel(8, 8, image::Rgba([200, 30, 30, 255])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
-        std::fs::create_dir_all(files.join("Previews")).unwrap();
-        std::fs::write(files.join("Previews/car-sedan.png"), png).unwrap();
+        varstotas_kernel::fs::create_dir_all(files.join("Previews")).unwrap();
+        varstotas_kernel::fs::write(files.join("Previews/car-sedan.png"), png).unwrap();
         let credit = Attribution { source: "Kenney".into(), title: "Car Kit".into(), author: "Kenney".into(), license: "CC0".into(), url: "https://kenney.nl/assets/car-kit".into() };
         let out = d.join("lib/Kenney/Car Kit");
         assert_eq!(import_pack(&files, &out, &credit, &[]).unwrap(), 2);
@@ -1202,6 +1202,6 @@ mod tests {
         let truck = varstotas_kernel::io::load(&out.join("Car Truck.vrst")).unwrap();
         assert!(truck.preview.is_none());
         assert!(import_pack(&files.join("Previews"), &d.join("none"), &credit, &[]).is_err());
-        let _ = std::fs::remove_dir_all(d);
+        let _ = varstotas_kernel::fs::remove_dir_all(d);
     }
 }

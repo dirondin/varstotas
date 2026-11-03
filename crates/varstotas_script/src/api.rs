@@ -36,7 +36,7 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
         visited: &mut usize,
         deadline: Instant,
     ) {
-        let Ok(rd) = std::fs::read_dir(d) else { return };
+        let Ok(rd) = varstotas_kernel::fs::read_dir(d) else { return };
         for e in rd.flatten() {
             *visited += 1;
             if *visited > 100_000 || Instant::now() > deadline || out.len() >= 5000 {
@@ -46,7 +46,7 @@ pub fn list_files(dir: &std::path::Path, ext: &str) -> Vec<String> {
             if e.file_type().is_ok_and(|t| t.is_symlink()) {
                 continue;
             }
-            if p.is_dir() {
+            if varstotas_kernel::fs::is_dir(&p) {
                 if depth < 8 {
                     walk(&p, ext, depth + 1, out, visited, deadline);
                 }
@@ -79,7 +79,7 @@ fn fetch(url: &str, to: Option<&str>, headers: &Map) -> Result<Vec<u8>, String> 
         || false,
     )?;
     if let Some(path) = to {
-        std::fs::write(path, &bytes).map_err(|e| e.to_string())?;
+        varstotas_kernel::fs::write(path, &bytes).map_err(|e| e.to_string())?;
         Ok(Vec::new())
     } else {
         Ok(bytes)
@@ -1486,15 +1486,15 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
                 .and_then(|b| String::from_utf8(b).map_err(std::io::Error::other)).or_else(|e| err(format!("{path}: {e}")))
     });
     e.register_fn("write_text", |path: ImmutableString, text: ImmutableString| -> R<()> {
-        std::fs::write(path.as_str(), text.as_str()).or_else(|e| err(format!("{path}: {e}")))
+        varstotas_kernel::fs::write(path.as_str(), text.as_str()).or_else(|e| err(format!("{path}: {e}")))
     });
-    e.register_fn("file_exists", |path: ImmutableString| std::path::Path::new(path.as_str()).exists());
+    e.register_fn("file_exists", |path: ImmutableString| varstotas_kernel::fs::exists(std::path::Path::new(path.as_str())));
     e.register_fn("list_files", |dir: ImmutableString, ext: ImmutableString| -> Array {
         list_files(std::path::Path::new(dir.as_str()), ext.trim_start_matches('.')).into_iter().map(Dynamic::from).collect()
     });
     e.register_fn("list_dirs", |dir: ImmutableString| -> Array {
-        let mut out: Vec<String> = std::fs::read_dir(dir.as_str())
-            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).take(5000)
+        let mut out: Vec<String> = varstotas_kernel::fs::read_dir(dir.as_str())
+            .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| varstotas_kernel::fs::is_dir(p)).take(5000)
                         .map(|p| p.to_string_lossy().to_string()).collect())
             .unwrap_or_default();
         out.sort();
@@ -1511,7 +1511,7 @@ fn register_context(e: &mut Engine, trusted_io: bool) {
     }
     fn fetch_file(url: &str, path: &str, headers: &Map) -> R<()> {
         if let Some(d) = std::path::Path::new(path).parent() {
-            let _ = std::fs::create_dir_all(d);
+            let _ = varstotas_kernel::fs::create_dir_all(d);
         }
         fetch(url, Some(path), headers).map(|_| ()).or_else(err)
     }

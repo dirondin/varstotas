@@ -41,7 +41,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 
 /// Cache file of the thumbnail of library file `path` (changes with the file).
 pub fn disk_path(path: &Path) -> Option<PathBuf> {
-    let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    let mtime = varstotas_kernel::fs::metadata(path).and_then(|m| m.modified()).ok()?;
     let stamp = mtime.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in format!("{}|{stamp}|{SIDE}", path.display()).bytes() {
@@ -68,7 +68,7 @@ impl Thumbs {
             return None;
         }
         let disk = disk();
-        if let Some(img) = disk.as_ref().and_then(|p| std::fs::read(p).ok()).and_then(|b| crate::textures::thumbnail(&b, SIDE)) {
+        if let Some(img) = disk.as_ref().and_then(|p| varstotas_kernel::fs::read(p).ok()).and_then(|b| crate::textures::thumbnail(&b, SIDE)) {
             let t = ctx.load_texture(format!("thumb:{key}"), img, egui::TextureOptions::LINEAR);
             let id = t.id();
             self.done.insert(key.to_string(), t);
@@ -111,7 +111,7 @@ impl Thumbs {
             match guarded(|| render(renderer, rs, &job.model)).and_then(|r| r) {
                 Ok(img) => {
                     if let Some(p) = &job.disk {
-                        let _ = std::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
+                        let _ = varstotas_kernel::fs::create_dir_all(p.parent().unwrap_or(Path::new(".")));
                         if let Err(e) = img.write_png(p) {
                             log::warn!("thumbnail {}: {e}", p.display());
                         }

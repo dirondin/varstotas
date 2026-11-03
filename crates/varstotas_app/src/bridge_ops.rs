@@ -268,7 +268,7 @@ impl VarstotasApp {
             Ok(p) => {
                 let mut v = json!({ "path": p.to_string_lossy() });
                 if s.base64 {
-                    match std::fs::read(p) {
+                    match varstotas_kernel::fs::read(p) {
                         Ok(b) => v["png_base64"] = Value::String(base64(&b)),
                         Err(e) => {
                             let _ = s.reply.send(Err(e.to_string()));
@@ -436,7 +436,7 @@ impl VarstotasApp {
                         Err(e) => return done(Err(e.to_string())),
                 },
                 };
-                if !confirmed && path.exists() {
+                if !confirmed && varstotas_kernel::fs::exists(&path) {
                     return Reply::confirm(format!("Overwrite the file\n{}", path.display()));
                 }
                 self.bridge_png(path, p, ctx, req.reply.clone(), p.get("base64").and_then(Value::as_bool).unwrap_or(false),
@@ -455,7 +455,7 @@ impl VarstotasApp {
                         }
                     },
                 };
-                if !confirmed && path.exists() && self.doc.path.as_deref() != Some(&path) {
+                if !confirmed && varstotas_kernel::fs::exists(&path) && self.doc.path.as_deref() != Some(&path) {
                     return Reply::confirm(format!("Save the model over the existing file\n{}", path.display()));
                 }
                 if self.save_to(&path) { done(Ok(json!(path.to_string_lossy()))) } else { done(Err(self.flash_text("save failed"))) }
@@ -475,7 +475,7 @@ impl VarstotasApp {
                     if !formats.contains(&ext.as_str()) {
                         return done(Err(format!("{what} exports as .{}", formats.join(", ."))));
                     }
-                    if !confirmed && path.exists() {
+                    if !confirmed && varstotas_kernel::fs::exists(&path) {
                         return Reply::Confirm(format!("Overwrite existing export files\n{}", path.display()), Some(HashSet::from([path])));
                     }
                     self.flash = None;
@@ -497,10 +497,10 @@ impl VarstotasApp {
                         files
                             .iter()
                             .map(|(p, _)| p)
-                            .filter(|p| p.exists())
+                            .filter(|p| varstotas_kernel::fs::exists(p))
                             .collect()
                     })
-                    .unwrap_or_else(|| if path.exists() { vec![&path] } else { vec![] });
+                    .unwrap_or_else(|| if varstotas_kernel::fs::exists(&path) { vec![&path] } else { vec![] });
                 if !confirmed && !collisions.is_empty() {
                     let message = format!("Overwrite existing export files\n{}", collisions.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"));
                     let paths = collisions.iter().map(|p| (*p).clone()).collect();
@@ -564,7 +564,7 @@ impl VarstotasApp {
         if !self.bridge.shots.is_empty() {
             return Reply::Done(Err("too many pending screenshots".into()));
         }
-        if std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+        if varstotas_kernel::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
             return Reply::Done(Err("refusing to overwrite a symbolic link".into()));
         }
         let ppp = ctx.pixels_per_point();

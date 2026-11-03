@@ -92,6 +92,11 @@ pub fn short(path: &Path, max: usize) -> String {
 
 /// `path` for the UI: the home folder shortened to `~` (except on Windows).
 pub fn display(path: &Path) -> String {
+    // the web build: the user's files are only names (the in-memory folders are no place of theirs)
+    #[cfg(target_arch = "wasm32")]
+    if let Some(name) = ["/uploads", "/downloads"].iter().find_map(|d| path.strip_prefix(d).ok()) {
+        return name.display().to_string();
+    }
     if !cfg!(windows)
         && let Some(home) = std::env::home_dir()
         && let Ok(rest) = path.strip_prefix(&home)

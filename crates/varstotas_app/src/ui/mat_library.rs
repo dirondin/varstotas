@@ -97,11 +97,11 @@ pub fn default_dir() -> Option<PathBuf> {
 
 fn scan(root: &Path, old: Vec<MatItem>) -> (Vec<MatItem>, Vec<String>) {
     fn walk(d: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(d) else { return };
+        let Ok(rd) = varstotas_kernel::fs::read_dir(d) else { return };
         let mut entries: Vec<_> = rd.flatten().map(|e| e.path()).collect();
         entries.sort();
         for p in entries {
-            if p.is_dir() {
+            if varstotas_kernel::fs::is_dir(&p) {
                 if depth < 2 {
                     walk(&p, depth + 1, out);
                 }
@@ -115,7 +115,7 @@ fn scan(root: &Path, old: Vec<MatItem>) -> (Vec<MatItem>, Vec<String>) {
     let mut old: Vec<MatItem> = old;
     let (mut items, mut errors) = (Vec::new(), Vec::new());
     for path in files {
-        let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        let mtime = varstotas_kernel::fs::metadata(&path).and_then(|m| m.modified()).ok();
         // Unchanged files keep their parsed material.
         if let Some(i) = old.iter().position(|it| it.path.as_deref() == Some(path.as_path()) && it.mtime == mtime) {
             items.push(old.swap_remove(i));
@@ -176,7 +176,7 @@ impl VarstotasApp {
 
     pub(crate) fn refresh_materials(&mut self) {
         let Some(dir) = self.material_library_dir() else { return };
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = varstotas_kernel::fs::create_dir_all(&dir);
         let (items, errors) = scan(&dir, std::mem::take(&mut self.mat_library.items));
         for e in &errors {
             log::warn!("materials: {e}");
@@ -251,7 +251,7 @@ impl VarstotasApp {
     /// Write `mat` to `<library>/<name>.vrstmat` (a model material or an example).
     pub(crate) fn save_material_value(&mut self, mat: &Material) {
         let Some(dir) = self.material_library_dir() else { return };
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = varstotas_kernel::fs::create_dir_all(&dir);
         let path = dir.join(format!("{}.{MATERIAL_EXT}", safe_name(&mat.name, MATERIAL)));
         match varstotas_kernel::io::save_material(mat, &path) {
             Ok(()) => {
@@ -301,10 +301,11 @@ impl VarstotasApp {
             let exts: Vec<&str> = p.material_import.iter().map(String::as_str).collect();
             d = d.add_filter(p.name.clone(), &exts);
         }
-        let Some(paths) = d.pick_files() else { return };
-        for p in paths {
-            self.import_material_from(&p);
-        }
+        self.pick_files(d, |app, paths| {
+            for p in paths {
+                app.import_material_from(&p);
+            }
+        });
     }
 
     /// A `.vrstmat`, or a file of a material importer plugin (its extension).
@@ -787,12 +788,12 @@ impl VarstotasApp {
             let mut mat = varstotas_kernel::io::load_material(path).map_err(|e| e.to_string())?;
             mat.name = name.to_string();
             let to = path.with_file_name(format!("{}.{MATERIAL_EXT}", safe_name(name, MATERIAL)));
-            if to != path && to.exists() {
+            if to != path && varstotas_kernel::fs::exists(&to) {
                 return Err(tr!("mat-file-exists", path = to.display().to_string()));
             }
             varstotas_kernel::io::save_material(&mat, &to).map_err(|e| e.to_string())?;
             if to != path {
-                std::fs::remove_file(path).map_err(|e| e.to_string())?;
+                varstotas_kernel::fs::remove_file(path).map_err(|e| e.to_string())?;
             }
             Ok(to)
         })();
@@ -833,7 +834,7 @@ impl VarstotasApp {
         match choice {
             Some(true) => {
                 self.mat_library.delete_ask = None;
-                match std::fs::remove_file(&path) {
+                match varstotas_kernel::fs::remove_file(&path) {
                     Ok(()) => {
                         self.flash(tr!("mat-deleted-from-library", name = name.as_str()));
                         self.refresh_materials();

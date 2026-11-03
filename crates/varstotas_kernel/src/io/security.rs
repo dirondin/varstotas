@@ -6,8 +6,8 @@ pub const MAX_MODEL_BYTES: usize = 256 * 1024 * 1024;
 
 pub fn read_limited(path: &Path, max: usize) -> std::io::Result<Vec<u8>> {
     // Reject FIFOs/devices before open, which could itself block.
-    if !std::fs::metadata(path)?.is_file() { return Err(std::io::Error::other("Expected a regular file")); }
-    let file = std::fs::File::open(path)?;
+    if !crate::fs::metadata(path)?.is_file() { return Err(std::io::Error::other("Expected a regular file")); }
+    let file = crate::fs::File::open(path)?;
     let meta = file.metadata()?;
     if !meta.is_file() || meta.len() > max as u64 {
         return Err(std::io::Error::other(
@@ -162,11 +162,20 @@ pub fn validate_model(m: &crate::Model) -> Result<(), IoError> {
 /// Replace a file without following a destination symlink or a predictable temp symlink.
 /// Parent directories must be trusted by the caller.
 pub fn atomic_write(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> std::io::Result<()> {
-    use std::io::Write;
     let (path, bytes) = (path.as_ref(), bytes.as_ref());
+    // the web build: one write, no temporary file (each file written is handed to the page)
+    #[cfg(target_arch = "wasm32")]
+    return crate::fs::write(path, bytes);
+    #[cfg(not(target_arch = "wasm32"))]
+    replace_file(path, bytes)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn replace_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+    if crate::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err(std::io::Error::other(
             "Refusing to overwrite a symbolic link",
         ));
@@ -181,7 +190,7 @@ pub fn atomic_write(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> std::io:
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        let mut opts = std::fs::OpenOptions::new();
+        let mut opts = crate::fs::OpenOptions::new();
         opts.write(true).create_new(true);
         #[cfg(unix)]
         {
@@ -197,13 +206,11 @@ pub fn atomic_write(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> std::io:
     let result = (|| {
         file.write_all(bytes)?;
         file.sync_all()?;
-        // no `Drop` for a file on wasm (no files there): the lint only fires there
-        #[cfg_attr(target_arch = "wasm32", allow(clippy::drop_non_drop))]
         drop(file);
-        std::fs::rename(&tmp, path)
+        crate::fs::rename(&tmp, path)
     })();
     if result.is_err() {
-        let _ = std::fs::remove_file(tmp);
+        let _ = crate::fs::remove_file(tmp);
     }
     result
 }
@@ -255,7 +262,7 @@ pub fn write_bundle_approved(files: &[(PathBuf, Vec<u8>)], approved: &std::colle
     let mut seen = std::collections::HashSet::new();
     for (path, _) in files {
         if !seen.insert(path) { return Err(IoError::Format("Conflicting export paths".into())); }
-        if let Ok(meta) = std::fs::symlink_metadata(path)
+        if let Ok(meta) = crate::fs::symlink_metadata(path)
             && (!meta.is_file() || !approved.contains(path)) {
             return Err(IoError::Format(format!("Export would replace an unapproved or non-regular file: {}", path.display())));
         }
@@ -263,7 +270,7 @@ pub fn write_bundle_approved(files: &[(PathBuf, Vec<u8>)], approved: &std::colle
     for (path, bytes) in files {
         if approved.contains(path) { atomic_write(path, bytes)?; } else {
             use std::io::Write;
-            std::fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(bytes)?;
+            crate::fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(bytes)?;
         }
     }
     Ok(())

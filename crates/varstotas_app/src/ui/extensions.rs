@@ -302,7 +302,7 @@ impl VarstotasApp {
         let src = if idx == CONSOLE {
             self.plugins.console.as_ref().map(|(_, s)| s.clone()).unwrap_or_default()
         } else {
-            match std::fs::read_to_string(&p.path) {
+            match varstotas_kernel::fs::read_to_string(&p.path) {
                 Ok(s) => s,
                 Err(e) => {
                     return self.flash_error(tr!("console-cannot-read", path = p.path.display().to_string(), error = e.to_string()));
@@ -424,7 +424,7 @@ pub(crate) static LAST_REVEALED: std::sync::Mutex<Option<std::path::PathBuf>> = 
 
 /// Show a folder in Finder / Explorer / the file manager.
 pub(crate) fn reveal(dir: &std::path::Path) {
-    let _ = std::fs::create_dir_all(dir);
+    let _ = varstotas_kernel::fs::create_dir_all(dir);
     if let Ok(mut l) = LAST_REVEALED.lock() {
         *l = Some(dir.to_path_buf());
     }

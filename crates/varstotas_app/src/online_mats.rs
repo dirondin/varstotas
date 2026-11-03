@@ -216,9 +216,9 @@ pub fn cache_dir() -> Option<PathBuf> {
 pub(crate) fn cached(url: &str, name: &str, max_age: Option<Duration>) -> Result<Vec<u8>, String> {
     let path = cache_dir().map(|d| d.join(name));
     if let Some(p) = &path
-        && let Ok(bytes) = std::fs::read(p)
+        && let Ok(bytes) = varstotas_kernel::fs::read(p)
     {
-        let fresh = max_age.is_none_or(|age| std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|e| e < age));
+        let fresh = max_age.is_none_or(|age| varstotas_kernel::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|e| e < age));
         if fresh {
             return Ok(bytes);
         }
@@ -233,9 +233,9 @@ pub(crate) fn cached(url: &str, name: &str, max_age: Option<Duration>) -> Result
 
 fn store(path: &Path, bytes: &[u8]) {
     if let Some(d) = path.parent() {
-        let _ = std::fs::create_dir_all(d);
+        let _ = varstotas_kernel::fs::create_dir_all(d);
     }
-    let _ = std::fs::write(path, bytes);
+    let _ = varstotas_kernel::fs::write(path, bytes);
 }
 
 /// Poly Haven's `assets?t=textures` (most downloaded first).
@@ -496,7 +496,7 @@ impl Online {
             let _progress = progress.observe(&ctx);
             let res = download(&asset).and_then(|m| {
                 let path = dir.join(asset.source.folder()).join(format!("{}.{}", safe_name(&m.name, MATERIAL), varstotas_kernel::io::MATERIAL_EXT));
-                let _ = std::fs::create_dir_all(path.parent().unwrap_or(&dir));
+                let _ = varstotas_kernel::fs::create_dir_all(path.parent().unwrap_or(&dir));
                 varstotas_kernel::io::save_material(&m, &path).map_err(|e| e.to_string())?;
                 Ok((path, Box::new(m)))
             });
@@ -520,7 +520,7 @@ impl Online {
                         let Some((url, name, progress)) = job else { break };
                         let _progress = progress.observe(&ctx);
                         let local = !url.starts_with("http://") && !url.starts_with("https://");
-                        let bytes = if local { std::fs::read(url.trim_start_matches("file://")).map_err(|e| e.to_string()) } else { cached(&url, &format!("thumbs/{}.png", file_safe(&name)), None) };
+                        let bytes = if local { varstotas_kernel::fs::read(url.trim_start_matches("file://")).map_err(|e| e.to_string()) } else { cached(&url, &format!("thumbs/{}.png", file_safe(&name)), None) };
                         let img = bytes
                             .ok()
                             .and_then(|b| image::load_from_memory(&b).ok())

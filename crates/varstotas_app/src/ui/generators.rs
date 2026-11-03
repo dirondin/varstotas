@@ -84,36 +84,36 @@ fn legacy_dir() -> Option<PathBuf> {
 /// Move the user's generators from `old` into the components folder `lib` (a free name when one
 /// is taken) and drop the installed example copies; `old` goes when empty.
 fn migrate_legacy(old: &Path, lib: &Path) {
-    let _ = std::fs::remove_dir_all(old.join("examples"));
+    let _ = varstotas_kernel::fs::remove_dir_all(old.join("examples"));
     let mut files = Vec::new();
-    for d in std::iter::once(old.to_path_buf()).chain(std::fs::read_dir(old).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir())) {
-        files.extend(std::fs::read_dir(&d).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "rhai")));
+    for d in std::iter::once(old.to_path_buf()).chain(varstotas_kernel::fs::read_dir(old).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| varstotas_kernel::fs::is_dir(p))) {
+        files.extend(varstotas_kernel::fs::read_dir(&d).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "rhai")));
     }
     for f in files {
         let rel = f.parent().and_then(|p| p.strip_prefix(old).ok()).map(Path::to_path_buf).unwrap_or_default();
         let to_dir = lib.join(rel);
         let stem = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let to = (1..).map(|n| to_dir.join(if n == 1 { format!("{stem}.rhai") } else { format!("{stem} {n}.rhai") })).find(|p| !p.exists()).expect("a free name");
-        match std::fs::create_dir_all(&to_dir).and_then(|()| std::fs::rename(&f, &to)) {
+        let to = (1..).map(|n| to_dir.join(if n == 1 { format!("{stem}.rhai") } else { format!("{stem} {n}.rhai") })).find(|p| !varstotas_kernel::fs::exists(p)).expect("a free name");
+        match varstotas_kernel::fs::create_dir_all(&to_dir).and_then(|()| varstotas_kernel::fs::rename(&f, &to)) {
             Ok(()) => log::info!("generators: moved {} to {}", f.display(), to.display()),
             Err(e) => log::warn!("generators: cannot move {}: {e}", f.display()),
         }
     }
     // Only empty folders go.
-    for d in std::fs::read_dir(old).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
-        let _ = std::fs::remove_dir(d);
+    for d in varstotas_kernel::fs::read_dir(old).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| varstotas_kernel::fs::is_dir(p)) {
+        let _ = varstotas_kernel::fs::remove_dir(d);
     }
-    let _ = std::fs::remove_dir(old);
+    let _ = varstotas_kernel::fs::remove_dir(old);
 }
 
 /// `.rhai` generators of the components folder `root` (two folder levels, like components).
 fn scan(root: &Path) -> (Vec<GenItem>, Vec<String>) {
     let mut files = Vec::new();
     fn walk(d: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(d) else { return };
+        let Ok(rd) = varstotas_kernel::fs::read_dir(d) else { return };
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() && depth < 2 {
+            if varstotas_kernel::fs::is_dir(&p) && depth < 2 {
                 walk(&p, depth + 1, out);
             } else if p.extension().is_some_and(|x| x == "rhai") {
                 out.push(p);
@@ -124,7 +124,7 @@ fn scan(root: &Path) -> (Vec<GenItem>, Vec<String>) {
     files.sort();
     let (mut items, mut errors) = (Vec::new(), Vec::new());
     for f in files {
-        match std::fs::read_to_string(&f).map_err(|e| e.to_string()).and_then(|s| Generator::parse(&s).map(|g| (g, s))) {
+        match varstotas_kernel::fs::read_to_string(&f).map_err(|e| e.to_string()).and_then(|s| Generator::parse(&s).map(|g| (g, s))) {
             Ok((g, source)) => {
                 let folder = f.parent().and_then(|p| p.strip_prefix(root).ok()).map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
                 items.push(GenItem { name: g.name, description: g.description, source, file: Some(f), folder, bundled: false })
@@ -308,7 +308,7 @@ impl VarstotasApp {
         lib.scanned = true;
         lib.thumbs.clear();
         let Some(dir) = dir else { return };
-        if let Some(old) = legacy_dir().filter(|d| d.is_dir()) {
+        if let Some(old) = legacy_dir().filter(|d| varstotas_kernel::fs::is_dir(d)) {
             migrate_legacy(&old, &crate::ui::library::default_dir().unwrap_or(dir.clone()));
         }
         (lib.items, lib.errors) = scan(&dir);

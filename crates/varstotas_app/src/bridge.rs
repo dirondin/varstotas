@@ -115,9 +115,9 @@ impl Bridge {
 
     fn write_modules(&self) -> std::io::Result<()> {
         let Some(py) = python_dir() else { return Ok(()) };
-        std::fs::create_dir_all(&py)?;
-        std::fs::write(py.join("varstotas.py"), PY_CLIENT)?;
-        std::fs::write(py.join("varstotas_mcp.py"), PY_MCP)
+        varstotas_kernel::fs::create_dir_all(&py)?;
+        varstotas_kernel::fs::write(py.join("varstotas.py"), PY_CLIENT)?;
+        varstotas_kernel::fs::write(py.join("varstotas_mcp.py"), PY_MCP)
     }
 
     /// `bridge.json` is written.
@@ -137,7 +137,7 @@ impl Bridge {
         }
         let Some(dir) = crate::paths::data_dir() else { return };
         let info = json!({ "host": "127.0.0.1", "port": self.port, "token": self.token, "pid": std::process::id() });
-        let r = std::fs::create_dir_all(&dir)
+        let r = varstotas_kernel::fs::create_dir_all(&dir)
             .and_then(|()| varstotas_kernel::io::atomic_write(dir.join("bridge.json"), info.to_string().as_bytes()));
         match r {
             Ok(()) => log::info!("bridge: open to other clients (bridge.json)"),
@@ -148,12 +148,12 @@ impl Bridge {
     /// Remove `bridge.json` when it is still ours (closed to other clients, or the app is closing).
     pub fn remove_file(&self) {
         let Some(path) = crate::paths::data_dir().map(|d| d.join("bridge.json")) else { return };
-        let ours = std::fs::read_to_string(&path)
+        let ours = varstotas_kernel::fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str::<Value>(&s).ok())
             .is_some_and(|v| v["token"] == self.token.as_str());
         if ours {
-            let _ = std::fs::remove_file(path);
+            let _ = varstotas_kernel::fs::remove_file(path);
         }
     }
 

@@ -50,7 +50,7 @@ pub fn seconds_until_due(minutes: u32, now: f64, last: f64) -> f64 {
 }
 
 fn mtime(p: &Path) -> Option<SystemTime> {
-    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+    varstotas_kernel::fs::metadata(p).and_then(|m| m.modified()).ok()
 }
 
 /// An autosave that can be recovered.
@@ -123,20 +123,20 @@ pub fn write_model(model: &Model, path: &Path) -> Result<(), String> {
     if let Some(dir) = path.parent()
         && !dir.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        varstotas_kernel::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     let mut tmp_name = path.file_name().map(OsString::from).unwrap_or_default();
     tmp_name.push(".tmp");
     let tmp = path.with_file_name(tmp_name);
-    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
+    varstotas_kernel::fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    varstotas_kernel::fs::rename(&tmp, path).map_err(|e| {
+        let _ = varstotas_kernel::fs::remove_file(&tmp);
         e.to_string()
     })
 }
 
 pub fn remove(path: &Path) {
-    match std::fs::remove_file(path) {
+    match varstotas_kernel::fs::remove_file(path) {
         Ok(()) => log::info!("autosave: removed {}", path.display()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => log::warn!("autosave: cannot remove {}: {e}", path.display()),
@@ -246,8 +246,8 @@ mod tests {
 
     fn tmp_dir(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("varstotas_autosave_test_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
+        varstotas_kernel::fs::create_dir_all(&d).unwrap();
         d
     }
 
@@ -263,7 +263,7 @@ mod tests {
     }
 
     fn set_mtime(p: &Path, t: SystemTime) {
-        let f = std::fs::File::options().write(true).open(p).unwrap();
+        let f = varstotas_kernel::fs::File::options().write(true).open(p).unwrap();
         f.set_modified(t).unwrap();
     }
 
@@ -296,12 +296,12 @@ mod tests {
         let d = tmp_dir("recovery");
         let file = d.join("house.vrst");
         let auto = path_for(Some(&file), Some(&d)).unwrap();
-        std::fs::create_dir_all(auto.parent().unwrap()).unwrap();
+        varstotas_kernel::fs::create_dir_all(auto.parent().unwrap()).unwrap();
         // No autosave: nothing to recover.
-        std::fs::write(&file, "x").unwrap();
+        varstotas_kernel::fs::write(&file, "x").unwrap();
         assert_eq!(find_recovery(Some(&file), Some(&d)), None);
         // Autosave older than the file: ignored.
-        std::fs::write(&auto, "y").unwrap();
+        varstotas_kernel::fs::write(&auto, "y").unwrap();
         let now = SystemTime::now();
         set_mtime(&auto, now - std::time::Duration::from_secs(120));
         set_mtime(&file, now - std::time::Duration::from_secs(60));
@@ -312,16 +312,16 @@ mod tests {
         assert_eq!(r.autosave, auto);
         assert_eq!(r.display_name(), "house.vrst");
         // Original deleted: still offered.
-        std::fs::remove_file(&file).unwrap();
+        varstotas_kernel::fs::remove_file(&file).unwrap();
         assert!(find_recovery(Some(&file), Some(&d)).is_some());
         // Untitled autosave in the data dir.
         assert!(find_recovery(None, Some(&d)).is_none());
-        std::fs::write(d.join(UNTITLED_FILE), "z").unwrap();
+        varstotas_kernel::fs::write(d.join(UNTITLED_FILE), "z").unwrap();
         let all = startup_recoveries(&[file.clone(), file.clone()], Some(&d));
         assert_eq!(all.len(), 2, "{all:?}");
         assert_eq!(all[0].original, None);
         assert_eq!(all[1].original.as_deref(), Some(file.as_path()));
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -333,15 +333,15 @@ mod tests {
         w.flush();
         let loaded = io::load(&auto).expect("autosave is a valid .vrst file");
         assert_eq!(loaded.root_mesh().faces.len(), 1);
-        assert!(!d.join("sub").join(format!("{UNTITLED_FILE}.tmp")).exists());
+        assert!(!varstotas_kernel::fs::exists(&d.join("sub").join(format!("{UNTITLED_FILE}.tmp"))));
 
         // A delete queued right after a write must win.
         let mut w = Autosaver::new();
         w.write(auto.clone(), sample_model());
         w.delete(auto.clone());
         w.flush();
-        assert!(!auto.exists());
-        let _ = std::fs::remove_dir_all(&d);
+        assert!(!varstotas_kernel::fs::exists(&auto));
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -359,6 +359,6 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].path, auto);
         assert!(got[0].result.is_ok());
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
     }
 }

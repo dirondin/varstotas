@@ -79,7 +79,7 @@ const SYMBOL_FONTS: &[&str] = &[
 fn install_symbol_fallback(ctx: &Context) {
     let Some((path, bytes)) = SYMBOL_FONTS
         .iter()
-        .find_map(|p| std::fs::read(p).ok().map(|b| (*p, b)))
+        .find_map(|p| varstotas_kernel::fs::read(p).ok().map(|b| (*p, b)))
     else {
         log::warn!("no symbol fallback font found; arrows may render as boxes");
         return;

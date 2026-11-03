@@ -178,11 +178,11 @@ impl VarstotasApp {
         let Some(dir) = edit_dir() else { return };
         let safe: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' }).collect();
         let path = dir.join(format!("{safe}-{slot}.{}", img.extension()));
-        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|()| varstotas_kernel::io::atomic_write(&path, &img.bytes[..])) {
+        if let Err(e) = varstotas_kernel::fs::create_dir_all(&dir).and_then(|()| varstotas_kernel::io::atomic_write(&path, &img.bytes[..])) {
             self.flash_error(tr!("realistic-cant-read", path = path.display().to_string(), error = e.to_string()));
             return;
         }
-        let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        let modified = varstotas_kernel::fs::metadata(&path).and_then(|m| m.modified()).ok();
         let st = &mut self.mat_editor.maps;
         st.edits.retain(|e| !(e.material == name && e.slot == slot));
         st.edits.push(ExternalEdit { material: name.to_string(), slot, path: path.clone(), modified });
@@ -202,14 +202,14 @@ impl VarstotasApp {
         st.last_poll = Some(Instant::now());
         let mut changed = Vec::new();
         for e in &mut st.edits {
-            let now = std::fs::metadata(&e.path).and_then(|m| m.modified()).ok();
+            let now = varstotas_kernel::fs::metadata(&e.path).and_then(|m| m.modified()).ok();
             if now.is_some() && now != e.modified {
                 e.modified = now;
                 changed.push((e.material.clone(), e.slot, e.path.clone()));
             }
         }
         for (name, slot, path) in changed {
-            let Ok(bytes) = std::fs::read(&path) else { continue };
+            let Ok(bytes) = varstotas_kernel::fs::read(&path) else { continue };
             if crate::textures::decode(&bytes).is_err() {
                 continue; // half-written: the next poll retries
             }
@@ -221,7 +221,7 @@ impl VarstotasApp {
             self.set_material_slots(&name, vec![(slot, Some(t))], &tr!("mated-undo-reload"));
             self.flash(tr!("mated-reloaded", slot = slot_label(slot)));
         }
-        self.mat_editor.maps.edits.retain(|e| e.path.exists());
+        self.mat_editor.maps.edits.retain(|e| varstotas_kernel::fs::exists(&e.path));
     }
 
     /// Set the base texture look of the current material: one undo step.

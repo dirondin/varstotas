@@ -73,15 +73,15 @@ pub fn sites_path() -> Option<PathBuf> {
 /// The sites of `sources.toml` (written with the defaults when missing).
 pub fn load_sites() -> Result<Vec<Site>, String> {
     let Some(p) = sites_path() else { return Ok(default_sites()) };
-    match std::fs::read_to_string(&p) {
+    match varstotas_kernel::fs::read_to_string(&p) {
         Ok(t) => toml::from_str::<SitesFile>(&t).map(|f| f.sites).map_err(|e| format!("{}: {e}", p.display())),
         Err(_) => {
             let sites = default_sites();
             let body = toml::to_string(&SitesFile { sites: sites.clone() }).unwrap_or_default();
             if let Some(d) = p.parent() {
-                let _ = std::fs::create_dir_all(d);
+                let _ = varstotas_kernel::fs::create_dir_all(d);
             }
-            let _ = std::fs::write(&p, format!("{SITES_HEADER}{body}"));
+            let _ = varstotas_kernel::fs::write(&p, format!("{SITES_HEADER}{body}"));
             Ok(sites)
         }
     }
@@ -197,7 +197,7 @@ pub fn where_froms(p: &Path) -> Vec<String> {
     }
     if cfg!(windows) {
         let ads = format!("{}:Zone.Identifier", p.display());
-        if let Ok(t) = std::fs::read_to_string(ads) {
+        if let Ok(t) = varstotas_kernel::fs::read_to_string(ads) {
             return t.lines().filter_map(|l| l.strip_prefix("ReferrerUrl=").or(l.strip_prefix("HostUrl="))).map(|s| s.trim().to_string()).collect();
         }
     }
@@ -211,7 +211,7 @@ pub fn parse_mdls_list(s: &str) -> Vec<String> {
 
 /// A stable hash of a file's bytes (duplicates).
 pub fn file_hash(p: &Path) -> Option<u64> {
-    let b = std::fs::read(p).ok()?;
+    let b = varstotas_kernel::fs::read(p).ok()?;
     Some(b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, x| (h ^ *x as u64).wrapping_mul(0x100_0000_01b3)) ^ b.len() as u64)
 }
 
@@ -220,7 +220,7 @@ pub fn archive_models(p: &Path) -> Vec<String> {
     if ext(p) != "zip" {
         return vec![p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()];
     }
-    let Ok(data) = std::fs::read(p) else { return Vec::new() };
+    let Ok(data) = varstotas_kernel::fs::read(p) else { return Vec::new() };
     let mut names: Vec<String> = Vec::new();
     // Only the names: read entries without inflating them is not possible here; the archive
     // is small enough to read whole (a model download).
@@ -251,8 +251,8 @@ impl Watcher {
             .name("downloads".into())
             .spawn(move || {
                 let list = |d: &Path| -> HashMap<PathBuf, u64> {
-                    std::fs::read_dir(d).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_file()).map(|p| {
-                        let n = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+                    varstotas_kernel::fs::read_dir(d).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| varstotas_kernel::fs::is_file(p)).map(|p| {
+                        let n = varstotas_kernel::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
                         (p, n)
                     }).collect()
                 };
@@ -354,11 +354,11 @@ pub fn manual_dir(hash: u64) -> Option<PathBuf> {
 pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugins::Plugin]) -> Result<(PathBuf, usize), String> {
     use crate::files::{safe_name, safe_rel};
     let dir = dir.to_path_buf();
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let _ = varstotas_kernel::fs::remove_dir_all(&dir);
+    varstotas_kernel::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let name = o.path.file_name().ok_or_else(|| tr!("downloads-err-no-file-name"))?;
     let copy = dir.join(name);
-    std::fs::copy(&o.path, &copy).map_err(|e| format!("{}: {e}", o.path.display()))?;
+    varstotas_kernel::fs::copy(&o.path, &copy).map_err(|e| format!("{}: {e}", o.path.display()))?;
     let source = safe_name(o.credit.source.trim(), "Downloads"); // i18n-ignore
     let stem = o.path.file_stem().map(|s| crate::online_models::pretty_name(&s.to_string_lossy())).unwrap_or_default();
     let title = safe_name(o.credit.title.trim(), &safe_name(&stem, crate::files::MODEL));
@@ -368,19 +368,19 @@ pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugi
     }
     let files = if ext(&copy) == "zip" {
         let out = dir.join("files");
-        let data = std::fs::read(&copy).map_err(|e| e.to_string())?;
+        let data = varstotas_kernel::fs::read(&copy).map_err(|e| e.to_string())?;
         for (n, bytes) in varstotas_kernel::io::unzip(&data, |_| true)? {
             let Some(rel) = safe_rel(&n) else { continue };
             let p = out.join(rel);
             if let Some(d) = p.parent() {
-                let _ = std::fs::create_dir_all(d);
+                let _ = varstotas_kernel::fs::create_dir_all(d);
             }
-            std::fs::write(&p, bytes).map_err(|e| format!("{}: {e}", p.display()))?;
+            varstotas_kernel::fs::write(&p, bytes).map_err(|e| format!("{}: {e}", p.display()))?;
         }
         // Only the chosen models (the rest of the archive stays: textures, previews).
         for (n, on) in &o.models {
             if !*on && let Some(rel) = safe_rel(n) {
-                let _ = std::fs::remove_file(out.join(rel));
+                let _ = varstotas_kernel::fs::remove_file(out.join(rel));
             }
         }
         out
@@ -398,10 +398,10 @@ pub fn import_offer(o: &Offer, lib: &Path, dir: &Path, importers: &[crate::plugi
         let pic = varstotas_script::list_files(&files, "").into_iter().map(PathBuf::from).find(|p| {
             ["png", "jpg", "jpeg"].contains(&ext(p).as_str()) && p.file_stem().is_some_and(|s| s.to_string_lossy().to_lowercase() == stem)
         });
-        m.set_preview(pic.and_then(|p| std::fs::read(p).ok()).and_then(|b| crate::textures::preview_bytes(&b).ok()));
+        m.set_preview(pic.and_then(|p| varstotas_kernel::fs::read(p).ok()).and_then(|b| crate::textures::preview_bytes(&b).ok()));
         let path = lib.join(&source).join(format!("{title}.vrst"));
         if let Some(d) = path.parent() {
-            let _ = std::fs::create_dir_all(d);
+            let _ = varstotas_kernel::fs::create_dir_all(d);
         }
         varstotas_kernel::io::save(&m, &path).map_err(|e| e.to_string())?;
         return Ok((path, 1));
@@ -542,16 +542,16 @@ impl LibraryState {
     }
 
     pub fn load() -> Self {
-        Self::path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+        Self::path().and_then(|p| varstotas_kernel::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
 
     pub fn save(&self) {
         if let Some(p) = Self::path() {
             if let Some(d) = p.parent() {
-                let _ = std::fs::create_dir_all(d);
+                let _ = varstotas_kernel::fs::create_dir_all(d);
             }
             if let Ok(b) = serde_json::to_vec_pretty(self) {
-                let _ = std::fs::write(p, b);
+                let _ = varstotas_kernel::fs::write(p, b);
             }
         }
     }
@@ -584,7 +584,7 @@ impl LibraryState {
 
     /// The library file / folder of an earlier import of the same bytes (if still there).
     pub fn duplicate(&self, hash: u64) -> Option<PathBuf> {
-        self.imported.get(&format!("{hash:016x}")).filter(|p| p.exists()).cloned()
+        self.imported.get(&format!("{hash:016x}")).filter(|p| varstotas_kernel::fs::exists(p)).cloned()
     }
 }
 
@@ -687,13 +687,13 @@ mod tests {
     #[test]
     fn offers_import_archives_and_files() {
         let d = std::env::temp_dir().join(format!("varstotas_dl_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
+        varstotas_kernel::fs::create_dir_all(&d).unwrap();
         let tri = b"v 0 0 0\nv 1000 0 0\nv 0 1000 0\nf 1 2 3\n";
         let quad = b"v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n";
         let zip = crate::online_mats::tests::zip(&[("chairs/a.obj", tri, true), ("chairs/b.obj", quad, false), ("chairs/c.stl.txt", b"x", false), ("__MACOSX/chairs/._a.obj", b"x", false)]);
         let zp = d.join("chairs.zip");
-        std::fs::write(&zp, zip).unwrap();
+        varstotas_kernel::fs::write(&zp, zip).unwrap();
         assert_eq!(archive_models(&zp), ["chairs/a.obj", "chairs/b.obj"]);
         let mut dl = Downloads { sites: Some(Ok(default_sites())), ..Default::default() };
         dl.expects.push(Expect::new(Attribution { source: "Printables".into(), title: "Two Chairs".into(), author: "Bob".into(), license: "CC BY 4.0".into(), url: "https://www.printables.com/model/1".into() }, Vec::new()));
@@ -710,7 +710,7 @@ mod tests {
         assert_eq!(import_offer(&o, &lib, &d.join("work"), &[]).unwrap(), (lib.join("Printables/Two Chairs.vrst"), 1));
         // A plain model file, no card: the credit from its name; a duplicate once recorded.
         let f = d.join("red_stool.obj");
-        std::fs::write(&f, tri).unwrap();
+        varstotas_kernel::fs::write(&f, tri).unwrap();
         dl.expects.clear();
         let mut st = LibraryState::default();
         let o = dl.offer(&f, &st);
@@ -719,7 +719,7 @@ mod tests {
         assert_eq!((p.clone(), n), (lib.join("Downloads/Red Stool.vrst"), 1));
         st.imported.insert(format!("{:016x}", o.hash.unwrap()), p);
         assert!(dl.offer(&f, &st).duplicate.is_some());
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -748,19 +748,19 @@ mod tests {
     #[test]
     fn watcher_finds_new_model_files() {
         let d = std::env::temp_dir().join(format!("varstotas_watch_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
-        std::fs::write(d.join("old.stl"), b"x").unwrap();
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
+        varstotas_kernel::fs::create_dir_all(&d).unwrap();
+        varstotas_kernel::fs::write(d.join("old.stl"), b"x").unwrap();
         let w = Watcher::start(d.clone(), egui::Context::default());
         std::thread::sleep(Duration::from_millis(300));
-        std::fs::write(d.join("notes.txt"), b"x").unwrap();
-        std::fs::write(d.join("chair.glb.crdownload"), b"x").unwrap();
-        std::fs::write(d.join("chair.glb"), b"glTF").unwrap();
+        varstotas_kernel::fs::write(d.join("notes.txt"), b"x").unwrap();
+        varstotas_kernel::fs::write(d.join("chair.glb.crdownload"), b"x").unwrap();
+        varstotas_kernel::fs::write(d.join("chair.glb"), b"glTF").unwrap();
         let got = w.rx.recv_timeout(Duration::from_secs(8)).unwrap();
         assert_eq!(got, d.join("chair.glb"));
         assert!(w.rx.recv_timeout(Duration::from_secs(4)).is_err());
         drop(w);
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = varstotas_kernel::fs::remove_dir_all(&d);
     }
 
     #[test]

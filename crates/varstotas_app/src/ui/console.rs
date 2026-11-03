@@ -88,7 +88,7 @@ impl VarstotasApp {
             self.run_python_file(path);
             return;
         }
-        match std::fs::read_to_string(path) {
+        match varstotas_kernel::fs::read_to_string(path) {
             Ok(src) => {
                 let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 self.run_script_source(&src, &tr!("console-script-undo", name = name));
@@ -173,13 +173,12 @@ impl VarstotasApp {
                 if ui.button(tr!("console-run")).on_hover_text(tr!("console-run-hint")).clicked() {
                     run = Some(self.prefs.console_code.clone());
                 }
-                if ui.button(tr!("console-open")).clicked()
-                    && let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).pick_file()
-                {
-                    match std::fs::read_to_string(&p) {
-                        Ok(s) => self.prefs.console_code = s,
-                        Err(e) => self.console.push(LogLine::Error(format!("{}: {e}", p.display()))),
-                    }
+                if ui.button(tr!("console-open")).clicked() {
+                    let d = crate::file_dialog::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]);
+                    self.pick_file(d, |app, p| match varstotas_kernel::fs::read_to_string(&p) {
+                        Ok(s) => app.prefs.console_code = s,
+                        Err(e) => app.console.push(LogLine::Error(format!("{}: {e}", p.display()))),
+                    });
                 }
                 if ui.button(tr!("console-save")).clicked()
                     && let Some(p) = crate::file_dialog::FileDialog::new().add_filter(tr!("console-filter-rhai"), &["rhai"]).set_file_name("script.rhai").save_file()

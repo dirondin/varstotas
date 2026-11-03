@@ -37,6 +37,7 @@ pub mod io;
 pub mod joinery;
 pub mod fasteners;
 pub mod fitting;
+pub mod fs;
 pub mod assembly;
 pub mod layout;
 pub mod locking;

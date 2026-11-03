@@ -278,7 +278,7 @@ impl VarstotasApp {
                 ui.add_enabled_ui(!recent.is_empty(), |ui| {
                     icon_menu(ui, None, &tr!("menu-open-recent"), |ui| {
                         for p in recent {
-                            let r = ui.add_enabled(p.is_file(), Button::new(recent_label(ui, &p, 48))).on_hover_text(p.display().to_string());
+                            let r = ui.add_enabled(varstotas_kernel::fs::is_file(&p), Button::new(recent_label(ui, &p, 48))).on_hover_text(p.display().to_string());
                             if r.clicked() {
                                 self.actions.push(Action::OpenPath(p));
                             }

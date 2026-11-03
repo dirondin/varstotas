@@ -94,7 +94,7 @@ pub fn frame_path(dir: &Path, i: usize) -> PathBuf {
 pub fn encode_gif(dir: &Path, count: usize, fps: f64, out: &Path) -> Result<(), String> {
     use image::codecs::gif::{GifEncoder, Repeat};
     let write = || -> Result<(), String> {
-        let file = std::fs::File::create(out).map_err(|e| e.to_string())?;
+        let file = varstotas_kernel::fs::File::create(out).map_err(|e| e.to_string())?;
         let mut enc = GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
         enc.set_repeat(Repeat::Infinite).map_err(|e| e.to_string())?;
         let delay = image::Delay::from_numer_denom_ms(1000, fps.round().max(1.0) as u32);
@@ -106,7 +106,7 @@ pub fn encode_gif(dir: &Path, count: usize, fps: f64, out: &Path) -> Result<(), 
     };
     let r = write();
     if r.is_err() {
-        let _ = std::fs::remove_file(out);
+        let _ = varstotas_kernel::fs::remove_file(out);
     }
     r
 }
@@ -118,19 +118,19 @@ mod tests {
     #[test]
     fn frames_become_a_looping_gif() {
         let dir = std::env::temp_dir().join(format!("varstotas-gif-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        varstotas_kernel::fs::create_dir_all(&dir).unwrap();
         for i in 0..3 {
             image::RgbaImage::from_pixel(8, 6, image::Rgba([i * 100, 50, 200, 255])).save(frame_path(&dir, i as usize)).unwrap();
         }
         let out = dir.join("a.gif");
         encode_gif(&dir, 3, 10.0, &out).unwrap();
-        let bytes = std::fs::read(&out).unwrap();
+        let bytes = varstotas_kernel::fs::read(&out).unwrap();
         assert!(bytes.starts_with(b"GIF89a") && bytes.windows(11).any(|w| w == b"NETSCAPE2.0"), "a looping GIF");
         let frames = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(&bytes)).unwrap();
         assert_eq!(image::AnimationDecoder::into_frames(frames).count(), 3);
         assert!(encode_gif(&dir, 4, 10.0, &out).is_err(), "a missing frame fails");
-        assert!(!out.exists(), "and leaves no partial file");
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!varstotas_kernel::fs::exists(&out), "and leaves no partial file");
+        let _ = varstotas_kernel::fs::remove_dir_all(&dir);
     }
 
     fn scene(name: &str, x: f64) -> Scene {
