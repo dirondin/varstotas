@@ -30,6 +30,14 @@ pub enum Topic {
     Styles,
     Scenes,
     Workshop,
+    WsParts,
+    WsCutList,
+    WsDrilling,
+    WsJoinery,
+    WsHardware,
+    WsFittings,
+    WsCarcass,
+    WsAssembly,
     Files,
     Scripts,
     Shortcuts,
@@ -53,18 +61,32 @@ pub const TOPICS: &[(Topic, &str)] = &[
     (Topic::Styles, "help-topic-styles"),
     (Topic::Scenes, "help-topic-scenes"),
     (Topic::Workshop, "help-topic-workshop"),
+    (Topic::WsParts, "help-topic-ws-parts"),
+    (Topic::WsCutList, "help-topic-ws-cutlist"),
+    (Topic::WsDrilling, "help-topic-ws-drilling"),
+    (Topic::WsJoinery, "help-topic-ws-joinery"),
+    (Topic::WsHardware, "help-topic-ws-hardware"),
+    (Topic::WsFittings, "help-topic-ws-fittings"),
+    (Topic::WsCarcass, "help-topic-ws-carcass"),
+    (Topic::WsAssembly, "help-topic-ws-assembly"),
     (Topic::Files, "help-topic-files"),
     (Topic::Scripts, "help-topic-scripts"),
     (Topic::Shortcuts, "help-topic-shortcuts"),
     (Topic::Problems, "help-topic-problems"),
 ];
 
-/// A block of a topic: a heading, a paragraph (`code` in backticks), a row (term, meaning),
-/// cards of tools, or a button opening the Script Reference on a topic.
+/// A block of a topic: a heading, a paragraph (`code` in backticks, `**bold**`), a row (term,
+/// meaning), a bullet, a numbered step (counted from the last heading), a framed tip, a link to
+/// a subtopic with what is in it, cards of tools, or a button opening the Script Reference on a
+/// topic.
 enum B {
     H(&'static str),
     P(&'static str),
     Row(&'static str, &'static str),
+    Li(&'static str),
+    Step(&'static str),
+    Tip(&'static str),
+    Sub(Topic, &'static str),
     Tools(&'static [ToolId]),
     Script(super::script_help::Topic, &'static str),
 }
@@ -255,17 +277,168 @@ const SCENES: &[B] = &[
 
 const WORKSHOP: &[B] = &[
     B::P("help-workshop-1"),
-    B::Row("help-workshop-2", "help-workshop-3"),
-    B::Row("help-workshop-4", "help-workshop-5"),
-    B::Row("help-workshop-13", "help-workshop-14"),
-    B::Row("help-workshop-15", "help-workshop-16"),
-    B::Row("help-workshop-17", "help-workshop-18"),
-    B::Row("help-workshop-6", "help-workshop-7"),
-    B::Row("help-workshop-8", "help-workshop-9"),
-    B::Row("help-workshop-19", "help-workshop-20"),
-    B::Row("help-workshop-21", "help-workshop-22"),
-    B::Row("help-workshop-10", "help-workshop-11"),
-    B::Script(super::script_help::Topic::Functions, "help-workshop-12"),
+    B::H("help-workshop-2"),
+    B::Step("help-workshop-3"),
+    B::Step("help-workshop-4"),
+    B::Step("help-workshop-5"),
+    B::Step("help-workshop-6"),
+    B::Step("help-workshop-7"),
+    B::Tip("help-workshop-8"),
+    B::H("help-workshop-9"),
+    B::Sub(Topic::WsParts, "help-workshop-10"),
+    B::Sub(Topic::WsCutList, "help-workshop-11"),
+    B::Sub(Topic::WsDrilling, "help-workshop-12"),
+    B::Sub(Topic::WsJoinery, "help-workshop-13"),
+    B::Sub(Topic::WsHardware, "help-workshop-14"),
+    B::Sub(Topic::WsFittings, "help-workshop-15"),
+    B::Sub(Topic::WsCarcass, "help-workshop-16"),
+    B::Sub(Topic::WsAssembly, "help-workshop-17"),
+    B::Script(super::script_help::Topic::Functions, "help-workshop-18"),
+];
+
+const WS_PARTS: &[B] = &[
+    B::P("help-ws-parts-1"),
+    B::H("help-ws-parts-2"),
+    B::Li("help-ws-parts-3"),
+    B::Li("help-ws-parts-4"),
+    B::Li("help-ws-parts-5"),
+    B::H("help-ws-parts-6"),
+    B::P("help-ws-parts-7"),
+    B::Li("help-ws-parts-8"),
+    B::Li("help-ws-parts-9"),
+    B::Li("help-ws-parts-10"),
+    B::Tip("help-ws-parts-11"),
+    B::H("help-ws-parts-12"),
+    B::P("help-ws-parts-13"),
+];
+
+const WS_CUT_LIST: &[B] = &[
+    B::P("help-ws-cutlist-1"),
+    B::H("help-ws-cutlist-2"),
+    B::Li("help-ws-cutlist-3"),
+    B::Li("help-ws-cutlist-4"),
+    B::Li("help-ws-cutlist-5"),
+    B::H("help-ws-cutlist-6"),
+    B::Li("help-ws-cutlist-7"),
+    B::Li("help-ws-cutlist-8"),
+    B::Li("help-ws-cutlist-9"),
+    B::Tip("help-ws-cutlist-10"),
+    B::H("help-ws-cutlist-11"),
+    B::P("help-ws-cutlist-12"),
+    B::P("help-ws-cutlist-13"),
+    B::H("help-ws-cutlist-14"),
+    B::Li("help-ws-cutlist-15"),
+    B::Li("help-ws-cutlist-16"),
+    B::H("help-ws-cutlist-17"),
+    B::P("help-ws-cutlist-18"),
+    B::H("help-ws-cutlist-19"),
+    B::Li("help-ws-cutlist-20"),
+    B::Li("help-ws-cutlist-21"),
+    B::Li("help-ws-cutlist-22"),
+    B::Sub(Topic::WsDrilling, "help-ws-cutlist-23"),
+];
+
+const WS_DRILLING: &[B] = &[
+    B::P("help-ws-drilling-1"),
+    B::H("help-ws-drilling-2"),
+    B::Li("help-ws-drilling-3"),
+    B::Li("help-ws-drilling-4"),
+    B::Li("help-ws-drilling-5"),
+    B::H("help-ws-drilling-6"),
+    B::P("help-ws-drilling-7"),
+    B::Tip("help-ws-drilling-8"),
+    B::H("help-ws-drilling-9"),
+    B::Li("help-ws-drilling-10"),
+    B::Li("help-ws-drilling-11"),
+    B::H("help-ws-drilling-12"),
+    B::P("help-ws-drilling-13"),
+    B::Tip("help-ws-drilling-14"),
+];
+
+const WS_JOINERY: &[B] = &[
+    B::P("help-ws-joinery-1"),
+    B::H("help-ws-joinery-2"),
+    B::Li("help-ws-joinery-3"),
+    B::Li("help-ws-joinery-4"),
+    B::Li("help-ws-joinery-5"),
+    B::Sub(Topic::WsHardware, "help-ws-joinery-6"),
+    B::H("help-ws-joinery-7"),
+    B::P("help-ws-joinery-8"),
+    B::H("help-ws-joinery-9"),
+    B::Li("help-ws-joinery-10"),
+    B::Li("help-ws-joinery-11"),
+    B::Li("help-ws-joinery-12"),
+    B::P("help-ws-joinery-13"),
+    B::H("help-ws-joinery-14"),
+    B::P("help-ws-joinery-15"),
+    B::Li("help-ws-joinery-16"),
+    B::Li("help-ws-joinery-17"),
+    B::Li("help-ws-joinery-18"),
+    B::H("help-ws-joinery-19"),
+    B::P("help-ws-joinery-20"),
+    B::H("help-ws-joinery-21"),
+    B::P("help-ws-joinery-22"),
+];
+
+const WS_HARDWARE: &[B] = &[
+    B::P("help-ws-hardware-1"),
+    B::H("help-ws-hardware-2"),
+    B::Li("help-ws-hardware-3"),
+    B::Li("help-ws-hardware-4"),
+    B::Li("help-ws-hardware-5"),
+    B::Li("help-ws-hardware-6"),
+    B::Li("help-ws-hardware-7"),
+    B::Li("help-ws-hardware-8"),
+    B::Li("help-ws-hardware-9"),
+    B::Tip("help-ws-hardware-10"),
+];
+
+const WS_FITTINGS: &[B] = &[
+    B::P("help-ws-fittings-1"),
+    B::H("help-ws-fittings-2"),
+    B::Step("help-ws-fittings-3"),
+    B::Step("help-ws-fittings-4"),
+    B::Step("help-ws-fittings-5"),
+    B::Step("help-ws-fittings-6"),
+    B::H("help-ws-fittings-7"),
+    B::P("help-ws-fittings-8"),
+    B::Tip("help-ws-fittings-9"),
+    B::H("help-ws-fittings-10"),
+    B::P("help-ws-fittings-11"),
+    B::Li("help-ws-fittings-12"),
+    B::Li("help-ws-fittings-13"),
+    B::Li("help-ws-fittings-14"),
+    B::H("help-ws-fittings-15"),
+    B::P("help-ws-fittings-16"),
+];
+
+const WS_CARCASS: &[B] = &[
+    B::P("help-ws-carcass-1"),
+    B::H("help-ws-carcass-2"),
+    B::P("help-ws-carcass-3"),
+    B::Li("help-ws-carcass-4"),
+    B::Li("help-ws-carcass-5"),
+    B::H("help-ws-carcass-6"),
+    B::P("help-ws-carcass-7"),
+    B::H("help-ws-carcass-8"),
+    B::P("help-ws-carcass-9"),
+    B::H("help-ws-carcass-10"),
+    B::P("help-ws-carcass-11"),
+];
+
+const WS_ASSEMBLY: &[B] = &[
+    B::P("help-ws-assembly-1"),
+    B::H("help-ws-assembly-2"),
+    B::P("help-ws-assembly-3"),
+    B::H("help-ws-assembly-4"),
+    B::P("help-ws-assembly-5"),
+    B::H("help-ws-assembly-6"),
+    B::P("help-ws-assembly-7"),
+    B::H("help-ws-assembly-8"),
+    B::P("help-ws-assembly-9"),
+    B::P("help-ws-assembly-10"),
+    B::H("help-ws-assembly-11"),
+    B::P("help-ws-assembly-12"),
 ];
 
 const FILES: &[B] = &[
@@ -300,6 +473,16 @@ const PROBLEMS: &[B] = &[
     B::Row("help-problems-11", "help-problems-12"),
 ];
 
+/// The topic `topic` is a subtopic of, shown under it in the list of topics.
+pub fn parent(topic: Topic) -> Option<Topic> {
+    use Topic::*;
+    matches!(topic, WsParts | WsCutList | WsDrilling | WsJoinery | WsHardware | WsFittings | WsCarcass | WsAssembly).then_some(Workshop)
+}
+
+fn topic_name(topic: Topic) -> String {
+    tr!(TOPICS.iter().find(|t| t.0 == topic).map(|t| t.1).unwrap_or_default())
+}
+
 fn page(topic: Topic) -> &'static [B] {
     match topic {
         Topic::Start => START,
@@ -318,6 +501,14 @@ fn page(topic: Topic) -> &'static [B] {
         Topic::Styles => STYLES,
         Topic::Scenes => SCENES,
         Topic::Workshop => WORKSHOP,
+        Topic::WsParts => WS_PARTS,
+        Topic::WsCutList => WS_CUT_LIST,
+        Topic::WsDrilling => WS_DRILLING,
+        Topic::WsJoinery => WS_JOINERY,
+        Topic::WsHardware => WS_HARDWARE,
+        Topic::WsFittings => WS_FITTINGS,
+        Topic::WsCarcass => WS_CARCASS,
+        Topic::WsAssembly => WS_ASSEMBLY,
         Topic::Files => FILES,
         Topic::Scripts => SCRIPTS,
         Topic::Shortcuts => SHORTCUTS,
@@ -400,15 +591,46 @@ fn tool_card(ui: &mut Ui, id: ToolId, ask: &mut Option<Ask>) {
     ui.add_space(4.0);
 }
 
+/// A line of text after a mark (a bullet or a step's number) kept in its own column.
+fn marked(ui: &mut Ui, mark: &str, text: &str) {
+    ui.horizontal_top(|ui| {
+        ui.add_space(8.0);
+        ui.add_sized([16.0, 14.0], egui::Label::new(RichText::new(mark).strong().color(theme::text_dim())));
+        ui.vertical(|ui| rich(ui, text));
+    });
+}
+
 fn blocks_ui(ui: &mut Ui, blocks: &[B], ask: &mut Option<Ask>) {
+    let mut step = 0;
     for b in blocks {
         match b {
             B::H(t) => {
-                ui.add_space(6.0);
+                step = 0;
+                ui.add_space(8.0);
                 ui.label(RichText::new(tr!(t)).strong().size(15.0));
             }
             B::P(t) => rich(ui, &tr!(t)),
             B::Row(a, b) => row(ui, &tr!(a), &tr!(b)),
+            B::Li(t) => marked(ui, "•", &tr!(t)),
+            B::Step(t) => {
+                step += 1;
+                marked(ui, &format!("{step}."), &tr!(t));
+            }
+            B::Tip(t) => {
+                egui::Frame::new().fill(theme::tray_bg()).stroke(egui::Stroke::new(1.0, theme::text_dim())).inner_margin(6.0).corner_radius(4.0).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    rich(ui, &tr!(t));
+                });
+            }
+            B::Sub(t, what) => {
+                ui.horizontal_wrapped(|ui| {
+                    ui.add_space(8.0);
+                    if ui.link(RichText::new(format!("→ {}", topic_name(*t))).strong()).clicked() {
+                        *ask = Some(Ask::Topic(*t));
+                    }
+                    ui.label(RichText::new(format!("— {}", tr!(what))).color(theme::text_dim()));
+                });
+            }
             B::Tools(ids) => {
                 ui.add_space(2.0);
                 for id in *ids {
@@ -426,9 +648,24 @@ fn blocks_ui(ui: &mut Ui, blocks: &[B], ask: &mut Option<Ask>) {
 }
 
 fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
-    ui.label(RichText::new(tr!(TOPICS.iter().find(|t| t.0 == topic).map(|t| t.1).unwrap_or_default())).strong().size(18.0));
+    if let Some(p) = parent(topic)
+        && ui.link(RichText::new(format!("← {}", topic_name(p))).small()).clicked()
+    {
+        *ask = Some(Ask::Topic(p));
+    }
+    ui.label(RichText::new(topic_name(topic)).strong().size(18.0));
     ui.add_space(4.0);
     blocks_ui(ui, page(topic), ask);
+    // the next subtopic, to read a section through
+    if let Some(p) = parent(topic) {
+        let subs: Vec<Topic> = TOPICS.iter().map(|t| t.0).filter(|t| parent(*t) == Some(p)).collect();
+        if let Some(next) = subs.iter().position(|t| *t == topic).and_then(|i| subs.get(i + 1)) {
+            ui.add_space(8.0);
+            if ui.link(format!("{} →", topic_name(*next))).clicked() {
+                *ask = Some(Ask::Topic(*next));
+            }
+        }
+    }
     if topic == Topic::Shortcuts {
         ui.label(RichText::new(tr!("help-tools")).strong().size(15.0));
         for id in ToolId::ALL {
@@ -449,7 +686,8 @@ fn topic_ui(ui: &mut Ui, topic: Topic, ask: &mut Option<Ask>) {
 /// The text of a block that a search looks at.
 fn block_text(b: &B) -> Option<String> {
     match b {
-        B::H(t) | B::P(t) => Some(tr!(t)),
+        B::H(t) | B::P(t) | B::Li(t) | B::Step(t) | B::Tip(t) => Some(tr!(t)),
+        B::Sub(t, w) => Some(format!("{} {}", topic_name(*t), tr!(w))),
         B::Row(a, b) => Some(format!("{} {}", tr!(a), tr!(b))),
         B::Script(_, l) => Some(tr!(l)),
         B::Tools(_) => None,
@@ -494,7 +732,7 @@ fn search_ui(ui: &mut Ui, q: &str, ask: &mut Option<Ask>) {
         for (t, i) in hits {
             if last != Some(t) {
                 ui.add_space(4.0);
-                let name = tr!(TOPICS.iter().find(|x| x.0 == t).map(|x| x.1).unwrap_or_default());
+                let name = topic_name(t);
                 if ui.link(RichText::new(name).strong()).clicked() {
                     *ask = Some(Ask::Topic(t));
                 }
@@ -552,9 +790,26 @@ impl VarstotasApp {
                 ui.vertical(|ui| {
                     ui.set_width(190.0);
                     ScrollArea::vertical().id_salt("app_help_topics").auto_shrink([true, false]).show(ui, |ui| {
+                        // subtopics only under the open topic, so the list stays short
+                        let open = parent(h.topic).unwrap_or(h.topic);
                         for (t, name) in TOPICS {
+                            let sub = parent(*t);
+                            if sub.is_some_and(|p| p != open) {
+                                continue;
+                            }
                             let sel = h.search.is_empty() && h.topic == *t;
-                            if ui.add(egui::Button::selectable(sel, tr!(name))).clicked() {
+                            let button = egui::Button::selectable(sel, tr!(name));
+                            let r = if sub.is_some() {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(14.0);
+                                    ui.add(button)
+                                })
+                                .inner
+                            } else {
+                                ui.add(button)
+                            };
+                            super::tray_lib::spot(format!("help:topic:{t:?}"), r.rect.center());
+                            if r.clicked() {
                                 h.topic = *t;
                                 h.search.clear();
                             }
@@ -607,5 +862,16 @@ mod tests {
         assert!(find_tools("push").contains(&ToolId::PushPull));
         assert!(find_blocks("autosave").iter().any(|h| h.0 == Topic::Files));
         assert!(find_blocks("zoom extents").iter().any(|h| h.0 == Topic::Navigation));
+        assert!(find_blocks("crossed-out").iter().any(|h| h.0 == Topic::WsDrilling));
+    }
+
+    /// Every subtopic is linked from its topic's page.
+    #[test]
+    fn subtopics_are_linked_from_their_topic() {
+        for (t, _) in TOPICS {
+            if let Some(p) = parent(*t) {
+                assert!(page(p).iter().any(|b| matches!(b, B::Sub(s, _) if s == t)), "{t:?} is not linked from {p:?}");
+            }
+        }
     }
 }

@@ -24,11 +24,23 @@ wait 5
 expect guide=(true Modifying "autosave")
 screenshot shots/guide_search.bmp
 # a topic in the list clears the search
-raw click 143 566
+action click_spot help:topic:Files
 wait 5
 expect guide=(true Files "")
 screenshot shots/guide_files.bmp
-raw click 135 620
+action click_spot help:topic:Shortcuts
 wait 5
 expect guide=(true Shortcuts "")
 screenshot shots/guide_keys.bmp
+# Workshop opens its subtopics under it in the list; a subtopic keeps them open
+action click_spot help:topic:Workshop
+wait 5
+expect guide=(true Workshop "")
+screenshot shots/guide_workshop.bmp
+action click_spot help:topic:WsDrilling
+wait 5
+expect guide=(true WsDrilling "")
+screenshot shots/guide_drilling.bmp
+action click_spot help:topic:WsJoinery
+wait 5
+expect guide=(true WsJoinery "")
