@@ -2,7 +2,8 @@
 
 What each version brought, in a few lines: the app shows this file in Help → What's New, and
 a release's notes on GitHub start with its section. A section is `## <version> — <date>`
-followed by `- ` lines; a Release build fails when its version has no section here.
+followed by `- ` lines; a Release build fails when its version has no section here (a
+pre-release such as 0.3.0-rc.1 is listed under 0.3.0).
 
 ## 0.3.0 — 2026-11-04
 

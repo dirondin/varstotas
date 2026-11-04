@@ -15,6 +15,11 @@ pub struct Release<'a> {
     pub items: Vec<&'a str>,
 }
 
+/// This version without a pre-release part (0.3.0-rc.1 → 0.3.0): the section it is listed under.
+pub fn this_version() -> &'static str {
+    env!("CARGO_PKG_VERSION").split('-').next().unwrap_or_default()
+}
+
 /// The releases in `text`, newest first as written.
 pub fn parse(text: &str) -> Vec<Release<'_>> {
     let mut out: Vec<Release> = Vec::new();
@@ -41,7 +46,7 @@ impl ReleaseNotesWindow {
     /// Open on this version (the newest when it has no section).
     pub fn show(&mut self) {
         self.open = true;
-        self.sel = parse(CHANGELOG).iter().position(|r| r.version == env!("CARGO_PKG_VERSION")).unwrap_or(0);
+        self.sel = parse(CHANGELOG).iter().position(|r| r.version == this_version()).unwrap_or(0);
     }
 
     /// For the debug harness: open and the version shown.
@@ -82,7 +87,7 @@ impl VarstotasApp {
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(r.version).size(18.0).strong());
-                            let current = r.version == env!("CARGO_PKG_VERSION");
+                            let current = r.version == this_version();
                             let date = if current { tr!("release-notes-current", date = r.date) } else { r.date.to_string() };
                             ui.label(RichText::new(date).color(theme::text_dim()));
                         });
@@ -108,7 +113,7 @@ mod tests {
     #[test]
     fn this_version_has_notes() {
         let releases = parse(CHANGELOG);
-        let current = releases.iter().find(|r| r.version == env!("CARGO_PKG_VERSION")).expect("CHANGELOG.md has no section for this version");
+        let current = releases.iter().find(|r| r.version == this_version()).expect("CHANGELOG.md has no section for this version");
         assert!(!current.items.is_empty() && !current.date.is_empty());
     }
 

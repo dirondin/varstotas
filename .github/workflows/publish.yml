@@ -90,9 +90,9 @@ jobs:
       - name: Publish
         run: |
           # what the version brought (its CHANGELOG.md section), then the downloads
-          awk -v v="$VERSION" '/^## /{f=($2==v); next} f' CHANGELOG.md > notes.md
+          awk -v v="${VERSION%%-*}" '/^## /{f=($2==v); next} f' CHANGELOG.md > notes.md
           if ! grep -q '^- ' notes.md; then
-            echo "::error::CHANGELOG.md has no section for $VERSION"
+            echo "::error::CHANGELOG.md has no section for ${VERSION%%-*}"
             exit 1
           fi
           sed "s/{version}/$VERSION/g" .github/release-notes.md >> notes.md
