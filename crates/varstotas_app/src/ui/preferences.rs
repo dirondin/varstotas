@@ -413,11 +413,13 @@ impl VarstotasApp {
             heading(ui, &tr!("prefs-data-folder"));
             #[cfg(not(target_arch = "wasm32"))]
             {
+                // the button first: a long path is cut to the window, not widening it
                 ui.horizontal(|ui| {
-                    ui.monospace(crate::paths::display(&dir));
                     if ui.button(tr!("reveal-in-file-manager")).clicked() {
                         super::extensions::reveal(&dir);
                     }
+                    let path = crate::paths::display(&dir);
+                    ui.add(egui::Label::new(RichText::new(path.clone()).monospace()).truncate()).on_hover_text(path);
                 });
                 note(ui, &tr!("prefs-data-folder-note"));
             }
