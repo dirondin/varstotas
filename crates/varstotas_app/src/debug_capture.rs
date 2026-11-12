@@ -708,6 +708,27 @@ impl VarstotasApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
+        // The scripts are written for a 1400x900 window (VARSTOTAS_SCRIPT_SCALE of it, zoomed
+        // to match). A window opened at another size (GitHub's Windows runners maximize every
+        // window to their 1024x768 screen) is put back to it before the first command.
+        if script.frame == 1 || script.frame == 30 {
+            let (inner, native, maximized, fullscreen) = ctx.input(|i| {
+                let v = i.viewport();
+                (v.inner_rect, v.native_pixels_per_point.unwrap_or(1.0), v.maximized, v.fullscreen)
+            });
+            let want = egui::vec2(1400.0, 900.0) * script_scale() * native;
+            let have = inner.map(|r| r.size() * ctx.pixels_per_point());
+            if have.is_none_or(|h| (h - want).abs().max_elem() > 2.0) {
+                log::info!("script: window {have:?} px (maximized {maximized:?}, fullscreen {fullscreen:?}), resizing to {want:?}");
+                if fullscreen == Some(true) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                }
+                if maximized == Some(true) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(want / ctx.pixels_per_point()));
+            }
+        }
         // Let the window and renderer settle: the viewport size must be stable for a while
         // before the first command (world → screen mapping depends on it).
         let vp = self.viewport.size();
