@@ -98,8 +98,8 @@ jobs:
           sed "s/{version}/$VERSION/g" .github/release-notes.md >> notes.md
           pre=()
           [[ "$VERSION" == *-* ]] && pre=(--prerelease)
-          # all files are attached to a draft first: an immutable release cannot get them later
-          gh release create "$TAG" dist/* --draft --verify-tag --title "Varstotas $VERSION" \
+          # all files are attached to a draft first (not the package-test kit, release-tests/): an immutable release cannot get them later
+          gh release create "$TAG" dist/Varstotas-* dist/SHA256SUMS.txt --draft --verify-tag --title "Varstotas $VERSION" \
             --notes-file notes.md "${pre[@]}"
           gh release edit "$TAG" --draft=false
           url="$(gh release view "$TAG" --json url --jq .url)"

@@ -1,0 +1,21 @@
+# The UI scripts (tests/ui/scripts/<name>.txt) the package tests run on a release build.
+# quick: on every package; full: also on each system's main package (the macOS .dmg, the Linux
+# AppImage, the Windows installer), or on every package with --full / -Full.
+quick x1
+quick release_notes
+quick exchange
+full shapes
+full sections
+full text3d
+full printing
+full sheets
+full unfold
+full realistic
+full render
+full physics
+full cut_list
+full joinery
+full assembly
+full doors
+full fittings
+full preferences

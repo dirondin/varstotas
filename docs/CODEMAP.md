@@ -210,6 +210,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
   - Check state with `dump` rather than screenshots.
   - Take a screenshot only for visual checks: convert the BMP with `sips -s format png -Z 1200`, then crop.
 - Regression scripts for UI behaviour live in `tests/ui/scripts/` and run with `tests/ui/run_all.sh`; `tests/ui/fixtures/<script>/components` is copied into the run's home first.
+- Package tests of a release (`tests/release/`): `run.sh` (macOS, Linux), `run.ps1` / `run.cmd` (Windows), `sandbox.ps1` / `sandbox.cmd` (Windows Sandbox) install or unpack each package and run the UI scripts listed in `scripts.txt` on the release build (`VARSTOTAS_SCRIPT` works there; only `VARSTOTAS_QA_EXAMPLES` is debug-only); `kit.sh` lays them out for Release build's `release-files` artifact.
 
 ## Repository examples (2026-10-22)
 Normal app builds do not embed or install optional examples. Help → Examples opens the repository in a browser. Existing installed files are retained. The debug QA harness alone can read repository fixtures when both `VARSTOTAS_SCRIPT` and `VARSTOTAS_QA_EXAMPLES` are set; `tests/ui/run_all.sh` supplies the path and explicitly copies plugin fixtures into its isolated HOME. `no_examples` skips these fixtures and checks normal startup.
