@@ -710,8 +710,9 @@ impl VarstotasApp {
         }
         // The scripts are written for a 1400x900 window (VARSTOTAS_SCRIPT_SCALE of it, zoomed
         // to match). A window opened at another size (GitHub's Windows runners maximize every
-        // window to their 1024x768 screen) is put back to it before the first command.
-        if script.frame == 1 || script.frame == 30 {
+        // window to their 1024x768 screen) is put back to it before the first command (checked
+        // again: the first request can go out before the interface zoom is applied).
+        if script.pc == 0 && script.frame % 30 == 1 {
             let (inner, native, maximized, fullscreen) = ctx.input(|i| {
                 let v = i.viewport();
                 (v.inner_rect, v.native_pixels_per_point.unwrap_or(1.0), v.maximized, v.fullscreen)

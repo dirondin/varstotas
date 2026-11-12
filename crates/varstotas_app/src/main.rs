@@ -172,6 +172,9 @@ fn main() -> eframe::Result<()> {
         wgpu_options,
         // scripted runs open at the default size, whatever size the window was last left at
         persist_window: std::env::var_os("VARSTOTAS_SCRIPT").is_none(),
+        // VARSTOTAS_DATA_DIR (the tests) also holds the preferences and window state: on
+        // Windows eframe's own folder is the user's roaming AppData whatever the environment says
+        persistence_path: std::env::var_os("VARSTOTAS_DATA_DIR").filter(|d| !d.is_empty()).map(|d| std::path::PathBuf::from(d).join("app.ron")),
         ..Default::default()
     };
     #[cfg(target_os = "macos")]
