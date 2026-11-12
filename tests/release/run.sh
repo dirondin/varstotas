@@ -12,6 +12,9 @@
 #   --only NAME   only packages whose file name contains NAME (repeatable)
 #   --deb         Linux: also install the .deb with sudo apt-get, test /usr/bin/varstotas, remove it
 #   --keep        keep the temporary folders (unpacked apps, script folders)
+#   --bin PATH    no packages: test this varstotas binary (a local build), with the full set
+#   --scale S     the scripted window's size against the 1400x900 the scripts are written for
+#                 (default 0.6: 840x540, the interface zoomed out to match, fits any screen)
 # Nothing outside the temporary folders is touched (HOME and the data folder point there), except
 # the .deb with --deb. Needs a desktop session (on Linux without one: xvfb-run).
 set -u
@@ -19,7 +22,7 @@ set -u
 here=$(cd "$(dirname "$0")" && pwd)
 # the kit (release-tests/ next to the packages) or the repository (tests/release)
 if [[ -d $here/tests/ui/scripts ]]; then kit=$here; else kit=$(cd "$here/../.." && pwd); fi
-set_full=0 set_quick=0 deb=0 keep=0 only=() pkgdir=
+set_full=0 set_quick=0 deb=0 keep=0 only=() pkgdir= scale=0.6 bin_only=
 while (( $# )); do
   case $1 in
     --full) set_full=1 ;;
@@ -27,7 +30,9 @@ while (( $# )); do
     --deb) deb=1 ;;
     --keep) keep=1 ;;
     --only) shift; only+=("$1") ;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --scale) shift; scale=$1 ;;
+    --bin) shift; bin_only=$1 ;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) pkgdir=$1 ;;
   esac
   shift
@@ -106,6 +111,10 @@ for f in "$pkgdir"/Varstotas-*; do
   version=$(echo "$b" | sed -nE 's/^Varstotas-(.*)-(macos|linux|windows)-.*/\1/p')
   [[ -n $version ]] && break
 done
+if [[ -n $bin_only ]]; then
+  bin_only=$(cd "$(dirname "$bin_only")" && pwd)/$(basename "$bin_only")
+  version=$("$bin_only" --version 2>/dev/null | tail -1 | sed -nE 's/^Varstotas ([^ ]+) .*/\1/p')
+fi
 if [[ -z $version ]]; then echo "no Varstotas-* packages in $pkgdir"; exit 1; fi
 base=${version%%-*}
 
@@ -127,8 +136,10 @@ echo "results:  $out"
 sed 's/^/  /' "$out/system.txt"
 
 echo
-echo "${bold}checksums${off}"
-if [[ ! -f $sums ]]; then
+[[ -z $bin_only ]] && echo "${bold}checksums${off}"
+if [[ -n $bin_only ]]; then
+  :
+elif [[ ! -f $sums ]]; then
   row release SHA256SUMS FAIL "no SHA256SUMS.txt"
 else
   if command -v sha256sum >/dev/null; then sha=(sha256sum); else sha=(shasum -a 256); fi
@@ -173,13 +184,6 @@ test_app() {
   else
     row "$v" "start" FAIL "exit $code$( [[ -s $shot ]] || echo ', no window image'); $(grep -E 'ERROR|panicked' "$log" | head -1 | cut -c1-160)"
   fi
-  if [[ -s $shot ]]; then
-    local size w hh
-    size=$(od -An -t d4 -j 18 -N 8 "$shot")
-    read -r w hh <<< "$size"
-    hh=${hh#-}
-    if (( w < 1400 || hh < 900 )); then row "$v" window info "${w}x${hh}: smaller than the 1400x900 the UI scripts are written for (a small screen), so their clicks may miss"; fi
-  fi
 
   # the UI scripts, each in its own folder with a fresh home
   local n s work ok bad
@@ -194,7 +198,7 @@ test_app() {
     ln -s "$h" "$work/home"
     log=$out/logs/$v-$n.log
     local t0=$(date +%s)
-    (cd "$work" && limited 400 env $(app_env "$h") VARSTOTAS_FOREGROUND=1 VARSTOTAS_SCRIPT="$s" ${wrap[@]+"${wrap[@]}"} "$bin") > "$log" 2>&1
+    (cd "$work" && limited 400 env $(app_env "$h") VARSTOTAS_FOREGROUND=1 VARSTOTAS_SCRIPT_SCALE=$scale VARSTOTAS_SCRIPT="$s" ${wrap[@]+"${wrap[@]}"} "$bin") > "$log" 2>&1
     code=$?
     bad=$(grep -cE 'expect FAIL|panicked' "$log")
     ok=$(grep -c 'expect ok' "$log")
@@ -348,8 +352,14 @@ test_linux_deb() {
 }
 
 # --- run --------------------------------------------------------------------------------------
-pkgs=$(pick)
-[[ -z $pkgs ]] && row release packages FAIL "no packages for $os $cpu"
+pkgs=
+if [[ -n $bin_only ]]; then
+  echo "${bold}$bin_only${off}"
+  test_app bin "$bin_only" "$( (( set_quick )) && echo quick || echo full)"
+else
+  pkgs=$(pick)
+  [[ -z $pkgs ]] && row release packages FAIL "no packages for $os $cpu"
+fi
 while read -r f; do
   [[ -z $f ]] && continue
   case $f in

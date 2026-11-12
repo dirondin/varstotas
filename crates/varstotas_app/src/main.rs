@@ -156,6 +156,7 @@ fn main() -> eframe::Result<()> {
     // Dock icon; the window keeps its normal level. VARSTOTAS_FOREGROUND=1 activates the window
     // and keeps it on top, as a script that records a video does.
     let background = std::env::var_os("VARSTOTAS_SCRIPT").is_some() && std::env::var_os("VARSTOTAS_FOREGROUND").is_none();
+    let script_scale = debug_capture::script_scale();
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
@@ -165,8 +166,8 @@ fn main() -> eframe::Result<()> {
             // build sets its application ID, the name of its .desktop file
             .with_app_id(option_env!("VARSTOTAS_APP_ID").unwrap_or("varstotas")) // i18n-ignore
             .with_icon(app_icon())
-            .with_inner_size([1400.0, 900.0])
-            .with_min_inner_size([800.0, 500.0])
+            .with_inner_size([1400.0 * script_scale, 900.0 * script_scale])
+            .with_min_inner_size([800.0 * script_scale, 500.0 * script_scale])
             .with_active(!background),
         wgpu_options,
         // scripted runs open at the default size, whatever size the window was last left at

@@ -11,6 +11,9 @@
 #   -Only NAME   only packages whose file name contains NAME (e.g. -Only setup)
 #   -AllCpu      also the packages for the other processor (x64 under emulation on Arm)
 #   -Keep        keep the temporary folders
+#   -Bin PATH    no packages: test this varstotas.exe (a local build), with the full set
+#   -Scale S     the scripted window's size against the 1400x900 the scripts are written for
+#                (default 0.6: 840x540, the interface zoomed out to match, fits any screen)
 # The installer is skipped when Varstotas is installed on this computer already (it would update
 # and then remove that one): test it in Windows Sandbox (sandbox.cmd) instead.
 param(
@@ -19,7 +22,9 @@ param(
   [switch]$Quick,
   [string[]]$Only = @(),
   [switch]$AllCpu,
-  [switch]$Keep
+  [switch]$Keep,
+  [double]$Scale = 0.6,
+  [string]$Bin = ""
 )
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
@@ -87,6 +92,11 @@ $version = $null
 foreach ($f in Get-ChildItem $pkgdir -Filter "Varstotas-*") {
   if ($f.Name -match '^Varstotas-(.*)-(macos|linux|windows)-') { $version = $Matches[1]; break }
 }
+if ($Bin) {
+  $Bin = (Resolve-Path $Bin).Path
+  $p = Start-Process $Bin -ArgumentList "--version" -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$tmp\version.txt"
+  if ((Get-Content "$tmp\version.txt" | Select-Object -Last 1) -match '^Varstotas (\S+) ') { $version = $Matches[1] }
+}
 if (-not $version) { Write-Host "no Varstotas-* packages in $pkgdir"; exit 1 }
 
 Write-Host "Varstotas $version - package tests on windows $cpu" -ForegroundColor White
@@ -100,11 +110,13 @@ foreach ($g in Get-CimInstance Win32_VideoController) { $sys += "gpu: $($g.Name)
 [IO.File]::WriteAllText("$out\system.txt", ($sys -join "`n") + "`n")
 $sys | ForEach-Object { Write-Host "  $_" }
 
-Head "checksums"
 $sums = Join-Path $pkgdir "SHA256SUMS.txt"
-if (-not (Test-Path $sums)) {
+if ($Bin) {
+} elseif (-not (Test-Path $sums)) {
+  Head "checksums"
   Row release SHA256SUMS FAIL "no SHA256SUMS.txt"
 } else {
+  Head "checksums"
   $n = 0; $bad = 0; $missing = 0
   foreach ($line in Get-Content $sums) {
     if ($line -notmatch '^([0-9a-f]{64})\s+\*?(.+)$') { continue }
@@ -141,11 +153,6 @@ function Test-App($v, $exe, $set) {
   $gfx = ([regex]::Matches($text, 'graphics in use: (.*)') | Select-Object -Last 1)
   $gfx = if ($gfx) { $gfx.Groups[1].Value.Trim() } else { "graphics not logged" }
   if ($code -eq 0 -and (Test-Path $shot) -and $text -notmatch 'panicked') { Row $v start ok $gfx }
-  if (Test-Path $shot) {
-    $b = [IO.File]::ReadAllBytes($shot)
-    $w = [BitConverter]::ToInt32($b, 18); $hh = [math]::Abs([BitConverter]::ToInt32($b, 22))
-    if ($w -lt 1400 -or $hh -lt 900) { Row $v window info "${w}x${hh}: smaller than the 1400x900 the UI scripts are written for (a small screen), so their clicks may miss" }
-  }
   else {
     $err = ($text -split "`n" | Where-Object { $_ -match 'ERROR|panicked' } | Select-Object -First 1)
     Row $v start FAIL ("exit $code" + $(if (-not (Test-Path $shot)) { ", no window image" } else { "" }) + "; $err")
@@ -163,7 +170,7 @@ function Test-App($v, $exe, $set) {
     cmd /c mklink /J "$work\shots" "$out\shots\$v" | Out-Null
     cmd /c mklink /J "$work\home" "$h" | Out-Null
     $log = "$out\logs\$v-$n.log"
-    $envs = App-Env $h; $envs.VARSTOTAS_FOREGROUND = "1"; $envs.VARSTOTAS_SCRIPT = $s
+    $envs = App-Env $h; $envs.VARSTOTAS_FOREGROUND = "1"; $envs.VARSTOTAS_SCRIPT_SCALE = $Scale.ToString([Globalization.CultureInfo]::InvariantCulture); $envs.VARSTOTAS_SCRIPT = $s
     $t0 = Get-Date
     $code = Run-App $exe $null $envs $log 400 $work
     $lines = Get-Content $log
@@ -248,7 +255,11 @@ $pkgs = Get-ChildItem $pkgdir -Filter "Varstotas-$version-windows-*" | Where-Obj
   $name = $_.Name
   ($cpus | Where-Object { $name -like "*-$_*" }) -and ($Only.Count -eq 0 -or ($Only | Where-Object { $name -like "*$_*" }))
 } | Sort-Object { if ($_.Name -like "*-setup.exe") { 0 } else { 1 } }
-if (-not $pkgs) { Row release packages FAIL "no packages for windows $cpu" }
+if ($Bin) {
+  $pkgs = @()
+  Head $Bin
+  Test-App bin $Bin $(if ($Quick) { "quick" } else { "full" })
+} elseif (-not $pkgs) { Row release packages FAIL "no packages for windows $cpu" }
 foreach ($f in $pkgs) {
   $c = if ($f.Name -like "*-aarch64*") { "arm64" } else { "x64" }
   $tag = if ($AllCpu) { "-$c" } else { "" }

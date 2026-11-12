@@ -3,9 +3,24 @@
 //! - `VARSTOTAS_SCREENSHOT=<file.bmp>` captures the window after ~40 frames, writes a BMP, quits.
 //! - `VARSTOTAS_SCRIPT=<file>` drives tools with scripted input (see [`ScriptCmd`] for the
 //!   command list), taking screenshots along the way; quits at the end of the script.
+//! - `VARSTOTAS_SCRIPT_SCALE=<0.3..1>` opens a scripted run's window that much smaller than
+//!   1400×900, the interface zoomed out to match ([`script_scale`]).
 
 use crate::ui::tray_lib::key_names;
 use egui::{Context, Event, ViewportCommand};
+
+/// The scale of a scripted run's window (`VARSTOTAS_SCRIPT_SCALE`, 0.3–1, default 1): the window
+/// is that much smaller and the interface zoomed out as much, so the layout the scripts click
+/// in stays 1400×900 points whatever the size of the screen (the package tests use 0.6).
+pub(crate) fn script_scale() -> f32 {
+    static SCALE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *SCALE.get_or_init(|| {
+        if std::env::var_os("VARSTOTAS_SCRIPT").is_none() {
+            return 1.0;
+        }
+        std::env::var("VARSTOTAS_SCRIPT_SCALE").ok().and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite()).map_or(1.0, |v| v.clamp(0.3, 1.0))
+    })
+}
 
 /// Repository fixtures for opt-in debug QA only; never read during normal app startup.
 pub(crate) fn qa_examples_dir() -> Option<std::path::PathBuf> {
@@ -73,6 +88,8 @@ impl DebugCapture {
             Ok(text) => {
                 let path = varstotas_kernel::fs::canonicalize(&p).unwrap_or_else(|_| p.clone().into());
                 let root = path.ancestors().nth(4).map(|r| r.display().to_string()).unwrap_or_default();
+                // Windows: canonicalize gives a verbatim path (\\?\C:\…), where the scripts' `/` would not separate
+                let root = root.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(root);
                 Some(Script::parse(&text.replace("$ROOT", &root)))
             }
             Err(e) => {
@@ -1933,6 +1950,10 @@ impl VarstotasApp {
             }
             return;
         }
+        if name == "ged_mark" {
+            self.gen_editor.code_h_mark = self.gen_editor.code_h;
+            return;
+        }
         if name == "ged_close" {
             self.gen_editor.open = false;
             return;
@@ -3256,7 +3277,7 @@ impl VarstotasApp {
             Some(Err(e)) => format!("err({})", e.chars().take(80).collect::<String>().replace(' ', "_")),
             None => "none".into(),
         };
-        format!("{head}:{pre}:{}:h{}", ed.status.replace(' ', "_"), ed.code_h.round())
+        format!("{head}:{pre}:{}:h{}:dh{}", ed.status.replace(' ', "_"), ed.code_h.round(), (ed.code_h - ed.code_h_mark).round())
     }
 
     fn gen_dump(&self) -> String {

@@ -8,6 +8,10 @@
 # The folder is removed after a passing run and kept (its path printed) after a failing one.
 # The app runs in the background: not activated, never focused, its window at the normal level
 # (a script that records a video, or VARSTOTAS_FOREGROUND=1, puts it on top and focuses it).
+# The window opens at 0.6 of the 1400x900 the scripts are written for, the interface zoomed out to
+# match (the layout stays 1400x900 points, so the scripts fit any screen);
+# VARSTOTAS_SCRIPT_SCALE=1 runs them at full size.
+export VARSTOTAS_SCRIPT_SCALE=${VARSTOTAS_SCRIPT_SCALE:-0.6}
 root=${0:A:h:h:h}
 out=$root/target/ui-tests
 mkdir -p $out/shots $out/home $out/models

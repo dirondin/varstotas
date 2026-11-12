@@ -209,7 +209,7 @@ Tests: `tests/rig.rs` (joints, shared variants, write-back, script / visibility 
 - To run a UI script: `VARSTOTAS_SCRIPT=file cargo run -p varstotas_app`.
   - Check state with `dump` rather than screenshots.
   - Take a screenshot only for visual checks: convert the BMP with `sips -s format png -Z 1200`, then crop.
-- Regression scripts for UI behaviour live in `tests/ui/scripts/` and run with `tests/ui/run_all.sh`; `tests/ui/fixtures/<script>/components` is copied into the run's home first.
+- Regression scripts for UI behaviour live in `tests/ui/scripts/` and run with `tests/ui/run_all.sh`; `tests/ui/fixtures/<script>/components` is copied into the run's home first. The scripts are written for a 1400×900 window; `VARSTOTAS_SCRIPT_SCALE` (run_all.sh and the package tests: 0.6) opens it smaller with the interface zoomed out to match (`debug_capture::script_scale`, applied in `apply_interface`), so the layout in points stays the same on any screen.
 - Package tests of a release (`tests/release/`): `run.sh` (macOS, Linux), `run.ps1` / `run.cmd` (Windows), `sandbox.ps1` / `sandbox.cmd` (Windows Sandbox) install or unpack each package and run the UI scripts listed in `scripts.txt` on the release build (`VARSTOTAS_SCRIPT` works there; only `VARSTOTAS_QA_EXAMPLES` is debug-only); `kit.sh` lays them out for Release build's `release-files` artifact.
 
 ## Repository examples (2026-10-22)

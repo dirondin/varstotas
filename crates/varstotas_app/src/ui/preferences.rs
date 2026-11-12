@@ -773,7 +773,9 @@ impl VarstotasApp {
     pub(crate) fn apply_interface(&mut self, ctx: &Context) {
         super::theme::set_look(ctx, super::theme::wants_dark(ctx, self.prefs.theme));
         let key = egui::Id::new("ui_scale_applied");
-        let zoom = ctx.zoom_factor();
+        // a scripted run's smaller window zooms the whole interface out (debug_capture::script_scale)
+        let window = crate::debug_capture::script_scale();
+        let zoom = ctx.zoom_factor() / window;
         let applied = ctx.data(|d| d.get_temp::<f32>(key));
         // ⌘ + / − / 0 (egui's own zoom keys) changed it: keep that in the preferences
         if applied.is_some_and(|a| (zoom - a).abs() > 1e-3) {
@@ -781,7 +783,7 @@ impl VarstotasApp {
         }
         let scale = self.prefs.ui_scale.clamp(0.5, 2.0);
         if (zoom - scale).abs() > 1e-3 {
-            ctx.set_zoom_factor(scale);
+            ctx.set_zoom_factor(scale * window);
         }
         ctx.data_mut(|d| d.insert_temp(key, scale));
         super::toolbar::set_button_side(self.prefs.toolbar_icons);

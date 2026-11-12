@@ -80,18 +80,15 @@ wait 3
 screenshot shots/ged_window.bmp
 dump ged_before_resize
 # the window shrinks and grows by its bottom-right corner (real mouse); the editor follows
-raw down 950 707
-raw move 950 650
-raw move 950 509
-raw up 950 509
+# (by about as much: the text's pixel grid differs with the window's scale, so not exactly)
+action ged_mark
+action drag_spot ged:corner 0 -198
 wait 5
-expect :h378
-raw down 950 509
-raw move 950 600
-raw move 950 650
-raw up 950 650
+expect :dh-20
+action ged_mark
+action drag_spot ged:corner 0 141
 wait 5
-expect :h510
+expect :dh1
 screenshot shots/ged_resized.bmp
 action ged_close
 wait 3

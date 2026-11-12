@@ -71,6 +71,8 @@ pub struct GenEditor {
     pub status: String,
     /// Height of the code editor last frame.
     pub code_h: f32,
+    /// `code_h` when the debug harness marked it (`ged_mark`): resize checks compare against it.
+    pub code_h_mark: f32,
 }
 
 impl Default for GenEditor {
@@ -93,6 +95,7 @@ impl Default for GenEditor {
             drag: None,
             status: String::new(),
             code_h: 0.0,
+            code_h_mark: 0.0,
         }
     }
 }
@@ -196,7 +199,9 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(40.0, 30.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(super::theme::card_bg());
         let win = self.placed(egui::Window::new(tr!("gen-editor-title")).id(egui::Id::new("Generator Editor")).open(&mut open), pos);
-        win.default_size([920.0, 600.0]).frame(frame).resizable(true).show(ctx, |ui| self.gen_editor_ui(ui));
+        if let Some(r) = win.default_size([920.0, 600.0]).frame(frame).resizable(true).show(ctx, |ui| self.gen_editor_ui(ui)) {
+            super::tray_lib::spot("ged:corner", r.response.rect.right_bottom() - vec2(4.0, 4.0));
+        }
         if !open {
             self.gen_editor.open = false;
         }
