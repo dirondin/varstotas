@@ -56,6 +56,8 @@ Notes:
 
 - The app's window opens and works by itself for a few minutes: leave the mouse and keyboard
   alone while it does.
+- The UI scripts click where things are in a 1400×900 window: on a smaller screen (the report
+  says so) their checks can fail without a fault in the app.
 - macOS: the copy under test has its quarantine flag removed, so the Gatekeeper prompt is not
   covered (see below).
 - Linux without a desktop session (a server, a container) needs `xvfb-run`; the AppImage runs

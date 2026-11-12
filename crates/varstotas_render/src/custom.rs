@@ -87,8 +87,10 @@ pub(crate) fn compose(shaders: &[Option<&CustomSurface>]) -> (String, Vec<usize>
         let args: Vec<&str> = ["a.x", "a.y", "a.z", "a.w", "b.x", "b.y", "b.z", "b.w"][..n].to_vec();
         cases.push_str(&format!("        case {}u: {{ return surface_c{i}(s, Params_c{i}({})); }}\n", i + 1, args.join(", ")));
     }
+    // the last return after the switch: FXC (Direct3D 12 without DXC, e.g. WARP) rejects a
+    // function whose only returns are inside a switch ("not all control paths return a value")
     src.push_str(&format!(
-        "fn custom_surface(id: u32, s: Surface, a: vec4<f32>, b: vec4<f32>) -> Surface {{\n    switch id {{\n{cases}        default: {{ return s; }}\n    }}\n}}\n"
+        "fn custom_surface(id: u32, s: Surface, a: vec4<f32>, b: vec4<f32>) -> Surface {{\n    switch id {{\n{cases}        default: {{}}\n    }}\n    return s;\n}}\n"
     ));
     (src, starts)
 }

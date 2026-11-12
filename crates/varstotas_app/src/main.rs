@@ -125,7 +125,12 @@ fn main() -> eframe::Result<()> {
             if adapter.get_info().backend == wgpu::Backend::Gl {
                 d.required_limits = adapter.limits();
             }
-            if adapter.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY) && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none() {
+            // not on a software adapter (llvmpipe, WARP): llvmpipe's ray queries crashed in the
+            // path tracer (Mesa 25.2 on aarch64); the path tracer then uses its compute fallback
+            if adapter.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+                && adapter.get_info().device_type != wgpu::DeviceType::Cpu
+                && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none()
+            {
                 d.required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
                 let have = adapter.limits();
                 d.required_limits.max_blas_primitive_count = have.max_blas_primitive_count;

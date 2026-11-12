@@ -173,6 +173,13 @@ test_app() {
   else
     row "$v" "start" FAIL "exit $code$( [[ -s $shot ]] || echo ', no window image'); $(grep -E 'ERROR|panicked' "$log" | head -1 | cut -c1-160)"
   fi
+  if [[ -s $shot ]]; then
+    local size w hh
+    size=$(od -An -t d4 -j 18 -N 8 "$shot")
+    read -r w hh <<< "$size"
+    hh=${hh#-}
+    if (( w < 1400 || hh < 900 )); then row "$v" window info "${w}x${hh}: smaller than the 1400x900 the UI scripts are written for (a small screen), so their clicks may miss"; fi
+  fi
 
   # the UI scripts, each in its own folder with a fresh home
   local n s work ok bad

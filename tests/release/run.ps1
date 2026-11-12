@@ -59,6 +59,7 @@ function Run-App($Exe, $Arguments, $EnvVars, $Log, $Seconds, $WorkDir) {
     if ($Arguments) { $a.ArgumentList = $Arguments }
     if ($WorkDir) { $a.WorkingDirectory = $WorkDir }
     $p = Start-Process @a
+    $null = $p.Handle   # without it ExitCode stays empty
     $code = 124
     if ($p.WaitForExit($Seconds * 1000)) { $p.WaitForExit(); $code = $p.ExitCode } else { $p.Kill() }
   } finally {
@@ -140,6 +141,11 @@ function Test-App($v, $exe, $set) {
   $gfx = ([regex]::Matches($text, 'graphics in use: (.*)') | Select-Object -Last 1)
   $gfx = if ($gfx) { $gfx.Groups[1].Value.Trim() } else { "graphics not logged" }
   if ($code -eq 0 -and (Test-Path $shot) -and $text -notmatch 'panicked') { Row $v start ok $gfx }
+  if (Test-Path $shot) {
+    $b = [IO.File]::ReadAllBytes($shot)
+    $w = [BitConverter]::ToInt32($b, 18); $hh = [math]::Abs([BitConverter]::ToInt32($b, 22))
+    if ($w -lt 1400 -or $hh -lt 900) { Row $v window info "${w}x${hh}: smaller than the 1400x900 the UI scripts are written for (a small screen), so their clicks may miss" }
+  }
   else {
     $err = ($text -split "`n" | Where-Object { $_ -match 'ERROR|panicked' } | Select-Object -First 1)
     Row $v start FAIL ("exit $code" + $(if (-not (Test-Path $shot)) { ", no window image" } else { "" }) + "; $err")
