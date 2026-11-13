@@ -1120,6 +1120,7 @@ view-preset-front-back-left-right = Спереди, Сзади, Слева, Сп
 ## Сообщения видового экрана
 
 view-nothing-rendered = ничего не отрисовано
+view-render-unavailable = этот графический драйвер не может делать рендер: трассировке путей нужны вычислительные шейдеры, а в OpenGL ES 3.0 их нет
 view-no-renderer = 3D-отрисовка недоступна
 # $error — причина.
 view-renderer-unavailable-yet = 3D-отрисовка пока недоступна ({ $error })

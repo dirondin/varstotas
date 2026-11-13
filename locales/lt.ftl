@@ -1116,6 +1116,7 @@ view-preset-front-back-left-right = Priekis, galas, kairė, dešinė
 ## Viewport messages
 
 view-nothing-rendered = nieko nesugeneruota
+view-render-unavailable = ši grafikos tvarkyklė negali atvaizduoti: spindulių sekimui reikia skaičiavimo šešėliuoklių, kurių OpenGL ES 3.0 neturi
 view-no-renderer = 3D vaizdavimo variklis nepasiekiamas
 # $error is the reason.
 view-renderer-unavailable-yet = 3D vaizdavimo variklis dar nepasiekiamas ({ $error })

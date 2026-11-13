@@ -1742,6 +1742,13 @@ impl Renderer {
         errors
     }
 
+    /// Whether the path tracer can run here: it is a compute shader reading storage buffers,
+    /// which OpenGL ES 3.0 (virgl in a VM, old drivers) does not have.
+    pub fn pt_available(rs: &egui_wgpu::RenderState) -> bool {
+        rs.adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::COMPUTE_SHADERS)
+            && rs.device.limits().max_storage_buffers_per_shader_stage > 0
+    }
+
     /// Start a path traced render of `geo` (any geometry, e.g. the one of `set_geometry`) from
     /// `camera` with the Realistic environment, materials and effects of `style`; `pt_step`
     /// adds samples. The image size may be lowered to fit the device.

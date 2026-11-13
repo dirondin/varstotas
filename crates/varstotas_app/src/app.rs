@@ -2581,6 +2581,13 @@ impl VarstotasApp {
 }
 
 impl eframe::App for VarstotasApp {
+    /// Opaque: eframe's default is see-through (for transparent windows), and an OpenGL surface
+    /// on Wayland shows that alpha. The view's image, which may carry alpha 0, then came out
+    /// black with trails (virgl in a VM); on an opaque clear every pixel ends up opaque.
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        [0.0, 0.0, 0.0, 1.0]
+    }
+
     /// Scripted (test) runs start from the same UI state every time (tray scroll, open cards).
     fn persist_egui_memory(&self) -> bool {
         !self.debug.script_active()

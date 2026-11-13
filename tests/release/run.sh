@@ -210,6 +210,9 @@ test_app() {
     ok=$(grep -c 'expect ok' "$log")
     if (( code == 0 && bad == 0 )); then
       row "$v" "script $n" ok "$ok checks, $(( $(date +%s) - t0 ))s"
+    elif (( code == 0 )) && ! grep -q panicked "$log" && grep -q 'path tracer: this graphics driver cannot render' "$log"; then
+      # the app said so instead of rendering (OpenGL ES 3.0 has no compute shaders)
+      row "$v" "script $n" skip "no path tracer with this graphics (no compute shaders); the app says so"
     else
       row "$v" "script $n" FAIL "exit $code, $bad failed, $ok ok: $(grep -E 'expect FAIL|panicked' "$log" | head -1 | sed -E 's/.*(expect FAIL|panicked)/\1/' | cut -c1-140)"
     fi

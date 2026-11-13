@@ -1110,6 +1110,7 @@ view-preset-front-back-left-right = Front, Back, Left, Right
 ## Viewport messages
 
 view-nothing-rendered = nothing rendered
+view-render-unavailable = this graphics driver cannot render: path tracing needs compute shaders, which OpenGL ES 3.0 does not have
 view-no-renderer = the 3D renderer is not available
 # $error is the reason.
 view-renderer-unavailable-yet = 3D renderer not available yet ({ $error })

@@ -184,6 +184,10 @@ function Test-App($v, $exe, $set) {
     $bad = @($lines | Where-Object { $_ -match 'expect FAIL|panicked' })
     $ok = @($lines | Where-Object { $_ -match 'expect ok' }).Count
     if ($code -eq 0 -and $bad.Count -eq 0) { Row $v "script $n" ok ("$ok checks, {0:N0}s" -f ((Get-Date) - $t0).TotalSeconds) }
+    elseif ($code -eq 0 -and -not ($lines -match 'panicked') -and ($lines -match 'path tracer: this graphics driver cannot render')) {
+      # the app said so instead of rendering (OpenGL ES 3.0 has no compute shaders)
+      Row $v "script $n" skip "no path tracer with this graphics (no compute shaders); the app says so"
+    }
     else {
       $first = if ($bad.Count) { ($bad[0] -replace '.*(expect FAIL|panicked)', '$1') } else { "" }
       Row $v "script $n" FAIL "exit $code, $($bad.Count) failed, $ok ok: $first"

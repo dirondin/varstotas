@@ -1116,6 +1116,7 @@ view-preset-front-back-left-right = Спераду, Ззаду, Злева, Сп
 ## Паведамленні бачнай вобласці
 
 view-nothing-rendered = нічога не намалявана
+view-render-unavailable = гэты графічны драйвер не можа рабіць рэндэр: трасіроўцы шляхоў патрэбныя вылічальныя шэйдары, а ў OpenGL ES 3.0 іх няма
 view-no-renderer = 3D-рэндарар недаступны
 # $error — прычына.
 view-renderer-unavailable-yet = 3D-рэндарар пакуль недаступны ({ $error })
