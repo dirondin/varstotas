@@ -710,16 +710,16 @@ impl VarstotasApp {
         }
         // The scripts are written for a 1400x900 window (VARSTOTAS_SCRIPT_SCALE of it, zoomed
         // to match). A window opened at another size (GitHub's Windows runners maximize every
-        // window to their 1024x768 screen) is put back to it before the first command (checked
-        // again: the first request can go out before the interface zoom is applied).
-        if script.pc == 0 && script.frame % 30 == 1 {
-            let (inner, native, maximized, fullscreen) = ctx.input(|i| {
+        // window to their 1024x768 screen) is put back to it before the first command. Checked
+        // from frame 20, once the interface zoom is applied (a request sent before it came out
+        // smaller by the zoom), on the drawing area: Wayland reports no window rectangle.
+        if script.pc == 0 && script.frame % 30 == 20 {
+            let (have, native, maximized, fullscreen) = ctx.input(|i| {
                 let v = i.viewport();
-                (v.inner_rect, v.native_pixels_per_point.unwrap_or(1.0), v.maximized, v.fullscreen)
+                (i.content_rect().size() * i.pixels_per_point, v.native_pixels_per_point.unwrap_or(1.0), v.maximized, v.fullscreen)
             });
             let want = egui::vec2(1400.0, 900.0) * script_scale() * native;
-            let have = inner.map(|r| r.size() * ctx.pixels_per_point());
-            if have.is_none_or(|h| (h - want).abs().max_elem() > 2.0) {
+            if (have - want).abs().max_elem() > 2.0 {
                 log::info!("script: window {have:?} px (maximized {maximized:?}, fullscreen {fullscreen:?}), resizing to {want:?}");
                 if fullscreen == Some(true) {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
@@ -728,6 +728,7 @@ impl VarstotasApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
                 }
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(want / ctx.pixels_per_point()));
+                script.stable = 0;
             }
         }
         // Let the window and renderer settle: the viewport size must be stable for a while
