@@ -637,15 +637,15 @@ impl VarstotasApp {
                             ui.horizontal(|ui| {
                                 if r.motion == 0 {
                                     ui.label(tr!("rig-axis-through"));
-                                    for k in 0..3 {
-                                        ui.add(egui::DragValue::new(&mut r.origin[k]).speed(1.0).max_decimals(2));
+                                    for v in &mut r.origin {
+                                        ui.add(egui::DragValue::new(v).speed(1.0).max_decimals(2));
                                     }
                                     ui.label(tr!("rig-along"));
                                 } else {
                                     ui.label(tr!("rig-direction"));
                                 }
-                                for k in 0..3 {
-                                    ui.add(egui::DragValue::new(&mut r.axis[k]).speed(0.01).max_decimals(4));
+                                for v in &mut r.axis {
+                                    ui.add(egui::DragValue::new(v).speed(0.01).max_decimals(4));
                                 }
                                 if ui.small_button(tr!("rig-pick")).on_hover_text(tr!("rig-pick-hint")).clicked() {
                                     pick = Some(i);

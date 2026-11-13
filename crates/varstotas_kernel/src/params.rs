@@ -134,8 +134,8 @@ impl Model {
             def.rig = None;
             def.rigged = None;
             self.defs[v] = def;
-            for k in 0..3 {
-                if let Some(s) = params.size[k] {
+            for (k, s) in params.size.into_iter().enumerate() {
+                if let Some(s) = s {
                     self.stretch_def(v, k, s);
                 }
             }

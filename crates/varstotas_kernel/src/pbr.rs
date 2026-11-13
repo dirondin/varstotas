@@ -107,8 +107,8 @@ impl Pbr {
         let c = |v: f32, lo: f32, hi: f32, def: f32| if v.is_finite() { v.clamp(lo, hi) } else { def };
         self.metallic = c(self.metallic, 0.0, 1.0, d.metallic);
         self.roughness = c(self.roughness, 0.0, 1.0, d.roughness);
-        for k in 0..3 {
-            self.emission[k] = c(self.emission[k], 0.0, 1.0, 0.0);
+        for e in &mut self.emission {
+            *e = c(*e, 0.0, 1.0, 0.0);
         }
         self.emission_strength = c(self.emission_strength, 0.0, 1000.0, 1.0);
         self.transmission = c(self.transmission, 0.0, 1.0, 0.0);

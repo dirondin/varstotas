@@ -1061,7 +1061,7 @@ impl Model {
             }
             .mesh()
             .ok_or(bad(&varstotas_i18n::tr!("print-error-36")))?;
-            for side in 0..2 {
+            for part in result.parts.iter_mut().take(2) {
                 let c = insert_part(
                     self,
                     path,
@@ -1070,11 +1070,11 @@ impl Model {
                     transform,
                 )?;
                 let parts =
-                    self.solid_op_in(path, crate::SolidOp::Subtract, c, result.parts[side])?;
+                    self.solid_op_in(path, crate::SolidOp::Subtract, c, *part)?;
                 if parts.len() != 1 {
                     return Err(bad(&varstotas_i18n::tr!("print-error-37")));
                 }
-                result.parts[side] = parts[0];
+                *part = parts[0];
             }
             let pin = crate::primitives::Primitive::Cylinder {
                 r: o.diameter_mm / 2.,

@@ -472,9 +472,7 @@ mod tests {
         }
         // sky above, black below: up-facing gets more light than down-facing
         let mut q = Panorama { width: 64, height: 32, rgb: vec![0.0; 64 * 32 * 3] };
-        for i in 0..64 * 16 * 3 {
-            q.rgb[i] = 1.0;
-        }
+        q.rgb[..64 * 16 * 3].fill(1.0);
         let sh = irradiance_sh(&q);
         let e = |n| (0..9).map(|k| sh[k][1] * sh_basis(n)[k]).sum::<f32>();
         assert!((e([0.0, 0.0, 1.0]) - std::f32::consts::PI).abs() < 0.15);

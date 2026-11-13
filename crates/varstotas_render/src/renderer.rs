@@ -1386,7 +1386,6 @@ impl Renderer {
     }
 
     /// Record the scene render pass (globals and per-frame buffers must be up to date).
-    #[allow(clippy::too_many_arguments)]
     /// Record the frame into `msaa_view` / `resolve_view`. With `post` (the effects path) the
     /// scene goes to its float target and G-buffer first, then the effects passes, then the
     /// result and the overlays are drawn into `msaa_view`.
