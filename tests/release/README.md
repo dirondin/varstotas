@@ -37,7 +37,7 @@ What each package goes through:
   entry, icons and file type from `install.sh`, the `.deb`'s control fields and contents;
 - `varstotas --version` is this release;
 - one normal start: graphics chosen as for a user (with the fallbacks), the window drawn;
-- the UI scripts in `scripts.txt`: the `quick` ones on every package (a model, export and
+- the UI scripts in `scripts.txt`, with the graphics API that start chose: the `quick` ones on every package (a model, export and
   import, What's New with this version), the `full` ones on the main package of each system
   (modelling, sections, 3D text, 3D printing, sheets, unfolding, the realistic style and the
   path tracer, physics, the cut list, joinery, assembly, doors, fittings, Preferences).

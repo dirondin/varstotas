@@ -184,6 +184,12 @@ test_app() {
   else
     row "$v" "start" FAIL "exit $code$( [[ -s $shot ]] || echo ', no window image'); $(grep -E 'ERROR|panicked' "$log" | head -1 | cut -c1-160)"
   fi
+  # the scripts skip the graphics probe: they get the API the normal start chose
+  local gpu_env=()
+  case $(echo "$gfx" | awk '{print tolower($1)}') in
+    vulkan|dx12|gl|metal) gpu_env=(WGPU_BACKEND="$(echo "$gfx" | awk '{print tolower($1)}')") ;;
+  esac
+  grep -q 'graphics: OpenGL (llvmpipe)' "$log" && gpu_env+=(LIBGL_ALWAYS_SOFTWARE=1)
 
   # the UI scripts, each in its own folder with a fresh home
   local n s work ok bad
@@ -198,7 +204,7 @@ test_app() {
     ln -s "$h" "$work/home"
     log=$out/logs/$v-$n.log
     local t0=$(date +%s)
-    (cd "$work" && limited 400 env $(app_env "$h") VARSTOTAS_FOREGROUND=1 VARSTOTAS_SCRIPT_SCALE=$scale VARSTOTAS_SCRIPT="$s" ${wrap[@]+"${wrap[@]}"} "$bin") > "$log" 2>&1
+    (cd "$work" && limited 400 env $(app_env "$h") VARSTOTAS_FOREGROUND=1 VARSTOTAS_SCRIPT_SCALE=$scale VARSTOTAS_SCRIPT="$s" ${gpu_env[@]+"${gpu_env[@]}"} ${wrap[@]+"${wrap[@]}"} "$bin") > "$log" 2>&1
     code=$?
     bad=$(grep -cE 'expect FAIL|panicked' "$log")
     ok=$(grep -c 'expect ok' "$log")

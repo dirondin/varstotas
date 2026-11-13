@@ -34,7 +34,9 @@ $kit = if (Test-Path "$here\tests\ui\scripts") { $here } else { (Resolve-Path "$
 if (-not $Packages) { $Packages = if (Test-Path "$here\..\SHA256SUMS.txt") { "$here\.." } else { "." } }
 $pkgdir = (Resolve-Path $Packages).Path
 
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+# RuntimeInformation is missing from some .NET Framework installs (Windows Sandbox): WMI tells the processor then
+$arch = "$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+if (-not $arch) { $arch = if ((Get-CimInstance Win32_Processor | Select-Object -First 1).Architecture -eq 12) { "Arm64" } else { "X64" } }
 $cpu = if ($arch -eq "Arm64") { "aarch64" } else { "x86_64" }
 $out = Join-Path $pkgdir ("test-results\" + (Get-Date -Format "yyyyMMdd-HHmmss") + "-windows-$cpu")
 New-Item -ItemType Directory -Force "$out\logs", "$out\shots" | Out-Null
@@ -157,6 +159,10 @@ function Test-App($v, $exe, $set) {
     $err = ($text -split "`n" | Where-Object { $_ -match 'ERROR|panicked' } | Select-Object -First 1)
     Row $v start FAIL ("exit $code" + $(if (-not (Test-Path $shot)) { ", no window image" } else { "" }) + "; $err")
   }
+  # the scripts skip the graphics probe: they get the API the normal start chose (Windows
+  # Sandbox's virtual GPU takes the sandbox down under DirectX 12, wgpu's own first choice)
+  $backend = $null
+  if ($gfx -match '^(Vulkan|Dx12|Gl|Metal) ') { $backend = $Matches[1].ToLower() }
 
   # the UI scripts, each in its own folder with a fresh home
   foreach ($n in Script-List $set) {
@@ -171,6 +177,7 @@ function Test-App($v, $exe, $set) {
     cmd /c mklink /J "$work\home" "$h" | Out-Null
     $log = "$out\logs\$v-$n.log"
     $envs = App-Env $h; $envs.VARSTOTAS_FOREGROUND = "1"; $envs.VARSTOTAS_SCRIPT_SCALE = $Scale.ToString([Globalization.CultureInfo]::InvariantCulture); $envs.VARSTOTAS_SCRIPT = $s
+    if ($backend) { $envs.WGPU_BACKEND = $backend }
     $t0 = Get-Date
     $code = Run-App $exe $null $envs $log 400 $work
     $lines = Get-Content $log
