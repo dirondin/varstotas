@@ -3,7 +3,7 @@
 //! add ambient occlusion, reflections, fog, depth of field and bloom, tone map, vignette and
 //! the stylized looks; the result is drawn into the usual multisampled target before overlays.
 
-use super::{DEPTH_FORMAT, samples};
+use super::DEPTH_FORMAT;
 use crate::wgpu;
 use crate::{Effects, Stylize};
 
@@ -11,15 +11,6 @@ use crate::{Effects, Stylize};
 pub(crate) const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// G-buffer of the scene pass (see `gbuf_pack` in shader.wgsl).
 pub(crate) const GBUF_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-/// Linear depth: R32Float, or R16Float where R32Float cannot be rendered to (OpenGL without
-/// EXT_color_buffer_float); see [`lin_format`].
-const LIN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
-
-/// The linear depth format this adapter can render to.
-pub(crate) fn lin_format(adapter: &wgpu::Adapter) -> wgpu::TextureFormat {
-    let renderable = adapter.get_texture_format_features(LIN_FORMAT).allowed_usages.contains(wgpu::TextureUsages::RENDER_ATTACHMENT);
-    if renderable { LIN_FORMAT } else { wgpu::TextureFormat::R16Float }
-}
 const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
 const MAX_BLOOM_LEVELS: u32 = 6;
 
@@ -84,6 +75,8 @@ pub(crate) struct Post {
     dummy_float: wgpu::TextureView,
     dummy_lin: wgpu::TextureView,
     lin_format: wgpu::TextureFormat,
+    /// Samples per pixel of the scene targets ([`crate::GpuCaps::samples`]).
+    samples: u32,
     dummy_depth: wgpu::TextureView,
     pub(crate) pipes: PostPipelines,
 }
@@ -129,6 +122,7 @@ impl Post {
         shader: &wgpu::ShaderModule,
         color_format: wgpu::TextureFormat,
         lin_format: wgpu::TextureFormat,
+        samples: u32,
     ) -> Self {
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: wgpu::ShaderStages::FRAGMENT, ty, count: None };
         let float = |filterable| wgpu::BindingType::Texture {
@@ -188,16 +182,16 @@ impl Post {
             "varstotas post dummy ms depth",
             [1, 1],
             DEPTH_FORMAT,
-            samples(),
+            samples,
             1,
             b | wgpu::TextureUsages::RENDER_ATTACHMENT,
         ));
-        let pipes = PostPipelines::new(device, &layout, shader, color_format, lin_format);
-        Self { bgl, layout, uniform, sampler, dummy_float, dummy_lin, lin_format, dummy_depth, pipes }
+        let pipes = PostPipelines::new(device, &layout, shader, color_format, lin_format, samples);
+        Self { bgl, layout, uniform, sampler, dummy_float, dummy_lin, lin_format, samples, dummy_depth, pipes }
     }
 
     pub(crate) fn rebuild(&mut self, device: &wgpu::Device, shader: &wgpu::ShaderModule, color_format: wgpu::TextureFormat) {
-        self.pipes = PostPipelines::new(device, &self.layout, shader, color_format, self.lin_format);
+        self.pipes = PostPipelines::new(device, &self.layout, shader, color_format, self.lin_format, self.samples);
     }
 }
 
@@ -208,6 +202,7 @@ impl PostPipelines {
         shader: &wgpu::ShaderModule,
         color_format: wgpu::TextureFormat,
         lin_format: wgpu::TextureFormat,
+        samples: u32,
     ) -> Self {
         let make = |label: &str, fs: &str, format: wgpu::TextureFormat, additive: bool, msaa: bool| {
             let add = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add };
@@ -223,7 +218,7 @@ impl PostPipelines {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState { count: if msaa { samples() } else { 1 }, mask: !0, alpha_to_coverage_enabled: false },
+                multisample: wgpu::MultisampleState { count: if msaa { samples } else { 1 }, mask: !0, alpha_to_coverage_enabled: false },
                 fragment: Some(wgpu::FragmentState {
                     module: shader,
                     entry_point: Some(fs),
@@ -284,11 +279,11 @@ impl PostTargets {
         let att = wgpu::TextureUsages::RENDER_ATTACHMENT;
         let bind = wgpu::TextureUsages::TEXTURE_BINDING;
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-        let hdr_ms = view(&tex(device, "varstotas post hdr ms", size, HDR_FORMAT, samples(), 1, att));
+        let hdr_ms = view(&tex(device, "varstotas post hdr ms", size, HDR_FORMAT, post.samples, 1, att));
         let hdr = view(&tex(device, "varstotas post hdr", size, HDR_FORMAT, 1, 1, att | bind));
-        let gbuf_ms = view(&tex(device, "varstotas post gbuf ms", size, GBUF_FORMAT, samples(), 1, att));
+        let gbuf_ms = view(&tex(device, "varstotas post gbuf ms", size, GBUF_FORMAT, post.samples, 1, att));
         let gbuf = view(&tex(device, "varstotas post gbuf", size, GBUF_FORMAT, 1, 1, att | bind));
-        let depth_ms = view(&tex(device, "varstotas post depth ms", size, DEPTH_FORMAT, samples(), 1, att | bind));
+        let depth_ms = view(&tex(device, "varstotas post depth ms", size, DEPTH_FORMAT, post.samples, 1, att | bind));
         let lin = view(&tex(device, "varstotas post linear depth", size, post.lin_format, 1, 1, att | bind));
         let ao_raw = view(&tex(device, "varstotas post ao raw", size, AO_FORMAT, 1, 1, att | bind));
         let ao = view(&tex(device, "varstotas post ao", size, AO_FORMAT, 1, 1, att | bind));

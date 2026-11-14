@@ -368,7 +368,7 @@ impl Viewport {
                         let table = crate::pbr::material_table(&doc.model);
                         let _ = guarded(|| renderer.set_materials(rs, &table));
                         let params = BuildParams { show_triangles: false, clean_xray: false, face_style: FaceStyle::Realistic, textures: true, prev_origin: g.origin };
-                        let r = if !varstotas_render::Renderer::pt_available(rs) {
+                        let r = if !varstotas_render::GpuCaps::of(rs).path_tracer {
                             Err(tr!("view-render-unavailable"))
                         } else {
                             guarded(|| scene_builder::build_from(&doc.model, &self.tess, &params)).and_then(|geo| {

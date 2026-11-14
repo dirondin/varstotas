@@ -19,8 +19,12 @@ impl FeedbackWindow {
             .map(|rs| {
                 let i = rs.adapter.get_info();
                 format!(
-                    "GPU: {}\nBackend: {:?}\nDriver: {} {}", // i18n-ignore: stable diagnostic field names
-                    i.name, i.backend, i.driver, i.driver_info
+                    "GPU: {}\nBackend: {:?}\nDriver: {} {}\nFeatures: {}", // i18n-ignore: stable diagnostic field names
+                    i.name,
+                    i.backend,
+                    i.driver,
+                    i.driver_info,
+                    varstotas_render::GpuCaps::of(rs).summary()
                 ) // i18n-ignore: stable diagnostic field names
             })
             .unwrap_or_else(|| "GPU: unavailable".into()); // i18n-ignore

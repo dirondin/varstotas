@@ -331,9 +331,10 @@ pub(crate) fn rq_source(src: &str) -> String {
     format!("enable wgpu_ray_query;\n{}{}{}", &src[..i], include_str!("pathtrace_rq.wgsl"), &src[j..])
 }
 
-/// Ray queries are used when the device has them (VARSTOTAS_NO_RAY_QUERY=1 turns them off).
-fn use_rq(device: &wgpu::Device) -> bool {
-    device.features().contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY) && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none()
+/// Ray queries are used when the device has them ([`crate::GpuCaps::ray_query`];
+/// VARSTOTAS_NO_RAY_QUERY=1 turns them off).
+fn use_rq(caps: &crate::GpuCaps) -> bool {
+    caps.ray_query && std::env::var_os("VARSTOTAS_NO_RAY_QUERY").is_none()
 }
 
 /// Buffers of one render.
@@ -387,8 +388,8 @@ fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 }
 
 impl PathTracer {
-    pub fn new(device: &wgpu::Device, shader: &wgpu::ShaderModule, src: &str, globals: &wgpu::BindGroupLayout, faces: &wgpu::BindGroupLayout) -> Self {
-        let rq = use_rq(device);
+    pub fn new(device: &wgpu::Device, caps: &crate::GpuCaps, shader: &wgpu::ShaderModule, src: &str, globals: &wgpu::BindGroupLayout, faces: &wgpu::BindGroupLayout) -> Self {
+        let rq = use_rq(caps);
         let mut entries = vec![
                 uniform_entry(0),
                 storage_entry(1, true),

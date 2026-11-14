@@ -7,33 +7,6 @@ use crate::{
 };
 use glam::{DMat4, DVec2, DVec3};
 
-/// Set where the driver cannot multisample (see [`samples`]).
-static NO_MSAA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Samples per pixel of the scene targets: 4, or 1 where the driver has no multisampling (virgl
-/// in a Linux VM on a macOS host has GL_MAX_SAMPLES 1, while wgpu assumes OpenGL ES 3.0's 4: the
-/// multisampled depth was incomplete and the view black). Without it there are no effects either.
-pub(crate) fn samples() -> u32 {
-    if NO_MSAA.load(std::sync::atomic::Ordering::Relaxed) { 1 } else { 4 }
-}
-
-/// GL_MAX_SAMPLES of an OpenGL adapter; None on the other graphics APIs.
-fn gl_max_samples(adapter: &wgpu::Adapter) -> Option<i32> {
-    #[cfg(all(not(target_arch = "wasm32"), not(target_vendor = "apple")))]
-    {
-        use glow::HasContext;
-        // SAFETY: reads one limit through the adapter's own GL context, changes nothing
-        let hal = unsafe { adapter.as_hal::<wgpu::hal::api::Gles>() }?;
-        let gl = hal.adapter_context().lock();
-        Some(unsafe { gl.get_parameter_i32(glow::MAX_SAMPLES) })
-    }
-    #[cfg(any(target_arch = "wasm32", target_vendor = "apple"))]
-    {
-        let _ = adapter;
-        None
-    }
-}
-
 /// Straight-alpha colour blending; alpha accumulates with the "over" operator
 /// (a = a_src + a_dst * (1 - a_src)). On the normal opaque background this is identical to
 /// `ALPHA_BLENDING`; on a transparent export background it leaves premultiplied colour with
@@ -62,10 +35,10 @@ mod annot;
 mod env;
 pub use env::{exposure_mult, srgb_to_linear};
 #[path = "post.rs"]
-mod post;
+pub(crate) mod post;
 use annot::{LineInst, ScreenProj, SpriteVertex, TextAtlas};
 pub use export::{ExportError, ExportOptions, MAX_EXPORT_DIM, RgbaImage, encode_exr};
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Uniform block, mirrors `Globals` in shader.wgsl.
 #[repr(C)]
@@ -386,6 +359,8 @@ pub struct Renderer {
     /// Format of the view handed to egui (non-sRGB view of the same texture).
     egui_view_format: wgpu::TextureFormat,
     manual_gamma: bool,
+    /// What the adapter can do (multisampling, effects, path tracer).
+    caps: &'static crate::GpuCaps,
     pipelines: Pipelines,
     globals: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
@@ -484,17 +459,8 @@ impl Renderer {
     /// Create from eframe's wgpu render state (`frame.wgpu_render_state()`).
     pub fn new(rs: &egui_wgpu::RenderState) -> Self {
         let device = &rs.device;
-        let max_samples = gl_max_samples(&rs.adapter);
-        NO_MSAA.store(max_samples.is_some_and(|n| n < 4), std::sync::atomic::Ordering::Relaxed);
-        if let Some(n) = max_samples.filter(|&n| n < 4) {
-            log::info!("graphics: no multisampling (GL_MAX_SAMPLES {n}): edges are not smoothed, no Realistic effects");
-        }
-        let view_formats_ok = rs
-            .adapter
-            .get_downlevel_capabilities()
-            .flags
-            .contains(wgpu::DownlevelFlags::VIEW_FORMATS);
-        let (color_format, egui_view_format, manual_gamma) = if view_formats_ok {
+        let caps = crate::GpuCaps::of(rs);
+        let (color_format, egui_view_format, manual_gamma) = if caps.srgb_views {
             (
                 wgpu::TextureFormat::Rgba8UnormSrgb,
                 wgpu::TextureFormat::Rgba8Unorm,
@@ -592,9 +558,7 @@ impl Renderer {
         });
 
         let limits = device.limits();
-        let seg_bgl = (limits.max_storage_buffers_per_shader_stage > 0
-            && rs.adapter.get_info().backend != wgpu::Backend::Gl)
-            .then(|| {
+        let seg_bgl = caps.segments.then(|| {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("varstotas segments"),
                     entries: &[0, 1].map(|binding| wgpu::BindGroupLayoutEntry {
@@ -629,7 +593,7 @@ impl Renderer {
             immediate_size: 0,
         });
         let layouts = Layouts { scene: layout, face: face_layout, seg: seg_layout, text: text_layout };
-        let pipelines = build_pipelines(device, &shader, &layouts, color_format, false);
+        let pipelines = build_pipelines(device, &shader, &layouts, color_format, false, caps.samples);
         let vb = wgpu::BufferUsages::VERTEX;
         Renderer {
             color_format,
@@ -643,6 +607,7 @@ impl Renderer {
             post_targets: None,
             egui_view_format,
             manual_gamma,
+            caps,
             pipelines,
             globals,
             bind_group,
@@ -1019,7 +984,7 @@ impl Renderer {
             label: Some("varstotas msaa color"),
             size: extent,
             mip_level_count: 1,
-            sample_count: samples(),
+            sample_count: self.caps.samples,
             dimension: wgpu::TextureDimension::D2,
             format: self.color_format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1029,7 +994,7 @@ impl Renderer {
             label: Some("varstotas depth"),
             size: extent,
             mip_level_count: 1,
-            sample_count: samples(),
+            sample_count: self.caps.samples,
             dimension: wgpu::TextureDimension::D2,
             format: DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1433,7 +1398,7 @@ impl Renderer {
     ) {
         let clear = if opts.background { wgpu::Color::WHITE } else { wgpu::Color::TRANSPARENT };
         // without multisampling the passes draw straight into the resolve target
-        let single = samples() == 1;
+        let single = self.caps.samples == 1;
         let color = |view, resolve, load| {
             Some(wgpu::RenderPassColorAttachment {
                 view: if single { resolve } else { view },
@@ -1709,14 +1674,14 @@ impl Renderer {
 
     /// Effects pipelines (no targets) when `style` needs them.
     fn ensure_post(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle) -> bool {
-        if style.face_style != FaceStyle::Realistic || !style.env.effects.needs_post() || samples() == 1 {
+        if style.face_style != FaceStyle::Realistic || !style.env.effects.needs_post() || !self.caps.effects {
             return false;
         }
         if self.post.is_none() {
-            self.post = Some(post::Post::new(&rs.device, &self.bgl, &self.shader, self.color_format, post::lin_format(&rs.adapter)));
+            self.post = Some(post::Post::new(&rs.device, &self.bgl, &self.shader, self.color_format, self.caps.lin_format, self.caps.samples));
         }
         if self.pipelines_hdr.is_none() {
-            self.pipelines_hdr = Some(build_pipelines(&rs.device, &self.shader, &self.layouts, self.color_format, true));
+            self.pipelines_hdr = Some(build_pipelines(&rs.device, &self.shader, &self.layouts, self.color_format, true, self.caps.samples));
         }
         true
     }
@@ -1759,9 +1724,9 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(src.clone().into()),
         });
         self.shader_src = src;
-        self.pipelines = build_pipelines(device, &self.shader, &self.layouts, self.color_format, false);
+        self.pipelines = build_pipelines(device, &self.shader, &self.layouts, self.color_format, false, self.caps.samples);
         if self.pipelines_hdr.is_some() {
-            self.pipelines_hdr = Some(build_pipelines(device, &self.shader, &self.layouts, self.color_format, true));
+            self.pipelines_hdr = Some(build_pipelines(device, &self.shader, &self.layouts, self.color_format, true, self.caps.samples));
         }
         if let Some(p) = &mut self.post {
             p.rebuild(device, &self.shader, self.color_format);
@@ -1772,13 +1737,6 @@ impl Renderer {
         self.custom = shaders.to_vec();
         self.custom_errors = errors.clone();
         errors
-    }
-
-    /// Whether the path tracer can run here: it is a compute shader reading storage buffers,
-    /// which OpenGL ES 3.0 (virgl in a VM, old drivers) does not have.
-    pub fn pt_available(rs: &egui_wgpu::RenderState) -> bool {
-        rs.adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::COMPUTE_SHADERS)
-            && rs.device.limits().max_storage_buffers_per_shader_stage > 0
     }
 
     /// Start a path traced render of `geo` (any geometry, e.g. the one of `set_geometry`) from
@@ -1795,7 +1753,7 @@ impl Renderer {
     ) {
         self.update_env(rs, style);
         let pt = self.pt.get_or_insert_with(|| {
-            crate::pathtrace::PathTracer::new(&rs.device, &self.shader, &self.shader_src, &self.bgl, &self.face_textures.bgl)
+            crate::pathtrace::PathTracer::new(&rs.device, self.caps, &self.shader, &self.shader_src, &self.bgl, &self.face_textures.bgl)
         });
         let test = crate::pathtrace::ShaderTest { cut: &self.face_textures.cut, glass: &self.face_textures.glass };
         pt.start(rs, geo, lights, camera, style, settings, &test);
@@ -2188,6 +2146,7 @@ fn build_pipelines(
     layouts: &Layouts,
     color_format: wgpu::TextureFormat,
     hdr: bool,
+    samples: u32,
 ) -> Pipelines {
     let layout = &layouts.scene;
     let face_layout = &layouts.face;
@@ -2324,7 +2283,7 @@ fn build_pipelines(
                 bias: d.bias,
             }),
             multisample: wgpu::MultisampleState {
-                count: samples(),
+                count: samples,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
