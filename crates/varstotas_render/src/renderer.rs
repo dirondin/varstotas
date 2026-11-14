@@ -7,7 +7,32 @@ use crate::{
 };
 use glam::{DMat4, DVec2, DVec3};
 
-const SAMPLES: u32 = 4;
+/// Set where the driver cannot multisample (see [`samples`]).
+static NO_MSAA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Samples per pixel of the scene targets: 4, or 1 where the driver has no multisampling (virgl
+/// in a Linux VM on a macOS host has GL_MAX_SAMPLES 1, while wgpu assumes OpenGL ES 3.0's 4: the
+/// multisampled depth was incomplete and the view black). Without it there are no effects either.
+pub(crate) fn samples() -> u32 {
+    if NO_MSAA.load(std::sync::atomic::Ordering::Relaxed) { 1 } else { 4 }
+}
+
+/// GL_MAX_SAMPLES of an OpenGL adapter; None on the other graphics APIs.
+fn gl_max_samples(adapter: &wgpu::Adapter) -> Option<i32> {
+    #[cfg(all(not(target_arch = "wasm32"), not(target_vendor = "apple")))]
+    {
+        use glow::HasContext;
+        // SAFETY: reads one limit through the adapter's own GL context, changes nothing
+        let hal = unsafe { adapter.as_hal::<wgpu::hal::api::Gles>() }?;
+        let gl = hal.adapter_context().lock();
+        Some(unsafe { gl.get_parameter_i32(glow::MAX_SAMPLES) })
+    }
+    #[cfg(any(target_arch = "wasm32", target_vendor = "apple"))]
+    {
+        let _ = adapter;
+        None
+    }
+}
 
 /// Straight-alpha colour blending; alpha accumulates with the "over" operator
 /// (a = a_src + a_dst * (1 - a_src)). On the normal opaque background this is identical to
@@ -459,6 +484,11 @@ impl Renderer {
     /// Create from eframe's wgpu render state (`frame.wgpu_render_state()`).
     pub fn new(rs: &egui_wgpu::RenderState) -> Self {
         let device = &rs.device;
+        let max_samples = gl_max_samples(&rs.adapter);
+        NO_MSAA.store(max_samples.is_some_and(|n| n < 4), std::sync::atomic::Ordering::Relaxed);
+        if let Some(n) = max_samples.filter(|&n| n < 4) {
+            log::info!("graphics: no multisampling (GL_MAX_SAMPLES {n}): edges are not smoothed, no Realistic effects");
+        }
         let view_formats_ok = rs
             .adapter
             .get_downlevel_capabilities()
@@ -989,7 +1019,7 @@ impl Renderer {
             label: Some("varstotas msaa color"),
             size: extent,
             mip_level_count: 1,
-            sample_count: SAMPLES,
+            sample_count: samples(),
             dimension: wgpu::TextureDimension::D2,
             format: self.color_format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -999,7 +1029,7 @@ impl Renderer {
             label: Some("varstotas depth"),
             size: extent,
             mip_level_count: 1,
-            sample_count: SAMPLES,
+            sample_count: samples(),
             dimension: wgpu::TextureDimension::D2,
             format: DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1402,12 +1432,14 @@ impl Renderer {
         opts: PassOpts,
     ) {
         let clear = if opts.background { wgpu::Color::WHITE } else { wgpu::Color::TRANSPARENT };
+        // without multisampling the passes draw straight into the resolve target
+        let single = samples() == 1;
         let color = |view, resolve, load| {
             Some(wgpu::RenderPassColorAttachment {
-                view,
+                view: if single { resolve } else { view },
                 depth_slice: None,
-                resolve_target: Some(resolve),
-                ops: wgpu::Operations { load, store: wgpu::StoreOp::Discard },
+                resolve_target: (!single).then_some(resolve),
+                ops: wgpu::Operations { load, store: if single { wgpu::StoreOp::Store } else { wgpu::StoreOp::Discard } },
             })
         };
         let depth = |view, load, store| {
@@ -1677,7 +1709,7 @@ impl Renderer {
 
     /// Effects pipelines (no targets) when `style` needs them.
     fn ensure_post(&mut self, rs: &egui_wgpu::RenderState, style: &RenderStyle) -> bool {
-        if style.face_style != FaceStyle::Realistic || !style.env.effects.needs_post() {
+        if style.face_style != FaceStyle::Realistic || !style.env.effects.needs_post() || samples() == 1 {
             return false;
         }
         if self.post.is_none() {
@@ -2292,7 +2324,7 @@ fn build_pipelines(
                 bias: d.bias,
             }),
             multisample: wgpu::MultisampleState {
-                count: SAMPLES,
+                count: samples(),
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },

@@ -3,7 +3,7 @@
 //! add ambient occlusion, reflections, fog, depth of field and bloom, tone map, vignette and
 //! the stylized looks; the result is drawn into the usual multisampled target before overlays.
 
-use super::{DEPTH_FORMAT, SAMPLES};
+use super::{DEPTH_FORMAT, samples};
 use crate::wgpu;
 use crate::{Effects, Stylize};
 
@@ -188,7 +188,7 @@ impl Post {
             "varstotas post dummy ms depth",
             [1, 1],
             DEPTH_FORMAT,
-            SAMPLES,
+            samples(),
             1,
             b | wgpu::TextureUsages::RENDER_ATTACHMENT,
         ));
@@ -223,7 +223,7 @@ impl PostPipelines {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState { count: if msaa { SAMPLES } else { 1 }, mask: !0, alpha_to_coverage_enabled: false },
+                multisample: wgpu::MultisampleState { count: if msaa { samples() } else { 1 }, mask: !0, alpha_to_coverage_enabled: false },
                 fragment: Some(wgpu::FragmentState {
                     module: shader,
                     entry_point: Some(fs),
@@ -284,11 +284,11 @@ impl PostTargets {
         let att = wgpu::TextureUsages::RENDER_ATTACHMENT;
         let bind = wgpu::TextureUsages::TEXTURE_BINDING;
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-        let hdr_ms = view(&tex(device, "varstotas post hdr ms", size, HDR_FORMAT, SAMPLES, 1, att));
+        let hdr_ms = view(&tex(device, "varstotas post hdr ms", size, HDR_FORMAT, samples(), 1, att));
         let hdr = view(&tex(device, "varstotas post hdr", size, HDR_FORMAT, 1, 1, att | bind));
-        let gbuf_ms = view(&tex(device, "varstotas post gbuf ms", size, GBUF_FORMAT, SAMPLES, 1, att));
+        let gbuf_ms = view(&tex(device, "varstotas post gbuf ms", size, GBUF_FORMAT, samples(), 1, att));
         let gbuf = view(&tex(device, "varstotas post gbuf", size, GBUF_FORMAT, 1, 1, att | bind));
-        let depth_ms = view(&tex(device, "varstotas post depth ms", size, DEPTH_FORMAT, SAMPLES, 1, att | bind));
+        let depth_ms = view(&tex(device, "varstotas post depth ms", size, DEPTH_FORMAT, samples(), 1, att | bind));
         let lin = view(&tex(device, "varstotas post linear depth", size, post.lin_format, 1, 1, att | bind));
         let ao_raw = view(&tex(device, "varstotas post ao raw", size, AO_FORMAT, 1, 1, att | bind));
         let ao = view(&tex(device, "varstotas post ao", size, AO_FORMAT, 1, 1, att | bind));

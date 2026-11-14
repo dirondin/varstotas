@@ -3630,6 +3630,7 @@ dependencies = [
  "egui-wgpu",
  "env_logger",
  "glam 0.34.1",
+ "glow",
  "libloading",
  "log",
  "png",

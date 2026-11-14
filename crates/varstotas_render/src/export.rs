@@ -7,7 +7,7 @@
 
 use super::{
     Camera, FrameCounts, HL_HIDE_DIMMED, HL_HIDE_SELECTED, Overlay3d, PassOpts, RenderStyle, Renderer, DEPTH_FORMAT,
-    SAMPLES,
+    samples,
 };
 use crate::readback::Pending;
 use crate::wgpu;
@@ -265,8 +265,8 @@ impl Renderer {
             })
         };
         let attach = wgpu::TextureUsages::RENDER_ATTACHMENT;
-        let msaa = target("varstotas export msaa", SAMPLES, self.color_format, attach);
-        let depth = target("varstotas export depth", SAMPLES, DEPTH_FORMAT, attach);
+        let msaa = target("varstotas export msaa", samples(), self.color_format, attach);
+        let depth = target("varstotas export depth", samples(), DEPTH_FORMAT, attach);
         let resolve = target("varstotas export resolve", 1, self.color_format, attach | wgpu::TextureUsages::COPY_SRC);
         let (msaa_view, depth_view, resolve_view) =
             (msaa.create_view(&Default::default()), depth.create_view(&Default::default()), resolve.create_view(&Default::default()));
