@@ -236,7 +236,7 @@ impl VarstotasApp {
         let resp = tip(resp, &tr!("toolbar-snapping"), Some("Shift+S"), &tr!("toolbar-snapping-tip", state = state)); // i18n-ignore
         egui::Popup::menu(&resp)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .show(|ui| self.snapping_menu(ui));
+            .show(|ui| self.snapping_menu(ui, true));
     }
 
     pub(crate) fn toolbar(&mut self, ui: &mut Ui) {

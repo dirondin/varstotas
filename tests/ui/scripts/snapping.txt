@@ -66,12 +66,13 @@ action snap_kind red off
 wait 3
 screenshot shots/snapping_partial.bmp
 # the magnet menu with a real click (toolbar above the viewport); a real click on a
-# checkbox there turns Red Axis back on
+# checkbox in its Directions submenu turns Red Axis back on
 raw move 77 -25
 raw click 77 -25
 wait 30
+action click_spot snap-group:Directions
+wait 10
 screenshot shots/snapping_menu.bmp
-raw move 89 283
-raw click 89 283
+action click_spot snap:Red Axis
 wait 5
 expect snapping=(true, [])

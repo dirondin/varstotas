@@ -527,7 +527,10 @@ impl VarstotasApp {
                 }
             });
 
-            ui.menu_button(tr!("menu-snapping"), |ui| self.snapping_menu(ui));
+            // stays open on clicks so several snaps can be toggled
+            let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+            let (snap_menu, _) = egui::containers::menu::MenuButton::new(tr!("menu-snapping")).config(keep).ui(ui, |ui| self.snapping_menu(ui, true));
+            super::tray_lib::spot("menu:Snapping", snap_menu.rect.center());
 
             // plugins are programs of their own: none in a browser
             if cfg!(not(target_arch = "wasm32")) {
@@ -648,8 +651,9 @@ impl VarstotasApp {
         }
     }
 
-    /// View → Snapping and the magnet button's menu: the master switch and every inference.
-    pub(crate) fn snapping_menu(&mut self, ui: &mut Ui) {
+    /// The Snapping menu and the magnet button's menu: the master switch, every inference by
+    /// group in submenus (`nested`, so the menu fits small screens) or in a list (Preferences).
+    pub(crate) fn snapping_menu(&mut self, ui: &mut Ui, nested: bool) {
         use crate::inference::settings::GROUPS;
         let mut on = self.prefs.snapping.enabled;
         if icon_check(ui, &mut on, Icon::Magnet, &tr!("menu-snapping")).on_hover_text(crate::keymap::label(crate::keymap::KeyCmd::ToggleSnapping).unwrap_or_default()).clicked() {
@@ -665,28 +669,52 @@ impl VarstotasApp {
                 }
             }
         });
-        for (group, kinds) in GROUPS {
+        if nested {
             ui.separator();
-            ui.label(egui::RichText::new(crate::inference::settings::group_label(group)).small().weak());
-            if group == "Grid" { // i18n-ignore
-                let mut grid = self.prefs.grid.show;
-                if icon_check(ui, &mut grid, Icon::Grid, &tr!("menu-show-grid")).clicked() {
-                    self.actions.push(Action::ToggleGrid);
-                }
-            }
-            ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
-                for &k in kinds {
-                    let mut v = self.prefs.snapping.is_on(k);
-                    let r = icon_check(ui, &mut v, Icon::Snap(k), &k.menu_label());
-                    super::tray_lib::spot(format!("snap:{}", k.menu_label()), r.rect.center());
-                    if r.changed() {
-                        self.prefs.snapping.set(k, v);
+        }
+        for (group, kinds) in GROUPS {
+            let label = crate::inference::settings::group_label(group);
+            let grid_group = group == "Grid"; // i18n-ignore
+            let mut contents = |ui: &mut Ui| {
+                if grid_group {
+                    let mut grid = self.prefs.grid.show;
+                    if icon_check(ui, &mut grid, Icon::Grid, &tr!("menu-show-grid")).clicked() {
+                        self.actions.push(Action::ToggleGrid);
                     }
                 }
-            });
-        }        // Increments: round free moves, angles and scale factors to a step.
-        ui.separator();
-        ui.label(egui::RichText::new(tr!("menu-increments")).small().weak());
+                ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
+                    for &k in kinds {
+                        let mut v = self.prefs.snapping.is_on(k);
+                        let r = icon_check(ui, &mut v, Icon::Snap(k), &k.menu_label());
+                        super::tray_lib::spot(format!("snap:{}", k.menu_label()), r.rect.center());
+                        if r.changed() {
+                            self.prefs.snapping.set(k, v);
+                        }
+                    }
+                });
+            };
+            if nested {
+                let icon = if grid_group { Icon::Grid } else { Icon::Snap(kinds[0]) };
+                let r = icon_menu(ui, Some(icon), &label, contents);
+                super::tray_lib::spot(format!("snap-group:{group}"), r.rect.center());
+            } else {
+                ui.separator();
+                ui.label(egui::RichText::new(label).small().weak());
+                contents(ui);
+            }
+        }
+        if nested {
+            let r = icon_menu(ui, None, &tr!("menu-increments"), |ui| self.snap_increments(ui));
+            super::tray_lib::spot("snap-group:Increments", r.rect.center()); // i18n-ignore
+        } else {
+            ui.separator();
+            ui.label(egui::RichText::new(tr!("menu-increments")).small().weak());
+            self.snap_increments(ui);
+        }
+    }
+
+    /// Increments: round free moves, angles and scale factors to a step.
+    fn snap_increments(&mut self, ui: &mut Ui) {
         let unit = self.doc.model.unit;
         ui.add_enabled_ui(self.prefs.snapping.enabled, |ui| {
             let inc = &mut self.prefs.snapping.increments;

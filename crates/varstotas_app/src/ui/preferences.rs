@@ -585,7 +585,7 @@ impl VarstotasApp {
         note(ui, &tr!("prefs-grid-note"));
         heading(ui, &tr!("prefs-snapping"));
         note(ui, &tr!("prefs-snapping-note"));
-        self.snapping_menu(ui);
+        self.snapping_menu(ui, false);
     }
 
     fn prefs_libraries(&mut self, ui: &mut Ui) {
