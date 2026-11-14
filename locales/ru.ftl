@@ -3933,6 +3933,7 @@ console-completion-count = { $sel } из { $n }
 
 log-level-error = ошибка
 log-level-warning = предупреждение
+log-gpu-more = Графика сообщила ещё о проблемах; сохранены только первые сообщения
 log-title = Журнал
 # $n — количество
 log-errors = Ошибки { $n }

@@ -13,6 +13,15 @@ const KEEP: usize = 2000;
 /// The same message again within this many seconds only counts up.
 const REPEAT_SECS: u64 = 5;
 
+/// Different graphics messages logged in one run (see [`gpu_first_time`]).
+const GPU_DISTINCT: usize = 20;
+
+/// Graphics messages known to be harmless: wgpu switches GL_FRAMEBUFFER_SRGB, which OpenGL ES
+/// does not have, on every frame; "Fake map" is wgpu reading a buffer back on OpenGL ES without
+/// glGetBufferSubData; EGL_BAD_MATCH (0x3009) of eglCreateContext is wgpu asking for desktop
+/// OpenGL first where there is only OpenGL ES.
+const GPU_NOISE: [&str; 3] = ["GL_FRAMEBUFFER_SRGB", "Fake map", "'eglCreateContext' code 0x3009"]; // i18n-ignore: driver messages
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
     Error,
@@ -80,6 +89,27 @@ pub fn push(level: Level, source: &str, text: &str) {
     while s.entries.len() > KEEP {
         s.entries.pop_front();
     }
+}
+
+/// Whether a warning or error of wgpu or the graphics driver is logged: not a known harmless
+/// one, the first time it comes and among the first [`GPU_DISTINCT`] different ones (a driver
+/// that fails repeats itself every frame).
+pub fn gpu_first_time(text: &str) -> bool {
+    static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    if GPU_NOISE.iter().any(|n| text.contains(n)) {
+        return false;
+    }
+    let Ok(mut seen) = SEEN.lock() else { return false };
+    if seen.len() > GPU_DISTINCT || seen.iter().any(|t| t == text) {
+        return false;
+    }
+    seen.push(text.to_string());
+    if seen.len() > GPU_DISTINCT {
+        drop(seen);
+        push(Level::Warn, "gpu", &varstotas_i18n::tr!("log-gpu-more"));
+        return false;
+    }
+    true
 }
 
 pub fn error(source: &str, text: &str) {
@@ -158,6 +188,9 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
+        if record.target().starts_with("wgpu") && record.level() <= log::Level::Warn && !gpu_first_time(&record.args().to_string()) {
+            return;
+        }
         if self.env.enabled(record.metadata()) {
             self.env.log(record);
         }
@@ -189,6 +222,16 @@ pub fn init() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graphics_messages_are_logged_once_without_known_noise() {
+        assert!(!gpu_first_time("GLES: [API/Error] ID 1 : GL_INVALID_ENUM in glEnable(GL_FRAMEBUFFER_SRGB)"));
+        assert!(!gpu_first_time("Fake map"));
+        assert!(!gpu_first_time("EGL 'eglCreateContext' code 0x3009: dri2_create_context"));
+        let text = "GLES: [API/Error] ID 1 : GL_INVALID_OPERATION in glRenderbufferStorageMultisample(samples=4)";
+        assert!(gpu_first_time(text));
+        assert!(!gpu_first_time(text));
+    }
 
     #[test]
     fn repeats_count_up_and_sources_are_short() {

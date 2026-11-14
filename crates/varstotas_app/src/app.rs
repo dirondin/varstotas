@@ -717,6 +717,9 @@ fn fallback_style() -> RenderStyle {
 impl VarstotasApp {
     pub fn new(cc: &eframe::CreationContext<'_>, startup_document: Option<PathBuf>) -> Self {
         crate::ui::theme::apply(&cc.egui_ctx);
+        if let Some(rs) = &cc.wgpu_render_state {
+            crate::gpu::watch_device(rs);
+        }
         let mut prefs: Prefs = cc
             .storage
             .and_then(|s| eframe::get_value(s, PREFS_KEY))

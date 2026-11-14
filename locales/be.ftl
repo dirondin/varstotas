@@ -3913,6 +3913,7 @@ console-completion-count = { $sel } з { $n }
 
 log-level-error = памылка
 log-level-warning = папярэджанне
+log-gpu-more = Графіка паведаміла пра іншыя праблемы; захаваны толькі першыя паведамленні
 log-title = Журнал
 # $n is a count
 log-errors = Памылкі { $n }

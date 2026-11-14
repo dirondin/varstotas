@@ -3844,6 +3844,7 @@ console-completion-count = { $sel } of { $n }
 
 log-level-error = error
 log-level-warning = warning
+log-gpu-more = More graphics messages came; only the first ones are kept
 log-title = Log
 # $n is a count
 log-errors = Errors { $n }

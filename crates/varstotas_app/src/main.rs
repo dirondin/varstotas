@@ -113,6 +113,12 @@ fn main() -> eframe::Result<()> {
         // the graphics API that works here (see gpu.rs)
         if let Some(backends) = gpu::choose() {
             setup.instance_descriptor.backends = backends;
+            // OpenGL: the driver's errors into the log (KHR_debug; wgpu assumes what OpenGL ES
+            // promises and a driver may not have it). Costs nothing while there are none; the
+            // validation layers of the other APIs are not installed for users, and slow.
+            if backends == egui_wgpu::wgpu::Backends::GL {
+                setup.instance_descriptor.flags |= egui_wgpu::wgpu::InstanceFlags::VALIDATION;
+            }
         }
         // Ray queries (hardware / driver ray tracing) for the path tracer, where there are any.
         let base = setup.device_descriptor.clone();

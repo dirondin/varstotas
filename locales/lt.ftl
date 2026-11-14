@@ -3867,6 +3867,7 @@ console-completion-count = { $sel } iš { $n }
 
 log-level-error = klaida
 log-level-warning = įspėjimas
+log-gpu-more = Grafika pranešė daugiau; išsaugoti tik pirmieji pranešimai
 log-title = Žurnalas
 # $n is a count
 log-errors = Klaidos { $n }

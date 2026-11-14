@@ -421,6 +421,27 @@ fn probe(api: Api) -> Result<String, String> {
     Ok(format!("{:?}", info.device_type))
 }
 
+/// Errors of the graphics device go to the log on every graphics API, each different one once:
+/// wgpu's validation errors (a bug: they still panic, as wgpu's own handler does, after they are
+/// logged), running out of memory and internal errors (logged, the app goes on) and a lost device
+/// (a driver reset or crash). The driver's own messages come on OpenGL only (see main.rs).
+pub(crate) fn watch_device(rs: &egui_wgpu::RenderState) {
+    rs.device.on_uncaptured_error(std::sync::Arc::new(|e: wgpu::Error| {
+        let text = e.to_string();
+        if crate::applog::gpu_first_time(&text) {
+            log::error!("graphics error: {text}");
+        }
+        if matches!(e, wgpu::Error::Validation { .. }) {
+            panic!("wgpu error: {text}");
+        }
+    }));
+    rs.device.set_device_lost_callback(|reason, message| {
+        if reason != wgpu::DeviceLostReason::Destroyed {
+            log::error!("graphics device lost: {message}");
+        }
+    });
+}
+
 /// Called on every frame; the first one tells that the API works.
 pub(crate) fn frame_drawn(frame: &eframe::Frame) {
     static DONE: OnceLock<()> = OnceLock::new();
