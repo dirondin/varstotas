@@ -66,6 +66,8 @@ screenshot shots/realistic_nobg.bmp
 action env sky=hdri background=on exposure=0 tonemap=aces sun=3 rotation=0
 action click_spot menu:Window
 wait 3
+action click_spot menu:SideBar
+wait 5
 action click_spot cmd:Card:Entity Info
 action click_spot cmd:Card:Components
 action click_spot cmd:Card:Tags
@@ -80,6 +82,8 @@ screenshot shots/realistic_tray.bmp
 # hide Materials and Material Editor too and open the Environment card by its arrow
 action click_spot menu:Window
 wait 3
+action click_spot menu:SideBar
+wait 5
 action click_spot cmd:Card:Materials
 action click_spot cmd:Card:Material Editor
 wait 3

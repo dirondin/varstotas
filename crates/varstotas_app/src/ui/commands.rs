@@ -114,11 +114,17 @@ pub const WINDOW_MENU: [Option<Cmd>; 24] = {
     [
         Some(ModelInfo), Some(ComponentParams), Some(WorkPlanes), None,
         Some(Library3d), Some(MaterialsOnline), None,
-        Some(UvEditor), Some(Render), None,
-        Some(Physics), Some(Unfold), Some(CutList), Some(Joinery), Some(Fittings), Some(Assembly), Some(Sheets), Some(PrintCheck), None,
+        Some(UvEditor), Some(Render), Some(Physics), None,
+        Some(Unfold), Some(CutList), Some(Joinery), Some(Fittings), Some(Assembly), Some(Sheets), Some(PrintCheck), None,
         Some(GeneratorEditor), Some(Console), Some(Log), None,
         Some(Preferences),
     ]
+};
+
+/// The Window menu's commands under Window → Workshop (so the menu fits a small screen).
+pub const WORKSHOP_MENU: [Cmd; 7] = {
+    use Cmd::*;
+    [Unfold, CutList, Joinery, Fittings, Assembly, Sheets, PrintCheck]
 };
 
 impl Cmd {

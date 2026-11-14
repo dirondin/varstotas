@@ -13,6 +13,8 @@ wait 5
 expect physics=(idle cloth=
 action click_spot menu:Window
 wait 5
+action click_spot menu:Workshop
+wait 5
 action click_spot cmd:Unfold
 wait 10
 expect unfold_open=true

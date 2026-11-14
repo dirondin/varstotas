@@ -6,6 +6,8 @@ save models/printing-before.vrst
 wait 10
 action click_spot menu:Window
 wait 5
+action click_spot menu:Workshop
+wait 5
 action click_spot cmd:PrintCheck
 wait 100
 expect printing=(true false busy=false stale=false faces=6 open=0 nonmanifold=0 winding=0 duplicates=0 inverted=0 repaired=false)

@@ -4,6 +4,8 @@ expect tray_hidden=[]
 action click_spot menu:Window
 wait 5
 screenshot shots/traycards_menu.bmp
+action click_spot menu:SideBar
+wait 5
 action click_spot cmd:Card:Materials
 wait 5
 expect tray_hidden=["Materials"]

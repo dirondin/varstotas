@@ -538,12 +538,13 @@ impl VarstotasApp {
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
             let (window_menu, _) = egui::containers::menu::MenuButton::new(tr!("menu-window")).config(keep).ui(ui, |ui| {
-                let mut open = self.prefs.tray_open;
-                if icon_check(ui, &mut open, Icon::SideBar, &tr!("menu-side-bar")).clicked() {
-                    self.actions.push(Action::ToggleTray);
-                }
-                // The tray's cards: a checkbox each (turning one on opens the tray).
-                ui.indent("tray_cards", |ui| {
+                // The side bar and its cards: a checkbox each (turning a card on opens the side bar).
+                let side = icon_menu(ui, Some(Icon::SideBar), &tr!("menu-side-bar"), |ui| {
+                    let mut open = self.prefs.tray_open;
+                    if icon_check(ui, &mut open, Icon::SideBar, &tr!("menu-side-bar-show")).clicked() {
+                        self.actions.push(Action::ToggleTray);
+                    }
+                    ui.separator();
                     for c in crate::ui::tray::TRAY_CARDS {
                         let mut shown = Cmd::Card(c).checked(self).unwrap_or(true);
                         let r = icon_check(ui, &mut shown, Cmd::Card(c).icon(), &crate::ui::tray::card_label(c));
@@ -553,8 +554,9 @@ impl VarstotasApp {
                         }
                     }
                 });
+                super::tray_lib::spot("menu:SideBar", side.rect.center());
                 ui.separator();
-                use Cmd::*;
+                use super::commands::WORKSHOP_MENU;
                 let mut after_separator = false;
                 for c in super::commands::WINDOW_MENU {
                     let Some(c) = c.filter(|c| c.available()) else {
@@ -566,18 +568,16 @@ impl VarstotasApp {
                         continue;
                     };
                     after_separator = false;
-                    let label = match c {
-                        Sheets => tr!("menu-sheets"),
-                        PrintCheck => tr!("print-title"),
-                        _ => c.menu_label(),
-                    };
-                    let on = c.checked(self).unwrap_or(false);
-                    // window names without the trailing "…" here
-                    let r = icon_row(ui, Some(c.icon()), label.trim_end_matches('…'), c.shortcut().as_deref(), c.enabled(self), on).on_hover_text(c.description());
-                    super::tray_lib::spot(format!("cmd:{}", c.key()), r.rect.center());
-                    if r.clicked() {
-                        self.actions.push(c.action());
-                        ui.close();
+                    if c == WORKSHOP_MENU[0] {
+                        let workshop = icon_menu(ui, Some(Cmd::CutList.icon()), &tr!("menu-workshop"), |ui| {
+                            for c in WORKSHOP_MENU.into_iter().filter(|c| c.available()) {
+                                self.window_menu_row(ui, c);
+                            }
+                        });
+                        super::tray_lib::spot("menu:Workshop", workshop.rect.center());
+                    }
+                    if !WORKSHOP_MENU.contains(&c) {
+                        self.window_menu_row(ui, c);
                     }
                 }
             });
@@ -629,6 +629,23 @@ impl VarstotasApp {
             });
             super::tray_lib::spot("menu:Help",help_menu.response.rect.center());
         });
+    }
+
+    /// One window of the Window menu (or its Workshop submenu): opens it and closes the menu.
+    fn window_menu_row(&mut self, ui: &mut Ui, c: Cmd) {
+        let label = match c {
+            Cmd::Sheets => tr!("menu-sheets"),
+            Cmd::PrintCheck => tr!("print-title"),
+            _ => c.menu_label(),
+        };
+        let on = c.checked(self).unwrap_or(false);
+        // window names without the trailing "…" here
+        let r = icon_row(ui, Some(c.icon()), label.trim_end_matches('…'), c.shortcut().as_deref(), c.enabled(self), on).on_hover_text(c.description());
+        super::tray_lib::spot(format!("cmd:{}", c.key()), r.rect.center());
+        if r.clicked() {
+            self.actions.push(c.action());
+            ui.close();
+        }
     }
 
     /// View → Snapping and the magnet button's menu: the master switch and every inference.

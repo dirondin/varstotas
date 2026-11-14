@@ -109,6 +109,8 @@ screenshot shots/fx_editor_ok.bmp
 material Brick
 action click_spot menu:Window
 wait 3
+action click_spot menu:SideBar
+wait 5
 action click_spot cmd:Card:Entity Info
 action click_spot cmd:Card:Material Editor
 action click_spot cmd:Card:Components
@@ -122,6 +124,8 @@ screenshot shots/fx_tray.bmp
 # hide Materials too, close the editor and open the Environment card (its Effects section is open)
 action click_spot menu:Window
 wait 3
+action click_spot menu:SideBar
+wait 5
 action click_spot cmd:Card:Materials
 wait 3
 raw key Escape

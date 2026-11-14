@@ -6,6 +6,8 @@ action console_close
 wait 5
 action click_spot menu:Window
 wait 5
+action click_spot menu:Workshop
+wait 5
 action click_spot cmd:Fittings
 wait 5
 expect fittings_open=true

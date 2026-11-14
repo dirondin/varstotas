@@ -8,6 +8,8 @@ zoom_extents
 wait 10
 action click_spot menu:Window
 wait 5
+action click_spot menu:Workshop
+wait 5
 action click_spot cmd:PrintCheck
 wait 120
 action click_spot printing:tab:Analysis
