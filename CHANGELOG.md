@@ -5,7 +5,7 @@ a release's notes on GitHub start with its section. A section is `## <version> �
 followed by `- ` lines; a Release build fails when its version has no section here (a
 pre-release such as 0.3.0-rc.1 is listed under 0.3.0).
 
-## 0.3.0 — 2026-11-04
+## 0.3.0 — 2026-11-15
 
 - Web version: Varstotas in a browser with WebGPU
 - Furniture making: cut list with stock, offcuts, edge banding, labels, prices and inches
@@ -16,6 +16,7 @@ pre-release such as 0.3.0-rc.1 is listed under 0.3.0).
 - Drilling maps (PDF)
 - Orbit with a right drag on laptops without a middle button
 - What's New in Help
+- Works in more virtual machines: graphics features are checked at start, graphics errors go to the log
 
 ## 0.2.0 — 2026-10-28
 

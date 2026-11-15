@@ -69,6 +69,9 @@
 
   <!-- every release adds an entry here before it is tagged (Release build checks it) -->
   <releases>
+    <release version="0.3.0" date="2026-11-15">
+      <url type="details">https://github.com/dirondin/varstotas/releases/tag/release-0.3.0</url>
+    </release>
     <release version="0.2.0" date="2026-10-28">
       <url type="details">https://github.com/dirondin/varstotas/releases/tag/release-0.2.0</url>
     </release>
