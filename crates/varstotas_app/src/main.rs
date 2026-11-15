@@ -104,6 +104,13 @@ fn main() -> eframe::Result<()> {
     objc2_foundation::NSProcessInfo::processInfo()
         .setProcessName(&objc2_foundation::NSString::from_str(APP_NAME));
     applog::init();
+    // no window can be shown: say so instead of a graphics error (before gpu.json is touched);
+    // VARSTOTAS_TRY_WINDOW=1 tries anyway (the tests of the window-failure message)
+    if !gpu::has_desktop() && std::env::var_os("VARSTOTAS_TRY_WINDOW").is_none() {
+        log::error!("{}", varstotas_i18n::tr!("app-no-desktop"));
+        std::process::exit(1);
+    }
+    window_failure_hook();
     gpu::wait_for_restart();
     if let Some(d) = paths::data_dir() {
         varstotas_i18n::set_data_dir(&paths::display(&d));
@@ -211,6 +218,22 @@ fn main() {}
 /// without 3D acceleration, Windows Sandbox, a broken driver). The Windows build has no console
 /// and a desktop launcher shows none either, so the reason goes into a message box.
 #[cfg(not(target_arch = "wasm32"))]
+/// A graphics API that cannot draw into the window fails in `Surface::configure`, where wgpu
+/// panics before the app's own error handler is set: the start-failure message instead, exit 1
+/// (and the next start tries another API, see gpu.rs).
+fn window_failure_hook() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let text = payload.downcast_ref::<String>().map(String::as_str).or_else(|| payload.downcast_ref::<&str>().copied()).unwrap_or_default();
+        if text.contains("Surface::configure") && std::env::var_os("VARSTOTAS_SCRIPT").is_none() {
+            start_failed(&text.split_whitespace().collect::<Vec<_>>().join(" "));
+            std::process::exit(1);
+        }
+        previous(info);
+    }));
+}
+
 fn start_failed(error: &str) {
     log::error!("start failed: {error}");
     // earlier errors that may explain it (this one is in the log twice already)
@@ -218,6 +241,10 @@ fn start_failed(error: &str) {
     for e in applog::recent(4).iter().filter(|e| !e.text.contains(error)) {
         details.push('\n');
         details.push_str(&e.text);
+    }
+    // a dialog with no desktop would wait, unseen, for ever
+    if !gpu::has_desktop() {
+        return;
     }
     rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Error)

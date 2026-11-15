@@ -3414,6 +3414,7 @@ dialog-template-intro = Nauji modeliai pradedami su šiais vienetais. Numatytąj
 dialog-about-tagline = Lengvas, vietinis 3D modeliavimo įrankis braižymui ir kūrimui.
 # $version is the app version
 dialog-about-version = Versija { $version }
+app-no-desktop = Varstotas reikia darbalaukio langui parodyti, o šis procesas jo neturi: jis paleistas kaip tarnyba arba kaip užduotis be prisijungusio naudotojo. Paleiskite jį iš naudotojo darbalaukio.
 app-start-failed-title = Nepavyko paleisti Varstotas
 app-start-failed = Varstotas nepavyko atverti lango:
 

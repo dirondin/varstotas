@@ -169,6 +169,26 @@ fn managed() -> bool {
     !cfg!(target_os = "macos") && std::env::var_os("WGPU_BACKEND").is_none() && std::env::var_os("VARSTOTAS_SCRIPT").is_none()
 }
 
+/// Whether this process has a desktop to show its window on. A service, or a scheduled task run
+/// with no user logged on, has an invisible window station (session 0): DirectX cannot make the
+/// window's swap chain there (DXGI_ERROR_NOT_CURRENTLY_AVAILABLE) and no API can draw.
+pub(crate) fn has_desktop() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::StationsAndDesktops::{GetProcessWindowStation, GetUserObjectInformationW, UOI_FLAGS, USEROBJECTFLAGS};
+        const WSF_VISIBLE: u32 = 1;
+        let mut flags = USEROBJECTFLAGS::default();
+        // SAFETY: reads this process's window station flags into a struct of the asked size
+        let ok = unsafe {
+            GetUserObjectInformationW(GetProcessWindowStation(), UOI_FLAGS, (&raw mut flags).cast(), size_of::<USEROBJECTFLAGS>() as u32, std::ptr::null_mut())
+        };
+        // when Windows cannot tell, try the window as before
+        ok == 0 || flags.dwFlags & WSF_VISIBLE != 0
+    }
+    #[cfg(not(windows))]
+    true
+}
+
 /// The backends the window may use this start (None: wgpu's own choice).
 pub(crate) fn choose() -> Option<wgpu::Backends> {
     if !managed() {

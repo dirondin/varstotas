@@ -3466,6 +3466,7 @@ dialog-template-intro = Новые модели начинаются с этих
 dialog-about-tagline = Лёгкий нативный 3D-редактор для рисования и построения.
 # $version — версия приложения
 dialog-about-version = Версия { $version }
+app-no-desktop = Varstotas нужен рабочий стол, чтобы показать окно, а у этого процесса его нет: он запущен как служба или как задача без вошедшего пользователя. Запустите его с рабочего стола пользователя.
 app-start-failed-title = Не удалось запустить Varstotas
 app-start-failed = Varstotas не смог открыть окно:
 

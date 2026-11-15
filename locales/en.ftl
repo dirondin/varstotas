@@ -3391,6 +3391,7 @@ dialog-template-intro = New models start with these units. You can change the de
 dialog-about-tagline = A light, native 3D modeler for drawing and building.
 # $version is the app version
 dialog-about-version = Version { $version }
+app-no-desktop = Varstotas needs a desktop to show its window, and this process has none: it runs as a service or as a task with no user logged on. Start it from a user's desktop.
 app-start-failed-title = Varstotas could not start
 app-start-failed = Varstotas could not open its window:
 

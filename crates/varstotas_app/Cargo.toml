@@ -47,6 +47,10 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Windows: whether the process has a desktop to show its window on (gpu::has_desktop).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_StationsAndDesktops"] }
+
 # Windows-only: embeds icon + version info into varstotas.exe (see build.rs).
 [build-dependencies]
 winresource = "0.1"
