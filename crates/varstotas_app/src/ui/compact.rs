@@ -44,8 +44,6 @@ const ITEM: f32 = 60.0;
 const REST: f64 = 0.35;
 /// Narrower than this the panels fill the window.
 const NARROW: f32 = 700.0;
-/// A sheet's gap at the top of a phone's page (the page behind shows there).
-const SHEET_TOP: f32 = 24.0;
 /// The dock's tools, as many as fit, in this order.
 const DOCK_TOOLS: [ToolId; 6] = [ToolId::Select, ToolId::Line, ToolId::Rectangle, ToolId::PushPull, ToolId::Move, ToolId::Tape];
 
@@ -300,8 +298,8 @@ thread_local! {
     static FIT: std::cell::Cell<(bool, bool)> = const { std::cell::Cell::new((false, false)) };
 }
 
-/// A window as the compact interface shows it (call last on the builder): on a phone a sheet
-/// over the page, not moved or resized; on a tablet kept inside the page.
+/// A window as the compact interface shows it (call last on the builder): on a phone the whole
+/// page, borderless, not moved or resized; on a tablet kept inside the page.
 pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Window<'a> {
     let (on, phone) = FIT.get();
     if !on {
@@ -309,8 +307,13 @@ pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Windo
     }
     let screen = ctx.content_rect();
     if phone {
-        let sheet = Rect::from_min_max(screen.min + vec2(0.0, SHEET_TOP), screen.max);
-        let frame = egui::Frame::window(&ctx.global_style()).corner_radius(egui::CornerRadius { nw: 18, ne: 18, sw: 0, se: 0 }).inner_margin(egui::Margin::same(12));
+        // the whole page, no border, corners or shadow
+        let frame = egui::Frame::window(&ctx.global_style())
+            .corner_radius(0)
+            .stroke(Stroke::NONE)
+            .shadow(egui::epaint::Shadow::NONE)
+            .inner_margin(egui::Margin::same(12));
+        let sheet = screen;
         // what a window lays out wider than a phone scrolls across
         win.fixed_rect(sheet).collapsible(false).frame(frame).hscroll(true)
     } else {
@@ -959,7 +962,7 @@ impl VarstotasApp {
         let screen = ctx.content_rect();
         let narrow = screen.width() < NARROW;
         let sheet = if narrow {
-            Rect::from_min_max(screen.min + vec2(0.0, 24.0), screen.max)
+            screen
         } else {
             Rect::from_min_max(pos2(screen.right() - MARGIN - 380.0, screen.top() + MARGIN), screen.max - vec2(MARGIN, MARGIN))
         };
@@ -970,8 +973,10 @@ impl VarstotasApp {
             }
             // taps beside the sheet close it (on a phone: only the strip above it)
             let backdrop = ui.allocate_rect(screen, Sense::click());
-            let corner = if narrow { egui::CornerRadius { nw: 18, ne: 18, sw: 0, se: 0 } } else { egui::CornerRadius::same(18) };
-            shadow(ui, sheet, 18.0);
+            let corner = if narrow { egui::CornerRadius::ZERO } else { egui::CornerRadius::same(18) };
+            if !narrow {
+                shadow(ui, sheet, 18.0);
+            }
             ui.painter().rect_filled(sheet, corner, theme::tray_bg());
             let inner = sheet.shrink2(vec2(10.0, 8.0));
             ui.scope_builder(UiBuilder::new().max_rect(inner).id_salt("compact_panels"), |ui| {
