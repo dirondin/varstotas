@@ -110,6 +110,9 @@ enum Menu {
     Help,
     /// The view's context menu (a right click, a long press).
     Context,
+    /// A long press on the dock: on its tool in this place (move, remove, replace), or on all
+    /// tools (add one).
+    Dock(Option<usize>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -243,6 +246,7 @@ impl Menu {
             Menu::Window => "menu-window",
             Menu::Help => "menu-help",
             Menu::Context => "compact-context",
+            Menu::Dock(_) => "compact-dock",
         })
     }
 
@@ -258,6 +262,7 @@ impl Menu {
             Menu::Window => Icon::SideBar,
             Menu::Help => Icon::Info,
             Menu::Context => Icon::More,
+            Menu::Dock(_) => Icon::Select,
         }
     }
 
@@ -431,7 +436,7 @@ impl VarstotasApp {
     pub(crate) fn compact_dump(&self) -> String {
         let level = self.compact.radial.as_ref().and_then(|r| r.levels.last().copied());
         let sub = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
-        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card)
+        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools())
     }
 
     /// F8: the other interface.
@@ -483,7 +488,8 @@ impl VarstotasApp {
         let room = rect.width() - 2.0 * MARGIN - 2.0 * PAD;
         // undo, redo and all tools stay; the tools take what is left
         let fit = ((room - 3.0 * DOCK - 2.0 * SEP) / DOCK).floor().max(0.0) as usize;
-        let tools = &DOCK_TOOLS[..fit.min(DOCK_TOOLS.len())];
+        let all = self.dock_tools();
+        let tools = &all[..fit.min(all.len())];
         let width = (3 + tools.len()) as f32 * DOCK + 2.0 * SEP + 2.0 * PAD;
         let dock = Rect::from_center_size(pos2(rect.center().x, rect.bottom() - MARGIN - (DOCK + 2.0 * PAD) / 2.0), vec2(width, DOCK + 2.0 * PAD));
         shadow(ui, dock, 16.0);
@@ -502,22 +508,30 @@ impl VarstotasApp {
         for c in [Cmd::Undo, Cmd::Redo] {
             let r = slot(&mut x);
             let enabled = c.enabled(self);
-            if self.dock_button(ui, r, c.icon(), false, enabled, &c.menu_label(), &format!("dock:{}", c.key())) {
+            if self.dock_button(ui, r, c.icon(), false, enabled, &c.menu_label(), &format!("dock:{}", c.key())).clicked() {
                 self.actions.push(c.action());
             }
         }
         sep(ui, &mut x);
         let current = self.tool_id();
-        for &t in tools {
+        // a long press (a right click) on a tool or on all tools: the dock's own menu
+        let edit = |r: &Response| r.long_touched() || r.secondary_clicked();
+        for (i, &t) in tools.iter().enumerate() {
             let r = slot(&mut x);
-            if self.dock_button(ui, r, t.icon(), current == t, true, &t.name(), &format!("dock:{t:?}")) {
+            let resp = self.dock_button(ui, r, t.icon(), current == t, true, &t.name(), &format!("dock:{t:?}"));
+            if edit(&resp) {
+                self.open_dock_list(r.center(), Some(i));
+            } else if resp.clicked() {
                 self.actions.push(Action::SetTool(t));
             }
         }
         sep(ui, &mut x);
         let r = slot(&mut x);
         let other = !tools.contains(&current);
-        if self.dock_button(ui, r, Icon::More, other, true, &tr!("compact-all-tools"), "dock:all") {
+        let resp = self.dock_button(ui, r, Icon::More, other, true, &tr!("compact-all-tools"), "dock:all");
+        if edit(&resp) {
+            self.open_dock_list(r.center(), None);
+        } else if resp.clicked() {
             let center = rect.center();
             self.open_radial(Some(center), false);
             if let Some(radial) = self.compact.radial.as_mut() {
@@ -527,7 +541,77 @@ impl VarstotasApp {
         dock
     }
 
-    fn dock_button(&mut self, ui: &mut Ui, r: Rect, icon: Icon, on: bool, enabled: bool, tip: &str, name: &str) -> bool {
+    pub(crate) fn default_dock(&self) -> Vec<ToolId> {
+        DOCK_TOOLS.to_vec()
+    }
+
+    /// The dock's tools: the user's or the default.
+    pub(crate) fn dock_tools(&self) -> Vec<ToolId> {
+        if self.prefs.dock.is_empty() { DOCK_TOOLS.to_vec() } else { self.prefs.dock.clone() }
+    }
+
+    fn open_dock_list(&mut self, at: Pos2, slot: Option<usize>) {
+        self.compact.radial = Some(Radial { center: at, levels: vec![Level::List(Menu::Dock(slot))], held: false, resting: None, sub: Vec::new() });
+    }
+
+    /// The dock's menu: for its tool at `slot` move it, take it off or put another tool in its
+    /// place; for all tools (`None`) put one more on the dock.
+    fn dock_menu(&mut self, ui: &mut Ui, slot: Option<usize>) {
+        use super::menu::icon_row;
+        let mut dock = self.dock_tools();
+        let mut changed = false;
+        if let Some(i) = slot.filter(|&i| i < dock.len()) {
+            let n = dock.len();
+            for (label, key, ok, to) in [(tr!("compact-dock-left"), "left", i > 0, i.wrapping_sub(1)), (tr!("compact-dock-right"), "right", i + 1 < n, i + 1)] {
+                let r = icon_row(ui, None, &label, None, ok, false);
+                spot(format!("dockmenu:{key}"), r.rect.center());
+                if r.clicked() {
+                    dock.swap(i, to);
+                    changed = true;
+                }
+            }
+            let r = icon_row(ui, Some(Icon::Eraser), &tr!("compact-dock-remove"), None, n > 1, false);
+            spot("dockmenu:remove", r.rect.center());
+            if r.clicked() {
+                dock.remove(i);
+                changed = true;
+            }
+        }
+        if !self.prefs.dock.is_empty() {
+            let r = icon_row(ui, None, &tr!("compact-dock-reset"), None, true, false);
+            spot("dockmenu:reset", r.rect.center());
+            if r.clicked() {
+                dock = DOCK_TOOLS.to_vec();
+                changed = true;
+            }
+        }
+        if slot.is_some() || !self.prefs.dock.is_empty() {
+            ui.separator();
+        }
+        let head = if slot.is_some() { tr!("compact-dock-replace") } else { tr!("compact-dock-add") };
+        ui.label(egui::RichText::new(head).color(theme::text_dim()));
+        for t in ToolId::ALL {
+            let here = slot.and_then(|i| dock.get(i)) == Some(&t);
+            if dock.contains(&t) && !here {
+                continue;
+            }
+            let r = icon_row(ui, Some(t.icon()), &t.name(), None, true, here);
+            spot(format!("dockmenu:{t:?}"), r.rect.center());
+            if r.clicked() && !here {
+                match slot.filter(|&i| i < dock.len()) {
+                    Some(i) => dock[i] = t,
+                    None => dock.push(t),
+                }
+                changed = true;
+            }
+        }
+        if changed {
+            self.prefs.dock = if dock == DOCK_TOOLS { Vec::new() } else { dock };
+            ui.close();
+        }
+    }
+
+    fn dock_button(&mut self, ui: &mut Ui, r: Rect, icon: Icon, on: bool, enabled: bool, tip: &str, name: &str) -> Response {
         let resp = ui.interact(r, Id::new(name), if enabled { Sense::click() } else { Sense::hover() });
         spot(name.to_string(), r.center());
         let p = ui.painter();
@@ -541,7 +625,7 @@ impl VarstotasApp {
             painter.multiply_opacity(0.35);
         }
         paint_icon(&painter, Rect::from_center_size(r.center(), vec2(26.0, 26.0)), icon, on);
-        resp.on_hover_text(tip).clicked()
+        resp.on_hover_text(tip)
     }
 
     /// Above the dock: the tool's hint (or a message) on the left, the Measurements value on
@@ -843,6 +927,7 @@ impl VarstotasApp {
                         Menu::Window => self.menu_window(ui),
                         Menu::Help => self.menu_help(ui),
                         Menu::Context => self.viewport_context_menu(ui),
+                        Menu::Dock(slot) => self.dock_menu(ui, slot),
                 }));
             });
             should_close = ui.should_close();

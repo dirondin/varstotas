@@ -153,6 +153,9 @@ pub struct Prefs {
     pub toolbar_icons: u32,
     /// Classic or compact (touch) interface, or as the device suits (Preferences → Interface, F8).
     pub ui_mode: crate::ui::compact::UiMode,
+    /// The compact interface's dock: its tools in order (Preferences → Interface, a long press
+    /// on the dock); empty = the default.
+    pub dock: Vec<crate::tools::ToolId>,
     /// The toolbar's buttons in order (Preferences → Toolbar; `toolbar::Item::key`, "|" = a
     /// separator); empty = the default.
     pub toolbar: Vec<String>,
@@ -237,6 +240,7 @@ impl Default for Prefs {
             ui_scale: 1.0,
             toolbar_icons: 36,
             ui_mode: Default::default(),
+            dock: Vec::new(),
             toolbar: Vec::new(),
             shortcuts: Default::default(),
             new_render: Default::default(),

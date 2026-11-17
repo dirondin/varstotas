@@ -88,6 +88,23 @@ expect compact_card=Some("Materials")
 action click_spot chip:All
 wait 5
 expect compact_card=None
+# the dock: a right click (a long press) on a tool puts another in its place; reset
+action click_spot compact:done
+wait 5
+action rclick_spot dock:Tape
+wait 10
+expect compact=(true Some(List(Dock(Some(5)))) false false)
+screenshot shots/compact_dock_menu.bmp
+action click_spot dockmenu:Eraser
+wait 10
+expect compact_dock=[Select, Line, Rectangle, PushPull, Move, Eraser]
+action rclick_spot dock:Eraser
+wait 10
+action click_spot dockmenu:reset
+wait 10
+expect compact_dock=[Select, Line, Rectangle, PushPull, Move, Tape]
+action click_spot compact:panels
+wait 10
 action click_spot compact:done
 wait 5
 expect compact=(true None false false)

@@ -207,6 +207,65 @@ fn folder_row(ui: &mut Ui, label: &str, custom: &mut Option<PathBuf>, default: O
 }
 
 /// A program / library row: the one in use (or why there is none), Choose…, Default.
+impl VarstotasApp {
+    /// The compact interface's dock: its tools in order, moved, taken off, added.
+    fn prefs_dock(&mut self, ui: &mut Ui) {
+        use crate::tools::ToolId;
+        heading(ui, &tr!("prefs-dock"));
+        let mut dock = self.dock_tools();
+        let n = dock.len();
+        let mut op: Option<(usize, i32)> = None;
+        for (i, &t) in dock.iter().enumerate() {
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                super::icons::paint_icon(ui.painter(), r, t.icon(), false);
+                ui.label(t.name());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    for (glyph, d, ok) in [("✕", 0, n > 1), ("⏷", 1, i + 1 < n), ("⏶", -1, i > 0)] {
+                        let r = ui.add_enabled(ok, egui::Button::new(glyph).small());
+                        super::tray_lib::spot(format!("prefs_dock:{t:?}:{d}"), r.rect.center());
+                        if r.clicked() {
+                            op = Some((i, d));
+                        }
+                    }
+                });
+            });
+        }
+        let mut add = None;
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("prefs_dock_add").selected_text(tr!("prefs-dock-add")).show_ui(ui, |ui| {
+                for t in ToolId::ALL.into_iter().filter(|t| !dock.contains(t)) {
+                    if ui.selectable_label(false, t.name()).clicked() {
+                        add = Some(t);
+                    }
+                }
+            });
+            if ui.add_enabled(!self.prefs.dock.is_empty(), egui::Button::new(tr!("compact-dock-reset"))).clicked() {
+                self.prefs.dock = Vec::new();
+            }
+        });
+        note(ui, &tr!("prefs-dock-note"));
+        let changed = match (op, add) {
+            (Some((i, 0)), _) => {
+                dock.remove(i);
+                true
+            }
+            (Some((i, d)), _) => {
+                dock.swap(i, (i as i32 + d) as usize);
+                true
+            }
+            (None, Some(t)) => {
+                dock.push(t);
+                true
+            }
+            _ => false,
+        };
+        if changed {
+            self.prefs.dock = if dock == self.default_dock() { Vec::new() } else { dock };
+        }
+    }
+}
+
 fn note(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).small().color(theme::text_dim()));
 }
@@ -840,6 +899,7 @@ impl VarstotasApp {
         ui.separator();
         let r = ui.checkbox(&mut self.prefs.show_start_screen, tr!("start-show"));
         super::tray_lib::spot("prefs:start_show", r.rect.center());
+        self.prefs_dock(ui);
     }
 
     /// Theme, scale and toolbar icon size from the preferences (every frame; cheap when unchanged).
