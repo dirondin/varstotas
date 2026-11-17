@@ -80,6 +80,14 @@ action click_spot compact:panels
 wait 10
 expect compact=(true None true false)
 screenshot shots/compact_panels.bmp
+# a chip shows one card, open; All shows them all again
+action click_spot chip:Materials
+wait 10
+screenshot shots/compact_chip.bmp
+expect compact_card=Some("Materials")
+action click_spot chip:All
+wait 5
+expect compact_card=None
 action click_spot compact:done
 wait 5
 expect compact=(true None false false)

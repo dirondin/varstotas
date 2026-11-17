@@ -57,6 +57,8 @@ pub struct Compact {
     pub panels: bool,
     /// The Measurements box's number pad.
     pub numpad: bool,
+    /// The one side bar card the sheet shows (None: all of them).
+    pub card: Option<&'static str>,
 }
 
 /// An open ring menu.
@@ -364,7 +366,7 @@ impl VarstotasApp {
     pub(crate) fn compact_dump(&self) -> String {
         let level = self.compact.radial.as_ref().and_then(|r| r.levels.last().copied());
         let sub = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
-        format!("({} {level:?} {} {}) compact_sub={sub:?}", self.compact.on, self.compact.panels, self.compact.numpad)
+        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card)
     }
 
     /// F8: the other interface.
@@ -832,6 +834,8 @@ impl VarstotasApp {
                     });
                 });
                 ui.add_space(4.0);
+                self.card_chips(ui);
+                ui.add_space(6.0);
                 self.tray_ui(ui);
             });
             if backdrop.clicked() && ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| !sheet.contains(p)) {
@@ -841,6 +845,26 @@ impl VarstotasApp {
         if done || ctx.input(|i| i.key_pressed(Key::Escape)) {
             self.compact.panels = false;
         }
+    }
+
+    /// A chip per side bar card over the sheet: one shows that card alone, open.
+    fn card_chips(&mut self, ui: &mut Ui) {
+        let hidden = self.prefs.tray_hidden.clone();
+        let cards = super::tray::TRAY_CARDS.into_iter().filter(|c| !hidden.iter().any(|h| h == c));
+        egui::ScrollArea::horizontal().id_salt("compact_chips").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                for card in std::iter::once(None).chain(cards.map(Some)) {
+                    let label = card.map_or_else(|| tr!("compact-cards-all"), super::tray::card_label);
+                    let on = self.compact.card == card;
+                    let b = ui.add(egui::Button::new(egui::RichText::new(label).size(14.0)).selected(on).min_size(vec2(0.0, 34.0)).corner_radius(17.0));
+                    spot(format!("chip:{}", card.unwrap_or("All")), b.rect.center()); // i18n-ignore
+                    if b.clicked() {
+                        self.compact.card = card;
+                    }
+                }
+            });
+        });
     }
 
     /// The Measurements box's number pad at the bottom: digits, the separators of the

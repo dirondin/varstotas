@@ -5467,3 +5467,4 @@ compact-arcs = Дуги и кривые
 compact-modify = Ещё инструменты
 compact-measure = Измерения
 compact-context = Действия
+compact-cards-all = Все

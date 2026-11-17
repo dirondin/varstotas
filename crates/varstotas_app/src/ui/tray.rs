@@ -127,12 +127,9 @@ pub(crate) fn card_label(title: &str) -> String {
     }
 }
 
-fn card<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, body: impl FnOnce(&mut Ui) -> R) {
-    card_ex(ui, title, icon, default_open, false, None, body);
-}
-
-/// [`card`] that can be forced open and have an icon button at the right of its header
-/// (`button`: icon, tooltip). True when that button was clicked.
+/// A side bar card: its header (icon, title) folds its body; `force_open` opens it, and
+/// `button` (icon, tooltip) is an icon button at the right of its header. True when that
+/// button was clicked.
 fn card_ex<R>(ui: &mut Ui, title: &str, icon: Icon, default_open: bool, force_open: bool, button: Option<(Icon, &str)>, body: impl FnOnce(&mut Ui) -> R) -> bool {
     let mut clicked = false;
     let r = Frame::new()
@@ -239,44 +236,47 @@ impl VarstotasApp {
 
     fn tray_cards(&mut self, ui: &mut Ui) {
         let hidden = self.prefs.tray_hidden.clone();
-        let on = |n: &str| !hidden.iter().any(|h| h == n);
+        // the compact interface's sheet can show one card, open
+        let only = self.compact.card.filter(|_| self.compact.on);
+        let forced = only.is_some();
+        let on = |n: &str| !hidden.iter().any(|h| h == n) && only.is_none_or(|o| o == n);
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             if on("Entity Info") { // i18n-ignore
                 let tip = tr!("tray-card-model-info-tip");
-                if card_ex(ui, "Entity Info", Icon::Info, true, false, Some((Icon::ModelInfo, tip.as_str())), |ui| self.entity_info(ui)) { // i18n-ignore
+                if card_ex(ui, "Entity Info", Icon::Info, true, forced, Some((Icon::ModelInfo, tip.as_str())), |ui| self.entity_info(ui)) { // i18n-ignore
                     self.actions.push(Action::ModelInfo);
                 }
             }
             if on("Materials") { // i18n-ignore
-                card(ui, "Materials", Icon::Paint, true, |ui| self.materials_panel(ui)); // i18n-ignore
+                card_ex(ui, "Materials", Icon::Paint, true, forced, None, |ui| self.materials_panel(ui)); // i18n-ignore
             }
             if on("Material Editor") { // i18n-ignore
-                card(ui, "Material Editor", Icon::Gear, true, |ui| self.material_editor_card(ui)); // i18n-ignore
+                card_ex(ui, "Material Editor", Icon::Gear, true, forced, None, |ui| self.material_editor_card(ui)); // i18n-ignore
             }
             if on("Components") { // i18n-ignore
                 let open = self.library_open_requested();
-                card_ex(ui, "Components", Icon::Group, false, open, None, |ui| self.library_panel(ui)); // i18n-ignore
+                card_ex(ui, "Components", Icon::Group, false, open || forced, None, |ui| self.library_panel(ui)); // i18n-ignore
             }
             if on("Tags") { // i18n-ignore
-                card(ui, "Tags", Icon::Eye, false, |ui| self.tags_panel(ui)); // i18n-ignore
+                card_ex(ui, "Tags", Icon::Eye, false, forced, None, |ui| self.tags_panel(ui)); // i18n-ignore
             }
             if on("Outliner") { // i18n-ignore
-                card(ui, "Outliner", Icon::Group, true, |ui| self.outliner(ui)); // i18n-ignore
+                card_ex(ui, "Outliner", Icon::Group, true, forced, None, |ui| self.outliner(ui)); // i18n-ignore
             }
             if on("Scenes") { // i18n-ignore
-                card(ui, "Scenes", Icon::ViewIso, false, |ui| self.scenes_panel(ui)); // i18n-ignore
+                card_ex(ui, "Scenes", Icon::ViewIso, false, forced, None, |ui| self.scenes_panel(ui)); // i18n-ignore
             }
             if on("Shadows") { // i18n-ignore
-                card(ui, "Shadows", Icon::Shadows, false, |ui| self.shadows_panel(ui)); // i18n-ignore
+                card_ex(ui, "Shadows", Icon::Shadows, false, forced, None, |ui| self.shadows_panel(ui)); // i18n-ignore
             }
             if on("Environment") { // i18n-ignore
-                card(ui, "Environment", Icon::StyleRealistic, false, |ui| self.environment_panel(ui)); // i18n-ignore
+                card_ex(ui, "Environment", Icon::StyleRealistic, false, forced, None, |ui| self.environment_panel(ui)); // i18n-ignore
             }
             if on("Soften Edges") { // i18n-ignore
-                card(ui, "Soften Edges", Icon::Arc, false, |ui| self.soften_panel(ui)); // i18n-ignore
+                card_ex(ui, "Soften Edges", Icon::Arc, false, forced, None, |ui| self.soften_panel(ui)); // i18n-ignore
             }
             if on("Instructor") { // i18n-ignore
-                card(ui, "Instructor", Icon::Select, false, |ui| self.instructor(ui)); // i18n-ignore
+                card_ex(ui, "Instructor", Icon::Select, false, forced, None, |ui| self.instructor(ui)); // i18n-ignore
             }
             if hidden.len() >= TRAY_CARDS.len() {
                 ui.label(RichText::new(tr!("tray-cards-all-off")).color(theme::text_dim()));
