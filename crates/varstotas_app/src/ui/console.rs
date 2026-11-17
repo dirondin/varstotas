@@ -108,10 +108,10 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + egui::vec2(16.0, 16.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(theme::card_bg());
         let win = self.placed(egui::Window::new(tr!("console-title")).id(egui::Id::new("Script Console")).open(&mut open), pos);
-        win
+        crate::ui::compact::fit_window(ctx, win
             .default_size([560.0, 460.0])
             .frame(frame)
-            .resizable(true)
+            .resizable(true))
             .show(ctx, |ui| {
             let mono = egui::TextStyle::Monospace;
             // Output | splitter | code | buttons: the splitter trades output for code height.

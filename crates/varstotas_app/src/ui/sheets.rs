@@ -292,7 +292,7 @@ impl VarstotasApp {
         let win = self.placed(egui::Window::new(tr!("sheets-title")).id(egui::Id::new("sheets_window")).open(&mut open).collapsible(false).resizable(true).default_size([920.0, 500.0]), pos);
         let model = &self.doc.model;
         let st = &mut self.sheets;
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 // Left column: sheets, paper, title block, the selected item.
                 ui.vertical(|ui| {

@@ -1259,6 +1259,7 @@ prefs-cut-offcuts-clear = Pašalinti visas
 
 prefs-title = Nustatymai
 prefs-search = Paieška
+prefs-sections = Skyriai
 prefs-nothing-found = Nieko nerasta
 prefs-reset = Atkurti
 prefs-reset-tip = Šio skyriaus nustatymai grąžinami į numatytuosius

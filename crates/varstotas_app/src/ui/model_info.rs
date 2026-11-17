@@ -203,7 +203,7 @@ impl VarstotasApp {
             .default_width(360.0)
             .min_width(240.0);
         let win = self.placed(win, pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             match tex {
                 Some((id, size)) => {
                     // as wide as the window is made, never past the image's own size
@@ -294,7 +294,7 @@ impl VarstotasApp {
             .default_size([480.0, 520.0])
             .min_size([340.0, 260.0]);
         let win = self.placed(win, pos);
-        let response = win.show(ctx, |ui| {
+        let response = crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let row = |ui: &mut egui::Ui, k: &str, v: RichText| {
                 ui.label(k);
                 ui.label(v);

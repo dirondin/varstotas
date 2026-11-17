@@ -1263,6 +1263,7 @@ prefs-cut-offcuts-clear = Удалить все
 
 prefs-title = Настройки
 prefs-search = Поиск
+prefs-sections = Разделы
 prefs-nothing-found = Ничего не найдено
 prefs-reset = Сбросить
 prefs-reset-tip = Вернуть настройки этого раздела по умолчанию

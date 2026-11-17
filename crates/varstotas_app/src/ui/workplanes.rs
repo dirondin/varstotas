@@ -39,7 +39,7 @@ impl VarstotasApp {
             .collapsible(false)
             .default_width(340.0);
         let win = self.placed(win, pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             if planes.is_empty() {
                 ui.label(tr!("workplane-none"));
             }

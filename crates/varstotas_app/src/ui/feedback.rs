@@ -91,11 +91,11 @@ impl VarstotasApp {
         let mut copy = false;
         let mut send = false;
         let w = &mut self.feedback;
-        egui::Window::new(tr!("report-menu"))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("report-menu"))
             .id(egui::Id::new("feedback_window"))
             .open(&mut open)
             .default_size([620.0, 540.0])
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 ui.label(
                     RichText::new(format!(
                         "{} · {}",

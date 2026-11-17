@@ -408,12 +408,12 @@ impl VarstotasApp {
         let tex = tex.id();
         let unit = self.doc.model.unit;
         let mut open = true;
-        egui::Window::new(tr!("mated-view-title", material = name, slot = slot_label(slot)))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("mated-view-title", material = name, slot = slot_label(slot)))
             .id(egui::Id::new("texture_view_window"))
             .open(&mut open)
             .default_size([520.0, 560.0])
             .resizable(true)
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&img.file_name).strong());
                     ui.label(

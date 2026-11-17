@@ -26,7 +26,7 @@ impl VarstotasApp {
         }
         let icon = self.about_icon.clone();
         let response = Modal::new(Id::new("start_screen")).show(ctx, |ui| {
-            ui.set_width(580.0);
+            ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 580.0));
             banner(ui, icon.as_ref());
             ui.add_space(14.0);
             ui.columns(2, |cols| {

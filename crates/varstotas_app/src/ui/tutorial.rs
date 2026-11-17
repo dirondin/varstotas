@@ -48,7 +48,7 @@ impl VarstotasApp {
         let step = self.tutorial.step;
         let mut open = true;
         let mut finish = false;
-        egui::Window::new(tr!("tutorial-title"))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("tutorial-title"))
             .id(egui::Id::new("tutorial_window"))
             .open(&mut open)
             .collapsible(false)
@@ -56,7 +56,7 @@ impl VarstotasApp {
             .default_pos([80.0, 100.0])
             .default_size([660.0, 520.0])
             .min_size([480.0, 360.0])
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading(tr!(&format!("tutorial-{step}-title")));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

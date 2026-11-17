@@ -239,7 +239,7 @@ impl VarstotasApp {
         let what = what.clone();
         let mut answer = None;
         egui::Modal::new(egui::Id::new("bridge_confirm")).show(ctx, |ui| {
-            ui.set_width(380.0);
+            ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
             ui.heading("External script");
             ui.add_space(4.0);
             ui.label(format!("A script or AI agent connected to Varstotas wants to:\n\n{what}"));

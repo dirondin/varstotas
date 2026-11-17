@@ -631,7 +631,7 @@ impl VarstotasApp {
         let k = unit.mm();
         let mut s = self.cutlist.draft.clone().unwrap_or_else(|| self.doc.model.cut_list.clone());
         let mut changed = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             for (label, v, max) in [
                 (tr!("cutlist-kerf"), &mut s.kerf, 20.0),
                 (tr!("cutlist-trim"), &mut s.trim, 100.0),
@@ -647,7 +647,7 @@ impl VarstotasApp {
                 ui.add_space(8.0);
             }
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(tr!("cutlist-band"));
             let mut shown = s.band / k;
             let r = ui.add(egui::DragValue::new(&mut shown).range(0.0..=10.0 / k).speed(0.05 / k).max_decimals(3).suffix(format!(" {}", unit.suffix())));
@@ -988,7 +988,7 @@ impl VarstotasApp {
         let mut labels = false;
         let mut drilling = false;
         let win = self.placed(egui::Window::new(tr!("cutlist-title")).id(egui::Id::new("cutlist_window")).open(&mut open).collapsible(false).resizable(true).default_size([640.0, 660.0]).min_width(560.0), pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             // the export buttons at the bottom, the tab above taking what is left
             egui::Panel::bottom("cutlist_export").resizable(false).frame(egui::Frame::NONE.inner_margin(egui::Margin { top: 6, ..Default::default() })).show_separator_line(false).show(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

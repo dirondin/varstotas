@@ -625,7 +625,7 @@ impl VarstotasApp {
         }
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("assembly-title")).id(egui::Id::new("assembly_window")).open(&mut open).collapsible(false).resizable(true).default_size([480.0, 420.0]).min_width(420.0).pivot(egui::Align2::RIGHT_TOP), pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             self.assembly_view_ui(ui);
             ui.separator();
             self.assembly_steps_ui(ui);

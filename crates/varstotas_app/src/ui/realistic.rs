@@ -367,12 +367,12 @@ impl VarstotasApp {
         let Some(mut ed) = self.tray.shader_edit.take() else { return };
         let mut open = true;
         let mut apply = false;
-        egui::Window::new(tr!("realistic-shader-window", material = ed.material.clone()))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("realistic-shader-window", material = ed.material.clone()))
             .id(egui::Id::new("shader_editor"))
             .open(&mut open)
             .default_pos(self.viewport.view_rect.min + vec2(60.0, 40.0))
             .default_size(vec2(760.0, 480.0))
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     egui::ComboBox::from_id_salt("shader_start").selected_text(tr!("realistic-start-from")).show_ui(ui, |ui| {
                         for (name, src) in crate::shaders::PRESETS.iter().copied().chain([("Checker (new)", NEW_SHADER)]) { // i18n-ignore

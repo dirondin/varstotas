@@ -219,7 +219,7 @@ impl VarstotasApp {
         let mut open = true;
         let pos = self.viewport.view_rect.right_top() + egui::vec2(-660.0, 30.0);
         let win = self.placed(egui::Window::new(tr!("console-ref-title")).id(egui::Id::new("script_help")).open(&mut open).default_size([620.0, 520.0]).resizable(true), pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(tr!("console-search"));
                 let r = ui.add(egui::TextEdit::singleline(&mut self.script_help.search).hint_text(tr!("console-search-hint")).desired_width(220.0));

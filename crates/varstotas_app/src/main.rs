@@ -182,7 +182,8 @@ fn main() -> eframe::Result<()> {
             .with_app_id(option_env!("VARSTOTAS_APP_ID").unwrap_or("varstotas")) // i18n-ignore
             .with_icon(app_icon())
             .with_inner_size([1400.0 * script_scale, 900.0 * script_scale])
-            .with_min_inner_size([800.0 * script_scale, 500.0 * script_scale])
+            // a script may make it a phone's (`window`)
+            .with_min_inner_size(if std::env::var_os("VARSTOTAS_SCRIPT").is_some() { [360.0 * script_scale, 500.0 * script_scale] } else { [800.0, 500.0] })
             .with_active(!background),
         wgpu_options,
         // scripted runs open at the default size, whatever size the window was last left at

@@ -213,7 +213,7 @@ impl VarstotasApp {
         let mut save: Option<&str> = None;
         let win = self.placed(egui::Window::new(tr!("unfold-title")).id(egui::Id::new("unfold_window")).open(&mut open).collapsible(false).resizable(true).default_size([560.0, 560.0]).min_width(480.0), pos);
         let selection = !self.doc.selection.is_empty();
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let what = tr(if selection { "unfold-selection" } else { "unfold-everything" });
             let summary = if u.faces == 0 {
                 tr!("unfold-no-faces", what = what)

@@ -243,13 +243,13 @@ impl VarstotasApp {
         let mut open = true;
         let mut check = false;
         let mut repair = false;
-        egui::Window::new(tr!("print-title"))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("print-title"))
             .id(egui::Id::new("printing"))
             .open(&mut open)
             .resizable(true)
             .default_size([560., 650.])
             .min_size([420., 380.])
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 ui.add_enabled_ui(!busy, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(tr!("print-scope"));

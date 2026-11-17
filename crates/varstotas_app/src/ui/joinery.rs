@@ -455,7 +455,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(60.0, 60.0);
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("joinery-title")).id(egui::Id::new("joinery_window")).open(&mut open).collapsible(false).resizable(true).default_size([460.0, 300.0]).min_width(420.0), pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             self.joinery_add_ui(ui);
             ui.separator();
             self.joinery_list_ui(ui);

@@ -270,6 +270,8 @@ pub enum ScriptCmd {
     RawSheet(String, Vec<f64>),
     /// `wait N` frames.
     Wait(u32),
+    /// `window W H`: the window's size, in the scripts' points (1400x900 at the start).
+    Window(f32, f32),
     /// `view iso|top|front|right|left|back|bottom`
     View(StandardView),
     ZoomExtents,
@@ -543,6 +545,7 @@ fn parse_cmd(line: &str) -> Option<ScriptCmd> {
             ScriptCmd::RawSheet(sub.to_string(), v)
         }
         "wait" => ScriptCmd::Wait(nums.first().copied().unwrap_or(1.0) as u32),
+        "window" if nums.len() == 2 => ScriptCmd::Window(nums[0] as f32, nums[1] as f32),
         "view" => ScriptCmd::View(match rest.to_ascii_lowercase().as_str() {
             "top" => StandardView::Top,
             "front" => StandardView::Front,
@@ -882,6 +885,11 @@ impl VarstotasApp {
                 if let Some(p) = self.last_pointer {
                     self.script_move(p, false);
                 }
+            }
+            ScriptCmd::Window(w, h) => {
+                let native = ctx.input(|i| i.viewport().native_pixels_per_point.unwrap_or(1.0));
+                let want = egui::vec2(w, h) * script_scale() * native;
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(want / ctx.pixels_per_point()));
             }
             ScriptCmd::Wait(n) => {
                 if let Some(s) = self.debug.script.as_mut() {

@@ -236,7 +236,7 @@ impl VarstotasApp {
         }
         self.online.ensure_catalogue(ctx);
         let mut open = true;
-        egui::Window::new(tr!("mat-online-title")).id(egui::Id::new("Online Materials")).open(&mut open).default_pos([120.0, 180.0]).default_size([640.0, 560.0]).min_width(420.0).collapsible(false).show(ctx, |ui| self.online_ui(ui, ctx));
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("mat-online-title")).id(egui::Id::new("Online Materials")).open(&mut open).default_pos([120.0, 180.0]).default_size([640.0, 560.0]).min_width(420.0).collapsible(false)).show(ctx, |ui| self.online_ui(ui, ctx));
         self.online.open &= open;
     }
 

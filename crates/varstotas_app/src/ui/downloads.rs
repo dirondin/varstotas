@@ -279,7 +279,7 @@ impl VarstotasApp {
         let lib = self.library_dir();
         let mut act: Option<bool> = None;
         let mut show: Option<PathBuf> = None;
-        egui::Window::new(tr!("downloads-import-title")).id(egui::Id::new("import_download")).default_pos([220.0, 180.0]).default_width(440.0).collapsible(false).show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("downloads-import-title")).id(egui::Id::new("import_download")).default_pos([220.0, 180.0]).default_width(440.0).collapsible(false)).show(ctx, |ui| {
             if self.models.dl.importing.is_some() {
                 ui.horizontal(|ui| {
                     ui.spinner();

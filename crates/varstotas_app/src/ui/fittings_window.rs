@@ -132,7 +132,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(80.0, 80.0);
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("fittings-title")).id(egui::Id::new("fittings_window")).open(&mut open).collapsible(false).resizable(true).default_size([520.0, 380.0]).min_width(440.0), pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             self.fitting_put_ui(ui);
             self.plinth_ui(ui);
             ui.separator();

@@ -103,12 +103,12 @@ impl VarstotasApp {
             return;
         }
         let mut open = true;
-        egui::Window::new(tr!("mated-window-title"))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("mated-window-title"))
             .id(egui::Id::new("material_editor_window"))
             .open(&mut open)
             .default_size([440.0, 640.0])
             .resizable(true)
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| self.material_editor(ui, true));
             });
         self.mat_editor.window &= open;

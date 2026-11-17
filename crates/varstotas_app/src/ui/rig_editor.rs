@@ -481,7 +481,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.left_top() + vec2(60.0, 40.0);
         let win = self.placed(egui::Window::new(tr!("rig-title")).id(egui::Id::new("rig_editor_window")).open(&mut open).collapsible(false).resizable(true).default_width(760.0), pos);
         let ed = &mut self.rig_editor;
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let Some(name) = name else {
                 ui.label(tr!("rig-select-hint"));
                 return;

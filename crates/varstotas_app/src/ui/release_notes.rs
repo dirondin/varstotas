@@ -64,7 +64,7 @@ impl VarstotasApp {
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("release-notes-title")).id(egui::Id::new("release_notes")).open(&mut open).default_size([600.0, 380.0]).resizable(true), [160.0, 140.0]);
         let sel = &mut self.release_notes.sel;
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let h = ui.available_height();
             ui.horizontal_top(|ui| {
                 egui::ScrollArea::vertical().id_salt("release_notes_list").max_height(h).max_width(140.0).show(ui, |ui| {

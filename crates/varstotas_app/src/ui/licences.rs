@@ -143,7 +143,7 @@ impl VarstotasApp {
         }
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("licences-title")).id(egui::Id::new("licences")).open(&mut open).default_size([680.0, 520.0]).resizable(true), [140.0, 160.0]);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 for t in Tab::ALL {
                     ui.selectable_value(&mut self.licences.tab, t, t.label());

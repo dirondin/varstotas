@@ -366,7 +366,7 @@ impl VarstotasApp {
             (false, PhysicsMode::Cloth) => self.cloth_check().map(|n| tr!("physics-cloth-particles", n = n)),
         };
         let (mut run, mut stop, mut apply, mut cancel) = (false, false, false, false);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let live = self.physics.run.is_some();
             let button = |ui: &mut egui::Ui, label: String, id: &str, enabled: bool| {
                 let r = ui.add_enabled(enabled, egui::Button::new(label));

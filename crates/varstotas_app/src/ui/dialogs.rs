@@ -18,7 +18,7 @@ impl VarstotasApp {
         if let Some(pending) = self.confirm.clone() {
             let mut choice: Option<u8> = None;
             let resp = Modal::new(Id::new("confirm_save")).show(ctx, |ui| {
-                ui.set_width(360.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
                 ui.heading(tr!("dialog-save-title"));
                 ui.add_space(4.0);
                 ui.label(tr!("dialog-save-question", name = self.doc.display_name()));
@@ -65,7 +65,7 @@ impl VarstotasApp {
         {
             let mut choice: Option<Option<bool>> = None;
             let resp = Modal::new(Id::new("recover_autosave")).show(ctx, |ui| {
-                ui.set_width(400.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 400.0));
                 ui.heading(tr!("dialog-recover-title"));
                 ui.add_space(4.0);
                 ui.label(match &r.original {
@@ -106,7 +106,7 @@ impl VarstotasApp {
             let mut choice: Option<bool> = None;
             let question = tr!(if self.doc.active_path.is_empty() { "dialog-resize-model" } else { "dialog-resize-group" });
             let resp = Modal::new(Id::new("confirm_resize")).show(ctx, |ui| {
-                ui.set_width(360.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
                 ui.heading(tr!("dialog-resize-title"));
                 ui.add_space(4.0);
                 ui.label(question.clone());
@@ -144,7 +144,7 @@ impl VarstotasApp {
         if let Some(mut p) = self.text_prompt.clone() {
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("text_prompt")).show(ctx, |ui| {
-                ui.set_width(380.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
                 ui.heading(&p.title);
                 ui.add_space(4.0);
                 let mut out = egui::TextEdit::singleline(&mut p.value).desired_width(f32::INFINITY).show(ui);
@@ -196,7 +196,7 @@ impl VarstotasApp {
             let aspect = (vp.x / vp.y.max(1.0)).max(1e-3) as f64;
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("export_png")).show(ctx, |ui| {
-                ui.set_width(340.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 340.0));
                 ui.heading(tr!("dialog-export-title"));
                 ui.add_space(6.0);
                 let max = varstotas_render::MAX_EXPORT_DIM;
@@ -274,7 +274,7 @@ impl VarstotasApp {
             let ortho = self.camera.ortho;
             let mut choice: Option<&str> = None;
             let resp = Modal::new(Id::new("export_drawing")).show(ctx, |ui| {
-                ui.set_width(340.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 340.0));
                 ui.heading(tr!("dialog-drawing-title"));
                 ui.add_space(6.0);
                 ui.label(RichText::new(tr!("dialog-drawing-intro")).color(theme::text_dim()));
@@ -344,7 +344,7 @@ impl VarstotasApp {
             let unit = self.doc.model.unit;
             let mut choice: Option<bool> = None;
             let resp = Modal::new(Id::new("text3d")).show(ctx, |ui| {
-                ui.set_width(360.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
                 ui.heading(tr!("dialog-text3d-title"));
                 ui.add_space(6.0);
                 let te = ui.add(egui::TextEdit::multiline(&mut p.text).desired_rows(3).desired_width(f32::INFINITY));
@@ -398,7 +398,7 @@ impl VarstotasApp {
         if self.show_templates && self.confirm.is_none() && self.autosave.recoveries.is_empty() {
             let mut picked: Option<Template> = None;
             let resp = Modal::new(Id::new("choose_template")).show(ctx, |ui| {
-                ui.set_width(380.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
                 ui.heading(tr!("dialog-template-title"));
                 ui.label(
                     RichText::new(tr!("dialog-template-intro"))
@@ -435,15 +435,19 @@ impl VarstotasApp {
                 self.about_icon = Some(ctx.load_texture("about_app_icon", image, egui::TextureOptions::LINEAR));
             }
             let resp = Modal::new(Id::new("about")).show(ctx, |ui| {
-                ui.set_width(540.0);
+                ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 540.0));
                 ui.add_space(8.0);
-                ui.horizontal_top(|ui| {
+                // a narrow page: the icon above the text
+                let narrow = ui.available_width() < 500.0;
+                let layout = if narrow { egui::Layout::top_down(egui::Align::Center) } else { egui::Layout::left_to_right(egui::Align::Min) };
+                ui.with_layout(layout, |ui| {
                     if let Some(icon) = &self.about_icon {
-                        ui.image((icon.id(), egui::vec2(156.0, 156.0)));
-                        ui.add_space(20.0);
+                        let side = if narrow { 112.0 } else { 156.0 };
+                        ui.image((icon.id(), egui::vec2(side, side)));
+                        ui.add_space(if narrow { 8.0 } else { 20.0 });
                     }
                     ui.vertical(|ui| {
-                        ui.set_max_width(340.0);
+                        ui.set_max_width(340.0f32.min(ui.available_width()));
                         ui.label(RichText::new(crate::APP_NAME).size(28.0).strong());
                         ui.add_space(4.0);
                         ui.label(RichText::new(tr!("dialog-about-version", version = env!("CARGO_PKG_VERSION"))).color(theme::text_dim()));

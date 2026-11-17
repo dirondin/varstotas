@@ -607,13 +607,13 @@ impl VarstotasApp {
             return;
         }
         let mut open = true;
-        egui::Window::new(tr!("uv-title"))
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("uv-title"))
             .id(egui::Id::new("uv_editor_window"))
             .open(&mut open)
             .default_size([620.0, 640.0])
             .default_pos([260.0, 150.0])
             .resizable(true)
-            .show(ctx, |ui| {
+            ).show(ctx, |ui| {
                 self.uv_toolbar(ui);
                 ui.separator();
                 // the canvas takes exactly what the status bar leaves, and the status bar is a

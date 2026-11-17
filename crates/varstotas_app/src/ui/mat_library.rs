@@ -812,7 +812,7 @@ impl VarstotasApp {
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let mut choice = None;
         let resp = egui::Modal::new(egui::Id::new("material_delete")).show(ctx, |ui| {
-            ui.set_width(360.0);
+            ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
             ui.heading(tr!("mat-delete-title"));
             ui.add_space(4.0);
             ui.label(tr!("library-delete-text", name = name.as_str()));

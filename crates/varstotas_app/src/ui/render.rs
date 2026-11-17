@@ -148,7 +148,7 @@ impl VarstotasApp {
         let tex = self.viewport.pt_texture();
         let mut job = self.viewport.pt.as_mut();
         let batch = self.render_window.batch.as_ref().map(|b| (b.next, b.written.len()));
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button(tr!("render-title")).on_hover_text(tr!("render-current-view")).clicked() {
                     start = true;

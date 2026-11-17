@@ -44,6 +44,8 @@ const ITEM: f32 = 60.0;
 const REST: f64 = 0.35;
 /// Narrower than this the panels fill the window.
 const NARROW: f32 = 700.0;
+/// A sheet's gap at the top of a phone's page (the page behind shows there).
+const SHEET_TOP: f32 = 24.0;
 /// The dock's tools, as many as fit, in this order.
 const DOCK_TOOLS: [ToolId; 6] = [ToolId::Select, ToolId::Line, ToolId::Rectangle, ToolId::PushPull, ToolId::Move, ToolId::Tape];
 
@@ -288,6 +290,66 @@ fn wanted(mode: UiMode, ctx: &egui::Context) -> bool {
     }
 }
 
+thread_local! {
+    /// This frame: the interface is compact, and the page is a phone's (narrow).
+    static FIT: std::cell::Cell<(bool, bool)> = const { std::cell::Cell::new((false, false)) };
+}
+
+/// A window as the compact interface shows it (call last on the builder): on a phone a sheet
+/// over the page, not moved or resized; on a tablet kept inside the page.
+pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Window<'a> {
+    let (on, phone) = FIT.get();
+    if !on {
+        return win;
+    }
+    let screen = ctx.content_rect();
+    if phone {
+        let sheet = Rect::from_min_max(screen.min + vec2(0.0, SHEET_TOP), screen.max);
+        let frame = egui::Frame::window(&ctx.global_style()).corner_radius(egui::CornerRadius { nw: 18, ne: 18, sw: 0, se: 0 }).inner_margin(egui::Margin::same(12));
+        // what a window lays out wider than a phone scrolls across
+        win.fixed_rect(sheet).collapsible(false).frame(frame).hscroll(true)
+    } else {
+        let inside = screen.shrink(MARGIN);
+        win.constrain_to(inside).max_size(inside.size())
+    }
+}
+
+/// This frame the interface is compact on a phone's page: windows are sheets, side by side
+/// layouts go one above the other.
+pub fn phone() -> bool {
+    FIT.get().1
+}
+
+/// A dialog's width `w`, narrower on a page that has no room for it.
+pub fn fit_width(ctx: &egui::Context, w: f32) -> f32 {
+    w.min(ctx.content_rect().width() - 56.0).max(160.0)
+}
+
+/// Finger-sized buttons and rows everywhere (`on`), or the theme's own.
+fn touch_style(ctx: &egui::Context, on: bool) {
+    const ROW: f32 = 34.0;
+    let is = ctx.global_style().spacing.interact_size.y == ROW;
+    if on == is {
+        return;
+    }
+    if on {
+        ctx.all_styles_mut(|s| {
+            s.spacing.interact_size.y = ROW;
+            s.spacing.button_padding = vec2(12.0, 7.0);
+            s.spacing.item_spacing = vec2(8.0, 8.0);
+            s.spacing.icon_width = 20.0;
+            s.spacing.icon_spacing = 8.0;
+        });
+    } else {
+        theme::apply(ctx);
+        let d = egui::style::Spacing::default();
+        ctx.all_styles_mut(|s| {
+            s.spacing.icon_width = d.icon_width;
+            s.spacing.icon_spacing = d.icon_spacing;
+        });
+    }
+}
+
 /// The page's main pointer is a finger (`pointer: coarse`).
 fn touch_screen() -> bool {
     #[cfg(target_arch = "wasm32")]
@@ -356,6 +418,9 @@ impl VarstotasApp {
     pub(crate) fn compact_frame(&mut self, ctx: &egui::Context) {
         let mode = if self.debug.script_active() && self.prefs.ui_mode == UiMode::Auto { UiMode::Classic } else { self.prefs.ui_mode };
         self.compact.on = wanted(mode, ctx);
+        let narrow = ctx.content_rect().width() < NARROW;
+        FIT.set((self.compact.on, self.compact.on && narrow));
+        touch_style(ctx, self.compact.on && (narrow || touch_screen()));
         if !self.compact.on {
             self.compact.panels = false;
             self.compact.numpad = false;

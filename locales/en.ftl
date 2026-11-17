@@ -1253,6 +1253,7 @@ prefs-cut-offcuts-clear = Remove all
 
 prefs-title = Preferences
 prefs-search = Search
+prefs-sections = Sections
 prefs-nothing-found = Nothing found
 prefs-reset = Reset
 prefs-reset-tip = This section's settings back to the defaults

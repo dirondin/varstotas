@@ -199,7 +199,7 @@ impl VarstotasApp {
         let pos = self.viewport.view_rect.min + vec2(40.0, 30.0);
         let frame = egui::Frame::window(&ctx.global_style()).fill(super::theme::card_bg());
         let win = self.placed(egui::Window::new(tr!("gen-editor-title")).id(egui::Id::new("Generator Editor")).open(&mut open), pos);
-        if let Some(r) = win.default_size([920.0, 600.0]).frame(frame).resizable(true).show(ctx, |ui| self.gen_editor_ui(ui)) {
+        if let Some(r) = crate::ui::compact::fit_window(ctx, win.default_size([920.0, 600.0]).frame(frame).resizable(true)).show(ctx, |ui| self.gen_editor_ui(ui)) {
             super::tray_lib::spot("ged:corner", r.response.rect.right_bottom() - vec2(4.0, 4.0));
         }
         if !open {

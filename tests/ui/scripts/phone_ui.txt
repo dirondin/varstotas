@@ -1,0 +1,45 @@
+# The compact interface on a phone's page: windows come as sheets over the page (not moved or
+# resized), Preferences as a list of sections with each section a page of its own, dialogs as
+# narrow as the page.
+box 0 0 0 400 300 200
+view iso
+zoom_extents
+action ui_compact
+window 400 860
+wait 30
+expect compact=(true None false false)
+screenshot shots/phone_ui.bmp
+action preferences
+wait 15
+screenshot shots/phone_prefs.bmp
+action click_spot prefs:General
+wait 10
+screenshot shots/phone_prefs_general.bmp
+action click_spot prefs_back
+wait 10
+action click_spot prefs:Interface
+wait 10
+screenshot shots/phone_prefs_interface.bmp
+action click_spot prefs_close
+wait 10
+action about
+wait 15
+screenshot shots/phone_about.bmp
+action click_spot about:close
+wait 5
+action cut_list
+wait 15
+screenshot shots/phone_cutlist.bmp
+action cut_list
+wait 5
+# a tablet: windows float, inside the page
+window 900 700
+wait 30
+action cut_list
+wait 15
+screenshot shots/tablet_cutlist.bmp
+action cut_list
+wait 5
+action ui_classic
+window 1400 900
+wait 30

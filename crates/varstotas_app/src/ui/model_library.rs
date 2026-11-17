@@ -468,7 +468,7 @@ impl VarstotasApp {
         }
         self.models.ensure(ctx);
         let mut open = true;
-        egui::Window::new(tr!("model-lib-title")).id(egui::Id::new("3D Library")).open(&mut open).default_pos([140.0, 160.0]).default_size([660.0, 580.0]).min_width(440.0).collapsible(false).show(ctx, |ui| self.models_ui(ui, ctx));
+        crate::ui::compact::fit_window(ctx, egui::Window::new(tr!("model-lib-title")).id(egui::Id::new("3D Library")).open(&mut open).default_pos([140.0, 160.0]).default_size([660.0, 580.0]).min_width(440.0).collapsible(false)).show(ctx, |ui| self.models_ui(ui, ctx));
         self.models.open &= open;
     }
 

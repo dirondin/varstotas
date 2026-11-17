@@ -242,7 +242,7 @@ impl VarstotasApp {
         let win = self.placed(win, pos);
         let w = &mut self.anim_window;
         let progress = w.run.as_ref().map(|r| r.progress());
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             ui.add_enabled_ui(!w.busy(), |ui| {
                 egui::Grid::new("anim_settings").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
                     ui.label(tr!("anim-animate"));

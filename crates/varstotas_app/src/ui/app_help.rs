@@ -775,7 +775,7 @@ impl VarstotasApp {
         let mut ask = None;
         let pos = self.viewport.view_rect.left_top() + egui::vec2(60.0, 30.0);
         let win = self.placed(egui::Window::new(tr!("help-window-title")).id(egui::Id::new("app_help")).open(&mut open).default_size([700.0, 640.0]).resizable(true), pos);
-        win.show(ctx, |ui| {
+        crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let h = &mut self.app_help;
             ui.horizontal(|ui| {
                 ui.label(tr!("help-search"));

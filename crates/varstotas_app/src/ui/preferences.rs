@@ -130,6 +130,8 @@ pub struct PrefsWindow {
     pub capture: Option<KeyCmd>,
     /// Interface: the available languages (code, own name), read when the section is shown.
     pub languages: Option<Vec<(String, String)>>,
+    /// On a phone: a section is shown, not the list of sections.
+    pub paged: bool,
 }
 
 /// The view of a new document (File → New, New from Template) — Preferences → View.
@@ -228,7 +230,12 @@ impl VarstotasApp {
             .resizable(true)
             .default_size([620.0, 460.0]);
         let win = self.placed(win, pos);
-        let shown = win.show(ctx, |ui| {
+        let phone = crate::ui::compact::phone();
+        let shown = crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
+            if phone {
+                self.prefs_phone(ui);
+                return;
+            }
             ui.horizontal_top(|ui| {
                 // the list of sections and the search
                 ui.vertical(|ui| {
@@ -269,6 +276,71 @@ impl VarstotasApp {
                                 });
                             }
                         });
+                        self.prefs_section(ui, section);
+                    });
+                });
+            });
+        });
+        if let Some(r) = shown {
+            // the title bar's ✕ (harness)
+            super::tray_lib::spot("prefs_close", egui::pos2(r.response.rect.max.x - 16.0, r.response.rect.min.y + 14.0));
+        }
+        if !open {
+            self.prefs_win.open = false;
+            self.prefs_win.capture = None;
+            self.prefs_win.paged = false;
+        }
+    }
+
+    /// Preferences on a phone: the sections as a list, a section as a page of its own with a
+    /// way back to the list.
+    fn prefs_phone(&mut self, ui: &mut egui::Ui) {
+        if !self.prefs_win.paged {
+            let r = ui.add(egui::TextEdit::singleline(&mut self.prefs_win.search).hint_text(tr!("prefs-search")).desired_width(f32::INFINITY));
+            super::tray_lib::spot("prefs_search", r.rect.center());
+            ui.add_space(4.0);
+            let search = self.prefs_win.search.clone();
+            egui::ScrollArea::vertical().id_salt("prefs_list").auto_shrink([false, false]).show(ui, |ui| {
+                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                    let mut any = false;
+                    for s in Section::ALL.into_iter().filter(|s| s.available() && s.matches(&search)) {
+                        any = true;
+                        let r = ui.add(egui::Button::new(s.name()).right_text("›").frame_when_inactive(false));
+                        super::tray_lib::spot(format!("prefs:{}", s.name()), r.rect.center());
+                        if r.clicked() {
+                            self.prefs_win.section = s;
+                            self.prefs_win.paged = true;
+                        }
+                    }
+                    if !any {
+                        note(ui, &tr!("prefs-nothing-found"));
+                    }
+                });
+            });
+            return;
+        }
+        let section = self.prefs_win.section;
+        ui.horizontal(|ui| {
+            let r = ui.button(format!("‹ {}", tr!("prefs-sections")));
+            super::tray_lib::spot("prefs_back", r.rect.center());
+            if r.clicked() {
+                self.prefs_win.paged = false;
+            }
+            if section != Section::CutList {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let r = ui.button(tr!("prefs-reset")).on_hover_text(tr!("prefs-reset-tip"));
+                    super::tray_lib::spot("prefs_reset", r.rect.center());
+                    if r.clicked() {
+                        self.reset_prefs_section(section);
+                    }
+                });
+            }
+        });
+        ui.heading(section.name());
+        egui::ScrollArea::vertical().id_salt("prefs_body").auto_shrink([false, false]).show(ui, |ui| self.prefs_section(ui, section));
+    }
+
+    fn prefs_section(&mut self, ui: &mut egui::Ui, section: Section) {
                         match section {
                             Section::General => self.prefs_general(ui),
                             Section::Drawing => self.prefs_drawing(ui),
@@ -282,18 +354,6 @@ impl VarstotasApp {
                             Section::Render => self.prefs_render(ui),
                             Section::CutList => self.prefs_cut_list(ui),
                         }
-                    });
-                });
-            });
-        });
-        if let Some(r) = shown {
-            // the title bar's ✕ (harness)
-            super::tray_lib::spot("prefs_close", egui::pos2(r.response.rect.max.x - 16.0, r.response.rect.min.y + 14.0));
-        }
-        if !open {
-            self.prefs_win.open = false;
-            self.prefs_win.capture = None;
-        }
     }
 
     fn reset_prefs_section(&mut self, s: Section) {
