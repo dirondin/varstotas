@@ -2635,6 +2635,10 @@ impl VarstotasApp {
             "report_problem" => Action::ReportProblem,
             "lock" => Action::LockSelected,
             "unlock_all" => Action::UnlockAll,
+            "help_touch" => {
+                self.open_app_help(crate::ui::app_help::Topic::Touch);
+                return;
+            }
             "ui_compact" | "ui_classic" => {
                 self.prefs.ui_mode = if name == "ui_compact" { crate::ui::compact::UiMode::Compact } else { crate::ui::compact::UiMode::Classic };
                 return;

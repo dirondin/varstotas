@@ -16,6 +16,7 @@ pub enum Topic {
     #[default]
     Start,
     Navigation,
+    Touch,
     Selecting,
     Drawing,
     Shapes,
@@ -47,6 +48,7 @@ pub enum Topic {
 pub const TOPICS: &[(Topic, &str)] = &[
     (Topic::Start, "help-topic-start"),
     (Topic::Navigation, "help-topic-navigation"),
+    (Topic::Touch, "help-topic-touch"),
     (Topic::Selecting, "help-topic-selecting"),
     (Topic::Drawing, "help-topic-drawing"),
     (Topic::Shapes, "help-topic-shapes"),
@@ -122,6 +124,7 @@ const NAVIGATION: &[B] = &[
     B::P("help-navigation-35"),
     B::P("help-navigation-12"),
     B::P("help-navigation-13"),
+    B::Sub(Topic::Touch, "help-navigation-36"),
     B::H("help-navigation-14"),
     B::P("help-navigation-15"),
     B::Tools(&[ToolId::Orbit, ToolId::Pan, ToolId::Zoom, ToolId::PositionCamera, ToolId::LookAround, ToolId::Walk]),
@@ -135,6 +138,25 @@ const NAVIGATION: &[B] = &[
     B::H("help-navigation-26"),
     B::P("help-navigation-27"),
     B::P("help-navigation-28"),
+];
+
+const TOUCH: &[B] = &[
+    B::H("help-touch-1"),
+    B::P("help-touch-2"),
+    B::Row("help-touch-3", "help-touch-4"),
+    B::Row("help-touch-5", "help-touch-6"),
+    B::Row("help-touch-7", "help-touch-8"),
+    B::Row("help-touch-9", "help-touch-10"),
+    B::Row("help-touch-11", "help-touch-12"),
+    B::P("help-touch-13"),
+    B::H("help-touch-14"),
+    B::Row("help-touch-15", "help-touch-16"),
+    B::Row("help-touch-17", "help-touch-18"),
+    B::Row("help-touch-19", "help-touch-20"),
+    B::Row("help-touch-21", "help-touch-22"),
+    B::H("help-touch-23"),
+    B::P("help-touch-24"),
+    B::Tip("help-touch-25"),
 ];
 
 const SELECTING: &[B] = &[
@@ -476,7 +498,11 @@ const PROBLEMS: &[B] = &[
 /// The topic `topic` is a subtopic of, shown under it in the list of topics.
 pub fn parent(topic: Topic) -> Option<Topic> {
     use Topic::*;
-    matches!(topic, WsParts | WsCutList | WsDrilling | WsJoinery | WsHardware | WsFittings | WsCarcass | WsAssembly).then_some(Workshop)
+    match topic {
+        WsParts | WsCutList | WsDrilling | WsJoinery | WsHardware | WsFittings | WsCarcass | WsAssembly => Some(Workshop),
+        Touch => Some(Navigation),
+        _ => None,
+    }
 }
 
 fn topic_name(topic: Topic) -> String {
@@ -487,6 +513,7 @@ fn page(topic: Topic) -> &'static [B] {
     match topic {
         Topic::Start => START,
         Topic::Navigation => NAVIGATION,
+        Topic::Touch => TOUCH,
         Topic::Selecting => SELECTING,
         Topic::Drawing => DRAWING,
         Topic::Shapes => SHAPES,
@@ -551,6 +578,8 @@ pub struct AppHelp {
     pub search: String,
     /// Bring the window to the front on the next frame.
     raise: bool,
+    /// On a phone: the list of topics is shown, not the topic.
+    listing: bool,
 }
 
 /// What a click in the guide asks the app to do.
@@ -758,6 +787,7 @@ impl VarstotasApp {
         self.app_help.open = true;
         self.app_help.raise = true;
         self.app_help.topic = topic;
+        self.app_help.listing = false;
         self.app_help.search.clear();
     }
 
@@ -775,17 +805,60 @@ impl VarstotasApp {
         let mut ask = None;
         let pos = self.viewport.view_rect.left_top() + egui::vec2(60.0, 30.0);
         let win = self.placed(egui::Window::new(tr!("help-window-title")).id(egui::Id::new("app_help")).open(&mut open).default_size([700.0, 640.0]).resizable(true), pos);
+        let phone = crate::ui::compact::phone();
         crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
             let h = &mut self.app_help;
             ui.horizontal(|ui| {
-                ui.label(tr!("help-search"));
-                let r = ui.add(egui::TextEdit::singleline(&mut h.search).hint_text(tr!("help-search-hint")).desired_width(240.0));
+                if phone && !h.listing && h.search.is_empty() {
+                    let r = ui.button(format!("‹ {}", tr!("help-topics")));
+                    super::tray_lib::spot("help:topics", r.rect.center());
+                    if r.clicked() {
+                        h.listing = true;
+                    }
+                } else {
+                    ui.label(tr!("help-search"));
+                }
+                let w = if phone { (ui.available_width() - 40.0).max(80.0) } else { 240.0 };
+                let r = ui.add(egui::TextEdit::singleline(&mut h.search).hint_text(tr!("help-search-hint")).desired_width(w));
                 if !h.search.is_empty() && ui.small_button("×").clicked() {
                     h.search.clear();
                     r.request_focus();
                 }
             });
             ui.separator();
+            if phone {
+                // the topics as a list, a topic as a page of its own
+                if h.listing && h.search.is_empty() {
+                    ScrollArea::vertical().id_salt("app_help_topics").auto_shrink([false, false]).show(ui, |ui| {
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                            let open = parent(h.topic).unwrap_or(h.topic);
+                            for (t, name) in TOPICS {
+                                let sub = parent(*t);
+                                if sub.is_some_and(|p| p != open) {
+                                    continue;
+                                }
+                                let text = if sub.is_some() { format!("    {}", tr!(name)) } else { tr!(name) };
+                                let r = ui.add(egui::Button::new(text).right_text("›").frame_when_inactive(false));
+                                super::tray_lib::spot(format!("help:topic:{t:?}"), r.rect.center());
+                                if r.clicked() {
+                                    h.topic = *t;
+                                    h.listing = false;
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    ScrollArea::vertical().id_salt(("app_help", h.topic as u8, h.search.is_empty())).auto_shrink([false, false]).show(ui, |ui| {
+                        let q = h.search.trim().to_lowercase();
+                        if q.is_empty() {
+                            topic_ui(ui, h.topic, &mut ask);
+                        } else {
+                            search_ui(ui, &q, &mut ask);
+                        }
+                    });
+                }
+                return;
+            }
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(190.0);

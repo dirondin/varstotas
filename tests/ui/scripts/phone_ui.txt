@@ -27,6 +27,16 @@ wait 15
 screenshot shots/phone_about.bmp
 action click_spot about:close
 wait 5
+action help_touch
+wait 15
+expect guide=(true Touch "")
+screenshot shots/phone_help.bmp
+action click_spot help:topics
+wait 10
+screenshot shots/phone_help_topics.bmp
+action click_spot help:topic:Navigation
+wait 10
+expect guide=(true Navigation "")
 action cut_list
 wait 15
 screenshot shots/phone_cutlist.bmp
