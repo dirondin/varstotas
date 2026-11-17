@@ -61,6 +61,8 @@ pub struct Compact {
     pub numpad: bool,
     /// The one side bar card the sheet shows (None: all of them).
     pub card: Option<&'static str>,
+    /// A tap the app makes itself (back on a window: its ✕), pressed and then let go.
+    tap: Option<(Pos2, bool)>,
 }
 
 /// An open ring menu.
@@ -298,7 +300,14 @@ fn wanted(mode: UiMode, ctx: &egui::Context) -> bool {
 thread_local! {
     /// This frame: the interface is compact, and the page is a phone's (narrow).
     static FIT: std::cell::Cell<(bool, bool)> = const { std::cell::Cell::new((false, false)) };
-    static INSETS: std::cell::Cell<Insets> = const { std::cell::Cell::new(Insets { top: 0.0, bottom: 0.0, left: 0.0, right: 0.0 }) };
+    static INSETS: std::cell::Cell<Insets> = const { std::cell::Cell::new(Insets { top: 0.0, bottom: 0.0, left: 0.0, right: 0.0, keyboard: 0.0 }) };
+    static TEST_KEYBOARD: std::cell::Cell<f32> = const { std::cell::Cell::new(0.0) };
+    /// The sheet's handle (a QA spot, given once the frame's spots are cleared).
+    static HANDLE: std::cell::Cell<Option<Pos2>> = const { std::cell::Cell::new(None) };
+    /// The dialog shown as a sheet the last frame.
+    static SHEET: std::cell::Cell<Option<egui::LayerId>> = const { std::cell::Cell::new(None) };
+    /// The sheet's handle is held (where it was pressed), and how far it is pulled down.
+    static SWIPE: std::cell::Cell<(Option<Pos2>, f32)> = const { std::cell::Cell::new((None, 0.0)) };
     /// Dialogs shown as sheets the last frame.
     static SHOWN: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
@@ -322,7 +331,8 @@ pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Windo
                 let m = |v: f32| (12.0 + v).min(100.0) as i8;
                 egui::Margin { left: m(i.left), right: m(i.right), top: m(i.top), bottom: m(i.bottom) }
             });
-        let sheet = screen;
+        // above the keyboard
+        let sheet = Rect::from_min_max(screen.min, screen.max - vec2(0.0, safe_area().keyboard));
         // what a window lays out wider than a phone scrolls across
         win.fixed_rect(sheet).collapsible(false).frame(frame).hscroll(true)
     } else {
@@ -355,9 +365,45 @@ pub fn fit_modal(ctx: &egui::Context, modal: egui::Modal) -> egui::Modal {
         .stroke(Stroke::NONE)
         .inner_margin(egui::Margin { left: SHEET_PAD as i8, right: SHEET_PAD as i8, top: 18, bottom: (SHEET_PAD + inset.bottom).min(100.0) as i8 });
     let mut modal = modal;
-    modal.area = modal.area.anchor(Align2::CENTER_BOTTOM, vec2(0.0, 0.0));
+    // above the keyboard; pulled down by its handle
+    modal.area = modal.area.anchor(Align2::CENTER_BOTTOM, vec2(0.0, SWIPE.get().1 - inset.keyboard));
     SHOWN.set(SHOWN.get() + 1);
+    SHEET.set(Some(modal.area.layer()));
     modal.frame(frame)
+}
+
+/// A row of a dialog's buttons (in place of `ui.horizontal`): on a phone one above another,
+/// the sheet wide and a finger tall.
+pub fn buttons<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    if !phone() {
+        return ui.horizontal(add).inner;
+    }
+    stacked(ui, add)
+}
+
+/// The buttons at the end of a dialog's row (in place of a right to left layout): on a phone
+/// one above another, the first (the default) on top.
+pub fn buttons_end<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    if !phone() {
+        return ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add).inner;
+    }
+    stacked(ui, add)
+}
+
+fn stacked<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = 44.0;
+        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), add).inner
+    })
+    .inner
+}
+
+/// Where a window's ✕ is on a phone (`rect`: the window, the whole page).
+pub fn close_at(ctx: &egui::Context, rect: Rect) -> Pos2 {
+    let font = egui::TextStyle::Heading.resolve(&ctx.global_style());
+    let h = ctx.fonts_mut(|f| f.row_height(&font));
+    let i = safe_area();
+    pos2(rect.max.x - 12.0 - i.right - h / 2.0, rect.min.y + 12.0 + i.top + h / 2.0)
 }
 
 /// The page's safe area: how far in from each side the notch, the rounded corners and the home
@@ -368,12 +414,26 @@ pub struct Insets {
     pub bottom: f32,
     pub left: f32,
     pub right: f32,
+    /// The on-screen keyboard's height (it covers the page's bottom).
+    pub keyboard: f32,
 }
 
 impl Insets {
     pub fn shrink(self, r: Rect) -> Rect {
-        Rect::from_min_max(r.min + vec2(self.left, self.top), r.max - vec2(self.right, self.bottom))
+        Rect::from_min_max(r.min + vec2(self.left, self.top), r.max - vec2(self.right, self.bottom.max(self.keyboard)))
     }
+}
+
+/// The QA spots found before the frame's were cleared.
+pub fn frame_spots() {
+    if let Some(p) = HANDLE.get() {
+        spot("sheet:handle", p);
+    }
+}
+
+/// The QA scripts' keyboard (`action keyboard N`).
+pub fn set_test_keyboard(h: f32) {
+    TEST_KEYBOARD.set(h);
 }
 
 pub fn safe_area() -> Insets {
@@ -390,14 +450,19 @@ fn read_safe_area(ctx: &egui::Context) -> Insets {
             let style = w.get_computed_style(&root).ok()??;
             let zoom = ctx.zoom_factor();
             let px = |name: &str| style.get_property_value(name).ok().and_then(|v| v.trim().trim_end_matches("px").parse::<f32>().ok()).unwrap_or(0.0) / zoom;
-            Some(Insets { top: px("--safe-top"), bottom: px("--safe-bottom"), left: px("--safe-left"), right: px("--safe-right") })
+            // the keyboard: what of the page the visual viewport leaves out at the bottom
+            let keyboard = w.visual_viewport().map_or(0.0, |v| {
+                let page = w.inner_height().ok().and_then(|h| h.as_f64()).unwrap_or(0.0);
+                ((page - v.height() - v.offset_top()).max(0.0) as f32) / zoom
+            });
+            Some(Insets { top: px("--safe-top"), bottom: px("--safe-bottom"), left: px("--safe-left"), right: px("--safe-right"), keyboard })
         };
         get().unwrap_or_default()
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = ctx;
-        Insets::default()
+        Insets { keyboard: TEST_KEYBOARD.get(), ..Default::default() }
     }
 }
 
@@ -405,10 +470,12 @@ fn read_safe_area(ctx: &egui::Context) -> Insets {
 fn touch_style(ctx: &egui::Context, on: bool) {
     const ROW: f32 = 34.0;
     const HEADING: f32 = 1.3;
+    const LONG: f32 = 0.6;
     let is = ctx.global_style().spacing.interact_size.y == ROW;
     if on == is {
         return;
     }
+    ctx.options_mut(|o| o.input_options.max_click_duration = if on { LONG as f64 } else { egui::InputOptions::default().max_click_duration });
     if on {
         ctx.all_styles_mut(|s| {
             s.spacing.interact_size.y = ROW;
@@ -419,6 +486,8 @@ fn touch_style(ctx: &egui::Context, on: bool) {
             // a finger is less precise than a mouse: a press this near a widget is its (the
             // touch targets grow to about 44 points without the rows growing)
             s.interaction.interact_radius = 12.0;
+            // a press held this long shows the tooltip and is no click
+            s.interaction.tooltip_delay = LONG;
             // a taller title bar: a bigger ✕ to hit
             if let Some(h) = s.text_styles.get_mut(&egui::TextStyle::Heading) {
                 h.size *= HEADING;
@@ -431,11 +500,17 @@ fn touch_style(ctx: &egui::Context, on: bool) {
             s.spacing.icon_width = d.spacing.icon_width;
             s.spacing.icon_spacing = d.spacing.icon_spacing;
             s.interaction.interact_radius = d.interaction.interact_radius;
+            s.interaction.tooltip_delay = d.interaction.tooltip_delay;
             if let Some(h) = s.text_styles.get_mut(&egui::TextStyle::Heading) {
                 h.size /= HEADING;
             }
         });
     }
+}
+
+/// An Escape this frame (closes a dialog).
+fn escape(ctx: &egui::Context) {
+    ctx.input_mut(|i| i.events.push(egui::Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }));
 }
 
 /// The page's history while the compact interface has something open (see `compact_back`).
@@ -576,6 +651,8 @@ impl VarstotasApp {
         FIT.set((self.compact.on, self.compact.on && narrow));
         INSETS.set(if self.compact.on { read_safe_area(ctx) } else { Insets::default() });
         let dialogs = SHOWN.replace(0);
+        let sheet = SHEET.replace(None).filter(|_| dialogs > 0);
+        self.sheet_swipe(ctx, sheet);
         self.compact_back(ctx, dialogs > 0);
         touch_style(ctx, self.compact.on && (narrow || touch_screen()));
         if !self.compact.on {
@@ -588,7 +665,20 @@ impl VarstotasApp {
     /// has open on top: the menus a level at a time, the number pad, the panels, a dialog. While
     /// something is open the page's history has an entry for it, so back does not leave the page.
     fn compact_back(&mut self, ctx: &egui::Context, dialog: bool) {
-        let open = self.compact.on && (self.compact.radial.is_some() || self.compact.numpad || self.compact.panels || dialog);
+        // a window on a phone: the topmost of those taking the whole page
+        let screen = ctx.content_rect();
+        let window = (FIT.get().1 && !dialog)
+            .then(|| {
+                ctx.memory(|m| {
+                    m.layer_ids()
+                        .filter(|l| l.order == egui::Order::Middle && m.areas().is_visible(l))
+                        .filter_map(|l| m.area_rect(l.id))
+                        .filter(|r| r.width() >= screen.width() - 1.0 && r.top() <= screen.top() + 1.0)
+                        .last()
+                })
+            })
+            .flatten();
+        let open = self.compact.on && (self.compact.radial.is_some() || self.compact.numpad || self.compact.panels || dialog || window.is_some());
         if back::take() {
             if let Some(r) = self.compact.radial.as_mut() {
                 if r.sub.pop().is_none() {
@@ -599,8 +689,10 @@ impl VarstotasApp {
             } else if self.compact.panels {
                 self.compact.panels = false;
             } else if dialog {
-                // a dialog closes on Escape
-                ctx.input_mut(|i| i.events.push(egui::Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }));
+                escape(ctx);
+            } else if let Some(r) = window {
+                // a tap on its ✕
+                self.compact.tap = Some((close_at(ctx, r), false));
             }
             ctx.request_repaint();
             return;
@@ -608,11 +700,59 @@ impl VarstotasApp {
         back::hold(open);
     }
 
+    /// A dialog's sheet is pulled down by its handle (a bar at its top): far enough, it closes.
+    fn sheet_swipe(&mut self, ctx: &egui::Context, sheet: Option<egui::LayerId>) {
+        const GRAB: f32 = 28.0;
+        HANDLE.set(None);
+        let Some(rect) = sheet.and_then(|l| ctx.memory(|m| m.area_rect(l.id))) else {
+            SWIPE.set((None, 0.0));
+            return;
+        };
+        let (mut from, before) = SWIPE.get();
+        let rect = rect.translate(vec2(0.0, -before));
+        let grab = Rect::from_min_size(rect.min, vec2(rect.width(), GRAB));
+        HANDLE.set(Some(grab.center()));
+        let (pressed, down, pos, origin) = ctx.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down(), i.pointer.latest_pos(), i.pointer.press_origin()));
+        if pressed && origin.is_some_and(|o| grab.contains(o)) {
+            from = origin;
+        }
+        let mut pull = 0.0;
+        if let Some(o) = from {
+            let d = pos.map_or(before, |p| (p.y - o.y).max(0.0));
+            if down {
+                pull = d;
+            } else {
+                from = None;
+                if d > (rect.height() * 0.25).min(120.0) {
+                    escape(ctx);
+                }
+            }
+            ctx.request_repaint();
+        }
+        SWIPE.set((from, pull));
+        // the handle
+        let bar = Rect::from_center_size(pos2(rect.center().x, rect.top() + pull + 9.0), vec2(36.0, 5.0));
+        ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, Id::new("sheet_handle"))).rect_filled(bar, 2.5, theme::text_dim().gamma_multiply(0.5));
+    }
+
+    /// The app's own tap (see `Compact::tap`), into the frame's input.
+    pub(crate) fn compact_raw_input(&mut self, raw: &mut egui::RawInput) {
+        let Some((at, pressed)) = self.compact.tap else { return };
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        if pressed {
+            raw.events.extend([button(false), egui::Event::PointerGone]);
+            self.compact.tap = None;
+        } else {
+            raw.events.extend([egui::Event::PointerMoved(at), button(true)]);
+            self.compact.tap = Some((at, true));
+        }
+    }
+
     /// For the QA scripts: (on, the ring's open level, panels, number pad).
     pub(crate) fn compact_dump(&self) -> String {
         let level = self.compact.radial.as_ref().and_then(|r| r.levels.last().copied());
         let sub = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
-        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools())
+        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?} compact_windows=(prefs {} about {})", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools(), self.prefs_win.open, self.show_about)
     }
 
     /// F8: the other interface.

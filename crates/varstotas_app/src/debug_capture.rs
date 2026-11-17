@@ -2635,6 +2635,10 @@ impl VarstotasApp {
             "report_problem" => Action::ReportProblem,
             "lock" => Action::LockSelected,
             "unlock_all" => Action::UnlockAll,
+            _ if name.starts_with("keyboard ") => {
+                crate::ui::compact::set_test_keyboard(name["keyboard ".len()..].trim().parse().unwrap_or(0.0));
+                return;
+            }
             "back" => {
                 crate::ui::compact::press_back();
                 return;

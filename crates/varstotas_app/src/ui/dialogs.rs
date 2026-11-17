@@ -24,11 +24,11 @@ impl VarstotasApp {
                 ui.label(tr!("dialog-save-question", name = self.doc.display_name()));
                 ui.label(RichText::new(tr!("dialog-save-warning")).color(theme::text_dim()));
                 ui.add_space(10.0);
-                ui.horizontal(|ui| {
+                crate::ui::compact::buttons(ui, |ui| {
                     if ui.button(tr!("dialog-dont-save")).clicked() {
                         choice = Some(1);
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    crate::ui::compact::buttons_end(ui, |ui| {
                         if ui.add(egui::Button::new(RichText::new(tr!("dialog-save")).strong())).clicked()
                             || ui.input(|i| i.key_pressed(egui::Key::Enter))
                         {
@@ -77,11 +77,11 @@ impl VarstotasApp {
                         .color(theme::text_dim()),
                 );
                 ui.add_space(10.0);
-                ui.horizontal(|ui| {
+                crate::ui::compact::buttons(ui, |ui| {
                     if ui.button(tr!("dialog-discard")).on_hover_text(tr!("dialog-discard-hint")).clicked() {
                         choice = Some(Some(false));
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    crate::ui::compact::buttons_end(ui, |ui| {
                         if ui.add(egui::Button::new(RichText::new(tr!("dialog-recover")).strong())).clicked() {
                             choice = Some(Some(true));
                         }
@@ -116,7 +116,7 @@ impl VarstotasApp {
                 );
                 ui.label(RichText::new(tr!("dialog-resize-keys")).small().color(theme::text_dim()));
                 ui.add_space(10.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     let yes = ui.add(egui::Button::new(RichText::new(tr!("dialog-yes")).strong()));
                     if yes.clicked() {
                         choice = Some(true);
@@ -161,7 +161,7 @@ impl VarstotasApp {
                 }
                 ui.label(RichText::new(&p.hint).small().color(theme::text_dim()));
                 ui.add_space(10.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     if ui.add(egui::Button::new(RichText::new(tr!("ok")).strong())).clicked() {
                         choice = Some(true);
                     }
@@ -239,7 +239,7 @@ impl VarstotasApp {
                         .color(theme::text_dim()),
                 );
                 ui.add_space(10.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     if ui.add(egui::Button::new(RichText::new(tr!("dialog-export")).strong())).clicked() {
                         choice = Some(true);
                     }
@@ -305,7 +305,7 @@ impl VarstotasApp {
                 ui.checkbox(&mut o.dims, tr!("dialog-drawing-dims"));
                 ui.checkbox(&mut o.sections, tr!("dialog-drawing-sections"));
                 ui.add_space(10.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     if ui.add(egui::Button::new(RichText::new(tr!("dialog-drawing-pdf")).strong())).clicked() {
                         choice = Some("pdf");
                     }
@@ -372,7 +372,7 @@ impl VarstotasApp {
                 });
                 ui.label(RichText::new(tr!("dialog-text3d-hint")).small().color(theme::text_dim()));
                 ui.add_space(10.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
                     if ui.add(egui::Button::new(RichText::new(tr!("dialog-text3d-place")).strong())).clicked() || enter {
                         choice = Some(true);
@@ -462,14 +462,14 @@ impl VarstotasApp {
                 ui.separator();
                 ui.add_space(6.0);
                 let mut close = false;
-                ui.horizontal(|ui| {
+                crate::ui::compact::buttons(ui, |ui| {
                     let r = ui.button(tr!("dialog-about-licences"));
                     super::tray_lib::spot("about:licences", r.rect.center());
                     if r.clicked() {
                         self.open_licences(crate::ui::licences::Tab::Varstotas);
                         close = true;
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    crate::ui::compact::buttons_end(ui, |ui| {
                         let r = ui.button(tr!("close"));
                         super::tray_lib::spot("about:close", r.rect.center());
                         close |= r.clicked();

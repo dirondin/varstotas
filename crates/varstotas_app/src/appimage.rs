@@ -166,7 +166,7 @@ impl VarstotasApp {
             ui.add_space(6.0);
             ui.label(tr!("appimage-offer-text"));
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
+            crate::ui::compact::buttons(ui, |ui| {
                 if ui.button(tr!("appimage-offer-add")).clicked() {
                     answer = Some(true);
                 }

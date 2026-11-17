@@ -468,7 +468,7 @@ impl VarstotasApp {
             ui.add_space(4.0);
             ui.label(RichText::new(tr!("library-undone-copies-stay")).weak());
             ui.add_space(10.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::ui::compact::buttons_end(ui, |ui| {
                 let label = if del.is_empty() { tr!("delete") } else { tr!("library-folder-delete-with", files = del.files) };
                 let r = ui.add(egui::Button::new(RichText::new(label).strong().color(Color32::from_rgb(200, 50, 40))));
                 super::tray_lib::spot("folder_delete:ok", r.rect.center());
@@ -528,7 +528,7 @@ impl VarstotasApp {
                 choice = Some(true);
             }
             ui.add_space(8.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::ui::compact::buttons_end(ui, |ui| {
                 if ui.add_enabled(ok, egui::Button::new(tr!(if ask.rename.is_some() { "library-rename" } else { "library-create" }))).clicked() {
                     choice = Some(true);
                 }
@@ -608,8 +608,8 @@ impl VarstotasApp {
                 }
             }
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::ui::compact::buttons(ui, |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     if ui.add(egui::Button::new(RichText::new(tr!("delete")).strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
                         choice = Some(true);
                     }
@@ -681,8 +681,8 @@ impl VarstotasApp {
             ui.label(tr!("library-delete-def-text", name = name.as_str(), uses = uses));
             ui.label(RichText::new(tr!("library-undo-brings-them-back")).weak());
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::ui::compact::buttons(ui, |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     if ui.add(egui::Button::new(RichText::new(tr!("delete")).strong().color(Color32::from_rgb(200, 50, 40)))).clicked() {
                         choice = Some(true);
                     }
@@ -723,8 +723,8 @@ impl VarstotasApp {
                 choice = Some(true);
             }
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            crate::ui::compact::buttons(ui, |ui| {
+                crate::ui::compact::buttons_end(ui, |ui| {
                     if ui.add_enabled(!text.trim().is_empty(), egui::Button::new(RichText::new(tr!("library-rename")).strong())).clicked() {
                         choice = Some(true);
                     }

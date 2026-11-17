@@ -244,7 +244,7 @@ impl VarstotasApp {
             ui.add_space(4.0);
             ui.label(format!("A script or AI agent connected to Varstotas wants to:\n\n{what}"));
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            crate::ui::compact::buttons(ui, |ui| {
                 if ui.button("Allow").clicked() {
                     answer = Some(true);
                 }

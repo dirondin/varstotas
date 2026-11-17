@@ -2787,6 +2787,7 @@ impl eframe::App for VarstotasApp {
         if compact {
             // the menu bar collects the QA targets otherwise
             crate::ui::tray_lib::clear_spots();
+            crate::ui::compact::frame_spots();
         } else {
             egui::Panel::top("menu_bar")
                 .frame(crate::ui::theme::bar_frame(&ctx))
@@ -3012,6 +3013,7 @@ impl eframe::App for VarstotasApp {
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         self.debug.raw_input_hook(raw_input);
+        self.compact_raw_input(raw_input);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

@@ -343,10 +343,7 @@ impl VarstotasApp {
         if let Some(r) = shown {
             // the title bar's ✕ (harness)
             let at = if phone {
-                // the whole page: the frame's margin and a taller title
-                let font = egui::TextStyle::Heading.resolve(&ctx.global_style());
-                let h = ctx.fonts_mut(|f| f.row_height(&font));
-                egui::pos2(r.response.rect.max.x - 12.0 - h / 2.0, r.response.rect.min.y + 12.0 + crate::ui::compact::safe_area().top + h / 2.0)
+                crate::ui::compact::close_at(ctx, r.response.rect)
             } else {
                 egui::pos2(r.response.rect.max.x - 16.0, r.response.rect.min.y + 14.0)
             };

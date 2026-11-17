@@ -20,15 +20,32 @@ wait 10
 action click_spot prefs:Interface
 wait 10
 screenshot shots/phone_prefs_interface.bmp
-action click_spot prefs_close
+# back closes a window (a tap on its ✕)
+expect compact_windows=(prefs true
+action back
 wait 10
+expect compact_windows=(prefs false
 # a dialog: a sheet across the bottom; back (Android's, the browser's) closes it
 action about
 wait 15
 screenshot shots/phone_about.bmp
 action back
 wait 10
-screenshot shots/phone_about_back.bmp
+expect compact_windows=(prefs false about false)
+# pulled down by its handle, the sheet closes
+action about
+wait 15
+action drag_spot sheet:handle 0 220
+wait 15
+expect compact_windows=(prefs false about false)
+# the on-screen keyboard: the sheet stays above it
+action keyboard 300
+action about
+wait 15
+screenshot shots/phone_about_keyboard.bmp
+action back
+wait 10
+action keyboard 0
 # back closes the menus a level at a time, then the panels
 action click_spot compact:menu
 wait 10
