@@ -382,6 +382,14 @@ fn parse_raw(rest: &str) -> Option<RawCmd> {
             let v: Vec<f32> = w.filter_map(|t| t.parse().ok()).collect();
             RawCmd::Finger(id, phase, Pos2::new(*v.first()?, *v.get(1)?))
         }
+        // `pen <down|move|up|hover|leave|erase_down|erase_move|erase_up> x y`: the pen as a
+        // browser reports it
+        "pen" => {
+            let mut w = args.split_whitespace();
+            let what = w.next()?.to_ascii_lowercase();
+            let v: Vec<f32> = w.filter_map(|t| t.parse().ok()).collect();
+            RawCmd::Pen(what, Pos2::new(*v.first()?, *v.get(1)?))
+        }
         "rclick" => RawCmd::RightClick(p(0)?),
         "dblclick" => RawCmd::DoubleClick(p(0)?),
         "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
@@ -426,6 +434,7 @@ pub enum RawCmd {
     /// `raw tap x y` — move + press + release in ONE frame (trackpad tap-to-click).
     Tap(Pos2),
     Finger(u64, egui::TouchPhase, Pos2),
+    Pen(String, Pos2),
     /// `raw rclick x y` — move, secondary press, release (3 frames): context menu.
     RightClick(Pos2),
     /// `raw dblclick x y` — move, press, release, press, release (5 frames).
@@ -2679,6 +2688,12 @@ impl VarstotasApp {
             modifiers: m,
         };
         let key = |k: Key, pressed: bool| Event::Key { key: k, physical_key: None, pressed, repeat: false, modifiers: m };
+        // what a browser would say pressed
+        crate::pointer::set_kind(match cmd {
+            RawCmd::Finger(..) => crate::pointer::Kind::Touch,
+            RawCmd::Pen(..) => crate::pointer::Kind::Pen,
+            _ => crate::pointer::Kind::Mouse,
+        });
         let frames: Vec<Vec<Event>> = match cmd {
             RawCmd::Move(p) => vec![vec![mv(p)]],
             RawCmd::Down(p) => vec![vec![mv(p)], vec![btn(p, true)]],
@@ -2687,16 +2702,56 @@ impl VarstotasApp {
             RawCmd::Tap(p) => vec![vec![mv(p), btn(p, true), btn(p, false)]],
             RawCmd::Finger(id, phase, p) => {
                 let touch = Event::Touch { device_id: egui::TouchDeviceId(0), id: egui::TouchId(id), phase, pos: p + origin, force: None };
-                let mut f = Vec::new();
-                if id == 0 {
-                    match phase {
-                        egui::TouchPhase::Start => f.extend([mv(p), btn(p, true)]),
-                        egui::TouchPhase::Move => f.push(mv(p)),
-                        _ => f.extend([btn(p, false), Event::PointerGone]),
+                // finger 0: the pointer event's press first (eframe runs a frame on it), then
+                // the touch event's
+                match (id, phase) {
+                    (0, egui::TouchPhase::Start) => vec![vec![mv(p), btn(p, true)], vec![btn(p, true), touch]],
+                    (0, egui::TouchPhase::Move) => vec![vec![mv(p), touch]],
+                    (0, _) => vec![vec![btn(p, false)], vec![btn(p, false), touch, Event::PointerGone]],
+                    _ => vec![vec![touch]],
+                }
+            }
+            RawCmd::Pen(what, p) => {
+                use crate::pointer::{PenEvent, push_pen, set_pen_down};
+                let at = p + origin;
+                let touch = |phase| Event::Touch { device_id: egui::TouchDeviceId(0), id: egui::TouchId(100), phase, pos: at, force: None };
+                match what.as_str() {
+                    "down" => {
+                        set_pen_down(Some(at));
+                        push_pen(PenEvent::Down(at));
+                        vec![vec![mv(p), btn(p, true)], vec![btn(p, true), touch(egui::TouchPhase::Start)]]
+                    }
+                    "move" => {
+                        set_pen_down(Some(at));
+                        push_pen(PenEvent::Move(at));
+                        vec![vec![mv(p), touch(egui::TouchPhase::Move)]]
+                    }
+                    "up" => {
+                        set_pen_down(None);
+                        push_pen(PenEvent::Up(at));
+                        vec![vec![btn(p, false)], vec![btn(p, false), touch(egui::TouchPhase::End)]]
+                    }
+                    "hover" => {
+                        push_pen(PenEvent::Hover(at));
+                        vec![vec![]]
+                    }
+                    "leave" => {
+                        push_pen(PenEvent::Leave);
+                        vec![vec![]]
+                    }
+                    "erase_down" => {
+                        push_pen(PenEvent::EraseDown(at));
+                        vec![vec![]]
+                    }
+                    "erase_move" => {
+                        push_pen(PenEvent::EraseMove(at));
+                        vec![vec![]]
+                    }
+                    _ => {
+                        push_pen(PenEvent::EraseUp(at));
+                        vec![vec![]]
                     }
                 }
-                f.push(touch);
-                vec![f]
             }
             RawCmd::Scroll(p, dy) => {
                 // A trackpad swipe: egui applies it at once (a wheel notch is smoothed over time).

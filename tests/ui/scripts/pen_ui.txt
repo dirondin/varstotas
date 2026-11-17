@@ -1,0 +1,39 @@
+# The pen: a mouse that hovers (no loupe, its press is the tool's at once), fingers under it
+# are a palm, its eraser end erases with the Eraser tool for the stroke.
+box 0 0 0 400 300 200
+view iso
+zoom_extents
+wait 10
+action ui_compact
+wait 10
+tool rectangle
+# hover shows the snap before the pen touches
+raw pen hover 300 760
+wait 3
+screenshot shots/pen_hover.bmp
+raw pen down 300 760
+wait 2
+raw pen up 300 760
+wait 3
+# a palm comes down, then the pen: the palm clicks nothing
+raw finger 0 down 900 300
+wait 2
+raw pen hover 440 860
+wait 2
+raw pen down 440 860
+wait 2
+raw pen up 440 860
+wait 3
+raw finger 0 up 900 300
+wait 5
+expect model_faces=7
+expect tool=Rectangle 
+# the eraser end: the Eraser for the stroke, then the tool again
+raw pen erase_down 300 760
+wait 2
+raw pen erase_move 302 762
+wait 2
+raw pen erase_up 302 762
+wait 5
+expect model_faces=6
+expect tool=Rectangle 

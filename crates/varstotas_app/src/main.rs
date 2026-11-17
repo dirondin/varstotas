@@ -46,6 +46,7 @@ mod templates;
 mod text3d;
 mod textures;
 mod thumbs;
+mod pointer;
 mod touch;
 mod vector_export;
 mod tools;

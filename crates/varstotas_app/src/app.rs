@@ -540,6 +540,9 @@ pub(crate) struct ScenePlayer {
     pub wait: f64,
 }
 
+/// Fingers this soon after the pen (seconds) are a palm resting on the screen.
+const PALM_SECS: f64 = 1.5;
+
 pub struct VarstotasApp {
     pub(crate) doc: Document,
     pub(crate) camera: Camera,
@@ -605,6 +608,12 @@ pub struct VarstotasApp {
     pub(crate) compact: crate::ui::compact::Compact,
     /// Fingers on the view.
     pub(crate) touch: crate::touch::Touch,
+    /// When a pen was last on or above the screen (input time): fingers meanwhile are a palm.
+    pen_seen: f64,
+    /// The tool the pen's eraser took over from, while it erases.
+    pen_erasing: Option<ToolId>,
+    /// The pen is over the view (hovering or touching): the cursor is where it is.
+    pen_over: bool,
     pub(crate) last_modifiers: Modifiers,
     /// A text field had keyboard focus last frame: Escape / Enter that just released it must
     /// not also reach the tools (e.g. clear the selection).
@@ -809,6 +818,9 @@ impl VarstotasApp {
             nav_button_rects: Vec::new(),
             compact: Default::default(),
             touch: Default::default(),
+            pen_seen: f64::NEG_INFINITY,
+            pen_erasing: None,
+            pen_over: false,
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
@@ -1260,8 +1272,23 @@ impl VarstotasApp {
         // Scripted runs drive the tools themselves; a real mouse resting over the window must
         // not inject pointer events (e.g. a move with the button up cancels a scripted drag).
         let events = if self.debug.synthetic_input() { Vec::new() } else { events };
+        // what the pointer is: a pen is a mouse that also hovers, and fingers under it are a palm
+        let kind = crate::pointer::kind();
+        let pen_at = crate::pointer::pen_down();
+        let now = ctx.input(|i| i.time);
+        let pen = kind == crate::pointer::Kind::Pen;
+        if pen {
+            if self.touch.active() {
+                self.touch.call_off();
+            }
+            self.pen_seen = now;
+        }
+        let palm = now - self.pen_seen < PALM_SECS;
+        let layer = response.layer_id;
+        let on_view = |p: egui::Pos2| rect.contains(p) && !on_hud(p) && ctx.layer_id_at(p).is_none_or(|l| l == layer);
+        self.pen_events(rect, &on_view, crate::pointer::take_pen_events(), modifiers);
         // two or more fingers navigate; a press the tool had from the first is called off
-        if let Some(g) = self.touch.update(&events) {
+        if let Some(g) = self.touch.update(&events, pen_at) {
             if self.tool_pressed {
                 self.tool_pressed = false;
                 self.press_local = None;
@@ -1275,10 +1302,13 @@ impl VarstotasApp {
         }
         // a finger runs the tool by its release (the navigation tools take its drag)
         let finger_clicks = !matches!(self.tool.id(), ToolId::Orbit | ToolId::Pan | ToolId::Zoom | ToolId::LookAround | ToolId::Walk);
+        // a browser says what pressed before its touch comes; a touch screen sends the touch
+        let finger = kind == crate::pointer::Kind::Touch || (kind != crate::pointer::Kind::Pen && self.touch.active());
         for ev in events {
             match ev {
                 egui::Event::PointerMoved(p) => {
-                    if self.touch.gestured() && self.touch.active() {
+                    // the pen comes on its own (`pen_events`)
+                    if pen || (self.touch.gestured() && self.touch.active()) {
                         continue;
                     }
                     if over || self.tool_pressed || self.touch.pending.is_some() {
@@ -1302,9 +1332,19 @@ impl VarstotasApp {
                     }
                     // a finger: its press waits, the tool sees it move as the mouse's hover, and its
                     // release clicks there (a second finger makes it navigation's)
+                    if button == PointerButton::Primary && pen {
+                        continue;
+                    }
                     if button == PointerButton::Primary {
                         let local = (pos - rect.min).to_pos2();
-                        if pressed && finger_clicks && self.touch.active() {
+                        // a browser presses twice for a touch (its pointer and its touch event)
+                        if pressed && self.tool_pressed {
+                            continue;
+                        }
+                        if pressed && finger && palm {
+                            continue;
+                        }
+                        if pressed && finger_clicks && finger {
                             if over && rect.contains(pos) && !on_hud(pos) {
                                 self.touch.pending = Some(local);
                                 self.last_pointer = Some(local);
@@ -1394,8 +1434,60 @@ impl VarstotasApp {
                 self.tool.cursor()
             };
             ctx.set_cursor_icon(icon);
-        } else if !self.tool_pressed && !self.debug.synthetic_input() {
+        } else if !self.tool_pressed && !self.debug.synthetic_input() && !(pen && self.pen_over) {
             self.last_pointer = None;
+        }
+    }
+
+    /// The pen: a mouse that also hovers, its eraser end the Eraser tool for the stroke.
+    /// `on_view`: a point on the view, not under its buttons or a window.
+    fn pen_events(&mut self, rect: egui::Rect, on_view: &dyn Fn(Pos2) -> bool, events: Vec<crate::pointer::PenEvent>, modifiers: Modifiers) {
+        use crate::pointer::PenEvent;
+        for e in events {
+            let (PenEvent::Hover(p) | PenEvent::Down(p) | PenEvent::Move(p) | PenEvent::Up(p) | PenEvent::EraseDown(p) | PenEvent::EraseMove(p) | PenEvent::EraseUp(p)) = e else {
+                self.pen_over = false;
+                continue;
+            };
+            let local = (p - rect.min).to_pos2();
+            let delta = self.last_pointer.map(|l| local - l).unwrap_or_default();
+            self.pen_over = on_view(p);
+            match e {
+                PenEvent::Hover(_) | PenEvent::Move(_) | PenEvent::EraseMove(_) if self.tool_pressed || on_view(p) => {
+                    self.last_pointer = Some(local);
+                    let pi = self.pointer_info(local, delta, None, self.tool_pressed);
+                    self.with_tool(pi, |t, c| t.on_pointer_move(c));
+                }
+                PenEvent::Down(_) | PenEvent::EraseDown(_) if !self.tool_pressed && on_view(p) => {
+                    if matches!(e, PenEvent::EraseDown(_)) && self.tool.id() != ToolId::Eraser {
+                        self.pen_erasing = Some(self.tool.id());
+                        self.set_tool(ToolId::Eraser);
+                    }
+                    if self.flash.as_ref().is_some_and(|f| f.2) {
+                        self.flash = None;
+                    }
+                    self.last_modifiers = modifiers;
+                    self.tool_pressed = true;
+                    self.last_pointer = Some(local);
+                    self.press_local = Some(local);
+                    let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(PointerButton::Primary), true);
+                    self.with_tool(pi, |t, c| t.on_pointer_down(c));
+                }
+                PenEvent::Up(_) | PenEvent::EraseUp(_) if self.tool_pressed => {
+                    self.tool_pressed = false;
+                    self.last_pointer = Some(local);
+                    let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(PointerButton::Primary), false);
+                    self.with_tool(pi, |t, c| t.on_pointer_up(c));
+                    if let Some(p0) = self.press_local.take()
+                        && p0.distance(local) < 4.0
+                    {
+                        self.after_primary_click(local, modifiers);
+                    }
+                    if let Some(id) = self.pen_erasing.take() {
+                        self.set_tool(id);
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -2781,8 +2873,9 @@ impl eframe::App for VarstotasApp {
             self.joints_overlay(&mut o3, &mut o2);
             self.joint_hardware_overlay(&mut o3);
             self.fitting_holes_overlay(&mut o3);
-            let cursor = response.hover_pos().or_else(|| {
-                let p = self.last_pointer.filter(|_| self.debug.script_active())?;
+            let pen_cursor = self.pen_over && crate::pointer::kind() == crate::pointer::Kind::Pen;
+            let cursor = response.hover_pos().filter(|_| !pen_cursor).or_else(|| {
+                let p = self.last_pointer.filter(|_| self.debug.script_active() || pen_cursor)?;
                 Some(self.viewport.rect.min + p.to_vec2())
             });
             self.nav_button_rects.clear();

@@ -24,6 +24,8 @@ const TWIST_START: f32 = 0.2;
 pub struct Touch {
     /// The fingers down, by id, at their screen points.
     fingers: BTreeMap<u64, Pos2>,
+    /// Touches that are the pen's (a browser reports the pen as a touch too).
+    pen_touches: std::collections::BTreeSet<u64>,
     /// Two or more fingers were down since the first one went down: its press is no click.
     gestured: bool,
     /// A finger's press kept for its release (view-local point where it went down).
@@ -49,13 +51,24 @@ pub struct Gesture {
 }
 
 impl Touch {
-    /// Takes a frame's events; the navigation asked for by two or more fingers.
-    pub fn update(&mut self, events: &[Event]) -> Option<Gesture> {
+    /// Takes a frame's events, `pen` being where the pen touches the screen; the navigation
+    /// asked for by two or more fingers.
+    pub fn update(&mut self, events: &[Event], pen: Option<Pos2>) -> Option<Gesture> {
         if self.fingers.is_empty() {
             self.gestured = false;
         }
         for e in events {
             if let Event::Touch { id, phase, pos, .. } = e {
+                // the pen's own touch is no finger
+                if *phase == TouchPhase::Start && pen.is_some_and(|p| p.distance(*pos) < 6.0) {
+                    self.pen_touches.insert(id.0);
+                }
+                if self.pen_touches.contains(&id.0) {
+                    if matches!(phase, TouchPhase::End | TouchPhase::Cancel) {
+                        self.pen_touches.remove(&id.0);
+                    }
+                    continue;
+                }
                 match phase {
                     TouchPhase::Start | TouchPhase::Move => {
                         self.fingers.insert(id.0, *pos);
@@ -98,6 +111,12 @@ impl Touch {
         };
         self.shape = Some((n, center, spread, angle));
         Some(g)
+    }
+
+    /// The fingers' press is not the tool's (the pen came: a palm on the screen).
+    pub fn call_off(&mut self) {
+        self.pending = None;
+        self.gestured = true;
     }
 
     /// A finger is down.
@@ -185,25 +204,25 @@ mod tests {
     #[test]
     fn two_fingers_pan_and_pinch() {
         let mut t = Touch::default();
-        assert!(t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0)]).is_none());
-        assert!(t.update(&[touch(1, TouchPhase::Start, 200.0, 100.0)]).unwrap().started);
-        let g = t.update(&[touch(0, TouchPhase::Move, 90.0, 110.0), touch(1, TouchPhase::Move, 230.0, 110.0)]).unwrap();
+        assert!(t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0)], None).is_none());
+        assert!(t.update(&[touch(1, TouchPhase::Start, 200.0, 100.0)], None).unwrap().started);
+        let g = t.update(&[touch(0, TouchPhase::Move, 90.0, 110.0), touch(1, TouchPhase::Move, 230.0, 110.0)], None).unwrap();
         assert_eq!(g.pan, Vec2::new(10.0, 10.0));
         assert!((g.zoom - 1.4).abs() < 1e-4);
         assert_eq!(g.twist, 0.0);
         assert!(t.gestured());
-        t.update(&[touch(0, TouchPhase::End, 90.0, 110.0), touch(1, TouchPhase::End, 230.0, 110.0)]);
+        t.update(&[touch(0, TouchPhase::End, 90.0, 110.0), touch(1, TouchPhase::End, 230.0, 110.0)], None);
         assert!(!t.active());
     }
 
     #[test]
     fn a_turn_past_the_wobble() {
         let mut t = Touch::default();
-        t.update(&[touch(0, TouchPhase::Start, 0.0, 0.0), touch(1, TouchPhase::Start, 100.0, 0.0)]);
+        t.update(&[touch(0, TouchPhase::Start, 0.0, 0.0), touch(1, TouchPhase::Start, 100.0, 0.0)], None);
         // a small turn is a pinch's wobble
-        let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 10.0)]).unwrap();
+        let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 10.0)], None).unwrap();
         assert_eq!(g.twist, 0.0);
-        let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 40.0)]).unwrap();
+        let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 40.0)], None).unwrap();
         assert!(g.twist > 0.2);
     }
 }
