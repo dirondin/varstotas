@@ -17,7 +17,7 @@ impl VarstotasApp {
         self.folder_delete_dialog(ctx);
         if let Some(pending) = self.confirm.clone() {
             let mut choice: Option<u8> = None;
-            let resp = Modal::new(Id::new("confirm_save")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("confirm_save"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
                 ui.heading(tr!("dialog-save-title"));
                 ui.add_space(4.0);
@@ -64,7 +64,7 @@ impl VarstotasApp {
             && let Some(r) = self.autosave.recoveries.first().cloned()
         {
             let mut choice: Option<Option<bool>> = None;
-            let resp = Modal::new(Id::new("recover_autosave")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("recover_autosave"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 400.0));
                 ui.heading(tr!("dialog-recover-title"));
                 ui.add_space(4.0);
@@ -105,7 +105,7 @@ impl VarstotasApp {
         {
             let mut choice: Option<bool> = None;
             let question = tr!(if self.doc.active_path.is_empty() { "dialog-resize-model" } else { "dialog-resize-group" });
-            let resp = Modal::new(Id::new("confirm_resize")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("confirm_resize"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
                 ui.heading(tr!("dialog-resize-title"));
                 ui.add_space(4.0);
@@ -143,7 +143,7 @@ impl VarstotasApp {
 
         if let Some(mut p) = self.text_prompt.clone() {
             let mut choice: Option<bool> = None;
-            let resp = Modal::new(Id::new("text_prompt")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("text_prompt"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
                 ui.heading(&p.title);
                 ui.add_space(4.0);
@@ -195,7 +195,7 @@ impl VarstotasApp {
             let ppp = ctx.pixels_per_point();
             let aspect = (vp.x / vp.y.max(1.0)).max(1e-3) as f64;
             let mut choice: Option<bool> = None;
-            let resp = Modal::new(Id::new("export_png")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("export_png"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 340.0));
                 ui.heading(tr!("dialog-export-title"));
                 ui.add_space(6.0);
@@ -273,7 +273,7 @@ impl VarstotasApp {
         if let Some(mut o) = self.vector_dialog.clone() {
             let ortho = self.camera.ortho;
             let mut choice: Option<&str> = None;
-            let resp = Modal::new(Id::new("export_drawing")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("export_drawing"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 340.0));
                 ui.heading(tr!("dialog-drawing-title"));
                 ui.add_space(6.0);
@@ -397,7 +397,7 @@ impl VarstotasApp {
 
         if self.show_templates && self.confirm.is_none() && self.autosave.recoveries.is_empty() {
             let mut picked: Option<Template> = None;
-            let resp = Modal::new(Id::new("choose_template")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("choose_template"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
                 ui.heading(tr!("dialog-template-title"));
                 ui.label(
@@ -434,7 +434,7 @@ impl VarstotasApp {
             {
                 self.about_icon = Some(ctx.load_texture("about_app_icon", image, egui::TextureOptions::LINEAR));
             }
-            let resp = Modal::new(Id::new("about")).show(ctx, |ui| {
+            let resp = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("about"))).show(ctx, |ui| {
                 ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 540.0));
                 ui.add_space(8.0);
                 // a narrow page: the icon above the text

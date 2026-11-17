@@ -238,7 +238,7 @@ impl VarstotasApp {
         };
         let what = what.clone();
         let mut answer = None;
-        egui::Modal::new(egui::Id::new("bridge_confirm")).show(ctx, |ui| {
+        crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("bridge_confirm"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
             ui.heading("External script");
             ui.add_space(4.0);

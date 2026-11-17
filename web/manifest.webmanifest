@@ -1,0 +1,11 @@
+{
+  "name": "Varstotas",
+  "short_name": "Varstotas",
+  "description": "A light 3D modeler for drawing and building",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#2b2d31",
+  "theme_color": "#2b2d31",
+  "icons": [{ "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }]
+}

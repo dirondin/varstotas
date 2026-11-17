@@ -160,7 +160,7 @@ impl VarstotasApp {
             return;
         }
         let mut answer = None;
-        Modal::new(Id::new("appimage_offer")).show(ctx, |ui| {
+        crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("appimage_offer"))).show(ctx, |ui| {
             ui.set_max_width(crate::ui::compact::fit_width(ui.ctx(), 460.0));
             ui.heading(tr!("appimage-offer-title"));
             ui.add_space(6.0);

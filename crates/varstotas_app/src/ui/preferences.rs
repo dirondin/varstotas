@@ -221,7 +221,7 @@ impl VarstotasApp {
                 super::icons::paint_icon(ui.painter(), r, t.icon(), false);
                 ui.label(t.name());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    for (glyph, d, ok) in [("✕", 0, n > 1), ("⏷", 1, i + 1 < n), ("⏶", -1, i > 0)] {
+                    for (glyph, d, ok) in [("×", 0, n > 1), ("⏷", 1, i + 1 < n), ("⏶", -1, i > 0)] {
                         let r = ui.add_enabled(ok, egui::Button::new(glyph).small());
                         super::tray_lib::spot(format!("prefs_dock:{t:?}:{d}"), r.rect.center());
                         if r.clicked() {
@@ -342,7 +342,15 @@ impl VarstotasApp {
         });
         if let Some(r) = shown {
             // the title bar's ✕ (harness)
-            super::tray_lib::spot("prefs_close", egui::pos2(r.response.rect.max.x - 16.0, r.response.rect.min.y + 14.0));
+            let at = if phone {
+                // the whole page: the frame's margin and a taller title
+                let font = egui::TextStyle::Heading.resolve(&ctx.global_style());
+                let h = ctx.fonts_mut(|f| f.row_height(&font));
+                egui::pos2(r.response.rect.max.x - 12.0 - h / 2.0, r.response.rect.min.y + 12.0 + crate::ui::compact::safe_area().top + h / 2.0)
+            } else {
+                egui::pos2(r.response.rect.max.x - 16.0, r.response.rect.min.y + 14.0)
+            };
+            super::tray_lib::spot("prefs_close", at);
         }
         if !open {
             self.prefs_win.open = false;

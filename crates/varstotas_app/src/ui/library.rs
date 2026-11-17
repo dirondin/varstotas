@@ -437,7 +437,7 @@ impl VarstotasApp {
         let Some(del) = self.library.folder_delete.clone() else { return };
         let name = del.dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let mut choice = None;
-        let resp = egui::Modal::new(egui::Id::new("library_folder_delete")).show(ctx, |ui| {
+        let resp = crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("library_folder_delete"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 380.0));
             ui.heading(tr!("library-folder-delete-title"));
             ui.add_space(4.0);
@@ -514,7 +514,7 @@ impl VarstotasApp {
         let Some(ask) = self.library.folder_ask.as_mut() else { return };
         let mut choice = None;
         let heading = tr!(if ask.rename.is_some() { "library-folder-rename-title" } else { "library-folder-new-title" });
-        let resp = egui::Modal::new(egui::Id::new("library_folder")).show(ctx, |ui| {
+        let resp = crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("library_folder"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 320.0));
             ui.heading(&heading);
             ui.add_space(4.0);
@@ -586,7 +586,7 @@ impl VarstotasApp {
     pub(crate) fn library_delete_dialog(&mut self, ctx: &egui::Context) {
         let Some((path, name)) = self.library.delete_ask.clone() else { return };
         let mut choice = None;
-        let resp = egui::Modal::new(egui::Id::new("library_delete")).show(ctx, |ui| {
+        let resp = crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("library_delete"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
             match &path {
                 Some(path) => {
@@ -674,7 +674,7 @@ impl VarstotasApp {
         };
         let (name, uses) = (def.name.clone(), self.doc.model.placed_count(d));
         let mut choice = None;
-        let resp = egui::Modal::new(egui::Id::new("def_delete")).show(ctx, |ui| {
+        let resp = crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("def_delete"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
             ui.heading(tr!("library-delete-doc-title"));
             ui.add_space(4.0);
@@ -707,7 +707,7 @@ impl VarstotasApp {
     pub(crate) fn component_rename_dialog(&mut self, ctx: &egui::Context) {
         let Some((target, mut text)) = self.library.rename.clone() else { return };
         let mut choice = None;
-        let resp = egui::Modal::new(egui::Id::new("component_rename")).show(ctx, |ui| {
+        let resp = crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("component_rename"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 340.0));
             ui.heading(tr!(if matches!(target, RenameTarget::Mat(_) | RenameTarget::MatFile(_)) { "library-rename-material" } else { "library-rename-component" }));
             ui.add_space(4.0);

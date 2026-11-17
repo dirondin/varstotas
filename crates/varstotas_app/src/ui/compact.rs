@@ -44,6 +44,8 @@ const ITEM: f32 = 60.0;
 const REST: f64 = 0.35;
 /// Narrower than this the panels fill the window.
 const NARROW: f32 = 700.0;
+/// A phone's sheet: its side margins.
+const SHEET_PAD: f32 = 16.0;
 /// The dock's tools, as many as fit, in this order.
 const DOCK_TOOLS: [ToolId; 6] = [ToolId::Select, ToolId::Line, ToolId::Rectangle, ToolId::PushPull, ToolId::Move, ToolId::Tape];
 
@@ -296,6 +298,9 @@ fn wanted(mode: UiMode, ctx: &egui::Context) -> bool {
 thread_local! {
     /// This frame: the interface is compact, and the page is a phone's (narrow).
     static FIT: std::cell::Cell<(bool, bool)> = const { std::cell::Cell::new((false, false)) };
+    static INSETS: std::cell::Cell<Insets> = const { std::cell::Cell::new(Insets { top: 0.0, bottom: 0.0, left: 0.0, right: 0.0 }) };
+    /// Dialogs shown as sheets the last frame.
+    static SHOWN: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// A window as the compact interface shows it (call last on the builder): on a phone the whole
@@ -312,7 +317,11 @@ pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Windo
             .corner_radius(0)
             .stroke(Stroke::NONE)
             .shadow(egui::epaint::Shadow::NONE)
-            .inner_margin(egui::Margin::same(12));
+            .inner_margin({
+                let i = safe_area();
+                let m = |v: f32| (12.0 + v).min(100.0) as i8;
+                egui::Margin { left: m(i.left), right: m(i.right), top: m(i.top), bottom: m(i.bottom) }
+            });
         let sheet = screen;
         // what a window lays out wider than a phone scrolls across
         win.fixed_rect(sheet).collapsible(false).frame(frame).hscroll(true)
@@ -328,14 +337,74 @@ pub fn phone() -> bool {
     FIT.get().1
 }
 
-/// A dialog's width `w`, narrower on a page that has no room for it.
+/// A dialog's width `w`, narrower on a page that has no room for it; on a phone the page's.
 pub fn fit_width(ctx: &egui::Context, w: f32) -> f32 {
-    w.min(ctx.content_rect().width() - 56.0).max(160.0)
+    let page = ctx.content_rect().width();
+    if FIT.get().1 { page - 2.0 * SHEET_PAD } else { w.min(page - 56.0).max(160.0) }
+}
+
+/// A dialog as the compact interface shows it: on a phone a sheet across the bottom of the
+/// page (where the thumb is), above the safe area.
+pub fn fit_modal(ctx: &egui::Context, modal: egui::Modal) -> egui::Modal {
+    if !FIT.get().1 {
+        return modal;
+    }
+    let inset = safe_area();
+    let frame = egui::Frame::window(&ctx.global_style())
+        .corner_radius(egui::CornerRadius { nw: 18, ne: 18, sw: 0, se: 0 })
+        .stroke(Stroke::NONE)
+        .inner_margin(egui::Margin { left: SHEET_PAD as i8, right: SHEET_PAD as i8, top: 18, bottom: (SHEET_PAD + inset.bottom).min(100.0) as i8 });
+    let mut modal = modal;
+    modal.area = modal.area.anchor(Align2::CENTER_BOTTOM, vec2(0.0, 0.0));
+    SHOWN.set(SHOWN.get() + 1);
+    modal.frame(frame)
+}
+
+/// The page's safe area: how far in from each side the notch, the rounded corners and the home
+/// bar reach (points; zero outside a browser).
+#[derive(Clone, Copy, Default)]
+pub struct Insets {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+}
+
+impl Insets {
+    pub fn shrink(self, r: Rect) -> Rect {
+        Rect::from_min_max(r.min + vec2(self.left, self.top), r.max - vec2(self.right, self.bottom))
+    }
+}
+
+pub fn safe_area() -> Insets {
+    INSETS.get()
+}
+
+/// Read the page's safe area (`env(safe-area-inset-*)`, as `--safe-*` on the page's root).
+fn read_safe_area(ctx: &egui::Context) -> Insets {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let get = || -> Option<Insets> {
+            let w = web_sys::window()?;
+            let root = w.document()?.document_element()?;
+            let style = w.get_computed_style(&root).ok()??;
+            let zoom = ctx.zoom_factor();
+            let px = |name: &str| style.get_property_value(name).ok().and_then(|v| v.trim().trim_end_matches("px").parse::<f32>().ok()).unwrap_or(0.0) / zoom;
+            Some(Insets { top: px("--safe-top"), bottom: px("--safe-bottom"), left: px("--safe-left"), right: px("--safe-right") })
+        };
+        get().unwrap_or_default()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = ctx;
+        Insets::default()
+    }
 }
 
 /// Finger-sized buttons and rows everywhere (`on`), or the theme's own.
 fn touch_style(ctx: &egui::Context, on: bool) {
     const ROW: f32 = 34.0;
+    const HEADING: f32 = 1.3;
     let is = ctx.global_style().spacing.interact_size.y == ROW;
     if on == is {
         return;
@@ -347,15 +416,92 @@ fn touch_style(ctx: &egui::Context, on: bool) {
             s.spacing.item_spacing = vec2(8.0, 8.0);
             s.spacing.icon_width = 20.0;
             s.spacing.icon_spacing = 8.0;
+            // a finger is less precise than a mouse: a press this near a widget is its (the
+            // touch targets grow to about 44 points without the rows growing)
+            s.interaction.interact_radius = 12.0;
+            // a taller title bar: a bigger ✕ to hit
+            if let Some(h) = s.text_styles.get_mut(&egui::TextStyle::Heading) {
+                h.size *= HEADING;
+            }
         });
     } else {
         theme::apply(ctx);
-        let d = egui::style::Spacing::default();
+        let d = egui::Style::default();
         ctx.all_styles_mut(|s| {
-            s.spacing.icon_width = d.icon_width;
-            s.spacing.icon_spacing = d.icon_spacing;
+            s.spacing.icon_width = d.spacing.icon_width;
+            s.spacing.icon_spacing = d.spacing.icon_spacing;
+            s.interaction.interact_radius = d.interaction.interact_radius;
+            if let Some(h) = s.text_styles.get_mut(&egui::TextStyle::Heading) {
+                h.size /= HEADING;
+            }
         });
     }
+}
+
+/// The page's history while the compact interface has something open (see `compact_back`).
+mod back {
+    use std::cell::Cell;
+
+    thread_local! {
+        /// An entry is pushed for what is open.
+        static PUSHED: Cell<bool> = const { Cell::new(false) };
+        /// The browser went back off it.
+        static WENT: Cell<bool> = const { Cell::new(false) };
+        /// The app took the entry off itself (its popstate is not a back).
+        static OWN: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// The browser went back since the last call (scripts: `action back`).
+    pub fn take() -> bool {
+        WENT.replace(false)
+    }
+
+    pub fn press() {
+        WENT.set(true);
+        PUSHED.set(false);
+    }
+
+    /// Keep an entry in the history while something is `open`.
+    pub fn hold(open: bool) {
+        if open == PUSHED.get() {
+            return;
+        }
+        PUSHED.set(open);
+        #[cfg(target_arch = "wasm32")]
+        if let Some(h) = web_sys::window().and_then(|w| w.history().ok()) {
+            if open {
+                let _ = h.push_state(&wasm_bindgen::JsValue::NULL, "");
+            } else {
+                OWN.set(true);
+                let _ = h.back();
+            }
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn install(ctx: egui::Context) {
+        use wasm_bindgen::JsCast;
+        let Some(window) = web_sys::window() else { return };
+        let on_pop = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::Event)>::new(move |_: web_sys::Event| {
+            if OWN.replace(false) {
+                return;
+            }
+            press();
+            ctx.request_repaint();
+        });
+        let _ = window.add_event_listener_with_callback("popstate", on_pop.as_ref().unchecked_ref());
+        on_pop.forget();
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn install_back(ctx: egui::Context) {
+    back::install(ctx);
+}
+
+/// A back as the browser's (the QA scripts).
+pub fn press_back() {
+    back::press();
 }
 
 /// The page's main pointer is a finger (`pointer: coarse`).
@@ -428,11 +574,38 @@ impl VarstotasApp {
         self.compact.on = wanted(mode, ctx);
         let narrow = ctx.content_rect().width() < NARROW;
         FIT.set((self.compact.on, self.compact.on && narrow));
+        INSETS.set(if self.compact.on { read_safe_area(ctx) } else { Insets::default() });
+        let dialogs = SHOWN.replace(0);
+        self.compact_back(ctx, dialogs > 0);
         touch_style(ctx, self.compact.on && (narrow || touch_screen()));
         if !self.compact.on {
             self.compact.panels = false;
             self.compact.numpad = false;
         }
+    }
+
+    /// The browser's back (Android's back button and gesture) closes what the compact interface
+    /// has open on top: the menus a level at a time, the number pad, the panels, a dialog. While
+    /// something is open the page's history has an entry for it, so back does not leave the page.
+    fn compact_back(&mut self, ctx: &egui::Context, dialog: bool) {
+        let open = self.compact.on && (self.compact.radial.is_some() || self.compact.numpad || self.compact.panels || dialog);
+        if back::take() {
+            if let Some(r) = self.compact.radial.as_mut() {
+                if r.sub.pop().is_none() {
+                    self.radial_back(false);
+                }
+            } else if self.compact.numpad {
+                self.compact.numpad = false;
+            } else if self.compact.panels {
+                self.compact.panels = false;
+            } else if dialog {
+                // a dialog closes on Escape
+                ctx.input_mut(|i| i.events.push(egui::Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }));
+            }
+            ctx.request_repaint();
+            return;
+        }
+        back::hold(open);
     }
 
     /// For the QA scripts: (on, the ring's open level, panels, number pad).
@@ -460,6 +633,8 @@ impl VarstotasApp {
 
     /// The floating buttons over the view `rect` (the central panel's `ui`).
     pub(crate) fn compact_chrome(&mut self, ui: &mut Ui, rect: Rect) {
+        // clear of the notch, the rounded corners and the home bar
+        let rect = safe_area().shrink(rect);
         // top left: the menu and the panels
         let menu_rect = Rect::from_min_size(rect.min + vec2(MARGIN, MARGIN), vec2(BUTTON, BUTTON));
         let menu = round_button(ui, menu_rect, Icon::More, true, false, Id::new("compact_menu"), &tr!("compact-menu"));
@@ -978,7 +1153,7 @@ impl VarstotasApp {
                 shadow(ui, sheet, 18.0);
             }
             ui.painter().rect_filled(sheet, corner, theme::tray_bg());
-            let inner = sheet.shrink2(vec2(10.0, 8.0));
+            let inner = if narrow { safe_area().shrink(sheet) } else { sheet }.shrink2(vec2(10.0, 8.0));
             ui.scope_builder(UiBuilder::new().max_rect(inner).id_salt("compact_panels"), |ui| {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(tr!("compact-panels")).size(18.0).strong());
@@ -1030,7 +1205,7 @@ impl VarstotasApp {
         const GAP: f32 = 8.0;
         let w = (screen.width() - 2.0 * MARGIN).min(420.0);
         let h = 4.0 * KEY + 3.0 * GAP + 96.0;
-        let sheet = Rect::from_min_size(pos2(screen.center().x - w / 2.0, screen.bottom() - MARGIN - h), vec2(w, h));
+        let sheet = Rect::from_min_size(pos2(screen.center().x - w / 2.0, screen.bottom() - MARGIN - safe_area().bottom - h), vec2(w, h));
         let mut close = false;
         egui::Area::new(Id::new("compact_numpad")).order(egui::Order::Foreground).fixed_pos(sheet.min).show(ctx, |ui| {
             shadow(ui, sheet, 18.0);

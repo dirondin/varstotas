@@ -1,6 +1,6 @@
-# The compact interface on a phone's page: windows come as sheets over the page (not moved or
-# resized), Preferences as a list of sections with each section a page of its own, dialogs as
-# narrow as the page.
+# The compact interface on a phone's page: windows take the whole page (not moved or resized),
+# Preferences and the User Guide as lists with each entry a page of its own, dialogs as sheets
+# across the bottom, back closing what is open.
 box 0 0 0 400 300 200
 view iso
 zoom_extents
@@ -22,11 +22,31 @@ wait 10
 screenshot shots/phone_prefs_interface.bmp
 action click_spot prefs_close
 wait 10
+# a dialog: a sheet across the bottom; back (Android's, the browser's) closes it
 action about
 wait 15
 screenshot shots/phone_about.bmp
-action click_spot about:close
+action back
+wait 10
+screenshot shots/phone_about_back.bmp
+# back closes the menus a level at a time, then the panels
+action click_spot compact:menu
+wait 10
+action click_spot radial:Draw
+wait 10
+expect compact=(true Some(Ring(Draw)) false false)
+action back
 wait 5
+expect compact=(true Some(Ring(Root)) false false)
+action back
+wait 5
+expect compact=(true None false false)
+action click_spot compact:panels
+wait 10
+expect compact=(true None true false)
+action back
+wait 5
+expect compact=(true None false false)
 action help_touch
 wait 15
 expect guide=(true Touch "")

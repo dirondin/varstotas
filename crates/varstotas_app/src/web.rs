@@ -46,6 +46,7 @@ pub fn start() {
                 Box::new(|cc| {
                     crate::file_dialog::CTX.with(|c| *c.borrow_mut() = Some(cc.egui_ctx.clone()));
                     crate::pointer::install(cc.egui_ctx.clone());
+                    crate::ui::compact::install_back(cc.egui_ctx.clone());
                     Ok(Box::new(crate::app::VarstotasApp::new(cc, None)))
                 }),
             )

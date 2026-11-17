@@ -25,7 +25,7 @@ impl VarstotasApp {
             self.about_icon = Some(ctx.load_texture("about_app_icon", image, egui::TextureOptions::LINEAR));
         }
         let icon = self.about_icon.clone();
-        let response = Modal::new(Id::new("start_screen")).show(ctx, |ui| {
+        let response = crate::ui::compact::fit_modal(ctx, Modal::new(Id::new("start_screen"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 580.0));
             banner(ui, icon.as_ref());
             ui.add_space(14.0);

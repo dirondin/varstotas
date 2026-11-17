@@ -811,7 +811,7 @@ impl VarstotasApp {
         let Some(path) = self.mat_library.delete_ask.clone() else { return };
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let mut choice = None;
-        let resp = egui::Modal::new(egui::Id::new("material_delete")).show(ctx, |ui| {
+        let resp = crate::ui::compact::fit_modal(ctx, egui::Modal::new(egui::Id::new("material_delete"))).show(ctx, |ui| {
             ui.set_width(crate::ui::compact::fit_width(ui.ctx(), 360.0));
             ui.heading(tr!("mat-delete-title"));
             ui.add_space(4.0);

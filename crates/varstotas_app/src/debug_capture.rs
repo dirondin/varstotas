@@ -2635,6 +2635,10 @@ impl VarstotasApp {
             "report_problem" => Action::ReportProblem,
             "lock" => Action::LockSelected,
             "unlock_all" => Action::UnlockAll,
+            "back" => {
+                crate::ui::compact::press_back();
+                return;
+            }
             "help_touch" => {
                 self.open_app_help(crate::ui::app_help::Topic::Touch);
                 return;
