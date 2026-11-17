@@ -135,10 +135,12 @@ pub enum KeyCmd {
     ToggleSnapping,
     NextScene,
     PrevScene,
+    CompactUi,
+    RadialMenu,
     Tool(ToolId),
 }
 
-const COMMANDS: [KeyCmd; 14] = [
+const COMMANDS: [KeyCmd; 16] = [
     KeyCmd::New,
     KeyCmd::Open,
     KeyCmd::Save,
@@ -153,6 +155,8 @@ const COMMANDS: [KeyCmd; 14] = [
     KeyCmd::ToggleSnapping,
     KeyCmd::NextScene,
     KeyCmd::PrevScene,
+    KeyCmd::CompactUi,
+    KeyCmd::RadialMenu,
 ];
 
 impl KeyCmd {
@@ -174,6 +178,8 @@ impl KeyCmd {
             Self::ToggleSnapping => Icon::Magnet,
             Self::NextScene => Icon::NextScene,
             Self::PrevScene => Icon::PrevScene,
+            Self::CompactUi => Icon::SideBar,
+            Self::RadialMenu => Icon::More,
             Self::Tool(t) => t.icon(),
         }
     }
@@ -208,6 +214,8 @@ impl KeyCmd {
             KeyCmd::ToggleSnapping => "key-toggle-snapping",
             KeyCmd::NextScene => "key-next-scene",
             KeyCmd::PrevScene => "key-prev-scene",
+            KeyCmd::CompactUi => "key-compact-ui",
+            KeyCmd::RadialMenu => "key-radial-menu",
             KeyCmd::Tool(t) => return t.name(),
         })
     }
@@ -229,6 +237,8 @@ impl KeyCmd {
             KeyCmd::ToggleSnapping => one(Shortcut::shift(Key::S)),
             KeyCmd::NextScene => one(Shortcut::plain(Key::PageDown)),
             KeyCmd::PrevScene => one(Shortcut::plain(Key::PageUp)),
+            KeyCmd::CompactUi => one(Shortcut::plain(Key::F8)),
+            KeyCmd::RadialMenu => one(Shortcut::plain(Key::Backtick)),
             KeyCmd::Tool(t) => t.shortcut().map(Shortcut::plain).into_iter().collect(),
         }
     }
@@ -249,6 +259,8 @@ impl KeyCmd {
             KeyCmd::ToggleSnapping => Action::ToggleSnapping,
             KeyCmd::NextScene => Action::NextScene,
             KeyCmd::PrevScene => Action::PrevScene,
+            KeyCmd::CompactUi => Action::ToggleCompactUi,
+            KeyCmd::RadialMenu => Action::RadialMenu,
             KeyCmd::Tool(t) => Action::SetTool(t),
         }
     }

@@ -1388,6 +1388,11 @@ prefs-theme-system = Kaip sistemoje
 prefs-theme-note = Vaizdo sritis išlaiko savo spalvas (dangus, žemė); lapai ir išklotinės lieka baltas popierius.
 prefs-scale = Mastelis
 prefs-scale-note = Meniu, skydeliai ir langai; %CMDK%+ / %CMDK%− / %CMDK%0 taip pat jį keičia.
+prefs-ui-mode = Sąsaja
+prefs-ui-mode-auto = Automatiškai
+prefs-ui-mode-classic = Įprasta
+prefs-ui-mode-compact = Kompaktiška
+prefs-ui-mode-note = Kompaktiška: be meniu juostos, įrankių juostos ir šoninės juostos; apvalūs mygtukai virš vaizdo, meniu žiede, skydeliai išskleidžiamame lape — jutikliniams ekranams. Automatiškai: kompaktiška telefonuose ir planšetėse naršyklėje. { $key } perjungia.
 prefs-toolbar-icons = Įrankių juostos piktogramos
 
 ## Shortcuts
@@ -1461,6 +1466,8 @@ key-zoom-extents = Rodyti viską
 key-toggle-snapping = Prisitraukimas įj. / išj.
 key-next-scene = Kita scena
 key-prev-scene = Ankstesnė scena
+key-compact-ui = Kompaktiška sąsaja
+key-radial-menu = Žiedinis meniu
 
 ## Key names and reserved keys (Preferences → Shortcuts)
 
@@ -5375,3 +5382,15 @@ physics-cloth-applied = Audinys tapo nauja grupe.
 ## Help → What's New
 release-notes-title = Kas naujo
 release-notes-current = { $date }, ši versija
+
+## Compact interface (ui/compact.rs)
+compact-menu = Meniu
+compact-panels = Skydeliai
+compact-done = Baigta
+compact-close = Uždaryti
+compact-back = ‹ atgal
+compact-all = Visi…
+compact-all-tools = Visi įrankiai
+compact-arcs = Lankai ir kreivės
+compact-modify = Daugiau įrankių
+compact-measure = Matavimas

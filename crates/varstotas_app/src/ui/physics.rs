@@ -328,6 +328,8 @@ impl VarstotasApp {
                 | Action::ViewPreset(_)
                 | Action::ToggleGrid
                 | Action::ToggleTray
+                | Action::ToggleCompactUi
+                | Action::RadialMenu
                 | Action::ToggleCard(_)
                 | Action::ToggleLog
         );

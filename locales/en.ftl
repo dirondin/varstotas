@@ -1382,6 +1382,11 @@ prefs-theme-system = As the System
 prefs-theme-note = The viewport keeps its own colours (sky, ground); sheets and unfold patterns stay white paper.
 prefs-scale = Scale
 prefs-scale-note = Menus, panels and windows; %CMDK%+ / %CMDK%− / %CMDK%0 change it too.
+prefs-ui-mode = Interface
+prefs-ui-mode-auto = Auto
+prefs-ui-mode-classic = Classic
+prefs-ui-mode-compact = Compact
+prefs-ui-mode-note = Compact: no menu bar, toolbar or side bar; round buttons over the view, the menus on a ring, the panels in a sheet — made for touch screens. Auto: compact on phones and tablets in a browser. { $key } switches.
 prefs-toolbar-icons = Toolbar icons
 
 ## Shortcuts
@@ -1455,6 +1460,8 @@ key-zoom-extents = Zoom Extents
 key-toggle-snapping = Snapping On / Off
 key-next-scene = Next Scene
 key-prev-scene = Previous Scene
+key-compact-ui = Compact Interface
+key-radial-menu = Ring Menu
 
 ## Key names and reserved keys (Preferences → Shortcuts)
 
@@ -5351,3 +5358,15 @@ physics-cloth-applied = The cloth is a new group.
 ## Help → What's New
 release-notes-title = What's New
 release-notes-current = { $date }, this version
+
+## Compact interface (ui/compact.rs)
+compact-menu = Menu
+compact-panels = Panels
+compact-done = Done
+compact-close = Close
+compact-back = ‹ back
+compact-all = All…
+compact-all-tools = All Tools
+compact-arcs = Arcs and Curves
+compact-modify = More Tools
+compact-measure = Measure

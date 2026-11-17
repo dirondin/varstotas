@@ -151,6 +151,8 @@ pub struct Prefs {
     pub ui_scale: f32,
     /// Side of a toolbar button, points.
     pub toolbar_icons: u32,
+    /// Classic or compact (touch) interface, or as the device suits (Preferences → Interface, F8).
+    pub ui_mode: crate::ui::compact::UiMode,
     /// The toolbar's buttons in order (Preferences → Toolbar; `toolbar::Item::key`, "|" = a
     /// separator); empty = the default.
     pub toolbar: Vec<String>,
@@ -234,6 +236,7 @@ impl Default for Prefs {
             language: None,
             ui_scale: 1.0,
             toolbar_icons: 36,
+            ui_mode: Default::default(),
             toolbar: Vec::new(),
             shortcuts: Default::default(),
             new_render: Default::default(),
@@ -324,6 +327,10 @@ pub enum Action {
     SetParallel(bool),
     ZoomExtents,
     ToggleTray,
+    /// The other interface: classic or compact (F8).
+    ToggleCompactUi,
+    /// The ring menu at the pointer (`ui/compact.rs`).
+    RadialMenu,
     SelectInstance(ContextPath, InstanceId),
     ToggleInstanceHidden(ContextPath, InstanceId),
     /// Outliner: select the instance and frame it in the view.
@@ -594,6 +601,8 @@ pub struct VarstotasApp {
     space_used: bool,
     /// The navigation buttons drawn over the view last frame (not the tools' clicks).
     pub(crate) nav_button_rects: Vec<egui::Rect>,
+    /// The compact interface (`ui/compact.rs`): on this frame, its ring menu and sheets.
+    pub(crate) compact: crate::ui::compact::Compact,
     pub(crate) last_modifiers: Modifiers,
     /// A text field had keyboard focus last frame: Escape / Enter that just released it must
     /// not also reach the tools (e.g. clear the selection).
@@ -796,6 +805,7 @@ impl VarstotasApp {
             space_held: false,
             space_used: false,
             nav_button_rects: Vec::new(),
+            compact: Default::default(),
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
@@ -1653,7 +1663,14 @@ impl VarstotasApp {
                 let to = nav::zoom_extents_camera(&self.doc.model, &self.camera, self.aspect());
                 self.animate_to(to);
             }
+            // the compact interface shows the side bar's cards in a sheet
+            Action::ToggleTray if self.compact.on => self.compact.panels = !self.compact.panels,
             Action::ToggleTray => self.prefs.tray_open = !self.prefs.tray_open,
+            Action::ToggleCompactUi => self.toggle_compact(),
+            Action::RadialMenu => {
+                let at = ctx.input(|i| i.pointer.latest_pos());
+                self.open_radial(at, false);
+            }
             Action::ToggleCard(c) => {
                 if self.prefs.tray_hidden.iter().any(|h| h == c) {
                     self.prefs.tray_hidden.retain(|h| h != c);
@@ -2621,29 +2638,38 @@ impl eframe::App for VarstotasApp {
         crate::axes::sync(&self.doc.model);
 
         self.anim_tick(&ctx);
-        egui::Panel::top("menu_bar")
-            .frame(crate::ui::theme::bar_frame(&ctx))
-            .show(ui, |ui| self.menu_bar(ui));
-        // not resizable: the panel fits its rows (buttons added in Preferences → Toolbar)
-        egui::Panel::top("toolbar")
-            .resizable(false)
-            .frame(crate::ui::theme::toolbar_frame(&ctx))
-            .show(ui, |ui| self.toolbar(ui));
+        self.compact_frame(&ctx);
+        let compact = self.compact.on;
+        if compact {
+            // the menu bar collects the QA targets otherwise
+            crate::ui::tray_lib::clear_spots();
+        } else {
+            egui::Panel::top("menu_bar")
+                .frame(crate::ui::theme::bar_frame(&ctx))
+                .show(ui, |ui| self.menu_bar(ui));
+            // not resizable: the panel fits its rows (buttons added in Preferences → Toolbar)
+            egui::Panel::top("toolbar")
+                .resizable(false)
+                .frame(crate::ui::theme::toolbar_frame(&ctx))
+                .show(ui, |ui| self.toolbar(ui));
+        }
         // The Snapping menus may have changed the switches before the viewport runs the tool.
         crate::inference::settings::publish(&self.prefs.snapping);
         crate::inference::settings::publish_grid(&self.prefs.grid);
-        egui::Panel::bottom("status_bar")
-            .frame(crate::ui::theme::bar_frame(&ctx))
-            .show(ui, |ui| self.status_bar(ui));
-        let mut tray_open = self.prefs.tray_open;
-        egui::Panel::right("default_tray")
-            .resizable(true)
-            .default_size(290.0)
-            .size_range(220.0..=480.0)
-            .frame(crate::ui::theme::tray_frame(&ctx))
-            .show_collapsible(ui, &mut tray_open, |ui| self.tray_ui(ui));
-        self.prefs.tray_open = tray_open;
-        if !self.doc.model.scenes.is_empty() {
+        if !compact {
+            egui::Panel::bottom("status_bar")
+                .frame(crate::ui::theme::bar_frame(&ctx))
+                .show(ui, |ui| self.status_bar(ui));
+            let mut tray_open = self.prefs.tray_open;
+            egui::Panel::right("default_tray")
+                .resizable(true)
+                .default_size(290.0)
+                .size_range(220.0..=480.0)
+                .frame(crate::ui::theme::tray_frame(&ctx))
+                .show_collapsible(ui, &mut tray_open, |ui| self.tray_ui(ui));
+            self.prefs.tray_open = tray_open;
+        }
+        if !compact && !self.doc.model.scenes.is_empty() {
             egui::Panel::top("scene_tabs")
                 .frame(crate::ui::theme::bar_frame(&ctx))
                 .show(ui, |ui| self.scene_tabs(ui));
@@ -2730,7 +2756,12 @@ impl eframe::App for VarstotasApp {
                 let frame = accent_soft().lerp_to_gamma(ACCENT, 0.4);
                 ui.painter().rect_stroke(rects[active], 0.0, egui::Stroke::new(2.5, frame), egui::StrokeKind::Inside);
             }
+            if compact {
+                let view = self.viewport.view_rect;
+                self.compact_chrome(ui, view);
+            }
         });
+        self.compact_overlays(&ctx);
         // Animation frames collect their own results (anim_tick).
         let export_result = if self.anim_window.run.is_some() { None } else { self.viewport.export_result.take() };
         match export_result {

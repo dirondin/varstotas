@@ -99,9 +99,16 @@ wait 5
 expect prefs_win=(true Interface)
 raw click 301 145
 wait 5
-raw click 377 282
+action click_spot icons:Large
 wait 5
 expect look=(true 1.00 44)
+# the compact interface on and off
+action click_spot uimode:Compact
+wait 5
+expect compact=(true None false false)
+action click_spot uimode:Classic
+wait 5
+expect compact=(false None false false)
 raw click 467 213
 wait 10
 expect look=(true 1.25 44)

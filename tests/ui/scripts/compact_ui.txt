@@ -1,0 +1,89 @@
+# The compact interface: no menu bar, toolbar, status bar or side bar; the menu ring (taps and a
+# held press let go on an item), the dock, the panels sheet and the Measurements number pad.
+box 0 0 0 400 300 200
+view iso
+zoom_extents
+wait 10
+action ui_compact
+wait 10
+expect compact=(true None false false)
+screenshot shots/compact_ui.bmp
+# the menu ring: Draw → Rectangle
+action click_spot compact:menu
+wait 10
+expect compact=(true Some(Ring(Root)) false false)
+screenshot shots/compact_ring.bmp
+action click_spot radial:Draw
+wait 10
+expect compact=(true Some(Ring(Draw)) false false)
+screenshot shots/compact_ring_draw.bmp
+action click_spot radial:Rectangle
+wait 10
+expect compact=(true None false false)
+expect tool=Rectangle 
+# the middle goes back, then closes
+action click_spot compact:menu
+wait 5
+action click_spot radial:Camera
+wait 5
+action click_spot radial:back
+wait 5
+expect compact=(true Some(Ring(Root)) false false)
+action click_spot radial:back
+wait 5
+expect compact=(true None false false)
+# a menu as a list: File
+action click_spot compact:menu
+wait 5
+action click_spot radial:menu:File
+wait 10
+expect compact=(true Some(List(File)) false false)
+screenshot shots/compact_list.bmp
+action click_spot radial:close
+wait 5
+expect compact=(true None false false)
+# the dock
+action click_spot dock:PushPull
+wait 5
+expect tool=PushPull 
+# the panels sheet
+action click_spot compact:panels
+wait 10
+expect compact=(true None true false)
+screenshot shots/compact_panels.bmp
+action click_spot compact:done
+wait 5
+expect compact=(true None false false)
+# the number pad: a rectangle 300 by 200
+tool rectangle
+rawp move 0 0 0
+rawp click 0 0 0
+rawp move 100 -100 0
+wait 3
+action click_spot compact:vcb
+wait 5
+expect compact=(true None false true)
+action click_spot numpad:3
+action click_spot numpad:0
+action click_spot numpad:0
+action click_spot numpad:;
+action click_spot numpad:2
+action click_spot numpad:0
+action click_spot numpad:0
+wait 3
+screenshot shots/compact_numpad.bmp
+action click_spot numpad:⏎
+wait 5
+expect compact=(true None false false)
+# a press on the menu button dragged onto Draw and let go opens its ring
+action drag_spot compact:menu 708 535
+wait 10
+expect compact=(true Some(Ring(Draw)) false false)
+action click_spot radial:back
+wait 5
+action click_spot radial:back
+wait 5
+# F8: back to the classic interface
+raw key F8
+wait 10
+expect compact=(false None false false)

@@ -1388,6 +1388,11 @@ prefs-theme-system = Як у сістэме
 prefs-theme-note = Бачная вобласць захоўвае свае колеры (неба, зямля); лісты і разгорткі застаюцца белай паперай.
 prefs-scale = Маштаб
 prefs-scale-note = Меню, панэлі і вокны; %CMDK%+ / %CMDK%− / %CMDK%0 таксама мяняюць яго.
+prefs-ui-mode = Інтэрфейс
+prefs-ui-mode-auto = Аўта
+prefs-ui-mode-classic = Звычайны
+prefs-ui-mode-compact = Кампактны
+prefs-ui-mode-note = Кампактны: без радка меню, панэлі інструментаў і бакавой панэлі; круглыя кнопкі над выглядам, меню па крузе, панэлі — у высоўным лісце. Для сэнсарных экранаў. Аўта: кампактны на тэлефонах і планшэтах у браўзеры. { $key } пераключае.
 prefs-toolbar-icons = Значкі панэлі інструментаў
 
 ## Спалучэнні клавіш
@@ -1461,6 +1466,8 @@ key-zoom-extents = Паказаць усё
 key-toggle-snapping = Прывязка ўкл. / выкл.
 key-next-scene = Наступная сцэна
 key-prev-scene = Папярэдняя сцэна
+key-compact-ui = Кампактны інтэрфейс
+key-radial-menu = Кальцавое меню
 
 ## Назвы клавіш і зарэзерваваныя клавішы (Налады → Спалучэнні клавіш)
 
@@ -5427,3 +5434,15 @@ physics-cloth-applied = Тканіна стала новай групай.
 ## Help → What's New
 release-notes-title = Што новага
 release-notes-current = { $date }, гэтая версія
+
+## Compact interface (ui/compact.rs)
+compact-menu = Меню
+compact-panels = Панэлі
+compact-done = Гатова
+compact-close = Закрыць
+compact-back = ‹ назад
+compact-all = Усе…
+compact-all-tools = Усе інструменты
+compact-arcs = Дугі і крывыя
+compact-modify = Яшчэ інструменты
+compact-measure = Вымярэнні

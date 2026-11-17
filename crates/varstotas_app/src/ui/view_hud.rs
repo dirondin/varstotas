@@ -122,7 +122,8 @@ impl VarstotasApp {
             hud = r.response.rect;
         });
         self.hud_rect = hud;
-        if self.prefs.nav.buttons {
+        // the compact interface has no menus for them: always there, finger-sized
+        if self.prefs.nav.buttons || self.compact.on {
             self.nav_buttons(ui, rect, hud);
         }
     }
@@ -131,7 +132,9 @@ impl VarstotasApp {
     /// turns the view round its middle, on Pan moves it, on Zoom (up: nearer) zooms; a click on
     /// Zoom Extents shows the whole model.
     fn nav_buttons(&mut self, ui: &mut Ui, rect: Rect, hud: Rect) {
-        const R: f32 = 14.0;
+        let (r_big, icon_side) = if self.compact.on { (21.0, 22.0) } else { (14.0, ICON) };
+        #[allow(non_snake_case)]
+        let R: f32 = r_big;
         let x = rect.right() - 8.0 - R;
         let top = if hud.is_finite() { hud.bottom() } else { rect.top() + 44.0 } + 8.0 + R;
         let fill = if ui.visuals().dark_mode { Color32::from_black_alpha(150) } else { Color32::from_white_alpha(200) };
@@ -154,7 +157,7 @@ impl VarstotasApp {
             super::tray_lib::spot(format!("nav:button:{name}"), c);
             let hot = resp.hovered() || resp.dragged();
             ui.painter().circle(c, R, if hot { super::theme::accent_soft() } else { fill }, Stroke::new(1.0, Color32::from_black_alpha(30)));
-            paint_icon(ui.painter(), Rect::from_center_size(c, vec2(ICON, ICON)), icon, false);
+            paint_icon(ui.painter(), Rect::from_center_size(c, vec2(icon_side, icon_side)), icon, false);
             if resp.dragged() || resp.hovered() {
                 ui.ctx().set_cursor_icon(if resp.dragged() { egui::CursorIcon::Grabbing } else if name == "extents" { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Grab });
             }

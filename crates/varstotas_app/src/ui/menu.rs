@@ -242,290 +242,20 @@ impl VarstotasApp {
         // Collect QA targets for the whole frame, including menus before the toolbar.
         super::tray_lib::clear_spots();
         egui::MenuBar::new().ui(ui, |ui| {
-            let file_menu = ui.menu_button(tr!("menu-file"), |ui| {
-                self.cmd_item(ui, Cmd::New);
-                icon_menu(ui, None, &tr!("menu-new-from-template"), |ui| {
-                    for t in Template::ALL {
-                        let b = Button::new(t.name()).selected(self.prefs.template == Some(t));
-                        if ui.add(b).on_hover_text(t.description()).clicked() {
-                            self.actions.push(Action::NewFromTemplate(t));
-                        }
-                    }
-                    ui.separator();
-                    ui.label(egui::RichText::new(tr!("template-files-heading")).weak());
-                    let dir = crate::templates::directory(self.prefs.templates_dir.as_deref());
-                    if let Some(dir) = &dir {
-                        match crate::templates::scan(dir) {
-                            Ok(files) if files.is_empty() => { ui.label(tr!("template-files-empty")); }
-                            Ok(files) => {
-                                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                                    for file in files {
-                                        if ui.button(&file.name).on_hover_text(file.path.display().to_string()).clicked() {
-                                            self.actions.push(Action::NewFromFileTemplate(file.path));
-                                            ui.close();
-                                        }
-                                    }
-                                });
-                            }
-                            Err(e) => { ui.label(tr!("template-folder-error", error = e.to_string())); }
-                        }
-                    }
-                    if super::extensions::CAN_REVEAL {
-                        ui.separator();
-                    }
-                    if super::extensions::CAN_REVEAL && ui.add_enabled(dir.is_some(), Button::new(tr!("template-open-folder"))).clicked() {
-                        if let Some(dir) = dir { super::extensions::reveal(&dir); }
-                        ui.close();
-                    }
-                });
-                self.cmd_item(ui, Cmd::Open);
-                let recent = self.prefs.recent.clone();
-                ui.add_enabled_ui(!recent.is_empty(), |ui| {
-                    icon_menu(ui, None, &tr!("menu-open-recent"), |ui| {
-                        for p in recent {
-                            let r = ui.add_enabled(varstotas_kernel::fs::is_file(&p), Button::new(recent_label(ui, &p, 48))).on_hover_text(p.display().to_string());
-                            if r.clicked() {
-                                self.actions.push(Action::OpenPath(p));
-                            }
-                        }
-                    });
-                });
-                let r = icon_row(ui, Some(Icon::StartScreen), &tr!("start-menu"), None, true, self.show_start);
-                super::tray_lib::spot("menu:StartScreen", r.rect.center());
-                if r.clicked() { self.actions.push(Action::StartScreen); ui.close(); }
-                ui.separator();
-                self.cmd_item(ui, Cmd::Save);
-                self.cmd_item(ui, Cmd::SaveAs);
-                let r = icon_menu(ui, Some(Icon::Picture(0)), &tr!("menu-preview-image"), |ui| {
-                    self.cmd_item(ui, Cmd::PreviewShow);
-                    ui.separator();
-                    for c in [Cmd::PreviewFromFile, Cmd::PreviewFromView, Cmd::PreviewRemove] {
-                        self.cmd_item(ui, c);
-                    }
-                })
-                .on_hover_text(tr!("menu-preview-image-hint"));
-                super::tray_lib::spot("menu:PreviewImage", r.rect.center());
-                ui.separator();
-                icon_menu(ui, Some(Icon::Import("")), &tr!("menu-import"), |ui| {
-                    use Cmd::*;
-                    for c in [ImportObj, ImportStl, ImportDxf, ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv] {
-                        self.cmd_item(ui, c);
-                    }
-                    self.plugin_file_items(ui, false);
-                    self.model_import_items(ui);
-                });
-                icon_menu(ui, Some(Icon::Export("")), &tr!("menu-export"), |ui| {
-                    use Cmd::*;
-                    self.cmd_item(ui, ExportImage);
-                    self.cmd_item(ui, ExportAnimation);
-                    ui.separator();
-                    for c in [ExportObj, ExportStl, ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing] {
-                        self.cmd_item(ui, c);
-                    }
-                    self.cmd_item_as(ui, Unfold, &tr!("menu-unfold-export"));
-                    self.cmd_item(ui, Sheets);
-                    ui.separator();
-                    for c in [ExportReport, ExportFacesJson, ExportAttributions] {
-                        self.cmd_item(ui, c);
-                    }
-                    self.plugin_file_items(ui, true);
-                });
-                ui.separator();
-                self.cmd_item(ui, Cmd::RunScript);
-                if Cmd::Quit.available() {
-                    ui.separator();
-                    self.cmd_item(ui, Cmd::Quit);
-                }
-            });
+            let file_menu = ui.menu_button(tr!("menu-file"), |ui| self.menu_file(ui));
             super::tray_lib::spot("menu:File", file_menu.response.rect.center());
 
-            let edit_menu = ui.menu_button(tr!("menu-edit"), |ui| {
-                let undo = self.doc.history.undo_label().map(|l| tr!("menu-undo-named", name = l)).unwrap_or_else(|| Cmd::Undo.menu_label());
-                let redo = self.doc.history.redo_label().map(|l| tr!("menu-redo-named", name = l)).unwrap_or_else(|| Cmd::Redo.menu_label());
-                self.cmd_item_as(ui, Cmd::Undo, &undo);
-                self.cmd_item_as(ui, Cmd::Redo, &redo);
-                ui.separator();
-                self.clipboard_items(ui);
-                for c in [Cmd::Delete, Cmd::PurgeUnused, Cmd::DeleteGuides] {
-                    self.cmd_item(ui, c);
-                }
-                ui.separator();
-                self.cmd_item(ui, Cmd::SelectAll);
-                self.cmd_item(ui, Cmd::SelectNone);
-                ui.separator();
-                self.cmd_item(ui, Cmd::Hide);
-                self.cmd_item(ui, Cmd::Lock);
-                self.cmd_item(ui, Cmd::UnhideAll);
-                self.cmd_item(ui, Cmd::UnlockAll);
-                ui.separator();
-                for c in [Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeUnique, Cmd::MakeParametric, Cmd::Explode, Cmd::CloseGroup] {
-                    self.cmd_item(ui, c);
-                }
-                ui.separator();
-                self.face_ops_items(ui);
-            });
+            let edit_menu = ui.menu_button(tr!("menu-edit"), |ui| self.menu_edit(ui));
             super::tray_lib::spot("menu:Edit", edit_menu.response.rect.center());
 
-            let view_menu = ui.menu_button(tr!("menu-view"), |ui| {
-                ui.label(egui::RichText::new(tr!("menu-face-style")).small().weak());
-                for (st, icon, label) in [
-                    (FaceStylePref::ShadedColor, Icon::StyleShaded, tr!("menu-shaded")),
-                    (FaceStylePref::Shaded, Icon::StyleTextured, tr!("menu-shaded-textures")),
-                    (FaceStylePref::Monochrome, Icon::StyleMonochrome, tr!("menu-monochrome")),
-                    (FaceStylePref::HiddenLine, Icon::StyleHiddenLine, tr!("menu-hidden-line")),
-                    (FaceStylePref::Wireframe, Icon::StyleWireframe, tr!("menu-wireframe")),
-                    (FaceStylePref::Realistic, Icon::StyleRealistic, tr!("menu-realistic")),
-                ] {
-                    if icon_radio(ui, self.prefs.face_style == st, icon, &label).clicked() {
-                        self.prefs.face_style = st;
-                    }
-                }
-                icon_check(ui, &mut self.prefs.xray, Icon::StyleXRay, &tr!("menu-x-ray"));
-                ui.separator();
-                ui.label(egui::RichText::new(tr!("menu-edge-style")).small().weak());
-                icon_check(ui, self.prefs.edges_mut(), Icon::StyleEdges, &tr!("menu-edges")).on_hover_text(tr!("menu-edges-hint"));
-                let r = icon_check(ui, &mut self.prefs.show_triangles, Icon::StyleWireframe, &tr!("view-triangles"));
-                super::tray_lib::spot("menu:Triangles", r.rect.center());
-                r.on_hover_text(tr!("view-triangles-hint"));
-                icon_check(ui, &mut self.prefs.profiles, Icon::StyleProfiles, &tr!("menu-profiles"));
-                ui.separator();
-                let mut guides = !self.doc.model.guides_hidden;
-                if icon_check(ui, &mut guides, Icon::Guides, &tr!("menu-guides")).clicked() {
-                    self.actions.push(Action::ToggleGuides);
-                }
-                let mut fasteners = !self.doc.model.fasteners_hidden;
-                if icon_check(ui, &mut fasteners, Icon::Joinery, &tr!("menu-fasteners")).on_hover_text(tr!("menu-fasteners-hint")).clicked() {
-                    self.actions.push(Action::ToggleFasteners);
-                }
-                icon_check(ui, &mut self.prefs.show_axes, Icon::Axes, &tr!("menu-axes"));
-                icon_check(ui, &mut self.prefs.show_ground, Icon::Ground, &tr!("menu-ground"));
-                icon_check(ui, &mut self.prefs.show_sky, Icon::Sky, &tr!("menu-sky")).on_hover_text(tr!("menu-sky-hint"));
-                let mut grid = self.prefs.grid.show;
-                if icon_check(ui, &mut grid, Icon::Grid, &tr!("menu-grid")).clicked() {
-                    self.actions.push(Action::ToggleGrid);
-                }
-                ui.separator();
-                let mut shadows = self.doc.model.shadows.enabled;
-                if icon_check(ui, &mut shadows, Icon::Shadows, &tr!("menu-shadows")).clicked() {
-                    self.actions.push(Action::ToggleShadows);
-                }
-                ui.separator();
-                let d = self.doc.model.section_display;
-                for (k, mut on, icon, label) in [
-                    (0u8, d.planes, Icon::Section, tr!("menu-section-planes")),
-                    (1, d.cuts, Icon::SectionCut, tr!("menu-section-cuts")),
-                    (2, d.fill, Icon::SectionFill, tr!("menu-section-fill")),
-                ] {
-                    if icon_check(ui, &mut on, icon, &label).clicked() {
-                        self.actions.push(Action::ToggleSectionDisplay(k));
-                    }
-                }
-                ui.separator();
-                let panes = [Icon::Panes1, Icon::Panes2, Icon::Panes2, Icon::Panes4, Icon::Panes4];
-                let vp = icon_menu(ui, Some(panes[self.pane_count.min(4)]), &tr!("menu-viewports"), |ui| {
-                    for (n, label) in [(1, tr!("menu-viewports-one")), (2, tr!("menu-viewports-two")), (4, tr!("menu-viewports-four"))] {
-                        let r = icon_radio(ui, self.pane_count == n, panes[n], &label);
-                        super::tray_lib::spot(format!("panes:{n}"), r.rect.center());
-                        if r.clicked() {
-                            self.actions.push(Action::SetPanes(n));
-                            ui.close();
-                        }
-                    }
-                    ui.separator();
-                    ui.label(egui::RichText::new(tr!("menu-presets")).small().weak());
-                    for (i, p) in crate::panes::PRESETS.iter().enumerate() {
-                        let r = icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), &p.name(), None, true, false);
-                        super::tray_lib::spot(format!("preset:{i}"), r.rect.center());
-                        if r.clicked() {
-                            self.actions.push(Action::ViewPreset(i));
-                            ui.close();
-                        }
-                    }
-                });
-                super::tray_lib::spot("menu:Viewports", vp.rect.center());
-                ui.separator();
-                icon_menu(ui, Some(Icon::Film), &tr!("menu-animation"), |ui| {
-                    let has = !self.doc.model.scenes.is_empty();
-                    let (play, icon) = if self.scene_player.is_some() { (tr!("menu-pause"), Icon::Pause) } else { (tr!("menu-play"), Icon::Play) };
-                    self.icon_item(ui, Some(icon), &play, None, has, Action::ToggleAnimation);
-                    ui.separator();
-                    self.icon_item(ui, Some(Icon::NextScene), &tr!("menu-next-scene"), crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
-                    self.icon_item(ui, Some(Icon::PrevScene), &tr!("menu-previous-scene"), crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
-                    ui.separator();
-                    self.icon_item(ui, Some(Icon::AddScene), &tr!("menu-add-scene"), None, true, Action::AddScene);
-                });
-            });
+            let view_menu = ui.menu_button(tr!("menu-view"), |ui| self.menu_view(ui));
             super::tray_lib::spot("menu:View", view_menu.response.rect.center());
 
-            ui.menu_button(tr!("menu-camera"), |ui| {
-                ui.menu_button(tr!("menu-standard-views"), |ui| {
-                    for (name, v) in [
-                        (tr!("view-iso"), StandardView::Iso),
-                        (tr!("view-top"), StandardView::Top),
-                        (tr!("view-bottom"), StandardView::Bottom),
-                        (tr!("view-front"), StandardView::Front),
-                        (tr!("view-back"), StandardView::Back),
-                        (tr!("view-left"), StandardView::Left),
-                        (tr!("view-right"), StandardView::Right),
-                    ] {
-                        self.icon_item(ui, Some(super::view_hud::view_icon(v)), &name, None, true, Action::View(v));
-                    }
-                });
-                ui.separator();
-                let ortho = self.camera.ortho;
-                if ui.radio(ortho, tr!("menu-parallel-projection")).clicked() {
-                    self.actions.push(Action::SetParallel(true));
-                }
-                if ui.radio(!ortho, tr!("menu-perspective")).clicked() {
-                    self.actions.push(Action::SetParallel(false));
-                }
-                ui.separator();
-                for id in crate::tools::CAMERA_NAV {
-                    self.tool_item(ui, id);
-                }
-                self.cmd_item(ui, Cmd::ZoomExtents);
-                ui.separator();
-                for id in crate::tools::CAMERA_EYE {
-                    self.tool_item(ui, id);
-                }
-            });
+            ui.menu_button(tr!("menu-camera"), |ui| self.menu_camera(ui));
 
-            ui.menu_button(tr!("menu-draw"), |ui| {
-                self.tool_item(ui, ToolId::Line);
-                ui.separator();
-                for id in crate::tools::DRAW_CURVES {
-                    self.tool_item(ui, id);
-                }
-                ui.separator();
-                for id in crate::tools::DRAW_FLAT {
-                    self.tool_item(ui, id);
-                }
-                ui.separator();
-                ui.label(egui::RichText::new(tr!("menu-shapes")).small().weak());
-                for id in crate::tools::SHAPES {
-                    self.tool_item(ui, id);
-                }
-                self.cmd_item(ui, Cmd::Text3d);
-            });
+            ui.menu_button(tr!("menu-draw"), |ui| self.menu_draw(ui));
 
-            ui.menu_button(tr!("menu-tools"), |ui| {
-                for id in crate::tools::TOOLS_PICK {
-                    self.tool_item(ui, id);
-                }
-                ui.separator();
-                for id in crate::tools::TOOLS_MODIFY {
-                    self.tool_item(ui, id);
-                }
-                icon_menu(ui, Some(Icon::Solids(2)), &tr!("menu-solid-tools"), |ui| {
-                    for op in varstotas_kernel::SolidOp::ALL {
-                        self.cmd_item(ui, Cmd::Solid(op));
-                    }
-                });
-                ui.separator();
-                for id in crate::tools::TOOLS_MEASURE {
-                    self.tool_item(ui, id);
-                }
-            });
+            ui.menu_button(tr!("menu-tools"), |ui| self.menu_tools(ui));
 
             // stays open on clicks so several snaps can be toggled
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
@@ -540,98 +270,392 @@ impl VarstotasApp {
 
             // Stays open on clicks so several tray cards can be toggled; buttons close it.
             let keep = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
-            let (window_menu, _) = egui::containers::menu::MenuButton::new(tr!("menu-window")).config(keep).ui(ui, |ui| {
-                // The side bar and its cards: a checkbox each (turning a card on opens the side bar).
-                let side = icon_menu(ui, Some(Icon::SideBar), &tr!("menu-side-bar"), |ui| {
-                    let mut open = self.prefs.tray_open;
-                    if icon_check(ui, &mut open, Icon::SideBar, &tr!("menu-side-bar-show")).clicked() {
-                        self.actions.push(Action::ToggleTray);
-                    }
-                    ui.separator();
-                    for c in crate::ui::tray::TRAY_CARDS {
-                        let mut shown = Cmd::Card(c).checked(self).unwrap_or(true);
-                        let r = icon_check(ui, &mut shown, Cmd::Card(c).icon(), &crate::ui::tray::card_label(c));
-                        super::tray_lib::spot(format!("cmd:{}", Cmd::Card(c).key()), r.rect.center());
-                        if r.clicked() {
-                            self.actions.push(Action::ToggleCard(c));
-                        }
-                    }
-                });
-                super::tray_lib::spot("menu:SideBar", side.rect.center());
-                ui.separator();
-                use super::commands::WORKSHOP_MENU;
-                let mut after_separator = false;
-                for c in super::commands::WINDOW_MENU {
-                    let Some(c) = c.filter(|c| c.available()) else {
-                        // one separator where a group is left out
-                        if c.is_none() && !after_separator {
-                            ui.separator();
-                            after_separator = true;
-                        }
-                        continue;
-                    };
-                    after_separator = false;
-                    if c == WORKSHOP_MENU[0] {
-                        let workshop = icon_menu(ui, Some(Cmd::CutList.icon()), &tr!("menu-workshop"), |ui| {
-                            for c in WORKSHOP_MENU.into_iter().filter(|c| c.available()) {
-                                self.window_menu_row(ui, c);
-                            }
-                        });
-                        super::tray_lib::spot("menu:Workshop", workshop.rect.center());
-                    }
-                    if !WORKSHOP_MENU.contains(&c) {
-                        self.window_menu_row(ui, c);
-                    }
-                }
-            });
+            let (window_menu, _) = egui::containers::menu::MenuButton::new(tr!("menu-window")).config(keep).ui(ui, |ui| self.menu_window(ui));
             super::tray_lib::spot("menu:Window", window_menu.rect.center());
 
-            let help_menu=ui.menu_button(tr!("menu-help"), |ui| {
-                let r = ui.button(tr!("tutorial-title"));
-                super::tray_lib::spot("menu:Tutorial", r.rect.center());
-                if r.clicked() { self.actions.push(Action::Tutorial); ui.close(); }
-                let guide=ui.add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open)).on_hover_text(tr!("menu-user-guide-hint"));
-                super::tray_lib::spot("menu:UserGuide",guide.rect.center());
-                if guide.clicked() {
-                    self.open_app_help(crate::ui::app_help::Topic::Start);
-                    ui.close();
-                }
-                let reference=ui.add(egui::Button::new(tr!("menu-script-reference")).selected(self.script_help.open)).on_hover_text(tr!("menu-script-reference-hint"));
-                super::tray_lib::spot("menu:ScriptReference",reference.rect.center());
-                if reference.clicked() {
-                    self.open_script_help(crate::ui::script_help::Topic::Basics, None);
-                    ui.close();
-                }
-                let examples = ui.add_enabled(!crate::EXAMPLES_URL.is_empty(), egui::Button::new(tr!("menu-examples"))).on_hover_text(tr!("menu-examples-hint"));
-                super::tray_lib::spot("menu:Examples", examples.rect.center());
-                if examples.clicked() {
-                    super::online_mats::open_url(crate::EXAMPLES_URL);
-                    ui.close();
-                }
-                ui.separator();
-                let licences=ui.add(egui::Button::new(tr!("menu-licences")).selected(self.licences.open)).on_hover_text(tr!("menu-licences-hint"));
-                super::tray_lib::spot("menu:Licences",licences.rect.center());
-                if licences.clicked() {
-                    self.open_licences(crate::ui::licences::Tab::Varstotas);
-                    ui.close();
-                }
-                let notes = ui.add(egui::Button::new(tr!("menu-release-notes")).selected(self.release_notes.open)).on_hover_text(tr!("menu-release-notes-hint"));
-                super::tray_lib::spot("menu:ReleaseNotes", notes.rect.center());
-                if notes.clicked() {
-                    self.actions.push(Action::ReleaseNotes);
-                    ui.close();
-                }
-                if ui.button(tr!("menu-about")).clicked() {
-                    self.actions.push(Action::About);
-                    ui.close();
-                }
-                ui.separator();
-                let r = ui.button(tr!("report-menu"));
-                super::tray_lib::spot("menu:ReportProblem", r.rect.center());
-                if r.clicked() { self.actions.push(Action::ReportProblem); ui.close(); }
-            });
+            let help_menu=ui.menu_button(tr!("menu-help"), |ui| self.menu_help(ui));
             super::tray_lib::spot("menu:Help",help_menu.response.rect.center());
         });
+    }
+
+    /// File: new, open, save, preview image, import, export, scripts, quit. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_file(&mut self, ui: &mut Ui) {
+        self.cmd_item(ui, Cmd::New);
+        icon_menu(ui, None, &tr!("menu-new-from-template"), |ui| {
+            for t in Template::ALL {
+                let b = Button::new(t.name()).selected(self.prefs.template == Some(t));
+                if ui.add(b).on_hover_text(t.description()).clicked() {
+                    self.actions.push(Action::NewFromTemplate(t));
+                }
+            }
+            ui.separator();
+            ui.label(egui::RichText::new(tr!("template-files-heading")).weak());
+            let dir = crate::templates::directory(self.prefs.templates_dir.as_deref());
+            if let Some(dir) = &dir {
+                match crate::templates::scan(dir) {
+                    Ok(files) if files.is_empty() => { ui.label(tr!("template-files-empty")); }
+                    Ok(files) => {
+                        egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                            for file in files {
+                                if ui.button(&file.name).on_hover_text(file.path.display().to_string()).clicked() {
+                                    self.actions.push(Action::NewFromFileTemplate(file.path));
+                                    ui.close();
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => { ui.label(tr!("template-folder-error", error = e.to_string())); }
+                }
+            }
+            if super::extensions::CAN_REVEAL {
+                ui.separator();
+            }
+            if super::extensions::CAN_REVEAL && ui.add_enabled(dir.is_some(), Button::new(tr!("template-open-folder"))).clicked() {
+                if let Some(dir) = dir { super::extensions::reveal(&dir); }
+                ui.close();
+            }
+        });
+        self.cmd_item(ui, Cmd::Open);
+        let recent = self.prefs.recent.clone();
+        ui.add_enabled_ui(!recent.is_empty(), |ui| {
+            icon_menu(ui, None, &tr!("menu-open-recent"), |ui| {
+                for p in recent {
+                    let r = ui.add_enabled(varstotas_kernel::fs::is_file(&p), Button::new(recent_label(ui, &p, 48))).on_hover_text(p.display().to_string());
+                    if r.clicked() {
+                        self.actions.push(Action::OpenPath(p));
+                    }
+                }
+            });
+        });
+        let r = icon_row(ui, Some(Icon::StartScreen), &tr!("start-menu"), None, true, self.show_start);
+        super::tray_lib::spot("menu:StartScreen", r.rect.center());
+        if r.clicked() { self.actions.push(Action::StartScreen); ui.close(); }
+        ui.separator();
+        self.cmd_item(ui, Cmd::Save);
+        self.cmd_item(ui, Cmd::SaveAs);
+        let r = icon_menu(ui, Some(Icon::Picture(0)), &tr!("menu-preview-image"), |ui| {
+            self.cmd_item(ui, Cmd::PreviewShow);
+            ui.separator();
+            for c in [Cmd::PreviewFromFile, Cmd::PreviewFromView, Cmd::PreviewRemove] {
+                self.cmd_item(ui, c);
+            }
+        })
+        .on_hover_text(tr!("menu-preview-image-hint"));
+        super::tray_lib::spot("menu:PreviewImage", r.rect.center());
+        ui.separator();
+        icon_menu(ui, Some(Icon::Import("")), &tr!("menu-import"), |ui| {
+            use Cmd::*;
+            for c in [ImportObj, ImportStl, ImportDxf, ImportGltf, Import3mf, ImportDae, ImportFbx, ImportPly, ImportCsv] {
+                self.cmd_item(ui, c);
+            }
+            self.plugin_file_items(ui, false);
+            self.model_import_items(ui);
+        });
+        icon_menu(ui, Some(Icon::Export("")), &tr!("menu-export"), |ui| {
+            use Cmd::*;
+            self.cmd_item(ui, ExportImage);
+            self.cmd_item(ui, ExportAnimation);
+            ui.separator();
+            for c in [ExportObj, ExportStl, ExportDxf, ExportGlb, Export3mf, ExportDae, ExportPly, ExportDrawing] {
+                self.cmd_item(ui, c);
+            }
+            self.cmd_item_as(ui, Unfold, &tr!("menu-unfold-export"));
+            self.cmd_item(ui, Sheets);
+            ui.separator();
+            for c in [ExportReport, ExportFacesJson, ExportAttributions] {
+                self.cmd_item(ui, c);
+            }
+            self.plugin_file_items(ui, true);
+        });
+        ui.separator();
+        self.cmd_item(ui, Cmd::RunScript);
+        if Cmd::Quit.available() {
+            ui.separator();
+            self.cmd_item(ui, Cmd::Quit);
+        }
+    }
+
+    /// Edit: undo, clipboard, selection, hide / lock, groups, face operations. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_edit(&mut self, ui: &mut Ui) {
+        let undo = self.doc.history.undo_label().map(|l| tr!("menu-undo-named", name = l)).unwrap_or_else(|| Cmd::Undo.menu_label());
+        let redo = self.doc.history.redo_label().map(|l| tr!("menu-redo-named", name = l)).unwrap_or_else(|| Cmd::Redo.menu_label());
+        self.cmd_item_as(ui, Cmd::Undo, &undo);
+        self.cmd_item_as(ui, Cmd::Redo, &redo);
+        ui.separator();
+        self.clipboard_items(ui);
+        for c in [Cmd::Delete, Cmd::PurgeUnused, Cmd::DeleteGuides] {
+            self.cmd_item(ui, c);
+        }
+        ui.separator();
+        self.cmd_item(ui, Cmd::SelectAll);
+        self.cmd_item(ui, Cmd::SelectNone);
+        ui.separator();
+        self.cmd_item(ui, Cmd::Hide);
+        self.cmd_item(ui, Cmd::Lock);
+        self.cmd_item(ui, Cmd::UnhideAll);
+        self.cmd_item(ui, Cmd::UnlockAll);
+        ui.separator();
+        for c in [Cmd::MakeGroup, Cmd::MakeComponent, Cmd::MakeUnique, Cmd::MakeParametric, Cmd::Explode, Cmd::CloseGroup] {
+            self.cmd_item(ui, c);
+        }
+        ui.separator();
+        self.face_ops_items(ui);
+    }
+
+    /// View: face and edge styles, what is shown, sections, viewports, animation. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_view(&mut self, ui: &mut Ui) {
+        ui.label(egui::RichText::new(tr!("menu-face-style")).small().weak());
+        for (st, icon, label) in [
+            (FaceStylePref::ShadedColor, Icon::StyleShaded, tr!("menu-shaded")),
+            (FaceStylePref::Shaded, Icon::StyleTextured, tr!("menu-shaded-textures")),
+            (FaceStylePref::Monochrome, Icon::StyleMonochrome, tr!("menu-monochrome")),
+            (FaceStylePref::HiddenLine, Icon::StyleHiddenLine, tr!("menu-hidden-line")),
+            (FaceStylePref::Wireframe, Icon::StyleWireframe, tr!("menu-wireframe")),
+            (FaceStylePref::Realistic, Icon::StyleRealistic, tr!("menu-realistic")),
+        ] {
+            if icon_radio(ui, self.prefs.face_style == st, icon, &label).clicked() {
+                self.prefs.face_style = st;
+            }
+        }
+        icon_check(ui, &mut self.prefs.xray, Icon::StyleXRay, &tr!("menu-x-ray"));
+        ui.separator();
+        ui.label(egui::RichText::new(tr!("menu-edge-style")).small().weak());
+        icon_check(ui, self.prefs.edges_mut(), Icon::StyleEdges, &tr!("menu-edges")).on_hover_text(tr!("menu-edges-hint"));
+        let r = icon_check(ui, &mut self.prefs.show_triangles, Icon::StyleWireframe, &tr!("view-triangles"));
+        super::tray_lib::spot("menu:Triangles", r.rect.center());
+        r.on_hover_text(tr!("view-triangles-hint"));
+        icon_check(ui, &mut self.prefs.profiles, Icon::StyleProfiles, &tr!("menu-profiles"));
+        ui.separator();
+        let mut guides = !self.doc.model.guides_hidden;
+        if icon_check(ui, &mut guides, Icon::Guides, &tr!("menu-guides")).clicked() {
+            self.actions.push(Action::ToggleGuides);
+        }
+        let mut fasteners = !self.doc.model.fasteners_hidden;
+        if icon_check(ui, &mut fasteners, Icon::Joinery, &tr!("menu-fasteners")).on_hover_text(tr!("menu-fasteners-hint")).clicked() {
+            self.actions.push(Action::ToggleFasteners);
+        }
+        icon_check(ui, &mut self.prefs.show_axes, Icon::Axes, &tr!("menu-axes"));
+        icon_check(ui, &mut self.prefs.show_ground, Icon::Ground, &tr!("menu-ground"));
+        icon_check(ui, &mut self.prefs.show_sky, Icon::Sky, &tr!("menu-sky")).on_hover_text(tr!("menu-sky-hint"));
+        let mut grid = self.prefs.grid.show;
+        if icon_check(ui, &mut grid, Icon::Grid, &tr!("menu-grid")).clicked() {
+            self.actions.push(Action::ToggleGrid);
+        }
+        ui.separator();
+        let mut shadows = self.doc.model.shadows.enabled;
+        if icon_check(ui, &mut shadows, Icon::Shadows, &tr!("menu-shadows")).clicked() {
+            self.actions.push(Action::ToggleShadows);
+        }
+        ui.separator();
+        let d = self.doc.model.section_display;
+        for (k, mut on, icon, label) in [
+            (0u8, d.planes, Icon::Section, tr!("menu-section-planes")),
+            (1, d.cuts, Icon::SectionCut, tr!("menu-section-cuts")),
+            (2, d.fill, Icon::SectionFill, tr!("menu-section-fill")),
+        ] {
+            if icon_check(ui, &mut on, icon, &label).clicked() {
+                self.actions.push(Action::ToggleSectionDisplay(k));
+            }
+        }
+        ui.separator();
+        let panes = [Icon::Panes1, Icon::Panes2, Icon::Panes2, Icon::Panes4, Icon::Panes4];
+        let vp = icon_menu(ui, Some(panes[self.pane_count.min(4)]), &tr!("menu-viewports"), |ui| {
+            for (n, label) in [(1, tr!("menu-viewports-one")), (2, tr!("menu-viewports-two")), (4, tr!("menu-viewports-four"))] {
+                let r = icon_radio(ui, self.pane_count == n, panes[n], &label);
+                super::tray_lib::spot(format!("panes:{n}"), r.rect.center());
+                if r.clicked() {
+                    self.actions.push(Action::SetPanes(n));
+                    ui.close();
+                }
+            }
+            ui.separator();
+            ui.label(egui::RichText::new(tr!("menu-presets")).small().weak());
+            for (i, p) in crate::panes::PRESETS.iter().enumerate() {
+                let r = icon_row(ui, Some(if p.panes.len() == 4 { Icon::Panes4 } else { Icon::Panes2 }), &p.name(), None, true, false);
+                super::tray_lib::spot(format!("preset:{i}"), r.rect.center());
+                if r.clicked() {
+                    self.actions.push(Action::ViewPreset(i));
+                    ui.close();
+                }
+            }
+        });
+        super::tray_lib::spot("menu:Viewports", vp.rect.center());
+        ui.separator();
+        icon_menu(ui, Some(Icon::Film), &tr!("menu-animation"), |ui| {
+            let has = !self.doc.model.scenes.is_empty();
+            let (play, icon) = if self.scene_player.is_some() { (tr!("menu-pause"), Icon::Pause) } else { (tr!("menu-play"), Icon::Play) };
+            self.icon_item(ui, Some(icon), &play, None, has, Action::ToggleAnimation);
+            ui.separator();
+            self.icon_item(ui, Some(Icon::NextScene), &tr!("menu-next-scene"), crate::keymap::label(crate::keymap::KeyCmd::NextScene).as_deref(), has, Action::NextScene);
+            self.icon_item(ui, Some(Icon::PrevScene), &tr!("menu-previous-scene"), crate::keymap::label(crate::keymap::KeyCmd::PrevScene).as_deref(), has, Action::PrevScene);
+            ui.separator();
+            self.icon_item(ui, Some(Icon::AddScene), &tr!("menu-add-scene"), None, true, Action::AddScene);
+        });
+    }
+
+    /// Camera: standard views, projection, navigation tools. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_camera(&mut self, ui: &mut Ui) {
+        ui.menu_button(tr!("menu-standard-views"), |ui| {
+            for (name, v) in [
+                (tr!("view-iso"), StandardView::Iso),
+                (tr!("view-top"), StandardView::Top),
+                (tr!("view-bottom"), StandardView::Bottom),
+                (tr!("view-front"), StandardView::Front),
+                (tr!("view-back"), StandardView::Back),
+                (tr!("view-left"), StandardView::Left),
+                (tr!("view-right"), StandardView::Right),
+            ] {
+                self.icon_item(ui, Some(super::view_hud::view_icon(v)), &name, None, true, Action::View(v));
+            }
+        });
+        ui.separator();
+        let ortho = self.camera.ortho;
+        if ui.radio(ortho, tr!("menu-parallel-projection")).clicked() {
+            self.actions.push(Action::SetParallel(true));
+        }
+        if ui.radio(!ortho, tr!("menu-perspective")).clicked() {
+            self.actions.push(Action::SetParallel(false));
+        }
+        ui.separator();
+        for id in crate::tools::CAMERA_NAV {
+            self.tool_item(ui, id);
+        }
+        self.cmd_item(ui, Cmd::ZoomExtents);
+        ui.separator();
+        for id in crate::tools::CAMERA_EYE {
+            self.tool_item(ui, id);
+        }
+    }
+
+    /// Draw: the drawing tools and shapes. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_draw(&mut self, ui: &mut Ui) {
+        self.tool_item(ui, ToolId::Line);
+        ui.separator();
+        for id in crate::tools::DRAW_CURVES {
+            self.tool_item(ui, id);
+        }
+        ui.separator();
+        for id in crate::tools::DRAW_FLAT {
+            self.tool_item(ui, id);
+        }
+        ui.separator();
+        ui.label(egui::RichText::new(tr!("menu-shapes")).small().weak());
+        for id in crate::tools::SHAPES {
+            self.tool_item(ui, id);
+        }
+        self.cmd_item(ui, Cmd::Text3d);
+    }
+
+    /// Tools: picking, modifying and measuring tools. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_tools(&mut self, ui: &mut Ui) {
+        for id in crate::tools::TOOLS_PICK {
+            self.tool_item(ui, id);
+        }
+        ui.separator();
+        for id in crate::tools::TOOLS_MODIFY {
+            self.tool_item(ui, id);
+        }
+        icon_menu(ui, Some(Icon::Solids(2)), &tr!("menu-solid-tools"), |ui| {
+            for op in varstotas_kernel::SolidOp::ALL {
+                self.cmd_item(ui, Cmd::Solid(op));
+            }
+        });
+        ui.separator();
+        for id in crate::tools::TOOLS_MEASURE {
+            self.tool_item(ui, id);
+        }
+    }
+
+    /// Window: the side bar and its cards, the windows. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_window(&mut self, ui: &mut Ui) {
+        // The side bar and its cards: a checkbox each (turning a card on opens the side bar).
+        let side = icon_menu(ui, Some(Icon::SideBar), &tr!("menu-side-bar"), |ui| {
+            let mut open = self.prefs.tray_open;
+            if icon_check(ui, &mut open, Icon::SideBar, &tr!("menu-side-bar-show")).clicked() {
+                self.actions.push(Action::ToggleTray);
+            }
+            ui.separator();
+            for c in crate::ui::tray::TRAY_CARDS {
+                let mut shown = Cmd::Card(c).checked(self).unwrap_or(true);
+                let r = icon_check(ui, &mut shown, Cmd::Card(c).icon(), &crate::ui::tray::card_label(c));
+                super::tray_lib::spot(format!("cmd:{}", Cmd::Card(c).key()), r.rect.center());
+                if r.clicked() {
+                    self.actions.push(Action::ToggleCard(c));
+                }
+            }
+        });
+        super::tray_lib::spot("menu:SideBar", side.rect.center());
+        ui.separator();
+        use super::commands::WORKSHOP_MENU;
+        let mut after_separator = false;
+        for c in super::commands::WINDOW_MENU {
+            let Some(c) = c.filter(|c| c.available()) else {
+                // one separator where a group is left out
+                if c.is_none() && !after_separator {
+                    ui.separator();
+                    after_separator = true;
+                }
+                continue;
+            };
+            after_separator = false;
+            if c == WORKSHOP_MENU[0] {
+                let workshop = icon_menu(ui, Some(Cmd::CutList.icon()), &tr!("menu-workshop"), |ui| {
+                    for c in WORKSHOP_MENU.into_iter().filter(|c| c.available()) {
+                        self.window_menu_row(ui, c);
+                    }
+                });
+                super::tray_lib::spot("menu:Workshop", workshop.rect.center());
+            }
+            if !WORKSHOP_MENU.contains(&c) {
+                self.window_menu_row(ui, c);
+            }
+        }
+    }
+
+    /// Help: tutorial, guides, licences, about, report a problem. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    pub(crate) fn menu_help(&mut self, ui: &mut Ui) {
+        let r = ui.button(tr!("tutorial-title"));
+        super::tray_lib::spot("menu:Tutorial", r.rect.center());
+        if r.clicked() { self.actions.push(Action::Tutorial); ui.close(); }
+        let guide=ui.add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open)).on_hover_text(tr!("menu-user-guide-hint"));
+        super::tray_lib::spot("menu:UserGuide",guide.rect.center());
+        if guide.clicked() {
+            self.open_app_help(crate::ui::app_help::Topic::Start);
+            ui.close();
+        }
+        let reference=ui.add(egui::Button::new(tr!("menu-script-reference")).selected(self.script_help.open)).on_hover_text(tr!("menu-script-reference-hint"));
+        super::tray_lib::spot("menu:ScriptReference",reference.rect.center());
+        if reference.clicked() {
+            self.open_script_help(crate::ui::script_help::Topic::Basics, None);
+            ui.close();
+        }
+        let examples = ui.add_enabled(!crate::EXAMPLES_URL.is_empty(), egui::Button::new(tr!("menu-examples"))).on_hover_text(tr!("menu-examples-hint"));
+        super::tray_lib::spot("menu:Examples", examples.rect.center());
+        if examples.clicked() {
+            super::online_mats::open_url(crate::EXAMPLES_URL);
+            ui.close();
+        }
+        ui.separator();
+        let licences=ui.add(egui::Button::new(tr!("menu-licences")).selected(self.licences.open)).on_hover_text(tr!("menu-licences-hint"));
+        super::tray_lib::spot("menu:Licences",licences.rect.center());
+        if licences.clicked() {
+            self.open_licences(crate::ui::licences::Tab::Varstotas);
+            ui.close();
+        }
+        let notes = ui.add(egui::Button::new(tr!("menu-release-notes")).selected(self.release_notes.open)).on_hover_text(tr!("menu-release-notes-hint"));
+        super::tray_lib::spot("menu:ReleaseNotes", notes.rect.center());
+        if notes.clicked() {
+            self.actions.push(Action::ReleaseNotes);
+            ui.close();
+        }
+        if ui.button(tr!("menu-about")).clicked() {
+            self.actions.push(Action::About);
+            ui.close();
+        }
+        ui.separator();
+        let r = ui.button(tr!("report-menu"));
+        super::tray_lib::spot("menu:ReportProblem", r.rect.center());
+        if r.clicked() { self.actions.push(Action::ReportProblem); ui.close(); }
     }
 
     /// One window of the Window menu (or its Workshop submenu): opens it and closes the menu.

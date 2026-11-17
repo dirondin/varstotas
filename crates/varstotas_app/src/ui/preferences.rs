@@ -340,6 +340,7 @@ impl VarstotasApp {
                 p.theme = d.theme;
                 p.ui_scale = d.ui_scale;
                 p.toolbar_icons = d.toolbar_icons;
+                p.ui_mode = d.ui_mode;
             }
         }
         if matches!(s, Section::General) { self.ensure_templates_dir(); }
@@ -739,6 +740,16 @@ impl VarstotasApp {
             }
         });
         note(ui, &tr!("prefs-scale-note"));
+        heading(ui, &tr!("prefs-ui-mode"));
+        ui.horizontal(|ui| {
+            use super::compact::UiMode;
+            for (m, key) in [(UiMode::Auto, "prefs-ui-mode-auto"), (UiMode::Classic, "prefs-ui-mode-classic"), (UiMode::Compact, "prefs-ui-mode-compact")] {
+                let r = ui.radio_value(&mut self.prefs.ui_mode, m, tr(key));
+                super::tray_lib::spot(format!("uimode:{m:?}"), r.rect.center());
+            }
+        });
+        let key = crate::keymap::label(crate::keymap::KeyCmd::CompactUi).unwrap_or_default();
+        note(ui, &tr!("prefs-ui-mode-note", key = key));
         heading(ui, &tr!("prefs-toolbar-icons"));
         ui.horizontal(|ui| {
             for (label, side) in super::toolbar::ICON_SIZES {
