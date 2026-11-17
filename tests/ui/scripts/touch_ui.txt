@@ -1,0 +1,52 @@
+# Fingers on the view: one draws (the point goes where it is let go, a loupe above it
+# meanwhile), two pan, pinch and turn, without a click from the first finger.
+box 0 0 0 400 300 200
+view iso
+zoom_extents
+wait 10
+action ui_compact
+wait 10
+expect model_faces=6
+# a rectangle by two finger taps, each moved before it is let go
+tool rectangle
+raw finger 0 down 300 760
+wait 2
+raw finger 0 move 320 770
+wait 3
+screenshot shots/touch_loupe.bmp
+raw finger 0 up 320 770
+wait 3
+raw finger 0 down 400 820
+wait 2
+raw finger 0 move 440 860
+wait 3
+raw finger 0 up 440 860
+wait 5
+expect model_faces=7
+# two fingers: pinch out zooms in, no click from the first
+expect cam_dist=858
+raw finger 0 down 800 500
+wait 2
+raw finger 1 down 1000 500
+wait 2
+raw finger 0 move 750 500
+raw finger 1 move 1050 500
+wait 3
+expect cam_dist=572 
+# moved together: pan
+raw finger 0 move 850 550
+raw finger 1 move 1150 550
+wait 3
+expect cam=(462,-326,451)
+# turned: the model turns about the vertical
+raw finger 0 move 850 450
+raw finger 1 move 1150 650
+wait 3
+raw finger 1 move 1100 750
+wait 3
+expect look=(-0.83,0.16,-0.53)
+raw finger 1 up 1100 750
+raw finger 0 up 850 450
+wait 5
+expect model_faces=7
+expect tool=Rectangle 

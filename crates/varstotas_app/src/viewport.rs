@@ -38,6 +38,8 @@ struct HighlightKey {
 #[derive(Default)]
 struct Gpu {
     renderer: Option<Renderer>,
+    /// The scene's picture last shown (the touch loupe magnifies it).
+    shown: Option<egui::TextureId>,
     renderer_error: Option<String>,
     built: Option<GeometryKey>,
     highlighted: Option<HighlightKey>,
@@ -211,6 +213,11 @@ impl Viewport {
     }
 
     /// The path traced image and its size.
+    /// The scene's picture in pane `pane` as last shown.
+    pub fn scene_texture(&self, pane: usize) -> Option<egui::TextureId> {
+        self.gpus.get(pane)?.shown
+    }
+
     pub fn pt_texture(&self) -> Option<(egui::TextureId, [u32; 2])> {
         self.gpus.first()?.renderer.as_ref()?.pt_texture()
     }
@@ -470,6 +477,7 @@ impl Viewport {
                 match guarded(|| renderer.render(rs, camera, overlay3d, style, size_px, ppp)) {
                     Ok(tex) => {
                         painter.image(tex, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                        g.shown = Some(tex);
                         drew = true;
                     }
                     Err(e) => {

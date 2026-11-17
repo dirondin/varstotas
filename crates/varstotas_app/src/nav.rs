@@ -376,6 +376,47 @@ impl NavController {
     }
 }
 
+impl NavController {
+    /// Two or more fingers on the view (`crate::touch`): together they pan, pinched they zoom
+    /// toward what was between them, turned they turn the model about the vertical; three
+    /// fingers orbit.
+    pub fn touch(&mut self, g: &crate::touch::Gesture, rect: Rect, model: &Model, camera: &mut Camera, prefs: &NavPrefs) -> bool {
+        let viewport = rect.size();
+        if g.started {
+            let p = point_under(model, camera, (g.center - rect.min).to_pos2(), viewport);
+            self.pivot = p;
+            self.pan_point = p;
+            return false;
+        }
+        let mut changed = false;
+        if g.fingers >= 3 {
+            if g.pan != Vec2::ZERO {
+                camera.orbit(prefs.orbit_delta(dvec2(g.pan)), self.pivot);
+                changed = true;
+            }
+            return changed;
+        }
+        if g.pan != Vec2::ZERO {
+            camera.pan(dvec2(g.pan) * prefs.pan_speed.clamp(0.1, 10.0), self.pan_point, dvec2(viewport));
+            changed = true;
+        }
+        if g.zoom.is_finite() && g.zoom > 0.0 && (g.zoom - 1.0).abs() > 1e-4 {
+            camera.zoom(g.zoom as f64, self.pan_point);
+            changed = true;
+        }
+        if g.twist != 0.0 {
+            // the model turns with the fingers: the camera the other way
+            let rotation = DQuat::from_axis_angle(DVec3::Z, g.twist as f64);
+            let pivot = self.pan_point;
+            camera.eye = pivot + rotation * (camera.eye - pivot);
+            camera.target = pivot + rotation * (camera.target - pivot);
+            camera.up = rotation * camera.up;
+            changed = true;
+        }
+        changed
+    }
+}
+
 /// Smooth camera transition (scenes, standard views).
 pub struct CameraAnimation {
     from: Camera,

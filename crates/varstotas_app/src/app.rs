@@ -603,6 +603,8 @@ pub struct VarstotasApp {
     pub(crate) nav_button_rects: Vec<egui::Rect>,
     /// The compact interface (`ui/compact.rs`): on this frame, its ring menu and sheets.
     pub(crate) compact: crate::ui::compact::Compact,
+    /// Fingers on the view.
+    pub(crate) touch: crate::touch::Touch,
     pub(crate) last_modifiers: Modifiers,
     /// A text field had keyboard focus last frame: Escape / Enter that just released it must
     /// not also reach the tools (e.g. clear the selection).
@@ -806,6 +808,7 @@ impl VarstotasApp {
             space_used: false,
             nav_button_rects: Vec::new(),
             compact: Default::default(),
+            touch: Default::default(),
             last_pointer: None,
             press_local: None,
             last_modifiers: Modifiers::NONE,
@@ -1257,10 +1260,28 @@ impl VarstotasApp {
         // Scripted runs drive the tools themselves; a real mouse resting over the window must
         // not inject pointer events (e.g. a move with the button up cancels a scripted drag).
         let events = if self.debug.synthetic_input() { Vec::new() } else { events };
+        // two or more fingers navigate; a press the tool had from the first is called off
+        if let Some(g) = self.touch.update(&events) {
+            if self.tool_pressed {
+                self.tool_pressed = false;
+                self.press_local = None;
+                let pi = self.current_pointer();
+                self.with_tool(pi, |t, c| t.on_pointer_up(c));
+            }
+            if self.viewport.nav.touch(&g, rect, &self.doc.model, &mut self.camera, &self.prefs.nav) {
+                self.cam_anim = None;
+                self.scene_player = None;
+            }
+        }
+        // a finger runs the tool by its release (the navigation tools take its drag)
+        let finger_clicks = !matches!(self.tool.id(), ToolId::Orbit | ToolId::Pan | ToolId::Zoom | ToolId::LookAround | ToolId::Walk);
         for ev in events {
             match ev {
                 egui::Event::PointerMoved(p) => {
-                    if over || self.tool_pressed {
+                    if self.touch.gestured() && self.touch.active() {
+                        continue;
+                    }
+                    if over || self.tool_pressed || self.touch.pending.is_some() {
                         let local = (p - rect.min).to_pos2();
                         let delta = self.last_pointer.map(|l| local - l).unwrap_or_default();
                         self.last_pointer = Some(local);
@@ -1279,7 +1300,34 @@ impl VarstotasApp {
                         }
                         continue;
                     }
+                    // a finger: its press waits, the tool sees it move as the mouse's hover, and its
+                    // release clicks there (a second finger makes it navigation's)
                     if button == PointerButton::Primary {
+                        let local = (pos - rect.min).to_pos2();
+                        if pressed && finger_clicks && self.touch.active() {
+                            if over && rect.contains(pos) && !on_hud(pos) {
+                                self.touch.pending = Some(local);
+                                self.last_pointer = Some(local);
+                                let pi = self.pointer_info(local, egui::Vec2::ZERO, None, false);
+                                self.with_tool(pi, |t, c| t.on_pointer_move(c));
+                            }
+                            continue;
+                        }
+                        if !pressed && let Some(_) = self.touch.pending.take() {
+                            if !self.touch.gestured() {
+                                self.last_modifiers = modifiers;
+                                self.last_pointer = Some(local);
+                                let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(button), true);
+                                self.with_tool(pi, |t, c| t.on_pointer_down(c));
+                                let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(button), false);
+                                self.with_tool(pi, |t, c| t.on_pointer_up(c));
+                                self.after_primary_click(local, modifiers);
+                            }
+                            continue;
+                        }
+                        if !pressed && self.touch.gestured() && !self.tool_pressed {
+                            continue;
+                        }
                         primary_down = pressed;
                     }
                     // the right button: a click selects what is under it for the context
@@ -2707,6 +2755,7 @@ impl eframe::App for VarstotasApp {
                     && let Some(p) = response.interact_pointer_pos()
                 {
                     self.tool_pressed = false;
+                    self.touch.pending = None;
                     self.context_select((p - self.viewport.rect.min).to_pos2());
                 }
                 let at = response.interact_pointer_pos().unwrap_or(self.viewport.rect.center());
@@ -2757,6 +2806,9 @@ impl eframe::App for VarstotasApp {
                 // the tool's markers and the cursor belong to the active pane; its 3D preview shows everywhere
                 let (markers, cur) = if is_active { (&o2[..], cursor) } else { (&[][..], None) };
                 self.viewport.paint(ui, frame, k, rect, is_active, &self.doc, &self.camera, &style, &o3, markers, cur);
+                if is_active {
+                    self.paint_loupe(&ctx, k, rect, markers);
+                }
                 ui.push_id(("pane", k), |ui| self.view_hud(ui, rect));
                 if !is_active {
                     self.exchange(k);

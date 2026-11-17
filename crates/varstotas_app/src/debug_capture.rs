@@ -368,6 +368,20 @@ fn parse_raw(rest: &str) -> Option<RawCmd> {
         "up" => RawCmd::Up(p(0)?),
         "click" => RawCmd::Click(p(0)?),
         "tap" => RawCmd::Tap(p(0)?),
+        // `finger <id> <down|move|up> x y`: a touch; finger 0 also drives the pointer, as the
+        // browser and touch screens make it
+        "finger" => {
+            let mut w = args.split_whitespace();
+            let id: u64 = w.next()?.parse().ok()?;
+            let phase = match w.next()? {
+                "down" => egui::TouchPhase::Start,
+                "move" => egui::TouchPhase::Move,
+                "up" => egui::TouchPhase::End,
+                _ => return None,
+            };
+            let v: Vec<f32> = w.filter_map(|t| t.parse().ok()).collect();
+            RawCmd::Finger(id, phase, Pos2::new(*v.first()?, *v.get(1)?))
+        }
         "rclick" => RawCmd::RightClick(p(0)?),
         "dblclick" => RawCmd::DoubleClick(p(0)?),
         "drag" => RawCmd::Drag { a: p(0)?, b: p(2)?, steps: n.get(4).map_or(8, |s| *s as u32).max(1), fast: false },
@@ -411,6 +425,7 @@ pub enum RawCmd {
     Click(Pos2),
     /// `raw tap x y` — move + press + release in ONE frame (trackpad tap-to-click).
     Tap(Pos2),
+    Finger(u64, egui::TouchPhase, Pos2),
     /// `raw rclick x y` — move, secondary press, release (3 frames): context menu.
     RightClick(Pos2),
     /// `raw dblclick x y` — move, press, release, press, release (5 frames).
@@ -2670,6 +2685,19 @@ impl VarstotasApp {
             RawCmd::Up(p) => vec![vec![mv(p)], vec![btn(p, false)]],
             RawCmd::Click(p) => vec![vec![mv(p)], vec![btn(p, true)], vec![btn(p, false)]],
             RawCmd::Tap(p) => vec![vec![mv(p), btn(p, true), btn(p, false)]],
+            RawCmd::Finger(id, phase, p) => {
+                let touch = Event::Touch { device_id: egui::TouchDeviceId(0), id: egui::TouchId(id), phase, pos: p + origin, force: None };
+                let mut f = Vec::new();
+                if id == 0 {
+                    match phase {
+                        egui::TouchPhase::Start => f.extend([mv(p), btn(p, true)]),
+                        egui::TouchPhase::Move => f.push(mv(p)),
+                        _ => f.extend([btn(p, false), Event::PointerGone]),
+                    }
+                }
+                f.push(touch);
+                vec![f]
+            }
             RawCmd::Scroll(p, dy) => {
                 // A trackpad swipe: egui applies it at once (a wheel notch is smoothed over time).
                 let wheel = |phase: egui::TouchPhase, dy: f32| Event::MouseWheel {

@@ -46,6 +46,7 @@ mod templates;
 mod text3d;
 mod textures;
 mod thumbs;
+mod touch;
 mod vector_export;
 mod tools;
 mod ui;
@@ -234,6 +235,7 @@ fn window_failure_hook() {
     }));
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn start_failed(error: &str) {
     log::error!("start failed: {error}");
     // earlier errors that may explain it (this one is in the log twice already)
