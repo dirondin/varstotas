@@ -68,6 +68,8 @@ pub struct Radial {
     held: bool,
     /// The item the held pointer rests on, and since when.
     resting: Option<(usize, f64)>,
+    /// The submenus entered in the shown list (their labels).
+    sub: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,6 +104,8 @@ enum Menu {
     Snapping,
     Window,
     Help,
+    /// The view's context menu (a right click, a long press).
+    Context,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -234,6 +238,7 @@ impl Menu {
             Menu::Snapping => "menu-snapping",
             Menu::Window => "menu-window",
             Menu::Help => "menu-help",
+            Menu::Context => "compact-context",
         })
     }
 
@@ -248,6 +253,7 @@ impl Menu {
             Menu::Snapping => Icon::Magnet,
             Menu::Window => Icon::SideBar,
             Menu::Help => Icon::Info,
+            Menu::Context => Icon::More,
         }
     }
 
@@ -357,7 +363,8 @@ impl VarstotasApp {
     /// For the QA scripts: (on, the ring's open level, panels, number pad).
     pub(crate) fn compact_dump(&self) -> String {
         let level = self.compact.radial.as_ref().and_then(|r| r.levels.last().copied());
-        format!("({} {level:?} {} {})", self.compact.on, self.compact.panels, self.compact.numpad)
+        let sub = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
+        format!("({} {level:?} {} {}) compact_sub={sub:?}", self.compact.on, self.compact.panels, self.compact.numpad)
     }
 
     /// F8: the other interface.
@@ -368,7 +375,12 @@ impl VarstotasApp {
     /// Open the ring menu at `at` (None: the middle of the view), on its first ring.
     pub(crate) fn open_radial(&mut self, at: Option<Pos2>, held: bool) {
         let center = at.unwrap_or_else(|| self.viewport.view_rect.center());
-        self.compact.radial = Some(Radial { center, levels: vec![Level::Ring(Ring::Root)], held, resting: None });
+        self.compact.radial = Some(Radial { center, levels: vec![Level::Ring(Ring::Root)], held, resting: None, sub: Vec::new() });
+    }
+
+    /// The view's context menu as a list, for what a right click or a long press at `at` picked.
+    pub(crate) fn open_context_list(&mut self, at: Pos2) {
+        self.compact.radial = Some(Radial { center: at, levels: vec![Level::List(Menu::Context)], held: false, resting: None, sub: Vec::new() });
     }
 
     /// The floating buttons over the view `rect` (the central panel's `ui`).
@@ -551,8 +563,16 @@ impl VarstotasApp {
                 Level::Ring(ring) => self.ring_ui(ui, screen, ring, &backdrop),
                 Level::List(menu) => self.list_ui(ui, screen, menu, &backdrop),
             };
-            if close || ui.input(|i| i.key_pressed(Key::Escape)) {
-                self.radial_back(close);
+            if close {
+                self.radial_back(true);
+            } else if ui.input(|i| i.key_pressed(Key::Escape)) {
+                // out of a submenu first
+                match self.compact.radial.as_mut() {
+                    Some(r) if !r.sub.is_empty() => {
+                        r.sub.pop();
+                    }
+                    _ => self.radial_back(false),
+                }
             }
         });
     }
@@ -561,6 +581,7 @@ impl VarstotasApp {
     fn radial_back(&mut self, all: bool) {
         if let Some(r) = self.compact.radial.as_mut() {
             r.levels.pop();
+            r.sub.clear();
             r.resting = None;
             if all || r.levels.is_empty() {
                 self.compact.radial = None;
@@ -573,6 +594,7 @@ impl VarstotasApp {
         let open = |app: &mut Self, level: Level| {
             if let Some(r) = app.compact.radial.as_mut() {
                 r.levels.push(level);
+                r.sub.clear();
                 r.resting = None;
             }
             false
@@ -718,6 +740,9 @@ impl VarstotasApp {
         let mut back = false;
         let mut close = false;
         let mut should_close = false;
+        let path = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
+        let title = path.last().cloned().unwrap_or_else(|| menu.label());
+        let mut drilled = None;
         ui.scope_builder(UiBuilder::new().max_rect(panel).closable(), |ui| {
             egui::Frame::new().fill(theme::card_bg()).corner_radius(18.0).inner_margin(egui::Margin::same(12)).shadow(egui::epaint::Shadow {
                 offset: [0, 4],
@@ -728,7 +753,7 @@ impl VarstotasApp {
                 ui.set_min_size(panel.size() - vec2(24.0, 24.0));
                 ui.set_max_size(panel.size() - vec2(24.0, 24.0));
                 ui.horizontal(|ui| {
-                    let b = ui.add(egui::Button::new(egui::RichText::new(format!("‹  {}", menu.label())).size(18.0).strong()).frame(false).min_size(vec2(0.0, 40.0)));
+                    let b = ui.add(egui::Button::new(egui::RichText::new(format!("‹  {title}")).size(18.0).strong()).frame(false).min_size(vec2(0.0, 40.0)));
                     spot("radial:back", b.rect.center());
                     back = b.clicked();
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -739,10 +764,8 @@ impl VarstotasApp {
                     });
                 });
                 ui.separator();
-                egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-                    touch_spacing(ui);
-                    // rows as wide as the panel, like a menu's
-                    ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| match menu {
+                // a submenu opens in the panel, its rows in place of the menu's
+                drilled = Some(super::menu::drilled(ui, &path, list_rows, |ui| match menu {
                         Menu::File => self.menu_file(ui),
                         Menu::Edit => self.menu_edit(ui),
                         Menu::View => self.menu_view(ui),
@@ -752,19 +775,31 @@ impl VarstotasApp {
                         Menu::Snapping => self.snapping_menu(ui, true),
                         Menu::Window => self.menu_window(ui),
                         Menu::Help => self.menu_help(ui),
-                    });
-                });
+                        Menu::Context => self.viewport_context_menu(ui),
+                }));
             });
             should_close = ui.should_close();
         });
+        let (opened, sub_closed) = drilled.map_or((None, false), |d| (d.opened, d.closed));
+        if let Some(label) = opened
+            && let Some(r) = self.compact.radial.as_mut()
+        {
+            r.sub.push(label);
+            return false;
+        }
         if back {
-            self.radial_back(false);
+            match self.compact.radial.as_mut() {
+                Some(r) if !r.sub.is_empty() => {
+                    r.sub.pop();
+                }
+                _ => self.radial_back(false),
+            }
             return false;
         }
         let acted = self.actions.len() > before && !menu.stays_open();
         // a tap beside the panel closes the menu too
         let outside = backdrop.clicked() && ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| !panel.contains(p));
-        close || should_close || acted || outside
+        close || should_close || sub_closed || acted || outside
     }
 
     /// The side bar's cards: the whole window on a phone, a card on the right on wider screens.
@@ -896,6 +931,14 @@ impl VarstotasApp {
             self.compact.numpad = false;
         }
     }
+}
+
+/// A list's rows: finger-sized, as wide as the panel, scrolled.
+fn list_rows(ui: &mut Ui, add: &mut dyn FnMut(&mut Ui)) {
+    egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+        touch_spacing(ui);
+        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| add(ui));
+    });
 }
 
 /// An × of half-side `r` at `c`.

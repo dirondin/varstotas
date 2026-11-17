@@ -2698,7 +2698,20 @@ impl eframe::App for VarstotasApp {
                 self.with_tool(p, |t, c| t.on_frame(c, step));
                 ctx.request_repaint();
             }
-            response.context_menu(|ui| self.viewport_context_menu(ui));
+            if !self.compact.on {
+                response.context_menu(|ui| self.viewport_context_menu(ui));
+            } else if response.secondary_clicked() || response.long_touched() {
+                // the compact interface's context menu: a list like its menus; a long press
+                // picks what is under the finger first, as a right click does
+                if response.long_touched()
+                    && let Some(p) = response.interact_pointer_pos()
+                {
+                    self.tool_pressed = false;
+                    self.context_select((p - self.viewport.rect.min).to_pos2());
+                }
+                let at = response.interact_pointer_pos().unwrap_or(self.viewport.rect.center());
+                self.open_context_list(at);
+            }
             if let Some(anim) = self.cam_anim.as_mut() {
                 if !anim.step(dt, &mut self.camera) {
                     self.cam_anim = None;

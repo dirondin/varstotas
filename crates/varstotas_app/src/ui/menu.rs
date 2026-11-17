@@ -59,10 +59,100 @@ fn paint_after_box(ui: &Ui, r: &Response, icon: Icon) {
     paint_icon(&painter, rect, icon, false);
 }
 
+/// Submenus opened in place, in the compact interface's lists (`ui/compact.rs`).
+struct Drill {
+    /// The labels of the submenus into the shown one.
+    path: Vec<String>,
+    /// Submenus entered so far this frame.
+    depth: usize,
+    /// Where the shown submenu's rows go, and how they are laid out.
+    target: (egui::LayerId, egui::Rect),
+    rows: fn(&mut Ui, &mut dyn FnMut(&mut Ui)),
+    /// A submenu row tapped this frame.
+    opened: Option<String>,
+    /// The shown submenu asked to close.
+    closed: bool,
+}
+
+thread_local! {
+    static DRILL: std::cell::RefCell<Option<Drill>> = const { std::cell::RefCell::new(None) };
+}
+
+/// What a list run with [`drilled`] asked for.
+pub(crate) struct Drilled {
+    /// The label of the submenu row tapped: the list goes into it.
+    pub opened: Option<String>,
+    /// A row of the shown submenu closed the menu.
+    pub closed: bool,
+}
+
+/// Runs a menu's rows `body` as a list whose submenus open in place, not as popups: a submenu
+/// is a row, and with `path` (the labels of the submenus entered) not empty only the rows of
+/// the submenu at its end are shown, in `ui`'s place (the rest runs unseen). `rows` lays a
+/// level's rows out.
+pub(crate) fn drilled(ui: &mut Ui, path: &[String], rows: fn(&mut Ui, &mut dyn FnMut(&mut Ui)), body: impl FnOnce(&mut Ui)) -> Drilled {
+    let rect = ui.available_rect_before_wrap();
+    DRILL.set(Some(Drill { path: path.to_vec(), depth: 0, target: (ui.layer_id(), rect), rows, opened: None, closed: false }));
+    let mut body = Some(body);
+    if path.is_empty() {
+        rows(ui, &mut |ui| {
+            if let Some(b) = body.take() {
+                b(ui)
+            }
+        });
+    } else {
+        let mut unseen = ui.new_child(egui::UiBuilder::new().max_rect(rect).invisible());
+        if let Some(b) = body.take() {
+            b(&mut unseen);
+        }
+        ui.allocate_rect(rect, egui::Sense::hover());
+    }
+    let d = DRILL.take().expect("drill state");
+    Drilled { opened: d.opened, closed: d.closed }
+}
+
 /// A submenu's row with an icon slot, like [`icon_row`].
 fn icon_menu<R>(ui: &mut Ui, icon: Option<Icon>, label: &str, add_contents: impl FnOnce(&mut Ui) -> R) -> Response {
     let id = ui.id().with(("menu_icon", label));
-    let r = ui.menu_button((egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label), add_contents).response;
+    let drill = DRILL.with_borrow(|d| d.as_ref().map(|d| (d.path.get(d.depth).cloned(), d.depth, d.path.len(), d.target, d.rows)));
+    let r = match drill {
+        // on the way to the shown submenu: nothing is shown here
+        Some((next, depth, len, (layer, rect), rows)) if depth < len => {
+            if next.as_deref() == Some(label) {
+                let set_depth = |n| DRILL.with_borrow_mut(|d| d.as_mut().map(|d| d.depth = n));
+                set_depth(depth + 1);
+                if depth + 1 == len {
+                    let mut shown = Ui::new(ui.ctx().clone(), egui::Id::new("menu_drill").with(depth), egui::UiBuilder::new().layer_id(layer).max_rect(rect));
+                    let mut add = Some(add_contents);
+                    let closed = shown.scope_builder(egui::UiBuilder::new().closable(), |ui| {
+                        rows(ui, &mut |ui| {
+                            if let Some(a) = add.take() {
+                                a(ui);
+                            }
+                        });
+                        ui.should_close()
+                    }).inner;
+                    if closed {
+                        DRILL.with_borrow_mut(|d| d.as_mut().map(|d| d.closed = true));
+                    }
+                } else {
+                    add_contents(ui);
+                }
+                set_depth(depth);
+            }
+            return ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover());
+        }
+        // in the shown level: a row that goes into the submenu
+        Some(_) => {
+            let r = ui.add(Button::new((egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label)).right_text("›"));
+            super::tray_lib::spot(format!("sub:{label}"), r.rect.center());
+            if r.clicked() {
+                DRILL.with_borrow_mut(|d| d.as_mut().map(|d| d.opened = Some(label.to_owned())));
+            }
+            r
+        }
+        None => ui.menu_button((egui::Atom::custom(id, egui::vec2(MENU_ICON, MENU_ICON)), label), add_contents).response,
+    };
     if let Some(icon) = icon {
         let x = r.rect.left() + ui.spacing().button_padding.x;
         let rect = egui::Rect::from_min_size(egui::pos2(x, r.rect.center().y - MENU_ICON / 2.0), egui::vec2(MENU_ICON, MENU_ICON));
@@ -172,7 +262,7 @@ impl VarstotasApp {
             self.actions.push(Action::Unfold);
         }
         if self.selected_textured_face() {
-            ui.menu_button(tr!("menu-texture"), |ui| {
+            icon_menu(ui, None, &tr!("menu-texture"), |ui| {
                 self.icon_item(ui, Some(Icon::TexturePosition), &tr!("menu-texture-position"), None, true, Action::SetTool(ToolId::TexturePosition));
                 self.icon_item(ui, Some(Icon::UvEditor), &tr!("menu-uv-editor"), None, true, Action::UvEditor);
             });
@@ -495,7 +585,7 @@ impl VarstotasApp {
 
     /// Camera: standard views, projection, navigation tools. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
     pub(crate) fn menu_camera(&mut self, ui: &mut Ui) {
-        ui.menu_button(tr!("menu-standard-views"), |ui| {
+        icon_menu(ui, None, &tr!("menu-standard-views"), |ui| {
             for (name, v) in [
                 (tr!("view-iso"), StandardView::Iso),
                 (tr!("view-top"), StandardView::Top),

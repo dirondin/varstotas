@@ -5370,3 +5370,4 @@ compact-all-tools = All Tools
 compact-arcs = Arcs and Curves
 compact-modify = More Tools
 compact-measure = Measure
+compact-context = Actions

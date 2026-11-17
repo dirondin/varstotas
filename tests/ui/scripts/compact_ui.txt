@@ -42,6 +42,35 @@ screenshot shots/compact_list.bmp
 action click_spot radial:close
 wait 5
 expect compact=(true None false false)
+# a submenu opens in the same panel, back goes up: Snapping → Points
+action click_spot compact:menu
+wait 5
+action click_spot radial:menu:Snapping
+wait 10
+action click_spot sub:Points
+wait 10
+expect compact=(true Some(List(Snapping)) false false) compact_sub=["Points"]
+screenshot shots/compact_sub.bmp
+action click_spot radial:back
+wait 5
+expect compact=(true Some(List(Snapping)) false false) compact_sub=[]
+action click_spot radial:close
+wait 5
+expect compact=(true None false false)
+# a right click: the context menu as a list, its submenus in place too
+tool select
+rawp rclick 200 150 200
+wait 10
+expect compact=(true Some(List(Context)) false false)
+screenshot shots/compact_context.bmp
+action click_spot sub:Intersect Faces
+wait 5
+expect compact_sub=["Intersect Faces"]
+action click_spot radial:back
+wait 5
+action click_spot radial:close
+wait 5
+expect compact=(true None false false)
 # the dock
 action click_spot dock:PushPull
 wait 5

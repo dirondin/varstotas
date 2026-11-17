@@ -5394,3 +5394,4 @@ compact-all-tools = Visi įrankiai
 compact-arcs = Lankai ir kreivės
 compact-modify = Daugiau įrankių
 compact-measure = Matavimas
+compact-context = Veiksmai

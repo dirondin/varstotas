@@ -5446,3 +5446,4 @@ compact-all-tools = Усе інструменты
 compact-arcs = Дугі і крывыя
 compact-modify = Яшчэ інструменты
 compact-measure = Вымярэнні
+compact-context = Дзеянні
