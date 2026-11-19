@@ -50,12 +50,12 @@ impl VarstotasApp {
                     action = Some(Action::Open);
                 }
                 cols[0].add_space(8.0);
-                if cols[0].button(tr!("menu-examples")).clicked() {
-                    super::online_mats::open_url(crate::EXAMPLES_URL);
-                }
                 let r = cols[0].button(tr!("tutorial-title"));
                 super::tray_lib::spot("start:tutorial", r.rect.center());
                 if r.clicked() { action = Some(Action::Tutorial); }
+                if cols[0].button(tr!("menu-examples")).clicked() {
+                    super::online_mats::open_url(crate::EXAMPLES_URL);
+                }
                 let r = cols[0].button(tr!("start-guide"));
                 super::tray_lib::spot("start:guide", r.rect.center());
                 if r.clicked() {
