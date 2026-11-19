@@ -3484,6 +3484,7 @@ app-start-failed = Varstotas не смог открыть окно:
 dialog-about-build = Сборка { $build } · { $commit }
 dialog-about-dev-build = Сборка для разработки · { $commit }
 dialog-about-licence = Свободное ПО под лицензией MIT.
+dialog-about-homepage = Домашняя страница:
 dialog-about-licences = Лицензии…
 
 ## ======== Листы ========

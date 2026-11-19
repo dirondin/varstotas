@@ -3432,6 +3432,7 @@ app-start-failed = Varstotas nepavyko atverti lango:
 dialog-about-build = Kompiliacija { $build } · { $commit }
 dialog-about-dev-build = Kūrėjo kompiliacija · { $commit }
 dialog-about-licence = Laisvoji programinė įranga pagal MIT licenciją.
+dialog-about-homepage = Pagrindinis puslapis:
 dialog-about-licences = Licencijos…
 
 ## ======== Lapai ========

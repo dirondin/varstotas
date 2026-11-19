@@ -56,6 +56,8 @@ mod viewport;
 mod web;
 
 // Repository examples; available on GitHub once the project is pushed.
+/// The home page: the source repository (Help → About).
+const HOMEPAGE_URL: &str = "https://github.com/dirondin/varstotas";
 const EXAMPLES_URL: &str = "https://github.com/dirondin/varstotas/tree/master/examples";
 const ISSUES_URL: &str = "https://github.com/dirondin/varstotas/issues/new";
 const APP_NAME: &str = "Varstotas"; // i18n-ignore

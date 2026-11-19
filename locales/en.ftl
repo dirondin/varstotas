@@ -3409,6 +3409,7 @@ app-start-failed = Varstotas could not open its window:
 dialog-about-build = Build { $build } · { $commit }
 dialog-about-dev-build = Development build · { $commit }
 dialog-about-licence = Free software under the MIT licence.
+dialog-about-homepage = Home page:
 dialog-about-licences = Licences…
 
 ## ======== Sheets ========

@@ -456,6 +456,13 @@ impl VarstotasApp {
                         ui.label(tr!("dialog-about-tagline"));
                         ui.add_space(14.0);
                         ui.label(RichText::new(tr!("dialog-about-licence")).color(theme::text_dim()));
+                        ui.add_space(8.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new(tr!("dialog-about-homepage")).color(theme::text_dim()));
+                            let shown = crate::HOMEPAGE_URL.trim_start_matches("https://");
+                            let r = ui.hyperlink_to(shown, crate::HOMEPAGE_URL).on_hover_text(crate::HOMEPAGE_URL);
+                            super::tray_lib::spot("about:homepage", r.rect.center());
+                        });
                     });
                 });
                 ui.add_space(18.0);
