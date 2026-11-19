@@ -76,7 +76,7 @@ h1 { font-size: clamp(2.2rem, 5.5vw, 3.6rem); letter-spacing: -.02em; }
 .get .card h3 { margin: 0; }
 .get .card .btn { align-self: flex-start; margin-top: auto; }
 .card.accent { border-color: var(--accent); }
-pre { margin: auto 0 0; padding: 10px 12px; border-radius: 8px; background: var(--bg-band); border: 1px solid var(--line); overflow-x: auto; font-size: .8rem; }
+pre { margin: auto 0 0; padding: 10px 12px; border-radius: 8px; background: var(--bg-band); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
 .links { margin-top: 24px; }
 
 /* gallery */

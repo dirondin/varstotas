@@ -69,7 +69,7 @@ Linux (AppImage, `.deb` or `.tar.gz`), the last two for x86_64 and Arm64, are on
 **macOS** 11+ (Apple Silicon and Intel)
 
 - `.dmg`: open it and drag Varstotas to Applications. Or with Homebrew:
-  `brew install --cask dirondin/tap/varstotas`.
+  `brew tap dirondin/tap`, then `brew install --cask varstotas`.
 - The app is not notarized, so macOS blocks the first launch: open Varstotas once, then
   **System Settings → Privacy & Security → Open Anyway** (macOS 14 and earlier: right-click
   Varstotas → **Open** → **Open**). Or in Terminal:
