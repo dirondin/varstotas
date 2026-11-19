@@ -702,11 +702,8 @@ impl VarstotasApp {
         }
     }
 
-    /// Help: tutorial, guides, licences, about, report a problem. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
+    /// Help: guides, tutorial, examples, licences, about, report a problem. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
     pub(crate) fn menu_help(&mut self, ui: &mut Ui) {
-        let r = ui.button(tr!("tutorial-title"));
-        super::tray_lib::spot("menu:Tutorial", r.rect.center());
-        if r.clicked() { self.actions.push(Action::Tutorial); ui.close(); }
         let guide=ui.add(egui::Button::new(tr!("menu-user-guide")).shortcut_text("F1").selected(self.app_help.open)).on_hover_text(tr!("menu-user-guide-hint"));
         super::tray_lib::spot("menu:UserGuide",guide.rect.center());
         if guide.clicked() {
@@ -719,6 +716,9 @@ impl VarstotasApp {
             self.open_script_help(crate::ui::script_help::Topic::Basics, None);
             ui.close();
         }
+        let r = ui.button(tr!("tutorial-title"));
+        super::tray_lib::spot("menu:Tutorial", r.rect.center());
+        if r.clicked() { self.actions.push(Action::Tutorial); ui.close(); }
         let examples = ui.add_enabled(!crate::EXAMPLES_URL.is_empty(), egui::Button::new(tr!("menu-examples"))).on_hover_text(tr!("menu-examples-hint"));
         super::tray_lib::spot("menu:Examples", examples.rect.center());
         if examples.clicked() {
