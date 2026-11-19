@@ -2,49 +2,158 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- the page runs under the notch and the home bar; the app keeps its controls clear of them -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2b2d31">
-<!-- added to the home screen: a full-screen app, no browser bars -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Varstotas">
-<link rel="apple-touch-icon" href="icon.png">
-<link rel="manifest" href="manifest.webmanifest">
-<title>Varstotas</title>
-<link rel="icon" href="icon.png">
-<style>
-  /* the safe area, read by the app (ui/compact.rs) */
-  :root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); --safe-left: env(safe-area-inset-left, 0px); --safe-right: env(safe-area-inset-right, 0px); }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #2b2d31; color: #e6e6e6; font: 15px system-ui, sans-serif; }
-  /* the fingers are the app's: no page zoom, scroll or pull-to-refresh over it */
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; outline: none; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  .note { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; }
-  .note div { max-width: 32em; line-height: 1.5; }
-  .note[hidden] { display: none; }
-  a { color: #8ab4f8; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The home page of the GitHub Pages site; the app itself is app/ (web/app/index.html).
+     English is written here; i18n/<lang>.json translate the elements with data-i18n (text),
+     data-i18n-alt (alt) and data-i18n-aria (aria-label); site.js picks the language. -->
+<title>Varstotas — a free 3D modeller for makers</title>
+<meta name="description" content="A free, open-source 3D modeller for makers and hobbyists: furniture, workshop projects and 3D prints in real millimetres. macOS, Windows, Linux and the browser.">
+<meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1d20" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Varstotas">
+<meta property="og:description" content="A free, open-source 3D modeller for makers: furniture, workshop projects and 3D prints in real millimetres.">
+<meta property="og:image" content="https://dirondin.github.io/varstotas/img/desktop.jpg">
+<link rel="icon" href="app/icon.png">
+<link rel="apple-touch-icon" href="app/icon.png">
+<link rel="stylesheet" href="site.css">
+<script>
+  // started from a home-screen icon added when the app lived at the site's root: go to the app
+  if (matchMedia("(display-mode: standalone)").matches) location.replace("app/");
+</script>
 </head>
 <body>
-<canvas id="varstotas"></canvas>
-<div class="note" id="loading"><div>Loading Varstotas…</div></div>
-<div class="note" id="no-webgpu" hidden><div>
-  <b>This browser has no WebGPU.</b><br>
-  Varstotas in the browser needs WebGPU: a recent Chrome or Edge, Safari 26 or later,
-  or Firefox on Windows. The desktop version runs everywhere:
-  <a href="https://github.com/dirondin/varstotas/releases">download it</a>.
-</div></div>
-<script type="module">
-  const loading = document.getElementById("loading");
-  if (!navigator.gpu || !(await navigator.gpu.requestAdapter().catch(() => null))) {
-    loading.hidden = true;
-    document.getElementById("no-webgpu").hidden = false;
-  } else {
-    const app = await import("./varstotas.js");
-    await app.default();
-    loading.hidden = true;
-  }
-</script>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="brand" href="./"><img src="app/icon.png" alt="" width="32" height="32"><span>Varstotas</span></a>
+    <nav class="nav">
+      <a href="#features" data-i18n="nav-features">Features</a>
+      <a href="#screens" data-i18n="nav-screens">Screenshots</a>
+      <a href="#get" data-i18n="nav-get">Get it</a>
+      <a href="https://github.com/dirondin/varstotas">GitHub</a>
+    </nav>
+    <label class="lang"><span class="sr" data-i18n="lang-label">Language</span>
+      <select id="lang" aria-label="Language" data-i18n-aria="lang-label">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+        <option value="lt">Lietuvių</option>
+        <option value="be">Беларуская</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-text">
+      <p class="eyebrow" data-i18n="hero-platforms">macOS · Windows · Linux · browser</p>
+      <h1 data-i18n="hero-title">A 3D modeller for makers</h1>
+      <p class="lead" data-i18n="hero-lead">Plan furniture, workshop projects and 3D prints in real millimetres, then take the dimensions to the workshop or the model to a slicer. Free and open source.</p>
+      <div class="actions">
+        <a class="btn primary" href="app/" data-i18n="hero-run">Open in the browser</a>
+        <a class="btn" href="#get" data-i18n="hero-download">Download</a>
+        <a class="btn ghost" href="https://github.com/dirondin/varstotas" data-i18n="hero-source">Source code</a>
+      </div>
+      <p class="small" data-i18n="hero-note">Nothing to install: the browser version needs WebGPU (a recent Chrome or Edge, Safari 26 or later, Firefox on Windows).</p>
+    </div>
+    <figure class="hero-shot">
+      <video src="img/push-pull.mp4" poster="img/push-pull.jpg" autoplay muted loop playsinline aria-label="Drawing a rectangle, pulling it into a box and pushing a pocket into its top" data-i18n-aria="video-push-pull"></video>
+    </figure>
+  </div>
+</section>
+
+<section id="features" class="band">
+  <div class="wrap">
+    <h2 data-i18n="features-title">What it does</h2>
+    <div class="cards">
+      <article class="card"><span class="ico">✎</span><h3 data-i18n="f-model">Direct modelling</h3><p data-i18n="f-model-d">Lines, arcs, curves, Push/Pull, Offset, Sweep, chamfers and fillets, with inference snapping and exact typed values.</p></article>
+      <article class="card"><span class="ico">▦</span><h3 data-i18n="f-cut">Cut list</h3><p data-i18n="f-cut-d">Parts laid out on sheets and boards for straight saw cuts: cutting diagrams, offcuts kept for the next project, waste, shopping list and cost as PDF, SVG or CSV.</p></article>
+      <article class="card"><span class="ico">⚒</span><h3 data-i18n="f-joinery">Joinery and hardware</h3><p data-i18n="f-joinery-d">Dowels, screws, pocket holes, mortise and tenon, box joints and dovetails cut into the parts; confirmats, hinges, slides, handles and drawers.</p></article>
+      <article class="card"><span class="ico">⇲</span><h3 data-i18n="f-assembly">Assembly</h3><p data-i18n="f-assembly-d">An exploded view, assembly steps with the fasteners and a printable instructions booklet.</p></article>
+      <article class="card"><span class="ico">◭</span><h3 data-i18n="f-print">3D printing</h3><p data-i18n="f-print-d">Checks and repair, wall-thickness maps, cutting with dowels, bed layout, STL and 3MF export.</p></article>
+      <article class="card"><span class="ico">◐</span><h3 data-i18n="f-render">Materials and rendering</h3><p data-i18n="f-render-d">PBR materials and a UV editor, a realistic real-time style with shadows and reflections, a GPU path tracer.</p></article>
+      <article class="card"><span class="ico">☰</span><h3 data-i18n="f-libs">Libraries</h3><p data-i18n="f-libs-d">Material and component trays, online models and materials, parametric generators for shelves, stairs and railings.</p></article>
+      <article class="card"><span class="ico">⌘</span><h3 data-i18n="f-script">Scripting and AI</h3><p data-i18n="f-script-d">A Rhai console and plugins, a Python client and an MCP server for AI agents.</p></article>
+      <article class="card"><span class="ico">✋</span><h3 data-i18n="f-touch">Touch and pen</h3><p data-i18n="f-touch-d">A compact interface for tablets and phones: a menu ring, a dock, a number pad, the pen and palm rejection.</p></article>
+      <article class="card"><span class="ico">⇄</span><h3 data-i18n="f-formats">Open formats</h3><p data-i18n="f-formats-d">Import glTF, OBJ, STL, FBX, 3MF, DXF and more; export glTF, OBJ, STL, 3MF and PNG; unfold to SVG, PDF and DXF.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <h2 data-i18n="screens-title">Screenshots</h2>
+    <div class="gallery">
+      <figure class="wide"><a href="img/desktop.jpg"><img src="img/desktop.jpg" loading="lazy" width="1600" height="983" alt="The Bookshelf demo on the desktop" data-i18n-alt="shot-desktop"></a><figcaption data-i18n="shot-desktop">The Bookshelf demo on the desktop</figcaption></figure>
+      <figure><a href="img/cut-list.jpg"><img src="img/cut-list.jpg" loading="lazy" width="1600" height="983" alt="The cut list of the bookshelf" data-i18n-alt="shot-cut"></a><figcaption data-i18n="shot-cut">The cut list of the bookshelf</figcaption></figure>
+      <figure><a href="img/cut-diagram.png"><img src="img/cut-diagram.png" loading="lazy" alt="A cutting diagram with the dowel holes and the offcuts" data-i18n-alt="shot-diagram"></a><figcaption data-i18n="shot-diagram">A cutting diagram with the dowel holes and the offcuts</figcaption></figure>
+      <figure><a href="img/assembly.gif"><img src="img/assembly.gif" loading="lazy" alt="Assembly steps of the bookshelf" data-i18n-alt="shot-assembly"></a><figcaption data-i18n="shot-assembly">Assembly steps of the bookshelf</figcaption></figure>
+      <figure><a href="img/assembly-booklet.png"><img src="img/assembly-booklet.png" loading="lazy" alt="A page of the instructions booklet" data-i18n-alt="shot-booklet"></a><figcaption data-i18n="shot-booklet">A page of the instructions booklet</figcaption></figure>
+      <figure class="wide"><a href="img/realistic.jpg"><img src="img/realistic.jpg" loading="lazy" width="1600" height="983" alt="The country house in the Realistic style" data-i18n-alt="shot-realistic"></a><figcaption data-i18n="shot-realistic">The country house in the Realistic style</figcaption></figure>
+      <figure><a href="img/workbench.jpg"><img src="img/workbench.jpg" loading="lazy" alt="A workbench with its dimensions" data-i18n-alt="shot-workbench"></a><figcaption data-i18n="shot-workbench">A workbench with its dimensions</figcaption></figure>
+      <figure><a href="img/desk-caddy.jpg"><img src="img/desk-caddy.jpg" loading="lazy" alt="A desk caddy for a 3D printer" data-i18n-alt="shot-caddy"></a><figcaption data-i18n="shot-caddy">A desk caddy for a 3D printer</figcaption></figure>
+      <figure><a href="img/gallery.jpg"><img src="img/gallery.jpg" loading="lazy" alt="Wood, metal, glass, brick and glowing materials" data-i18n-alt="shot-gallery"></a><figcaption data-i18n="shot-gallery">Wood, metal, glass, brick and glowing materials</figcaption></figure>
+      <figure><video src="img/house-orbit.mp4" poster="img/house-orbit.jpg" muted loop playsinline controls preload="none" aria-label="Orbiting the country house" data-i18n-aria="shot-orbit"></video><figcaption data-i18n="shot-orbit">Orbiting the country house</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap devices">
+    <div class="devices-text">
+      <h2 data-i18n="devices-title">On every screen</h2>
+      <p data-i18n="devices-d">Native on macOS, Windows and Linux, and in the browser. On a tablet or a phone the compact interface turns on by itself: big targets, a menu ring, the tools in a dock and the panels in a sheet.</p>
+    </div>
+    <div class="device-row">
+      <figure class="device tablet"><img src="img/tablet.jpg" loading="lazy" width="1400" height="973" alt="The compact interface on a tablet" data-i18n-alt="dev-tablet"><figcaption data-i18n="dev-tablet">The compact interface on a tablet</figcaption></figure>
+      <figure class="device phone"><img src="img/phone.jpg" loading="lazy" width="461" height="1000" alt="On a phone" data-i18n-alt="dev-phone"><figcaption data-i18n="dev-phone">On a phone</figcaption></figure>
+      <figure class="device phone"><img src="img/phone-menu.jpg" loading="lazy" width="461" height="1000" alt="The menu ring" data-i18n-alt="dev-menu"><figcaption data-i18n="dev-menu">The menu ring</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="get">
+  <div class="wrap">
+    <h2 data-i18n="get-title">Get Varstotas</h2>
+    <div class="cards get">
+      <article class="card accent">
+        <h3 data-i18n="get-web">In the browser</h3>
+        <p data-i18n="get-web-d">Nothing to install; documents open from your disk and save back to it.</p>
+        <a class="btn primary" href="app/" data-i18n="get-web-run">Open Varstotas</a>
+      </article>
+      <article class="card">
+        <h3>macOS</h3>
+        <p data-i18n="get-mac-d">11 or later, Apple Silicon and Intel: a .dmg or Homebrew.</p>
+        <pre><code>brew install --cask dirondin/tap/varstotas</code></pre>
+      </article>
+      <article class="card">
+        <h3>Windows</h3>
+        <p data-i18n="get-win-d">10 or later, x64 and Arm: an installer, a portable .zip or Scoop.</p>
+        <pre><code>scoop bucket add dirondin https://github.com/dirondin/scoop-bucket
+scoop install dirondin/varstotas</code></pre>
+      </article>
+      <article class="card">
+        <h3>Linux</h3>
+        <p data-i18n="get-linux-d">x86_64 and Arm64: an AppImage, a .deb or a .tar.gz.</p>
+      </article>
+    </div>
+    <p class="links">
+      <a class="btn" href="https://github.com/dirondin/varstotas/releases/latest" data-i18n="get-all">All downloads and release notes</a>
+      <a class="btn ghost" href="https://github.com/dirondin/varstotas#installing-and-running" data-i18n="get-notes">Installation notes</a>
+    </p>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-row">
+    <span data-i18n="foot-licence">Free software under the MIT licence.</span>
+    <span class="foot-links">
+      <a href="https://github.com/dirondin/varstotas" data-i18n="foot-source">Source on GitHub</a>
+      <a href="https://github.com/dirondin/varstotas/issues/new" data-i18n="foot-issues">Report a problem</a>
+    </span>
+  </div>
+</footer>
+<script src="site.js"></script>
 </body>
 </html>

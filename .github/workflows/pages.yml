@@ -1,4 +1,4 @@
-# Puts the web version of a release-* tag on GitHub Pages: the `web-site` artifact of the tag's
+# Puts the site of a release-* tag on GitHub Pages (the home page at the root, the web version in app/): the `web-site` artifact of the tag's
 # latest successful Release build (release.yml → web.yml), as is (no rebuild). Called by Publish
 # release (publish.yml) for releases; run it by hand from a tag ("Use workflow from") to publish
 # that tag's site again. The github-pages environment allows the master branch and release-* tags.

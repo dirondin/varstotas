@@ -1,6 +1,7 @@
 // Smoke test of the web build in headless Chrome (WebGPU; SwiftShader where there is no GPU):
 // the page starts the app, a document is opened from "disk", exported as PNG and saved, both
 // come back as downloads. No dependencies: Node 22+ (fetch, WebSocket) and Chrome over CDP.
+// The home page comes first: its links and its translations (every data-i18n key in each i18n/*.json).
 // usage: node tests/web/smoke.mjs [site dir, default target/web] [out dir, default target/web-smoke]
 // CHROME=<path> picks the browser, CHROME_FLAGS adds switches, CHROME_LOG=1 shows its log. Screenshots of each step are left in the out dir.
 // The clicks are at fixed points of a 1400×900 page: move them when the layout changes.
@@ -25,14 +26,15 @@ const chrome = process.env.CHROME ?? [
 if (!chrome) fail("no Chrome: set CHROME");
 
 // the site, served as GitHub Pages would
-const types = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".png": "image/png" };
+const types = { ".json": "application/json", ".css": "text/css", ".jpg": "image/jpeg", ".gif": "image/gif", ".mp4": "video/mp4", ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".png": "image/png" };
 const server = createServer((req, res) => {
   const path = join(site, decodeURIComponent(new URL(req.url, "http://x").pathname).replace(/\/$/, "/index.html"));
   if (!path.startsWith(site) || !existsSync(path)) return res.writeHead(404).end();
   res.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream" }).end(readFileSync(path));
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const url = `http://127.0.0.1:${server.address().port}/`;
+const home = `http://127.0.0.1:${server.address().port}/`;
+const url = `${home}app/`;
 
 // Linux without a GPU: the page's WebGPU canvas is shown only when Chrome itself draws with
 // SwiftShader too (without these its swap chain gets no shared image, and buffers fail next)
@@ -119,6 +121,23 @@ await send("DOM.enable");
 await send("Page.setInterceptFileChooserDialog", { enabled: true });
 await send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: downloads });
 await send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
+
+// the home page: the app's link, every picture there, each language has every key
+const page = readFileSync(join(site, "index.html"), "utf8");
+check(page.includes('href="app/"'), "home page links the app");
+for (const [, src] of page.matchAll(/(?:src|poster|href)="((?:img|app|i18n)\/[^"#]*)"/g)) {
+  if (!src.endsWith("/") && !existsSync(join(site, src))) fail(`home page: no ${src}`);
+}
+const keys = [...page.matchAll(/data-i18n(?:-alt|-aria)?="([^"]+)"/g)].map((m) => m[1]);
+for (const f of readdirSync(join(site, "i18n"))) {
+  const strings = JSON.parse(readFileSync(join(site, "i18n", f), "utf8"));
+  const missing = keys.filter((k) => !(k in strings));
+  if (missing.length) fail(`i18n/${f}: no ${[...new Set(missing)].join(", ")}`);
+}
+console.log("ok   home page files and translations");
+await send("Page.navigate", { url: `${home}?lang=ru` });
+for (let i = 0; i < 40 && (await evaluate("document.documentElement.lang")) !== "ru"; i++) await sleep(250);
+check((await evaluate("document.querySelector('h1').textContent")).includes("3D-редактор"), "home page in Russian");
 
 await send("Page.navigate", { url });
 for (let i = 0; i < 60 && (await evaluate("location.href")) !== url; i++) await sleep(500);

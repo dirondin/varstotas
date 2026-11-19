@@ -1,4 +1,4 @@
-//! The web build: the app runs in the page's canvas (`web/index.html`, id `varstotas`) on
+//! The web build: the app runs in the page's canvas (`web/app/index.html`, id `varstotas`) on
 //! WebGPU only; a browser without it gets the page's own message instead of a blank canvas.
 //! The app's files live in memory (`varstotas_kernel::fs`): its data folder `/data` is kept in
 //! the browser's IndexedDB (`web_store.js`), loaded before the app starts; a file written

@@ -57,6 +57,10 @@ everything can be scripted.
 
 ## Download
 
+The home page is [dirondin.github.io/varstotas](https://dirondin.github.io/varstotas/); the
+web version runs from there, in [app/](https://dirondin.github.io/varstotas/app/) (WebGPU: a recent
+Chrome or Edge, Safari 26 or later, Firefox on Windows).
+
 Builds for macOS (`.dmg`, Apple Silicon and Intel), Windows (installer or portable `.zip`) and
 Linux (AppImage, `.deb` or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.
 
@@ -281,7 +285,7 @@ scripts/build-linux.sh      # Linux (this machine's arch): .tar.gz + .AppImage +
 GitHub Actions in `.github/workflows`:
 
 - **CI** (`ci.yml`) — every pull request and push to `master`: `cargo clippy -D warnings` and `cargo test --workspace` on Linux, and the tests on Windows and macOS.
-- **Release build** (`release.yml`) — pushing a tag `release-<version>`: the version check, unit tests in the release profile, release builds on macOS (universal) and on Windows and Linux for x86_64 and Arm64 (GitHub's Arm runners). All the packages above and `SHA256SUMS.txt` are kept as the run's `release-files` artifact, and the web version (`web.yml`: `scripts/build-web.sh`, then `tests/web/smoke.mjs` opens, exports and saves a document in headless Chrome on SwiftShader's WebGPU) as `web-site`; nothing is published. To build a tag again, run the workflow by hand from the tag (Actions → Release build → Run workflow → Use workflow from → Tags).
+- **Release build** (`release.yml`) — pushing a tag `release-<version>`: the version check, unit tests in the release profile, release builds on macOS (universal) and on Windows and Linux for x86_64 and Arm64 (GitHub's Arm runners). All the packages above and `SHA256SUMS.txt` are kept as the run's `release-files` artifact, and the web version (`web.yml`: `scripts/build-web.sh`, then `tests/web/smoke.mjs` checks the home page and its translations, then opens, exports and saves a document in headless Chrome on SwiftShader's WebGPU) as `web-site`: the home page (`web/index.html`; English in the page, `web/i18n/<lang>.json` for the other languages; `scripts/build-web.sh --site` copies only it) and the app in `app/`; nothing is published. To build a tag again, run the workflow by hand from the tag (Actions → Release build → Run workflow → Use workflow from → Tags).
 - **Testing a release** — the `release-files` artifact also holds `release-tests/`, a kit that installs each package on the system it runs on, starts it and drives it through UI scripts, ending with PASS or FAIL and a report (macOS, Linux, Windows and Windows Sandbox; `tests/release/README.md`, with the checks left for a person). It is not published.
 - **Publish release** (`publish.yml`) — by hand only, run from the tag the same way. It needs a successful Release build of the tag at its current commit and a successful CI run of that commit, takes that build's files as they are (no rebuild), checks the checksums, attaches everything to a draft and then publishes it as "Varstotas <version>". Its notes are the version's section of `CHANGELOG.md` (a few lines on what it brought; the app shows the same file in Help → What's New, and Release build fails without the section) followed by a downloads table (`.github/release-notes.md`). A version with a `-` (`release-0.2.0-rc.1`) makes a pre-release. A release that is already published is never changed; with release immutability on (Settings → General → Releases) its files and tag are frozen.
 - **Web site** (`pages.yml`) — after publishing a release (or by hand from a tag): that tag's `web-site` artifact goes to GitHub Pages as it is. The `github-pages` environment allows the master branch and `release-*` tags.
