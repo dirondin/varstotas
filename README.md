@@ -59,7 +59,9 @@ everything can be scripted.
 
 The home page is [dirondin.github.io/varstotas](https://dirondin.github.io/varstotas/); the
 web version runs from there, in [app/](https://dirondin.github.io/varstotas/app/) (WebGPU: a recent
-Chrome or Edge, Safari 26 or later, Firefox on Windows).
+Chrome or Edge, Safari 26 or later, Firefox on Windows). It is a PWA: install it from the
+browser (Install app, or Share → Add to Home Screen on an iPhone or iPad) and it opens in a
+window of its own, also without the network once it was opened.
 
 Builds for macOS (`.dmg`, Apple Silicon and Intel), Windows (installer or portable `.zip`) and
 Linux (AppImage, `.deb` or `.tar.gz`), the last two for x86_64 and Arm64, are on the [Releases](https://github.com/dirondin/varstotas/releases) page.

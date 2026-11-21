@@ -135,6 +135,13 @@ for (const f of readdirSync(join(site, "i18n"))) {
   if (missing.length) fail(`i18n/${f}: no ${[...new Set(missing)].join(", ")}`);
 }
 console.log("ok   home page files and translations");
+
+// a PWA: the manifest's icons, the offline worker filled in with the app's files
+const manifest = JSON.parse(readFileSync(join(site, "app", "manifest.webmanifest"), "utf8"));
+for (const icon of manifest.icons) if (!existsSync(join(site, "app", icon.src))) fail(`manifest: no ${icon.src}`);
+check(manifest.icons.some((i) => i.sizes === "512x512" && i.purpose === "maskable"), "manifest icons");
+const worker = readFileSync(join(site, "app", "sw.js"), "utf8");
+check(!worker.includes("__") && worker.includes('"./varstotas_bg.wasm"'), "offline worker lists the app's files");
 await send("Page.navigate", { url: `${home}?lang=ru` });
 for (let i = 0; i < 40 && (await evaluate("document.documentElement.lang")) !== "ru"; i++) await sleep(250);
 check((await evaluate("document.querySelector('h1').textContent")).includes("3D-редактор"), "home page in Russian");
@@ -151,6 +158,8 @@ for (let i = 0; i < 120 && !started; i++) {
 await sleep(5000);
 await shot("1-start");
 check(started && errors.length === 0, "app started");
+const cached = await evaluate(`(async () => { await navigator.serviceWorker.ready; for (let i = 0; i < 60; i++) { for (const k of await caches.keys()) { const c = await caches.open(k); if (await c.match("./varstotas_bg.wasm")) return k; } await new Promise((r) => setTimeout(r, 500)); } return "none"; })()`);
+check(cached.startsWith("varstotas-"), `offline worker cached the app (${cached})`);
 
 // start screen → Open a document… → x1.vrst
 await click(553, 479, 5);
@@ -173,6 +182,17 @@ check(vrst.length > 0 && statSync(model).size > 0, `save (${vrst.length} bytes)`
 await shot("4-saved");
 check(errors.length === 0, "no page errors");
 
-browser.kill();
+// offline: the server gone, the app opens from the worker's cache
 server.close();
+server.closeAllConnections();
+await send("Page.reload", { ignoreCache: true });
+let offline = false;
+for (let i = 0; i < 120 && !offline; i++) {
+  await sleep(500);
+  offline = await evaluate(`(() => { const c = document.getElementById("varstotas"); const l = document.getElementById("loading"); return !!c && c.width > 0 && !!l && l.hidden; })()`).catch(() => false);
+}
+await shot("5-offline");
+check(offline, "app opens offline");
+
+browser.kill();
 process.exit(0);

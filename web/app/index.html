@@ -10,10 +10,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Varstotas">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Varstotas</title>
-<link rel="icon" href="icon.png">
+<link rel="icon" href="icons/icon-192.png">
 <style>
   /* the safe area, read by the app (ui/compact.rs) */
   :root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); --safe-left: env(safe-area-inset-left, 0px); --safe-right: env(safe-area-inset-right, 0px); }
@@ -36,6 +36,8 @@
   <a href="https://github.com/dirondin/varstotas/releases">download it</a>.
 </div></div>
 <script type="module">
+  // the offline worker (sw.js): the app opens without the network once it was here
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   const loading = document.getElementById("loading");
   if (!navigator.gpu || !(await navigator.gpu.requestAdapter().catch(() => null))) {
     loading.hidden = true;
