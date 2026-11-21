@@ -1,6 +1,6 @@
 //! Fingers on the view: one runs the tool (the point goes where the finger is let go, so the
-//! finger does not hide it, with a loupe above it meanwhile), two navigate (moved together: pan,
-//! pinched: zoom, turned: turn the model about the vertical), three orbit.
+//! finger does not hide it, with a loupe above it meanwhile), two or more navigate (moved
+//! together: pan, pinched: zoom).
 //!
 //! The browser and the touch screens turn the first finger into the left mouse button as
 //! well; the other fingers come only as [`egui::Event::Touch`].
@@ -17,11 +17,8 @@ const LOUPE_R: f32 = 56.0;
 const LOUPE_ZOOM: f32 = 2.0;
 const LOUPE_LIFT: f32 = 96.0;
 /// The loupe waits this long (seconds) for a finger held alone: fingers seldom land together,
-/// and the first of a two- or three-finger gesture is no finger for the tool.
+/// and the first of a gesture's fingers is no finger for the tool.
 const LOUPE_DELAY: f64 = 0.25;
-
-/// A twist smaller than this (radians, since the fingers met) is a pinch's wobble, not a turn.
-const TWIST_START: f32 = 0.2;
 
 #[derive(Default)]
 pub struct Touch {
@@ -40,15 +37,12 @@ pub struct Touch {
     /// The points a finger's taps gave the tool so far, while it is busy with them (a rectangle's
     /// first corner, a line's points…): shown, as the finger hides where it tapped.
     pub marks: Vec<varstotas_kernel::glam::DVec3>,
-    /// The last frame's fingers: how many, their middle, spread and turn.
-    shape: Option<(usize, Pos2, f32, f32)>,
-    /// The turn since the fingers met, and whether it got past [`TWIST_START`].
-    twist: (f32, bool),
+    /// The last frame's fingers: how many, their middle and spread.
+    shape: Option<(usize, Pos2, f32)>,
 }
 
 /// What two or more fingers did in a frame.
 pub struct Gesture {
-    pub fingers: usize,
     /// Their middle (screen points).
     pub center: Pos2,
     /// The fingers came or went: nothing moved yet.
@@ -56,8 +50,6 @@ pub struct Gesture {
     pub pan: Vec2,
     /// Spread now / before.
     pub zoom: f32,
-    /// Radians, clockwise on the screen.
-    pub twist: f32,
 }
 
 impl Touch {
@@ -100,27 +92,14 @@ impl Touch {
         let pts: Vec<Pos2> = self.fingers.values().copied().collect();
         let center = (pts.iter().fold(Vec2::ZERO, |s, p| s + p.to_vec2()) / n as f32).to_pos2();
         let spread = pts.iter().map(|p| p.distance(center)).sum::<f32>() / n as f32;
-        let d = pts[1] - pts[0];
-        let angle = d.y.atan2(d.x);
         let g = match self.shape {
-            Some((m, c0, s0, a0)) if m == n => {
-                let mut turn = angle - a0;
-                if turn > std::f32::consts::PI {
-                    turn -= std::f32::consts::TAU;
-                } else if turn < -std::f32::consts::PI {
-                    turn += std::f32::consts::TAU;
-                }
-                self.twist.0 += turn;
-                self.twist.1 |= self.twist.0.abs() > TWIST_START;
+            Some((m, c0, s0)) if m == n => {
                 let zoom = if s0 > 1.0 && spread > 1.0 { spread / s0 } else { 1.0 };
-                Gesture { fingers: n, center, started: false, pan: center - c0, zoom, twist: if self.twist.1 { turn } else { 0.0 } }
+                Gesture { center, started: false, pan: center - c0, zoom }
             }
-            _ => {
-                self.twist = (0.0, false);
-                Gesture { fingers: n, center, started: true, pan: Vec2::ZERO, zoom: 1.0, twist: 0.0 }
-            }
+            _ => Gesture { center, started: true, pan: Vec2::ZERO, zoom: 1.0 },
         };
-        self.shape = Some((n, center, spread, angle));
+        self.shape = Some((n, center, spread));
         Some(g)
     }
 
@@ -261,7 +240,6 @@ mod tests {
         let g = t.update(&[touch(0, TouchPhase::Move, 90.0, 110.0), touch(1, TouchPhase::Move, 230.0, 110.0)], None).unwrap();
         assert_eq!(g.pan, Vec2::new(10.0, 10.0));
         assert!((g.zoom - 1.4).abs() < 1e-4);
-        assert_eq!(g.twist, 0.0);
         assert!(t.gestured());
         t.update(&[touch(0, TouchPhase::End, 90.0, 110.0), touch(1, TouchPhase::End, 230.0, 110.0)], None);
         assert!(!t.active());
@@ -283,14 +261,4 @@ mod tests {
         assert_eq!(t.loupe(p, 2.5), Err(None));
     }
 
-    #[test]
-    fn a_turn_past_the_wobble() {
-        let mut t = Touch::default();
-        t.update(&[touch(0, TouchPhase::Start, 0.0, 0.0), touch(1, TouchPhase::Start, 100.0, 0.0)], None);
-        // a small turn is a pinch's wobble
-        let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 10.0)], None).unwrap();
-        assert_eq!(g.twist, 0.0);
-        let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 40.0)], None).unwrap();
-        assert!(g.twist > 0.2);
-    }
 }

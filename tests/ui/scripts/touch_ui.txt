@@ -1,5 +1,5 @@
 # Fingers on the view: one draws (the point goes where it is let go, a loupe above it
-# once it is held alone a moment), two pan, pinch and turn, without a click from the first finger.
+# once it is held alone a moment), two pan and pinch, without a click from the first finger.
 box 0 0 0 400 300 200
 view iso
 zoom_extents
@@ -45,15 +45,8 @@ raw finger 0 move 850 550
 raw finger 1 move 1150 550
 wait 3
 expect cam=(462,-326,451)
-# turned: the model turns about the vertical
-raw finger 0 move 850 450
-raw finger 1 move 1150 650
-wait 3
-raw finger 1 move 1100 750
-wait 3
-expect look=(-0.83,0.16,-0.53)
-raw finger 1 up 1100 750
-raw finger 0 up 850 450
+raw finger 1 up 1150 550
+raw finger 0 up 850 550
 wait 5
 expect model_faces=7
 expect tool=Rectangle 
@@ -62,7 +55,7 @@ expect tool=Rectangle
 action click_spot nav:button:orbit
 wait 5
 expect tool=Orbit
-expect look=(-0.83,0.16,-0.53)
+expect look=(-0.41,0.74,-0.53)
 raw finger 0 down 700 500
 wait 2
 raw finger 0 move 800 500
@@ -72,7 +65,7 @@ wait 2
 raw finger 0 up 900 520
 wait 5
 expect tool=Orbit
-expect look=(-0.14,0.76,-0.63)
+expect look=(0.50,0.59,-0.63)
 action click_spot nav:button:orbit
 wait 5
 expect tool=Rectangle
