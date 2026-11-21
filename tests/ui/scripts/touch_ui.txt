@@ -1,5 +1,5 @@
 # Fingers on the view: one draws (the point goes where it is let go, a loupe above it
-# meanwhile), two pan, pinch and turn, without a click from the first finger.
+# once it is held alone a moment), two pan, pinch and turn, without a click from the first finger.
 box 0 0 0 400 300 200
 view iso
 zoom_extents
@@ -13,6 +13,9 @@ raw finger 0 down 300 760
 wait 2
 raw finger 0 move 320 770
 wait 3
+screenshot shots/touch_no_loupe_yet.bmp
+# the loupe waits a moment for a second finger
+wait 30
 screenshot shots/touch_loupe.bmp
 raw finger 0 up 320 770
 wait 3

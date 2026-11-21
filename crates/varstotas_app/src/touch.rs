@@ -16,6 +16,9 @@ use crate::overlay::{Marker2d, paint_marker, tooltip};
 const LOUPE_R: f32 = 56.0;
 const LOUPE_ZOOM: f32 = 2.0;
 const LOUPE_LIFT: f32 = 96.0;
+/// The loupe waits this long (seconds) for a finger held alone: fingers seldom land together,
+/// and the first of a two- or three-finger gesture is no finger for the tool.
+const LOUPE_DELAY: f64 = 0.25;
 
 /// A twist smaller than this (radians, since the fingers met) is a pinch's wobble, not a turn.
 const TWIST_START: f32 = 0.2;
@@ -30,6 +33,8 @@ pub struct Touch {
     gestured: bool,
     /// A finger's press kept for its release (view-local point where it went down).
     pub pending: Option<Pos2>,
+    /// When `pending` was pressed (seconds, egui's input time).
+    pub pending_at: f64,
     /// The last frame's fingers: how many, their middle, spread and turn.
     shape: Option<(usize, Pos2, f32, f32)>,
     /// The turn since the fingers met, and whether it got past [`TWIST_START`].
@@ -129,9 +134,12 @@ impl Touch {
         self.gestured
     }
 
-    /// Where the loupe looks (view-local): a finger held for the tool.
-    pub fn loupe(&self, pointer: Option<Pos2>) -> Option<Pos2> {
-        self.pending.and(pointer).filter(|_| !self.gestured)
+    /// Where the loupe looks (view-local): a finger held alone for the tool for [`LOUPE_DELAY`]
+    /// by `now`; otherwise how long until it may show, if it may.
+    pub fn loupe(&self, pointer: Option<Pos2>, now: f64) -> Result<Pos2, Option<f64>> {
+        let Some(at) = self.pending.and(pointer).filter(|_| !self.gestured) else { return Err(None) };
+        let wait = self.pending_at + LOUPE_DELAY - now;
+        if wait > 0.0 { Err(Some(wait)) } else { Ok(at) }
     }
 }
 
@@ -139,7 +147,15 @@ impl crate::app::VarstotasApp {
     /// The loupe over a finger held for the tool in pane `pane` (`rect`): the scene under the
     /// finger magnified, with the tool's point markers and its tooltip.
     pub(crate) fn paint_loupe(&self, ctx: &egui::Context, pane: usize, rect: Rect, markers: &[Marker2d]) {
-        let Some(at) = self.touch.loupe(self.last_pointer) else { return };
+        let at = match self.touch.loupe(self.last_pointer, ctx.input(|i| i.time)) {
+            Ok(at) => at,
+            Err(wait) => {
+                if let Some(w) = wait {
+                    ctx.request_repaint_after(std::time::Duration::from_secs_f64(w));
+                }
+                return;
+            }
+        };
         let Some(tex) = self.viewport.scene_texture(pane) else { return };
         let finger = rect.min + at.to_vec2();
         // above the finger; beside it near the top
@@ -213,6 +229,22 @@ mod tests {
         assert!(t.gestured());
         t.update(&[touch(0, TouchPhase::End, 90.0, 110.0), touch(1, TouchPhase::End, 230.0, 110.0)], None);
         assert!(!t.active());
+    }
+
+    #[test]
+    fn the_loupe_waits_for_a_second_finger() {
+        let mut t = Touch::default();
+        t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0)], None);
+        t.pending = Some(Pos2::new(100.0, 100.0));
+        t.pending_at = 1.0;
+        let p = Some(Pos2::new(100.0, 100.0));
+        assert!(matches!(t.loupe(p, 1.1), Err(Some(_))));
+        assert_eq!(t.loupe(p, 1.3), Ok(Pos2::new(100.0, 100.0)));
+        // the second finger came in time: no loupe at all
+        t.pending_at = 2.0;
+        t.update(&[touch(1, TouchPhase::Start, 200.0, 100.0)], None);
+        t.pending = p;
+        assert_eq!(t.loupe(p, 2.5), Err(None));
     }
 
     #[test]

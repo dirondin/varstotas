@@ -1327,6 +1327,11 @@ impl VarstotasApp {
                     if button == PointerButton::Middle {
                         continue;
                     }
+                    // the browser presses for each finger that lands: during two or more fingers'
+                    // navigation no press is the tool's (no selection box, no loupe)
+                    if pressed && self.touch.gestured() && self.touch.active() {
+                        continue;
+                    }
                     // a left press with Space held navigates, all of it (not the tool's)
                     if button == PointerButton::Primary && (space || self.viewport.nav.button() == Some(PointerButton::Primary)) && !self.tool_pressed {
                         if pressed {
@@ -1351,6 +1356,7 @@ impl VarstotasApp {
                         if pressed && finger_clicks && finger {
                             if over && rect.contains(pos) && !on_hud(pos) {
                                 self.touch.pending = Some(local);
+                                self.touch.pending_at = now;
                                 self.last_pointer = Some(local);
                                 let pi = self.pointer_info(local, egui::Vec2::ZERO, None, false);
                                 self.with_tool(pi, |t, c| t.on_pointer_move(c));
