@@ -2635,6 +2635,11 @@ impl VarstotasApp {
             "report_problem" => Action::ReportProblem,
             "lock" => Action::LockSelected,
             "unlock_all" => Action::UnlockAll,
+            _ if name.starts_with("safe_area ") => {
+                let v: Vec<f32> = name["safe_area ".len()..].split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                crate::ui::compact::set_test_safe_area(v.first().copied().unwrap_or(0.0), v.get(1).copied().unwrap_or(0.0));
+                return;
+            }
             _ if name.starts_with("keyboard ") => {
                 crate::ui::compact::set_test_keyboard(name["keyboard ".len()..].trim().parse().unwrap_or(0.0));
                 return;

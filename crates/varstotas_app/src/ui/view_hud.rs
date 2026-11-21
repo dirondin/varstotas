@@ -98,6 +98,8 @@ pub fn view_label(view: Option<StandardView>, ortho: bool) -> String {
 impl VarstotasApp {
     /// Draw the controls over the viewport `rect`; remembers where they are.
     pub(crate) fn view_hud(&mut self, ui: &mut Ui, rect: Rect) {
+        // clear of a phone's status bar, notch and home bar (none on a desktop)
+        let rect = super::compact::safe_area().shrink(rect);
         let area = Rect::from_min_max(rect.right_top() + vec2(-520.0, 8.0), rect.right_top() + vec2(-8.0, 44.0));
         let mut hud = Rect::NOTHING;
         ui.scope_builder(UiBuilder::new().max_rect(area).layout(Layout::right_to_left(Align::Min)), |ui| {

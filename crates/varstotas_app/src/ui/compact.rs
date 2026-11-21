@@ -302,6 +302,8 @@ thread_local! {
     static FIT: std::cell::Cell<(bool, bool)> = const { std::cell::Cell::new((false, false)) };
     static INSETS: std::cell::Cell<Insets> = const { std::cell::Cell::new(Insets { top: 0.0, bottom: 0.0, left: 0.0, right: 0.0, keyboard: 0.0 }) };
     static TEST_KEYBOARD: std::cell::Cell<f32> = const { std::cell::Cell::new(0.0) };
+    /// The QA scripts' phone: its status bar and home bar (top, bottom).
+    static TEST_SAFE: std::cell::Cell<(f32, f32)> = const { std::cell::Cell::new((0.0, 0.0)) };
     /// The sheet's handle (a QA spot, given once the frame's spots are cleared).
     static HANDLE: std::cell::Cell<Option<Pos2>> = const { std::cell::Cell::new(None) };
     /// The dialog shown as a sheet the last frame.
@@ -445,6 +447,11 @@ pub fn set_test_keyboard(h: f32) {
     TEST_KEYBOARD.set(h);
 }
 
+/// The QA scripts' safe area (`action safe_area TOP BOTTOM`): a phone's status and home bars.
+pub fn set_test_safe_area(top: f32, bottom: f32) {
+    TEST_SAFE.set((top, bottom));
+}
+
 pub fn safe_area() -> Insets {
     INSETS.get()
 }
@@ -471,7 +478,8 @@ fn read_safe_area(ctx: &egui::Context) -> Insets {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = ctx;
-        Insets { keyboard: TEST_KEYBOARD.get(), ..Default::default() }
+        let (top, bottom) = TEST_SAFE.get();
+        Insets { top, bottom, keyboard: TEST_KEYBOARD.get(), ..Default::default() }
     }
 }
 
