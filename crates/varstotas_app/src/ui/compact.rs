@@ -347,6 +347,15 @@ pub fn phone() -> bool {
     FIT.get().1
 }
 
+/// Where the view's top-left notes (the group being edited) go in the view `rect`: under the
+/// floating buttons in the compact interface, `None` in the classic one.
+pub fn below_buttons(rect: Rect) -> Option<Pos2> {
+    FIT.get().0.then(|| {
+        let r = safe_area().shrink(rect);
+        r.min + vec2(MARGIN, MARGIN + BUTTON + 8.0)
+    })
+}
+
 /// A dialog's width `w`, narrower on a page that has no room for it; on a phone the page's.
 pub fn fit_width(ctx: &egui::Context, w: f32) -> f32 {
     let page = ctx.content_rect().width();

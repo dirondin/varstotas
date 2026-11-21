@@ -528,8 +528,15 @@ impl Viewport {
             })
             .unwrap_or_default();
             let text = tr!("view-editing", path = names.join(" › "));
-            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(12.5), Color32::from_gray(40));
-            let r = Rect::from_min_size(rect.min + vec2(10.0, 10.0), galley.size() + vec2(16.0, 8.0));
+            let font = egui::FontId::proportional(12.5);
+            // compact: under the floating buttons, wrapped clear of the right-hand column
+            let below = crate::ui::compact::below_buttons(rect);
+            let galley = match below {
+                Some(at) => painter.layout(text, font, Color32::from_gray(40), (rect.right() - at.x - 92.0).max(120.0)),
+                None => painter.layout_no_wrap(text, font, Color32::from_gray(40)),
+            };
+            let at = below.unwrap_or(rect.min + vec2(10.0, 10.0));
+            let r = Rect::from_min_size(at, galley.size() + vec2(16.0, 8.0));
             painter.rect_filled(r, 6.0, Color32::from_rgba_unmultiplied(255, 255, 255, 210));
             painter.galley(r.min + vec2(8.0, 4.0), galley, Color32::BLACK);
         }
