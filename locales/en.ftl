@@ -1408,7 +1408,6 @@ prefs-default-keys = Default: { $keys }
 
 ## Navigation
 
-prefs-speed = Speed
 prefs-nav-orbit = Orbit
 prefs-nav-pan = Pan
 prefs-nav-zoom = Zoom
@@ -1421,7 +1420,6 @@ prefs-middle-drag = Middle button drag:
 prefs-shift-other = Shift gives the other one.
 prefs-right-drag = Right button drag:
 prefs-right-drag-off = Nothing
-prefs-no-middle = Without a middle button
 prefs-space-drag = Space + drag navigates
 prefs-space-drag-tip = Hold Space and drag with the left button (or one finger on a touchpad) to orbit, with Shift to pan, whatever the tool. A tap on Space alone still picks Select.
 prefs-nav-buttons = Navigation buttons in the view
@@ -1433,7 +1431,7 @@ view-nav-pan-tip = Pan: drag to move the view
 view-nav-zoom-tip = Zoom: drag up to come nearer, down to go back
 prefs-trackpad = Trackpad
 prefs-two-fingers = Two fingers:
-prefs-trackpad-note = Shift swaps orbit and pan. Pinch and %CMD% + two fingers zoom independently of the mouse wheel.
+prefs-trackpad-note = Two fingers moved on the trackpad, as the system scrolls. Shift swaps orbit and pan; %CMD% + two fingers zooms with the native pinch’s settings.
 
 ## View (defaults of a new document)
 
@@ -5161,20 +5159,21 @@ prefs-gesture-speed = Sensitivity
 prefs-invert-swipe = Invert two-finger swipe
 prefs-pinch-enabled = Pinch to zoom
 prefs-invert-pinch = Invert pinch
-prefs-twist = Two-finger twist
+prefs-twist = Two-finger twist:
 prefs-twist-off = Off
 prefs-twist-orbit = Orbit around vertical axis
 prefs-twist-roll = Roll view
 prefs-invert-twist = Invert twist
-prefs-trackpad-platform = Native pinch and twist depend on OS and driver support. Smooth-scroll devices also use these settings.
 prefs-touch = Touch screen
 prefs-touch-pan = Two fingers moved together: pan
 prefs-touch-zoom = Two fingers pinched: zoom
 prefs-touch-twist = Two fingers turned:
-prefs-touch-system = Browser gestures
-prefs-system-pinch = The browser’s pinch: zoom
-prefs-system-twist = The browser’s turn:
-prefs-touch-system-note = Safari on iPhone, iPad and Mac reports a pinch and a turn of its own; other browsers and the desktop app do not. While it does, the same gesture above gives way to it, so the view does not zoom or turn twice.
+prefs-mouse-speed-note = The speeds are also the Orbit, Pan and Zoom tools’ and the navigation buttons’.
+prefs-touch-note = Our own handling of fingers on the screen: in any browser and in the app on a touch screen.
+prefs-native = Native gestures
+prefs-native-on-screen = Also for fingers on the touch screen (Safari on iPhone and iPad)
+prefs-native-note = The pinch and twist as the system recognises them: a Mac trackpad in the app and in Safari, and fingers on the screen in Safari when asked above. Other browsers and Windows and Linux touch screens send none.
+prefs-touch-conflict = Safari recognises the pinch and twist of fingers on the screen itself, and both the touch screen gestures and the native ones are on for them: they may fight. While Safari sends its own, ours of the kind gives way; if the view still jumps, turn one of them off.
 
 view-triangles = Triangles
 view-triangles-hint = Show every tessellation edge over the current style, including soft edges and polygon diagonals.

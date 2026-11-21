@@ -1414,7 +1414,6 @@ prefs-default-keys = Numatytasis: { $keys }
 
 ## Navigation
 
-prefs-speed = Greitis
 prefs-nav-orbit = Sukimas
 prefs-nav-pan = Slinkimas
 prefs-nav-zoom = Artinimas
@@ -1427,7 +1426,6 @@ prefs-middle-drag = Vidurinio mygtuko tempimas:
 prefs-shift-other = Shift suteikia kitą.
 prefs-right-drag = Dešiniojo mygtuko tempimas:
 prefs-right-drag-off = Nieko
-prefs-no-middle = Be vidurinio mygtuko
 prefs-space-drag = Tarpas + tempimas – navigacija
 prefs-space-drag-tip = Laikykite tarpą ir tempkite kairiuoju mygtuku (arba vienu pirštu jutiklinėje planšetėje): sukimas, su Shift – poslinkis, bet kuriame įrankyje. Trumpas tarpo paspaudimas kaip ir anksčiau parenka „Žymėjimą“.
 prefs-nav-buttons = Navigacijos mygtukai vaizde
@@ -1439,7 +1437,7 @@ view-nav-pan-tip = Slinkti: tempkite, kad pastumtumėte vaizdą
 view-nav-zoom-tip = Mastelis: tempkite aukštyn – arčiau, žemyn – toliau
 prefs-trackpad = Jutiklinis kilimėlis
 prefs-two-fingers = Du pirštai:
-prefs-trackpad-note = Shift sukeičia sukimą ir stumdymą. Suspaudimas ir %CMD% + du pirštai artina nepriklausomai nuo pelės ratuko.
+prefs-trackpad-note = Dviejų pirštų judesys jutikliniu kilimėliu, kaip jį slenka sistema. Shift sukeičia orbitą ir panoramą; %CMD% + du pirštai — mastelis su natūralaus suspaudimo nuostatomis.
 
 ## View (defaults of a new document)
 
@@ -5185,20 +5183,21 @@ prefs-gesture-speed = Jautrumas
 prefs-invert-swipe = Apversti dviejų pirštų slinkimą
 prefs-pinch-enabled = Artinti suspaudimo gestu
 prefs-invert-pinch = Apversti suspaudimą
-prefs-twist = Dviejų pirštų pasukimas
+prefs-twist = Pasukimas dviem pirštais:
 prefs-twist-off = Išjungta
 prefs-twist-orbit = Sukti apie vertikalią ašį
 prefs-twist-roll = Pakreipti vaizdą
 prefs-invert-twist = Apversti pasukimą
-prefs-trackpad-platform = Suspaudimas ir pasukimas priklauso nuo OS ir tvarkyklės. Šie nustatymai taip pat taikomi sklandaus slinkimo įrenginiams.
 prefs-touch = Jutiklinis ekranas
 prefs-touch-pan = Du pirštai kartu — panorama
 prefs-touch-zoom = Suspaudus du pirštus — mastelis
 prefs-touch-twist = Pasukus du pirštus:
-prefs-touch-system = Naršyklės gestai
-prefs-system-pinch = Naršyklės suspaudimas — mastelis
-prefs-system-twist = Naršyklės pasukimas:
-prefs-touch-system-note = Safari iPhone, iPad ir Mac pats praneša apie suspaudimą ir pasukimą; kitos naršyklės ir darbalaukio programa — ne. Kol jis tai daro, tas pats gestas aukščiau jam užleidžia vietą, kad vaizdas nebūtų keičiamas ar sukamas dukart.
+prefs-mouse-speed-note = Šie greičiai galioja ir įrankiams „Orbita“, „Panorama“, „Mastelis“ bei naršymo mygtukams.
+prefs-touch-note = Mūsų pačių pirštų ekrane apdorojimas: bet kurioje naršyklėje ir programoje jutikliniame ekrane.
+prefs-native = Natūralūs gestai
+prefs-native-on-screen = Ir pirštams jutikliniame ekrane (Safari iPhone ir iPad)
+prefs-native-note = Suspaudimas ir pasukimas taip, kaip juos atpažįsta sistema: Mac jutiklinis kilimėlis programoje ir Safari, o pirštai ekrane — Safari, jei įjungta aukščiau. Kitos naršyklės ir Windows bei Linux jutikliniai ekranai jų nesiunčia.
+prefs-touch-conflict = Safari pats atpažįsta pirštų ekrane suspaudimą ir pasukimą, o jiems įjungti ir jutiklinio ekrano, ir natūralūs gestai: jie gali konfliktuoti. Kol Safari siunčia savo gestą, toks pat mūsų užleidžia vietą; jei vaizdas vis tiek trūkčioja, išjunkite vieną iš jų.
 
 view-triangles = Trikampiai
 view-triangles-hint = Rodyti visas trianguliacijos briaunas virš esamo stiliaus, įskaitant minkštas briaunas ir daugiakampių įstrižaines.

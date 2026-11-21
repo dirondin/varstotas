@@ -82,13 +82,17 @@ wait 5
 expect cam_dist=4415
 expect hud=(Some(Iso) false Shaded false)
 # Invert the swipe: wheel inversion is now separate from trackpad gestures
+raw scroll 500 350 -150
+wait 8
 action click_spot nav:invert_swipe
 wait 3
 expect invert_swipe: true
 raw scroll 900 600 100
 wait 5
 expect cam_dist=12000
-# Reset: Orbit, no inversion
+# Reset: Orbit, no inversion (the button tops the section: scrolled back to it)
+raw scroll 500 350 1000
+wait 8
 raw click 649 92
 wait 5
 expect nav=NavPrefs { orbit_speed: 1.0, zoom_speed: 1.0, invert_zoom: false, zoom_to_cursor: true, middle: Orbit, two_finger: Orbit, pan_speed: 1.0, trackpad_enabled: true

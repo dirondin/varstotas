@@ -85,7 +85,7 @@ raw scroll 640 400 -2000
 wait 8
 action click_spot nav:touch_twist_off
 wait 3
-expect touch_twist: Disabled, system_pinch: false, system_twist: Disabled
+expect touch_twist: Disabled, touch_twist_speed: 1.0, touch_invert_twist: false, native_on_screen: false
 action back
 wait 5
 raw finger 0 down 850 450

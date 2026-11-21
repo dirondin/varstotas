@@ -62,7 +62,7 @@ expect cam_dist=3047
 # a wheel that is a touchpad: scrolling orbits, Ctrl + scroll zooms
 action preferences
 wait 5
-raw scroll 500 350 -1500
+raw scroll 500 350 -250
 wait 8
 screenshot shots/laptop_nav_prefs.bmp
 action click_spot nav:wheel_trackpad

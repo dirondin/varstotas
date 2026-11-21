@@ -24,7 +24,7 @@ dump after_twist
 expect cam_dist=12000
 action preferences
 wait 5
-raw scroll 500 350 -230
+raw scroll 500 350 -600
 wait 8
 action click_spot nav:pinch
 wait 3
@@ -54,9 +54,14 @@ wait 3
 expect trackpad_enabled: false
 raw click 664 54
 wait 5
-raw pinch 900 500 0.5
-raw twist 900 500 0.3
 raw scroll 900 500 100
+wait 5
+expect cam_dist=24000
+# the native pinch is its own section: the trackpad's switch leaves it (inverted above)
+raw pinch 900 500 0.5
+wait 5
+expect cam_dist=12000
+raw pinch 900 500 2
 wait 5
 expect cam_dist=24000
 raw wheel 900 500 1

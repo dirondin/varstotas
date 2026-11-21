@@ -1009,7 +1009,29 @@ impl VarstotasApp {
     fn prefs_navigation(&mut self, ui: &mut Ui) {
         use crate::nav::{ButtonDrag, NavGesture, TwistGesture};
         let n = &mut self.prefs.nav;
-        heading(ui, &tr!("prefs-speed"));
+        let r = ui.checkbox(&mut n.buttons, tr!("prefs-nav-buttons")).on_hover_text(tr!("prefs-nav-buttons-tip"));
+        super::tray_lib::spot("nav:buttons", r.rect.center());
+        let speed = |ui: &mut Ui, v: &mut f64| {
+            ui.horizontal(|ui| {
+                ui.label(tr!("prefs-gesture-speed"));
+                ui.add(egui::Slider::new(v, 0.25..=4.0).logarithmic(true).suffix("×"))
+            })
+            .inner
+        };
+        let twist_row = |ui: &mut Ui, mode: &mut TwistGesture, label: &str, spot: &str| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr(label));
+                for (gesture, label, key) in [(TwistGesture::Disabled, "prefs-twist-off", "off"), (TwistGesture::Orbit, "prefs-twist-orbit", "orbit"), (TwistGesture::Roll, "prefs-twist-roll", "roll")] {
+                    let r = ui.radio_value(mode, gesture, tr(label));
+                    super::tray_lib::spot(format!("{spot}_{key}"), r.rect.center());
+                }
+            });
+        };
+        // Safari pinches and turns fingers on the screen itself (`nav::NavPrefs::native_on_screen`)
+        let overlap = gesture_events() && n.touch_overlaps_native();
+
+        // ---- mouse (its speeds are also the Orbit, Pan and Zoom tools' and buttons')
+        heading(ui, &tr!("prefs-mouse"));
         egui::Grid::new("nav_speed").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
             ui.label(tr!("prefs-nav-orbit"));
             let r = ui.add(egui::Slider::new(&mut n.orbit_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
@@ -1019,24 +1041,34 @@ impl VarstotasApp {
             let r = ui.add(egui::Slider::new(&mut n.zoom_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
             super::tray_lib::spot("nav:zoom", r.rect.center());
             ui.end_row();
-        });
-        ui.horizontal(|ui| {
             ui.label(tr!("prefs-nav-pan"));
             ui.add(egui::Slider::new(&mut n.pan_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
+            ui.end_row();
         });
-        heading(ui, &tr!("prefs-nav-zoom"));
+        note(ui, &tr!("prefs-mouse-speed-note"));
         let r = ui.checkbox(&mut n.invert_zoom, tr!("prefs-invert-wheel")).on_hover_text(tr!("prefs-invert-wheel-tip"));
         super::tray_lib::spot("nav:invert", r.rect.center());
         let r = ui.checkbox(&mut n.zoom_to_cursor, tr!("prefs-zoom-cursor")).on_hover_text(tr!("prefs-zoom-cursor-tip"));
         super::tray_lib::spot("nav:cursor", r.rect.center());
-        heading(ui, &tr!("prefs-mouse"));
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(tr!("prefs-middle-drag"));
             ui.radio_value(&mut n.middle, NavGesture::Orbit, tr!("prefs-nav-orbit"));
             let r = ui.radio_value(&mut n.middle, NavGesture::Pan, tr!("prefs-nav-pan"));
             super::tray_lib::spot("nav:middle_pan", r.rect.center());
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("prefs-right-drag"));
+            ui.radio_value(&mut n.right, ButtonDrag::Orbit, tr!("prefs-nav-orbit"));
+            let r = ui.radio_value(&mut n.right, ButtonDrag::Pan, tr!("prefs-nav-pan"));
+            super::tray_lib::spot("nav:right_pan", r.rect.center());
+            let r = ui.radio_value(&mut n.right, ButtonDrag::Off, tr!("prefs-right-drag-off"));
+            super::tray_lib::spot("nav:right_off", r.rect.center());
+        });
         note(ui, &tr!("prefs-shift-other"));
+        let r = ui.checkbox(&mut n.space_drag, tr!("prefs-space-drag")).on_hover_text(tr!("prefs-space-drag-tip"));
+        super::tray_lib::spot("nav:space", r.rect.center());
+
+        // ---- trackpad: two fingers moved, as the system scrolls
         heading(ui, &tr!("prefs-trackpad"));
         let r = ui.checkbox(&mut n.trackpad_enabled, tr!("prefs-trackpad-enabled"));
         super::tray_lib::spot("nav:trackpad", r.rect.center());
@@ -1049,82 +1081,55 @@ impl VarstotasApp {
                 let r = ui.radio_value(&mut n.two_finger, NavGesture::Zoom, tr!("prefs-nav-zoom"));
                 super::tray_lib::spot("nav:two_zoom", r.rect.center());
             });
-            ui.horizontal(|ui| {
-                ui.label(tr!("prefs-gesture-speed"));
-                ui.add(egui::Slider::new(&mut n.trackpad_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
-            });
+            speed(ui, &mut n.trackpad_speed);
             let r = ui.checkbox(&mut n.invert_swipe, tr!("prefs-invert-swipe"));
             super::tray_lib::spot("nav:invert_swipe", r.rect.center());
+            let r = ui.checkbox(&mut n.wheel_is_trackpad, tr!("prefs-wheel-trackpad")).on_hover_text(tr!("prefs-wheel-trackpad-tip"));
+            super::tray_lib::spot("nav:wheel_trackpad", r.rect.center());
             note(ui, &tr!("prefs-trackpad-note"));
-            ui.separator();
-            let r = ui.checkbox(&mut n.pinch_enabled, tr!("prefs-pinch-enabled"));
-            super::tray_lib::spot("nav:pinch", r.rect.center());
-            ui.add_enabled_ui(n.pinch_enabled, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(tr!("prefs-gesture-speed"));
-                    ui.add(egui::Slider::new(&mut n.pinch_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
-                });
-                let r = ui.checkbox(&mut n.invert_pinch, tr!("prefs-invert-pinch"));
-                super::tray_lib::spot("nav:invert_pinch", r.rect.center());
-            });
-            ui.separator();
-            ui.label(RichText::new(tr!("prefs-twist")).strong());
-            ui.horizontal_wrapped(|ui| {
-                for (gesture, label, spot) in [
-                    (TwistGesture::Disabled, "prefs-twist-off", "nav:twist_off"),
-                    (TwistGesture::Orbit, "prefs-twist-orbit", "nav:twist_orbit"),
-                    (TwistGesture::Roll, "prefs-twist-roll", "nav:twist_roll"),
-                ] {
-                    let r = ui.radio_value(&mut n.twist, gesture, tr!(label));
-                    super::tray_lib::spot(spot, r.rect.center());
-                }
-            });
-            ui.add_enabled_ui(n.twist != TwistGesture::Disabled, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(tr!("prefs-gesture-speed"));
-                    ui.add(egui::Slider::new(&mut n.twist_speed, 0.25..=4.0).logarithmic(true).suffix("×"));
-                });
-                ui.checkbox(&mut n.invert_twist, tr!("prefs-invert-twist"));
-            });
-            note(ui, &tr!("prefs-trackpad-platform"));
         });
-        // fingers on a touch screen: ours, then the browser's own pinch and turn (`crate::touch`)
+
+        // ---- touch screen: our own handling of fingers on it (`crate::touch`)
         heading(ui, &tr!("prefs-touch"));
         let r = ui.checkbox(&mut n.touch_pan, tr!("prefs-touch-pan"));
         super::tray_lib::spot("nav:touch_pan", r.rect.center());
+        ui.add_enabled_ui(n.touch_pan, |ui| speed(ui, &mut n.touch_pan_speed));
         let r = ui.checkbox(&mut n.touch_zoom, tr!("prefs-touch-zoom"));
         super::tray_lib::spot("nav:touch_zoom", r.rect.center());
-        let twist_row = |ui: &mut Ui, mode: &mut TwistGesture, label: &str, spot: &str| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(tr(label));
-                for (gesture, label, key) in [(TwistGesture::Disabled, "prefs-twist-off", "off"), (TwistGesture::Orbit, "prefs-twist-orbit", "orbit"), (TwistGesture::Roll, "prefs-twist-roll", "roll")] {
-                    let r = ui.radio_value(mode, gesture, tr(label));
-                    super::tray_lib::spot(format!("{spot}_{key}"), r.rect.center());
-                }
-            });
-        };
-        twist_row(ui, &mut n.touch_twist, "prefs-touch-twist", "nav:touch_twist");
-        ui.label(RichText::new(tr!("prefs-touch-system")).strong());
-        let r = ui.checkbox(&mut n.system_pinch, tr!("prefs-system-pinch"));
-        super::tray_lib::spot("nav:system_pinch", r.rect.center());
-        twist_row(ui, &mut n.system_twist, "prefs-system-twist", "nav:system_twist");
-        note(ui, &tr!("prefs-touch-system-note"));
-        // laptops: no middle button, a touchpad that reports a wheel
-        heading(ui, &tr!("prefs-no-middle"));
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tr!("prefs-right-drag"));
-            ui.radio_value(&mut n.right, ButtonDrag::Orbit, tr!("prefs-nav-orbit"));
-            let r = ui.radio_value(&mut n.right, ButtonDrag::Pan, tr!("prefs-nav-pan"));
-            super::tray_lib::spot("nav:right_pan", r.rect.center());
-            let r = ui.radio_value(&mut n.right, ButtonDrag::Off, tr!("prefs-right-drag-off"));
-            super::tray_lib::spot("nav:right_off", r.rect.center());
+        ui.add_enabled_ui(n.touch_zoom, |ui| {
+            speed(ui, &mut n.touch_zoom_speed);
+            ui.checkbox(&mut n.touch_invert_zoom, tr!("prefs-invert-pinch"));
         });
-        let r = ui.checkbox(&mut n.space_drag, tr!("prefs-space-drag")).on_hover_text(tr!("prefs-space-drag-tip"));
-        super::tray_lib::spot("nav:space", r.rect.center());
-        let r = ui.checkbox(&mut n.buttons, tr!("prefs-nav-buttons")).on_hover_text(tr!("prefs-nav-buttons-tip"));
-        super::tray_lib::spot("nav:buttons", r.rect.center());
-        let r = ui.checkbox(&mut n.wheel_is_trackpad, tr!("prefs-wheel-trackpad")).on_hover_text(tr!("prefs-wheel-trackpad-tip"));
-        super::tray_lib::spot("nav:wheel_trackpad", r.rect.center());
+        twist_row(ui, &mut n.touch_twist, "prefs-touch-twist", "nav:touch_twist");
+        ui.add_enabled_ui(n.touch_twist != TwistGesture::Disabled, |ui| {
+            speed(ui, &mut n.touch_twist_speed);
+            ui.checkbox(&mut n.touch_invert_twist, tr!("prefs-invert-twist"));
+        });
+        note(ui, &tr!("prefs-touch-note"));
+        if overlap {
+            warning(ui, &tr!("prefs-touch-conflict"));
+        }
+
+        // ---- native gestures: the pinch and twist the system (or Safari) recognises
+        heading(ui, &tr!("prefs-native"));
+        let r = ui.checkbox(&mut n.pinch_enabled, tr!("prefs-pinch-enabled"));
+        super::tray_lib::spot("nav:pinch", r.rect.center());
+        ui.add_enabled_ui(n.pinch_enabled, |ui| {
+            speed(ui, &mut n.pinch_speed);
+            let r = ui.checkbox(&mut n.invert_pinch, tr!("prefs-invert-pinch"));
+            super::tray_lib::spot("nav:invert_pinch", r.rect.center());
+        });
+        twist_row(ui, &mut n.twist, "prefs-twist", "nav:twist");
+        ui.add_enabled_ui(n.twist != TwistGesture::Disabled, |ui| {
+            speed(ui, &mut n.twist_speed);
+            ui.checkbox(&mut n.invert_twist, tr!("prefs-invert-twist"));
+        });
+        let r = ui.checkbox(&mut n.native_on_screen, tr!("prefs-native-on-screen"));
+        super::tray_lib::spot("nav:native_on_screen", r.rect.center());
+        note(ui, &tr!("prefs-native-note"));
+        if overlap {
+            warning(ui, &tr!("prefs-touch-conflict"));
+        }
     }
 
     fn prefs_view(&mut self, ui: &mut Ui) {
@@ -1206,4 +1211,20 @@ impl VarstotasApp {
         self.camera.set_ortho(!v.perspective);
         self.viewport.invalidate();
     }
+}
+
+/// A warning under settings that may fight each other.
+fn warning(ui: &mut Ui, text: &str) {
+    ui.label(RichText::new(format!("⚠ {text}")).small().color(theme::warning()));
+}
+
+/// The browser recognises pinches and turns of fingers itself (Safari's gesture events: on
+/// iPhone, iPad and Mac); the desktop app never does.
+fn gesture_events() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        web_sys::window().is_some_and(|w| js_sys::Reflect::has(&w, &"GestureEvent".into()).unwrap_or(false))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    false
 }
