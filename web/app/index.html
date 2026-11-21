@@ -21,11 +21,12 @@
   /* the fingers are the app's: no page zoom, scroll or pull-to-refresh over it */
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; outline: none; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   /* opened from the home screen, iOS gives 100% the screen less the status bar (the page runs
-     under it): the canvas ended short of the bottom; there 100vh is the whole screen */
+     under it): the canvas ended short of the bottom; there 100vh is the whole screen. Only the
+     canvas, fixed: a page taller than the window would scroll, and the touches with it */
   @media (display-mode: standalone) {
-    html, body { height: 100vh; }
     canvas { bottom: auto; height: 100vh; }
   }
+  body { position: fixed; inset: 0; }
   .note { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; }
   .note div { max-width: 32em; line-height: 1.5; }
   .note[hidden] { display: none; }
@@ -44,6 +45,8 @@
 <script type="module">
   // the offline worker (sw.js): the app opens without the network once it was here
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  // the page never scrolls (iOS scrolls it to show a focused field): the touches would be off
+  addEventListener("scroll", () => { if (scrollX || scrollY) scrollTo(0, 0); });
   const loading = document.getElementById("loading");
   if (!navigator.gpu || !(await navigator.gpu.requestAdapter().catch(() => null))) {
     loading.hidden = true;
