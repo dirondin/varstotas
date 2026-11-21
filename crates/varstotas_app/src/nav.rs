@@ -41,9 +41,9 @@ pub enum TwistGesture {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TouchMenu {
     /// One finger held (egui's long touch).
-    #[default]
     LongPress,
     /// A quick tap of two fingers.
+    #[default]
     TwoFingerTap,
     /// A quick tap of three fingers.
     ThreeFingerTap,
@@ -135,7 +135,7 @@ impl Default for NavPrefs {
             right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, nav_buttons: NavButtons::CompactOrTouch,
             touch_pan: true, touch_pan_speed: 1.0, touch_zoom: true, touch_zoom_speed: 1.0, touch_invert_zoom: false,
             touch_twist: TwistGesture::Orbit, touch_twist_speed: 1.0, touch_invert_twist: false, native_on_screen: false,
-            touch_menu: TouchMenu::LongPress }
+            touch_menu: TouchMenu::TwoFingerTap }
     }
 }
 
