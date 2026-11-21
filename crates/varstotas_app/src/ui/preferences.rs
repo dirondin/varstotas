@@ -1088,6 +1088,27 @@ impl VarstotasApp {
             });
             note(ui, &tr!("prefs-trackpad-platform"));
         });
+        // fingers on a touch screen: ours, then the browser's own pinch and turn (`crate::touch`)
+        heading(ui, &tr!("prefs-touch"));
+        let r = ui.checkbox(&mut n.touch_pan, tr!("prefs-touch-pan"));
+        super::tray_lib::spot("nav:touch_pan", r.rect.center());
+        let r = ui.checkbox(&mut n.touch_zoom, tr!("prefs-touch-zoom"));
+        super::tray_lib::spot("nav:touch_zoom", r.rect.center());
+        let twist_row = |ui: &mut Ui, mode: &mut TwistGesture, label: &str, spot: &str| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(tr(label));
+                for (gesture, label, key) in [(TwistGesture::Disabled, "prefs-twist-off", "off"), (TwistGesture::Orbit, "prefs-twist-orbit", "orbit"), (TwistGesture::Roll, "prefs-twist-roll", "roll")] {
+                    let r = ui.radio_value(mode, gesture, tr(label));
+                    super::tray_lib::spot(format!("{spot}_{key}"), r.rect.center());
+                }
+            });
+        };
+        twist_row(ui, &mut n.touch_twist, "prefs-touch-twist", "nav:touch_twist");
+        ui.label(RichText::new(tr!("prefs-touch-system")).strong());
+        let r = ui.checkbox(&mut n.system_pinch, tr!("prefs-system-pinch"));
+        super::tray_lib::spot("nav:system_pinch", r.rect.center());
+        twist_row(ui, &mut n.system_twist, "prefs-system-twist", "nav:system_twist");
+        note(ui, &tr!("prefs-touch-system-note"));
         // laptops: no middle button, a touchpad that reports a wheel
         heading(ui, &tr!("prefs-no-middle"));
         ui.horizontal_wrapped(|ui| {

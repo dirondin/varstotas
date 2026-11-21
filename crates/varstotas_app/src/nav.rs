@@ -73,6 +73,15 @@ pub struct NavPrefs {
     pub wheel_is_trackpad: bool,
     /// Orbit / pan / zoom buttons to drag at the view's right edge.
     pub buttons: bool,
+    /// Fingers on a touch screen (`crate::touch`), our own handling: two moved together pan,
+    /// pinched zoom, turned orbit about the vertical or roll.
+    pub touch_pan: bool,
+    pub touch_zoom: bool,
+    pub touch_twist: TwistGesture,
+    /// The browser's own pinch and turn of fingers on the screen (Safari's gesture events;
+    /// other browsers and the native app send none). Ours give way to them while they come.
+    pub system_pinch: bool,
+    pub system_twist: TwistGesture,
 }
 
 impl Default for NavPrefs {
@@ -81,7 +90,8 @@ impl Default for NavPrefs {
             trackpad_enabled: true, trackpad_speed: 1.0, invert_swipe: false,
             pinch_enabled: true, pinch_speed: 1.0, invert_pinch: false,
             twist: TwistGesture::Orbit, twist_speed: 1.0, invert_twist: false,
-            right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, buttons: true }
+            right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, buttons: true,
+            touch_pan: true, touch_zoom: true, touch_twist: TwistGesture::Orbit, system_pinch: false, system_twist: TwistGesture::Disabled }
     }
 }
 
@@ -122,23 +132,33 @@ impl NavPrefs {
     }
 
     pub fn apply_twist(&self, camera: &mut Camera, angle: f64, pivot: DVec3) -> bool {
-        if !self.trackpad_enabled || self.twist == TwistGesture::Disabled || !angle.is_finite() || angle == 0.0 {
+        if !self.trackpad_enabled || !angle.is_finite() || angle == 0.0 {
             return false;
         }
         let angle = angle * self.twist_speed.clamp(0.1, 10.0) * if self.invert_twist { 1.0 } else { -1.0 };
-        let axis = if self.twist == TwistGesture::Orbit { DVec3::Z } else { camera.basis().forward };
-        let rotation = DQuat::from_axis_angle(axis, angle);
-        if self.twist == TwistGesture::Orbit {
-            camera.eye = pivot + rotation * (camera.eye - pivot);
-            camera.target = pivot + rotation * (camera.target - pivot);
-        }
-        camera.up = rotation * camera.up;
-        true
+        turn(camera, self.twist, angle, pivot)
     }
 
     pub fn orbit_delta(&self, d: DVec2) -> DVec2 {
         d * self.orbit_speed.clamp(0.1, 10.0)
     }
+}
+
+/// Turns the view by `angle` radians: the camera about the vertical through `pivot` (Orbit) or
+/// about its own line of sight (Roll); false when `mode` is Disabled.
+fn turn(camera: &mut Camera, mode: TwistGesture, angle: f64, pivot: DVec3) -> bool {
+    let axis = match mode {
+        TwistGesture::Disabled => return false,
+        TwistGesture::Orbit => DVec3::Z,
+        TwistGesture::Roll => camera.basis().forward,
+    };
+    let rotation = DQuat::from_axis_angle(axis, angle);
+    if mode == TwistGesture::Orbit {
+        camera.eye = pivot + rotation * (camera.eye - pivot);
+        camera.target = pivot + rotation * (camera.target - pivot);
+    }
+    camera.up = rotation * camera.up;
+    true
 }
 
 pub fn dvec2(v: Vec2) -> DVec2 {
@@ -295,7 +315,7 @@ impl NavController {
 
         // ---- wheel / trackpad ----------------------------------------------------
         if response.hovered() || response.contains_pointer() {
-            let (events, now) = ctx.input(|i| (i.events.clone(), i.time));
+            let (events, now, fingers) = ctx.input(|i| (i.events.clone(), i.time, i.any_touches()));
             for ev in events {
                 match ev {
                     Event::MouseWheel { unit, delta, modifiers, phase } => {
@@ -349,6 +369,29 @@ impl NavController {
                             }
                         }
                     }
+                    // Safari's pinch and turn of fingers on the screen: the touch preferences
+                    Event::Zoom(f) if fingers && prefs.system_pinch && f.is_finite() && f > 0.0 && f != 1.0 => {
+                        if let Some(l) = local {
+                            camera.zoom(f as f64, zoom_at(l, camera));
+                            changed = true;
+                        }
+                    }
+                    Event::Rotate(angle) if fingers => {
+                        if let Some(l) = local
+                            && angle.is_finite()
+                        {
+                            let anchor = match self.scroll_anchor {
+                                Some((p, t)) if now - t < 0.25 => p,
+                                _ => point_under(model, camera, l, viewport),
+                            };
+                            // the sign as a trackpad's turn
+                            if turn(camera, prefs.system_twist, -angle as f64, anchor) {
+                                self.scroll_anchor = Some((anchor, now));
+                                changed = true;
+                            }
+                        }
+                    }
+                    Event::Zoom(_) if fingers => {}
                     Event::Zoom(f) if prefs.trackpad_enabled && prefs.pinch_enabled && f.is_finite() && f > 0.0 && f != 1.0 => {
                         if let Some(l) = local {
                             let target = zoom_at(l, camera);
@@ -377,8 +420,9 @@ impl NavController {
 }
 
 impl NavController {
-    /// Two or more fingers on the view (`crate::touch`): together they pan, pinched they zoom
-    /// toward what was between them.
+    /// Two or more fingers on the view (`crate::touch`), as the preferences say: together they
+    /// pan, pinched they zoom toward what was between them, turned they orbit about the
+    /// vertical or roll; a pinch or turn the browser makes itself takes their place.
     pub fn touch(&mut self, g: &crate::touch::Gesture, rect: Rect, model: &Model, camera: &mut Camera, prefs: &NavPrefs) -> bool {
         let viewport = rect.size();
         if g.started {
@@ -388,12 +432,15 @@ impl NavController {
             return false;
         }
         let mut changed = false;
-        if g.pan != Vec2::ZERO {
+        if prefs.touch_pan && g.pan != Vec2::ZERO {
             camera.pan(dvec2(g.pan) * prefs.pan_speed.clamp(0.1, 10.0), self.pan_point, dvec2(viewport));
             changed = true;
         }
-        if g.zoom.is_finite() && g.zoom > 0.0 && (g.zoom - 1.0).abs() > 1e-4 {
+        if prefs.touch_zoom && !(prefs.system_pinch && g.system.0) && g.zoom.is_finite() && g.zoom > 0.0 && (g.zoom - 1.0).abs() > 1e-4 {
             camera.zoom(g.zoom as f64, self.pan_point);
+            changed = true;
+        }
+        if g.twist != 0.0 && !(prefs.system_twist != TwistGesture::Disabled && g.system.1) && turn(camera, prefs.touch_twist, g.twist as f64, self.pan_point) {
             changed = true;
         }
         changed
