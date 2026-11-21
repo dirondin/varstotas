@@ -4,10 +4,12 @@
 //! model's guides, shadows, sections) — each a small drop-down. Drawn in the viewport's layer
 //! (windows stay above it); clicks on it do not reach the tools (`hud_rect`). One per pane of
 //! a split view (`panes.rs`). Under it, the navigation buttons: orbit, pan and zoom by
-//! dragging them, zoom extents by a click (no middle button or gestures needed).
+//! dragging them or by their tools (a click), zoom extents by a click (no middle button or
+//! gestures needed).
 
 use super::icons::{Icon, paint_icon};
 use crate::app::{Action, FaceStylePref, VarstotasApp};
+use crate::tools::ToolId;
 use egui::{Align, Color32, Layout, Rect, Response, Stroke, Ui, UiBuilder, vec2};
 use varstotas_i18n::tr;
 use varstotas_render::StandardView;
@@ -122,15 +124,19 @@ impl VarstotasApp {
             hud = r.response.rect;
         });
         self.hud_rect = hud;
-        // the compact interface has no menus for them: always there, finger-sized
-        if self.prefs.nav.buttons || self.compact.on {
+        // classic: as the preference says; compact: finger-sized, on a touch screen only (a mouse
+        // has its buttons and wheel)
+        let touch = super::compact::touch_screen() || self.touch.seen();
+        if if self.compact.on { touch } else { self.prefs.nav.buttons } {
             self.nav_buttons(ui, rect, hud);
         }
     }
 
     /// The navigation buttons down the view's right edge under the bar `hud`: a drag on Orbit
     /// turns the view round its middle, on Pan moves it, on Zoom (up: nearer) zooms; a click on
-    /// Zoom Extents shows the whole model.
+    /// one of them switches to its tool (a finger on the view then navigates: the buttons sit in
+    /// a phone's corner, too far to drag) and back to the tool before on a second click; a click
+    /// on Zoom Extents shows the whole model.
     fn nav_buttons(&mut self, ui: &mut Ui, rect: Rect, hud: Rect) {
         let (r_big, icon_side) = if self.compact.on { (21.0, 22.0) } else { (14.0, ICON) };
         #[allow(non_snake_case)]
@@ -155,8 +161,20 @@ impl VarstotasApp {
             self.nav_button_rects.push(r);
             let resp = ui.interact(r, ui.id().with(("nav_button", name)), egui::Sense::click_and_drag());
             super::tray_lib::spot(format!("nav:button:{name}"), c);
+            let tool = match name {
+                "orbit" => Some(ToolId::Orbit),
+                "pan" => Some(ToolId::Pan),
+                "zoom" => Some(ToolId::Zoom),
+                _ => None,
+            };
+            let on = tool.is_some_and(|t| self.tool_id() == t);
             let hot = resp.hovered() || resp.dragged();
-            ui.painter().circle(c, R, if hot { super::theme::accent_soft() } else { fill }, Stroke::new(1.0, Color32::from_black_alpha(30)));
+            let (bg, ring) = if on {
+                (super::theme::accent_soft(), Stroke::new(2.0, super::theme::ACCENT))
+            } else {
+                (if hot { super::theme::accent_soft() } else { fill }, Stroke::new(1.0, Color32::from_black_alpha(30)))
+            };
+            ui.painter().circle(c, R, bg, ring);
             paint_icon(ui.painter(), Rect::from_center_size(c, vec2(icon_side, icon_side)), icon, false);
             if resp.dragged() || resp.hovered() {
                 ui.ctx().set_cursor_icon(if resp.dragged() { egui::CursorIcon::Grabbing } else if name == "extents" { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Grab });
@@ -175,6 +193,19 @@ impl VarstotasApp {
             }
             if name == "extents" && resp.clicked() {
                 self.actions.push(Action::ZoomExtents);
+            }
+            if let Some(t) = tool
+                && resp.clicked()
+            {
+                if on {
+                    self.actions.push(Action::SetTool(self.nav_return.take().unwrap_or(ToolId::Select)));
+                } else {
+                    let now = self.tool_id();
+                    if !matches!(now, ToolId::Orbit | ToolId::Pan | ToolId::Zoom) {
+                        self.nav_return = Some(now);
+                    }
+                    self.actions.push(Action::SetTool(t));
+                }
             }
             resp.on_hover_text(tip);
         }

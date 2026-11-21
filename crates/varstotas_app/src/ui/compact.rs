@@ -589,7 +589,7 @@ pub fn press_back() {
 }
 
 /// The page's main pointer is a finger (`pointer: coarse`).
-fn touch_screen() -> bool {
+pub(crate) fn touch_screen() -> bool {
     #[cfg(target_arch = "wasm32")]
     {
         thread_local! {

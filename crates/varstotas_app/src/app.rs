@@ -608,6 +608,8 @@ pub struct VarstotasApp {
     space_used: bool,
     /// The navigation buttons drawn over the view last frame (not the tools' clicks).
     pub(crate) nav_button_rects: Vec<egui::Rect>,
+    /// The tool a navigation button's click switched from: its second click goes back to it.
+    pub(crate) nav_return: Option<ToolId>,
     /// The compact interface (`ui/compact.rs`): on this frame, its ring menu and sheets.
     pub(crate) compact: crate::ui::compact::Compact,
     /// Fingers on the view.
@@ -820,6 +822,7 @@ impl VarstotasApp {
             space_held: false,
             space_used: false,
             nav_button_rects: Vec::new(),
+            nav_return: None,
             compact: Default::default(),
             touch: Default::default(),
             pen_seen: f64::NEG_INFINITY,

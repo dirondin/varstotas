@@ -53,3 +53,22 @@ raw finger 0 up 850 450
 wait 5
 expect model_faces=7
 expect tool=Rectangle 
+# the navigation buttons (shown once a finger touched the screen): a tap is their tool, a
+# finger on the view then navigates, a second tap goes back
+action click_spot nav:button:orbit
+wait 5
+expect tool=Orbit
+expect look=(-0.83,0.16,-0.53)
+raw finger 0 down 700 500
+wait 2
+raw finger 0 move 800 500
+wait 2
+raw finger 0 move 900 520
+wait 2
+raw finger 0 up 900 520
+wait 5
+expect tool=Orbit
+expect look=(-0.14,0.76,-0.63)
+action click_spot nav:button:orbit
+wait 5
+expect tool=Rectangle

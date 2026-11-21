@@ -27,6 +27,8 @@ const TWIST_START: f32 = 0.2;
 pub struct Touch {
     /// The fingers down, by id, at their screen points.
     fingers: BTreeMap<u64, Pos2>,
+    /// A finger touched the screen since the start (a touch screen without `pointer: coarse`).
+    seen: bool,
     /// Touches that are the pen's (a browser reports the pen as a touch too).
     pen_touches: std::collections::BTreeSet<u64>,
     /// Two or more fingers were down since the first one went down: its press is no click.
@@ -74,6 +76,7 @@ impl Touch {
                     }
                     continue;
                 }
+                self.seen = true;
                 match phase {
                     TouchPhase::Start | TouchPhase::Move => {
                         self.fingers.insert(id.0, *pos);
@@ -122,6 +125,11 @@ impl Touch {
     pub fn call_off(&mut self) {
         self.pending = None;
         self.gestured = true;
+    }
+
+    /// A finger has touched the screen since the start.
+    pub fn seen(&self) -> bool {
+        self.seen
     }
 
     /// A finger is down.
