@@ -99,3 +99,19 @@ raw finger 0 up 850 450
 wait 5
 expect look=(-0.14,0.76,-0.63)
 screenshot shots/touch_prefs.bmp
+# the context menu by a tap of two fingers (Preferences → Navigation → Touch screen)
+action preferences
+wait 5
+action click_spot nav:touch_menu_two
+wait 3
+expect touch_menu: TwoFingerTap
+action back
+wait 5
+raw finger 0 down 700 500
+raw finger 1 down 800 520
+wait 2
+raw finger 1 up 800 520
+raw finger 0 up 700 500
+wait 5
+expect compact=(true Some(List(Context)) false false)
+screenshot shots/touch_menu_tap.bmp

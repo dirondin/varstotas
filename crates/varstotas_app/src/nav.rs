@@ -37,6 +37,29 @@ pub enum TwistGesture {
     Roll,
 }
 
+/// What opens the view's context menu with fingers on a touch screen (a right click always does).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TouchMenu {
+    /// One finger held (egui's long touch).
+    #[default]
+    LongPress,
+    /// A quick tap of two fingers.
+    TwoFingerTap,
+    /// A quick tap of three fingers.
+    ThreeFingerTap,
+}
+
+impl TouchMenu {
+    /// The fingers whose tap opens the menu.
+    pub fn tap_fingers(self) -> Option<usize> {
+        match self {
+            TouchMenu::LongPress => None,
+            TouchMenu::TwoFingerTap => Some(2),
+            TouchMenu::ThreeFingerTap => Some(3),
+        }
+    }
+}
+
 /// Mouse and trackpad navigation (Preferences → Navigation).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -88,6 +111,8 @@ pub struct NavPrefs {
     /// recognises them there itself (other browsers and the desktop app do not). While it
     /// sends one, ours of the kind gives way.
     pub native_on_screen: bool,
+    /// The context menu with fingers: a long press or a tap of two or three fingers.
+    pub touch_menu: TouchMenu,
 }
 
 impl Default for NavPrefs {
@@ -98,7 +123,8 @@ impl Default for NavPrefs {
             twist: TwistGesture::Orbit, twist_speed: 1.0, invert_twist: false,
             right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, buttons: true,
             touch_pan: true, touch_pan_speed: 1.0, touch_zoom: true, touch_zoom_speed: 1.0, touch_invert_zoom: false,
-            touch_twist: TwistGesture::Orbit, touch_twist_speed: 1.0, touch_invert_twist: false, native_on_screen: false }
+            touch_twist: TwistGesture::Orbit, touch_twist_speed: 1.0, touch_invert_twist: false, native_on_screen: false,
+            touch_menu: TouchMenu::LongPress }
     }
 }
 

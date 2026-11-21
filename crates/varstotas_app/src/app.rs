@@ -610,6 +610,9 @@ pub struct VarstotasApp {
     pub(crate) nav_button_rects: Vec<egui::Rect>,
     /// The tool a navigation button's click switched from: its second click goes back to it.
     pub(crate) nav_return: Option<ToolId>,
+    /// Where the view's context menu (the classic interface's) opened: a right click, a long
+    /// press or a tap of fingers (`nav::TouchMenu`).
+    menu_at: egui::Pos2,
     /// The compact interface (`ui/compact.rs`): on this frame, its ring menu and sheets.
     pub(crate) compact: crate::ui::compact::Compact,
     /// Fingers on the view.
@@ -823,6 +826,7 @@ impl VarstotasApp {
             space_used: false,
             nav_button_rects: Vec::new(),
             nav_return: None,
+            menu_at: egui::Pos2::ZERO,
             compact: Default::default(),
             touch: Default::default(),
             pen_seen: f64::NEG_INFINITY,
@@ -1295,6 +1299,7 @@ impl VarstotasApp {
         let on_view = |p: egui::Pos2| rect.contains(p) && !on_hud(p) && ctx.layer_id_at(p).is_none_or(|l| l == layer);
         self.pen_events(rect, &on_view, crate::pointer::take_pen_events(), modifiers);
         // two or more fingers navigate; a press the tool had from the first is called off
+        self.touch.clock = now;
         if let Some(g) = self.touch.update(&events, pen_at) {
             if self.tool_pressed {
                 self.tool_pressed = false;
@@ -2862,19 +2867,34 @@ impl eframe::App for VarstotasApp {
                 self.with_tool(p, |t, c| t.on_frame(c, step));
                 ctx.request_repaint();
             }
+            // the context menu: a right click, or fingers as Preferences → Navigation says (a
+            // long press, a tap of two or three); fingers pick what is under them first, as a
+            // right click does
+            let menu = self.prefs.nav.touch_menu;
+            let tap = self.touch.take_tap().filter(|&(n, at)| menu.tap_fingers() == Some(n) && self.viewport.rect.contains(at)).map(|t| t.1);
+            let long = (response.long_touched() && menu == crate::nav::TouchMenu::LongPress).then(|| response.interact_pointer_pos()).flatten();
+            let finger = tap.or(long);
+            if let Some(p) = finger {
+                self.tool_pressed = false;
+                self.touch.pending = None;
+                self.context_select((p - self.viewport.rect.min).to_pos2());
+            }
+            let right = response.clicked_by(egui::PointerButton::Secondary) && !response.long_touched();
+            let open = finger.or(right.then(|| response.interact_pointer_pos()).flatten());
             if !self.compact.on {
-                response.context_menu(|ui| self.viewport_context_menu(ui));
-            } else if response.secondary_clicked() || response.long_touched() {
-                // the compact interface's context menu: a list like its menus; a long press
-                // picks what is under the finger first, as a right click does
-                if response.long_touched()
-                    && let Some(p) = response.interact_pointer_pos()
-                {
-                    self.tool_pressed = false;
-                    self.touch.pending = None;
-                    self.context_select((p - self.viewport.rect.min).to_pos2());
+                if let Some(at) = open {
+                    self.menu_at = at;
                 }
-                let at = response.interact_pointer_pos().unwrap_or(self.viewport.rect.center());
+                let set = if open.is_some() {
+                    Some(egui::SetOpenCommand::Bool(true))
+                } else if response.clicked() {
+                    Some(egui::SetOpenCommand::Bool(false))
+                } else {
+                    None
+                };
+                egui::Popup::menu(&response).open_memory(set).at_position(self.menu_at).show(|ui| self.viewport_context_menu(ui));
+            } else if let Some(at) = open.or(right.then(|| self.viewport.rect.center())) {
+                // the compact interface's: a list like its menus
                 self.open_context_list(at);
             }
             if let Some(anim) = self.cam_anim.as_mut() {

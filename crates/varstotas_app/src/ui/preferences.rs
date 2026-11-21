@@ -1007,7 +1007,7 @@ impl VarstotasApp {
     }
 
     fn prefs_navigation(&mut self, ui: &mut Ui) {
-        use crate::nav::{ButtonDrag, NavGesture, TwistGesture};
+        use crate::nav::{ButtonDrag, NavGesture, TouchMenu, TwistGesture};
         let n = &mut self.prefs.nav;
         let r = ui.checkbox(&mut n.buttons, tr!("prefs-nav-buttons")).on_hover_text(tr!("prefs-nav-buttons-tip"));
         super::tray_lib::spot("nav:buttons", r.rect.center());
@@ -1104,6 +1104,13 @@ impl VarstotasApp {
         ui.add_enabled_ui(n.touch_twist != TwistGesture::Disabled, |ui| {
             speed(ui, &mut n.touch_twist_speed);
             ui.checkbox(&mut n.touch_invert_twist, tr!("prefs-invert-twist"));
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("prefs-touch-menu"));
+            for (menu, label, key) in [(TouchMenu::LongPress, "prefs-touch-menu-long", "long"), (TouchMenu::TwoFingerTap, "prefs-touch-menu-two", "two"), (TouchMenu::ThreeFingerTap, "prefs-touch-menu-three", "three")] {
+                let r = ui.radio_value(&mut n.touch_menu, menu, tr(label));
+                super::tray_lib::spot(format!("nav:touch_menu_{key}"), r.rect.center());
+            }
         });
         note(ui, &tr!("prefs-touch-note"));
         if overlap {

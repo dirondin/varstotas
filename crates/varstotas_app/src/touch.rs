@@ -21,6 +21,12 @@ const LOUPE_LIFT: f32 = 96.0;
 /// and the first of a gesture's fingers is no finger for the tool.
 const LOUPE_DELAY: f64 = 0.25;
 
+/// A tap of two or three fingers (a context menu, `nav::TouchMenu`): all of them up within
+/// this long (seconds) of the first going down…
+const TAP_SECS: f64 = 0.4;
+/// …none of them slid further than this (points).
+const TAP_SLOP: f32 = 20.0;
+
 /// A twist smaller than this (radians, since the fingers met) is a pinch's wobble, not a turn.
 const TWIST_START: f32 = 0.2;
 
@@ -48,6 +54,13 @@ pub struct Touch {
     /// The browser's own pinch and turn (Safari's gesture events) came while these fingers
     /// were down: ours give way to them, not to zoom or turn twice.
     system: (bool, bool),
+    /// The time now (seconds, egui's input time), for [`TAP_SECS`]; the caller sets it.
+    pub clock: f64,
+    /// The touch so far, from its first finger down to its last up: when it began, where each
+    /// finger went down, the most at once, and whether one slid away (no tap then).
+    tap_track: Option<(f64, BTreeMap<u64, Pos2>, usize, bool)>,
+    /// A quick tap of two or more fingers that did not slide: how many and their middle.
+    tap: Option<(usize, Pos2)>,
 }
 
 /// What two or more fingers did in a frame.
@@ -91,6 +104,9 @@ impl Touch {
                     continue;
                 }
                 self.seen = true;
+                if *phase == TouchPhase::Start && self.fingers.is_empty() {
+                    self.tap_track = Some((self.clock, BTreeMap::new(), 0, false));
+                }
                 match phase {
                     TouchPhase::Start | TouchPhase::Move => {
                         self.fingers.insert(id.0, *pos);
@@ -98,6 +114,25 @@ impl Touch {
                     TouchPhase::End | TouchPhase::Cancel => {
                         self.fingers.remove(&id.0);
                     }
+                }
+                if let Some((_, starts, most, slid)) = &mut self.tap_track {
+                    match phase {
+                        TouchPhase::Start => {
+                            starts.insert(id.0, *pos);
+                            *most = (*most).max(self.fingers.len());
+                        }
+                        TouchPhase::Move | TouchPhase::End => *slid |= starts.get(&id.0).is_some_and(|s| s.distance(*pos) > TAP_SLOP),
+                        TouchPhase::Cancel => *slid = true,
+                    }
+                }
+                if self.fingers.is_empty()
+                    && let Some((t0, starts, most, slid)) = self.tap_track.take()
+                    && most >= 2
+                    && !slid
+                    && self.clock - t0 <= TAP_SECS
+                {
+                    let middle = starts.values().fold(Vec2::ZERO, |s, p| s + p.to_vec2()) / starts.len() as f32;
+                    self.tap = Some((most, middle.to_pos2()));
                 }
             }
         }
@@ -133,6 +168,11 @@ impl Touch {
         };
         self.shape = Some((n, center, spread, angle));
         Some(g)
+    }
+
+    /// A quick tap of two or more fingers since asked last: how many and their middle.
+    pub fn take_tap(&mut self) -> Option<(usize, Pos2)> {
+        self.tap.take()
     }
 
     /// The fingers' press is not the tool's (the pen came: a palm on the screen).
@@ -303,5 +343,30 @@ mod tests {
         assert_eq!(g.twist, 0.0);
         let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 40.0)], None).unwrap();
         assert!(g.twist > 0.2);
+    }
+
+    #[test]
+    fn a_quick_still_tap_of_two_or_three_fingers() {
+        let mut t = Touch::default();
+        t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0), touch(1, TouchPhase::Start, 200.0, 100.0)], None);
+        t.update(&[touch(2, TouchPhase::Start, 150.0, 160.0)], None);
+        t.update(&[touch(0, TouchPhase::End, 104.0, 100.0)], None);
+        assert_eq!(t.take_tap(), None);
+        t.update(&[touch(1, TouchPhase::End, 200.0, 100.0), touch(2, TouchPhase::End, 150.0, 160.0)], None);
+        assert_eq!(t.take_tap(), Some((3, Pos2::new(150.0, 120.0))));
+        // slid: a pan, no tap
+        t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0), touch(1, TouchPhase::Start, 200.0, 100.0)], None);
+        t.update(&[touch(0, TouchPhase::Move, 150.0, 100.0), touch(1, TouchPhase::Move, 250.0, 100.0)], None);
+        t.update(&[touch(0, TouchPhase::End, 150.0, 100.0), touch(1, TouchPhase::End, 250.0, 100.0)], None);
+        assert_eq!(t.take_tap(), None);
+        // held too long
+        t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0), touch(1, TouchPhase::Start, 200.0, 100.0)], None);
+        t.clock = 1.0;
+        t.update(&[touch(0, TouchPhase::End, 100.0, 100.0), touch(1, TouchPhase::End, 200.0, 100.0)], None);
+        assert_eq!(t.take_tap(), None);
+        // one finger is the tool's
+        t.update(&[touch(0, TouchPhase::Start, 100.0, 100.0)], None);
+        t.update(&[touch(0, TouchPhase::End, 100.0, 100.0)], None);
+        assert_eq!(t.take_tap(), None);
     }
 }
