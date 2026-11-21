@@ -293,10 +293,13 @@ impl VarstotasApp {
         let model = &self.doc.model;
         let st = &mut self.sheets;
         crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
+            // on a phone the settings and the sheet one at a time
+            let pane = crate::ui::compact::pane_tabs(ui, "sheets", &[tr!("pane-settings"), tr!("pane-preview")]);
             ui.horizontal_top(|ui| {
                 // Left column: sheets, paper, title block, the selected item.
+                if pane != Some(1) {
                 ui.vertical(|ui| {
-                    ui.set_width(270.0);
+                    ui.set_width(if pane.is_some() { ui.available_width() } else { 270.0 });
                     ui.label(RichText::new(tr!("sheets-title")).strong());
                     egui::ScrollArea::vertical().id_salt("sheet_list").max_height(110.0).show(ui, |ui| {
                         for (i, name) in names.iter().enumerate() {
@@ -529,10 +532,17 @@ impl VarstotasApp {
                         }
                     }
                 });
+                }
                 // Right: the sheet.
+                if pane == Some(0) {
+                    return;
+                }
                 ui.vertical(|ui| {
                     // above the summary and export row
-                    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ui.available_height() - 30.0).max(PREVIEW), Sense::click_and_drag());
+                    // (on a phone no wider than the page)
+                    let least = if pane.is_some() { vec2(0.0, PREVIEW.y) } else { PREVIEW };
+                    let below = if pane.is_some() { 52.0 } else { 30.0 };
+                    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ui.available_height() - below).max(least), Sense::click_and_drag());
                     let painter = ui.painter_at(rect);
                     painter.rect_filled(rect, 4.0, theme::border());
                     let (Some(sheet), Some(page)) = (sheet.as_mut(), page.as_ref()) else {
@@ -622,9 +632,16 @@ impl VarstotasApp {
                             painter.rect_filled(Rect::from_center_size(r.max, vec2(8.0, 8.0)), 1.0, theme::ACCENT);
                         }
                     }
-                    ui.horizontal(|ui| {
+                    // on a phone the summary over the export row
+                    if pane.is_some() {
                         let scale = sheet.viewports.iter().filter(|v| viewport_scale(model, v).is_some()).count();
-                        ui.label(RichText::new(tr!("sheets-summary", paper = paper_name(sheet.size), viewports = sheet.viewports.len(), scaled = scale, texts = sheet.texts.len())).color(theme::text_dim()));
+                        ui.label(RichText::new(tr!("sheets-summary", paper = paper_name(sheet.size), viewports = sheet.viewports.len(), scaled = scale, texts = sheet.texts.len())).small().color(theme::text_dim()));
+                    }
+                    ui.horizontal(|ui| {
+                        if pane.is_none() {
+                            let scale = sheet.viewports.iter().filter(|v| viewport_scale(model, v).is_some()).count();
+                            ui.label(RichText::new(tr!("sheets-summary", paper = paper_name(sheet.size), viewports = sheet.viewports.len(), scaled = scale, texts = sheet.texts.len())).color(theme::text_dim()));
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button(RichText::new(tr!("dialog-drawing-svg")).strong()).on_hover_text(tr!("sheets-svg-hint")).clicked() {
                                 save = Some("svg");

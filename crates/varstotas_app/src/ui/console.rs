@@ -169,7 +169,7 @@ impl VarstotasApp {
                 help = Some(Some(w));
             }
             self.console.editor.show(ui, &mut self.prefs.console_code, code_h);
-            ui.horizontal(|ui| {
+            crate::ui::compact::row(ui, |ui| {
                 if ui.button(tr!("console-run")).on_hover_text(tr!("console-run-hint")).clicked() {
                     run = Some(self.prefs.console_code.clone());
                 }

@@ -230,7 +230,7 @@ impl VarstotasApp {
     fn gen_editor_ui(&mut self, ui: &mut Ui) {
         let unit = self.doc.model.unit;
         let name = self.gen_editor.parsed.as_ref().ok().map(|g| g.name.clone());
-        ui.horizontal(|ui| {
+        super::compact::row(ui, |ui| {
             if ui.button(tr!("gen-new")).on_hover_text(tr!("gen-new-hint")).clicked() {
                 self.gen_editor.new_generator();
             }
@@ -261,13 +261,15 @@ impl VarstotasApp {
             if ui.add_enabled(ok, egui::Button::new(tr!("gen-place"))).on_hover_text(tr!("gen-place-hint")).clicked() {
                 self.actions.push(Action::PlaceGenerator(self.gen_editor.source.clone(), self.gen_editor.values.clone()));
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if super::script_help::help_button(ui) {
-                    self.open_script_help(super::script_help::Topic::Generators, None);
-                }
-            });
+            let help = |ui: &mut Ui| super::script_help::help_button(ui);
+            let help = if super::compact::phone() { help(ui) } else { ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), help).inner };
+            if help {
+                self.open_script_help(super::script_help::Topic::Generators, None);
+            }
         });
         ui.separator();
+        // on a phone the code and the preview with the parameters one at a time
+        let pane = super::compact::pane_tabs(ui, "gen_editor", &[tr!("pane-code"), tr!("pane-preview")]);
         // The editor fills the window (it grows when the window is resized).
         let h = (ui.available_height() - 24.0).max(160.0);
         self.gen_editor.code_h = h;
@@ -277,8 +279,9 @@ impl VarstotasApp {
                 // (the vertical separator would take any height offered)
                 ui.set_max_height(h);
                 let mut edited = false;
+                if pane != Some(1) {
                 ui.vertical(|ui| {
-                    ui.set_width((w * 0.56).max(260.0));
+                    ui.set_width(if pane.is_some() { w } else { (w * 0.56).max(260.0) });
                     let ed = &mut self.gen_editor;
                     let f1 = ed.editor.f1(ui, &ed.source);
                     edited = ed.editor.show(ui, &mut ed.source, h).response.changed();
@@ -286,8 +289,13 @@ impl VarstotasApp {
                         self.open_script_help(super::script_help::Topic::Generators, Some(w));
                     }
                 });
-                ui.separator();
-                ui.vertical(|ui| self.gen_editor_side(ui, unit, h));
+                }
+                if pane.is_none() {
+                    ui.separator();
+                }
+                if pane != Some(0) {
+                    ui.vertical(|ui| self.gen_editor_side(ui, unit, h));
+                }
                 edited
             })
             .inner;

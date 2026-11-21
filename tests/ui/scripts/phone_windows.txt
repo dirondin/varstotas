@@ -1,0 +1,151 @@
+# Every window on a phone's page (the compact interface, 400 x 860): one screenshot each, a
+# window opened and closed by back, for a look at what does not fit.
+box 0 0 0 400 300 200
+select_all
+action make_group
+wait 5
+view iso
+zoom_extents
+action ui_compact
+window 400 860
+wait 30
+action cut_list
+wait 20
+screenshot shots/phone_win_cutlist.bmp
+action back
+wait 10
+action render_window
+wait 20
+screenshot shots/phone_win_render.bmp
+action click_spot pane:render:1
+wait 10
+screenshot shots/phone_win_render_2.bmp
+action back
+wait 10
+action unfold
+wait 20
+screenshot shots/phone_win_unfold.bmp
+action back
+wait 10
+action licences formats
+wait 20
+screenshot shots/phone_win_lic_formats.bmp
+action back
+wait 10
+action licences libraries
+wait 20
+screenshot shots/phone_win_lic_libraries.bmp
+action back
+wait 10
+action licences components
+wait 20
+screenshot shots/phone_win_lic_components.bmp
+action click_spot pane:licences:1
+wait 10
+screenshot shots/phone_win_lic_components_2.bmp
+action back
+wait 10
+action sheet_add a3
+wait 5
+action sheets
+wait 20
+screenshot shots/phone_win_sheets.bmp
+action click_spot pane:sheets:1
+wait 10
+screenshot shots/phone_win_sheets_2.bmp
+action back
+wait 10
+action gen_editor
+wait 20
+screenshot shots/phone_win_gen_editor.bmp
+action click_spot pane:gen_editor:1
+wait 10
+screenshot shots/phone_win_gen_editor_2.bmp
+action back
+wait 10
+action joinery
+wait 20
+screenshot shots/phone_win_joinery.bmp
+action back
+wait 10
+action fittings
+wait 20
+screenshot shots/phone_win_fittings.bmp
+action back
+wait 10
+action assembly
+wait 20
+screenshot shots/phone_win_assembly.bmp
+action back
+wait 10
+action physics
+wait 20
+screenshot shots/phone_win_physics.bmp
+action back
+wait 10
+action work_planes
+wait 20
+screenshot shots/phone_win_work_planes.bmp
+action back
+wait 10
+action model_info
+wait 20
+screenshot shots/phone_win_model_info.bmp
+action back
+wait 10
+action anim_window
+wait 20
+screenshot shots/phone_win_anim.bmp
+action back
+wait 10
+action console
+wait 20
+screenshot shots/phone_win_console.bmp
+action back
+wait 10
+action print_check
+wait 20
+screenshot shots/phone_win_print.bmp
+action back
+wait 10
+action uv_open
+wait 20
+screenshot shots/phone_win_uv.bmp
+action back
+wait 10
+action export_dialog
+wait 20
+screenshot shots/phone_win_export.bmp
+action back
+wait 10
+action about
+wait 20
+screenshot shots/phone_win_about.bmp
+action back
+wait 10
+action release_notes
+wait 20
+screenshot shots/phone_win_release_notes.bmp
+action back
+wait 10
+action report_problem
+wait 20
+screenshot shots/phone_win_report.bmp
+action back
+wait 10
+action tutorial
+wait 20
+screenshot shots/phone_win_tutorial.bmp
+action back
+wait 10
+action preferences
+wait 15
+action click_spot prefs:Toolbar
+wait 10
+screenshot shots/phone_win_prefs_toolbar.bmp
+action click_spot pane:prefs_toolbar:1
+wait 10
+screenshot shots/phone_win_prefs_toolbar_2.bmp
+action back
+wait 10
+quit

@@ -144,7 +144,7 @@ impl VarstotasApp {
         let mut open = true;
         let win = self.placed(egui::Window::new(tr!("licences-title")).id(egui::Id::new("licences")).open(&mut open).default_size([680.0, 520.0]).resizable(true), [140.0, 160.0]);
         crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
-            ui.horizontal(|ui| {
+            crate::ui::compact::row(ui, |ui| {
                 for t in Tab::ALL {
                     ui.selectable_value(&mut self.licences.tab, t, t.label());
                 }
@@ -162,7 +162,7 @@ impl VarstotasApp {
 
     fn components_tab(&mut self, ui: &mut Ui) {
         let tp = third_party();
-        ui.horizontal(|ui| {
+        crate::ui::compact::row(ui, |ui| {
             ui.label(tr!("licences-count", n = tp.crates.len()));
             ui.add(egui::TextEdit::singleline(&mut self.licences.filter).hint_text(tr!("licences-filter")).desired_width(200.0).id_salt("licences_filter"));
             if ui.button(tr!("licences-save")).on_hover_text(tr!("licences-save-hint")).clicked()
@@ -176,24 +176,25 @@ impl VarstotasApp {
             }
         });
         let f = self.licences.filter.to_lowercase();
-        let h = ui.available_height();
-        ui.horizontal_top(|ui| {
-            egui::ScrollArea::vertical().id_salt("licences_list").max_height(h).max_width(250.0).show(ui, |ui| {
-                ui.vertical(|ui| {
-                ui.set_width(240.0);
+        let sel = &mut self.licences.sel;
+        let list = |ui: &mut Ui, sel: &mut Option<usize>, width: f32| {
+            ui.vertical(|ui| {
+                ui.set_width(width);
                 for (i, c) in tp.crates.iter().enumerate() {
                     if !f.is_empty() && !c.name.to_lowercase().contains(&f) && !c.license.to_lowercase().contains(&f) {
                         continue;
                     }
-                    let r = ui.selectable_label(self.licences.sel == Some(i), format!("{} {}", c.name, c.version)).on_hover_text(&c.license);
+                    let r = ui.selectable_label(*sel == Some(i), format!("{} {}", c.name, c.version)).on_hover_text(&c.license);
                     if r.clicked() {
-                        self.licences.sel = Some(i);
+                        *sel = Some(i);
+                        // on a phone the picked one's licence
+                        crate::ui::compact::set_pane(ui.ctx(), "licences", 1);
                     }
                 }
-                });
             });
-            ui.separator();
-            egui::ScrollArea::vertical().id_salt("licences_text").max_height(h).show(ui, |ui| ui.vertical(|ui| match self.licences.sel.and_then(|i| tp.crates.get(i)) {
+        };
+        let text = |ui: &mut Ui, sel: Option<usize>| {
+            ui.vertical(|ui| match sel.and_then(|i| tp.crates.get(i)) {
                 Some(c) => {
                     ui.heading(format!("{} {}", c.name, c.version));
                     ui.label(RichText::new(&c.license).strong());
@@ -209,8 +210,25 @@ impl VarstotasApp {
                 None => {
                     ui.label(RichText::new(tr!("licences-pick")).weak());
                 }
-            }));
-        });
+            });
+        };
+        // on a phone the list and the licence one at a time
+        match crate::ui::compact::pane_tabs(ui, "licences", &[tr!("licences-tab-components"), tr!("licence-libs-col-licence")]) {
+            None => {
+                let h = ui.available_height();
+                ui.horizontal_top(|ui| {
+                    egui::ScrollArea::vertical().id_salt("licences_list").max_height(h).max_width(250.0).show(ui, |ui| list(ui, sel, 240.0));
+                    ui.separator();
+                    egui::ScrollArea::vertical().id_salt("licences_text").max_height(h).show(ui, |ui| text(ui, *sel));
+                });
+            }
+            Some(0) => {
+                egui::ScrollArea::vertical().id_salt("licences_list").show(ui, |ui| list(ui, sel, ui.available_width()));
+            }
+            Some(_) => {
+                egui::ScrollArea::vertical().id_salt("licences_text").show(ui, |ui| text(ui, *sel));
+            }
+        }
     }
 }
 
@@ -221,6 +239,10 @@ fn varstotas_tab(ui: &mut Ui) {
         ui.label(RichText::new(LICENSE).monospace().small());
         ui.add_space(8.0);
         ui.label(RichText::new(tr!("licences-programs")).strong());
+        if super::compact::phone() {
+            let rows: Vec<Vec<String>> = PROGRAMS.iter().map(|(n, id)| vec![n.to_string(), cell("program", id, "use"), cell("program", id, "licence")]).collect();
+            super::compact::cards(ui, &[String::new(), tr!("licences-col-use"), tr!("licence-libs-col-licence")], &rows);
+        } else {
         egui::Grid::new("licences_programs").num_columns(3).show(ui, |ui| {
             for (n, id) in PROGRAMS {
                 ui.label(*n);
@@ -229,6 +251,7 @@ fn varstotas_tab(ui: &mut Ui) {
                 ui.end_row();
             }
         });
+        }
         ui.add_space(8.0);
         ui.label(RichText::new(tr!("licences-yours")).small().weak());
     });
@@ -236,8 +259,13 @@ fn varstotas_tab(ui: &mut Ui) {
 
 fn formats_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_formats").show(ui, |ui| {
+        let head = [tr!("licence-formats-col-format"), tr!("licence-formats-col-varstotas"), tr!("licence-formats-col-how"), tr!("licence-formats-col-note")];
+        if super::compact::phone() {
+            let rows: Vec<Vec<String>> = FORMATS.iter().map(|(f, id)| vec![f.to_string(), cell("format", id, "what"), cell("format", id, "how"), cell("format", id, "note")]).collect();
+            return super::compact::cards(ui, &head, &rows);
+        }
         egui::Grid::new("licences_formats_grid").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
-            for h in [tr!("licence-formats-col-format"), tr!("licence-formats-col-varstotas"), tr!("licence-formats-col-how"), tr!("licence-formats-col-note")] {
+            for h in head {
                 ui.label(RichText::new(h).strong());
             }
             ui.end_row();
@@ -256,8 +284,13 @@ fn libraries_tab(ui: &mut Ui) {
     egui::ScrollArea::vertical().id_salt("licences_libraries").show(ui, |ui| {
         ui.label(RichText::new(tr!("licence-libs-intro")).small());
         ui.add_space(6.0);
+        let head = [tr!("licence-libs-col-library"), tr!("licence-libs-col-assets"), tr!("licence-libs-col-licence"), tr!("licence-libs-col-terms")];
+        if super::compact::phone() {
+            let rows: Vec<Vec<String>> = LIBRARIES.iter().map(|(n, id)| vec![if n.is_empty() { cell("lib", id, "name") } else { n.to_string() }, cell("lib", id, "what"), cell("lib", id, "licence"), cell("lib", id, "terms")]).collect();
+            return super::compact::cards(ui, &head, &rows);
+        }
         egui::Grid::new("licences_libraries_grid").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
-            for h in [tr!("licence-libs-col-library"), tr!("licence-libs-col-assets"), tr!("licence-libs-col-licence"), tr!("licence-libs-col-terms")] {
+            for h in head {
                 ui.label(RichText::new(h).strong());
             }
             ui.end_row();

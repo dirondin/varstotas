@@ -149,7 +149,7 @@ impl VarstotasApp {
         let mut job = self.viewport.pt.as_mut();
         let batch = self.render_window.batch.as_ref().map(|b| (b.next, b.written.len()));
         crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
-            ui.horizontal(|ui| {
+            crate::ui::compact::row(ui, |ui| {
                 if ui.button(tr!("render-title")).on_hover_text(tr!("render-current-view")).clicked() {
                     start = true;
                 }
@@ -200,57 +200,39 @@ impl VarstotasApp {
                     ui.label(RichText::new(e).color(crate::ui::realistic::ERROR_RED));
                 }
             }
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(360.0);
-                    egui::ScrollArea::vertical().id_salt("render_settings_scroll").show(ui, |ui| {
-                        settings_ui(ui, &mut settings, &mut env, &self.camera, unit);
-                    });
-                });
+            let image = |ui: &mut egui::Ui| {
                 if let Some((id, size)) = tex {
                     let avail = ui.available_width().max(100.0);
                     let k = (avail / size[0] as f32).min(ui.available_height().max(200.0) / size[1] as f32).min(1.0);
                     ui.image(egui::load::SizedTexture::new(id, vec2(size[0] as f32 * k, size[1] as f32 * k)));
                 }
-            });
-            egui::CollapsingHeader::new(tr!("render-lights", n = lights.len())).id_salt("render_lights").default_open(true).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    for k in LightKind::ALL {
-                        let label = match k {
-                            LightKind::Point => tr!("render-add-point"),
-                            LightKind::Spot => tr!("render-add-spot"),
-                            LightKind::Area => tr!("render-add-area"),
-                        };
-                        if ui.button(label).clicked() {
-                            let at = self.camera.target + DVec3::Z * 2000.0;
-                            lights.push(Light::new(k, at));
-                            sel = Some(lights.len() - 1);
-                        }
-                    }
-                });
-                let mut remove = None;
-                egui::Grid::new("render_light_list").num_columns(4).spacing([8.0, 2.0]).show(ui, |ui| {
-                    for (i, l) in lights.iter_mut().enumerate() {
-                        ui.checkbox(&mut l.enabled, "").on_hover_text(tr!("render-on"));
-                        if ui.selectable_label(sel == Some(i), &l.name).clicked() {
-                            sel = Some(i);
-                        }
-                        ui.label(RichText::new(l.kind.label()).small().weak());
-                        if ui.small_button(tr!("delete")).clicked() {
-                            remove = Some(i);
-                        }
-                        ui.end_row();
-                    }
-                });
-                if let Some(i) = remove {
-                    lights.remove(i);
-                    sel = None;
+            };
+            // on a phone the settings and the image one at a time
+            let pane = crate::ui::compact::pane_tabs(ui, "render", &[tr!("pane-settings"), tr!("render-sec-image")]);
+            match pane {
+                None => {
+                    ui.horizontal_top(|ui| {
+                        ui.vertical(|ui| {
+                            ui.set_width(360.0);
+                            egui::ScrollArea::vertical().id_salt("render_settings_scroll").show(ui, |ui| {
+                                settings_ui(ui, &mut settings, &mut env, &self.camera, unit);
+                            });
+                        });
+                        image(ui);
+                    });
                 }
-                if let Some(l) = sel.and_then(|i| lights.get_mut(i)) {
-                    ui.separator();
-                    light_editor(ui, "render_light", l, unit, &self.camera);
+                Some(0) => {
+                    // the lights under the settings, in the same scroll
+                    egui::ScrollArea::vertical().id_salt("render_settings_scroll").show(ui, |ui| {
+                        settings_ui(ui, &mut settings, &mut env, &self.camera, unit);
+                        lights_ui(ui, &mut lights, &mut sel, unit, &self.camera);
+                    });
                 }
-            });
+                Some(_) => image(ui),
+            }
+            if pane.is_none() {
+                lights_ui(ui, &mut lights, &mut sel, unit, &self.camera);
+            }
         });
         if !open {
             self.render_window.open = false;
@@ -424,6 +406,63 @@ pub(crate) fn light_editor(ui: &mut egui::Ui, id: &str, l: &mut Light, unit: var
     });
 }
 
+/// The Render window's lights: add, switch on and off, pick and edit.
+fn lights_ui(ui: &mut egui::Ui, lights: &mut Vec<Light>, sel: &mut Option<usize>, unit: varstotas_kernel::LengthUnit, camera: &Camera) {
+    egui::CollapsingHeader::new(tr!("render-lights", n = lights.len())).id_salt("render_lights").default_open(true).show(ui, |ui| {
+        crate::ui::compact::row(ui, |ui| {
+            for k in LightKind::ALL {
+                let label = match k {
+                    LightKind::Point => tr!("render-add-point"),
+                    LightKind::Spot => tr!("render-add-spot"),
+                    LightKind::Area => tr!("render-add-area"),
+                };
+                if ui.button(label).clicked() {
+                    let at = camera.target + DVec3::Z * 2000.0;
+                    lights.push(Light::new(k, at));
+                    *sel = Some(lights.len() - 1);
+                }
+            }
+        });
+        let mut remove = None;
+        egui::Grid::new("render_light_list").num_columns(4).spacing([8.0, 2.0]).show(ui, |ui| {
+            for (i, l) in lights.iter_mut().enumerate() {
+                ui.checkbox(&mut l.enabled, "").on_hover_text(tr!("render-on"));
+                if ui.selectable_label(*sel == Some(i), &l.name).clicked() {
+                    *sel = Some(i);
+                }
+                ui.label(RichText::new(l.kind.label()).small().weak());
+                if ui.small_button(tr!("delete")).clicked() {
+                    remove = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+        if let Some(i) = remove {
+            lights.remove(i);
+            *sel = None;
+        }
+        if let Some(l) = sel.and_then(|i| lights.get_mut(i)) {
+            ui.separator();
+            light_editor(ui, "render_light", l, unit, camera);
+        }
+    });
+}
+
+/// Between the two pairs of a settings row: on a phone the second goes on a row of its own.
+fn half(ui: &mut egui::Ui) {
+    if super::compact::phone() {
+        ui.end_row();
+    }
+}
+
+/// As [`half`], the next cell under the values (its label cell blank).
+fn half_blank(ui: &mut egui::Ui) {
+    if super::compact::phone() {
+        ui.end_row();
+        ui.label("");
+    }
+}
+
 /// A collapsible group: `id` is fixed, `title` is shown.
 fn section(ui: &mut egui::Ui, id: &str, title: String, open: bool, body: impl FnOnce(&mut egui::Ui)) {
     egui::CollapsingHeader::new(title).id_salt(("render_section", id)).default_open(open).show(ui, |ui| {
@@ -434,7 +473,7 @@ fn section(ui: &mut egui::Ui, id: &str, title: String, open: bool, body: impl Fn
 /// The settings part of the Render window: quality presets, image, sampling, camera, light and
 /// colour. Grading (Colour) shows on the render at once; the rest at the next render.
 fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment, camera: &Camera, unit: varstotas_kernel::LengthUnit) {
-    ui.horizontal(|ui| {
+    super::compact::row(ui, |ui| {
         ui.label(tr!("render-quality"));
         for (name, samples, bounces, _) in RENDER_PRESETS {
             let tip = tr!("render-quality-tip", samples = samples, bounces = bounces);
@@ -447,6 +486,7 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
         ui.label(tr!("render-size"));
         ui.add_enabled(!s.match_view, egui::DragValue::new(&mut s.width).range(16..=8192).suffix(" px"));
         ui.add(egui::DragValue::new(&mut s.height).range(16..=8192).suffix(" px"));
+        half_blank(ui);
         ui.checkbox(&mut s.match_view, tr!("render-match-view")).on_hover_text(tr!("render-match-view-tip"));
         ui.end_row();
         ui.label("");
@@ -459,17 +499,20 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
                 }
             }
         });
+        half_blank(ui);
         ui.checkbox(&mut s.transparent, tr!("render-transparent")).on_hover_text(tr!("render-transparent-tip"));
         ui.end_row();
     });
     section(ui, "Sampling", tr!("render-sec-sampling"), true, |ui| { // i18n-ignore
         ui.label(tr!("render-samples"));
         ui.add(egui::DragValue::new(&mut s.samples).range(1..=100_000));
+        half(ui);
         ui.label(tr!("render-time-limit"));
         ui.add(egui::DragValue::new(&mut s.time_limit).range(0.0..=36_000.0).suffix(" s")).on_hover_text(tr!("render-time-limit-tip"));
         ui.end_row();
         ui.label(tr!("render-bounces"));
         ui.add(egui::DragValue::new(&mut s.bounces).range(1..=32));
+        half(ui);
         ui.label(tr!("render-clamp"));
         ui.add(egui::DragValue::new(&mut s.clamp).range(0.0..=1000.0).speed(0.5))
             .on_hover_text(tr!("render-clamp-tip"));
@@ -513,6 +556,7 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
             ui.label(tr!("render-aperture"));
             ui.add(egui::DragValue::new(&mut s.f_stop).range(0.5..=64.0).speed(0.05).prefix("f/").max_decimals(1))
                 .on_hover_text(tr!("render-aperture-tip"));
+            half(ui);
             ui.label(tr!("render-focus"));
             ui.horizontal(|ui| {
                 let mut f = if s.focus > 0.0 { s.focus } else { camera.distance() };
@@ -529,11 +573,13 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
     section(ui, "Light", tr!("render-sec-light"), false, |ui| { // i18n-ignore
         ui.label(tr!("render-sun"));
         ui.add(egui::DragValue::new(&mut env.sun).range(0.0..=20.0).speed(0.02)).on_hover_text(tr!("render-sun-tip"));
+        half(ui);
         ui.label(tr!("render-sky"));
         ui.add(egui::DragValue::new(&mut env.intensity).range(0.0..=20.0).speed(0.02)).on_hover_text(tr!("render-sky-tip"));
         ui.end_row();
         ui.label(tr!("render-rotation"));
         ui.add(egui::DragValue::new(&mut env.rotation_deg).range(-360.0..=360.0).suffix("°")).on_hover_text(tr!("render-rotation-tip"));
+        half(ui);
         ui.label(tr!("render-exposure"));
         ui.add(egui::DragValue::new(&mut env.exposure).range(-10.0..=10.0).speed(0.02).suffix(" EV")).on_hover_text(tr!("render-env-exposure-tip"));
         ui.end_row();
@@ -541,6 +587,7 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
     section(ui, "Colour", tr!("render-sec-colour"), false, |ui| { // i18n-ignore
         ui.label(tr!("render-exposure"));
         ui.add(egui::DragValue::new(&mut s.exposure).range(-10.0..=10.0).speed(0.02).suffix(" EV")).on_hover_text(tr!("render-exposure-tip"));
+        half(ui);
         ui.label(tr!("render-tone-curve"));
         let label = |t: Option<Tonemap>| match t {
             None => tr!("render-tone-environment", name = crate::ui::realistic::tonemap_name(env.tonemap)),
@@ -555,16 +602,19 @@ fn settings_ui(ui: &mut egui::Ui, s: &mut RenderSettings, env: &mut Environment,
         ui.label(tr!("render-white-balance"));
         ui.add(egui::DragValue::new(&mut s.temperature).range(1500.0..=15000.0).speed(20.0).suffix(" K"))
             .on_hover_text(tr!("render-white-balance-tip"));
+        half(ui);
         ui.label(tr!("render-tint"));
         ui.add(egui::DragValue::new(&mut s.tint).range(-1.0..=1.0).speed(0.01)).on_hover_text(tr!("render-tint-tip"));
         ui.end_row();
         ui.label(tr!("render-saturation"));
         ui.add(egui::DragValue::new(&mut s.saturation).range(0.0..=2.0).speed(0.01));
+        half(ui);
         ui.label(tr!("render-contrast"));
         ui.add(egui::DragValue::new(&mut s.contrast).range(0.5..=2.0).speed(0.01));
         ui.end_row();
         ui.label(tr!("render-vignette"));
         ui.add(egui::DragValue::new(&mut s.vignette).range(0.0..=1.0).speed(0.01));
+        half(ui);
         ui.label("");
         if ui.add_enabled(!s.neutral_grade(), egui::Button::new(tr!("render-reset"))).on_hover_text(tr!("render-reset-tip")).clicked() {
             s.reset_grade();

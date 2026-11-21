@@ -2617,6 +2617,9 @@ render-size = Размер
 
 ## Настройки
 
+pane-settings = Настройки
+pane-preview = Превью
+pane-code = Код
 render-sec-image = Изображение
 render-sec-sampling = Семплирование
 render-sec-camera = Камера
@@ -3971,6 +3974,7 @@ log-badge-hint = Окно → Журнал: ошибки и предупрежд
 
 licences-tab-varstotas = Varstotas
 licences-tab-components = Открытый код
+licences-col-use = Для чего
 licences-tab-formats = Форматы файлов
 licences-tab-libraries = Онлайн-библиотеки
 

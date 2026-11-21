@@ -2552,6 +2552,9 @@ render-size = Size
 
 ## Settings
 
+pane-settings = Settings
+pane-preview = Preview
+pane-code = Code
 render-sec-image = Image
 render-sec-sampling = Sampling
 render-sec-camera = Camera
@@ -3880,6 +3883,7 @@ log-badge-hint = Window → Log: errors and warnings from everywhere (scripts, i
 
 licences-tab-varstotas = Varstotas
 licences-tab-components = Open Source
+licences-col-use = Used for
 licences-tab-formats = File Formats
 licences-tab-libraries = Online Libraries
 

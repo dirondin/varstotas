@@ -226,9 +226,14 @@ impl VarstotasApp {
             }
             ui.add_space(4.0);
             let s = &mut self.unfold;
+            // on a phone a pair a row
+            let phone = crate::ui::compact::phone();
             egui::Grid::new("unfold_opts").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
                 ui.label(tr!("unfold-scale"));
                 ui.add(egui::DragValue::new(&mut s.scale_n).range(0.01..=10000.0).speed(0.1));
+                if phone {
+                    ui.end_row();
+                }
                 ui.label(tr!("unfold-paper"));
                 ui.horizontal(|ui| {
                     egui::ComboBox::from_id_salt("unfold_paper").selected_text(s.paper.name()).show_ui(ui, |ui| {
@@ -241,13 +246,18 @@ impl VarstotasApp {
                 ui.end_row();
                 ui.checkbox(&mut s.opts.tabs, tr!("unfold-glue-tabs"));
                 ui.add_enabled(s.opts.tabs, egui::DragValue::new(&mut s.opts.tab_width).range(1.0..=50.0).speed(0.2).suffix(" mm"));
+                if phone {
+                    ui.end_row();
+                }
                 ui.checkbox(&mut s.opts.numbers, tr!("unfold-edge-numbers"));
                 ui.checkbox(&mut s.opts.soft_folds, tr!("unfold-soft-folds"));
                 ui.end_row();
             });
             ui.add_space(6.0);
             // Preview of the current sheet: the window's rest above the legend and the export row.
-            let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), (ui.available_height() - 64.0).max(240.0)), Sense::hover());
+            // (on a phone the legend and the export row wrap: more room for them)
+            let below = if phone { 96.0 } else { 64.0 };
+            let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), (ui.available_height() - below).max(240.0)), Sense::hover());
             let painter = ui.painter_at(rect);
             painter.rect_filled(rect, 4.0, theme::border());
             if let Some(d) = pages.get(s.page) {
@@ -300,7 +310,7 @@ impl VarstotasApp {
                     painter.add(egui::epaint::TextShape::new(top_left, galley, Color32::from_gray(60)).with_angle(ang));
                 }
             }
-            ui.horizontal(|ui| {
+            crate::ui::compact::row(ui, |ui| {
                 if pages.len() > 1 {
                     if ui.add_enabled(s.page > 0, egui::Button::new("◀")).clicked() {
                         s.page -= 1;

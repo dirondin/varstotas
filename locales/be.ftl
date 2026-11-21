@@ -2611,6 +2611,9 @@ render-size = Памер
 
 ## Налады
 
+pane-settings = Налады
+pane-preview = Папярэдні прагляд
+pane-code = Код
 render-sec-image = Відарыс
 render-sec-sampling = Сэмплаванне
 render-sec-camera = Камера
@@ -3951,6 +3954,7 @@ log-badge-hint = Акно → Журнал: памылкі і папярэджа
 
 licences-tab-varstotas = Varstotas
 licences-tab-components = Адкрытая праграмная частка
+licences-col-use = Для чаго
 licences-tab-formats = Фарматы файлаў
 licences-tab-libraries = Анлайн-бібліятэкі
 

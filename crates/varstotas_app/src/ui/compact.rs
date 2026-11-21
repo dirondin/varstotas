@@ -382,6 +382,59 @@ pub fn fit_modal(ctx: &egui::Context, modal: egui::Modal) -> egui::Modal {
     modal.frame(frame)
 }
 
+/// A row of a window's controls (in place of `ui.horizontal`): on a phone it wraps, the page
+/// being narrower than the window was laid out for.
+pub fn row<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    if phone() { ui.horizontal_wrapped(add).inner } else { ui.horizontal(add).inner }
+}
+
+/// A window's panes side by side (`None`: lay them out as ever); on a phone one at a time, by
+/// tabs drawn here over them: the one to show. `id`: the window's, `names`: the panes'.
+pub fn pane_tabs(ui: &mut Ui, id: &str, names: &[String]) -> Option<usize> {
+    if !phone() {
+        return None;
+    }
+    let key = Id::new(("compact_panes", id));
+    let mut at = ui.data(|d| d.get_temp::<usize>(key)).unwrap_or(0).min(names.len().saturating_sub(1));
+    ui.horizontal_wrapped(|ui| {
+        for (i, name) in names.iter().enumerate() {
+            let r = ui.selectable_value(&mut at, i, name);
+            spot(&format!("pane:{id}:{i}"), r.rect.center());
+        }
+    });
+    ui.separator();
+    ui.data_mut(|d| d.insert_temp(key, at));
+    Some(at)
+}
+
+/// Shows pane `at` of the window `id`'s [`pane_tabs`] (an entry picked in a list shows its page).
+pub fn set_pane(ctx: &egui::Context, id: &str, at: usize) {
+    ctx.data_mut(|d| d.insert_temp(Id::new(("compact_panes", id)), at));
+}
+
+/// A table on a phone: each row a card, its first cell the title and the others under it,
+/// each after its column's name. `rows`: the cells, as the columns of `head`.
+pub fn cards(ui: &mut Ui, head: &[String], rows: &[Vec<String>]) {
+    for row in rows {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if let Some(title) = row.first() {
+                ui.label(egui::RichText::new(title).strong());
+            }
+            for (name, cell) in head.iter().zip(row).skip(1) {
+                if cell.trim().is_empty() {
+                    continue;
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.label(egui::RichText::new(format!("{name}:")).small().color(theme::text_dim()));
+                    ui.add(egui::Label::new(egui::RichText::new(cell).small()).wrap());
+                });
+            }
+        });
+    }
+}
+
 /// A row of a dialog's buttons (in place of `ui.horizontal`): on a phone one above another,
 /// the sheet wide and a finger tall.
 pub fn buttons<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {

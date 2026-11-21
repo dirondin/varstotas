@@ -2570,6 +2570,9 @@ render-size = Dydis
 
 ## Nustatymai
 
+pane-settings = Nustatymai
+pane-preview = Peržiūra
+pane-code = Kodas
 render-sec-image = Vaizdas
 render-sec-sampling = Mėginių ėmimas
 render-sec-camera = Kamera
@@ -3904,6 +3907,7 @@ log-badge-hint = Langas → Žurnalas: klaidos ir įspėjimai iš visur (scenari
 
 licences-tab-varstotas = Varstotas
 licences-tab-components = Atvirasis kodas
+licences-col-use = Paskirtis
 licences-tab-formats = Failų formatai
 licences-tab-libraries = Internetinės bibliotekos
 

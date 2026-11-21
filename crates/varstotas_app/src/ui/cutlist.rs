@@ -774,7 +774,8 @@ impl VarstotasApp {
         let unit = self.doc.model.unit;
         let mut set: Option<(String, PartOptions)> = None;
         let mut select = None;
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        // the table scrolls across by itself where the page is narrower (a phone)
+        egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
             egui::Grid::new("cutlist_parts").num_columns(7).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 for h in ["cutlist-col-part", "cutlist-col-count", "cutlist-col-size", "cutlist-col-material", "cutlist-col-grain", "cutlist-col-bands", "cutlist-col-use"] {
                     ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
@@ -833,7 +834,7 @@ impl VarstotasApp {
         let mut select = None;
         let mut remembered: Vec<(String, f64)> = Vec::new();
         // the note under it
-        egui::ScrollArea::vertical().max_height((ui.available_height() - 24.0).max(80.0)).auto_shrink([false, false]).show(ui, |ui| {
+        egui::ScrollArea::both().max_height((ui.available_height() - 24.0).max(80.0)).auto_shrink([false, false]).show(ui, |ui| {
             egui::Grid::new("cutlist_hardware").num_columns(5).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
                 for h in ["cutlist-col-item", "cutlist-col-count", "cutlist-col-price", "cutlist-col-cost"] {
                     ui.label(RichText::new(varstotas_i18n::tr(h)).strong());
@@ -989,30 +990,42 @@ impl VarstotasApp {
         let mut drilling = false;
         let win = self.placed(egui::Window::new(tr!("cutlist-title")).id(egui::Id::new("cutlist_window")).open(&mut open).collapsible(false).resizable(true).default_size([640.0, 660.0]).min_width(560.0), pos);
         crate::ui::compact::fit_window(ctx, win).show(ctx, |ui| {
-            // the export buttons at the bottom, the tab above taking what is left
-            egui::Panel::bottom("cutlist_export").resizable(false).frame(egui::Frame::NONE.inner_margin(egui::Margin { top: 6, ..Default::default() })).show_separator_line(false).show(ui, |ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // the export buttons at the bottom, the tab above taking what is left; on a phone
+            // a row on top (where the page has room for all of them)
+            let export = |ui: &mut Ui, save: &mut Option<&str>, labels: &mut bool, drilling: &mut bool| {
                     ui.add_enabled_ui(!plan.parts.is_empty(), |ui| {
                         let r = ui.button(RichText::new(tr!("cutlist-labels")).strong());
                         if r.on_hover_text(tr!("cutlist-labels-tip")).clicked() {
-                            labels = true;
+                            *labels = true;
                         }
                         let on = super::drilling::any_drilling(&plan, &self.doc.model.cut_list);
                         let r = ui.add_enabled(on, egui::Button::new(RichText::new(tr!("cutlist-drilling")).strong()));
                         super::tray_lib::spot("cutlist:drilling", r.rect.center());
                         if r.on_hover_text(tr!("cutlist-drilling-tip")).on_disabled_hover_text(tr!("cutlist-drilling-none")).clicked() {
-                            drilling = true;
+                            *drilling = true;
                         }
                         for (ext, need_plans) in [("csv", false), ("svg", true), ("pdf", true)] {
                             let on = !need_plans || !plan.plans.is_empty();
                             if ui.add_enabled(on, egui::Button::new(RichText::new(format!("{}…", ext.to_uppercase())).strong())).clicked() {
-                                save = Some(ext);
+                                *save = Some(ext);
                             }
                         }
                     });
+            };
+            if crate::ui::compact::phone() {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(tr!("cutlist-export")).color(theme::text_dim()));
+                    export(ui, &mut save, &mut labels, &mut drilling);
                 });
-            });
+                ui.separator();
+            } else {
+                egui::Panel::bottom("cutlist_export").resizable(false).frame(egui::Frame::NONE.inner_margin(egui::Margin { top: 6, ..Default::default() })).show_separator_line(false).show(ui, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        export(ui, &mut save, &mut labels, &mut drilling);
+                        ui.label(RichText::new(tr!("cutlist-export")).color(theme::text_dim()));
+                    });
+                });
+            }
             self.cut_settings_ui(ui);
             ui.add_space(4.0);
             self.cut_summary_ui(ui, &plan);

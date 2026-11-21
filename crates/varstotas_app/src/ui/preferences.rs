@@ -774,9 +774,8 @@ impl VarstotasApp {
         };
         // the lists down to the bottom of the window (less the column headings)
         let list_h = (ui.clip_rect().bottom() - ui.cursor().top() - 40.0).max(160.0);
-        ui.columns(2, |cols| {
-            heading(&mut cols[0], &tr!("prefs-toolbar-on"));
-            egui::ScrollArea::vertical().id_salt("tb_on").max_height(list_h).auto_shrink([false, true]).show(&mut cols[0], |ui| {
+        let on_list = |ui: &mut Ui, op: &mut Option<(usize, i32)>| {
+            egui::ScrollArea::vertical().id_salt("tb_on").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
                 let n = items.len();
                 for (i, &it) in items.iter().enumerate() {
                     // separators are told apart by their place
@@ -795,15 +794,16 @@ impl VarstotasApp {
                                 };
                                 super::tray_lib::spot(format!("tb_{name}:{key}"), r.rect.center());
                                 if r.clicked() {
-                                    op = Some((i, d));
+                                    *op = Some((i, d));
                                 }
                             }
                         });
                     });
                 }
             });
-            heading(&mut cols[1], &tr!("prefs-toolbar-reserve"));
-            egui::ScrollArea::vertical().id_salt("tb_off").max_height(list_h).auto_shrink([false, true]).show(&mut cols[1], |ui| {
+        };
+        let off_list = |ui: &mut Ui, add: &mut Option<Item>| {
+            egui::ScrollArea::vertical().id_salt("tb_off").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
                 let mut group = None;
                 for it in std::iter::once(Item::Sep).chain(spare) {
                     if it.group().is_some() && it.group() != group {
@@ -815,13 +815,26 @@ impl VarstotasApp {
                         let r = ui.add(egui::Button::new("←").small()).on_hover_text(tr!("prefs-toolbar-to-end"));
                         super::tray_lib::spot(format!("tb_in:{}", it.key()), r.rect.center());
                         if r.clicked() {
-                            add = Some(it);
+                            *add = Some(it);
                         }
                         label(ui, it);
                     });
                 }
             });
-        });
+        };
+        // on a phone the toolbar's and the reserve one at a time
+        match super::compact::pane_tabs(ui, "prefs_toolbar", &[tr!("prefs-toolbar-on"), tr!("prefs-toolbar-reserve")]) {
+            None => {
+                ui.columns(2, |cols| {
+                    heading(&mut cols[0], &tr!("prefs-toolbar-on"));
+                    on_list(&mut cols[0], &mut op);
+                    heading(&mut cols[1], &tr!("prefs-toolbar-reserve"));
+                    off_list(&mut cols[1], &mut add);
+                });
+            }
+            Some(0) => on_list(ui, &mut op),
+            Some(_) => off_list(ui, &mut add),
+        }
         let changed = op.is_some() || add.is_some();
         match op {
             Some((i, 0)) => {
