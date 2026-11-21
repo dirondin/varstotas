@@ -1330,7 +1330,7 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
                 len(ui, &mut st.width, &mut changed);
                 ui.label("×");
                 len(ui, &mut st.thickness, &mut changed);
-                ui.label(RichText::new("ⓘ").color(theme::text_dim())).on_hover_text(tr!("mated-stock-section-tip"));
+                ui.label(RichText::new("ℹ").color(theme::text_dim())).on_hover_text(tr!("mated-stock-section-tip"));
             });
             ui.end_row();
         } else {
@@ -1409,7 +1409,7 @@ fn stock_editor(ui: &mut Ui, st: &mut Stock, salt: (&'static str, usize), unit: 
                                 changed = true;
                             }
                         });
-                        ui.label(RichText::new("ⓘ").color(theme::text_dim())).on_hover_text(tr!("mated-stock-prices-tip"));
+                        ui.label(RichText::new("ℹ").color(theme::text_dim())).on_hover_text(tr!("mated-stock-prices-tip"));
                     });
                 }
                 ui.end_row();

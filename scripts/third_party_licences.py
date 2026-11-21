@@ -110,6 +110,16 @@ def main():
                 texts.append(t)
             ids.append([fname, index[t]])
         crates.append({"name": name, "version": ver, "license": lic, "repository": p.get("repository") or "", "texts": ids})
+    # what is bundled without a crate: the symbol font the browser version draws arrows with
+    fonts = os.path.join(ROOT, "crates", "varstotas_app", "assets", "fonts")
+    for name, ver, lic, repo, path in [
+        ("DejaVu Sans (symbols subset)", "2.37", "Bitstream Vera / public domain", "https://github.com/dejavu-fonts/dejavu-fonts", "DejaVuSans-LICENSE.txt"),
+    ]:
+        t = open(os.path.join(fonts, path), encoding="utf-8").read().strip()
+        if t not in index:
+            index[t] = len(texts)
+            texts.append(t)
+        crates.append({"name": name, "version": ver, "license": lic, "repository": repo, "texts": [[path, index[t]]]})
     out_dir = os.path.join(ROOT, "crates", "varstotas_app", "licences")
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "third_party.json"), "w", encoding="utf-8") as f:

@@ -752,7 +752,7 @@ impl VarstotasApp {
                                     s.joints = step.joints.clone();
                                 }
                                 edit = Some((tr!("assembly-undo-steps"), steps));
-                            } else if k > 0 && ui.small_button("⤒").on_hover_text(tr!("assembly-join-tip")).clicked() {
+                            } else if k > 0 && ui.small_button("↥").on_hover_text(tr!("assembly-join-tip")).clicked() {
                                 let s = steps.remove(k);
                                 steps[k - 1].parts.extend(s.parts);
                                 steps[k - 1].joints.extend(s.joints);

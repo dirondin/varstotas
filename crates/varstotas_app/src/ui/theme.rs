@@ -76,14 +76,15 @@ const SYMBOL_FONTS: &[&str] = &[
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ];
 
+/// Without a system one (in a browser): DejaVu Sans's arrows, box drawing, shapes and the
+/// symbols the interface uses (a subset, assets/fonts; its licence is in Help → Licences).
+const BUNDLED_SYMBOLS: &[u8] = include_bytes!("../../assets/fonts/DejaVuSans-symbols.ttf");
+
 fn install_symbol_fallback(ctx: &Context) {
-    let Some((path, bytes)) = SYMBOL_FONTS
+    let (path, bytes) = SYMBOL_FONTS
         .iter()
         .find_map(|p| varstotas_kernel::fs::read(p).ok().map(|b| (*p, b)))
-    else {
-        log::warn!("no symbol fallback font found; arrows may render as boxes");
-        return;
-    };
+        .unwrap_or(("bundled DejaVu Sans", BUNDLED_SYMBOLS.to_vec()));
     let mut fonts = egui::FontDefinitions::default();
     fonts
         .font_data
