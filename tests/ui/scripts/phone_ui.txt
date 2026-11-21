@@ -14,6 +14,13 @@ action safe_area 47 34
 wait 5
 expect ("hud:view", 233, 75)
 screenshot shots/phone_safe_area.bmp
+action preferences
+wait 15
+action click_spot prefs:Navigation
+wait 10
+screenshot shots/phone_safe_prefs.bmp
+action back
+wait 10
 action safe_area 0 0
 wait 5
 action preferences

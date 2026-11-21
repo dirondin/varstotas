@@ -323,20 +323,17 @@ pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Windo
     }
     let screen = ctx.content_rect();
     if phone {
-        // the whole page, no border, corners or shadow
-        let frame = egui::Frame::window(&ctx.global_style())
-            .corner_radius(0)
-            .stroke(Stroke::NONE)
-            .shadow(egui::epaint::Shadow::NONE)
-            .inner_margin({
-                let i = safe_area();
-                let m = |v: f32| (12.0 + v).min(100.0) as i8;
-                egui::Margin { left: m(i.left), right: m(i.right), top: m(i.top), bottom: m(i.bottom) }
-            });
+        // the whole page, no border, corners or shadow; the status bar's room above the title,
+        // the home bar's below the content (egui gives a window's margins to its title bar too)
+        let i = safe_area();
+        let m = |v: f32| (12.0 + v).min(100.0) as i8;
+        let frame = egui::Frame::window(&ctx.global_style()).corner_radius(0).stroke(Stroke::NONE).shadow(egui::epaint::Shadow::NONE);
+        let title = frame.inner_margin(egui::Margin { left: m(i.left), right: m(i.right), top: m(i.top), bottom: m(0.0) });
+        let frame = frame.inner_margin(egui::Margin { left: m(i.left), right: m(i.right), top: m(0.0), bottom: m(i.bottom) });
         // above the keyboard
-        let sheet = Rect::from_min_max(screen.min, screen.max - vec2(0.0, safe_area().keyboard));
+        let sheet = Rect::from_min_max(screen.min, screen.max - vec2(0.0, i.keyboard));
         // what a window lays out wider than a phone scrolls across
-        win.fixed_rect(sheet).collapsible(false).frame(frame).hscroll(true)
+        win.fixed_rect(sheet).collapsible(false).frame(frame).title_frame(title).hscroll(true)
     } else {
         let inside = screen.shrink(MARGIN);
         win.constrain_to(inside).max_size(inside.size())
