@@ -37,6 +37,9 @@ pub struct Touch {
     pub pending: Option<Pos2>,
     /// When `pending` was pressed (seconds, egui's input time).
     pub pending_at: f64,
+    /// The points a finger's taps gave the tool so far, while it is busy with them (a rectangle's
+    /// first corner, a line's points…): shown, as the finger hides where it tapped.
+    pub marks: Vec<varstotas_kernel::glam::DVec3>,
     /// The last frame's fingers: how many, their middle, spread and turn.
     shape: Option<(usize, Pos2, f32, f32)>,
     /// The turn since the fingers met, and whether it got past [`TWIST_START`].
@@ -213,6 +216,31 @@ impl crate::app::VarstotasApp {
         painter.circle_stroke(c, LOUPE_R + 1.5, Stroke::new(1.0, Color32::from_black_alpha(80)));
         if let Some(t) = tip {
             tooltip(&painter, c + vec2(-LOUPE_R, LOUPE_R + 6.0), t);
+        }
+    }
+
+    /// The points tapped for the tool in pane `rect`, numbered.
+    pub(crate) fn paint_tap_marks(&self, ctx: &egui::Context, rect: Rect) {
+        if self.touch.marks.is_empty() {
+            return;
+        }
+        let painter = ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("touch_marks"))).with_clip_rect(rect);
+        let vp = DVec2::new(rect.width() as f64, rect.height() as f64);
+        let many = self.touch.marks.len() > 1;
+        for (i, m) in self.touch.marks.iter().enumerate() {
+            let Some(s) = self.camera.world_to_screen(*m, vp) else { continue };
+            let p = rect.min + vec2(s.x as f32, s.y as f32);
+            let a = crate::ui::theme::ACCENT;
+            painter.circle(p, 20.0, a.gamma_multiply(0.18), Stroke::new(1.5, a.gamma_multiply(0.6)));
+            painter.circle_filled(p + vec2(0.0, 1.5), 9.0, Color32::from_black_alpha(50));
+            painter.circle(p, 8.0, a, Stroke::new(2.5, Color32::WHITE));
+            if many {
+                let at = p + vec2(0.0, -30.0);
+                let g = painter.layout_no_wrap((i + 1).to_string(), egui::FontId::proportional(12.0), Color32::WHITE);
+                let r = Rect::from_center_size(at, g.size() + vec2(10.0, 4.0));
+                painter.rect_filled(r, 8.0, crate::ui::theme::ACCENT);
+                painter.galley(r.center() - g.size() / 2.0, g, Color32::WHITE);
+            }
         }
     }
 }

@@ -1308,6 +1308,10 @@ impl VarstotasApp {
             }
         }
         // a finger runs the tool by its release (the navigation tools take its drag)
+        // the tapped points go with the operation (done, cancelled, another tool)
+        if !self.tool.is_busy() {
+            self.touch.marks.clear();
+        }
         let finger_clicks = !matches!(self.tool.id(), ToolId::Orbit | ToolId::Pan | ToolId::Zoom | ToolId::LookAround | ToolId::Walk);
         // a browser says what pressed before its touch comes; a touch screen sends the touch
         let finger = kind == crate::pointer::Kind::Touch || (kind != crate::pointer::Kind::Pen && self.touch.active());
@@ -1375,6 +1379,12 @@ impl VarstotasApp {
                                 let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(button), false);
                                 self.with_tool(pi, |t, c| t.on_pointer_up(c));
                                 self.after_primary_click(local, modifiers);
+                                // the tool goes on from this point: keep it shown
+                                if self.tool.is_busy()
+                                    && let Some((_, p)) = crate::inference::last_snap()
+                                {
+                                    self.touch.marks.push(p);
+                                }
                             }
                             continue;
                         }
@@ -2914,6 +2924,7 @@ impl eframe::App for VarstotasApp {
                 let (markers, cur) = if is_active { (&o2[..], cursor) } else { (&[][..], None) };
                 self.viewport.paint(ui, frame, k, rect, is_active, &self.doc, &self.camera, &style, &o3, markers, cur);
                 if is_active {
+                    self.paint_tap_marks(&ctx, rect);
                     self.paint_loupe(&ctx, k, rect, markers);
                 }
                 ui.push_id(("pane", k), |ui| self.view_hud(ui, rect));

@@ -761,7 +761,7 @@ impl VarstotasApp {
     pub(crate) fn compact_dump(&self) -> String {
         let level = self.compact.radial.as_ref().and_then(|r| r.levels.last().copied());
         let sub = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
-        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?} compact_windows=(prefs {} about {})", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools(), self.prefs_win.open, self.show_about)
+        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?} compact_windows=(prefs {} about {}) tap_marks={}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools(), self.prefs_win.open, self.show_about, self.touch.marks.len())
     }
 
     /// F8: the other interface.

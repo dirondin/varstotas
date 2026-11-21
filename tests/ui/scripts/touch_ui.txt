@@ -19,6 +19,9 @@ wait 30
 screenshot shots/touch_loupe.bmp
 raw finger 0 up 320 770
 wait 3
+# the tapped corner stays shown while the rectangle is drawn
+expect tap_marks=1
+screenshot shots/touch_tap_mark.bmp
 raw finger 0 down 400 820
 wait 2
 raw finger 0 move 440 860
@@ -26,6 +29,7 @@ wait 3
 raw finger 0 up 440 860
 wait 5
 expect model_faces=7
+expect tap_marks=0
 # two fingers: pinch out zooms in, no click from the first
 expect cam_dist=858
 raw finger 0 down 800 500
