@@ -1368,7 +1368,16 @@ impl VarstotasApp {
                         if pressed && finger && palm {
                             continue;
                         }
-                        if pressed && finger_clicks && finger {
+                        // a tap and at once a press near it: the Select tool's drag (a selection
+                        // box), pressed and released as the mouse's
+                        let again = pressed
+                            && finger
+                            && self.tool.id() == ToolId::Select
+                            && self.touch.last_tap.is_some_and(|(t, p)| now - t < crate::touch::TAP_AGAIN_SECS && p.distance(local) < 40.0);
+                        if again {
+                            self.touch.last_tap = None;
+                        }
+                        if pressed && finger_clicks && finger && !again {
                             if over && rect.contains(pos) && !on_hud(pos) {
                                 self.touch.pending = Some(local);
                                 self.touch.pending_at = now;
@@ -1387,6 +1396,7 @@ impl VarstotasApp {
                                 let pi = self.pointer_info(local, egui::Vec2::ZERO, Some(button), false);
                                 self.with_tool(pi, |t, c| t.on_pointer_up(c));
                                 self.after_primary_click(local, modifiers);
+                                self.touch.last_tap = Some((now, local));
                                 // the tool goes on from this point: keep it shown
                                 if self.tool.is_busy()
                                     && let Some((_, p)) = crate::inference::last_snap()

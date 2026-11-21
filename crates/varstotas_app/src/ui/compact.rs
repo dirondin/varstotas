@@ -334,8 +334,8 @@ pub fn fit_window<'a>(ctx: &egui::Context, win: egui::Window<'a>) -> egui::Windo
         let frame = frame.inner_margin(egui::Margin { left: m(i.left), right: m(i.right), top: m(0.0), bottom: m(i.bottom) });
         // above the keyboard
         let sheet = Rect::from_min_max(screen.min, screen.max - vec2(0.0, i.keyboard));
-        // what a window lays out wider than a phone scrolls across
-        win.fixed_rect(sheet).collapsible(false).frame(frame).title_frame(title).hscroll(true)
+        // what a window lays out wider or taller than a phone scrolls
+        win.fixed_rect(sheet).collapsible(false).frame(frame).title_frame(title).scroll(true)
     } else {
         let inside = screen.shrink(MARGIN);
         win.constrain_to(inside).max_size(inside.size())

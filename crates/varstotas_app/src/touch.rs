@@ -30,6 +30,10 @@ const TAP_SECS: f64 = 0.4;
 /// …none of them slid further than this (points).
 const TAP_SLOP: f32 = 20.0;
 
+/// A press this soon (seconds) after a tap, near it, is a drag of the Select tool (a selection
+/// box), not a tap to come.
+pub const TAP_AGAIN_SECS: f64 = 0.4;
+
 /// A twist smaller than this (radians, since the fingers met) is a pinch's wobble, not a turn.
 const TWIST_START: f32 = 0.2;
 
@@ -64,6 +68,8 @@ pub struct Touch {
     tap_track: Option<(f64, BTreeMap<u64, Pos2>, usize, bool)>,
     /// A quick tap of two or more fingers that did not slide: how many and their middle.
     tap: Option<(usize, Pos2)>,
+    /// When and where (view-local) the last one-finger tap clicked for the tool.
+    pub last_tap: Option<(f64, Pos2)>,
 }
 
 /// What two or more fingers did in a frame.

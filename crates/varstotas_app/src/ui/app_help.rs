@@ -151,6 +151,7 @@ const TOUCH: &[B] = &[
     B::P("help-touch-13"),
     B::H("help-touch-14"),
     B::Row("help-touch-15", "help-touch-16"),
+    B::Row("help-touch-26", "help-touch-27"),
     B::Row("help-touch-17", "help-touch-18"),
     B::Row("help-touch-21", "help-touch-22"),
     B::H("help-touch-23"),

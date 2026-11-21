@@ -76,6 +76,25 @@ expect look=(-0.14,0.76,-0.63)
 action click_spot nav:button:orbit
 wait 5
 expect tool=Rectangle
+# a tap and at once a press there: the Select tool's selection box (right to left: touching)
+tool select
+raw finger 0 down 1150 690
+raw finger 0 up 1150 690
+raw finger 0 down 1152 692
+raw finger 0 move 900 550
+raw finger 0 move 700 450
+wait 2
+screenshot shots/touch_box.bmp
+raw finger 0 up 700 450
+wait 5
+expect sel F=2 E=1
+# one finger alone is the tool's tap (where it is let go): no box without the tap first
+raw finger 0 down 1150 690
+raw finger 0 move 700 450
+raw finger 0 up 700 450
+wait 5
+expect sel F=1 E=0
+tool rectangle
 # Preferences → Navigation → Touch screen: the turn off, the fingers only pan and pinch
 action preferences
 wait 5
