@@ -1249,7 +1249,11 @@ impl VarstotasApp {
                         Menu::View => self.menu_view(ui),
                         Menu::Camera => self.menu_camera(ui),
                         Menu::Draw => self.menu_draw(ui),
-                        Menu::Tools => self.menu_tools(ui),
+                        Menu::Tools => {
+                            self.menu_tools(ui);
+                            ui.separator();
+                            self.menu_nav_tools(ui);
+                        }
                         Menu::Snapping => self.snapping_menu(ui, true),
                         Menu::Window => self.menu_window(ui),
                         Menu::Help => self.menu_help(ui),
@@ -1394,6 +1398,14 @@ impl VarstotasApp {
                     match k {
                         // drawn: not every font has these signs
                         "✕" => paint_cross(p, r.center(), 8.0, fg),
+                        "⌫" => {
+                            // a key with its point to the left and a small cross in it
+                            let c = r.center() + vec2(1.0, 0.0);
+                            let (w, h) = (13.0, 9.0);
+                            let shape = vec![c + vec2(-w - 6.0, 0.0), c + vec2(-w + 2.0, -h), c + vec2(w, -h), c + vec2(w, h), c + vec2(-w + 2.0, h)];
+                            p.add(egui::Shape::closed_line(shape, Stroke::new(2.0, fg)));
+                            paint_cross(p, c + vec2(1.5, 0.0), 4.0, fg);
+                        }
                         "⏎" => {
                             let c = r.center();
                             p.line(vec![c + vec2(-11.0, 0.0), c + vec2(-3.0, 8.0), c + vec2(12.0, -8.0)], Stroke::new(2.5, fg));

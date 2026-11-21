@@ -656,6 +656,15 @@ impl VarstotasApp {
         }
     }
 
+    /// The navigation tools, for the end of the compact interface's All (`ui/compact.rs`): on a
+    /// touch screen a finger then navigates.
+    pub(crate) fn menu_nav_tools(&mut self, ui: &mut Ui) {
+        for id in [ToolId::Orbit, ToolId::Pan, ToolId::Zoom] {
+            self.tool_item(ui, id);
+        }
+        self.cmd_item(ui, Cmd::ZoomExtents);
+    }
+
     /// Window: the side bar and its cards, the windows. The menu bar and the compact interface's menu (`ui/compact.rs`) show it.
     pub(crate) fn menu_window(&mut self, ui: &mut Ui) {
         // The side bar and its cards: a checkbox each (turning a card on opens the side bar).
