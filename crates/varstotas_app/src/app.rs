@@ -617,6 +617,8 @@ pub struct VarstotasApp {
     pub(crate) compact: crate::ui::compact::Compact,
     /// Fingers on the view.
     pub(crate) touch: crate::touch::Touch,
+    /// The fingers down as the browser's events brought them (`touch::lift_lost`).
+    fingers_down: std::collections::BTreeMap<u64, egui::Pos2>,
     /// When a pen was last on or above the screen (input time): fingers meanwhile are a palm.
     pen_seen: f64,
     /// The tool the pen's eraser took over from, while it erases.
@@ -829,6 +831,7 @@ impl VarstotasApp {
             menu_at: egui::Pos2::ZERO,
             compact: Default::default(),
             touch: Default::default(),
+            fingers_down: Default::default(),
             pen_seen: f64::NEG_INFINITY,
             pen_erasing: None,
             pen_over: false,
@@ -3051,8 +3054,10 @@ impl eframe::App for VarstotasApp {
         }
     }
 
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         self.debug.raw_input_hook(raw_input);
+        let pressed = ctx.input(|i| i.pointer.primary_down());
+        crate::touch::lift_lost(&mut self.fingers_down, raw_input, crate::touch::browser_fingers().as_deref(), pressed);
         self.compact_raw_input(raw_input);
     }
 

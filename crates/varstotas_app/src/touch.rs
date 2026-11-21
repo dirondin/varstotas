@@ -8,6 +8,9 @@
 
 use std::collections::BTreeMap;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
+
 use egui::{Color32, Event, Id, LayerId, Order, Pos2, Rect, Stroke, TouchPhase, Vec2, pos2, vec2};
 use varstotas_kernel::glam::DVec2;
 
@@ -76,6 +79,52 @@ pub struct Gesture {
     pub twist: f32,
     /// The browser pinches / turns these fingers itself (see [`Touch::system`]).
     pub system: (bool, bool),
+}
+
+/// Fingers the browser lifted whose lift never reached the app: eframe drops a touch's end
+/// where the page reaches past the window (an iPhone's home screen gives a window shorter than
+/// the screen) when it comes in the frame the touch began, and the finger stayed down for us
+/// and for egui. Their ends, and the pointer's release once none is left (`pressed`: egui
+/// holds it), go at the end of `raw`'s events. `down`: the fingers down so far, kept across
+/// frames; `live`: the ones on the screen now (`None`: not known, outside a browser).
+pub fn lift_lost(down: &mut BTreeMap<u64, Pos2>, raw: &mut egui::RawInput, live: Option<&[u64]>, pressed: bool) {
+    for e in &raw.events {
+        if let Event::Touch { id, phase, pos, .. } = e {
+            match phase {
+                TouchPhase::Start | TouchPhase::Move => {
+                    down.insert(id.0, *pos);
+                }
+                TouchPhase::End | TouchPhase::Cancel => {
+                    down.remove(&id.0);
+                }
+            }
+        }
+    }
+    let Some(live) = live else { return };
+    let lost: Vec<(u64, Pos2)> = down.iter().filter(|(id, _)| !live.contains(id)).map(|(id, p)| (*id, *p)).collect();
+    let Some(&(_, last)) = lost.last() else { return };
+    for (id, pos) in lost {
+        down.remove(&id);
+        raw.events.push(Event::Touch { device_id: egui::TouchDeviceId(0), id: egui::TouchId(id), phase: TouchPhase::End, pos, force: None });
+    }
+    if down.is_empty() && pressed {
+        raw.events.push(Event::PointerButton { pos: last, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() });
+        raw.events.push(Event::PointerGone);
+    }
+}
+
+/// The fingers on the page's screen now, by egui's touch ids (the page keeps them, see
+/// web/app/index.html); `None` before the first touch and outside a browser.
+pub fn browser_fingers() -> Option<Vec<u64>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let window = web_sys::window()?;
+        let list = js_sys::Reflect::get(&window, &"varstotasTouches".into()).ok()?;
+        let list: js_sys::Array = list.dyn_into().ok()?;
+        Some(list.iter().filter_map(|v| v.as_f64()).map(|id| egui::TouchId::from(id as i32).0).collect())
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    None
 }
 
 impl Touch {
@@ -343,6 +392,29 @@ mod tests {
         assert_eq!(g.twist, 0.0);
         let g = t.update(&[touch(1, TouchPhase::Move, 100.0, 40.0)], None).unwrap();
         assert!(g.twist > 0.2);
+    }
+
+    #[test]
+    fn a_lift_the_browser_lost_is_given_back() {
+        let mut down = BTreeMap::new();
+        let mut raw = egui::RawInput::default();
+        raw.events = vec![touch(0, TouchPhase::Start, 10.0, 800.0), touch(1, TouchPhase::Start, 50.0, 800.0)];
+        lift_lost(&mut down, &mut raw, Some(&[0, 1]), true);
+        assert_eq!(raw.events.len(), 2, "both on the screen: nothing added");
+        // finger 1 went up, its end lost
+        let mut raw = egui::RawInput::default();
+        lift_lost(&mut down, &mut raw, Some(&[0]), true);
+        assert!(matches!(raw.events[..], [Event::Touch { id: egui::TouchId(1), phase: TouchPhase::End, .. }]));
+        // the last one too: its end and the pointer's release
+        let mut raw = egui::RawInput::default();
+        lift_lost(&mut down, &mut raw, Some(&[]), true);
+        assert!(matches!(raw.events[..], [Event::Touch { phase: TouchPhase::End, .. }, Event::PointerButton { pressed: false, .. }, Event::PointerGone]));
+        assert!(down.is_empty());
+        // outside a browser nothing is known: nothing added
+        let mut raw = egui::RawInput::default();
+        raw.events = vec![touch(2, TouchPhase::Start, 10.0, 10.0)];
+        lift_lost(&mut down, &mut raw, None, true);
+        assert_eq!(raw.events.len(), 1);
     }
 
     #[test]

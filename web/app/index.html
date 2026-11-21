@@ -47,6 +47,10 @@
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   // the page never scrolls (iOS scrolls it to show a focused field): the touches would be off
   addEventListener("scroll", () => { if (scrollX || scrollY) scrollTo(0, 0); });
+  // the fingers on the screen, for the app: a lift the browser does not hand on to it (a finger
+  // stuck down, one finger then navigating as two) is put back
+  const fingers = (e) => { window.varstotasTouches = Array.from(e.touches, (t) => t.identifier); };
+  for (const type of ["touchstart", "touchend", "touchcancel"]) addEventListener(type, fingers, { capture: true, passive: true });
   const loading = document.getElementById("loading");
   if (!navigator.gpu || !(await navigator.gpu.requestAdapter().catch(() => null))) {
     loading.hidden = true;
