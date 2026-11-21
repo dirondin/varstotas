@@ -60,6 +60,17 @@ impl TouchMenu {
     }
 }
 
+/// When the navigation buttons show over the view (`ui/view_hud.rs`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NavButtons {
+    Off,
+    /// In the compact interface or on a touch screen (`pointer: coarse`, or once a finger
+    /// touched it): a mouse has its buttons and wheel.
+    #[default]
+    CompactOrTouch,
+    Always,
+}
+
 /// Mouse and trackpad navigation (Preferences → Navigation).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -94,8 +105,8 @@ pub struct NavPrefs {
     /// Wheel scrolling comes from a touchpad (Windows and Linux report two fingers as a
     /// wheel): it navigates as two fingers do, Ctrl + scroll (a pinch there) zooms.
     pub wheel_is_trackpad: bool,
-    /// Orbit / pan / zoom buttons to drag at the view's right edge.
-    pub buttons: bool,
+    /// When the Orbit / Pan / Zoom / Zoom Extents buttons show at the view's right edge.
+    pub nav_buttons: NavButtons,
     /// Fingers on a touch screen (`crate::touch`), our own handling: two moved together pan,
     /// pinched zoom, turned orbit about the vertical or roll; each with its speed (× the
     /// standard one) and the zoom and turn with an inversion.
@@ -121,7 +132,7 @@ impl Default for NavPrefs {
             trackpad_enabled: true, trackpad_speed: 1.0, invert_swipe: false,
             pinch_enabled: true, pinch_speed: 1.0, invert_pinch: false,
             twist: TwistGesture::Orbit, twist_speed: 1.0, invert_twist: false,
-            right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, buttons: true,
+            right: ButtonDrag::Orbit, space_drag: true, wheel_is_trackpad: false, nav_buttons: NavButtons::CompactOrTouch,
             touch_pan: true, touch_pan_speed: 1.0, touch_zoom: true, touch_zoom_speed: 1.0, touch_invert_zoom: false,
             touch_twist: TwistGesture::Orbit, touch_twist_speed: 1.0, touch_invert_twist: false, native_on_screen: false,
             touch_menu: TouchMenu::LongPress }

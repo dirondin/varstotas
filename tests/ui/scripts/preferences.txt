@@ -70,6 +70,8 @@ expect snapping=(true, [])
 raw click 137 282
 wait 5
 expect prefs_win=(true Navigation)
+raw scroll 500 350 -150
+wait 8
 action click_spot nav:two_zoom
 wait 3
 expect two_finger: Zoom

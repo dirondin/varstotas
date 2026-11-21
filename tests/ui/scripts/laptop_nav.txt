@@ -48,6 +48,17 @@ raw key Space
 wait 5
 # Space tapped alone: Select
 expect tool=Select
+# the buttons show with a mouse in the classic interface only when asked
+expect nav_buttons: CompactOrTouch
+action preferences
+wait 5
+action click_spot prefs:Navigation
+wait 5
+action click_spot nav:buttons_always
+wait 3
+expect nav_buttons: Always
+raw click 664 54
+wait 5
 action drag_spot nav:button:orbit 80 0
 wait 5
 expect cam=(-640,-1777,3053)

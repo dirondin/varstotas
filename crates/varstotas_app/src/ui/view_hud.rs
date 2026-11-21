@@ -124,10 +124,13 @@ impl VarstotasApp {
             hud = r.response.rect;
         });
         self.hud_rect = hud;
-        // classic: as the preference says; compact: finger-sized, on a touch screen only (a mouse
-        // has its buttons and wheel)
-        let touch = super::compact::touch_screen() || self.touch.seen();
-        if if self.compact.on { touch } else { self.prefs.nav.buttons } {
+        // as Preferences → Navigation says (finger-sized in the compact interface)
+        let shown = match self.prefs.nav.nav_buttons {
+            crate::nav::NavButtons::Off => false,
+            crate::nav::NavButtons::CompactOrTouch => self.compact.on || super::compact::touch_screen() || self.touch.seen(),
+            crate::nav::NavButtons::Always => true,
+        };
+        if shown {
             self.nav_buttons(ui, rect, hud);
         }
     }

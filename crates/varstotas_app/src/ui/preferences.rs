@@ -1007,10 +1007,15 @@ impl VarstotasApp {
     }
 
     fn prefs_navigation(&mut self, ui: &mut Ui) {
-        use crate::nav::{ButtonDrag, NavGesture, TouchMenu, TwistGesture};
+        use crate::nav::{ButtonDrag, NavButtons, NavGesture, TouchMenu, TwistGesture};
         let n = &mut self.prefs.nav;
-        let r = ui.checkbox(&mut n.buttons, tr!("prefs-nav-buttons")).on_hover_text(tr!("prefs-nav-buttons-tip"));
-        super::tray_lib::spot("nav:buttons", r.rect.center());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("prefs-nav-buttons")).on_hover_text(tr!("prefs-nav-buttons-tip"));
+            for (when, label, key) in [(NavButtons::Off, "prefs-nav-buttons-off", "off"), (NavButtons::CompactOrTouch, "prefs-nav-buttons-compact", "compact"), (NavButtons::Always, "prefs-nav-buttons-always", "always")] {
+                let r = ui.radio_value(&mut n.nav_buttons, when, tr(label));
+                super::tray_lib::spot(format!("nav:buttons_{key}"), r.rect.center());
+            }
+        });
         let speed = |ui: &mut Ui, v: &mut f64| {
             ui.horizontal(|ui| {
                 ui.label(tr!("prefs-gesture-speed"));
