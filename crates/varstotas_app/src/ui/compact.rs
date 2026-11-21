@@ -59,6 +59,8 @@ pub struct Compact {
     pub panels: bool,
     /// The Measurements box's number pad.
     pub numpad: bool,
+    /// The hint opened in full by a tap (while it is the one shown).
+    pub hint_open: Option<String>,
     /// The one side bar card the sheet shows (None: all of them).
     pub card: Option<&'static str>,
     /// A tap the app makes itself (back on a window: its ✕), pressed and then let go.
@@ -766,7 +768,7 @@ impl VarstotasApp {
     pub(crate) fn compact_dump(&self) -> String {
         let level = self.compact.radial.as_ref().and_then(|r| r.levels.last().copied());
         let sub = self.compact.radial.as_ref().map(|r| r.sub.clone()).unwrap_or_default();
-        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?} compact_windows=(prefs {} about {}) tap_marks={}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools(), self.prefs_win.open, self.show_about, self.touch.marks.len())
+        format!("({} {level:?} {} {}) compact_sub={sub:?} compact_card={:?} compact_dock={:?} compact_windows=(prefs {} about {}) tap_marks={} hint_open={}", self.compact.on, self.compact.panels, self.compact.numpad, self.compact.card, self.dock_tools(), self.prefs_win.open, self.show_about, self.touch.marks.len(), self.compact.hint_open.is_some())
     }
 
     /// F8: the other interface.
@@ -1012,14 +1014,34 @@ impl VarstotasApp {
             Some((msg, false)) => (msg, Color32::WHITE, theme::ACCENT),
             None => (text, Color32::WHITE, Color32::from_rgba_unmultiplied(0x1F, 0x23, 0x28, 210)),
         };
-        let room = chip_left - left - 24.0;
-        if room < 60.0 || text.is_empty() {
+        if text.is_empty() {
+            self.compact.hint_open = None;
             return;
         }
-        let mut job = egui::text::LayoutJob::simple_singleline(text, font, fg);
-        job.wrap = egui::text::TextWrapping::truncate_at_width(room);
+        // two lines beside the chip, growing up; what does not fit opens in full by a tap,
+        // across the page above the chip
+        let open = self.compact.hint_open.as_deref() == Some(text.as_str());
+        if !open {
+            self.compact.hint_open = None;
+        }
+        let room = if open { right - left - 24.0 } else { chip_left - left - 24.0 };
+        if room < 60.0 {
+            return;
+        }
+        let mut job = egui::text::LayoutJob::simple(text.clone(), font, fg, room);
+        job.wrap.max_rows = if open { 12 } else { 2 };
+        job.wrap.overflow_character = Some('…');
         let g = ui.painter().layout_job(job);
-        let hint = Rect::from_min_size(pos2(left, y), vec2(g.size().x + 24.0, H));
+        let h = (g.size().y + 16.0).max(H);
+        let bottom = if open && chip_left < right { y - 8.0 } else { y + H };
+        let hint = Rect::from_min_size(pos2(left, bottom - h), vec2(g.size().x + 24.0, h));
+        if g.elided || open {
+            if ui.interact(hint, Id::new("compact_hint"), Sense::click()).clicked() {
+                self.compact.hint_open = (!open).then_some(text);
+            }
+            self.nav_button_rects.push(hint);
+        }
+        spot("compact:hint", hint.center());
         let p = ui.painter();
         p.rect_filled(hint, H / 2.0, bg);
         p.galley(pos2(hint.left() + 12.0, hint.center().y - g.size().y / 2.0), g, fg);

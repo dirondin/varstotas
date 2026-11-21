@@ -9,6 +9,14 @@ window 400 860
 wait 30
 expect compact=(true None false false)
 screenshot shots/phone_ui.bmp
+# a hint longer than two lines: a tap opens it in full across the page, another closes it
+action click_spot compact:hint
+wait 5
+expect hint_open=true
+screenshot shots/phone_hint_open.bmp
+action click_spot compact:hint
+wait 5
+expect hint_open=false
 # a phone's status bar and home bar: the view's menus and buttons stay clear of them too
 action safe_area 47 34
 wait 5
