@@ -403,8 +403,7 @@ mod tests {
     #[test]
     fn a_lift_the_browser_lost_is_given_back() {
         let mut down = BTreeMap::new();
-        let mut raw = egui::RawInput::default();
-        raw.events = vec![touch(0, TouchPhase::Start, 10.0, 800.0), touch(1, TouchPhase::Start, 50.0, 800.0)];
+        let mut raw = egui::RawInput { events: vec![touch(0, TouchPhase::Start, 10.0, 800.0), touch(1, TouchPhase::Start, 50.0, 800.0)], ..Default::default() };
         lift_lost(&mut down, &mut raw, Some(&[0, 1]), true);
         assert_eq!(raw.events.len(), 2, "both on the screen: nothing added");
         // finger 1 went up, its end lost
@@ -417,8 +416,7 @@ mod tests {
         assert!(matches!(raw.events[..], [Event::Touch { phase: TouchPhase::End, .. }, Event::PointerButton { pressed: false, .. }, Event::PointerGone]));
         assert!(down.is_empty());
         // outside a browser nothing is known: nothing added
-        let mut raw = egui::RawInput::default();
-        raw.events = vec![touch(2, TouchPhase::Start, 10.0, 10.0)];
+        let mut raw = egui::RawInput { events: vec![touch(2, TouchPhase::Start, 10.0, 10.0)], ..Default::default() };
         lift_lost(&mut down, &mut raw, None, true);
         assert_eq!(raw.events.len(), 1);
     }

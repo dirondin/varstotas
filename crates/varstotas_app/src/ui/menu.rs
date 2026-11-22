@@ -59,6 +59,9 @@ fn paint_after_box(ui: &Ui, r: &Response, icon: Icon) {
     paint_icon(&painter, rect, icon, false);
 }
 
+/// Lays out a submenu's rows: given the page and the body that adds them.
+type Rows = fn(&mut Ui, &mut dyn FnMut(&mut Ui));
+
 /// Submenus opened in place, in the compact interface's lists (`ui/compact.rs`).
 struct Drill {
     /// The labels of the submenus into the shown one.
@@ -67,7 +70,7 @@ struct Drill {
     depth: usize,
     /// Where the shown submenu's rows go, and how they are laid out.
     target: (egui::LayerId, egui::Rect),
-    rows: fn(&mut Ui, &mut dyn FnMut(&mut Ui)),
+    rows: Rows,
     /// A submenu row tapped this frame.
     opened: Option<String>,
     /// The shown submenu asked to close.
@@ -90,7 +93,7 @@ pub(crate) struct Drilled {
 /// is a row, and with `path` (the labels of the submenus entered) not empty only the rows of
 /// the submenu at its end are shown, in `ui`'s place (the rest runs unseen). `rows` lays a
 /// level's rows out.
-pub(crate) fn drilled(ui: &mut Ui, path: &[String], rows: fn(&mut Ui, &mut dyn FnMut(&mut Ui)), body: impl FnOnce(&mut Ui)) -> Drilled {
+pub(crate) fn drilled(ui: &mut Ui, path: &[String], rows: Rows, body: impl FnOnce(&mut Ui)) -> Drilled {
     let rect = ui.available_rect_before_wrap();
     DRILL.set(Some(Drill { path: path.to_vec(), depth: 0, target: (ui.layer_id(), rect), rows, opened: None, closed: false }));
     let mut body = Some(body);

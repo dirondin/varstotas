@@ -399,7 +399,7 @@ pub fn pane_tabs(ui: &mut Ui, id: &str, names: &[String]) -> Option<usize> {
     ui.horizontal_wrapped(|ui| {
         for (i, name) in names.iter().enumerate() {
             let r = ui.selectable_value(&mut at, i, name);
-            spot(&format!("pane:{id}:{i}"), r.rect.center());
+            spot(format!("pane:{id}:{i}"), r.rect.center());
         }
     });
     ui.separator();
@@ -998,6 +998,7 @@ impl VarstotasApp {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn dock_button(&mut self, ui: &mut Ui, r: Rect, icon: Icon, on: bool, enabled: bool, tip: &str, name: &str) -> Response {
         let resp = ui.interact(r, Id::new(name), if enabled { Sense::click() } else { Sense::hover() });
         spot(name.to_string(), r.center());
