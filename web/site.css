@@ -64,7 +64,7 @@ h1 { font-size: clamp(2.2rem, 5.5vw, 3.6rem); letter-spacing: -.02em; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { background: transparent; }
 /* the version a button gives, small under its label */
-.btn:has(.ver:not([hidden])) { flex-direction: column; padding-top: 6px; padding-bottom: 6px; line-height: 1.2; }
+.btn:has(.ver:not([hidden])) { flex-direction: column; gap: 4px; min-height: 56px; line-height: 1.2; }
 .btn .ver { font-size: 12px; font-weight: 500; opacity: 0.7; }
 .hero-shot { margin: 0; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); background: #ccc6bb; }
 .hero-shot video { width: 100%; }
