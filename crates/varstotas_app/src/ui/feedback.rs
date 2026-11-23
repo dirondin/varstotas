@@ -141,10 +141,8 @@ impl VarstotasApp {
                     let r = ui.button(tr!("report-copy"));
                     super::tray_lib::spot("report:copy", r.rect.center());
                     copy = r.clicked();
-                    let r = ui.add_enabled(
-                        !w.title.trim().is_empty() && !w.description.trim().is_empty(),
-                        egui::Button::new(tr!("report-github")),
-                    );
+                    // the title and description can also be written on GitHub's page
+                    let r = ui.button(tr!("report-github"));
                     super::tray_lib::spot("report:github", r.rect.center());
                     send = r.clicked();
                 });
