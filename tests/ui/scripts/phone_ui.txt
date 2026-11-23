@@ -20,7 +20,7 @@ expect hint_open=false
 # a phone's status bar and home bar: the view's menus and buttons stay clear of them too
 action safe_area 47 34
 wait 5
-expect ("hud:view", 233, 75)
+expect ("hud:view", 274, 75)
 screenshot shots/phone_safe_area.bmp
 action preferences
 wait 15

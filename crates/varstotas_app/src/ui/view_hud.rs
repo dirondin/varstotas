@@ -115,12 +115,15 @@ impl VarstotasApp {
                 .fill(fill)
                 .stroke(Stroke::new(1.0, Color32::from_black_alpha(30)))
                 .corner_radius(6.0)
-                .inner_margin(egui::Margin::symmetric(6, 2))
+                // half a separator's room: each button's icon as far from the bar's end as from
+                // the separator beside it
+                .inner_margin(egui::Margin::symmetric(8, 2))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
                         // (right to left: the view ends up on the left, Show on the right)
                         let sep = |ui: &mut Ui| {
-                            let (r, _) = ui.allocate_exact_size(vec2(9.0, 16.0), egui::Sense::hover());
+                            let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), egui::Sense::hover());
                             ui.painter().vline(r.center().x, r.y_range(), Stroke::new(1.0, Color32::from_black_alpha(40)));
                         };
                         self.hud_show_menu(ui);
