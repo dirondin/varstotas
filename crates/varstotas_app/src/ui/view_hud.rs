@@ -67,17 +67,24 @@ fn icon_button(ui: &mut Ui, icon: Icon, on: bool, tip: &str) -> Response {
 /// caller's hover text says what it shows.
 fn pill(ui: &mut Ui, icon: Icon, name: &str, content: impl FnOnce(&mut Ui)) -> Response {
     let id = ui.id().with(("hud_pill", name));
-    // the icon's room is a little wider than the icon: a gap before the arrow
-    let b = egui::Button::new((egui::Atom::custom(id, vec2(ICON + 3.0, ICON)), "⏷")).frame(false);
+    // the icon, a gap and the arrow, drawn here: the arrow glyph sits differently in each font
+    // (the bundled symbols in the browser hug the icon)
+    const GAP: f32 = 5.0;
+    const ARROW: egui::Vec2 = vec2(8.0, 5.0);
+    let b = egui::Button::new(egui::Atom::custom(id, vec2(ICON + GAP + ARROW.x, ICON))).frame(false);
     // a click inside does not close it: the switches and the field of view stay in the open
     // menu, the choices close it themselves (`ui.close()`)
     let config = egui::containers::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
     let (r, _) = egui::containers::menu::MenuButton::from_button(b).config(config).ui(ui, content);
     super::tray_lib::spot(format!("hud:{name}"), r.rect.center());
-    // the custom atom comes first: right after the button's padding
-    let pad = ui.spacing().button_padding.x;
-    let rect = Rect::from_center_size(egui::pos2(r.rect.left() + pad + ICON / 2.0, r.rect.center().y), vec2(ICON, ICON));
+    // the icon and the arrow in the middle of the button (it may be wider than they are)
+    let left = r.rect.center().x - (ICON + GAP + ARROW.x) / 2.0;
+    let rect = Rect::from_center_size(egui::pos2(left + ICON / 2.0, r.rect.center().y), vec2(ICON, ICON));
     paint_icon(ui.painter(), rect, icon, false);
+    let c = egui::pos2(rect.right() + GAP + ARROW.x / 2.0, rect.center().y + 1.0);
+    let color = ui.style().interact(&r).fg_stroke.color;
+    let arrow = vec![c + vec2(-ARROW.x / 2.0, -ARROW.y / 2.0), c + vec2(ARROW.x / 2.0, -ARROW.y / 2.0), c + vec2(0.0, ARROW.y / 2.0)];
+    ui.painter().add(egui::Shape::convex_polygon(arrow, color, egui::Stroke::NONE));
     r
 }
 
