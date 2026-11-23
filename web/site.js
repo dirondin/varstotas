@@ -45,3 +45,18 @@
   });
   apply(pick());
 })();
+
+// The versions on the buttons: the web build's (written in by scripts/build-web.sh) and the
+// latest release's for download (GitHub's; nothing shown when it does not answer).
+(() => {
+  const web = document.getElementById("ver-web");
+  if (web.textContent.startsWith("__")) web.hidden = true;
+  const native = document.getElementById("ver-native");
+  fetch("https://api.github.com/repos/dirondin/varstotas/releases/latest")
+    .then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then((release) => {
+      native.textContent = release.tag_name.replace(/^release-/, "");
+      native.hidden = false;
+    })
+    .catch(() => {});
+})();

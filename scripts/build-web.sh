@@ -14,7 +14,9 @@ out=target/web
 site() {
     rm -rf "$out/i18n" "$out/img"
     mkdir -p "$out/img"
-    cp -R web/index.html web/site.css web/site.js web/i18n "$out/"
+    cp -R web/site.css web/site.js web/i18n "$out/"
+    # the web build's version on its button
+    sed "s/__WEB_VERSION__/$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)/" web/index.html > "$out/index.html"
     cp web/img/* "$out/img/"
     (cd docs/images && cp workbench.jpg desk-caddy.jpg gallery.jpg cut-diagram.png assembly.gif assembly-booklet.png "../../$out/img/")
 }
