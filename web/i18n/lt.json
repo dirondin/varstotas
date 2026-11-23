@@ -8,6 +8,7 @@
   "hero-title": "3D modeliavimas tiems, kas kuria savo rankomis",
   "hero-lead": "Projektuokite baldus, dirbtuvių darbus ir 3D spaudinius tikrais milimetrais, o tada neškite matmenis į dirbtuves arba modelį į pjaustyklę. Nemokama ir atviro kodo.",
   "hero-run": "Atidaryti naršyklėje",
+  "hero-version": "Versija",
   "hero-download": "Atsisiųsti",
   "hero-source": "Pirminis kodas",
   "hero-note": "Nieko nereikia diegti: naršyklės versijai reikia WebGPU (naujo Chrome ar Edge, Safari 26 ar naujesnės, Firefox sistemoje Windows).",
