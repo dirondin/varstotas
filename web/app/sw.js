@@ -1,5 +1,7 @@
 // The app offline (a PWA): its files are cached when this worker installs, then each request
 // goes to the network first, refreshing the cache, and to the cache when the network fails.
+// Past the browser's own HTTP cache: it would hand back the files of the build before (a server's
+// Last-Modified or GitHub Pages' ten minutes let it), and the new build would not show.
 // scripts/build-web.sh fills VERSION (a hash of the build) and FILES (the files in app/): a new
 // build changes this file, so the browser installs the worker again and caches the new files.
 const VERSION = "__VERSION__";
@@ -8,7 +10,7 @@ const CACHE = `varstotas-${VERSION}`;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting()),
+    caches.open(CACHE).then((cache) => cache.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting()),
   );
 });
 
@@ -24,7 +26,7 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: "no-cache" })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();
