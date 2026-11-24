@@ -2,13 +2,14 @@
 // or folder (null), keyed by its path. Loaded once before the app starts (store_load), then
 // changed as the app writes (store_file, store_dir, store_delete). Used by web.rs.
 
-const NAME = "varstotas";
+// the database's name: the beta's is its own (web.rs)
+let name = "varstotas";
 const FILES = "files";
 let db = null;
 
 function open() {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open(NAME, 1);
+    const r = indexedDB.open(name, 1);
     r.onupgradeneeded = () => r.result.createObjectStore(FILES);
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
@@ -17,7 +18,8 @@ function open() {
 
 // Every record as [path, bytes or null, path, bytes or null, ...]; empty when there is no
 // storage (a private window may have none).
-export async function store_load() {
+export async function store_load(database) {
+  name = database;
   try {
     db = await open();
   } catch (e) {

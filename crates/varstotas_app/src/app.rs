@@ -16,7 +16,7 @@ use varstotas_render::{Camera, FaceStyle, Overlay3d, RenderStyle, StandardView};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-const PREFS_KEY: &str = "varstotas_prefs";
+const PREFS_KEY: &str = if crate::BETA { "varstotas_beta_prefs" } else { "varstotas_prefs" };
 pub(crate) const MAX_RECENT: usize = 8;
 /// How long transient status messages stay visible.
 const FLASH_SECS: f64 = 3.0;
@@ -2790,8 +2790,9 @@ impl eframe::App for VarstotasApp {
     }
 
     /// Scripted (test) runs start from the same UI state every time (tray scroll, open cards).
+    /// The beta keeps none either: the site's storage under one name is the release's.
     fn persist_egui_memory(&self) -> bool {
-        !self.debug.script_active()
+        !self.debug.script_active() && !crate::BETA
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {

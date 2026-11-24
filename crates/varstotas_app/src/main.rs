@@ -63,6 +63,9 @@ const ISSUES_URL: &str = "https://github.com/dirondin/varstotas/issues/new";
 const APP_NAME: &str = "Varstotas"; // i18n-ignore
 const BUILD: &str = env!("VARSTOTAS_BUILD"); // CI run number; empty in local builds
 const COMMIT: &str = env!("VARSTOTAS_COMMIT");
+/// The web version's beta (the master branch's nightly build at beta/app/, `scripts/build-web.sh
+/// --beta`): its preferences and data folder are its own, apart from the release's on the same site.
+const BETA: bool = option_env!("VARSTOTAS_BETA").is_some();
 
 /// `0.1.0 (build 42, 4cc73e5)`; local builds: `0.1.0 (dev, 4cc73e5)`. For `--version`,
 /// the bridge and reports — not translated.

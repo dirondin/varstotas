@@ -1,0 +1,29 @@
+# The web build's tools on a Linux runner: Rust with the wasm32 target, the cache, wasm-bindgen-cli
+# of the version in the checked out Cargo.lock and wasm-opt (binaryen). Used by web.yml and pages.yml.
+name: Web build tools
+description: Rust for wasm32, wasm-bindgen-cli and wasm-opt
+inputs:
+  dir:
+    description: the checkout to build (its Cargo.lock)
+    default: .
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+        components: clippy
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: true
+        workspaces: ${{ inputs.dir }}
+    - name: wasm-bindgen and wasm-opt
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        # wasm-bindgen-cli must match the wasm-bindgen crate in Cargo.lock
+        v=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+        curl -sSfL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$v/wasm-bindgen-$v-x86_64-unknown-linux-musl.tar.gz" | tar xz -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/wasm-bindgen-$v-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+        curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz" | tar xz -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/binaryen-version_123/bin" >> "$GITHUB_PATH"

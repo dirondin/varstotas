@@ -1,15 +1,24 @@
-# Puts the site of a release-* tag on GitHub Pages (the home page at the root, the web version in app/): the `web-site` artifact of the tag's
-# latest successful Release build (release.yml → web.yml), as is (no rebuild). Called by Publish
-# release (publish.yml) for releases; run it by hand from a tag ("Use workflow from") to publish
-# that tag's site again. The github-pages environment allows the master branch and release-* tags.
+# The site on GitHub Pages, put together each time (Pages takes the whole site at once):
+#   /           the home page, from master; its buttons give the release's and the beta's versions
+#   /app/       the web version of the latest release, built from its release-* tag
+#   /beta/app/  the beta: master's web version (scripts/build-web.sh --beta: Varstotas Beta, its
+#               preferences and data folder apart from the release's); /beta/ leads there
+# Called by Publish release (publish.yml) after a release; nightly when master has changed since
+# the site was last put together here; by hand (Actions → Web site → Run workflow) any time, for
+# instance to put out the home page between releases. The release's app gets master's offline
+# worker (scripts/web-worker.sh): the release's own may clear the beta's caches.
+# The github-pages environment allows the master branch and release-* tags.
 name: Web site
 
 on:
   workflow_call:
   workflow_dispatch:
+  schedule:
+    - cron: "30 2 * * *"
 
 permissions:
   actions: read
+  contents: read
   pages: write
   id-token: write
 
@@ -17,42 +26,118 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
 jobs:
+  plan:
+    name: What to build
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      master: ${{ steps.plan.outputs.master }}
+      go: ${{ steps.plan.outputs.go }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - id: plan
+        run: |
+          tag="$(gh release view --json tagName --jq .tagName)"
+          master="$(gh api "repos/$GH_REPO/commits/master" --jq .sha)"
+          go=true
+          # nightly: only when master has changed since the last site put together by this workflow
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            last="$(gh run list --workflow pages.yml --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+            [[ "$last" == "$master" ]] && go=false
+          fi
+          echo "Release $tag, master ${master::7}, build: $go"
+          { echo "tag=$tag"; echo "master=$master"; echo "go=$go"; } >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Release's web version
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.master }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.tag }}
+          path: release
+      - uses: ./.github/actions/web-tools
+        with:
+          dir: release
+      - name: Build
+        working-directory: release
+        run: scripts/build-web.sh
+      - name: Offline worker
+        run: scripts/web-worker.sh release/target/web/app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-app
+          path: release/target/web/app
+          if-no-files-found: error
+          retention-days: 3
+
+  beta:
+    name: Beta (master)
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.master }}
+      - uses: ./.github/actions/web-tools
+      - name: Build
+        run: scripts/build-web.sh --beta
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta-app
+          path: target/web-beta/app
+          if-no-files-found: error
+          retention-days: 3
+
   pages:
     name: GitHub Pages
+    needs: [plan, release, beta]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     env:
-      TAG: ${{ github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.plan.outputs.tag }}
     steps:
-      - name: Release build
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.master }}
+      - name: Home page
         run: |
-          if [[ "$GITHUB_REF_TYPE" != tag || "$TAG" != release-* ]]; then
-            echo "::error::Run this workflow from a release-* tag (Use workflow from → Tags), not $GITHUB_REF_TYPE $TAG"
-            exit 1
-          fi
-          build="$(gh run list --workflow release.yml --commit "$GITHUB_SHA" --status success --limit 20 \
-            --json databaseId,headBranch --jq "[.[] | select(.headBranch == \"$TAG\")][0].databaseId // empty")"
-          if [[ -z "$build" ]]; then
-            echo "::error::No successful Release build of $TAG at ${GITHUB_SHA::7}"
-            exit 1
-          fi
-          echo "Release build: $GITHUB_SERVER_URL/$GH_REPO/actions/runs/$build"
-          echo "BUILD_RUN=$build" >> "$GITHUB_ENV"
+          export WEB_VERSION="${TAG#release-}"
+          BETA_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          export BETA_VERSION
+          scripts/build-web.sh --site
       - uses: actions/download-artifact@v4
         with:
-          name: web-site
-          path: site
-          run-id: ${{ env.BUILD_RUN }}
-          github-token: ${{ github.token }}
+          name: release-app
+          path: target/web/app
+      - uses: actions/download-artifact@v4
+        with:
+          name: beta-app
+          path: target/web/beta/app
+      - name: The beta's address
+        run: printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=app/"><title>Varstotas Beta</title><a href="app/">Varstotas Beta</a>\n' > target/web/beta/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: target/web
       - id: deployment
         uses: actions/deploy-pages@v4
       - name: Summary
-        run: echo "Web version of [$TAG](${{ steps.deployment.outputs.page_url }}) from Release build run $BUILD_RUN" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "[Site]($PAGE_URL) — app/ from $TAG, beta/app/ from master ${MASTER::7}" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          MASTER: ${{ needs.plan.outputs.master }}

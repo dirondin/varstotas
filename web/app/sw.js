@@ -6,7 +6,10 @@
 // build changes this file, so the browser installs the worker again and caches the new files.
 const VERSION = "__VERSION__";
 const FILES = __FILES__;
-const CACHE = `varstotas-${VERSION}`;
+// named for the worker's place too: the release's (app/) and the beta's (beta/app/) share the
+// site's caches, and each clears only its own older ones (and the unplaced ones of the builds before)
+const PREFIX = `varstotas-${new URL(self.registration.scope).pathname}-`;
+const CACHE = PREFIX + VERSION;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -17,7 +20,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("varstotas-") && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith(PREFIX) && k !== CACHE) || /^varstotas-[0-9a-f]{16}$/.test(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });

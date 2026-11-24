@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(module = "/src/web_store.js")]
 extern "C" {
-    async fn store_load() -> wasm_bindgen::JsValue;
+    async fn store_load(name: &str) -> wasm_bindgen::JsValue;
     fn store_file(path: &str, data: &[u8]);
     fn store_dir(path: &str);
     fn store_delete(path: &str);
@@ -133,7 +133,7 @@ pub fn restore_data(zip: &[u8]) -> Result<(usize, Option<crate::app::Prefs>), St
 
 /// Put the data folder kept from earlier visits into the file system.
 async fn load_data() {
-    let records = js_sys::Array::from(&store_load().await);
+    let records = js_sys::Array::from(&store_load(if crate::BETA { "varstotas-beta" } else { "varstotas" }).await);
     let mut files = 0;
     for i in (0..records.length()).step_by(2) {
         let Some(path) = records.get(i).as_string() else { continue };

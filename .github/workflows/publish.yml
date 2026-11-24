@@ -125,6 +125,7 @@ jobs:
     if: needs.publish.outputs.prerelease == 'false'
     permissions:
       actions: read
+      contents: read
       pages: write
       id-token: write
     uses: ./.github/workflows/pages.yml

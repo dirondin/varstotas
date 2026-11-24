@@ -46,11 +46,13 @@
   apply(pick());
 })();
 
-// The versions on the buttons: the web build's (written in by scripts/build-web.sh) and the
+// The versions on the buttons: the web build's and the beta's (written in by scripts/build-web.sh) and the
 // latest release's for download (GitHub's; nothing shown when it does not answer).
 (() => {
-  const web = document.getElementById("ver-web");
-  if (web.lastChild.textContent.startsWith("__")) web.hidden = true;
+  for (const id of ["ver-web", "ver-beta"]) {
+    const el = document.getElementById(id);
+    if (el.lastChild.textContent.startsWith("__")) el.hidden = true;
+  }
   const native = document.getElementById("ver-native");
   fetch("https://api.github.com/repos/dirondin/varstotas/releases/latest")
     .then((r) => (r.ok ? r.json() : Promise.reject()))
