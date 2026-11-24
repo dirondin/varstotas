@@ -74,12 +74,18 @@ jobs:
       - name: Build
         working-directory: release
         run: scripts/build-web.sh
+      # the app is in app/ since the home page came (after 0.3.0: the whole build then); the
+      # offline worker only where the app's page has one (since the PWA, after 0.3.0 too)
       - name: Offline worker
-        run: scripts/web-worker.sh release/target/web/app
+        run: |
+          app=release/target/web/app
+          [[ -d "$app" ]] || app=release/target/web
+          [[ -f "$app/sw.js" ]] && scripts/web-worker.sh "$app"
+          echo "APP=$app" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
           name: release-app
-          path: release/target/web/app
+          path: ${{ env.APP }}
           if-no-files-found: error
           retention-days: 3
 
