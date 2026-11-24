@@ -5,6 +5,17 @@ a release's notes on GitHub start with its section. A section is `## <version> �
 followed by `- ` lines; a Release build fails when its version has no section here (a
 pre-release such as 0.3.0-rc.1 is listed under 0.3.0).
 
+## 0.4.0 — 2026-11-24
+
+- Compact interface for touch screens, tablets and phones (F8): a menu ring, the panels in a sheet, a dock of your tools, a number pad
+- Fingers and pen: one finger draws with a loupe, two pan and zoom, a tap of two fingers opens the context menu, a tap and a drag draws a selection box
+- On a phone windows and dialogs fit the page
+- The web version installs as an app and works offline
+- Preferences → Navigation in sections: mouse, trackpad, touch screen
+- A home page with the downloads and the web version
+- Report a Problem opens the GitHub issue straight away
+- Windows: no crash in a process without a desktop
+
 ## 0.3.0 — 2026-11-15
 
 - Web version: Varstotas in a browser with WebGPU
