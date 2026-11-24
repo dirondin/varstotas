@@ -58,6 +58,9 @@ section { padding: 64px 0; }
 h1 { font-size: clamp(2.2rem, 5.5vw, 3.6rem); letter-spacing: -.02em; }
 .lead { font-size: 1.15rem; color: var(--dim); margin: 0 0 28px; }
 .actions, .links { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
+/* the release's buttons in the first row, the beta and the source in the second */
+.actions { flex-direction: column; }
+.actions .row { display: flex; flex-wrap: wrap; gap: 12px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 20px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-weight: 600; text-decoration: none; }
 .btn:hover { border-color: var(--dim); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
